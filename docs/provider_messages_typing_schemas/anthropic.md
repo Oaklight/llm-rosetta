@@ -329,6 +329,88 @@ class CacheControlEphemeralParam(TypedDict, total=False):
 
 **说明**: 这是 Anthropic 的 Prompt Caching 功能，可以在内容块上设置缓存断点以减少重复处理成本。
 
+## 工具选择类型详解
+
+### ToolChoiceParam
+
+**用途**: 控制模型是否和如何使用工具
+
+```python
+ToolChoiceParam: TypeAlias = Union[
+    ToolChoiceAnyParam,
+    ToolChoiceAutoParam,
+    ToolChoiceNoneParam,
+    ToolChoiceToolParam
+]
+```
+
+**可能的值**:
+
+1. `ToolChoiceAnyParam` - 允许使用任何工具
+2. `ToolChoiceAutoParam` - 自动选择是否使用工具
+3. `ToolChoiceNoneParam` - 不使用任何工具
+4. `ToolChoiceToolParam` - 指定使用特定工具
+
+### ToolChoiceAnyParam
+
+**用途**: 允许使用任何工具
+
+```python
+class ToolChoiceAnyParam(TypedDict, total=False):
+    type: Required[Literal["any"]]
+    disable_parallel_tool_use: bool
+```
+
+| 字段                        | 类型                       | 必需 | 说明                 |
+| --------------------------- | -------------------------- | ---- | -------------------- |
+| `type`                      | `Required[Literal["any"]]` | ✓    | 选择类型标识         |
+| `disable_parallel_tool_use` | `bool`                     | ✗    | 是否禁用并行工具使用 |
+
+### ToolChoiceAutoParam
+
+**用途**: 自动选择是否使用工具
+
+```python
+class ToolChoiceAutoParam(TypedDict, total=False):
+    type: Required[Literal["auto"]]
+    disable_parallel_tool_use: bool
+```
+
+| 字段                        | 类型                        | 必需 | 说明                 |
+| --------------------------- | --------------------------- | ---- | -------------------- |
+| `type`                      | `Required[Literal["auto"]]` | ✓    | 选择类型标识         |
+| `disable_parallel_tool_use` | `bool`                      | ✗    | 是否禁用并行工具使用 |
+
+### ToolChoiceNoneParam
+
+**用途**: 不使用任何工具
+
+```python
+class ToolChoiceNoneParam(TypedDict, total=False):
+    type: Required[Literal["none"]]
+```
+
+| 字段   | 类型                        | 必需 | 说明         |
+| ------ | --------------------------- | ---- | ------------ |
+| `type` | `Required[Literal["none"]]` | ✓    | 选择类型标识 |
+
+### ToolChoiceToolParam
+
+**用途**: 指定使用特定工具
+
+```python
+class ToolChoiceToolParam(TypedDict, total=False):
+    name: Required[str]
+    type: Required[Literal["tool"]]
+    disable_parallel_tool_use: bool
+```
+
+| 字段                        | 类型                        | 必需 | 说明                 |
+| --------------------------- | --------------------------- | ---- | -------------------- |
+| `name`                      | `Required[str]`             | ✓    | 工具名称             |
+| `type`                      | `Required[Literal["tool"]]` | ✓    | 选择类型标识         |
+| `disable_parallel_tool_use` | `bool`                      | ✗    | 是否禁用并行工具使用 |
+
 ## 关键特性总结
 
 ### 1. 角色系统
@@ -357,7 +439,13 @@ class CacheControlEphemeralParam(TypedDict, total=False):
 - **服务器工具**: ServerToolUseBlockParam（特定于 web_search）
 - **双向流程**: assistant 发起 → user 响应
 
-### 5. 高级特性
+### 5. 工具选择机制
+
+- **四种模式**: any（任何工具）、auto（自动选择）、none（不使用工具）、tool（指定工具）
+- **并行工具使用控制**: 可以通过`disable_parallel_tool_use`字段控制是否允许并行使用工具
+- **指定工具**: 可以通过`name`字段指定特定的工具
+
+### 6. 高级特性
 
 - **Prompt Caching**: 通过`cache_control`字段实现
 - **思考过程**: ThinkingBlockParam 和 RedactedThinkingBlockParam
