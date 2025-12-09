@@ -319,6 +319,75 @@ class ChatCompletionMessageCustomToolCallParam(TypedDict, total=False):
     type: Required[Literal["custom"]]  # 工具类型
 ```
 
+## 工具选择类型详解
+
+### ChatCompletionToolChoiceOptionParam
+
+**用途**: 控制模型是否和如何使用工具
+
+```python
+ChatCompletionToolChoiceOptionParam: TypeAlias = Union[
+    Literal["none", "auto", "required"],
+    ChatCompletionAllowedToolChoiceParam,
+    ChatCompletionNamedToolChoiceParam,
+    ChatCompletionNamedToolChoiceCustomParam
+]
+```
+
+**可能的值**:
+
+1. `"none"` - 不使用任何工具
+2. `"auto"` - 自动选择是否使用工具
+3. `"required"` - 必须使用工具
+4. `ChatCompletionAllowedToolChoiceParam` - 允许的工具选择参数
+5. `ChatCompletionNamedToolChoiceParam` - 指定名称的工具选择参数
+6. `ChatCompletionNamedToolChoiceCustomParam` - 自定义的指定名称工具选择参数
+
+### ChatCompletionNamedToolChoiceParam
+
+**用途**: 指定使用特定的函数工具
+
+```python
+class ChatCompletionNamedToolChoiceParam(TypedDict, total=False):
+    function: Required[Function]
+    type: Required[Literal["function"]]
+```
+
+| 字段       | 类型                            | 必需 | 说明         |
+| ---------- | ------------------------------- | ---- | ------------ |
+| `function` | `Required[Function]`            | ✓    | 函数信息     |
+| `type`     | `Required[Literal["function"]]` | ✓    | 工具类型标识 |
+
+### ChatCompletionNamedToolChoiceCustomParam
+
+**用途**: 指定使用特定的自定义工具
+
+```python
+class ChatCompletionNamedToolChoiceCustomParam(TypedDict, total=False):
+    custom: Required[Custom]
+    type: Required[Literal["custom"]]
+```
+
+| 字段     | 类型                          | 必需 | 说明           |
+| -------- | ----------------------------- | ---- | -------------- |
+| `custom` | `Required[Custom]`            | ✓    | 自定义工具信息 |
+| `type`   | `Required[Literal["custom"]]` | ✓    | 工具类型标识   |
+
+### ChatCompletionAllowedToolChoiceParam
+
+**用途**: 指定允许使用的工具类型
+
+```python
+class ChatCompletionAllowedToolChoiceParam(TypedDict, total=False):
+    type: Required[Literal["tool_type"]]
+    tool_type: Required[Literal["function", "custom"]]
+```
+
+| 字段        | 类型                                      | 必需 | 说明           |
+| ----------- | ----------------------------------------- | ---- | -------------- |
+| `type`      | `Required[Literal["tool_type"]]`          | ✓    | 选择类型标识   |
+| `tool_type` | `Required[Literal["function", "custom"]]` | ✓    | 允许的工具类型 |
+
 ## 关键特性总结
 
 ### 1. 角色系统
@@ -342,13 +411,19 @@ class ChatCompletionMessageCustomToolCallParam(TypedDict, total=False):
 - **两种工具类型**: function 工具和 custom 工具
 - **已弃用**: `function_call`字段和 function 角色
 
-### 4. 内容结构
+### 4. 工具选择机制
+
+- **四种模式**: none（不使用工具）、auto（自动选择）、required（必须使用工具）、指定工具
+- **指定工具**: 可以指定特定的函数工具或自定义工具
+- **工具类型限制**: 可以限制只使用特定类型的工具（function 或 custom）
+
+### 5. 内容结构
 
 - **简单文本**: 直接使用字符串
 - **结构化内容**: 使用内容部分数组（Iterable[ContentPart]）
 - **类型标识**: 每个内容部分都有`type`字段标识其类型
 
-### 5. 可选字段
+### 6. 可选字段
 
 - **name**: 所有角色（除 tool 和 function）都支持可选的 name 字段
 - **refusal**: assistant 角色支持拒绝消息

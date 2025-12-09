@@ -16,15 +16,15 @@
 
 ### 角色类型
 
-| 角色          | OpenAI     | Anthropic    | Google         | 说明                      |
-| ------------- | ---------- | ------------ | -------------- | ------------------------- |
-| **system**    | ✓          | ✗ (API 参数) | ✓              | 系统提示                  |
-| **developer** | ✓          | ✗            | ✗              | 开发者指令（OpenAI 特有） |
-| **user**      | ✓          | ✓            | ✓              | 用户消息                  |
-| **assistant** | ✓          | ✓            | ✗ (使用 model) | 助手/模型响应             |
-| **model**     | ✗          | ✗            | ✓              | 模型响应（Google 特有）   |
-| **tool**      | ✓          | ✗ (内容块)   | ✗              | 工具响应                  |
-| **function**  | ✓ (已弃用) | ✗            | ✗              | 函数响应（已弃用）        |
+| 角色          | OpenAI     | Anthropic       | Google                    | 说明                      |
+| ------------- | ---------- | --------------- | ------------------------- | ------------------------- |
+| **system**    | ✓          | ✗ (system 参数) | ✗ (GenerateContentConfig) | 系统提示                  |
+| **developer** | ✓          | ✗               | ✗                         | 开发者指令（OpenAI 特有） |
+| **user**      | ✓          | ✓               | ✓                         | 用户消息                  |
+| **assistant** | ✓          | ✓               | ✗ (使用 model)            | 助手/模型响应             |
+| **model**     | ✗          | ✗               | ✓                         | 模型响应（Google 特有）   |
+| **tool**      | ✓          | ✗ (内容块)      | ✗ (Part 字段)             | 工具响应                  |
+| **function**  | ✓ (已弃用) | ✗               | ✗                         | 函数响应（已弃用）        |
 
 ### 角色设计差异
 
@@ -38,14 +38,15 @@
 **Anthropic**:
 
 - 最少角色类型（2 种）
-- system 通过 API 参数传递
+- system 通过 API 的 system 参数传递，支持多个 system 消息，每个消息可以是文本块
 - 工具交互通过内容块实现
 - 简化但功能完整
 
 **Google**:
 
-- 3 种角色（user, model, system）
+- 2 种角色（user, model）
 - model 替代 assistant
+- system 通过 GenerateContentConfig 的 system_instruction 参数传递，支持多条指令
 - 灵活的类型系统补偿角色数量少
 
 ## 消息内容结构对比
@@ -171,7 +172,33 @@ graph TD
 | **自定义工具** | ✓            | ✗              | ✗         |
 | **服务器工具** | ✗            | ✓ (web_search) | ✗         |
 
+### 工具选择机制对比
+
+| 特性             | OpenAI                                             | Anthropic                           | Google                                               |
+| ---------------- | -------------------------------------------------- | ----------------------------------- | ---------------------------------------------------- |
+| **选择类型**     | auto/none/any/function                             | auto/none/any/tool                  | AUTO/NONE/ANY                                        |
+| **指定工具**     | `{"type": "function", "function": {"name": "fn"}}` | `{"type": "tool", "name": "tool"}`  | 通过`allowed_function_names`列表，同时 Mode 设为 ANY |
+| **并行工具使用** | 通过`parallel_tool_calls`参数控制                  | 通过`disable_parallel_tool_use`控制 | 模型自主决定                                         |
+| **配置位置**     | API 参数`tool_choice`                              | API 参数`tool_choice`               | 嵌套配置（ToolConfig → FunctionCallingConfig）       |
+| **默认行为**     | auto（模型自行决定）                               | auto（模型自行决定）                | AUTO（模型自行决定）                                 |
+
 ## 特殊功能对比
+
+### System Prompt
+
+| Provider      | 支持 | 实现方式                                                        |
+| ------------- | ---- | --------------------------------------------------------------- |
+| **OpenAI**    | ✓    | 作为角色为`system`的消息                                        |
+| **Anthropic** | ✓    | API 的`system`参数，支持多个文本块，不作为消息历史的一部分      |
+| **Google**    | ✓    | `GenerateContentConfig`的`system_instruction`参数，支持多条指令 |
+
+### 工具选择机制
+
+| Provider      | 支持 | 实现方式                                                             |
+| ------------- | ---- | -------------------------------------------------------------------- |
+| **OpenAI**    | ✓    | `tool_choice`参数，支持 auto/none/any/function 四种模式              |
+| **Anthropic** | ✓    | `tool_choice`参数，支持 auto/none/any/tool 四种模式                  |
+| **Google**    | ✓    | 嵌套配置对象，支持 AUTO/NONE/ANY/ANY+allowed_function_names 四种模式 |
 
 ### Prompt Caching
 
@@ -205,6 +232,7 @@ graph TD
 - **角色导向**: 通过不同角色类型区分功能
 - **向后兼容**: 保留已弃用的 function 相关类型
 - **多模态扩展**: 通过 ContentPart 支持多种媒体类型
+- **工具控制**: 通过`tool_choice`和`parallel_tool_calls`精细控制工具使用
 
 ### Anthropic
 
@@ -212,6 +240,7 @@ graph TD
 - **极简角色**: 只有 user 和 assistant 两种角色
 - **功能丰富**: 10+种内容块类型支持各种场景
 - **缓存优化**: 内置 Prompt Caching 支持
+- **工具选择**: 支持四种工具选择模式，包括并行工具使用控制
 
 ### Google
 
@@ -219,6 +248,7 @@ graph TD
 - **自动转换**: 在对象、字典、字符串之间自动转换
 - **Part 架构**: 通过 Part 的不同字段支持各种内容
 - **代码执行**: 内置代码执行支持
+- **嵌套配置**: 通过嵌套的配置对象控制函数调用行为
 
 ## 转换挑战
 
@@ -226,15 +256,16 @@ graph TD
 
 **挑战**:
 
-- OpenAI 有 6 种角色，Anthropic 只有 2 种
-- system 角色在 Anthropic 中是 API 参数
-- tool 角色在 Anthropic 中是内容块
+- OpenAI 有 6 种角色，Anthropic 和 Google 只有 2 种
+- system 角色在 Anthropic 中是 API 的 system 参数，支持多个文本块
+- system 角色在 Google 中是 GenerateContentConfig 的 system_instruction 参数，支持多条指令
+- tool 角色在 Anthropic 中是内容块，在 Google 中是 Part 字段
 
 **解决方案**:
 
 - 建立角色映射表
-- system 消息需要特殊处理
-- tool 消息转换为对应的内容块
+- system 消息需要特殊处理，根据目标 provider 转换为对应的 API 参数
+- tool/function 消息转换为对应的内容块或 Part 字段
 
 ### 2. 工具调用
 
@@ -249,6 +280,22 @@ graph TD
 - 统一的工具调用 IR
 - 保留所有必要的 ID 信息
 - 转换时重新生成符合目标格式的 ID
+
+### 3. 工具选择机制
+
+**挑战**:
+
+- 选择模式命名不同（auto/AUTO, none/NONE, any/ANY）
+- 指定特定工具的方式不同
+- 并行工具使用控制方式不同
+- Google 使用嵌套配置对象
+
+**解决方案**:
+
+- 统一的工具选择 IR
+- 标准化选择模式名称
+- 提供并行工具使用的统一控制
+- 转换时处理不同的配置结构
 
 ### 3. 特有功能
 
@@ -284,7 +331,8 @@ graph TD
 2. **角色区分**: 区分用户和模型的消息
 3. **多模态**: 支持文本和图片
 4. **工具调用**: 支持函数/工具调用机制
-5. **对话历史**: 支持多轮对话
+5. **工具选择**: 支持控制模型是否和如何使用工具
+6. **对话历史**: 支持多轮对话
 
 这些共同点为设计统一的 IR 提供了基础。
 
@@ -295,8 +343,9 @@ graph TD
 1. **角色系统**: 从 2 种到 6 种不等
 2. **内容组织**: 内容部分 vs 内容块 vs Part
 3. **工具调用**: 消息字段 vs 内容块 vs Part 字段
-4. **特殊功能**: 各有独特功能（缓存、思考、代码执行等）
-5. **类型灵活性**: 从严格到灵活不等
+4. **工具选择**: 不同的配置方式和选项（如并行工具使用控制）
+5. **特殊功能**: 各有独特功能（缓存、思考、代码执行等）
+6. **类型灵活性**: 从严格到灵活不等
 
 这些差异需要在 IR 设计中仔细考虑和处理。
 

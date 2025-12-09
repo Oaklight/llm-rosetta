@@ -213,6 +213,55 @@ instance is considered invalid.
 | `thought_signature`     | `typing.Optional[bytes]`                                      |      |
 | `video_metadata`        | `typing.Optional[google.genai.types.VideoMetadataDict]`       |      |
 
+## 工具选择类型详解
+
+### ToolConfig
+
+**用途**: 配置模型如何使用工具
+
+```python
+class ToolConfig(TypedDict, total=False):
+    function_calling_config: NotRequired[FunctionCallingConfig]
+```
+
+| 字段                      | 类型                    | 必需 | 说明         |
+| ------------------------- | ----------------------- | ---- | ------------ |
+| `function_calling_config` | `FunctionCallingConfig` | ✗    | 函数调用配置 |
+
+### FunctionCallingConfig
+
+**用途**: 配置函数调用行为
+
+```python
+class FunctionCallingConfig(TypedDict, total=False):
+    mode: NotRequired[FunctionCallingMode]
+    allowed_function_names: NotRequired[List[str]]
+    disable_functions: NotRequired[bool]
+```
+
+| 字段                     | 类型                  | 必需 | 说明                 |
+| ------------------------ | --------------------- | ---- | -------------------- |
+| `mode`                   | `FunctionCallingMode` | ✗    | 函数调用模式         |
+| `allowed_function_names` | `List[str]`           | ✗    | 允许调用的函数名列表 |
+| `disable_functions`      | `bool`                | ✗    | 是否禁用函数调用     |
+
+### FunctionCallingMode
+
+**用途**: 定义函数调用模式
+
+```python
+class FunctionCallingMode(str, Enum):
+    AUTO = "AUTO"
+    ANY = "ANY"
+    NONE = "NONE"
+```
+
+| 值     | 说明                     |
+| ------ | ------------------------ |
+| `AUTO` | 模型自动决定是否调用函数 |
+| `ANY`  | 允许模型调用任何可用函数 |
+| `NONE` | 不允许模型调用任何函数   |
+
 ## 使用示例
 
 ### 简单文本消息
@@ -274,31 +323,49 @@ contents = [
 
 ## 关键特性总结
 
-### 1. 灵活的类型系统
+### 1. 角色系统
 
-- **多种表示方式**: 同一内容可以用字符串、对象或字典表示
-- **嵌套结构**: 支持复杂的嵌套内容结构
-- **类型转换**: 自动在不同表示之间转换
+- **2 种角色**: user, model
+- **无 system 角色**: 系统提示通过 API 的其他参数传递
+- **无 function 角色**: 函数调用通过 Part 字段实现
 
-### 2. 角色系统
+### 2. Part 架构
 
-- **用户和模型**: 主要使用`user`和`model`角色
-- **系统消息**: 可以使用`system`角色设置上下文
+- **Part 接口**: 所有内容类型都是 Part
+- **类型标识**: 每个 Part 都有`part_type`字段
+- **可组合**: 一条消息可以包含多个不同类型的 Part
 
 ### 3. 多模态支持
 
-- **文本**: 通过`text`字段
-- **图片**: 通过`inline_data`字段
-- **混合内容**: 一条消息可以包含多种媒体类型
+- **文本**: TextPart
+- **内联数据**: InlineDataPart（支持多种 MIME 类型）
+- **文件数据**: FilePart（支持多种文件类型）
+- **视频**: VideoPart（支持多种视频格式）
 
-### 4. 与其他提供商的主要差异
+### 4. 工具调用机制
 
-| 特性       | Google GenAI                | OpenAI         | Anthropic      |
-| ---------- | --------------------------- | -------------- | -------------- |
-| 类型灵活性 | 高（多种表示方式）          | 中（固定结构） | 中（固定结构） |
-| 角色数量   | 3 种（user, model, system） | 6 种           | 2 种           |
-| 多模态支持 | 内联数据                    | 内容部分       | 内容块         |
-| 工具调用   | 函数调用                    | 工具调用       | 工具使用块     |
+- **函数声明**: FunctionDeclaration
+- **函数调用**: FunctionCall
+- **函数响应**: FunctionResponse
+- **双向流程**: model 发起 → function 响应
+
+### 5. 工具选择机制
+
+- **四种模式**:
+  - AUTO（自动选择是否使用函数）
+  - ANY（允许使用任何函数）
+  - NONE（不使用任何函数）
+  - ANY+allowed_function_names（强制选择特定函数）
+- **函数名过滤**: 可以通过`allowed_function_names`限制可用函数，当与ANY模式结合使用时形成第四种模式
+- **完全禁用**: 可以通过`disable_functions`完全禁用函数调用
+- **配置层级**: 通过嵌套的配置对象（ToolConfig → FunctionCallingConfig）设置
+
+### 6. 高级特性
+
+- **流式响应**: 支持流式生成和处理
+- **多轮对话**: 通过消息历史实现
+- **安全过滤**: 内置内容过滤机制
+- **多模型支持**: 适配不同的 Google AI 模型
 
 ## 注意事项
 
