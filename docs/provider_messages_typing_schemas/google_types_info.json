@@ -1,0 +1,389 @@
+{
+  "classes": {
+    "Content": {
+      "name": "Content",
+      "module": "google.genai.types",
+      "doc": "Contains the multi-part content of a message.",
+      "fields": {
+        "parts": {
+          "annotation": "typing.Optional[list[google.genai.types.Part]]",
+          "doc": null
+        },
+        "role": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations": {
+        "parts": "typing.Optional[list[google.genai.types.Part]]",
+        "role": "typing.Optional[str]"
+      }
+    },
+    "ContentDict": {
+      "name": "ContentDict",
+      "module": "google.genai.types",
+      "doc": "Contains the multi-part content of a message.",
+      "fields": {
+        "parts": {
+          "annotation": "typing.Optional[list[google.genai.types.PartDict]]",
+          "doc": null
+        },
+        "role": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "dict"
+      ],
+      "annotations": {
+        "parts": "typing.Optional[list[google.genai.types.PartDict]]",
+        "role": "typing.Optional[str]"
+      }
+    },
+    "File": {
+      "name": "File",
+      "module": "google.genai.types",
+      "doc": "A file uploaded to the API.",
+      "fields": {
+        "name": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "display_name": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "mime_type": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "size_bytes": {
+          "annotation": "typing.Optional[int]",
+          "doc": null
+        },
+        "create_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "expiration_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "update_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "sha256_hash": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "uri": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "download_uri": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "state": {
+          "annotation": "typing.Optional[google.genai.types.FileState]",
+          "doc": null
+        },
+        "source": {
+          "annotation": "typing.Optional[google.genai.types.FileSource]",
+          "doc": null
+        },
+        "video_metadata": {
+          "annotation": "typing.Optional[dict[str, typing.Any]]",
+          "doc": null
+        },
+        "error": {
+          "annotation": "typing.Optional[google.genai.types.FileStatus]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations": {
+        "name": "typing.Optional[str]",
+        "display_name": "typing.Optional[str]",
+        "mime_type": "typing.Optional[str]",
+        "size_bytes": "typing.Optional[int]",
+        "create_time": "typing.Optional[datetime.datetime]",
+        "expiration_time": "typing.Optional[datetime.datetime]",
+        "update_time": "typing.Optional[datetime.datetime]",
+        "sha256_hash": "typing.Optional[str]",
+        "uri": "typing.Optional[str]",
+        "download_uri": "typing.Optional[str]",
+        "state": "typing.Optional[google.genai.types.FileState]",
+        "source": "typing.Optional[google.genai.types.FileSource]",
+        "video_metadata": "typing.Optional[dict[str, typing.Any]]",
+        "error": "typing.Optional[google.genai.types.FileStatus]"
+      }
+    },
+    "FileDict": {
+      "name": "FileDict",
+      "module": "google.genai.types",
+      "doc": "A file uploaded to the API.",
+      "fields": {
+        "name": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "display_name": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "mime_type": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "size_bytes": {
+          "annotation": "typing.Optional[int]",
+          "doc": null
+        },
+        "create_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "expiration_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "update_time": {
+          "annotation": "typing.Optional[datetime.datetime]",
+          "doc": null
+        },
+        "sha256_hash": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "uri": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "download_uri": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "state": {
+          "annotation": "typing.Optional[google.genai.types.FileState]",
+          "doc": null
+        },
+        "source": {
+          "annotation": "typing.Optional[google.genai.types.FileSource]",
+          "doc": null
+        },
+        "video_metadata": {
+          "annotation": "typing.Optional[dict[str, typing.Any]]",
+          "doc": null
+        },
+        "error": {
+          "annotation": "typing.Optional[google.genai.types.FileStatusDict]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "dict"
+      ],
+      "annotations": {
+        "name": "typing.Optional[str]",
+        "display_name": "typing.Optional[str]",
+        "mime_type": "typing.Optional[str]",
+        "size_bytes": "typing.Optional[int]",
+        "create_time": "typing.Optional[datetime.datetime]",
+        "expiration_time": "typing.Optional[datetime.datetime]",
+        "update_time": "typing.Optional[datetime.datetime]",
+        "sha256_hash": "typing.Optional[str]",
+        "uri": "typing.Optional[str]",
+        "download_uri": "typing.Optional[str]",
+        "state": "typing.Optional[google.genai.types.FileState]",
+        "source": "typing.Optional[google.genai.types.FileSource]",
+        "video_metadata": "typing.Optional[dict[str, typing.Any]]",
+        "error": "typing.Optional[google.genai.types.FileStatusDict]"
+      }
+    },
+    "Part": {
+      "name": "Part",
+      "module": "google.genai.types",
+      "doc": "A datatype containing media content.\n\nExactly one field within a Part should be set, representing the specific type\nof content being conveyed. Using multiple fields within the same `Part`\ninstance is considered invalid.",
+      "fields": {
+        "media_resolution": {
+          "annotation": "typing.Optional[google.genai.types.PartMediaResolution]",
+          "doc": null
+        },
+        "code_execution_result": {
+          "annotation": "typing.Optional[google.genai.types.CodeExecutionResult]",
+          "doc": null
+        },
+        "executable_code": {
+          "annotation": "typing.Optional[google.genai.types.ExecutableCode]",
+          "doc": null
+        },
+        "file_data": {
+          "annotation": "typing.Optional[google.genai.types.FileData]",
+          "doc": null
+        },
+        "function_call": {
+          "annotation": "typing.Optional[google.genai.types.FunctionCall]",
+          "doc": null
+        },
+        "function_response": {
+          "annotation": "typing.Optional[google.genai.types.FunctionResponse]",
+          "doc": null
+        },
+        "inline_data": {
+          "annotation": "typing.Optional[google.genai.types.Blob]",
+          "doc": null
+        },
+        "text": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "thought": {
+          "annotation": "typing.Optional[bool]",
+          "doc": null
+        },
+        "thought_signature": {
+          "annotation": "typing.Optional[bytes]",
+          "doc": null
+        },
+        "video_metadata": {
+          "annotation": "typing.Optional[google.genai.types.VideoMetadata]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations": {
+        "media_resolution": "typing.Optional[google.genai.types.PartMediaResolution]",
+        "code_execution_result": "typing.Optional[google.genai.types.CodeExecutionResult]",
+        "executable_code": "typing.Optional[google.genai.types.ExecutableCode]",
+        "file_data": "typing.Optional[google.genai.types.FileData]",
+        "function_call": "typing.Optional[google.genai.types.FunctionCall]",
+        "function_response": "typing.Optional[google.genai.types.FunctionResponse]",
+        "inline_data": "typing.Optional[google.genai.types.Blob]",
+        "text": "typing.Optional[str]",
+        "thought": "typing.Optional[bool]",
+        "thought_signature": "typing.Optional[bytes]",
+        "video_metadata": "typing.Optional[google.genai.types.VideoMetadata]"
+      }
+    },
+    "PartDict": {
+      "name": "PartDict",
+      "module": "google.genai.types",
+      "doc": "A datatype containing media content.\n\nExactly one field within a Part should be set, representing the specific type\nof content being conveyed. Using multiple fields within the same `Part`\ninstance is considered invalid.",
+      "fields": {
+        "media_resolution": {
+          "annotation": "typing.Optional[google.genai.types.PartMediaResolutionDict]",
+          "doc": null
+        },
+        "code_execution_result": {
+          "annotation": "typing.Optional[google.genai.types.CodeExecutionResultDict]",
+          "doc": null
+        },
+        "executable_code": {
+          "annotation": "typing.Optional[google.genai.types.ExecutableCodeDict]",
+          "doc": null
+        },
+        "file_data": {
+          "annotation": "typing.Optional[google.genai.types.FileDataDict]",
+          "doc": null
+        },
+        "function_call": {
+          "annotation": "typing.Optional[google.genai.types.FunctionCallDict]",
+          "doc": null
+        },
+        "function_response": {
+          "annotation": "typing.Optional[google.genai.types.FunctionResponseDict]",
+          "doc": null
+        },
+        "inline_data": {
+          "annotation": "typing.Optional[google.genai.types.BlobDict]",
+          "doc": null
+        },
+        "text": {
+          "annotation": "typing.Optional[str]",
+          "doc": null
+        },
+        "thought": {
+          "annotation": "typing.Optional[bool]",
+          "doc": null
+        },
+        "thought_signature": {
+          "annotation": "typing.Optional[bytes]",
+          "doc": null
+        },
+        "video_metadata": {
+          "annotation": "typing.Optional[google.genai.types.VideoMetadataDict]",
+          "doc": null
+        }
+      },
+      "bases": [
+        "dict"
+      ],
+      "annotations": {
+        "media_resolution": "typing.Optional[google.genai.types.PartMediaResolutionDict]",
+        "code_execution_result": "typing.Optional[google.genai.types.CodeExecutionResultDict]",
+        "executable_code": "typing.Optional[google.genai.types.ExecutableCodeDict]",
+        "file_data": "typing.Optional[google.genai.types.FileDataDict]",
+        "function_call": "typing.Optional[google.genai.types.FunctionCallDict]",
+        "function_response": "typing.Optional[google.genai.types.FunctionResponseDict]",
+        "inline_data": "typing.Optional[google.genai.types.BlobDict]",
+        "text": "typing.Optional[str]",
+        "thought": "typing.Optional[bool]",
+        "thought_signature": "typing.Optional[bytes]",
+        "video_metadata": "typing.Optional[google.genai.types.VideoMetadataDict]"
+      }
+    }
+  },
+  "type_aliases": {
+    "ContentListUnionDict": {
+      "name": "typing.Union[google.genai.types.Content, google.genai.types.ContentDict, str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict, list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]], list[typing.Union[google.genai.types.Content, google.genai.types.ContentDict, str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict, list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]]]]]",
+      "origin": "typing.Union",
+      "args": [
+        "<class 'google.genai.types.Content'>",
+        "<class 'google.genai.types.ContentDict'>",
+        "<class 'str'>",
+        "<class 'google.genai.types.File'>",
+        "<class 'google.genai.types.FileDict'>",
+        "<class 'google.genai.types.Part'>",
+        "<class 'google.genai.types.PartDict'>",
+        "list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]]",
+        "list[typing.Union[google.genai.types.Content, google.genai.types.ContentDict, str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict, list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]]]]"
+      ]
+    },
+    "ContentUnionDict": {
+      "name": "typing.Union[google.genai.types.Content, google.genai.types.ContentDict, str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict, list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]]]",
+      "origin": "typing.Union",
+      "args": [
+        "<class 'google.genai.types.Content'>",
+        "<class 'google.genai.types.ContentDict'>",
+        "<class 'str'>",
+        "<class 'google.genai.types.File'>",
+        "<class 'google.genai.types.FileDict'>",
+        "<class 'google.genai.types.Part'>",
+        "<class 'google.genai.types.PartDict'>",
+        "list[typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]]"
+      ]
+    },
+    "PartUnionDict": {
+      "name": "typing.Union[str, google.genai.types.File, google.genai.types.FileDict, google.genai.types.Part, google.genai.types.PartDict]",
+      "origin": "typing.Union",
+      "args": [
+        "<class 'str'>",
+        "<class 'google.genai.types.File'>",
+        "<class 'google.genai.types.FileDict'>",
+        "<class 'google.genai.types.Part'>",
+        "<class 'google.genai.types.PartDict'>"
+      ]
+    }
+  },
+  "enums": {}
+}
