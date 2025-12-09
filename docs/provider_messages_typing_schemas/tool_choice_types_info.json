@@ -1,0 +1,1582 @@
+{
+  "openai": [
+    {
+      "name": "Union",
+      "module": "typing",
+      "doc": null,
+      "annotations": {},
+      "origin": "typing.Union",
+      "args": [
+        "typing.Literal['none', 'auto', 'required']",
+        "<class 'openai.types.chat.chat_completion_allowed_tool_choice_param.ChatCompletionAllowedToolChoiceParam'>",
+        "<class 'openai.types.chat.chat_completion_named_tool_choice_param.ChatCompletionNamedToolChoiceParam'>",
+        "<class 'openai.types.chat.chat_completion_named_tool_choice_custom_param.ChatCompletionNamedToolChoiceCustomParam'>"
+      ],
+      "annotations_error": "typing.Union[typing.Literal['none', 'auto', 'required'], openai.types.chat.chat_completion_allowed_tool_choice_param.ChatCompletionAllowedToolChoiceParam, openai.types.chat.chat_completion_named_tool_choice_param.ChatCompletionNamedToolChoiceParam, openai.types.chat.chat_completion_named_tool_choice_custom_param.ChatCompletionNamedToolChoiceCustomParam] is not a module, class, method, or function."
+    },
+    {
+      "name": "ChatCompletionNamedToolChoiceParam",
+      "module": "openai.types.chat.chat_completion_named_tool_choice_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "function": "typing_extensions.Required[openai.types.chat.chat_completion_named_tool_choice_param.Function]",
+        "type": "typing_extensions.Required[typing.Literal['function']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ChatCompletionFunctionToolParam",
+      "module": "openai.types.chat.chat_completion_function_tool_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "function": "typing_extensions.Required[openai.types.shared_params.function_definition.FunctionDefinition]",
+        "type": "typing_extensions.Required[typing.Literal['function']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    }
+  ],
+  "anthropic": [
+    {
+      "name": "ServerToolUsage",
+      "module": "anthropic.types.server_tool_usage",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "ToolUseBlock",
+      "module": "anthropic.types.tool_use_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "ServerToolUseBlock",
+      "module": "anthropic.types.server_tool_use_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "WebSearchToolResultError",
+      "module": "anthropic.types.web_search_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "WebSearchToolResultBlock",
+      "module": "anthropic.types.web_search_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "ToolParam",
+      "module": "anthropic.types.tool_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "input_schema": "typing_extensions.Required[typing.Union[anthropic.types.tool_param.InputSchemaTyped, typing.Dict[str, object]]]",
+        "name": "typing_extensions.Required[str]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]",
+        "description": "<class 'str'>",
+        "type": "typing.Optional[typing.Literal['custom']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolUseBlockParam",
+      "module": "anthropic.types.tool_use_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "id": "typing_extensions.Required[str]",
+        "input": "typing_extensions.Required[typing.Dict[str, object]]",
+        "name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_use']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolResultBlockParam",
+      "module": "anthropic.types.tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]",
+        "content": "typing.Union[str, typing.Iterable[typing.Union[anthropic.types.text_block_param.TextBlockParam, anthropic.types.image_block_param.ImageBlockParam, anthropic.types.search_result_block_param.SearchResultBlockParam, anthropic.types.document_block_param.DocumentBlockParam]]]",
+        "is_error": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ServerToolUseBlockParam",
+      "module": "anthropic.types.server_tool_use_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "id": "typing_extensions.Required[str]",
+        "input": "typing_extensions.Required[typing.Dict[str, object]]",
+        "name": "typing_extensions.Required[typing.Literal['web_search']]",
+        "type": "typing_extensions.Required[typing.Literal['server_tool_use']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "WebSearchToolRequestErrorParam",
+      "module": "anthropic.types.web_search_tool_request_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'max_uses_exceeded', 'too_many_requests', 'query_too_long']]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "WebSearchToolResultBlockParam",
+      "module": "anthropic.types.web_search_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[typing.Iterable[anthropic.types.web_search_result_block_param.WebSearchResultBlockParam], anthropic.types.web_search_tool_request_error_param.WebSearchToolRequestErrorParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolBash20250124Param",
+      "module": "anthropic.types.tool_bash_20250124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['bash']]",
+        "type": "typing_extensions.Required[typing.Literal['bash_20250124']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "WebSearchTool20250305Param",
+      "module": "anthropic.types.web_search_tool_20250305_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['web_search']]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_20250305']]",
+        "allowed_domains": "typing.Optional[typing.Sequence[str]]",
+        "blocked_domains": "typing.Optional[typing.Sequence[str]]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]",
+        "max_uses": "typing.Optional[int]",
+        "user_location": "typing.Optional[anthropic.types.web_search_tool_20250305_param.UserLocation]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolTextEditor20250124Param",
+      "module": "anthropic.types.tool_text_editor_20250124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_editor']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250124']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolTextEditor20250429Param",
+      "module": "anthropic.types.tool_text_editor_20250429_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_based_edit_tool']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250429']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolTextEditor20250728Param",
+      "module": "anthropic.types.tool_text_editor_20250728_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_based_edit_tool']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250728']]",
+        "cache_control": "typing.Optional[anthropic.types.cache_control_ephemeral_param.CacheControlEphemeralParam]",
+        "max_characters": "typing.Optional[int]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolChoiceAnyParam",
+      "module": "anthropic.types.tool_choice_any_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['any']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolChoiceAutoParam",
+      "module": "anthropic.types.tool_choice_auto_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['auto']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolChoiceNoneParam",
+      "module": "anthropic.types.tool_choice_none_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['none']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "ToolChoiceToolParam",
+      "module": "anthropic.types.tool_choice_tool_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaServerToolUsage",
+      "module": "anthropic.types.beta.beta_server_tool_usage",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaServerToolCaller",
+      "module": "anthropic.types.beta.beta_server_tool_caller",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolUseBlock",
+      "module": "anthropic.types.beta.beta_tool_use_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMCPToolUseBlock",
+      "module": "anthropic.types.beta.beta_mcp_tool_use_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMCPToolResultBlock",
+      "module": "anthropic.types.beta.beta_mcp_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaServerToolUseBlock",
+      "module": "anthropic.types.beta.beta_server_tool_use_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaWebFetchToolResultErrorBlock",
+      "module": "anthropic.types.beta.beta_web_fetch_tool_result_error_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaWebFetchToolResultBlock",
+      "module": "anthropic.types.beta.beta_web_fetch_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaWebSearchToolResultError",
+      "module": "anthropic.types.beta.beta_web_search_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaWebSearchToolResultBlock",
+      "module": "anthropic.types.beta.beta_web_search_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolSearchToolResultError",
+      "module": "anthropic.types.beta.beta_tool_search_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolReferenceBlock",
+      "module": "anthropic.types.beta.beta_tool_reference_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolSearchToolSearchResultBlock",
+      "module": "anthropic.types.beta.beta_tool_search_tool_search_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolSearchToolResultBlock",
+      "module": "anthropic.types.beta.beta_tool_search_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaCodeExecutionToolResultError",
+      "module": "anthropic.types.beta.beta_code_execution_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaCodeExecutionToolResultBlock",
+      "module": "anthropic.types.beta.beta_code_execution_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaBashCodeExecutionToolResultError",
+      "module": "anthropic.types.beta.beta_bash_code_execution_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaBashCodeExecutionToolResultBlock",
+      "module": "anthropic.types.beta.beta_bash_code_execution_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaTextEditorCodeExecutionToolResultError",
+      "module": "anthropic.types.beta.beta_text_editor_code_execution_tool_result_error",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaTextEditorCodeExecutionToolResultBlock",
+      "module": "anthropic.types.beta.beta_text_editor_code_execution_tool_result_block",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaClearToolUses20250919EditResponse",
+      "module": "anthropic.types.beta.beta_clear_tool_uses_20250919_edit_response",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolParam",
+      "module": "anthropic.types.beta.beta_tool_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "input_schema": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_tool_param.InputSchemaTyped, typing.Dict[str, object]]]",
+        "name": "typing_extensions.Required[str]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "description": "<class 'str'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>",
+        "type": "typing.Optional[typing.Literal['custom']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaServerToolCallerParam",
+      "module": "anthropic.types.beta.beta_server_tool_caller_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['code_execution_20250825']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolUseBlockParam",
+      "module": "anthropic.types.beta.beta_tool_use_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "id": "typing_extensions.Required[str]",
+        "input": "typing_extensions.Required[typing.Dict[str, object]]",
+        "name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_use']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "caller": "typing.Union[anthropic.types.beta.beta_direct_caller_param.BetaDirectCallerParam, anthropic.types.beta.beta_server_tool_caller_param.BetaServerToolCallerParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolReferenceBlockParam",
+      "module": "anthropic.types.beta.beta_tool_reference_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_reference']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "content": "typing.Union[str, typing.Iterable[typing.Union[anthropic.types.beta.beta_text_block_param.BetaTextBlockParam, anthropic.types.beta.beta_image_block_param.BetaImageBlockParam, anthropic.types.beta.beta_search_result_block_param.BetaSearchResultBlockParam, anthropic.types.beta.beta_request_document_block_param.BetaRequestDocumentBlockParam, anthropic.types.beta.beta_tool_reference_block_param.BetaToolReferenceBlockParam]]]",
+        "is_error": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMCPToolUseBlockParam",
+      "module": "anthropic.types.beta.beta_mcp_tool_use_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "id": "typing_extensions.Required[str]",
+        "input": "typing_extensions.Required[typing.Dict[str, object]]",
+        "name": "typing_extensions.Required[str]",
+        "server_name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['mcp_tool_use']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaServerToolUseBlockParam",
+      "module": "anthropic.types.beta.beta_server_tool_use_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "id": "typing_extensions.Required[str]",
+        "input": "typing_extensions.Required[typing.Dict[str, object]]",
+        "name": "typing_extensions.Required[typing.Literal['web_search', 'web_fetch', 'code_execution', 'bash_code_execution', 'text_editor_code_execution', 'tool_search_tool_regex', 'tool_search_tool_bm25']]",
+        "type": "typing_extensions.Required[typing.Literal['server_tool_use']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "caller": "typing.Union[anthropic.types.beta.beta_direct_caller_param.BetaDirectCallerParam, anthropic.types.beta.beta_server_tool_caller_param.BetaServerToolCallerParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebFetchToolResultErrorBlockParam",
+      "module": "anthropic.types.beta.beta_web_fetch_tool_result_error_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'url_too_long', 'url_not_allowed', 'url_not_accessible', 'unsupported_content_type', 'too_many_requests', 'max_uses_exceeded', 'unavailable']]",
+        "type": "typing_extensions.Required[typing.Literal['web_fetch_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebFetchToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_web_fetch_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_web_fetch_tool_result_error_block_param.BetaWebFetchToolResultErrorBlockParam, anthropic.types.beta.beta_web_fetch_block_param.BetaWebFetchBlockParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['web_fetch_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebSearchToolRequestErrorParam",
+      "module": "anthropic.types.beta.beta_web_search_tool_request_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'max_uses_exceeded', 'too_many_requests', 'query_too_long']]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebSearchToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_web_search_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[typing.Iterable[anthropic.types.beta.beta_web_search_result_block_param.BetaWebSearchResultBlockParam], anthropic.types.beta.beta_web_search_tool_request_error_param.BetaWebSearchToolRequestErrorParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaRequestMCPToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_request_mcp_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['mcp_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "content": "typing.Union[str, typing.Iterable[anthropic.types.beta.beta_text_block_param.BetaTextBlockParam]]",
+        "is_error": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolSearchToolResultErrorParam",
+      "module": "anthropic.types.beta.beta_tool_search_tool_result_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'too_many_requests', 'execution_time_exceeded']]",
+        "type": "typing_extensions.Required[typing.Literal['tool_search_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolSearchToolSearchResultBlockParam",
+      "module": "anthropic.types.beta.beta_tool_search_tool_search_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "tool_references": "typing_extensions.Required[typing.Iterable[anthropic.types.beta.beta_tool_reference_block_param.BetaToolReferenceBlockParam]]",
+        "type": "typing_extensions.Required[typing.Literal['tool_search_tool_search_result']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolSearchToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_tool_search_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_tool_search_tool_result_error_param.BetaToolSearchToolResultErrorParam, anthropic.types.beta.beta_tool_search_tool_search_result_block_param.BetaToolSearchToolSearchResultBlockParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool_search_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaCodeExecutionToolResultErrorParam",
+      "module": "anthropic.types.beta.beta_code_execution_tool_result_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'too_many_requests', 'execution_time_exceeded']]",
+        "type": "typing_extensions.Required[typing.Literal['code_execution_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaCodeExecutionToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_code_execution_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_code_execution_tool_result_error_param.BetaCodeExecutionToolResultErrorParam, anthropic.types.beta.beta_code_execution_result_block_param.BetaCodeExecutionResultBlockParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['code_execution_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaBashCodeExecutionToolResultErrorParam",
+      "module": "anthropic.types.beta.beta_bash_code_execution_tool_result_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'too_many_requests', 'execution_time_exceeded', 'output_file_too_large']]",
+        "type": "typing_extensions.Required[typing.Literal['bash_code_execution_tool_result_error']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaBashCodeExecutionToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_bash_code_execution_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_bash_code_execution_tool_result_error_param.BetaBashCodeExecutionToolResultErrorParam, anthropic.types.beta.beta_bash_code_execution_result_block_param.BetaBashCodeExecutionResultBlockParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['bash_code_execution_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaTextEditorCodeExecutionToolResultErrorParam",
+      "module": "anthropic.types.beta.beta_text_editor_code_execution_tool_result_error_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "error_code": "typing_extensions.Required[typing.Literal['invalid_tool_input', 'unavailable', 'too_many_requests', 'execution_time_exceeded', 'file_not_found']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_code_execution_tool_result_error']]",
+        "error_message": "typing.Optional[str]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaTextEditorCodeExecutionToolResultBlockParam",
+      "module": "anthropic.types.beta.beta_text_editor_code_execution_tool_result_block_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "content": "typing_extensions.Required[typing.Union[anthropic.types.beta.beta_text_editor_code_execution_tool_result_error_param.BetaTextEditorCodeExecutionToolResultErrorParam, anthropic.types.beta.beta_text_editor_code_execution_view_result_block_param.BetaTextEditorCodeExecutionViewResultBlockParam, anthropic.types.beta.beta_text_editor_code_execution_create_result_block_param.BetaTextEditorCodeExecutionCreateResultBlockParam, anthropic.types.beta.beta_text_editor_code_execution_str_replace_result_block_param.BetaTextEditorCodeExecutionStrReplaceResultBlockParam]]",
+        "tool_use_id": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_code_execution_tool_result']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMCPToolConfigParam",
+      "module": "anthropic.types.beta.beta_mcp_tool_config_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "defer_loading": "<class 'bool'>",
+        "enabled": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMCPToolDefaultConfigParam",
+      "module": "anthropic.types.beta.beta_mcp_tool_default_config_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "defer_loading": "<class 'bool'>",
+        "enabled": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMCPToolsetParam",
+      "module": "anthropic.types.beta.beta_mcp_toolset_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "mcp_server_name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['mcp_toolset']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "configs": "typing.Optional[typing.Dict[str, anthropic.types.beta.beta_mcp_tool_config_param.BetaMCPToolConfigParam]]",
+        "default_config": "<class 'anthropic.types.beta.beta_mcp_tool_default_config_param.BetaMCPToolDefaultConfigParam'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolBash20241022Param",
+      "module": "anthropic.types.beta.beta_tool_bash_20241022_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['bash']]",
+        "type": "typing_extensions.Required[typing.Literal['bash_20241022']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolBash20250124Param",
+      "module": "anthropic.types.beta.beta_tool_bash_20250124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['bash']]",
+        "type": "typing_extensions.Required[typing.Literal['bash_20250124']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMemoryTool20250818Param",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['memory']]",
+        "type": "typing_extensions.Required[typing.Literal['memory_20250818']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebFetchTool20250910Param",
+      "module": "anthropic.types.beta.beta_web_fetch_tool_20250910_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['web_fetch']]",
+        "type": "typing_extensions.Required[typing.Literal['web_fetch_20250910']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "allowed_domains": "typing.Optional[typing.Sequence[str]]",
+        "blocked_domains": "typing.Optional[typing.Sequence[str]]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "citations": "typing.Optional[anthropic.types.beta.beta_citations_config_param.BetaCitationsConfigParam]",
+        "defer_loading": "<class 'bool'>",
+        "max_content_tokens": "typing.Optional[int]",
+        "max_uses": "typing.Optional[int]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaWebSearchTool20250305Param",
+      "module": "anthropic.types.beta.beta_web_search_tool_20250305_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['web_search']]",
+        "type": "typing_extensions.Required[typing.Literal['web_search_20250305']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "allowed_domains": "typing.Optional[typing.Sequence[str]]",
+        "blocked_domains": "typing.Optional[typing.Sequence[str]]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "max_uses": "typing.Optional[int]",
+        "strict": "<class 'bool'>",
+        "user_location": "typing.Optional[anthropic.types.beta.beta_web_search_tool_20250305_param.UserLocation]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolTextEditor20241022Param",
+      "module": "anthropic.types.beta.beta_tool_text_editor_20241022_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_editor']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20241022']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolTextEditor20250124Param",
+      "module": "anthropic.types.beta.beta_tool_text_editor_20250124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_editor']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250124']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolTextEditor20250429Param",
+      "module": "anthropic.types.beta.beta_tool_text_editor_20250429_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_based_edit_tool']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250429']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolTextEditor20250728Param",
+      "module": "anthropic.types.beta.beta_tool_text_editor_20250728_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['str_replace_based_edit_tool']]",
+        "type": "typing_extensions.Required[typing.Literal['text_editor_20250728']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "max_characters": "typing.Optional[int]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolComputerUse20241022Param",
+      "module": "anthropic.types.beta.beta_tool_computer_use_20241022_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "display_height_px": "typing_extensions.Required[int]",
+        "display_width_px": "typing_extensions.Required[int]",
+        "name": "typing_extensions.Required[typing.Literal['computer']]",
+        "type": "typing_extensions.Required[typing.Literal['computer_20241022']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "display_number": "typing.Optional[int]",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolComputerUse20250124Param",
+      "module": "anthropic.types.beta.beta_tool_computer_use_20250124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "display_height_px": "typing_extensions.Required[int]",
+        "display_width_px": "typing_extensions.Required[int]",
+        "name": "typing_extensions.Required[typing.Literal['computer']]",
+        "type": "typing_extensions.Required[typing.Literal['computer_20250124']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "display_number": "typing.Optional[int]",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolComputerUse20251124Param",
+      "module": "anthropic.types.beta.beta_tool_computer_use_20251124_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "display_height_px": "typing_extensions.Required[int]",
+        "display_width_px": "typing_extensions.Required[int]",
+        "name": "typing_extensions.Required[typing.Literal['computer']]",
+        "type": "typing_extensions.Required[typing.Literal['computer_20251124']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "display_number": "typing.Optional[int]",
+        "enable_zoom": "<class 'bool'>",
+        "input_examples": "typing.Iterable[typing.Dict[str, object]]",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaCodeExecutionTool20250522Param",
+      "module": "anthropic.types.beta.beta_code_execution_tool_20250522_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['code_execution']]",
+        "type": "typing_extensions.Required[typing.Literal['code_execution_20250522']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaCodeExecutionTool20250825Param",
+      "module": "anthropic.types.beta.beta_code_execution_tool_20250825_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['code_execution']]",
+        "type": "typing_extensions.Required[typing.Literal['code_execution_20250825']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolSearchToolBm25_20251119Param",
+      "module": "anthropic.types.beta.beta_tool_search_tool_bm25_20251119_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['tool_search_tool_bm25']]",
+        "type": "typing_extensions.Required[typing.Literal['tool_search_tool_bm25_20251119', 'tool_search_tool_bm25']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolSearchToolRegex20251119Param",
+      "module": "anthropic.types.beta.beta_tool_search_tool_regex_20251119_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[typing.Literal['tool_search_tool_regex']]",
+        "type": "typing_extensions.Required[typing.Literal['tool_search_tool_regex_20251119', 'tool_search_tool_regex']]",
+        "allowed_callers": "typing.List[typing.Literal['direct', 'code_execution_20250825']]",
+        "cache_control": "typing.Optional[anthropic.types.beta.beta_cache_control_ephemeral_param.BetaCacheControlEphemeralParam]",
+        "defer_loading": "<class 'bool'>",
+        "strict": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolChoiceAnyParam",
+      "module": "anthropic.types.beta.beta_tool_choice_any_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['any']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolChoiceAutoParam",
+      "module": "anthropic.types.beta.beta_tool_choice_auto_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['auto']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolChoiceNoneParam",
+      "module": "anthropic.types.beta.beta_tool_choice_none_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['none']]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolChoiceToolParam",
+      "module": "anthropic.types.beta.beta_tool_choice_tool_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "name": "typing_extensions.Required[str]",
+        "type": "typing_extensions.Required[typing.Literal['tool']]",
+        "disable_parallel_tool_use": "<class 'bool'>"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolUsesKeepParam",
+      "module": "anthropic.types.beta.beta_tool_uses_keep_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['tool_uses']]",
+        "value": "typing_extensions.Required[int]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaToolUsesTriggerParam",
+      "module": "anthropic.types.beta.beta_tool_uses_trigger_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['tool_uses']]",
+        "value": "typing_extensions.Required[int]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaClearToolUses20250919EditParam",
+      "module": "anthropic.types.beta.beta_clear_tool_uses_20250919_edit_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "type": "typing_extensions.Required[typing.Literal['clear_tool_uses_20250919']]",
+        "clear_at_least": "typing.Optional[anthropic.types.beta.beta_input_tokens_clear_at_least_param.BetaInputTokensClearAtLeastParam]",
+        "clear_tool_inputs": "typing.Union[bool, typing.Sequence[str], NoneType]",
+        "exclude_tools": "typing.Optional[typing.Sequence[str]]",
+        "keep": "<class 'anthropic.types.beta.beta_tool_uses_keep_param.BetaToolUsesKeepParam'>",
+        "trigger": "typing.Union[anthropic.types.beta.beta_input_tokens_trigger_param.BetaInputTokensTriggerParam, anthropic.types.beta.beta_tool_uses_trigger_param.BetaToolUsesTriggerParam]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaRequestMCPServerToolConfigurationParam",
+      "module": "anthropic.types.beta.beta_request_mcp_server_tool_configuration_param",
+      "doc": "dict() -> new empty dictionary\ndict(mapping) -> new dictionary initialized from a mapping object's\n    (key, value) pairs\ndict(iterable) -> new dictionary initialized as if via:\n    d = {}\n    for k, v in iterable:\n        d[k] = v\ndict(**kwargs) -> new dictionary initialized with the name=value pairs\n    in the keyword argument list.  For example:  dict(one=1, two=2)",
+      "annotations": {
+        "allowed_tools": "typing.Optional[typing.Sequence[str]]",
+        "enabled": "typing.Optional[bool]"
+      },
+      "bases": [
+        "dict"
+      ]
+    },
+    {
+      "name": "BetaMemoryTool20250818ViewCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_view_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMemoryTool20250818CreateCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_create_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMemoryTool20250818DeleteCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_delete_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMemoryTool20250818InsertCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_insert_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMemoryTool20250818RenameCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_rename_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaMemoryTool20250818StrReplaceCommand",
+      "module": "anthropic.types.beta.beta_memory_tool_20250818_str_replace_command",
+      "doc": "!!! abstract \"Usage Documentation\"\n    [Models](../concepts/models.md)\n\nA base class for creating Pydantic models.\n\nAttributes:\n    __class_vars__: The names of the class variables defined on the model.\n    __private_attributes__: Metadata about the private attributes of the model.\n    __signature__: The synthesized `__init__` [`Signature`][inspect.Signature] of the model.\n\n    __pydantic_complete__: Whether model building is completed, or if there are still undefined fields.\n    __pydantic_core_schema__: The core schema of the model.\n    __pydantic_custom_init__: Whether the model has a custom `__init__` function.\n    __pydantic_decorators__: Metadata containing the decorators defined on the model.\n        This replaces `Model.__validators__` and `Model.__root_validators__` from Pydantic V1.\n    __pydantic_generic_metadata__: Metadata for generic models; contains data used for a similar purpose to\n        __args__, __origin__, __parameters__ in typing-module generics. May eventually be replaced by these.\n    __pydantic_parent_namespace__: Parent namespace of the model, used for automatic rebuilding of models.\n    __pydantic_post_init__: The name of the post-init method for the model, if defined.\n    __pydantic_root_model__: Whether the model is a [`RootModel`][pydantic.root_model.RootModel].\n    __pydantic_serializer__: The `pydantic-core` `SchemaSerializer` used to dump instances of the model.\n    __pydantic_validator__: The `pydantic-core` `SchemaValidator` used to validate instances of the model.\n\n    __pydantic_fields__: A dictionary of field names and their corresponding [`FieldInfo`][pydantic.fields.FieldInfo] objects.\n    __pydantic_computed_fields__: A dictionary of computed field names and their corresponding [`ComputedFieldInfo`][pydantic.fields.ComputedFieldInfo] objects.\n\n    __pydantic_extra__: A dictionary containing extra values, if [`extra`][pydantic.config.ConfigDict.extra]\n        is set to `'allow'`.\n    __pydantic_fields_set__: The names of fields explicitly set during instantiation.\n    __pydantic_private__: Values of private attributes set on the model instance.",
+      "annotations": {},
+      "bases": [
+        "BaseModel"
+      ],
+      "annotations_error": "name 'ClassVar' is not defined",
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "BetaToolRunner",
+      "module": "anthropic.lib.tools._beta_runner",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {},
+      "bases": [
+        "BaseSyncToolRunner"
+      ]
+    },
+    {
+      "name": "BetaAsyncToolRunner",
+      "module": "anthropic.lib.tools._beta_runner",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {},
+      "bases": [
+        "BaseAsyncToolRunner"
+      ]
+    },
+    {
+      "name": "BetaStreamingToolRunner",
+      "module": "anthropic.lib.tools._beta_runner",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {},
+      "bases": [
+        "BaseSyncToolRunner"
+      ]
+    },
+    {
+      "name": "BetaAsyncStreamingToolRunner",
+      "module": "anthropic.lib.tools._beta_runner",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {},
+      "bases": [
+        "BaseAsyncToolRunner"
+      ]
+    },
+    {
+      "name": "BetaFunctionTool",
+      "module": "anthropic.lib.tools._beta_functions",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {
+        "func": "~CallableT",
+        "name": "<class 'str'>",
+        "description": "<class 'str'>",
+        "input_schema": "typing.Union[anthropic.types.tool_param.InputSchemaTyped, typing.Dict[str, object]]"
+      },
+      "bases": [
+        "BaseFunctionTool"
+      ],
+      "attributes": {
+        "call": "<class 'function'>"
+      }
+    },
+    {
+      "name": "BetaAsyncFunctionTool",
+      "module": "anthropic.lib.tools._beta_functions",
+      "doc": "Abstract base class for generic types.\n\nA generic type is typically declared by inheriting from\nthis class parameterized with one or more type variables.\nFor example, a generic mapping type might be defined as::\n\n  class Mapping(Generic[KT, VT]):\n      def __getitem__(self, key: KT) -> VT:\n          ...\n      # Etc.\n\nThis class can then be used as follows::\n\n  def lookup_name(mapping: Mapping[KT, VT], key: KT, default: VT) -> VT:\n      try:\n          return mapping[key]\n      except KeyError:\n          return default",
+      "annotations": {
+        "func": "~CallableT",
+        "name": "<class 'str'>",
+        "description": "<class 'str'>",
+        "input_schema": "typing.Union[anthropic.types.tool_param.InputSchemaTyped, typing.Dict[str, object]]"
+      },
+      "bases": [
+        "BaseFunctionTool"
+      ],
+      "attributes": {
+        "call": "<class 'function'>"
+      }
+    },
+    {
+      "name": "BetaBuiltinFunctionTool",
+      "module": "anthropic.lib.tools._beta_functions",
+      "doc": "Helper class that provides a standard way to create an ABC using\ninheritance.",
+      "annotations": {},
+      "bases": [
+        "ABC"
+      ],
+      "attributes": {
+        "to_dict": "<class 'function'>",
+        "call": "<class 'function'>",
+        "name": "<class 'property'>"
+      }
+    },
+    {
+      "name": "BetaAsyncBuiltinFunctionTool",
+      "module": "anthropic.lib.tools._beta_functions",
+      "doc": "Helper class that provides a standard way to create an ABC using\ninheritance.",
+      "annotations": {},
+      "bases": [
+        "ABC"
+      ],
+      "attributes": {
+        "to_dict": "<class 'function'>",
+        "call": "<class 'function'>",
+        "name": "<class 'property'>"
+      }
+    },
+    {
+      "name": "BetaAbstractMemoryTool",
+      "module": "anthropic.lib.tools._beta_builtin_memory_tool",
+      "doc": "Abstract base class for memory tool implementations.\n\nThis class provides the interface for implementing a custom memory backend for Claude.\n\nSubclass this to create your own memory storage solution (e.g., database, cloud storage, encrypted files, etc.).\n\nExample usage:\n\n```py\nclass MyMemoryTool(BetaAbstractMemoryTool):\n    def view(self, command: BetaMemoryTool20250818ViewCommand) -> BetaFunctionToolResultType:\n        ...\n        return \"view result\"\n\n    def create(self, command: BetaMemoryTool20250818CreateCommand) -> BetaFunctionToolResultType:\n        ...\n        return \"created successfully\"\n\n    # ... implement other abstract methods\n\n\nclient = Anthropic()\nmemory_tool = MyMemoryTool()\nmessage = client.beta.messages.run_tools(\n    model=\"claude-sonnet-4-5\",\n    messages=[{\"role\": \"user\", \"content\": \"Remember that I like coffee\"}],\n    tools=[memory_tool],\n).until_done()\n```",
+      "annotations": {},
+      "bases": [
+        "BetaBuiltinFunctionTool"
+      ],
+      "attributes": {
+        "to_dict": "<class 'function'>",
+        "call": "<class 'function'>",
+        "execute": "<class 'function'>",
+        "view": "<class 'function'>",
+        "create": "<class 'function'>",
+        "str_replace": "<class 'function'>",
+        "insert": "<class 'function'>",
+        "delete": "<class 'function'>",
+        "rename": "<class 'function'>",
+        "clear_all_memory": "<class 'function'>"
+      }
+    },
+    {
+      "name": "BetaAsyncAbstractMemoryTool",
+      "module": "anthropic.lib.tools._beta_builtin_memory_tool",
+      "doc": "Abstract base class for memory tool implementations.\n\nThis class provides the interface for implementing a custom memory backend for Claude.\n\nSubclass this to create your own memory storage solution (e.g., database, cloud storage, encrypted files, etc.).\n\nExample usage:\n\n```py\nclass MyMemoryTool(BetaAbstractMemoryTool):\n    def view(self, command: BetaMemoryTool20250818ViewCommand) -> BetaFunctionToolResultType:\n        ...\n        return \"view result\"\n\n    def create(self, command: BetaMemoryTool20250818CreateCommand) -> BetaFunctionToolResultType:\n        ...\n        return \"created successfully\"\n\n    # ... implement other abstract methods\n\n\nclient = Anthropic()\nmemory_tool = MyMemoryTool()\nmessage = client.beta.messages.run_tools(\n    model=\"claude-3-5-sonnet-20241022\",\n    messages=[{\"role\": \"user\", \"content\": \"Remember that I like coffee\"}],\n    tools=[memory_tool],\n).until_done()\n```",
+      "annotations": {},
+      "bases": [
+        "BetaAsyncBuiltinFunctionTool"
+      ],
+      "attributes": {
+        "to_dict": "<class 'function'>",
+        "call": "<class 'function'>",
+        "execute": "<class 'function'>",
+        "view": "<class 'function'>",
+        "create": "<class 'function'>",
+        "str_replace": "<class 'function'>",
+        "insert": "<class 'function'>",
+        "delete": "<class 'function'>",
+        "rename": "<class 'function'>",
+        "clear_all_memory": "<class 'function'>"
+      }
+    }
+  ],
+  "google": [
+    {
+      "name": "ToolConfig",
+      "module": "google.genai.types",
+      "doc": "Tool config.\n\nThis config is shared for all tools provided in the request.",
+      "annotations": {
+        "function_calling_config": "typing.Optional[google.genai.types.FunctionCallingConfig]",
+        "retrieval_config": "typing.Optional[google.genai.types.RetrievalConfig]"
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "Tool",
+      "module": "google.genai.types",
+      "doc": "Tool details of a tool that the model may use to generate a response.",
+      "annotations": {
+        "function_declarations": "typing.Optional[list[google.genai.types.FunctionDeclaration]]",
+        "retrieval": "typing.Optional[google.genai.types.Retrieval]",
+        "google_search_retrieval": "typing.Optional[google.genai.types.GoogleSearchRetrieval]",
+        "computer_use": "typing.Optional[google.genai.types.ComputerUse]",
+        "file_search": "typing.Optional[google.genai.types.FileSearch]",
+        "code_execution": "typing.Optional[google.genai.types.ToolCodeExecution]",
+        "enterprise_web_search": "typing.Optional[google.genai.types.EnterpriseWebSearch]",
+        "google_maps": "typing.Optional[google.genai.types.GoogleMaps]",
+        "google_search": "typing.Optional[google.genai.types.GoogleSearch]",
+        "url_context": "typing.Optional[google.genai.types.UrlContext]"
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "attributes": {
+        "model_config": "<class 'dict'>"
+      }
+    },
+    {
+      "name": "FunctionDeclaration",
+      "module": "google.genai.types",
+      "doc": "Defines a function that the model can generate JSON inputs for.\n\nThe inputs are based on `OpenAPI 3.0 specifications\n<https://spec.openapis.org/oas/v3.0.3>`_.",
+      "annotations": {
+        "behavior": "typing.Optional[google.genai.types.Behavior]",
+        "description": "typing.Optional[str]",
+        "name": "typing.Optional[str]",
+        "parameters": "typing.Optional[google.genai.types.Schema]",
+        "parameters_json_schema": "typing.Optional[typing.Any]",
+        "response": "typing.Optional[google.genai.types.Schema]",
+        "response_json_schema": "typing.Optional[typing.Any]"
+      },
+      "bases": [
+        "BaseModel"
+      ],
+      "attributes": {
+        "from_callable_with_api_option": "<class 'classmethod'>",
+        "from_callable": "<class 'classmethod'>",
+        "model_config": "<class 'dict'>"
+      }
+    }
+  ]
+}
