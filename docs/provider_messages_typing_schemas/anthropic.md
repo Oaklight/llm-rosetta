@@ -24,14 +24,16 @@ graph TD
     E --> M[ToolResultBlockParam]
     E --> N[ServerToolUseBlockParam]
     E --> O[WebSearchToolResultBlockParam]
+    E --> P[MCPToolUseBlockParam]
+    E --> Q[MCPToolResultBlockParam]
 
-    G --> P[Base64ImageSourceParam]
-    G --> Q[URLImageSourceParam]
+    G --> R[Base64ImageSourceParam]
+    G --> S[URLImageSourceParam]
 
-    H --> R[Base64PDFSourceParam]
-    H --> S[PlainTextSourceParam]
-    H --> T[ContentBlockSourceParam]
-    H --> U[URLPDFSourceParam]
+    H --> T[Base64PDFSourceParam]
+    H --> U[PlainTextSourceParam]
+    H --> V[ContentBlockSourceParam]
+    H --> W[URLPDFSourceParam]
 ```
 
 ## 主类型定义
@@ -58,6 +60,8 @@ class MessageParam(TypedDict, total=False):
                     ToolResultBlockParam,
                     ServerToolUseBlockParam,
                     WebSearchToolResultBlockParam,
+                    MCPToolUseBlockParam,
+                    MCPToolResultBlockParam,
                     ContentBlock,
                 ]
             ],
@@ -310,6 +314,48 @@ class WebSearchToolResultBlockParam(TypedDict, total=False):
 | `type`          | `Literal["web_search_tool_result"]`         | ✓    | 内容块类型标识    |
 | `cache_control` | `Optional[CacheControlEphemeralParam]`      | ✗    | 缓存控制断点      |
 
+### 11. MCPToolUseBlockParam
+
+**用途**: MCP (Model Context Protocol) 工具使用内容块（assistant 发起 MCP 工具调用）
+
+```python
+class MCPToolUseBlockParam(TypedDict, total=False):
+    id: Required[str]
+    input: Required[Dict[str, object]]
+    name: Required[str]
+    server_name: Required[str]
+    type: Required[Literal["mcp_tool_use"]]
+    cache_control: Optional[CacheControlEphemeralParam]
+```
+
+| 字段            | 类型                                   | 必需 | 说明           |
+| --------------- | -------------------------------------- | ---- | -------------- |
+| `id`            | `str`                                  | ✓    | 工具调用 ID    |
+| `input`         | `Dict[str, object]`                    | ✓    | 工具输入参数   |
+| `name`          | `str`                                  | ✓    | 工具名称       |
+| `server_name`   | `str`                                  | ✓    | MCP 服务器名称 |
+| `type`          | `Literal["mcp_tool_use"]`              | ✓    | 内容块类型标识 |
+| `cache_control` | `Optional[CacheControlEphemeralParam]` | ✗    | 缓存控制断点   |
+
+### 12. MCPToolResultBlockParam
+
+**用途**: MCP 工具结果内容块（模型接收 MCP 工具执行结果）
+
+```python
+class MCPToolResultBlock(BaseModel):
+    content: Union[str, List[TextBlock]]
+    is_error: bool
+    tool_use_id: str
+    type: Literal["mcp_tool_result"]
+```
+
+| 字段          | 类型                          | 必需 | 说明              |
+| ------------- | ----------------------------- | ---- | ----------------- |
+| `content`     | `Union[str, List[TextBlock]]` | ✓    | 工具结果内容      |
+| `is_error`    | `bool`                        | ✓    | 是否为错误结果    |
+| `tool_use_id` | `str`                         | ✓    | 对应的工具调用 ID |
+| `type`        | `Literal["mcp_tool_result"]`  | ✓    | 内容块类型标识    |
+
 ## 辅助类型
 
 ### CacheControlEphemeralParam
@@ -328,6 +374,95 @@ class CacheControlEphemeralParam(TypedDict, total=False):
 | `ttl`  | `Literal["5m", "1h"]`  | ✗    | 缓存生存时间，默认 5 分钟 |
 
 **说明**: 这是 Anthropic 的 Prompt Caching 功能，可以在内容块上设置缓存断点以减少重复处理成本。
+
+## MCP 工具调用相关类型
+
+### 1. MCPToolsetParam
+
+**用途**: MCP 工具集配置参数
+
+```python
+class MCPToolsetParam(TypedDict, total=False):
+    mcp_server_name: Required[str]
+    type: Required[Literal["mcp_toolset"]]
+    cache_control: Optional[CacheControlEphemeralParam]
+    configs: Optional[Dict[str, MCPToolConfigParam]]
+    default_config: MCPToolDefaultConfigParam
+```
+
+| 字段              | 类型                                      | 必需 | 说明                               |
+| ----------------- | ----------------------------------------- | ---- | ---------------------------------- |
+| `mcp_server_name` | `str`                                     | ✓    | MCP 服务器名称                     |
+| `type`            | `Literal["mcp_toolset"]`                  | ✓    | 工具集类型标识                     |
+| `cache_control`   | `Optional[CacheControlEphemeralParam]`    | ✗    | 缓存控制断点                       |
+| `configs`         | `Optional[Dict[str, MCPToolConfigParam]]` | ✗    | 特定工具的配置覆盖，以工具名称为键 |
+| `default_config`  | `MCPToolDefaultConfigParam`               | ✗    | 应用于此服务器所有工具的默认配置   |
+
+### 2. MCPToolConfigParam
+
+**用途**: MCP 工具配置参数
+
+```python
+class MCPToolConfigParam(TypedDict, total=False):
+    defer_loading: bool
+    enabled: bool
+```
+
+| 字段            | 类型   | 必需 | 说明             |
+| --------------- | ------ | ---- | ---------------- |
+| `defer_loading` | `bool` | ✗    | 是否延迟加载工具 |
+| `enabled`       | `bool` | ✗    | 是否启用工具     |
+
+### 3. MCPToolDefaultConfigParam
+
+**用途**: MCP 工具默认配置参数
+
+```python
+class MCPToolDefaultConfigParam(TypedDict, total=False):
+    defer_loading: bool
+    enabled: bool
+```
+
+| 字段            | 类型   | 必需 | 说明             |
+| --------------- | ------ | ---- | ---------------- |
+| `defer_loading` | `bool` | ✗    | 是否延迟加载工具 |
+| `enabled`       | `bool` | ✗    | 是否启用工具     |
+
+### 4. RequestMCPServerURLDefinitionParam
+
+**用途**: MCP 服务器 URL 定义参数
+
+```python
+class RequestMCPServerURLDefinitionParam(TypedDict, total=False):
+    name: Required[str]
+    type: Required[Literal["url"]]
+    url: Required[str]
+    authorization_token: Optional[str]
+    tool_configuration: Optional[RequestMCPServerToolConfigurationParam]
+```
+
+| 字段                  | 类型                                               | 必需 | 说明         |
+| --------------------- | -------------------------------------------------- | ---- | ------------ |
+| `name`                | `str`                                              | ✓    | 服务器名称   |
+| `type`                | `Literal["url"]`                                   | ✓    | 定义类型标识 |
+| `url`                 | `str`                                              | ✓    | 服务器 URL   |
+| `authorization_token` | `Optional[str]`                                    | ✗    | 授权令牌     |
+| `tool_configuration`  | `Optional[RequestMCPServerToolConfigurationParam]` | ✗    | 工具配置     |
+
+### 5. RequestMCPServerToolConfigurationParam
+
+**用途**: MCP 服务器工具配置参数
+
+```python
+class RequestMCPServerToolConfigurationParam(TypedDict, total=False):
+    allowed_tools: Optional[SequenceNotStr[str]]
+    enabled: Optional[bool]
+```
+
+| 字段            | 类型                            | 必需 | 说明               |
+| --------------- | ------------------------------- | ---- | ------------------ |
+| `allowed_tools` | `Optional[SequenceNotStr[str]]` | ✗    | 允许使用的工具列表 |
+| `enabled`       | `Optional[bool]`                | ✗    | 是否启用工具配置   |
 
 ## 工具选择类型详解
 
@@ -437,6 +572,7 @@ class ToolChoiceToolParam(TypedDict, total=False):
 - **工具使用**: ToolUseBlockParam（assistant 消息中）
 - **工具结果**: ToolResultBlockParam（user 消息中）
 - **服务器工具**: ServerToolUseBlockParam（特定于 web_search）
+- **MCP 工具**: MCPToolUseBlockParam（Model Context Protocol 工具）
 - **双向流程**: assistant 发起 → user 响应
 
 ### 5. 工具选择机制
@@ -451,8 +587,9 @@ class ToolChoiceToolParam(TypedDict, total=False):
 - **思考过程**: ThinkingBlockParam 和 RedactedThinkingBlockParam
 - **引用系统**: citations 字段支持内容引用
 - **搜索集成**: 内置搜索结果和 web 搜索工具支持
+- **MCP 支持**: 通过 Model Context Protocol 支持外部工具集成
 
-### 6. 与 OpenAI 的主要差异
+### 7. 与 OpenAI 的主要差异
 
 | 特性        | Anthropic               | OpenAI                                                     |
 | ----------- | ----------------------- | ---------------------------------------------------------- |
@@ -462,6 +599,7 @@ class ToolChoiceToolParam(TypedDict, total=False):
 | 多模态      | 内容块                  | 内容部分                                                   |
 | 缓存        | 内置支持                | 无                                                         |
 | 思考过程    | 内置支持                | 无                                                         |
+| MCP 工具    | 内置支持                | 无                                                         |
 
 ## 使用示例
 
@@ -536,6 +674,50 @@ user_msg: MessageParam = {
 }
 ```
 
+### MCP 工具调用示例
+
+```python
+# 在 API 请求中配置 MCP 服务器
+mcp_servers = [
+    {
+        "name": "calculator-server",
+        "type": "url",
+        "url": "https://calculator-mcp-server.example.com",
+        "authorization_token": "auth_token_123",
+        "tool_configuration": {
+            "allowed_tools": ["calc_evaluate", "calc_help"],
+            "enabled": True
+        }
+    }
+]
+
+# Assistant 发起 MCP 工具调用
+assistant_msg: MessageParam = {
+    "role": "assistant",
+    "content": [
+        {
+            "type": "text",
+            "text": "Let me calculate that for you."
+        },
+        {
+            "type": "mcp_tool_use",
+            "id": "mcptool_456",
+            "server_name": "calculator-server",
+            "name": "calc_evaluate",
+            "input": {"expression": "26 * 9 / 5 + 32"}
+        }
+    ]
+}
+
+# MCP 工具结果（由系统自动处理）
+mcp_result = {
+    "type": "mcp_tool_result",
+    "tool_use_id": "mcptool_456",
+    "content": "78.8",
+    "is_error": False
+}
+```
+
 ### 使用缓存控制
 
 ```python
@@ -587,13 +769,17 @@ user_msg: MessageParam = {
    - Assistant 在 content 中包含 tool_use 块
    - User 必须在下一条消息中提供 tool_result 块
    - tool_result 的 tool_use_id 必须匹配 tool_use 的 id
-4. **缓存控制**:
+4. **MCP 工具调用**:
+   - 需要在 API 请求中通过 mcp_servers 参数配置 MCP 服务器
+   - MCP 工具结果由系统自动处理，不需要用户手动提供
+   - 可以通过 MCPToolsetParam 配置工具集
+5. **缓存控制**:
    - 只在长上下文场景下使用
    - 缓存断点会影响计费
    - TTL 默认为 5 分钟
-5. **类型标识**: 每个内容块都必须有正确的 type 字段
-6. **图片格式**: 仅支持 JPEG, PNG, GIF, WebP
-7. **文档支持**: 支持 PDF 和纯文本文档
+6. **类型标识**: 每个内容块都必须有正确的 type 字段
+7. **图片格式**: 仅支持 JPEG, PNG, GIF, WebP
+8. **文档支持**: 支持 PDF 和纯文本文档
 
 ## 版本信息
 
