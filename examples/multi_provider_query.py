@@ -187,6 +187,69 @@ def query_google(
     return response
 
 
+def query_openai_responses(
+    messages: List[Dict[str, Any]],
+    tools: Optional[List[Dict[str, Any]]] = None,
+    model: Optional[str] = None,
+) -> Any:
+    """
+    使用 OpenAI Responses API 发送请求。
+
+    Args:
+        messages: OpenAI 风格的消息列表（role: system/user/assistant，content 为字符串）
+        tools: OpenAI 函数工具定义（与 chat.completions 相同的结构）
+        model: 模型名称（默认读取环境变量 OPENAI_MODEL 或 gpt-4.1-nano）
+
+    Returns:
+        OpenAI Responses API 的响应对象
+    """
+    # 初始化客户端
+    client = openai.OpenAI(
+        api_key=os.getenv("OPENAI_API_KEY"),
+        base_url=os.getenv("OPENAI_BASE_URL"),
+    )
+
+    # 提取 system 指令并构造输入文本
+    system_content = None
+    transcript_lines: List[str] = []
+    for msg in messages:
+        role = msg.get("role")
+        content = msg.get("content", "")
+        if role == "system":
+            system_content = content
+            continue
+
+        # 将对话转为简洁的串联文本，保持上下文
+        prefix = "User" if role == "user" else "Assistant"
+        # 若 content 不是纯字符串（极少见），做兜底处理
+        if isinstance(content, list):
+            # 尝试拼接其中的 text 字段
+            text_parts = []
+            for part in content:
+                if isinstance(part, dict) and "text" in part:
+                    text_parts.append(part["text"])
+            content = "\n".join(text_parts) if text_parts else str(content)
+        transcript_lines.append(f"{prefix}: {content}")
+
+    input_text = "\n".join(transcript_lines) if transcript_lines else ""
+
+    # 组装请求参数
+    kwargs: Dict[str, Any] = {
+        "model": model or os.getenv("OPENAI_MODEL", "gpt-4.1-nano"),
+        "input": input_text or (messages[-1].get("content", "") if messages else ""),
+    }
+    if system_content:
+        kwargs["instructions"] = system_content
+    if tools:
+        kwargs["tools"] = tools
+        kwargs["tool_choice"] = "auto"
+
+    # 发送请求（Responses API）
+    response = client.responses.create(**kwargs)
+    return response
+
+
+# ... rest of code ...
 # def convert_messages(
 #     messages: List[Dict[str, Any]], source_provider: str, target_provider: str
 # ) -> List[Dict[str, Any]]:
