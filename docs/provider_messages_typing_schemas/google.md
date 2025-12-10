@@ -356,7 +356,7 @@ contents = [
   - ANY（允许使用任何函数）
   - NONE（不使用任何函数）
   - ANY+allowed_function_names（强制选择特定函数）
-- **函数名过滤**: 可以通过`allowed_function_names`限制可用函数，当与ANY模式结合使用时形成第四种模式
+- **函数名过滤**: 可以通过`allowed_function_names`限制可用函数，当与 ANY 模式结合使用时形成第四种模式
 - **完全禁用**: 可以通过`disable_functions`完全禁用函数调用
 - **配置层级**: 通过嵌套的配置对象（ToolConfig → FunctionCallingConfig）设置
 
@@ -366,6 +366,167 @@ contents = [
 - **多轮对话**: 通过消息历史实现
 - **安全过滤**: 内置内容过滤机制
 - **多模型支持**: 适配不同的 Google AI 模型
+
+## MCP 工具调用机制
+
+### 概述
+
+Google GenAI SDK 支持通过 Model Context Protocol (MCP)与外部工具进行交互。MCP 是一种标准化协议，允许模型与外部服务进行通信，从而扩展模型的能力。
+
+### 关键组件
+
+#### 1. MCP 工具适配器
+
+Google GenAI SDK 使用`McpToGenAiToolAdapter`类将 MCP 工具转换为 Gemini 可用的工具：
+
+```python
+class McpToGenAiToolAdapter:
+    """Adapter for working with MCP tools in a GenAI client."""
+
+    def __init__(
+        self,
+        session: "mcp.ClientSession",
+        list_tools_result: "mcp_types.ListToolsResult",
+    ) -> None:
+        self._mcp_session = session
+        self._list_tools_result = list_tools_result
+
+    async def call_tool(
+        self, function_call: FunctionCall
+    ) -> "mcp_types.CallToolResult":
+        """Calls a function on the MCP server."""
+        name = function_call.name if function_call.name else ""
+        arguments = dict(function_call.args) if function_call.args else {}
+
+        return typing.cast(
+            "mcp_types.CallToolResult",
+            await self._mcp_session.call_tool(
+                name=name,
+                arguments=arguments,
+            ),
+        )
+
+    @property
+    def tools(self) -> list[Tool]:
+        """Returns a list of Google GenAI tools."""
+        return mcp_to_gemini_tools(self._list_tools_result.tools)
+```
+
+#### 2. MCP 工具转换
+
+SDK 提供了将 MCP 工具转换为 Gemini 工具的函数：
+
+```python
+def mcp_to_gemini_tool(tool: McpTool) -> types.Tool:
+    """Translates an MCP tool to a Google GenAI tool."""
+    return types.Tool(
+        function_declarations=[{
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": types.Schema.from_json_schema(
+                json_schema=types.JSONSchema(
+                    **_filter_to_supported_schema(tool.inputSchema)
+                )
+            ),
+        }]
+    )
+
+def mcp_to_gemini_tools(tools: list[McpTool]) -> list[types.Tool]:
+    """Translates a list of MCP tools to a list of Google GenAI tools."""
+    return [mcp_to_gemini_tool(tool) for tool in tools]
+```
+
+#### 3. MCP 会话处理
+
+SDK 支持检测和处理 MCP 会话：
+
+```python
+def has_mcp_tool_usage(tools: types.ToolListUnion) -> bool:
+    """Checks whether the list of tools contains any MCP tools or sessions."""
+    if McpClientSession is None:
+        return False
+    for tool in tools:
+        if isinstance(tool, McpTool) or isinstance(tool, McpClientSession):
+            return True
+    return False
+
+def has_mcp_session_usage(tools: types.ToolListUnion) -> bool:
+    """Checks whether the list of tools contains any MCP sessions."""
+    if McpClientSession is None:
+        return False
+    for tool in tools:
+        if isinstance(tool, McpClientSession):
+            return True
+    return False
+```
+
+### 使用流程
+
+1. **初始化 MCP 服务器**：创建 MCP 服务器参数并初始化连接
+2. **创建 MCP 会话**：使用服务器连接创建 ClientSession
+3. **将 MCP 会话传递给模型**：在 generate_content 调用中将 MCP 会话作为工具传递
+4. **自动工具调用**：SDK 会自动处理工具调用和响应
+
+### 使用示例
+
+```python
+import os
+import asyncio
+from datetime import datetime
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from google import genai
+
+client = genai.Client()
+
+# 创建stdio连接的服务器参数
+server_params = StdioServerParameters(
+    command="npx",  # 可执行文件
+    args=["-y", "@philschmid/weather-mcp"],  # MCP服务器
+    env=None,  # 可选环境变量
+)
+
+async def run():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            # 提示获取伦敦当天的天气
+            prompt = f"What is the weather in London in {datetime.now().strftime('%Y-%m-%d')}?"
+
+            # 初始化客户端和服务器之间的连接
+            await session.initialize()
+
+            # 向模型发送带有MCP函数声明的请求
+            response = await client.aio.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+                config=genai.types.GenerateContentConfig(
+                    temperature=0,
+                    tools=[session],  # 使用会话，将自动调用工具
+                    # 如果不希望SDK自动调用工具，可以取消下面的注释
+                    # automatic_function_calling=genai.types.AutomaticFunctionCallingConfig(
+                    #     disable=True
+                    # ),
+                ),
+            )
+            print(response.text)
+
+# 启动asyncio事件循环并运行主函数
+asyncio.run(run())
+```
+
+### 内部工作原理
+
+1. **工具转换**：当检测到 MCP 会话或工具时，SDK 会将其转换为 Gemini 可用的工具格式
+2. **自动函数调用**：默认情况下，SDK 会自动处理函数调用，但可以通过配置禁用
+3. **会话管理**：SDK 会管理 MCP 会话的生命周期，确保正确初始化和关闭
+4. **错误处理**：SDK 提供了错误处理机制，可以捕获和处理 MCP 工具调用中的错误
+
+### 注意事项
+
+1. **异步操作**：MCP 工具调用是异步的，需要在异步环境中使用
+2. **工具兼容性**：并非所有 MCP 工具都与自动函数调用兼容，SDK 会在检测到不兼容工具时发出警告
+3. **版本标记**：SDK 会在 API 请求头中添加 MCP 版本标记，以便跟踪使用情况
+4. **JSON Schema 转换**：SDK 会过滤 MCP 工具的输入模式，确保只包含 Gemini 支持的字段
 
 ## 注意事项
 
