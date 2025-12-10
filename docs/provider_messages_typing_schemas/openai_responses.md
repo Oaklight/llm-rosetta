@@ -324,7 +324,28 @@ class ShellCall(TypedDict, total=False):
     """
 ```
 
-### MCP 工具
+## MCP 工具调用类型
+
+OpenAI Responses API 支持 Model Context Protocol (MCP) 工具调用，允许模型与外部服务进行交互。MCP 是一种标准化协议，使模型能够访问外部工具和资源，从而扩展其能力。
+
+### MCP 相关类型概览
+
+在 `ResponseInputItemParam` 联合类型中，有四种与 MCP 相关的类型：
+
+```python
+ResponseInputItemParam: TypeAlias = Union[
+    # ...其他类型...
+    McpListTools,
+    McpApprovalRequest,
+    McpApprovalResponse,
+    McpCall,
+    # ...其他类型...
+]
+```
+
+### McpCall
+
+`McpCall` 是 MCP 工具调用的核心类型，用于表示模型对 MCP 工具的调用请求。
 
 ```python
 class McpCall(TypedDict, total=False):
@@ -357,6 +378,136 @@ class McpCall(TypedDict, total=False):
 
     可以是 `in_progress`、`completed`、`incomplete`、`calling` 或 `failed` 之一。
     """
+```
+
+### McpListTools
+
+`McpListTools` 类型用于列出可用的 MCP 工具。
+
+```python
+class McpListTools(TypedDict, total=False):
+    id: Required[str]
+    """MCP 工具列表请求的唯一 ID。"""
+
+    server_label: Required[str]
+    """MCP 服务器的标签。"""
+
+    type: Required[Literal["mcp_list_tools"]]
+    """项目的类型。始终为 `mcp_list_tools`。"""
+
+    error: Optional[str]
+    """列出工具时的错误（如果有）。"""
+
+    output: Optional[str]
+    """可用工具的 JSON 列表。"""
+
+    status: Literal["in_progress", "completed", "incomplete", "calling", "failed"]
+    """工具列表请求的状态。"""
+```
+
+### McpApprovalRequest
+
+`McpApprovalRequest` 类型用于请求用户批准 MCP 工具调用。
+
+```python
+class McpApprovalRequest(TypedDict, total=False):
+    id: Required[str]
+    """批准请求的唯一 ID。"""
+
+    call: Required[McpCall]
+    """需要批准的 MCP 工具调用。"""
+
+    type: Required[Literal["mcp_approval_request"]]
+    """项目的类型。始终为 `mcp_approval_request`。"""
+
+    status: Literal["in_progress", "completed", "incomplete"]
+    """批准请求的状态。"""
+```
+
+### McpApprovalResponse
+
+`McpApprovalResponse` 类型用于用户对 MCP 工具调用批准请求的响应。
+
+```python
+class McpApprovalResponse(TypedDict, total=False):
+    id: Required[str]
+    """批准响应的唯一 ID。"""
+
+    approval_request_id: Required[str]
+    """对应批准请求的 ID。"""
+
+    approved: Required[bool]
+    """是否批准工具调用。"""
+
+    type: Required[Literal["mcp_approval_response"]]
+    """项目的类型。始终为 `mcp_approval_response`。"""
+
+    status: Literal["in_progress", "completed", "incomplete"]
+    """批准响应的状态。"""
+```
+
+### MCP 工具调用流程
+
+MCP 工具调用的典型流程如下：
+
+1. **工具列表请求**：模型可以通过 `McpListTools` 请求列出特定 MCP 服务器上可用的工具。
+
+2. **工具调用**：模型使用 `McpCall` 调用特定的 MCP 工具，提供必要的参数。
+
+3. **批准请求**（可选）：如果工具调用需要用户批准，系统会生成 `McpApprovalRequest`。
+
+4. **批准响应**（可选）：用户通过 `McpApprovalResponse` 批准或拒绝工具调用。
+
+5. **工具执行**：如果工具调用被批准（或不需要批准），系统会执行工具调用并更新 `McpCall` 的状态和输出。
+
+### MCP 工具调用示例
+
+```python
+# 列出可用工具
+list_tools_request = {
+    "id": "list_123",
+    "server_label": "calculator-server",
+    "type": "mcp_list_tools",
+    "status": "calling"
+}
+
+# 工具调用
+tool_call = {
+    "id": "call_456",
+    "server_label": "calculator-server",
+    "name": "calc_evaluate",
+    "arguments": '{"expression": "26 * 9 / 5 + 32"}',
+    "type": "mcp_call",
+    "status": "calling"
+}
+
+# 批准请求
+approval_request = {
+    "id": "approval_789",
+    "call": tool_call,
+    "type": "mcp_approval_request",
+    "status": "in_progress"
+}
+
+# 批准响应
+approval_response = {
+    "id": "response_012",
+    "approval_request_id": "approval_789",
+    "approved": True,
+    "type": "mcp_approval_response",
+    "status": "completed"
+}
+
+# 工具调用结果
+tool_call_result = {
+    "id": "call_456",
+    "server_label": "calculator-server",
+    "name": "calc_evaluate",
+    "arguments": '{"expression": "26 * 9 / 5 + 32"}',
+    "output": "78.8",
+    "type": "mcp_call",
+    "status": "completed"
+}
 ```
 
 ## 工具调用输出类型
@@ -490,6 +641,8 @@ Responses API 与传统的 Chat Completions API 相比有以下主要区别：
 
 5. **推理能力**：通过 `ResponseReasoningItemParam` 支持模型的推理过程。
 
+6. **MCP 支持**：通过 Model Context Protocol 支持与外部服务的交互，扩展模型能力。
+
 ## 使用示例
 
 ### 基本文本消息
@@ -535,8 +688,21 @@ function_call = {
 }
 ```
 
+### MCP 工具调用
+
+```python
+mcp_call = {
+    "id": "mcp_call_123",
+    "server_label": "calculator-server",
+    "name": "calc_evaluate",
+    "arguments": '{"expression": "26 * 9 / 5 + 32"}',
+    "type": "mcp_call",
+    "status": "calling"
+}
+```
+
 ## 结论
 
-OpenAI Responses API 提供了一个强大而灵活的消息类型系统，支持多种内容类型和工具调用。与传统的 Chat Completions API 相比，它提供了更丰富的功能和更统一的接口，适用于更复杂的应用场景。
+OpenAI Responses API 提供了一个强大而灵活的消息类型系统，支持多种内容类型和工具调用。与传统的 Chat Completions API 相比，它提供了更丰富的功能和更统一的接口，适用于更复杂的应用场景。特别是通过 MCP 工具调用机制，模型能够与外部服务交互，大大扩展了其能力范围。
 
 在设计中间表示（IR）时，需要考虑如何将这些丰富的类型映射到其他提供商的消息格式，或者如何在不同提供商之间进行转换。
