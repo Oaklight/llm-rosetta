@@ -249,6 +249,16 @@ def query_openai_responses(
     return response
 
 
+def query_google_interaction():
+    client = genai.Client()
+
+    interaction = client.interactions.create(
+        agent="deep-research-pro-preview-12-2025",
+        input="Research the history of Google TPUs",
+        background=True,
+    )
+
+
 # ... rest of code ...
 # def convert_messages(
 #     messages: List[Dict[str, Any]], source_provider: str, target_provider: str
