@@ -7,7 +7,6 @@ import pytest
 from src.llm_provider_converter.converters.openai_chat_converter import (
     OpenAIChatConverter,
 )
-from src.llm_provider_converter.types.ir import IRInput, ToolChoice, ToolDefinition
 
 
 class TestOpenAIChatConverter:
