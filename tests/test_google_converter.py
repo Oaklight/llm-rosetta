@@ -5,7 +5,6 @@ Google GenAI转换器测试
 import pytest
 
 from src.llm_provider_converter.converters.google_converter import GoogleConverter
-from src.llm_provider_converter.types.ir import IRInput, ToolChoice, ToolDefinition
 
 
 class TestGoogleConverter:
