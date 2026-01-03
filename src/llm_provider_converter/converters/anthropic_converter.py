@@ -138,8 +138,15 @@ class AnthropicConverter(BaseConverter):
                 )
 
         # 处理普通消息
-        messages = provider_data.get("messages", [])
-        for msg in messages:
+        # Handle both a full payload (with a 'messages' key) and a single message dict
+        if "messages" in provider_data:
+            messages_to_process = provider_data["messages"]
+        elif "role" in provider_data:
+            messages_to_process = [provider_data]
+        else:
+            messages_to_process = []
+
+        for msg in messages_to_process:
             ir_message = {
                 "role": msg["role"],
                 "content": self._convert_content_from_anthropic(msg["content"]),

@@ -33,41 +33,38 @@ available_tools = {
     "get_flight_info": get_flight_info,
 }
 
+# This now follows the IR `ToolDefinition` format
 tools_spec = [
     {
         "type": "function",
-        "function": {
-            "name": "get_current_weather",
-            "description": "Get the current weather in a given location",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "The city and state, e.g. San Francisco, CA",
-                    },
-                    "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+        "name": "get_current_weather",
+        "description": "Get the current weather in a given location",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "location": {
+                    "type": "string",
+                    "description": "The city and state, e.g. San Francisco, CA",
                 },
-                "required": ["location"],
+                "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
             },
+            "required": ["location"],
         },
     },
     {
         "type": "function",
-        "function": {
-            "name": "get_flight_info",
-            "description": "Get flight information between two locations",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "origin": {"type": "string", "description": "The origin city"},
-                    "destination": {
-                        "type": "string",
-                        "description": "The destination city",
-                    },
+        "name": "get_flight_info",
+        "description": "Get flight information between two locations",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "origin": {"type": "string", "description": "The origin city"},
+                "destination": {
+                    "type": "string",
+                    "description": "The destination city",
                 },
-                "required": ["origin", "destination"],
             },
+            "required": ["origin", "destination"],
         },
     },
 ]
