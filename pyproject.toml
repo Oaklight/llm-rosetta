@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm-provider-converter"
+version = "0.0.1"
+description = "A library to convert between different LLM provider API standards."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+openai = ["openai"]
+anthropic = ["anthropic"]
+google = ["google-genai"]
+dev = ["python-dotenv", "pytest"]
+all = ["llm-provider-converter[openai,anthropic,google,dev]"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
