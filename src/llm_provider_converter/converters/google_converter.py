@@ -63,16 +63,18 @@ class GoogleConverter(BaseConverter):
                 if message["role"] == "system":
                     # Google使用system_instruction而不是system消息
                     if system_instruction is None:
-                        system_instruction = self._convert_message_to_content(message)
+                        system_instruction = self._convert_message_to_content(
+                            message, ir_input
+                        )
                     else:
                         # 如果有多个system消息，合并它们
                         existing_parts = system_instruction.get("parts", [])
-                        new_parts = self._convert_message_to_content(message).get(
-                            "parts", []
-                        )
+                        new_parts = self._convert_message_to_content(
+                            message, ir_input
+                        ).get("parts", [])
                         system_instruction["parts"] = existing_parts + new_parts
                 else:
-                    content = self._convert_message_to_content(message)
+                    content = self._convert_message_to_content(message, ir_input)
                     if content:
                         contents.append(content)
             elif is_extension_item(item):
@@ -107,7 +109,6 @@ class GoogleConverter(BaseConverter):
 
     def from_provider(self, provider_data: Any) -> IRInput:
         """将Google GenAI格式转换为IR格式"""
-        # 如果传入的是tuple（来自to_provider的返回值），取第一个元素
         if isinstance(provider_data, tuple):
             provider_data = provider_data[0]
 
@@ -116,27 +117,35 @@ class GoogleConverter(BaseConverter):
 
         messages = []
 
-        # 处理system_instruction
-        if "system_instruction" in provider_data:
-            system_message = self._convert_content_to_message(
-                provider_data["system_instruction"], "system"
-            )
-            if system_message:
-                messages.append(system_message)
+        # The actual response is in the 'candidates' field
+        candidates = provider_data.get("candidates", [])
+        if not candidates:
+            # Handle cases with no candidates, e.g., safety block
+            prompt_feedback = provider_data.get("prompt_feedback")
+            if prompt_feedback and prompt_feedback.get("block_reason"):
+                block_reason = prompt_feedback.get("block_reason")
+                block_message = f"Request was blocked. Reason: {block_reason}"
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": block_message}],
+                    }
+                )
+            return messages
 
-        # 处理contents
-        contents = provider_data.get("contents", [])
-        if not isinstance(contents, list):
-            contents = [contents]
-
-        for content in contents:
-            message = self._convert_content_to_message(content)
-            if message:
-                messages.append(message)
+        # Process all candidates
+        for candidate in candidates:
+            content = candidate.get("content")
+            if content:
+                message = self._convert_content_to_message(content)
+                if message:
+                    messages.append(message)
 
         return messages
 
-    def _convert_message_to_content(self, message: Dict[str, Any]) -> Dict[str, Any]:
+    def _convert_message_to_content(
+        self, message: Dict[str, Any], ir_input: IRInput
+    ) -> Dict[str, Any]:
         """将IR消息转换为Google Content"""
         # 角色映射
         role_mapping = {
@@ -150,7 +159,7 @@ class GoogleConverter(BaseConverter):
 
         # 转换内容部分
         for content_part in message["content"]:
-            part = self._convert_content_part_to_part(content_part)
+            part = self._convert_content_part_to_part(content_part, ir_input)
             if part:
                 parts.append(part)
 
@@ -158,7 +167,7 @@ class GoogleConverter(BaseConverter):
         return content
 
     def _convert_content_part_to_part(
-        self, content_part: Dict[str, Any]
+        self, content_part: Dict[str, Any], ir_input: IRInput
     ) -> Optional[Dict[str, Any]]:
         """将IR内容部分转换为Google Part"""
         if is_text_part(content_part):
@@ -256,6 +265,28 @@ class GoogleConverter(BaseConverter):
             return {"function_call": {"name": tool_name, "args": tool_args}}
 
         elif is_tool_result_part(content_part):
+            # Google的function_response.name需要是函数名，而不是tool_call_id
+            # 我们需要回溯历史记录找到对应的tool_call来获取函数名
+            tool_name = None
+            for msg in ir_input:
+                if not is_message(msg):
+                    continue
+                for part in msg.get("content", []):
+                    if is_tool_call_part(part) and part.get(
+                        "tool_call_id"
+                    ) == content_part.get("tool_call_id"):
+                        tool_name = part.get("tool_name")
+                        break
+                if tool_name:
+                    break
+
+            if not tool_name:
+                warnings.warn(
+                    f"Could not find corresponding tool call for tool_call_id '{content_part.get('tool_call_id')}'. "
+                    "Using tool_call_id as function name, which may cause issues with Google GenAI."
+                )
+                tool_name = content_part.get("tool_call_id")
+
             # 支持多种字段名格式
             result_content = (
                 content_part.get("result")
@@ -269,7 +300,7 @@ class GoogleConverter(BaseConverter):
 
             return {
                 "function_response": {
-                    "name": content_part["tool_call_id"],  # Google使用name字段
+                    "name": tool_name,  # 使用找到的函数名
                     "response": response_data,
                 }
             }
@@ -295,70 +326,84 @@ class GoogleConverter(BaseConverter):
 
         content_parts = []
         for part in parts:
-            converted_part = self._convert_part_to_content_part(part)
-            if converted_part:
-                content_parts.append(converted_part)
+            converted_parts = self._convert_part_to_content_parts(part)
+            if converted_parts:
+                content_parts.extend(converted_parts)
 
         if not content_parts:
             return None
 
         return {"role": ir_role, "content": content_parts}
 
-    def _convert_part_to_content_part(
+    def _convert_part_to_content_parts(
         self, part: Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
-        """将Google Part转换为IR内容部分"""
-        if "text" in part:
-            return {"type": "text", "text": part["text"]}
+    ) -> List[Dict[str, Any]]:
+        """将Google Part转换为一个或多个IR内容部分"""
+        ir_parts = []
+        if "text" in part and part["text"] is not None and part["text"] != "":
+            ir_parts.append({"type": "text", "text": part["text"]})
 
-        elif "inline_data" in part:
+        if "function_call" in part and part["function_call"] is not None:
+            func_call = part["function_call"]
+            ir_parts.append(
+                {
+                    "type": "tool_call",
+                    "tool_call_id": func_call.get("id", func_call.get("name", "")),
+                    "tool_name": func_call["name"],
+                    "tool_input": func_call.get("args", {}),
+                    "tool_type": "function",
+                }
+            )
+
+        if "inline_data" in part and part["inline_data"] is not None:
             inline_data = part["inline_data"]
             mime_type = inline_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
-                return {
-                    "type": "image",
-                    "data": inline_data["data"],
-                    "media_type": mime_type,
-                }
+                ir_parts.append(
+                    {
+                        "type": "image",
+                        "data": inline_data["data"],
+                        "media_type": mime_type,
+                    }
+                )
             elif mime_type.startswith("audio/"):
-                return {
-                    "type": "audio",
-                    "url": None,  # inline data doesn't have URL
-                    "media_type": mime_type,
-                }
+                ir_parts.append(
+                    {
+                        "type": "audio",
+                        "url": None,  # inline data doesn't have URL
+                        "media_type": mime_type,
+                    }
+                )
             else:
-                return {
-                    "type": "file",
-                    "file_data": {"data": inline_data["data"], "media_type": mime_type},
-                }
+                ir_parts.append(
+                    {
+                        "type": "file",
+                        "file_data": {
+                            "data": inline_data["data"],
+                            "media_type": mime_type,
+                        },
+                    }
+                )
 
-        elif "file_data" in part:
+        if "file_data" in part and part["file_data"] is not None:
             file_data = part["file_data"]
             mime_type = file_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
-                return {"type": "image", "image_url": file_data["file_uri"]}
+                ir_parts.append({"type": "image", "image_url": file_data["file_uri"]})
             elif mime_type.startswith("audio/"):
-                return {
-                    "type": "audio",
-                    "url": file_data["file_uri"],
-                    "media_type": mime_type,
-                }
+                ir_parts.append(
+                    {
+                        "type": "audio",
+                        "url": file_data["file_uri"],
+                        "media_type": mime_type,
+                    }
+                )
             else:
-                return {"type": "file", "file_url": file_data["file_uri"]}
+                ir_parts.append({"type": "file", "file_url": file_data["file_uri"]})
 
-        elif "function_call" in part:
-            func_call = part["function_call"]
-            return {
-                "type": "tool_call",
-                "id": func_call.get("id", func_call.get("name", "")),
-                "name": func_call["name"],
-                "arguments": func_call.get("args", {}),
-                "tool_type": "function",
-            }
-
-        elif "function_response" in part:
+        if "function_response" in part and part["function_response"] is not None:
             func_response = part["function_response"]
             response_data = func_response.get("response", {})
 
@@ -366,16 +411,21 @@ class GoogleConverter(BaseConverter):
             is_error = "error" in response_data
             content = response_data.get("error" if is_error else "output", "")
 
-            return {
-                "type": "tool_result",
-                "tool_call_id": func_response.get("id", func_response.get("name", "")),
-                "content": str(content),
-                "is_error": is_error,
-            }
+            ir_parts.append(
+                {
+                    "type": "tool_result",
+                    "tool_call_id": func_response.get(
+                        "id", func_response.get("name", "")
+                    ),
+                    "content": str(content),
+                    "is_error": is_error,
+                }
+            )
 
-        else:
+        if not ir_parts:
             warnings.warn(f"不支持的Part类型: {list(part.keys())}")
-            return None
+
+        return ir_parts
 
     def _convert_tools(self, tools: List[ToolDefinition]) -> List[Dict[str, Any]]:
         """转换工具定义为Google格式"""

@@ -239,7 +239,7 @@ class OpenAIChatConverter(BaseConverter):
                     ir_content.append({"type": "text", "text": msg["content"]})
 
                 # 处理工具调用
-                if "tool_calls" in msg:
+                if "tool_calls" in msg and msg["tool_calls"] is not None:
                     for tool_call in msg["tool_calls"]:
                         ir_content.append(
                             self._convert_tool_call_from_openai(tool_call)
