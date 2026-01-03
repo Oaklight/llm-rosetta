@@ -10,8 +10,10 @@ def get_current_weather(location: str, unit: str = "fahrenheit"):
         return json.dumps(
             {"location": "San Francisco", "temperature": "72", "unit": "fahrenheit"}
         )
-    elif "paris" in location.lower():
-        return json.dumps({"location": "Paris", "temperature": "22", "unit": "celsius"})
+    elif "paris" in location.lower() or "shanghai" in location.lower():
+        return json.dumps(
+            {"location": location, "temperature": "22", "unit": "celsius"}
+        )
     else:
         return json.dumps({"location": location, "temperature": "unknown"})
 
