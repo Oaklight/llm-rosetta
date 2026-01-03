@@ -5,13 +5,20 @@ LLM Provider Converter - OpenAI Chat Completions Converter
 """
 
 import json
-from typing import List, Dict, Any, Tuple, Optional, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from .base import BaseConverter
 from ..types.ir import (
-    IRInput, ToolDefinition, ToolChoice, ContentPart,
-    is_message, is_extension_item, is_text_part, is_tool_call_part, is_tool_result_part
+    ContentPart,
+    IRInput,
+    ToolChoice,
+    ToolDefinition,
+    is_extension_item,
+    is_message,
+    is_text_part,
+    is_tool_call_part,
+    is_tool_result_part,
 )
+from .base import BaseConverter
 
 
 class OpenAIChatConverter(BaseConverter):
@@ -163,9 +170,17 @@ class OpenAIChatConverter(BaseConverter):
             raise ValueError("OpenAI data must be a dictionary")
         
         ir_input = []
-        messages = provider_data.get("messages", [])
         
-        for msg in messages:
+        # Handle both a full payload (with a 'messages' key) and a single message dict
+        if "messages" in provider_data:
+            messages_to_process = provider_data["messages"]
+        elif "role" in provider_data:
+            messages_to_process = [provider_data]
+        else:
+            # If it's neither, it might be an empty dict or something else, process nothing.
+            messages_to_process = []
+        
+        for msg in messages_to_process:
             role = msg["role"]
             
             if role == "system":
@@ -417,6 +432,14 @@ class OpenAIChatConverter(BaseConverter):
     
     def _convert_tool_choice_to_openai(self, tool_choice: ToolChoice) -> Union[str, Dict[str, Any]]:
         """将IR工具选择转换为OpenAI格式"""
+        # 增加对字符串输入的健壮性处理
+        if isinstance(tool_choice, str):
+            if tool_choice in ["none", "auto", "required"]:
+                return tool_choice
+            else:
+                # 如果是函数名，则包装成OpenAI需要的格式
+                return {"type": "function", "function": {"name": tool_choice}}
+
         # 支持测试中使用的"type"字段
         mode = tool_choice.get("mode") or tool_choice.get("type")
         
