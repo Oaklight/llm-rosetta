@@ -419,12 +419,7 @@ class OpenAIChatConverter(BaseConverter):
         self, tool: ToolDefinition
     ) -> Dict[str, Any]:
         """将IR工具定义转换为OpenAI格式"""
-        # 处理测试中传入的OpenAI格式工具定义
-        if "function" in tool and isinstance(tool["function"], dict):
-            # 这已经是OpenAI格式，直接返回
-            return tool
-
-        # 处理IR格式的工具定义
+        # This method now strictly converts from IR format to OpenAI format.
         if tool["type"] == "function":
             return {
                 "type": "function",
