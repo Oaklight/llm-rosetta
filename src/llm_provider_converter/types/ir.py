@@ -103,6 +103,10 @@ class ToolCallPart(TypedDict):
     - tool_type: 区分不同的工具类型（function, mcp, web_search等）
 
     这样设计避免了类型爆炸，同时保持扩展性。
+
+    provider_metadata字段用于存储provider特定的元数据，例如：
+    - Google的thought_signature（Gemini 3必需，Gemini 2.5推荐）
+    - 其他provider的特殊字段
     """
 
     type: Required[Literal["tool_call"]]
@@ -118,6 +122,7 @@ class ToolCallPart(TypedDict):
             "file_search",
         ]
     ]  # 默认为 "function"
+    provider_metadata: NotRequired[Dict[str, Any]]  # Provider特定的元数据
 
 
 class ToolResultPart(TypedDict):
@@ -313,11 +318,13 @@ def extract_text_content(message: Message) -> str:
     Returns:
         拼接后的文本内容
     """
-    return "".join(
-        part.get("text", "")  # type: ignore
-        for part in message.get("content", [])
-        if is_text_part(part)
-    )
+    texts = []
+    for part in message.get("content", []):
+        if is_text_part(part):
+            text = part.get("text", "")
+            if text is not None:  # 确保text不是None
+                texts.append(str(text))
+    return "".join(texts)
 
 
 def extract_tool_calls(

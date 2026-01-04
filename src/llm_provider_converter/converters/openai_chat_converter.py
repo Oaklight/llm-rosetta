@@ -4,8 +4,7 @@ LLM Provider Converter - OpenAI Chat Completions Converter
 实现IR与OpenAI Chat Completions API格式之间的转换
 """
 
-import json
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
     ContentPart,
@@ -18,6 +17,7 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
+from ..utils import FieldMapper, ToolCallConverter, ToolConverter
 from .base import BaseConverter
 
 
@@ -109,7 +109,7 @@ class OpenAIChatConverter(BaseConverter):
                         if is_text_part(part):
                             text_parts.append(part["text"])
                         elif is_tool_call_part(part):
-                            tool_calls.append(self._convert_tool_call_to_openai(part))
+                            tool_calls.append(ToolCallConverter.to_openai_chat(part))
                         elif part["type"] == "reasoning":
                             warnings.append(
                                 "Reasoning content not supported in OpenAI Chat Completions, ignored"
@@ -151,7 +151,7 @@ class OpenAIChatConverter(BaseConverter):
                         openai_message = {
                             "role": "assistant",
                             "tool_calls": [
-                                self._convert_tool_call_to_openai(tool_call)
+                                ToolCallConverter.to_openai_chat(tool_call)
                             ],
                         }
                         messages.append(openai_message)
@@ -163,32 +163,55 @@ class OpenAIChatConverter(BaseConverter):
 
         # 添加工具定义
         if tools:
-            result["tools"] = [
-                self._convert_tool_definition_to_openai(tool) for tool in tools
-            ]
+            result["tools"] = ToolConverter.batch_convert_tools(tools, "openai_chat")
 
         # 添加工具选择
         if tool_choice:
-            result["tool_choice"] = self._convert_tool_choice_to_openai(tool_choice)
+            result["tool_choice"] = ToolConverter.convert_tool_choice(
+                tool_choice, "openai"
+            )
 
         return result, warnings
 
     def from_provider(self, provider_data: Any) -> IRInput:
         """
         将OpenAI Chat Completions格式转换为IR格式
+
+        Args:
+            provider_data: OpenAI Chat Completions响应对象或字典
+                          可以是：
+                          1. API响应（包含choices字段）
+                          2. 消息列表（包含messages字段）
+                          3. 单个消息对象（包含role字段）
+                          自动处理Pydantic模型对象（调用.model_dump()）
         """
+        # 自动unwrap Pydantic模型对象
+        if hasattr(provider_data, "model_dump"):
+            provider_data = provider_data.model_dump()
+
         if not isinstance(provider_data, dict):
             raise ValueError("OpenAI data must be a dictionary")
 
         ir_input = []
 
-        # Handle both a full payload (with a 'messages' key) and a single message dict
-        if "messages" in provider_data:
+        # Handle different input formats
+        if "choices" in provider_data:
+            # This is an API response with choices
+            messages_to_process = []
+            for choice in provider_data["choices"]:
+                if "message" in choice:
+                    messages_to_process.append(choice["message"])
+                elif "delta" in choice:
+                    # Streaming response
+                    messages_to_process.append(choice["delta"])
+        elif "messages" in provider_data:
+            # This is a payload with messages
             messages_to_process = provider_data["messages"]
         elif "role" in provider_data:
+            # This is a single message
             messages_to_process = [provider_data]
         else:
-            # If it's neither, it might be an empty dict or something else, process nothing.
+            # Empty or unknown format
             messages_to_process = []
 
         for msg in messages_to_process:
@@ -242,7 +265,7 @@ class OpenAIChatConverter(BaseConverter):
                 if "tool_calls" in msg and msg["tool_calls"] is not None:
                     for tool_call in msg["tool_calls"]:
                         ir_content.append(
-                            self._convert_tool_call_from_openai(tool_call)
+                            ToolCallConverter.from_openai_chat(tool_call)
                         )
 
                 ir_input.append({"role": "assistant", "content": ir_content})
@@ -289,22 +312,21 @@ class OpenAIChatConverter(BaseConverter):
 
     def _convert_image_to_openai(self, image_part: Dict[str, Any]) -> Dict[str, Any]:
         """将IR图像转换为OpenAI格式"""
-        # 支持多种URL字段名称
-        url = image_part.get("image_url") or image_part.get("url")
+        url = FieldMapper.get_image_url(image_part)
+        image_data = FieldMapper.get_image_data(image_part)
+        detail = image_part.get("detail", "auto")
+        
         if url:
             return {
                 "type": "image_url",
-                "image_url": {"url": url, "detail": image_part.get("detail", "auto")},
+                "image_url": {"url": url, "detail": detail},
             }
-        elif "image_data" in image_part:
-            image_data = image_part["image_data"]
+        elif image_data:
+            # 创建data URL
             data_url = f"data:{image_data['media_type']};base64,{image_data['data']}"
             return {
                 "type": "image_url",
-                "image_url": {
-                    "url": data_url,
-                    "detail": image_part.get("detail", "auto"),
-                },
+                "image_url": {"url": data_url, "detail": detail},
             }
         else:
             raise ValueError("Image part must have either image_url/url or image_data")
@@ -331,141 +353,30 @@ class OpenAIChatConverter(BaseConverter):
         else:
             raise ValueError("File part must have either file_data or file_url")
 
-    def _convert_tool_call_to_openai(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
-        """将IR工具调用转换为OpenAI格式"""
-        tool_type = tool_call.get("tool_type", "function")
-
-        # 支持多种字段名称映射
-        tool_call_id = tool_call.get("tool_call_id") or tool_call.get("id")
-        tool_name = tool_call.get("tool_name") or tool_call.get("name")
-        tool_input = tool_call.get("tool_input") or tool_call.get("arguments", {})
-
-        if tool_type == "function":
-            return {
-                "id": tool_call_id,
-                "type": "function",
-                "function": {"name": tool_name, "arguments": json.dumps(tool_input)},
-            }
-        else:
-            # 其他工具类型转换为自定义工具
-            return {
-                "id": tool_call_id,
-                "type": "custom",
-                "custom": {
-                    "name": f"{tool_type}_{tool_name}",
-                    "input": json.dumps(tool_input),
-                },
-            }
 
     def _convert_image_from_openai(self, image_part: Dict[str, Any]) -> Dict[str, Any]:
         """将OpenAI图像转换为IR格式"""
         image_url_data = image_part["image_url"]
         url = image_url_data["url"]
+        detail = image_url_data.get("detail", "auto")
 
         if url.startswith("data:"):
             # Base64数据URL
             import re
-
             match = re.match(r"data:([^;]+);base64,(.+)", url)
             if match:
                 media_type, data = match.groups()
                 return {
                     "type": "image",
                     "image_data": {"data": data, "media_type": media_type},
-                    "detail": image_url_data.get("detail", "auto"),
+                    "detail": detail,
                 }
 
         # 普通URL
         return {
             "type": "image",
             "image_url": url,
-            "detail": image_url_data.get("detail", "auto"),
+            "detail": detail,
         }
 
-    def _convert_tool_call_from_openai(
-        self, tool_call: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """将OpenAI工具调用转换为IR格式"""
-        if tool_call["type"] == "function":
-            function = tool_call["function"]
-            return {
-                "type": "tool_call",
-                "tool_call_id": tool_call["id"],
-                "tool_name": function["name"],
-                "tool_input": json.loads(function["arguments"]),
-                "tool_type": "function",
-            }
-        elif tool_call["type"] == "custom":
-            custom = tool_call["custom"]
-            # 尝试解析工具类型
-            name = custom["name"]
-            if "_" in name:
-                tool_type, tool_name = name.split("_", 1)
-            else:
-                tool_type = "custom"
-                tool_name = name
 
-            return {
-                "type": "tool_call",
-                "tool_call_id": tool_call["id"],
-                "tool_name": tool_name,
-                "tool_input": json.loads(custom["input"]),
-                "tool_type": tool_type,
-            }
-        else:
-            raise ValueError(f"Unsupported tool call type: {tool_call['type']}")
-
-    def _convert_tool_definition_to_openai(
-        self, tool: ToolDefinition
-    ) -> Dict[str, Any]:
-        """将IR工具定义转换为OpenAI格式"""
-        # This method now strictly converts from IR format to OpenAI format.
-        if tool["type"] == "function":
-            return {
-                "type": "function",
-                "function": {
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("parameters", {}),
-                },
-            }
-        else:
-            # 其他工具类型转换为自定义工具
-            return {
-                "type": "custom",
-                "custom": {
-                    "name": f"{tool['type']}_{tool['name']}",
-                    "description": tool.get("description", ""),
-                    "parameters": tool.get("parameters", {}),
-                },
-            }
-
-    def _convert_tool_choice_to_openai(
-        self, tool_choice: ToolChoice
-    ) -> Union[str, Dict[str, Any]]:
-        """将IR工具选择转换为OpenAI格式"""
-        # 增加对字符串输入的健壮性处理
-        if isinstance(tool_choice, str):
-            if tool_choice in ["none", "auto", "required"]:
-                return tool_choice
-            else:
-                # 如果是函数名，则包装成OpenAI需要的格式
-                return {"type": "function", "function": {"name": tool_choice}}
-
-        # 支持测试中使用的"type"字段
-        mode = tool_choice.get("mode") or tool_choice.get("type")
-
-        if mode == "none":
-            return "none"
-        elif mode == "auto":
-            return "auto"
-        elif mode == "any" or mode == "required":
-            return "required"  # OpenAI使用"required"表示必须使用工具
-        elif mode == "tool" or mode == "function":
-            # 支持多种字段名称
-            tool_name = tool_choice.get("tool_name")
-            if not tool_name and "function" in tool_choice:
-                tool_name = tool_choice["function"]["name"]
-            return {"type": "function", "function": {"name": tool_name}}
-        else:
-            raise ValueError(f"Unsupported tool choice mode: {mode}")
