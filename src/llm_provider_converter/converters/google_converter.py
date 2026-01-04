@@ -32,6 +32,54 @@ class GoogleConverter(BaseConverter):
     - system_instruction: 单独处理system消息
     """
 
+    def build_config(
+        self,
+        tools: Optional[List[ToolDefinition]] = None,
+        tool_choice: Optional[ToolChoice] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """构建Google GenAI的config参数
+
+        这个方法用于从tools和tool_choice构建Google API调用所需的config字典。
+        在多次调用同一个模型时，可以预先构建config以提高效率。
+
+        Args:
+            tools: 工具定义列表
+            tool_choice: 工具选择配置
+
+        Returns:
+            Google GenAI的config字典，如果没有工具配置则返回None
+
+        Example:
+            >>> converter = GoogleConverter()
+            >>> config = converter.build_config(tools=tools_spec)
+            >>> # 在多次调用中重用config
+            >>> response1 = client.models.generate_content(
+            ...     model=model_name,
+            ...     contents=contents1,
+            ...     config=config
+            ... )
+            >>> response2 = client.models.generate_content(
+            ...     model=model_name,
+            ...     contents=contents2,
+            ...     config=config
+            ... )
+        """
+        config = {}
+
+        # 转换工具
+        if tools:
+            google_tools = self._convert_tools(tools)
+            if google_tools:
+                config["tools"] = google_tools
+
+        # 转换工具选择配置
+        if tool_choice:
+            tool_config = self._convert_tool_choice(tool_choice)
+            if tool_config:
+                config["tool_config"] = tool_config
+
+        return config if config else None
+
     def to_provider(
         self,
         ir_input: IRInput,

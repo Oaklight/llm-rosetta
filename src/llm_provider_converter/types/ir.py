@@ -300,6 +300,88 @@ def is_tool_result_part(part: ContentPart) -> bool:
 
 
 # ============================================================================
+# 辅助函数 - 用于处理IR消息
+# ============================================================================
+
+
+def extract_text_content(message: Message) -> str:
+    """从消息中提取所有文本内容
+
+    Args:
+        message: IR格式的消息
+
+    Returns:
+        拼接后的文本内容
+    """
+    return "".join(
+        part.get("text", "")  # type: ignore
+        for part in message.get("content", [])
+        if is_text_part(part)
+    )
+
+
+def extract_tool_calls(
+    message: Message, limit: Union[int, None] = None
+) -> List[ToolCallPart]:
+    """从消息中提取工具调用
+
+    Args:
+        message: IR格式的消息
+        limit: 限制返回的工具调用数量。None表示返回所有，1表示只返回第一个
+
+    Returns:
+        工具调用部分的列表
+
+    Examples:
+        >>> # 获取所有工具调用
+        >>> all_calls = extract_tool_calls(message)
+        >>>
+        >>> # 只获取第一个工具调用
+        >>> first_call = extract_tool_calls(message, limit=1)
+        >>> if first_call:
+        >>>     tool_call = first_call[0]
+        >>>
+        >>> # 获取前3个工具调用
+        >>> first_three = extract_tool_calls(message, limit=3)
+    """
+    tool_calls = [
+        part  # type: ignore
+        for part in message.get("content", [])
+        if is_tool_call_part(part)
+    ]
+
+    if limit is not None:
+        return tool_calls[:limit]
+    return tool_calls
+
+
+def create_tool_result_message(
+    tool_call_id: str, result: Any, is_error: bool = False
+) -> Message:
+    """创建工具结果消息
+
+    Args:
+        tool_call_id: 工具调用ID
+        result: 工具执行结果
+        is_error: 是否为错误结果
+
+    Returns:
+        IR格式的工具结果消息
+    """
+    return {
+        "role": "user",
+        "content": [
+            {
+                "type": "tool_result",
+                "tool_call_id": tool_call_id,
+                "result": result,
+                "is_error": is_error,
+            }
+        ],
+    }
+
+
+# ============================================================================
 # 工具定义和选择类型
 # ============================================================================
 
@@ -357,4 +439,8 @@ __all__ = [
     "is_text_part",
     "is_tool_call_part",
     "is_tool_result_part",
+    # 辅助函数
+    "extract_text_content",
+    "extract_tool_calls",
+    "create_tool_result_message",
 ]
