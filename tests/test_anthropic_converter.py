@@ -2,21 +2,16 @@
 测试Anthropic转换器
 """
 
-import os
-import sys
-import unittest
+import pytest
 
-# 添加src目录到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
-from llm_provider_converter.converters import AnthropicConverter
-from llm_provider_converter.types.ir import IRInput, ToolChoice, ToolDefinition
+from src.llm_provider_converter.converters import AnthropicConverter
+from src.llm_provider_converter.types.ir import IRInput, ToolChoice, ToolDefinition
 
 
-class TestAnthropicConverter(unittest.TestCase):
+class TestAnthropicConverter:
     """Anthropic转换器测试"""
 
-    def setUp(self):
+    def setup_method(self):
         """设置测试环境"""
         self.converter = AnthropicConverter()
 
@@ -30,23 +25,23 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input)
 
         # 验证结果结构
-        self.assertIn("messages", result)
-        self.assertEqual(len(result["messages"]), 2)
-        self.assertEqual(len(warnings), 0)
+        assert "messages" in result
+        assert len(result["messages"]) == 2
+        assert len(warnings) == 0
 
         # 验证第一条消息
         msg1 = result["messages"][0]
-        self.assertEqual(msg1["role"], "user")
-        self.assertEqual(len(msg1["content"]), 1)
-        self.assertEqual(msg1["content"][0]["type"], "text")
-        self.assertEqual(msg1["content"][0]["text"], "Hello")
+        assert msg1["role"] == "user"
+        assert len(msg1["content"]) == 1
+        assert msg1["content"][0]["type"] == "text"
+        assert msg1["content"][0]["text"] == "Hello"
 
         # 验证第二条消息
         msg2 = result["messages"][1]
-        self.assertEqual(msg2["role"], "assistant")
-        self.assertEqual(len(msg2["content"]), 1)
-        self.assertEqual(msg2["content"][0]["type"], "text")
-        self.assertEqual(msg2["content"][0]["text"], "Hi there!")
+        assert msg2["role"] == "assistant"
+        assert len(msg2["content"]) == 1
+        assert msg2["content"][0]["type"] == "text"
+        assert msg2["content"][0]["text"] == "Hi there!"
 
     def test_system_message(self):
         """测试system消息转换"""
@@ -61,15 +56,15 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input)
 
         # 验证system消息被正确处理
-        self.assertIn("system", result)
-        self.assertEqual(len(result["system"]), 1)
-        self.assertEqual(result["system"][0]["type"], "text")
-        self.assertEqual(result["system"][0]["text"], "You are a helpful assistant.")
+        assert "system" in result
+        assert len(result["system"]) == 1
+        assert result["system"][0]["type"] == "text"
+        assert result["system"][0]["text"] == "You are a helpful assistant."
 
         # 验证普通消息
-        self.assertIn("messages", result)
-        self.assertEqual(len(result["messages"]), 1)
-        self.assertEqual(result["messages"][0]["role"], "user")
+        assert "messages" in result
+        assert len(result["messages"]) == 1
+        assert result["messages"][0]["role"] == "user"
 
     def test_tool_call_conversion(self):
         """测试工具调用转换"""
@@ -92,22 +87,22 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input)
 
         # 验证消息结构
-        self.assertEqual(len(result["messages"]), 1)
+        assert len(result["messages"]) == 1
         msg = result["messages"][0]
-        self.assertEqual(msg["role"], "assistant")
-        self.assertEqual(len(msg["content"]), 2)
+        assert msg["role"] == "assistant"
+        assert len(msg["content"]) == 2
 
         # 验证文本部分
         text_block = msg["content"][0]
-        self.assertEqual(text_block["type"], "text")
-        self.assertEqual(text_block["text"], "Let me search for that")
+        assert text_block["type"] == "text"
+        assert text_block["text"] == "Let me search for that"
 
         # 验证工具调用部分
         tool_block = msg["content"][1]
-        self.assertEqual(tool_block["type"], "tool_use")
-        self.assertEqual(tool_block["id"], "call_123")
-        self.assertEqual(tool_block["name"], "web_search")
-        self.assertEqual(tool_block["input"], {"query": "AI news"})
+        assert tool_block["type"] == "tool_use"
+        assert tool_block["id"] == "call_123"
+        assert tool_block["name"] == "web_search"
+        assert tool_block["input"] == {"query": "AI news"}
 
     def test_tool_result_conversion(self):
         """测试工具结果转换"""
@@ -128,11 +123,11 @@ class TestAnthropicConverter(unittest.TestCase):
 
         # 验证工具结果转换
         msg = result["messages"][0]
-        self.assertEqual(msg["role"], "user")
+        assert msg["role"] == "user"
         tool_result = msg["content"][0]
-        self.assertEqual(tool_result["type"], "tool_result")
-        self.assertEqual(tool_result["tool_use_id"], "call_123")
-        self.assertEqual(tool_result["content"], "Latest AI news: ...")
+        assert tool_result["type"] == "tool_result"
+        assert tool_result["tool_use_id"] == "call_123"
+        assert tool_result["content"] == "Latest AI news: ..."
 
     def test_tool_definitions(self):
         """测试工具定义转换"""
@@ -159,13 +154,13 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input, tools=tools)
 
         # 验证工具定义
-        self.assertIn("tools", result)
-        self.assertEqual(len(result["tools"]), 1)
+        assert "tools" in result
+        assert len(result["tools"]) == 1
 
         tool = result["tools"][0]
-        self.assertEqual(tool["name"], "get_weather")
-        self.assertEqual(tool["description"], "Get weather information")
-        self.assertIn("input_schema", tool)
+        assert tool["name"] == "get_weather"
+        assert tool["description"] == "Get weather information"
+        assert "input_schema" in tool
 
     def test_tool_choice_conversion(self):
         """测试工具选择转换"""
@@ -178,10 +173,10 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input, tool_choice=tool_choice)
 
         # 验证工具选择
-        self.assertIn("tool_choice", result)
+        assert "tool_choice" in result
         choice = result["tool_choice"]
-        self.assertEqual(choice["type"], "auto")
-        self.assertTrue(choice["disable_parallel_tool_use"])
+        assert choice["type"] == "auto"
+        assert choice["disable_parallel_tool_use"] is True
 
     def test_round_trip_conversion(self):
         """测试往返转换"""
@@ -201,19 +196,19 @@ class TestAnthropicConverter(unittest.TestCase):
         converted_ir = self.converter.from_provider(anthropic_data)
 
         # 验证往返转换
-        self.assertEqual(len(converted_ir), len(original_ir))
+        assert len(converted_ir) == len(original_ir)
 
         # 验证每条消息
         for i, (orig, conv) in enumerate(zip(original_ir, converted_ir)):
-            self.assertEqual(orig["role"], conv["role"])
-            self.assertEqual(len(orig["content"]), len(conv["content"]))
+            assert orig["role"] == conv["role"]
+            assert len(orig["content"]) == len(conv["content"])
 
             for j, (orig_part, conv_part) in enumerate(
                 zip(orig["content"], conv["content"])
             ):
-                self.assertEqual(orig_part["type"], conv_part["type"])
+                assert orig_part["type"] == conv_part["type"]
                 if orig_part["type"] == "text":
-                    self.assertEqual(orig_part["text"], conv_part["text"])
+                    assert orig_part["text"] == conv_part["text"]
 
     def test_extension_item_handling(self):
         """测试扩展项处理"""
@@ -230,9 +225,9 @@ class TestAnthropicConverter(unittest.TestCase):
         result, warnings = self.converter.to_provider(ir_input)
 
         # 验证扩展项被忽略但产生警告
-        self.assertEqual(len(result["messages"]), 2)  # 只有普通消息
-        self.assertGreater(len(warnings), 0)  # 应该有警告
-        self.assertTrue(any("System event ignored" in w for w in warnings))
+        assert len(result["messages"]) == 2  # 只有普通消息
+        assert len(warnings) > 0  # 应该有警告
+        assert any("System event ignored" in w for w in warnings)
 
     def test_validation_errors(self):
         """测试输入验证"""
@@ -241,7 +236,7 @@ class TestAnthropicConverter(unittest.TestCase):
             {"invalid": "data"}  # 既没有role也没有type
         ]
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.converter.to_provider(invalid_ir)
 
         # 测试缺少必需字段的消息
@@ -249,9 +244,5 @@ class TestAnthropicConverter(unittest.TestCase):
             {"role": "user"}  # 缺少content字段
         ]
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError):
             self.converter.to_provider(invalid_message)
-
-
-if __name__ == "__main__":
-    unittest.main()
