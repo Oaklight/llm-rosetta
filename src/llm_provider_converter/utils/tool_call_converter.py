@@ -1,0 +1,392 @@
+"""
+Tool Call Converter - 工具调用转换工具
+
+提供IR ToolCallPart与各provider工具调用格式之间的双向转换。
+"""
+
+import json
+import uuid
+from typing import Any, Dict
+
+
+class ToolCallConverter:
+    """工具调用转换器
+
+    处理IR ToolCallPart与各provider工具调用格式之间的转换。
+    支持的provider: openai_chat, openai_responses, anthropic, google
+    """
+
+    # ==================== IR → Provider ====================
+
+    @staticmethod
+    def to_openai_chat(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """将IR工具调用转换为OpenAI Chat格式
+
+        Args:
+            tool_call: IR格式的工具调用
+
+        Returns:
+            OpenAI Chat格式的工具调用
+
+        Example:
+            >>> tool_call = {
+            ...     "type": "tool_call",
+            ...     "tool_call_id": "call_123",
+            ...     "tool_name": "get_weather",
+            ...     "tool_input": {"city": "Beijing"},
+            ...     "tool_type": "function"
+            ... }
+            >>> ToolCallConverter.to_openai_chat(tool_call)
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"city": "Beijing"}'
+                }
+            }
+        """
+        from .field_mapper import FieldMapper
+
+        tool_type = tool_call.get("tool_type", "function")
+        tool_call_id = FieldMapper.get_tool_id(tool_call)
+        tool_name = FieldMapper.get_tool_name(tool_call)
+        tool_input = FieldMapper.get_tool_input(tool_call)
+
+        if tool_type == "function":
+            return {
+                "id": tool_call_id,
+                "type": "function",
+                "function": {"name": tool_name, "arguments": json.dumps(tool_input)},
+            }
+        else:
+            # 其他工具类型转换为自定义工具
+            return {
+                "id": tool_call_id,
+                "type": "custom",
+                "custom": {
+                    "name": f"{tool_type}_{tool_name}",
+                    "input": json.dumps(tool_input),
+                },
+            }
+
+    @staticmethod
+    def to_openai_responses(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """将IR工具调用转换为OpenAI Responses API格式
+
+        Args:
+            tool_call: IR格式的工具调用
+
+        Returns:
+            OpenAI Responses API格式的工具调用
+
+        Example:
+            >>> tool_call = {
+            ...     "type": "tool_call",
+            ...     "tool_call_id": "call_123",
+            ...     "tool_name": "mcp://server/tool",
+            ...     "tool_input": {"query": "test"},
+            ...     "tool_type": "mcp"
+            ... }
+            >>> ToolCallConverter.to_openai_responses(tool_call)
+            {
+                "type": "mcp_call",
+                "id": "call_123",
+                "name": "mcp://server/tool",
+                "arguments": '{"query": "test"}',
+                "server_label": "default",
+                "status": "calling"
+            }
+        """
+        from .field_mapper import FieldMapper
+
+        tool_type = tool_call.get("tool_type", "function")
+        tool_call_id = FieldMapper.get_tool_id(tool_call)
+        tool_name = FieldMapper.get_tool_name(tool_call)
+        tool_input = FieldMapper.get_tool_input(tool_call)
+
+        # 序列化tool_input
+        arguments = (
+            json.dumps(tool_input) if isinstance(tool_input, dict) else tool_input
+        )
+
+        # 检测MCP调用
+        if tool_name and tool_name.startswith("mcp://"):
+            return {
+                "type": "mcp_call",
+                "id": tool_call_id,
+                "name": tool_name,
+                "arguments": arguments,
+                "server_label": tool_call.get("server_name", "default"),
+                "status": "calling",
+            }
+        elif tool_type == "mcp":
+            return {
+                "type": "mcp_call",
+                "id": tool_call_id,
+                "name": tool_name,
+                "arguments": arguments,
+                "server_label": tool_call.get("server_name", "default"),
+                "status": "calling",
+            }
+        elif tool_type == "function":
+            return {
+                "type": "function_call",
+                "call_id": tool_call_id,
+                "name": tool_name,
+                "arguments": arguments,
+            }
+        elif tool_type == "web_search":
+            return {
+                "type": "function_web_search",
+                "call_id": tool_call_id,
+                "query": tool_input.get("query", ""),
+                "arguments": arguments,
+            }
+        elif tool_type == "code_interpreter":
+            return {
+                "type": "code_interpreter_call",
+                "call_id": tool_call_id,
+                "code": tool_input.get("code", ""),
+                "arguments": arguments,
+            }
+        elif tool_type == "file_search":
+            return {
+                "type": "file_search_call",
+                "call_id": tool_call_id,
+                "query": tool_input.get("query", ""),
+                "arguments": arguments,
+            }
+        else:
+            # 默认转换为函数调用
+            return {
+                "type": "function_call",
+                "call_id": tool_call_id,
+                "name": f"{tool_type}_{tool_name}",
+                "arguments": arguments,
+            }
+
+    @staticmethod
+    def to_anthropic(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """将IR工具调用转换为Anthropic格式
+
+        Args:
+            tool_call: IR格式的工具调用
+
+        Returns:
+            Anthropic格式的工具调用
+
+        Example:
+            >>> tool_call = {
+            ...     "type": "tool_call",
+            ...     "tool_call_id": "call_123",
+            ...     "tool_name": "get_weather",
+            ...     "tool_input": {"city": "Beijing"},
+            ...     "tool_type": "function"
+            ... }
+            >>> ToolCallConverter.to_anthropic(tool_call)
+            {
+                "type": "tool_use",
+                "id": "call_123",
+                "name": "get_weather",
+                "input": {"city": "Beijing"}
+            }
+        """
+        from .field_mapper import FieldMapper
+
+        tool_type = tool_call.get("tool_type", "function")
+        tool_id = FieldMapper.get_tool_id(tool_call)
+        tool_name = FieldMapper.get_tool_name(tool_call)
+        tool_input = FieldMapper.get_tool_input(tool_call)
+
+        if tool_type == "function":
+            return {
+                "type": "tool_use",
+                "id": tool_id,
+                "name": tool_name,
+                "input": tool_input,
+            }
+        elif tool_type == "web_search":
+            # Anthropic有专门的web_search工具
+            return {
+                "type": "server_tool_use",
+                "id": tool_id,
+                "name": "web_search",
+                "input": tool_input,
+            }
+        else:
+            # 其他类型转换为普通工具调用
+            return {
+                "type": "tool_use",
+                "id": tool_id,
+                "name": f"{tool_type}_{tool_name}",
+                "input": tool_input,
+            }
+
+    @staticmethod
+    def to_google(
+        tool_call: Dict[str, Any], preserve_metadata: bool = True
+    ) -> Dict[str, Any]:
+        """将IR工具调用转换为Google格式
+
+        Args:
+            tool_call: IR格式的工具调用
+            preserve_metadata: 是否保留provider_metadata中的thought_signature
+
+        Returns:
+            Google格式的工具调用
+
+        Example:
+            >>> tool_call = {
+            ...     "type": "tool_call",
+            ...     "tool_name": "get_weather",
+            ...     "tool_input": {"city": "Beijing"},
+            ...     "provider_metadata": {
+            ...         "google": {"thought_signature": "abc123"}
+            ...     }
+            ... }
+            >>> ToolCallConverter.to_google(tool_call)
+            {
+                "function_call": {
+                    "name": "get_weather",
+                    "args": {"city": "Beijing"}
+                },
+                "thoughtSignature": "abc123"
+            }
+        """
+        from .field_mapper import FieldMapper
+
+        tool_name = FieldMapper.get_tool_name(tool_call)
+        tool_args = FieldMapper.get_tool_input(tool_call)
+
+        part = {"function_call": {"name": tool_name, "args": tool_args}}
+
+        # 保留thought_signature（对Gemini 3必需，对Gemini 2.5推荐）
+        if preserve_metadata and "provider_metadata" in tool_call:
+            metadata = tool_call["provider_metadata"]
+            if "google" in metadata and "thought_signature" in metadata["google"]:
+                part["thoughtSignature"] = metadata["google"]["thought_signature"]
+
+        return part
+
+    # ==================== Provider → IR ====================
+
+    @staticmethod
+    def from_openai_chat(tool_call: Dict[str, Any]) -> Dict[str, Any]:
+        """将OpenAI Chat格式的工具调用转换为IR格式
+
+        Args:
+            tool_call: OpenAI Chat格式的工具调用
+
+        Returns:
+            IR格式的工具调用
+
+        Example:
+            >>> tool_call = {
+            ...     "id": "call_123",
+            ...     "type": "function",
+            ...     "function": {
+            ...         "name": "get_weather",
+            ...         "arguments": '{"city": "Beijing"}'
+            ...     }
+            ... }
+            >>> ToolCallConverter.from_openai_chat(tool_call)
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_123",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "Beijing"},
+                "tool_type": "function"
+            }
+        """
+        if tool_call["type"] == "function":
+            function = tool_call["function"]
+            return {
+                "type": "tool_call",
+                "tool_call_id": tool_call["id"],
+                "tool_name": function["name"],
+                "tool_input": json.loads(function["arguments"]),
+                "tool_type": "function",
+            }
+        elif tool_call["type"] == "custom":
+            custom = tool_call["custom"]
+            # 尝试解析工具类型
+            name = custom["name"]
+            if "_" in name:
+                tool_type, tool_name = name.split("_", 1)
+            else:
+                tool_type = "custom"
+                tool_name = name
+
+            return {
+                "type": "tool_call",
+                "tool_call_id": tool_call["id"],
+                "tool_name": tool_name,
+                "tool_input": json.loads(custom["input"]),
+                "tool_type": tool_type,
+            }
+        else:
+            raise ValueError(f"Unsupported tool call type: {tool_call['type']}")
+
+    @staticmethod
+    def from_google(
+        part: Dict[str, Any], preserve_metadata: bool = True
+    ) -> Dict[str, Any]:
+        """将Google格式的function_call转换为IR格式
+
+        Args:
+            part: Google格式的Part（包含function_call）
+            preserve_metadata: 是否保留thought_signature到provider_metadata
+
+        Returns:
+            IR格式的工具调用
+
+        Example:
+            >>> part = {
+            ...     "function_call": {
+            ...         "name": "get_weather",
+            ...         "args": {"city": "Beijing"}
+            ...     },
+            ...     "thoughtSignature": "abc123"
+            ... }
+            >>> ToolCallConverter.from_google(part)
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_get_weather_...",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "Beijing"},
+                "tool_type": "function",
+                "provider_metadata": {
+                    "google": {"thought_signature": "abc123"}
+                }
+            }
+        """
+        # 支持两种命名格式：function_call（SDK）和 functionCall（REST API）
+        func_call = part.get("function_call") or part.get("functionCall")
+        if not func_call:
+            raise ValueError("Part does not contain function_call")
+
+        # Google 的 function_call 可能没有 id 字段，我们需要生成一个唯一 ID
+        tool_call_id = func_call.get("id")
+        if not tool_call_id:
+            # 生成一个基于函数名的唯一 ID
+            tool_call_id = f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
+
+        tool_call_part = {
+            "type": "tool_call",
+            "tool_call_id": tool_call_id,
+            "tool_name": func_call["name"],
+            "tool_input": func_call.get("args", {}),
+            "tool_type": "function",
+        }
+
+        # 保存thought_signature到provider_metadata
+        if preserve_metadata:
+            # 支持两种命名：thoughtSignature（REST）和 thought_signature（SDK）
+            thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+            if thought_sig:
+                tool_call_part["provider_metadata"] = {
+                    "google": {"thought_signature": thought_sig}
+                }
+
+        return tool_call_part

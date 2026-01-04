@@ -17,6 +17,7 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
+from ..utils import FieldMapper, ToolCallConverter, ToolConverter
 from .base import BaseConverter
 
 
@@ -68,13 +69,11 @@ class GoogleConverter(BaseConverter):
 
         # 转换工具
         if tools:
-            google_tools = self._convert_tools(tools)
-            if google_tools:
-                config["tools"] = google_tools
+            config["tools"] = ToolConverter.batch_convert_tools(tools, "google")
 
         # 转换工具选择配置
         if tool_choice:
-            tool_config = self._convert_tool_choice(tool_choice)
+            tool_config = ToolConverter.convert_tool_choice(tool_choice, "google")
             if tool_config:
                 config["tool_config"] = tool_config
 
@@ -143,20 +142,27 @@ class GoogleConverter(BaseConverter):
 
         # 转换工具
         if tools:
-            google_tools = self._convert_tools(tools)
-            if google_tools:
-                result["tools"] = google_tools
+            result["tools"] = ToolConverter.batch_convert_tools(tools, "google")
 
         # 转换工具选择配置
         if tool_choice:
-            tool_config = self._convert_tool_choice(tool_choice)
+            tool_config = ToolConverter.convert_tool_choice(tool_choice, "google")
             if tool_config:
                 result["tool_config"] = tool_config
 
         return result, warnings_list
 
     def from_provider(self, provider_data: Any) -> IRInput:
-        """将Google GenAI格式转换为IR格式"""
+        """将Google GenAI格式转换为IR格式
+
+        Args:
+            provider_data: Google GenAI响应对象或字典
+                          自动处理Pydantic模型对象（调用.model_dump()）
+        """
+        # 自动unwrap Pydantic模型对象
+        if hasattr(provider_data, "model_dump"):
+            provider_data = provider_data.model_dump()
+
         if isinstance(provider_data, tuple):
             provider_data = provider_data[0]
 
@@ -217,9 +223,19 @@ class GoogleConverter(BaseConverter):
     def _convert_content_part_to_part(
         self, content_part: Dict[str, Any], ir_input: IRInput
     ) -> Optional[Dict[str, Any]]:
-        """将IR内容部分转换为Google Part"""
+        """将IR内容部分转换为Google Part
+
+        注意：如果content_part包含provider_metadata中的thought_signature，
+        会将其添加到返回的Part中。这对于Gemini 3模型是必需的。
+        """
         if is_text_part(content_part):
-            return {"text": content_part["text"]}
+            part = {"text": content_part["text"]}
+            # 检查是否有thought_signature需要保留
+            if "provider_metadata" in content_part:
+                metadata = content_part["provider_metadata"]
+                if "google" in metadata and "thought_signature" in metadata["google"]:
+                    part["thoughtSignature"] = metadata["google"]["thought_signature"]
+            return part
 
         elif content_part["type"] == "image":
             # Google使用inline_data或file_data
@@ -298,19 +314,7 @@ class GoogleConverter(BaseConverter):
                 return None
 
         elif is_tool_call_part(content_part):
-            # 支持多种字段名格式
-            tool_name = (
-                content_part.get("tool_name")
-                or content_part.get("name")
-                or content_part.get("function", {}).get("name", "")
-            )
-            tool_args = (
-                content_part.get("tool_input")
-                or content_part.get("arguments")
-                or content_part.get("args", {})
-            )
-
-            return {"function_call": {"name": tool_name, "args": tool_args}}
+            return ToolCallConverter.to_google(content_part, preserve_metadata=True)
 
         elif is_tool_result_part(content_part):
             # Google的function_response.name需要是函数名，而不是tool_call_id
@@ -335,12 +339,8 @@ class GoogleConverter(BaseConverter):
                 )
                 tool_name = content_part.get("tool_call_id")
 
-            # 支持多种字段名格式
-            result_content = (
-                content_part.get("result")
-                or content_part.get("content")
-                or content_part.get("output", "")
-            )
+            # 使用FieldMapper统一处理字段名
+            result_content = FieldMapper.get_result_content(content_part)
 
             response_data = {"output": result_content}
             if content_part.get("is_error"):
@@ -391,17 +391,10 @@ class GoogleConverter(BaseConverter):
         if "text" in part and part["text"] is not None and part["text"] != "":
             ir_parts.append({"type": "text", "text": part["text"]})
 
-        if "function_call" in part and part["function_call"] is not None:
-            func_call = part["function_call"]
-            ir_parts.append(
-                {
-                    "type": "tool_call",
-                    "tool_call_id": func_call.get("id", func_call.get("name", "")),
-                    "tool_name": func_call["name"],
-                    "tool_input": func_call.get("args", {}),
-                    "tool_type": "function",
-                }
-            )
+        # 支持两种命名格式：function_call（SDK）和 functionCall（REST API）
+        func_call = part.get("function_call") or part.get("functionCall")
+        if func_call is not None:
+            ir_parts.append(ToolCallConverter.from_google(part, preserve_metadata=True))
 
         if "inline_data" in part and part["inline_data"] is not None:
             inline_data = part["inline_data"]
@@ -451,8 +444,9 @@ class GoogleConverter(BaseConverter):
             else:
                 ir_parts.append({"type": "file", "file_url": file_data["file_uri"]})
 
-        if "function_response" in part and part["function_response"] is not None:
-            func_response = part["function_response"]
+        # 支持两种命名格式：function_response（SDK）和 functionResponse（REST API）
+        func_response = part.get("function_response") or part.get("functionResponse")
+        if func_response is not None:
             response_data = func_response.get("response", {})
 
             # 检查是否是错误响应
@@ -470,80 +464,23 @@ class GoogleConverter(BaseConverter):
                 }
             )
 
+        # 处理独立的thoughtSignature（在text或其他part中）
+        # 这种情况下，signature会附加到最后一个part上
+        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+        if thought_sig and ir_parts:
+            # 将signature添加到最后一个part的metadata中
+            last_part = ir_parts[-1]
+            if "provider_metadata" not in last_part:
+                last_part["provider_metadata"] = {}
+            if "google" not in last_part["provider_metadata"]:
+                last_part["provider_metadata"]["google"] = {}
+            last_part["provider_metadata"]["google"]["thought_signature"] = thought_sig
+
         if not ir_parts:
-            warnings.warn(f"不支持的Part类型: {list(part.keys())}")
+            # 过滤掉已知的可忽略字段
+            ignorable_keys = {"thoughtSignature", "thought_signature"}
+            unknown_keys = set(part.keys()) - ignorable_keys
+            if unknown_keys:
+                warnings.warn(f"不支持的Part类型: {list(unknown_keys)}")
 
         return ir_parts
-
-    def _convert_tools(self, tools: List[ToolDefinition]) -> List[Dict[str, Any]]:
-        """转换工具定义为Google格式"""
-        google_tools = []
-
-        for tool in tools:
-            if tool["type"] == "function":
-                # 支持嵌套的function结构
-                if "function" in tool:
-                    func_def = tool["function"]
-                    function_declaration = {
-                        "name": func_def["name"],
-                        "description": func_def.get("description", ""),
-                    }
-                    # 转换参数schema
-                    if "parameters" in func_def:
-                        function_declaration["parameters"] = func_def["parameters"]
-                else:
-                    # 直接的工具定义格式
-                    function_declaration = {
-                        "name": tool["name"],
-                        "description": tool.get("description", ""),
-                    }
-                    # 转换参数schema
-                    if "parameters" in tool:
-                        function_declaration["parameters"] = tool["parameters"]
-
-                google_tool = {"function_declarations": [function_declaration]}
-                google_tools.append(google_tool)
-
-            elif tool["type"] == "mcp":
-                # Google原生支持MCP，但需要特殊处理
-                warnings.warn(
-                    "MCP工具需要通过Google GenAI的MCP适配器处理，"
-                    "请参考Google GenAI文档中的MCP集成方式"
-                )
-
-            else:
-                warnings.warn(f"不支持的工具类型: {tool['type']}")
-
-        return google_tools
-
-    def _convert_tool_choice(self, tool_choice: ToolChoice) -> Optional[Dict[str, Any]]:
-        """转换工具选择配置为Google格式"""
-        # 支持type和mode字段
-        choice_type = tool_choice.get("type") or tool_choice.get("mode")
-
-        if choice_type == "auto":
-            return {"function_calling_config": {"mode": "AUTO"}}
-        elif choice_type == "none":
-            return {"function_calling_config": {"mode": "NONE"}}
-        elif choice_type in ["any", "required"]:
-            return {"function_calling_config": {"mode": "ANY"}}
-        elif choice_type in ["tool", "function"]:
-            # 获取函数名
-            func_name = None
-            if "function" in tool_choice:
-                func_name = tool_choice["function"].get("name")
-            elif "tool_name" in tool_choice:
-                func_name = tool_choice["tool_name"]
-
-            if func_name:
-                return {
-                    "function_calling_config": {
-                        "mode": "ANY",
-                        "allowed_function_names": [func_name],
-                    }
-                }
-            else:
-                return {"function_calling_config": {"mode": "ANY"}}
-        else:
-            warnings.warn(f"不支持的工具选择类型: {choice_type}")
-            return None

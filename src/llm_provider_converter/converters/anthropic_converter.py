@@ -14,6 +14,7 @@ from ..types.ir import (
     is_extension_item,
     is_message,
 )
+from ..utils import FieldMapper, ToolCallConverter, ToolConverter
 from .base import BaseConverter
 
 
@@ -81,9 +82,7 @@ class AnthropicConverter(BaseConverter):
                         # 创建一个assistant消息包含工具调用
                         anthropic_message = {
                             "role": "assistant",
-                            "content": [
-                                self._convert_tool_call_to_anthropic(tool_call)
-                            ],
+                            "content": [ToolCallConverter.to_anthropic(tool_call)],
                         }
                         messages.append(anthropic_message)
                 elif extension_type in ["batch_marker", "session_control"]:
@@ -98,20 +97,28 @@ class AnthropicConverter(BaseConverter):
 
         # 添加工具定义
         if tools:
-            result["tools"] = [
-                self._convert_tool_definition_to_anthropic(tool) for tool in tools
-            ]
+            result["tools"] = ToolConverter.batch_convert_tools(tools, "anthropic")
 
         # 添加工具选择
         if tool_choice:
-            result["tool_choice"] = self._convert_tool_choice_to_anthropic(tool_choice)
+            result["tool_choice"] = ToolConverter.convert_tool_choice(
+                tool_choice, "anthropic"
+            )
 
         return result, warnings
 
     def from_provider(self, provider_data: Any) -> IRInput:
         """
         将Anthropic格式转换为IR格式
+
+        Args:
+            provider_data: Anthropic响应对象或字典
+                          自动处理Pydantic模型对象（调用.model_dump()）
         """
+        # 自动unwrap Pydantic模型对象
+        if hasattr(provider_data, "model_dump"):
+            provider_data = provider_data.model_dump()
+
         if not isinstance(provider_data, dict):
             raise ValueError("Anthropic data must be a dictionary")
 
@@ -168,9 +175,11 @@ class AnthropicConverter(BaseConverter):
                 blocks.append({"type": "text", "text": part["text"]})
 
             elif part_type == "image":
-                if "image_data" in part:
+                image_url = FieldMapper.get_image_url(part)
+                image_data = FieldMapper.get_image_data(part)
+
+                if image_data:
                     # base64形式
-                    image_data = part["image_data"]
                     blocks.append(
                         {
                             "type": "image",
@@ -181,12 +190,12 @@ class AnthropicConverter(BaseConverter):
                             },
                         }
                     )
-                elif "image_url" in part:
-                    # URL形式（Anthropic可能不直接支持，需要先下载）
+                elif image_url:
+                    # URL形式
                     blocks.append(
                         {
                             "type": "image",
-                            "source": {"type": "url", "url": part["image_url"]},
+                            "source": {"type": "url", "url": image_url},
                         }
                     )
 
@@ -213,7 +222,7 @@ class AnthropicConverter(BaseConverter):
                     )
 
             elif part_type == "tool_call":
-                blocks.append(self._convert_tool_call_to_anthropic(part))
+                blocks.append(ToolCallConverter.to_anthropic(part))
 
             elif part_type == "tool_result":
                 blocks.append(
@@ -230,36 +239,6 @@ class AnthropicConverter(BaseConverter):
                 blocks.append({"type": "thinking", "thinking": part["reasoning"]})
 
         return blocks
-
-    def _convert_tool_call_to_anthropic(
-        self, tool_call: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """将IR工具调用转换为Anthropic格式"""
-        tool_type = tool_call.get("tool_type", "function")
-
-        if tool_type == "function":
-            return {
-                "type": "tool_use",
-                "id": tool_call["tool_call_id"],
-                "name": tool_call["tool_name"],
-                "input": tool_call["tool_input"],
-            }
-        elif tool_type == "web_search":
-            # Anthropic有专门的web_search工具
-            return {
-                "type": "server_tool_use",
-                "id": tool_call["tool_call_id"],
-                "name": "web_search",
-                "input": tool_call["tool_input"],
-            }
-        else:
-            # 其他类型转换为普通工具调用
-            return {
-                "type": "tool_use",
-                "id": tool_call["tool_call_id"],
-                "name": f"{tool_type}_{tool_call['tool_name']}",
-                "input": tool_call["tool_input"],
-            }
 
     def _convert_content_from_anthropic(
         self, content: Union[str, List[Dict[str, Any]]]
@@ -283,13 +262,15 @@ class AnthropicConverter(BaseConverter):
                         {
                             "type": "image",
                             "image_data": {
-                                "data": source["data"],
-                                "media_type": source["media_type"],
+                                "data": source.get("data", ""),
+                                "media_type": source.get("media_type", ""),
                             },
                         }
                     )
                 elif source.get("type") == "url":
-                    ir_content.append({"type": "image", "image_url": source["url"]})
+                    ir_content.append(
+                        {"type": "image", "image_url": source.get("url", "")}
+                    )
 
             elif block_type == "document":
                 source = block.get("source", {})
@@ -310,24 +291,23 @@ class AnthropicConverter(BaseConverter):
                 ir_content.append(
                     {
                         "type": "tool_call",
-                        "tool_call_id": block["id"],
-                        "tool_name": block["name"],
-                        "tool_input": block["input"],
+                        "tool_call_id": block.get("id", ""),
+                        "tool_name": block.get("name", ""),
+                        "tool_input": block.get("input", {}),
                         "tool_type": "function",
                     }
                 )
 
             elif block_type == "server_tool_use":
                 # Anthropic的服务器端工具
-                tool_type = (
-                    "web_search" if block["name"] == "web_search" else "function"
-                )
+                tool_name = block.get("name", "")
+                tool_type = "web_search" if tool_name == "web_search" else "function"
                 ir_content.append(
                     {
                         "type": "tool_call",
-                        "tool_call_id": block["id"],
-                        "tool_name": block["name"],
-                        "tool_input": block["input"],
+                        "tool_call_id": block.get("id", ""),
+                        "tool_name": tool_name,
+                        "tool_input": block.get("input", {}),
                         "tool_type": tool_type,
                     }
                 )
@@ -336,8 +316,8 @@ class AnthropicConverter(BaseConverter):
                 ir_content.append(
                     {
                         "type": "tool_result",
-                        "tool_call_id": block["tool_use_id"],
-                        "result": block["content"],
+                        "tool_call_id": block.get("tool_use_id", ""),
+                        "result": block.get("content", ""),
                         "is_error": block.get("is_error", False),
                     }
                 )
@@ -346,39 +326,3 @@ class AnthropicConverter(BaseConverter):
                 ir_content.append({"type": "reasoning", "reasoning": block["thinking"]})
 
         return ir_content
-
-    def _convert_tool_definition_to_anthropic(
-        self, tool: ToolDefinition
-    ) -> Dict[str, Any]:
-        """将IR工具定义转换为Anthropic格式"""
-        return {
-            "name": tool["name"],
-            "description": tool.get("description", ""),
-            "input_schema": tool.get("parameters", {}),
-        }
-
-    def _convert_tool_choice_to_anthropic(
-        self, tool_choice: ToolChoice
-    ) -> Dict[str, Any]:
-        """将IR工具选择转换为Anthropic格式"""
-        mode = tool_choice["mode"]
-
-        if mode == "none":
-            return {"type": "none"}
-        elif mode == "auto":
-            result = {"type": "auto"}
-            if tool_choice.get("disable_parallel"):
-                result["disable_parallel_tool_use"] = True
-            return result
-        elif mode == "any":
-            result = {"type": "any"}
-            if tool_choice.get("disable_parallel"):
-                result["disable_parallel_tool_use"] = True
-            return result
-        elif mode == "tool":
-            result = {"type": "tool", "name": tool_choice["tool_name"]}
-            if tool_choice.get("disable_parallel"):
-                result["disable_parallel_tool_use"] = True
-            return result
-        else:
-            raise ValueError(f"Unsupported tool choice mode: {mode}")
