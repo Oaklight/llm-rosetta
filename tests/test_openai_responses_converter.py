@@ -216,27 +216,26 @@ class TestOpenAIResponsesConverter:
         assert reasoning_item["type"] == "reasoning"
         assert reasoning_item["content"] == "Let me think about this..."
 
-        # 检查普通消息
+        # 检查普通消息 - assistant角色的文本使用output_text
         message_item = result["input"][1]
         assert message_item["type"] == "message"
         assert message_item["role"] == "assistant"
         assert message_item["content"] == [
-            {"type": "input_text", "text": "The answer is 42."}
+            {"type": "output_text", "text": "The answer is 42."}
         ]
 
     def test_tool_definitions_conversion(self):
         """测试工具定义转换"""
+        # 使用IR格式的工具定义（与examples一致）
         tools = [
             {
                 "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get current weather",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {"location": {"type": "string"}},
-                        "required": ["location"],
-                    },
+                "name": "get_weather",
+                "description": "Get current weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                    "required": ["location"],
                 },
             }
         ]
@@ -250,9 +249,9 @@ class TestOpenAIResponsesConverter:
 
         tool = result["tools"][0]
         assert tool["type"] == "function"
-        assert tool["function"]["name"] == "get_weather"
-        assert tool["function"]["description"] == "Get current weather"
-        assert "parameters" in tool["function"]
+        assert tool["name"] == "get_weather"
+        assert tool["description"] == "Get current weather"
+        assert "parameters" in tool
 
     def test_tool_choice_conversion(self):
         """测试工具选择配置转换"""
@@ -381,8 +380,9 @@ class TestOpenAIResponsesConverter:
 
     def test_provider_to_ir_with_reasoning(self):
         """测试Provider到IR的推理内容转换"""
+        # 这应该是API的output格式，不是input格式
         provider_data = {
-            "input": [
+            "output": [
                 {"type": "reasoning", "content": "Let me think step by step..."},
                 {
                     "type": "message",
@@ -396,14 +396,14 @@ class TestOpenAIResponsesConverter:
 
         assert len(result) == 2  # 推理内容和普通消息分开
 
-        # 检查推理消息
+        # 检查推理消息 - reasoning类型的item会被转换为带reasoning标记的内容
         reasoning_msg = result[0]
         assert reasoning_msg["role"] == "assistant"
         assert len(reasoning_msg["content"]) == 1
         reasoning_part = reasoning_msg["content"][0]
-        assert reasoning_part["type"] == "text"
-        assert reasoning_part["text"] == "Let me think step by step..."
-        assert reasoning_part["reasoning"] is True
+        # 推理内容保持为"reasoning"类型，使用"reasoning"字段存储内容
+        assert reasoning_part["type"] == "reasoning"
+        assert reasoning_part["reasoning"] == "Let me think step by step..."
 
         # 检查普通消息
         text_msg = result[1]
