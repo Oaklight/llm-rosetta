@@ -1,16 +1,20 @@
 """
 字段映射工具
+Field mapping utility
 
 处理不同provider之间的字段名差异，提供统一的字段访问接口
+Handles field name differences between providers, provides a unified field access interface
 """
 
 from typing import Any, Dict, List, Optional, Union
 
 
 class FieldMapper:
-    """字段映射工具，处理不同provider的字段名差异"""
+    """字段映射工具，处理不同provider的字段名差异
+    Field mapping utility, handles field name differences between providers
+    """
 
-    # 定义常见的字段映射规则
+    # 定义常见的字段映射规则 Define common field mapping rules
     TOOL_NAME_FIELDS = ["tool_name", "name", "function.name"]
     TOOL_INPUT_FIELDS = ["tool_input", "arguments", "args", "input", "parameters"]
     TOOL_ID_FIELDS = ["tool_call_id", "id", "call_id"]
@@ -57,7 +61,9 @@ class FieldMapper:
 
     @staticmethod
     def _get_nested_field(data: Dict[str, Any], field_path: str) -> Any:
-        """获取嵌套字段的值"""
+        """获取嵌套字段的值
+        Get value of nested field
+        """
         parts = field_path.split(".")
         value = data
         for part in parts:
@@ -69,39 +75,51 @@ class FieldMapper:
 
     @classmethod
     def get_tool_name(cls, data: Dict[str, Any], default: str = "") -> str:
-        """获取工具名称"""
+        """获取工具名称
+        Get tool name
+        """
         return cls.get_field(data, cls.TOOL_NAME_FIELDS, default)
 
     @classmethod
     def get_tool_input(
         cls, data: Dict[str, Any], default: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """获取工具输入参数"""
+        """获取工具输入参数
+        Get tool input parameters
+        """
         result = cls.get_field(data, cls.TOOL_INPUT_FIELDS, default)
         return result if result is not None else {}
 
     @classmethod
     def get_tool_id(cls, data: Dict[str, Any], default: str = "") -> str:
-        """获取工具调用ID"""
+        """获取工具调用ID
+        Get tool call ID
+        """
         return cls.get_field(data, cls.TOOL_ID_FIELDS, default)
 
     @classmethod
     def get_result_content(cls, data: Dict[str, Any], default: Any = None) -> Any:
-        """获取结果内容"""
+        """获取结果内容
+        Get result content
+        """
         return cls.get_field(data, cls.RESULT_FIELDS, default)
 
     @classmethod
     def get_image_url(
         cls, data: Dict[str, Any], default: Optional[str] = None
     ) -> Optional[str]:
-        """获取图像URL"""
+        """获取图像URL
+        Get image URL
+        """
         return cls.get_field(data, cls.IMAGE_URL_FIELDS, default)
 
     @classmethod
     def get_image_data(
         cls, data: Dict[str, Any], default: Optional[Dict] = None
     ) -> Optional[Dict[str, Any]]:
-        """获取图像数据"""
+        """获取图像数据
+        Get image data
+        """
         return cls.get_field(data, cls.IMAGE_DATA_FIELDS, default)
 
     @staticmethod

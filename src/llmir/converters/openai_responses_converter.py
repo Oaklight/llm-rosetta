@@ -1,5 +1,5 @@
 """
-LLM Provider Converter - OpenAI Responses API Converter
+LLMIR - OpenAI Responses API Converter
 
 实现IR与OpenAI Responses API格式之间的转换
 """
@@ -27,7 +27,9 @@ from .base import BaseConverter
 
 
 class OpenAIResponsesConverter(BaseConverter):
-    """OpenAI Responses API格式转换器"""
+    """OpenAI Responses API格式转换器
+    OpenAI Responses API format converter
+    """
 
     def to_provider(
         self,
@@ -37,10 +39,12 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> Tuple[Dict[str, Any], List[str]]:
         """
         将IR格式转换为OpenAI Responses API格式
+        Convert IR format to OpenAI Responses API format
 
         Responses API使用扁平的项目列表，每个项目可以是消息、工具调用或其他类型
+        Responses API uses a flat list of items, each item can be message, tool call or other types
         """
-        # 验证输入
+        # 验证输入 Validate input
         validation_errors = self.validate_ir_input(ir_input)
         if validation_errors:
             raise ValueError(f"Invalid IR input: {validation_errors}")
@@ -53,13 +57,13 @@ class OpenAIResponsesConverter(BaseConverter):
                 message = item  # type: ignore
 
                 if message["role"] in ["system", "user", "developer"]:
-                    # 基本消息类型
+                    # 基本消息类型 Basic message types
                     content_list = []
                     tool_calls = []
 
                     for part in message["content"]:
                         if is_text_part(part):
-                            # 用户输入使用 input_text
+                            # 用户输入使用 input_text User input uses input_text
                             # 注意：这里是 provider 格式的字典，不是 IR 格式
                             content_list.append(
                                 {"type": "input_text", "text": part["text"]}
@@ -69,13 +73,13 @@ class OpenAIResponsesConverter(BaseConverter):
                         elif part["type"] == "file":
                             content_list.append(self._convert_file_to_responses(part))
                         elif is_tool_call_part(part):
-                            # Responses API中工具调用是独立的项目
+                            # Responses API中工具调用是独立的项目 Tool calls are independent items in Responses API
                             tool_calls.append(
                                 ToolCallConverter.to_openai_responses(part)
                             )
                         elif is_tool_result_part(part):
-                            # 工具结果转换为函数调用输出
-                            # 支持多种字段名称
+                            # 工具结果转换为函数调用输出 Tool results converted to function call output
+                            # 支持多种字段名称 Support multiple field names
                             result_content = part.get("result") or part.get("content")
                             items.append(
                                 {
@@ -85,13 +89,13 @@ class OpenAIResponsesConverter(BaseConverter):
                                 }
                             )
                         elif part["type"] == "reasoning":
-                            # Responses API支持推理
+                            # Responses API支持推理 Responses API supports reasoning
                             # 注意：这里是 provider 格式的字典，不是 IR 格式
                             items.append(
                                 {"type": "reasoning", "reasoning": part["reasoning"]}
                             )
 
-                    # 添加消息（如果有内容）
+                    # 添加消息（如果有内容） Add message (if there is content)
                     if content_list:
                         items.append(
                             {
@@ -101,24 +105,24 @@ class OpenAIResponsesConverter(BaseConverter):
                             }
                         )
 
-                    # 添加工具调用
+                    # 添加工具调用 Add tool calls
                     items.extend(tool_calls)
 
                 elif message["role"] == "assistant":
-                    # Assistant消息处理
+                    # Assistant消息处理 Assistant message handling
                     content_list = []
                     tool_calls = []
 
                     for part in message["content"]:
                         if is_text_part(part):
-                            # 检查是否是推理文本
+                            # 检查是否是推理文本 Check if it's reasoning text
                             if part.get("reasoning"):
                                 # 注意：这里是 provider 格式的字典，不是 IR 格式
                                 items.append(
                                     {"type": "reasoning", "content": part["text"]}
                                 )
                             else:
-                                # Assistant 输出使用 output_text
+                                # Assistant 输出使用 output_text Assistant output uses output_text
                                 # 注意：这里是 provider 格式的字典，不是 IR 格式
                                 content_list.append(
                                     {"type": "output_text", "text": part["text"]}
@@ -133,7 +137,7 @@ class OpenAIResponsesConverter(BaseConverter):
                                 {"type": "reasoning", "reasoning": part["reasoning"]}
                             )
 
-                    # 添加assistant消息（如果有文本内容）
+                    # 添加assistant消息（如果有文本内容） Add assistant message (if there is text content)
                     if content_list:
                         items.append(
                             {
@@ -143,7 +147,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             }
                         )
 
-                    # 添加工具调用
+                    # 添加工具调用 Add tool calls
                     items.extend(tool_calls)
 
             elif is_extension_item(item):
@@ -151,7 +155,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 extension_type = extension.get("type")
 
                 if extension_type == "system_event":
-                    # Responses API支持系统事件
+                    # Responses API支持系统事件 Responses API supports system events
                     items.append(
                         {
                             "type": "system_event",
@@ -168,16 +172,16 @@ class OpenAIResponsesConverter(BaseConverter):
                 elif extension_type in ["batch_marker", "session_control"]:
                     warnings.append(f"Extension item ignored: {extension_type}")
 
-        # 构建结果
+        # 构建结果 Build result
         result = {"input": items}
 
-        # 添加工具定义
+        # 添加工具定义 Add tool definitions
         if tools:
             result["tools"] = ToolConverter.batch_convert_tools(
                 tools, "openai_responses"
             )
 
-        # 添加工具选择
+        # 添加工具选择 Add tool choice
         if tool_choice:
             result["tool_choice"] = ToolConverter.convert_tool_choice(
                 tool_choice, "openai_responses"
@@ -188,21 +192,23 @@ class OpenAIResponsesConverter(BaseConverter):
     def from_provider(self, provider_data: Any) -> IRInput:
         """
         将OpenAI Responses API格式转换为IR格式
+        Convert OpenAI Responses API format to IR format
 
         注意：Responses API的响应在'output'字段，而请求在'input'字段
+        Note: Responses API response is in 'output' field, while request is in 'input' field
 
         Args:
-            provider_data: OpenAI Responses API响应对象或字典
-                          自动处理Pydantic模型对象（调用.model_dump()）
+            provider_data: OpenAI Responses API响应对象或字典 OpenAI Responses API response object or dict
+                          自动处理Pydantic模型对象（调用.model_dump()） Automatically handles Pydantic model objects (calls .model_dump())
         """
-        # 自动unwrap Pydantic模型对象
+        # 自动unwrap Pydantic模型对象 Auto unwrap Pydantic model objects
         if hasattr(provider_data, "model_dump"):
             provider_data = provider_data.model_dump()
 
         if not isinstance(provider_data, dict):
             raise ValueError("OpenAI Responses data must be a dictionary")
 
-        # 响应数据在output字段，请求数据在input字段
+        # 响应数据在output字段，请求数据在input字段 Response data in output field, request data in input field
         items = provider_data.get("output") or provider_data.get("input", [])
         if not isinstance(items, list):
             raise ValueError("OpenAI Responses output/input must be a list")
@@ -214,7 +220,7 @@ class OpenAIResponsesConverter(BaseConverter):
             item_type = item.get("type")
 
             if item_type == "message":
-                # 处理消息
+                # 处理消息 Handle messages
                 if current_message:
                     ir_input.append(current_message)
 
@@ -227,7 +233,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 elif isinstance(content, list):
                     for part in content:
                         part_type = part.get("type", "")
-                        # 支持input_text和output_text
+                        # 支持input_text和output_text Support input_text and output_text
                         if part_type in ["input_text", "output_text", "text"]:
                             ir_content.append(TextPart(type="text", text=part["text"]))
                         elif part_type == "input_image":
@@ -238,13 +244,13 @@ class OpenAIResponsesConverter(BaseConverter):
                 current_message = Message(role=role, content=ir_content)
 
             elif item_type == "function_call":
-                # 函数调用转换为工具调用
+                # 函数调用转换为工具调用 Function call converted to tool call
                 tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
                     current_message["content"].append(tool_call)
                 else:
-                    # 创建新的assistant消息
+                    # 创建新的assistant消息 Create new assistant message
                     if current_message:
                         ir_input.append(current_message)
                     current_message = Message(
@@ -253,7 +259,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     )
 
             elif item_type == "function_call_output":
-                # 函数调用输出转换为工具结果
+                # 函数调用输出转换为工具结果 Function call output converted to tool result
                 if current_message:
                     ir_input.append(current_message)
 
@@ -269,7 +275,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
 
             elif item_type == "mcp_call":
-                # MCP调用转换为工具调用
+                # MCP调用转换为工具调用 MCP call converted to tool call
                 tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
@@ -283,7 +289,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     )
 
             elif item_type == "mcp_call_output":
-                # MCP调用输出转换为工具结果
+                # MCP调用输出转换为工具结果 MCP call output converted to tool result
                 if current_message:
                     ir_input.append(current_message)
 
@@ -299,11 +305,11 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
 
             elif item_type == "reasoning":
-                # 推理内容转换为ReasoningPart
-                # o4-mini的reasoning可能有content字段为null的情况
+                # 推理内容转换为ReasoningPart Reasoning content converted to ReasoningPart
+                # o4-mini的reasoning可能有content字段为null的情况 o4-mini reasoning may have null content field
                 reasoning_content = item.get("reasoning") or item.get("content")
 
-                # 只有当reasoning_content不为None时才添加
+                # 只有当reasoning_content不为None时才添加 Only add when reasoning_content is not None
                 if reasoning_content:
                     reasoning_part = ReasoningPart(
                         type="reasoning", reasoning=str(reasoning_content)
@@ -311,15 +317,15 @@ class OpenAIResponsesConverter(BaseConverter):
                     if current_message:
                         current_message["content"].append(reasoning_part)
                     else:
-                        # 创建新的assistant消息包含推理
+                        # 创建新的assistant消息包含推理 Create new assistant message containing reasoning
                         current_message = Message(
                             role="assistant",
                             content=[reasoning_part],
                         )
-                # 如果reasoning_content为None，跳过这个reasoning event
+                # 如果reasoning_content为None，跳过这个reasoning event If reasoning_content is None, skip this reasoning event
 
             elif item_type == "system_event":
-                # 系统事件转换为扩展项
+                # 系统事件转换为扩展项 System event converted to extension item
                 if current_message:
                     ir_input.append(current_message)
                     current_message = None
@@ -334,7 +340,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
 
             elif item_type in ["shell_call", "computer_call", "code_interpreter_call"]:
-                # 其他工具调用类型
+                # 其他工具调用类型 Other tool call types
                 tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
@@ -347,7 +353,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         content=[tool_call],
                     )
 
-        # 添加最后一个消息
+        # 添加最后一个消息 Add the last message
         if current_message:
             ir_input.append(current_message)
 
@@ -355,12 +361,14 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _convert_image_to_responses(self, image_part: Dict[str, Any]) -> Dict[str, Any]:
         """将IR图像转换为Responses API格式
+        Convert IR image to Responses API format
 
         注意：图像始终使用 input_image，因为图像只能作为输入
+        Note: images always use input_image, because images can only be input
         """
         result = {"type": "input_image", "detail": image_part.get("detail", "auto")}
 
-        # 支持多种URL字段名称
+        # 支持多种URL字段名称 Support multiple URL field names
         url = image_part.get("image_url") or image_part.get("url")
         if url:
             result["image_url"] = url
@@ -375,8 +383,10 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _convert_file_to_responses(self, file_part: Dict[str, Any]) -> Dict[str, Any]:
         """将IR文件转换为Responses API格式
+        Convert IR file to Responses API format
 
         注意：文件始终使用 input_file，因为文件只能作为输入
+        Note: files always use input_file, because files can only be input
         """
         result = {
             "type": "input_file",
@@ -395,13 +405,15 @@ class OpenAIResponsesConverter(BaseConverter):
     def _convert_image_from_responses(
         self, image_part: Dict[str, Any]
     ) -> Dict[str, Any]:
-        """将Responses API图像转换为IR格式"""
+        """将Responses API图像转换为IR格式
+        Convert Responses API image to IR format
+        """
         detail = image_part.get("detail", "auto")
 
         if "image_url" in image_part:
             url = image_part["image_url"]
             if url.startswith("data:"):
-                # Base64数据URL
+                # Base64数据URL Base64 data URL
                 import re
 
                 match = re.match(r"data:([^;]+);base64,(.+)", url)
@@ -417,24 +429,26 @@ class OpenAIResponsesConverter(BaseConverter):
             else:
                 return ImagePart(type="image", image_url=url, detail=detail)
         elif "file_id" in image_part:
-            # 文件ID形式，转换为引用
+            # 文件ID形式，转换为引用 File ID form, converted to reference
             # 注意：file_id 不在 ImagePart 定义中，使用字典字面量
             return {"type": "image", "file_id": image_part["file_id"], "detail": detail}  # type: ignore
 
         return ImagePart(type="image", detail=detail)
 
     def _convert_file_from_responses(self, file_part: Dict[str, Any]) -> Dict[str, Any]:
-        """将Responses API文件转换为IR格式"""
+        """将Responses API文件转换为IR格式
+        Convert Responses API file to IR format
+        """
         file_name = file_part.get("filename", "unknown")
 
         if "file_data" in file_part:
-            # 假设是base64编码的数据
+            # 假设是base64编码的数据 Assume it's base64 encoded data
             return FilePart(
                 type="file",
                 file_name=file_name,
                 file_data={
                     "data": file_part["file_data"],
-                    "media_type": "application/octet-stream",  # 默认类型
+                    "media_type": "application/octet-stream",  # 默认类型 Default type
                 },
             )
         elif "file_url" in file_part:
