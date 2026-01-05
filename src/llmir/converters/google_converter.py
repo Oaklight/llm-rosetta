@@ -8,9 +8,14 @@ import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
+    FilePart,
+    ImagePart,
     IRInput,
+    Message,
+    TextPart,
     ToolChoice,
     ToolDefinition,
+    ToolResultPart,
     is_extension_item,
     is_message,
     is_text_part,
@@ -180,10 +185,10 @@ class GoogleConverter(BaseConverter):
                 block_reason = prompt_feedback.get("block_reason")
                 block_message = f"Request was blocked. Reason: {block_reason}"
                 messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": block_message}],
-                    }
+                    Message(
+                        role="assistant",
+                        content=[TextPart(type="text", text=block_message)],
+                    )
                 )
             return messages
 
@@ -389,7 +394,7 @@ class GoogleConverter(BaseConverter):
         """将Google Part转换为一个或多个IR内容部分"""
         ir_parts = []
         if "text" in part and part["text"] is not None and part["text"] != "":
-            ir_parts.append({"type": "text", "text": part["text"]})
+            ir_parts.append(TextPart(type="text", text=part["text"]))
 
         # 支持两种命名格式：function_call（SDK）和 functionCall（REST API）
         func_call = part.get("function_call") or part.get("functionCall")
@@ -409,6 +414,7 @@ class GoogleConverter(BaseConverter):
                     }
                 )
             elif mime_type.startswith("audio/"):
+                # 保持音频类型为 "audio"，这是测试期望的
                 ir_parts.append(
                     {
                         "type": "audio",
@@ -432,8 +438,11 @@ class GoogleConverter(BaseConverter):
             mime_type = file_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
-                ir_parts.append({"type": "image", "image_url": file_data["file_uri"]})
+                ir_parts.append(
+                    ImagePart(type="image", image_url=file_data["file_uri"])
+                )
             elif mime_type.startswith("audio/"):
+                # 保持音频类型为 "audio"，这是测试期望的
                 ir_parts.append(
                     {
                         "type": "audio",
@@ -442,7 +451,7 @@ class GoogleConverter(BaseConverter):
                     }
                 )
             else:
-                ir_parts.append({"type": "file", "file_url": file_data["file_uri"]})
+                ir_parts.append(FilePart(type="file", file_url=file_data["file_uri"]))
 
         # 支持两种命名格式：function_response（SDK）和 functionResponse（REST API）
         func_response = part.get("function_response") or part.get("functionResponse")
@@ -454,14 +463,12 @@ class GoogleConverter(BaseConverter):
             content = response_data.get("error" if is_error else "output", "")
 
             ir_parts.append(
-                {
-                    "type": "tool_result",
-                    "tool_call_id": func_response.get(
-                        "id", func_response.get("name", "")
-                    ),
-                    "content": str(content),
-                    "is_error": is_error,
-                }
+                ToolResultPart(
+                    type="tool_result",
+                    tool_call_id=func_response.get("id", func_response.get("name", "")),
+                    result=str(content),
+                    is_error=is_error,
+                )
             )
 
         # 处理独立的thoughtSignature（在text或其他part中）

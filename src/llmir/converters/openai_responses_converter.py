@@ -4,13 +4,18 @@ LLM Provider Converter - OpenAI Responses API Converter
 实现IR与OpenAI Responses API格式之间的转换
 """
 
-import json
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
+    FilePart,
+    ImagePart,
     IRInput,
+    Message,
+    ReasoningPart,
+    TextPart,
     ToolChoice,
     ToolDefinition,
+    ToolResultPart,
     is_extension_item,
     is_message,
     is_text_part,
@@ -55,6 +60,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     for part in message["content"]:
                         if is_text_part(part):
                             # 用户输入使用 input_text
+                            # 注意：这里是 provider 格式的字典，不是 IR 格式
                             content_list.append(
                                 {"type": "input_text", "text": part["text"]}
                             )
@@ -80,6 +86,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             )
                         elif part["type"] == "reasoning":
                             # Responses API支持推理
+                            # 注意：这里是 provider 格式的字典，不是 IR 格式
                             items.append(
                                 {"type": "reasoning", "reasoning": part["reasoning"]}
                             )
@@ -106,11 +113,13 @@ class OpenAIResponsesConverter(BaseConverter):
                         if is_text_part(part):
                             # 检查是否是推理文本
                             if part.get("reasoning"):
+                                # 注意：这里是 provider 格式的字典，不是 IR 格式
                                 items.append(
                                     {"type": "reasoning", "content": part["text"]}
                                 )
                             else:
                                 # Assistant 输出使用 output_text
+                                # 注意：这里是 provider 格式的字典，不是 IR 格式
                                 content_list.append(
                                     {"type": "output_text", "text": part["text"]}
                                 )
@@ -119,6 +128,7 @@ class OpenAIResponsesConverter(BaseConverter):
                                 ToolCallConverter.to_openai_responses(part)
                             )
                         elif part["type"] == "reasoning":
+                            # 注意：这里是 provider 格式的字典，不是 IR 格式
                             items.append(
                                 {"type": "reasoning", "reasoning": part["reasoning"]}
                             )
@@ -213,118 +223,80 @@ class OpenAIResponsesConverter(BaseConverter):
                 ir_content = []
 
                 if isinstance(content, str):
-                    ir_content.append({"type": "text", "text": content})
+                    ir_content.append(TextPart(type="text", text=content))
                 elif isinstance(content, list):
                     for part in content:
                         part_type = part.get("type", "")
                         # 支持input_text和output_text
                         if part_type in ["input_text", "output_text", "text"]:
-                            ir_content.append({"type": "text", "text": part["text"]})
+                            ir_content.append(TextPart(type="text", text=part["text"]))
                         elif part_type == "input_image":
                             ir_content.append(self._convert_image_from_responses(part))
                         elif part_type == "input_file":
                             ir_content.append(self._convert_file_from_responses(part))
 
-                current_message = {"role": role, "content": ir_content}
+                current_message = Message(role=role, content=ir_content)
 
             elif item_type == "function_call":
                 # 函数调用转换为工具调用
-                arguments = item.get("arguments", "{}")
-                if isinstance(arguments, dict):
-                    tool_input = arguments
-                else:
-                    tool_input = json.loads(arguments)
+                tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
-                    current_message["content"].append(
-                        {
-                            "type": "tool_call",
-                            "tool_call_id": item.get("call_id", item.get("id")),
-                            "tool_name": item["name"],
-                            "tool_input": tool_input,
-                            "tool_type": "function",
-                        }
-                    )
+                    current_message["content"].append(tool_call)
                 else:
                     # 创建新的assistant消息
                     if current_message:
                         ir_input.append(current_message)
-                    current_message = {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_call",
-                                "tool_call_id": item.get("call_id", item.get("id")),
-                                "tool_name": item["name"],
-                                "tool_input": tool_input,
-                                "tool_type": "function",
-                            }
-                        ],
-                    }
+                    current_message = Message(
+                        role="assistant",
+                        content=[tool_call],
+                    )
 
             elif item_type == "function_call_output":
                 # 函数调用输出转换为工具结果
                 if current_message:
                     ir_input.append(current_message)
 
-                current_message = {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_call_id": item["call_id"],
-                            "result": item["output"],
-                        }
+                current_message = Message(
+                    role="user",
+                    content=[
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id=item["call_id"],
+                            result=item["output"],
+                        )
                     ],
-                }
+                )
 
             elif item_type == "mcp_call":
                 # MCP调用转换为工具调用
-                server = item.get("server", "")
-                tool = item.get("tool", item.get("name", ""))
-                tool_name = f"mcp://{server}/{tool}" if server and tool else tool
+                tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
-                    current_message["content"].append(
-                        {
-                            "type": "tool_call",
-                            "tool_call_id": item["id"],
-                            "tool_name": tool_name,
-                            "tool_input": item.get("arguments", {}),
-                            "tool_type": "mcp",
-                        }
-                    )
+                    current_message["content"].append(tool_call)
                 else:
                     if current_message:
                         ir_input.append(current_message)
-                    current_message = {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_call",
-                                "tool_call_id": item["id"],
-                                "tool_name": tool_name,
-                                "tool_input": item.get("arguments", {}),
-                                "tool_type": "mcp",
-                            }
-                        ],
-                    }
+                    current_message = Message(
+                        role="assistant",
+                        content=[tool_call],
+                    )
 
             elif item_type == "mcp_call_output":
                 # MCP调用输出转换为工具结果
                 if current_message:
                     ir_input.append(current_message)
 
-                current_message = {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_call_id": item["call_id"],
-                            "result": item["output"],
-                        }
+                current_message = Message(
+                    role="user",
+                    content=[
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id=item["call_id"],
+                            result=item["output"],
+                        )
                     ],
-                }
+                )
 
             elif item_type == "reasoning":
                 # 推理内容转换为ReasoningPart
@@ -333,21 +305,17 @@ class OpenAIResponsesConverter(BaseConverter):
 
                 # 只有当reasoning_content不为None时才添加
                 if reasoning_content:
+                    reasoning_part = ReasoningPart(
+                        type="reasoning", reasoning=str(reasoning_content)
+                    )
                     if current_message:
-                        current_message["content"].append(
-                            {"type": "reasoning", "reasoning": str(reasoning_content)}
-                        )
+                        current_message["content"].append(reasoning_part)
                     else:
                         # 创建新的assistant消息包含推理
-                        current_message = {
-                            "role": "assistant",
-                            "content": [
-                                {
-                                    "type": "reasoning",
-                                    "reasoning": str(reasoning_content),
-                                }
-                            ],
-                        }
+                        current_message = Message(
+                            role="assistant",
+                            content=[reasoning_part],
+                        )
                 # 如果reasoning_content为None，跳过这个reasoning event
 
             elif item_type == "system_event":
@@ -367,37 +335,17 @@ class OpenAIResponsesConverter(BaseConverter):
 
             elif item_type in ["shell_call", "computer_call", "code_interpreter_call"]:
                 # 其他工具调用类型
-                tool_type_map = {
-                    "shell_call": "code_interpreter",
-                    "computer_call": "computer_use",
-                    "code_interpreter_call": "code_interpreter",
-                }
+                tool_call = ToolCallConverter.from_openai_responses(item)
 
                 if current_message and current_message["role"] == "assistant":
-                    current_message["content"].append(
-                        {
-                            "type": "tool_call",
-                            "tool_call_id": item.get("call_id", item.get("id")),
-                            "tool_name": item.get("name", item_type),
-                            "tool_input": item.get("arguments", {}),
-                            "tool_type": tool_type_map.get(item_type, "function"),
-                        }
-                    )
+                    current_message["content"].append(tool_call)
                 else:
                     if current_message:
                         ir_input.append(current_message)
-                    current_message = {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_call",
-                                "tool_call_id": item.get("call_id", item.get("id")),
-                                "tool_name": item.get("name", item_type),
-                                "tool_input": item.get("arguments", {}),
-                                "tool_type": tool_type_map.get(item_type, "function"),
-                            }
-                        ],
-                    }
+                    current_message = Message(
+                        role="assistant",
+                        content=[tool_call],
+                    )
 
         # 添加最后一个消息
         if current_message:
@@ -448,7 +396,7 @@ class OpenAIResponsesConverter(BaseConverter):
         self, image_part: Dict[str, Any]
     ) -> Dict[str, Any]:
         """将Responses API图像转换为IR格式"""
-        result = {"type": "image", "detail": image_part.get("detail", "auto")}
+        detail = image_part.get("detail", "auto")
 
         if "image_url" in image_part:
             url = image_part["image_url"]
@@ -459,30 +407,46 @@ class OpenAIResponsesConverter(BaseConverter):
                 match = re.match(r"data:([^;]+);base64,(.+)", url)
                 if match:
                     media_type, data = match.groups()
-                    result["image_data"] = {"data": data, "media_type": media_type}
+                    return ImagePart(
+                        type="image",
+                        image_data={"data": data, "media_type": media_type},
+                        detail=detail,
+                    )
                 else:
-                    result["image_url"] = url
+                    return ImagePart(type="image", image_url=url, detail=detail)
             else:
-                result["image_url"] = url
+                return ImagePart(type="image", image_url=url, detail=detail)
         elif "file_id" in image_part:
             # 文件ID形式，转换为引用
-            result["file_id"] = image_part["file_id"]
+            # 注意：file_id 不在 ImagePart 定义中，使用字典字面量
+            return {"type": "image", "file_id": image_part["file_id"], "detail": detail}  # type: ignore
 
-        return result
+        return ImagePart(type="image", detail=detail)
 
     def _convert_file_from_responses(self, file_part: Dict[str, Any]) -> Dict[str, Any]:
         """将Responses API文件转换为IR格式"""
-        result = {"type": "file", "file_name": file_part.get("filename", "unknown")}
+        file_name = file_part.get("filename", "unknown")
 
         if "file_data" in file_part:
             # 假设是base64编码的数据
-            result["file_data"] = {
-                "data": file_part["file_data"],
-                "media_type": "application/octet-stream",  # 默认类型
-            }
+            return FilePart(
+                type="file",
+                file_name=file_name,
+                file_data={
+                    "data": file_part["file_data"],
+                    "media_type": "application/octet-stream",  # 默认类型
+                },
+            )
         elif "file_url" in file_part:
-            result["file_url"] = file_part["file_url"]
+            return FilePart(
+                type="file", file_name=file_name, file_url=file_part["file_url"]
+            )
         elif "file_id" in file_part:
-            result["file_id"] = file_part["file_id"]
+            # 注意：file_id 不在 FilePart 定义中，使用字典字面量
+            return {
+                "type": "file",
+                "file_name": file_name,
+                "file_id": file_part["file_id"],
+            }  # type: ignore
 
-        return result
+        return FilePart(type="file", file_name=file_name)

@@ -8,9 +8,15 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ..types.ir import (
     ContentPart,
+    FilePart,
+    ImagePart,
     IRInput,
+    Message,
+    ReasoningPart,
+    TextPart,
     ToolChoice,
     ToolDefinition,
+    ToolResultPart,
     is_extension_item,
     is_message,
 )
@@ -54,7 +60,7 @@ class AnthropicConverter(BaseConverter):
                     for block in system_content:
                         if block.get("type") == "text":
                             system_messages.append(
-                                {"type": "text", "text": block["text"]}
+                                TextPart(type="text", text=block["text"])
                             )
                 else:
                     # 普通消息：直接转换
@@ -130,18 +136,18 @@ class AnthropicConverter(BaseConverter):
             if isinstance(system_content, str):
                 # 简单字符串形式
                 ir_input.append(
-                    {
-                        "role": "system",
-                        "content": [{"type": "text", "text": system_content}],
-                    }
+                    Message(
+                        role="system",
+                        content=[TextPart(type="text", text=system_content)],
+                    )
                 )
             elif isinstance(system_content, list):
                 # 内容块列表形式
                 ir_input.append(
-                    {
-                        "role": "system",
-                        "content": self._convert_content_from_anthropic(system_content),
-                    }
+                    Message(
+                        role="system",
+                        content=self._convert_content_from_anthropic(system_content),
+                    )
                 )
 
         # 处理普通消息
@@ -154,10 +160,10 @@ class AnthropicConverter(BaseConverter):
             messages_to_process = []
 
         for msg in messages_to_process:
-            ir_message = {
-                "role": msg["role"],
-                "content": self._convert_content_from_anthropic(msg["content"]),
-            }
+            ir_message = Message(
+                role=msg["role"],
+                content=self._convert_content_from_anthropic(msg["content"]),
+            )
             ir_input.append(ir_message)
 
         return ir_input
@@ -172,7 +178,7 @@ class AnthropicConverter(BaseConverter):
             part_type = part.get("type")
 
             if part_type == "text":
-                blocks.append({"type": "text", "text": part["text"]})
+                blocks.append(TextPart(type="text", text=part["text"]))
 
             elif part_type == "image":
                 image_url = FieldMapper.get_image_url(part)
@@ -192,6 +198,7 @@ class AnthropicConverter(BaseConverter):
                     )
                 elif image_url:
                     # URL形式
+                    # 注意：这里是 provider 格式的字典，不是 IR 格式
                     blocks.append(
                         {
                             "type": "image",
@@ -214,6 +221,7 @@ class AnthropicConverter(BaseConverter):
                         }
                     )
                 elif "file_url" in part:
+                    # 注意：这里是 provider 格式的字典，不是 IR 格式
                     blocks.append(
                         {
                             "type": "document",
@@ -236,6 +244,7 @@ class AnthropicConverter(BaseConverter):
 
             elif part_type == "reasoning":
                 # Anthropic支持thinking块
+                # 注意：这里是 provider 格式的字典，不是 IR 格式
                 blocks.append({"type": "thinking", "thinking": part["reasoning"]})
 
         return blocks
@@ -245,7 +254,7 @@ class AnthropicConverter(BaseConverter):
     ) -> List[ContentPart]:
         """将Anthropic内容转换为IR内容部分"""
         if isinstance(content, str):
-            return [{"type": "text", "text": content}]
+            return [TextPart(type="text", text=content)]
 
         ir_content = []
 
@@ -253,76 +262,56 @@ class AnthropicConverter(BaseConverter):
             block_type = block.get("type")
 
             if block_type == "text":
-                ir_content.append({"type": "text", "text": block["text"]})
+                ir_content.append(TextPart(type="text", text=block["text"]))
 
             elif block_type == "image":
                 source = block.get("source", {})
                 if source.get("type") == "base64":
                     ir_content.append(
-                        {
-                            "type": "image",
-                            "image_data": {
+                        ImagePart(
+                            type="image",
+                            image_data={
                                 "data": source.get("data", ""),
                                 "media_type": source.get("media_type", ""),
                             },
-                        }
+                        )
                     )
                 elif source.get("type") == "url":
                     ir_content.append(
-                        {"type": "image", "image_url": source.get("url", "")}
+                        ImagePart(type="image", image_url=source.get("url", ""))
                     )
 
             elif block_type == "document":
                 source = block.get("source", {})
                 if source.get("type") == "base64":
                     ir_content.append(
-                        {
-                            "type": "file",
-                            "file_data": {
+                        FilePart(
+                            type="file",
+                            file_data={
                                 "data": source["data"],
                                 "media_type": source["media_type"],
                             },
-                        }
+                        )
                     )
                 elif source.get("type") == "url":
-                    ir_content.append({"type": "file", "file_url": source["url"]})
+                    ir_content.append(FilePart(type="file", file_url=source["url"]))
 
-            elif block_type == "tool_use":
-                ir_content.append(
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": block.get("id", ""),
-                        "tool_name": block.get("name", ""),
-                        "tool_input": block.get("input", {}),
-                        "tool_type": "function",
-                    }
-                )
-
-            elif block_type == "server_tool_use":
-                # Anthropic的服务器端工具
-                tool_name = block.get("name", "")
-                tool_type = "web_search" if tool_name == "web_search" else "function"
-                ir_content.append(
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": block.get("id", ""),
-                        "tool_name": tool_name,
-                        "tool_input": block.get("input", {}),
-                        "tool_type": tool_type,
-                    }
-                )
+            elif block_type in ["tool_use", "server_tool_use"]:
+                ir_content.append(ToolCallConverter.from_anthropic(block))
 
             elif block_type == "tool_result":
                 ir_content.append(
-                    {
-                        "type": "tool_result",
-                        "tool_call_id": block.get("tool_use_id", ""),
-                        "result": block.get("content", ""),
-                        "is_error": block.get("is_error", False),
-                    }
+                    ToolResultPart(
+                        type="tool_result",
+                        tool_call_id=block.get("tool_use_id", ""),
+                        result=block.get("content", ""),
+                        is_error=block.get("is_error", False),
+                    )
                 )
 
             elif block_type == "thinking":
-                ir_content.append({"type": "reasoning", "reasoning": block["thinking"]})
+                ir_content.append(
+                    ReasoningPart(type="reasoning", reasoning=block["thinking"])
+                )
 
         return ir_content
