@@ -1,0 +1,139 @@
+site_name: LLMIR
+site_description: Large Language Model Intermediate Representation - Unified message format conversion for different LLM providers
+repo_url: https://github.com/Oaklight/llmir
+repo_name: Oaklight/llmir
+
+# Documentation directory
+docs_dir: docs
+
+# Theme configuration
+theme:
+  name: material
+  palette:
+    # Support automatic switching (follow system)
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+  language: en
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Oaklight/llmir
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/llmir/
+  alternate:
+    - name: English
+      link: /en/
+      lang: en
+    - name: 中文
+      link: /zh-cn/
+      lang: zh
+
+# Navigation structure
+nav:
+  - Home: index.md
+  - Getting Started:
+      - getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Basic Usage: getting-started/basic-usage.md
+  - User Guide:
+      - guide/index.md
+      - Converters:
+          - Overview: guide/converters/index.md
+          - OpenAI Chat: guide/converters/openai-chat.md
+          - OpenAI Responses: guide/converters/openai-responses.md
+          - Anthropic: guide/converters/anthropic.md
+          - Google: guide/converters/google.md
+      - Intermediate Representation: guide/intermediate-representation.md
+      - Auto Detection: guide/auto-detection.md
+  - API Reference:
+      - api/index.md
+      - Converters: api/converters.md
+      - Type Definitions: api/types.md
+      - Utilities: api/utils.md
+  - Development:
+      - development/index.md
+      - Contributing: development/contributing.md
+      - Architecture: development/architecture.md
+  - Examples:
+      - examples/index.md
+      - Basic Conversion: examples/basic-conversion.md
+      - Multi-turn Chat: examples/multi-turn-chat.md
+      - Tool Calling: examples/tool-calling.md
+  - Changelog: changelog.md
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - codehilite:
+      guess_lang: true
+  - fenced_code
+  - footnotes
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.blocks.details
+  - pymdownx.blocks.tab
+  - pymdownx.progressbar
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+# Plugins
+plugins:
+  - search:
+      lang: en
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - ../src
+          options:
+            docstring_style: google
+
+# Custom CSS and JS
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Copyright
+copyright: Copyright &copy; 2024 LLMIR
