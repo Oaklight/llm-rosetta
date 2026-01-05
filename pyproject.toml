@@ -19,7 +19,7 @@ dependencies = []
 openai = ["openai"]
 anthropic = ["anthropic"]
 google = ["google-genai"]
-dev = ["python-dotenv", "pytest"]
+dev = ["python-dotenv", "pytest", "pytest-cov"]
 all = ["llmir[openai,anthropic,google,dev]"]
 
 [tool.setuptools.packages.find]

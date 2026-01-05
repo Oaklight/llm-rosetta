@@ -4,7 +4,7 @@ Google GenAI转换器测试
 
 import pytest
 
-from src.llm_provider_converter.converters.google_converter import GoogleConverter
+from llmir.converters.google_converter import GoogleConverter
 
 
 class TestGoogleConverter:
