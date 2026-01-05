@@ -16,13 +16,13 @@ from openai import OpenAI
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from examples.tools import available_tools, tools_spec
-from llm_provider_converter.converters.anthropic_converter import AnthropicConverter
-from llm_provider_converter.converters.google_converter import GoogleConverter
-from llm_provider_converter.converters.openai_chat_converter import OpenAIChatConverter
-from llm_provider_converter.converters.openai_responses_converter import (
+from llmir.converters.anthropic_converter import AnthropicConverter
+from llmir.converters.google_converter import GoogleConverter
+from llmir.converters.openai_chat_converter import OpenAIChatConverter
+from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
-from llm_provider_converter.types.ir import (
+from llmir.types.ir import (
     Message,
     ToolCallPart,
     create_tool_result_message,

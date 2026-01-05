@@ -13,7 +13,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from llm_provider_converter.converters.google_converter import GoogleConverter
+from llmir.converters.google_converter import GoogleConverter
 
 # 加载环境变量
 load_dotenv()

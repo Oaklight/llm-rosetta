@@ -9,10 +9,10 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from llm_provider_converter.converters.openai_responses_converter import (
+from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
-from llm_provider_converter.types.ir import extract_text_content, extract_tool_calls
+from llmir.types.ir import extract_text_content, extract_tool_calls
 
 # Load environment variables
 load_dotenv()

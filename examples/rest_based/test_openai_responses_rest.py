@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from examples.tools import available_tools, tools_spec
-from llm_provider_converter.converters.openai_responses_converter import (
+from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
 
