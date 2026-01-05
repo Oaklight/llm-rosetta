@@ -213,7 +213,7 @@ class TestGoogleConverter:
                     {
                         "type": "tool_result",
                         "tool_call_id": "call_123",
-                        "content": "API Error",
+                        "result": "API Error",
                         "is_error": True,
                     }
                 ],
@@ -356,8 +356,8 @@ class TestGoogleConverter:
         assert len(result) == 1
         user_msg = result[0]
         assert user_msg["content"][0]["type"] == "tool_result"
-        # Google converter使用"content"字段存储结果，不是"result"
-        assert user_msg["content"][0]["content"] == "API Error"
+        # Google converter现在使用标准的"result"字段存储结果
+        assert user_msg["content"][0]["result"] == "API Error"
         assert user_msg["content"][0]["is_error"] is True
 
     def test_provider_to_ir_with_system_instruction(self):

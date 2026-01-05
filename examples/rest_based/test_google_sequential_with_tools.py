@@ -212,7 +212,9 @@ def test_sequential_travel_planning():
                     )
 
                 # 添加tool results到历史
-                ir_messages.append({"role": "user", "content": tool_results})
+                from src.llmir.types.ir import Message
+
+                ir_messages.append(Message(role="user", content=tool_results))
 
             elif text_parts:
                 print(f"Text response: {text_parts[0].get('text', 'N/A')}")
