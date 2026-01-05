@@ -160,11 +160,11 @@ class GoogleConverter(BaseConverter):
                           自动处理Pydantic模型对象（调用.model_dump()）
         """
         # 自动unwrap Pydantic模型对象
-        if hasattr(provider_data, "model_dump"):
-            provider_data = provider_data.model_dump()
-
         if isinstance(provider_data, tuple):
             provider_data = provider_data[0]
+
+        if hasattr(provider_data, "model_dump"):
+            provider_data = provider_data.model_dump()
 
         if not isinstance(provider_data, dict):
             raise ValueError("Google data must be a dictionary")

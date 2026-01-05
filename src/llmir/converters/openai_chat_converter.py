@@ -77,13 +77,15 @@ class OpenAIChatConverter(BaseConverter):
 
                     # 添加user消息（如果有非工具结果内容）
                     if content_parts:
+                        # 如果只有一个文本部分，使用字符串；否则使用列表
+                        if len(content_parts) == 1 and content_parts[0].get("type") == "text":
+                            content = content_parts[0]["text"]
+                        else:
+                            content = content_parts
+                        
                         openai_message = {
                             "role": "user",
-                            "content": content_parts
-                            if len(content_parts) > 1
-                            else content_parts[0]["text"]
-                            if content_parts
-                            else "",
+                            "content": content,
                         }
                         messages.append(openai_message)
 

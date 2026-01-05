@@ -70,7 +70,7 @@ class BaseConverter(ABC):
             # 检查是否是Message或ExtensionItem
             if "role" in item:
                 # 这是一个Message
-                if item.get("role") not in ["system", "user", "assistant"]:
+                if item.get("role") not in ["system", "user", "assistant", "developer"]:
                     errors.append(f"Message {i} has invalid role: {item.get('role')}")
 
                 if "content" not in item:

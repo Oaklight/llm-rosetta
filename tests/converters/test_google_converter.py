@@ -523,3 +523,208 @@ class TestGoogleConverter:
         # 这是预期行为，MCP工具需要特殊处理
         with pytest.raises(KeyError):
             self.converter.to_provider(messages, tools=tools)
+
+    def test_build_config(self):
+        """测试 build_config 方法"""
+        tools = [
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get weather",
+                "parameters": {},
+            }
+        ]
+        tool_choice = {"mode": "auto"}
+        config = self.converter.build_config(tools=tools, tool_choice=tool_choice)
+        assert config is not None
+        assert "tools" in config
+        assert "tool_config" in config
+        assert config["tool_config"]["function_calling_config"]["mode"] == "AUTO"
+
+    def test_from_provider_with_safety_block(self):
+        """测试 from_provider 对安全阻断响应的处理"""
+        provider_data = {
+            "prompt_feedback": {"block_reason": "SAFETY"},
+            "candidates": [],
+        }
+        result = self.converter.from_provider(provider_data)
+        assert len(result) == 1
+        msg = result[0]
+        assert msg["role"] == "assistant"
+        assert "Request was blocked" in msg["content"][0]["text"]
+
+    def test_thought_signature_round_trip(self):
+        """测试 thought_signature 的往返转换"""
+        # to_provider
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Hello",
+                        "provider_metadata": {
+                            "google": {"thought_signature": "sig123"}
+                        },
+                    }
+                ],
+            }
+        ]
+        result, _ = self.converter.to_provider(messages)
+        part = result["contents"][0]["parts"][0]
+        assert part["thoughtSignature"] == "sig123"
+
+        # from_provider
+        provider_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hi", "thoughtSignature": "sig456"}],
+                    }
+                }
+            ]
+        }
+        ir_result = self.converter.from_provider(provider_data)
+        ir_part = ir_result[0]["content"][0]
+        assert ir_part["provider_metadata"]["google"]["thought_signature"] == "sig456"
+
+    def test_to_provider_with_extension_item(self):
+        """测试 to_provider 对扩展项的处理"""
+        messages = [{"type": "system_event", "event_type": "test"}]
+        _, warnings = self.converter.to_provider(messages)
+        assert len(warnings) == 1
+        assert "不支持扩展项类型" in warnings[0]
+
+    def test_from_provider_with_pydantic_tuple_and_invalid_data(self):
+        """测试 from_provider 对 Pydantic 元组和无效数据的处理"""
+
+        class MockPydantic:
+            def model_dump(self):
+                return {"candidates": []}
+
+        # 测试元组
+        result = self.converter.from_provider((MockPydantic(),))
+        assert result == []
+
+        # 测试无效数据
+        with pytest.raises(ValueError, match="Google data must be a dictionary"):
+            self.converter.from_provider("not a dict")
+
+    def test_from_provider_with_non_list_parts(self):
+        """测试 from_provider 处理非列表格式的 parts"""
+        provider_data = {
+            "candidates": [{"content": {"role": "model", "parts": {"text": "Hello"}}}]
+        }
+        result = self.converter.from_provider(provider_data)
+        assert result[0]["content"][0]["text"] == "Hello"
+
+    def test_to_provider_with_url_warnings(self):
+        """测试 to_provider 对 URL 内容的警告"""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "image_url": "http://a.com/b.jpg"},
+                    {"type": "file", "file_url": "http://a.com/b.pdf"},
+                ],
+            }
+        ]
+        with pytest.warns(UserWarning, match="不直接支持图片URL"):
+            with pytest.warns(UserWarning, match="不直接支持文件URL"):
+                self.converter.to_provider(messages)
+
+    def test_to_provider_with_unsupported_audio(self):
+        """测试 to_provider 对不支持的音频格式的处理"""
+        messages = [{"role": "user", "content": [{"type": "audio"}]}]
+        with pytest.warns(UserWarning, match="不支持的音频格式"):
+            self.converter.to_provider(messages)
+
+    def test_from_provider_with_file_data_and_unknown_parts(self):
+        """测试 from_provider 对 file_data 和未知 part 的处理"""
+        provider_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "file_data": {
+                                    "file_uri": "gs://a/b.txt",
+                                    "mime_type": "text/plain",
+                                }
+                            },
+                            {"unknown_part": {}},
+                        ],
+                    }
+                }
+            ]
+        }
+        with pytest.warns(UserWarning, match="不支持的Part类型"):
+            result = self.converter.from_provider(provider_data)
+        assert result[0]["content"][0]["type"] == "file"
+        assert result[0]["content"][0]["file_url"] == "gs://a/b.txt"
+
+    def test_to_provider_with_invalid_item(self):
+        """测试 to_provider 对无效 IR 项的处理"""
+        with pytest.raises(KeyError):
+            self.converter.to_provider([{"invalid": "item"}])
+
+    def test_to_provider_with_direct_data_parts(self):
+        """测试 to_provider 对直接 data/media_type 字段的处理"""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "data": "img_data", "media_type": "image/gif"},
+                    {"type": "file", "data": "file_data", "media_type": "text/csv"},
+                ],
+            }
+        ]
+        result, _ = self.converter.to_provider(messages)
+        parts = result["contents"][0]["parts"]
+        assert parts[0]["inline_data"]["data"] == "img_data"
+        assert parts[1]["inline_data"]["data"] == "file_data"
+
+    def test_from_provider_with_inline_file_and_file_data_image(self):
+        """测试 from_provider 对内联文件和 file_data 图像的处理"""
+        provider_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "inline_data": {
+                                    "data": "file_data",
+                                    "mime_type": "application/pdf",
+                                }
+                            },
+                            {
+                                "file_data": {
+                                    "file_uri": "gs://a/b.png",
+                                    "mime_type": "image/png",
+                                }
+                            },
+                        ],
+                    }
+                }
+            ]
+        }
+        result = self.converter.from_provider(provider_data)
+        content = result[0]["content"]
+        assert content[0]["type"] == "file"
+        assert content[0]["file_data"]["data"] == "file_data"
+        assert content[1]["type"] == "image"
+        assert content[1]["image_url"] == "gs://a/b.png"
+
+    def test_tool_result_without_matching_call_warning(self):
+        """测试在没有匹配工具调用时，工具结果转换产生的警告"""
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_call_id": "dne"}],
+            }
+        ]
+        with pytest.warns(UserWarning, match="Could not find corresponding tool call"):
+            self.converter.to_provider(messages)

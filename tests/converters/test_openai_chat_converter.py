@@ -301,3 +301,191 @@ class TestOpenAIChatConverter:
         assert user_msg["content"][0]["type"] == "tool_result"
         assert user_msg["content"][0]["tool_call_id"] == "call_123"
         assert user_msg["content"][0]["result"] == "Sunny, 20°C"
+
+    def test_to_provider_with_extensions(self):
+        """测试 to_provider 对扩展项的处理"""
+        messages = [
+            {"type": "system_event", "event_type": "start"},
+            {
+                "type": "tool_chain_node",
+                "tool_call": {
+                    "type": "tool_call",
+                    "id": "tc_1",
+                    "name": "tool1",
+                    "arguments": {},
+                },
+            },
+            {"type": "batch_marker"},
+        ]
+        result, warnings = self.converter.to_provider(messages)
+        assert len(warnings) == 3
+        assert "System event ignored" in warnings[0]
+        assert "Tool chain converted" in warnings[1]
+        assert "Extension item ignored" in warnings[2]
+
+    def test_to_provider_with_reasoning_content(self):
+        """测试 to_provider 对推理内容的处理"""
+        messages = [
+            {
+                "role": "user",
+                "content": [{"type": "reasoning", "reasoning": "user reasoning"}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "reasoning", "reasoning": "assistant reasoning"}],
+            },
+        ]
+        result, warnings = self.converter.to_provider(messages)
+        assert len(warnings) == 2
+        assert all("Reasoning content not supported" in w for w in warnings)
+
+    def test_to_provider_with_file_content(self):
+        """测试 to_provider 对文件内容的处理"""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "file",
+                        "file_data": {"data": "base64data"},
+                        "file_name": "test.txt",
+                    }
+                ],
+            }
+        ]
+        result, _ = self.converter.to_provider(messages)
+        file_part = result["messages"][0]["content"][0]
+        assert file_part["type"] == "file"
+        assert file_part["file"]["file_data"] == "base64data"
+
+    def test_to_provider_with_image_data(self):
+        """测试 to_provider 对 image_data 的处理"""
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "image_data": {"data": "img_data", "media_type": "image/png"},
+                    }
+                ],
+            }
+        ]
+        result, _ = self.converter.to_provider(messages)
+        img_part = result["messages"][0]["content"][0]
+        assert img_part["type"] == "image_url"
+        assert img_part["image_url"]["url"].startswith("data:image/png;base64,")
+
+    def test_to_provider_assistant_with_text_and_tools(self):
+        """测试 to_provider 对同时包含文本和工具调用的助手消息的处理"""
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Let me check"},
+                    {"type": "tool_call", "id": "c1", "name": "tool1", "arguments": {}},
+                ],
+            }
+        ]
+        result, _ = self.converter.to_provider(messages)
+        msg = result["messages"][0]
+        assert msg["content"] == "Let me check"
+        assert len(msg["tool_calls"]) == 1
+
+    def test_to_provider_assistant_empty_content(self):
+        """测试 to_provider 对空内容助手消息的处理"""
+        messages = [{"role": "assistant", "content": []}]
+        result, _ = self.converter.to_provider(messages)
+        assert result["messages"][0]["content"] == ""
+
+    def test_from_provider_with_api_response(self):
+        """测试 from_provider 对 API 响应格式的处理"""
+        provider_data = {
+            "choices": [{"message": {"role": "assistant", "content": "Hello from API"}}]
+        }
+        result = self.converter.from_provider(provider_data)
+        assert result[0]["content"][0]["text"] == "Hello from API"
+
+    def test_from_provider_with_streaming_response(self):
+        """测试 from_provider 对流式响应的处理"""
+        provider_data = {
+            "choices": [{"delta": {"role": "assistant", "content": "Streaming"}}]
+        }
+        result = self.converter.from_provider(provider_data)
+        assert result[0]["content"][0]["text"] == "Streaming"
+
+    def test_from_provider_with_input_audio(self):
+        """测试 from_provider 对音频输入的处理"""
+        provider_data = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "input_audio",
+                            "input_audio": {"data": "audio_data", "format": "wav"},
+                        }
+                    ],
+                }
+            ]
+        }
+        result = self.converter.from_provider(provider_data)
+        assert result[0]["content"][0]["type"] == "file"
+        assert result[0]["content"][0]["file_data"]["media_type"] == "audio/wav"
+
+    def test_from_provider_with_function_role(self):
+        """测试 from_provider 对已弃用的 function 角色的处理"""
+        provider_data = {
+            "messages": [{"role": "function", "name": "old_func", "content": "result"}]
+        }
+        result = self.converter.from_provider(provider_data)
+        assert result[0]["role"] == "user"
+        assert result[0]["content"][0]["type"] == "tool_result"
+        assert "legacy_function_old_func" in result[0]["content"][0]["tool_call_id"]
+
+    def test_from_provider_with_base64_image(self):
+        """测试 from_provider 对 base64 图像的处理"""
+        provider_data = {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": "data:image/jpeg;base64,abc123",
+                                "detail": "high",
+                            },
+                        }
+                    ],
+                }
+            ]
+        }
+        result = self.converter.from_provider(provider_data)
+        img = result[0]["content"][0]
+        assert img["type"] == "image"
+        assert img["image_data"]["data"] == "abc123"
+        assert img["image_data"]["media_type"] == "image/jpeg"
+
+    def test_from_provider_with_pydantic_and_invalid_data(self):
+        """测试 from_provider 对 Pydantic 模型和无效数据的处理"""
+
+        class MockPydantic:
+            def model_dump(self):
+                return {"messages": []}
+
+        result = self.converter.from_provider(MockPydantic())
+        assert result == []
+
+        with pytest.raises(ValueError, match="OpenAI data must be a dictionary"):
+            self.converter.from_provider("not a dict")
+
+    def test_image_conversion_errors(self):
+        """测试图像转换的错误处理"""
+        with pytest.raises(ValueError, match="must have either"):
+            self.converter._convert_image_to_openai({"type": "image"})
+
+    def test_file_conversion_errors(self):
+        """测试文件转换的错误处理"""
+        with pytest.raises(ValueError, match="must have either"):
+            self.converter._convert_file_to_openai({"type": "file"})
