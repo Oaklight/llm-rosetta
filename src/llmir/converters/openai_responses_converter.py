@@ -383,6 +383,21 @@ class OpenAIResponsesConverter(BaseConverter):
                             "tool_type": tool_type_map.get(item_type, "function"),
                         }
                     )
+                else:
+                    if current_message:
+                        ir_input.append(current_message)
+                    current_message = {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "tool_call",
+                                "tool_call_id": item.get("call_id", item.get("id")),
+                                "tool_name": item.get("name", item_type),
+                                "tool_input": item.get("arguments", {}),
+                                "tool_type": tool_type_map.get(item_type, "function"),
+                            }
+                        ],
+                    }
 
         # 添加最后一个消息
         if current_message:
@@ -392,7 +407,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _convert_image_to_responses(self, image_part: Dict[str, Any]) -> Dict[str, Any]:
         """将IR图像转换为Responses API格式
-        
+
         注意：图像始终使用 input_image，因为图像只能作为输入
         """
         result = {"type": "input_image", "detail": image_part.get("detail", "auto")}
@@ -412,7 +427,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _convert_file_to_responses(self, file_part: Dict[str, Any]) -> Dict[str, Any]:
         """将IR文件转换为Responses API格式
-        
+
         注意：文件始终使用 input_file，因为文件只能作为输入
         """
         result = {
