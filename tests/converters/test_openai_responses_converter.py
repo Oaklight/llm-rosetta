@@ -4,7 +4,7 @@ OpenAI Responses API转换器测试
 
 import pytest
 
-from src.llm_provider_converter.converters.openai_responses_converter import (
+from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
 

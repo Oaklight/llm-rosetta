@@ -4,8 +4,8 @@
 
 import pytest
 
-from src.llm_provider_converter.converters import AnthropicConverter
-from src.llm_provider_converter.types.ir import IRInput, ToolChoice, ToolDefinition
+from llmir.converters.anthropic_converter import AnthropicConverter
+from llmir.types.ir import IRInput, ToolChoice, ToolDefinition
 
 
 class TestAnthropicConverter:
