@@ -153,6 +153,7 @@ class ToolConverter:
             if not tool_name and "function" in tool_choice:
                 tool_name = tool_choice["function"].get("name")
             if tool_name:
+                # 注意：这里是 provider 格式的字典，不是 IR 格式
                 return {"type": "function", "function": {"name": tool_name}}
             else:
                 return "required"

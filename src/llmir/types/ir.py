@@ -375,17 +375,17 @@ def create_tool_result_message(
     Returns:
         IR格式的工具结果消息
     """
-    return {
-        "role": "user",
-        "content": [
-            {
-                "type": "tool_result",
-                "tool_call_id": tool_call_id,
-                "result": result,
-                "is_error": is_error,
-            }
+    return Message(
+        role="user",
+        content=[
+            ToolResultPart(
+                type="tool_result",
+                tool_call_id=tool_call_id,
+                result=result,
+                is_error=is_error,
+            )
         ],
-    }
+    )
 
 
 # ============================================================================

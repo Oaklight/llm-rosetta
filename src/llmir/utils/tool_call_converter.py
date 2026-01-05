@@ -299,15 +299,17 @@ class ToolCallConverter:
                 "tool_type": "function"
             }
         """
+        from ..types.ir import ToolCallPart
+        
         if tool_call["type"] == "function":
             function = tool_call["function"]
-            return {
-                "type": "tool_call",
-                "tool_call_id": tool_call["id"],
-                "tool_name": function["name"],
-                "tool_input": json.loads(function["arguments"]),
-                "tool_type": "function",
-            }
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=tool_call["id"],
+                tool_name=function["name"],
+                tool_input=json.loads(function["arguments"]),
+                tool_type="function",
+            )
         elif tool_call["type"] == "custom":
             custom = tool_call["custom"]
             # 尝试解析工具类型
@@ -318,15 +320,150 @@ class ToolCallConverter:
                 tool_type = "custom"
                 tool_name = name
 
-            return {
-                "type": "tool_call",
-                "tool_call_id": tool_call["id"],
-                "tool_name": tool_name,
-                "tool_input": json.loads(custom["input"]),
-                "tool_type": tool_type,
-            }
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=tool_call["id"],
+                tool_name=tool_name,
+                tool_input=json.loads(custom["input"]),
+                tool_type=tool_type,
+            )
         else:
             raise ValueError(f"Unsupported tool call type: {tool_call['type']}")
+
+    @staticmethod
+    def from_anthropic(block: Dict[str, Any]) -> Dict[str, Any]:
+        """将Anthropic格式的工具调用转换为IR格式
+
+        Args:
+            block: Anthropic格式的工具调用块（tool_use 或 server_tool_use）
+
+        Returns:
+            IR格式的工具调用
+
+        Example:
+            >>> block = {
+            ...     "type": "tool_use",
+            ...     "id": "toolu_123",
+            ...     "name": "get_weather",
+            ...     "input": {"city": "Beijing"}
+            ... }
+            >>> ToolCallConverter.from_anthropic(block)
+            {
+                "type": "tool_call",
+                "tool_call_id": "toolu_123",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "Beijing"},
+                "tool_type": "function"
+            }
+        """
+        from ..types.ir import ToolCallPart
+
+        block_type = block.get("type")
+        
+        if block_type == "tool_use":
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=block.get("id", ""),
+                tool_name=block.get("name", ""),
+                tool_input=block.get("input", {}),
+                tool_type="function",
+            )
+        elif block_type == "server_tool_use":
+            # Anthropic的服务器端工具
+            tool_name = block.get("name", "")
+            tool_type = "web_search" if tool_name == "web_search" else "function"
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=block.get("id", ""),
+                tool_name=tool_name,
+                tool_input=block.get("input", {}),
+                tool_type=tool_type,
+            )
+        else:
+            raise ValueError(f"Unsupported Anthropic block type: {block_type}")
+
+    @staticmethod
+    def from_openai_responses(item: Dict[str, Any]) -> Dict[str, Any]:
+        """将OpenAI Responses API格式的工具调用转换为IR格式
+
+        Args:
+            item: OpenAI Responses API格式的工具调用项
+
+        Returns:
+            IR格式的工具调用
+
+        Example:
+            >>> item = {
+            ...     "type": "function_call",
+            ...     "call_id": "call_123",
+            ...     "name": "get_weather",
+            ...     "arguments": '{"city": "Beijing"}'
+            ... }
+            >>> ToolCallConverter.from_openai_responses(item)
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_123",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "Beijing"},
+                "tool_type": "function"
+            }
+        """
+        from ..types.ir import ToolCallPart
+        import json
+
+        item_type = item.get("type")
+        
+        # 解析 arguments
+        arguments = item.get("arguments", {})
+        if isinstance(arguments, dict):
+            tool_input = arguments
+        elif isinstance(arguments, str):
+            # 尝试解析 JSON 字符串
+            try:
+                tool_input = json.loads(arguments) if arguments else {}
+            except json.JSONDecodeError:
+                # 如果不是 JSON，将字符串作为单个参数
+                tool_input = {"input": arguments}
+        else:
+            tool_input = {}
+
+        if item_type == "function_call":
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=item.get("call_id", item.get("id", "")),
+                tool_name=item["name"],
+                tool_input=tool_input,
+                tool_type="function",
+            )
+        elif item_type == "mcp_call":
+            # MCP调用可能使用 server/tool 字段或 name 字段
+            server = item.get("server", "")
+            tool = item.get("tool", item.get("name", ""))
+            tool_name = f"mcp://{server}/{tool}" if server and tool else tool
+            
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=item["id"],
+                tool_name=tool_name,
+                tool_input=tool_input,
+                tool_type="mcp",
+            )
+        elif item_type in ["shell_call", "computer_call", "code_interpreter_call"]:
+            # 其他工具调用类型
+            tool_type_map = {
+                "shell_call": "code_interpreter",
+                "computer_call": "computer_use",
+                "code_interpreter_call": "code_interpreter",
+            }
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=item.get("call_id", item.get("id", "")),
+                tool_name=item.get("name", item_type),
+                tool_input=tool_input,
+                tool_type=tool_type_map.get(item_type, "function"),
+            )
+        else:
+            raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")
 
     @staticmethod
     def from_google(
@@ -361,6 +498,8 @@ class ToolCallConverter:
                 }
             }
         """
+        from ..types.ir import ToolCallPart
+        
         # 支持两种命名格式：function_call（SDK）和 functionCall（REST API）
         func_call = part.get("function_call") or part.get("functionCall")
         if not func_call:
@@ -372,7 +511,8 @@ class ToolCallConverter:
             # 生成一个基于函数名的唯一 ID
             tool_call_id = f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
 
-        tool_call_part = {
+        # 构建基本的工具调用部分
+        tool_call_kwargs = {
             "type": "tool_call",
             "tool_call_id": tool_call_id,
             "tool_name": func_call["name"],
@@ -385,8 +525,8 @@ class ToolCallConverter:
             # 支持两种命名：thoughtSignature（REST）和 thought_signature（SDK）
             thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
             if thought_sig:
-                tool_call_part["provider_metadata"] = {
+                tool_call_kwargs["provider_metadata"] = {
                     "google": {"thought_signature": thought_sig}
                 }
 
-        return tool_call_part
+        return ToolCallPart(**tool_call_kwargs)

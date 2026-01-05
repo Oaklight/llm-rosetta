@@ -8,9 +8,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
     ContentPart,
+    FileData,
+    FilePart,
+    ImagePart,
     IRInput,
+    Message,
+    TextPart,
     ToolChoice,
     ToolDefinition,
+    ToolResultPart,
     is_extension_item,
     is_message,
     is_text_part,
@@ -62,6 +68,7 @@ class OpenAIChatConverter(BaseConverter):
 
                     for part in message["content"]:
                         if is_text_part(part):
+                            # 注意：这里是 provider 格式的字典，不是 IR 的 TextPart
                             content_parts.append({"type": "text", "text": part["text"]})
                         elif part["type"] == "image":
                             content_parts.append(self._convert_image_to_openai(part))
@@ -78,11 +85,14 @@ class OpenAIChatConverter(BaseConverter):
                     # 添加user消息（如果有非工具结果内容）
                     if content_parts:
                         # 如果只有一个文本部分，使用字符串；否则使用列表
-                        if len(content_parts) == 1 and content_parts[0].get("type") == "text":
+                        if (
+                            len(content_parts) == 1
+                            and content_parts[0].get("type") == "text"
+                        ):
                             content = content_parts[0]["text"]
                         else:
                             content = content_parts
-                        
+
                         openai_message = {
                             "role": "user",
                             "content": content,
@@ -117,6 +127,7 @@ class OpenAIChatConverter(BaseConverter):
                                 "Reasoning content not supported in OpenAI Chat Completions, ignored"
                             )
 
+                    # 注意：这里不能使用 Message() 因为这是 provider 格式，不是 IR 格式
                     openai_message = {"role": "assistant"}
 
                     # 添加文本内容
@@ -152,9 +163,7 @@ class OpenAIChatConverter(BaseConverter):
                         # 创建一个assistant消息包含工具调用
                         openai_message = {
                             "role": "assistant",
-                            "tool_calls": [
-                                ToolCallConverter.to_openai_chat(tool_call)
-                            ],
+                            "tool_calls": [ToolCallConverter.to_openai_chat(tool_call)],
                         }
                         messages.append(openai_message)
                 elif extension_type in ["batch_marker", "session_control"]:
@@ -222,10 +231,10 @@ class OpenAIChatConverter(BaseConverter):
             if role == "system":
                 # System消息
                 ir_input.append(
-                    {
-                        "role": "system",
-                        "content": [{"type": "text", "text": msg["content"]}],
-                    }
+                    Message(
+                        role="system",
+                        content=[TextPart(type="text", text=msg["content"])],
+                    )
                 )
 
             elif role == "user":
@@ -234,26 +243,26 @@ class OpenAIChatConverter(BaseConverter):
                 ir_content = []
 
                 if isinstance(content, str):
-                    ir_content.append({"type": "text", "text": content})
+                    ir_content.append(TextPart(type="text", text=content))
                 elif isinstance(content, list):
                     for part in content:
                         if part["type"] == "text":
-                            ir_content.append({"type": "text", "text": part["text"]})
+                            ir_content.append(TextPart(type="text", text=part["text"]))
                         elif part["type"] == "image_url":
                             ir_content.append(self._convert_image_from_openai(part))
                         elif part["type"] == "input_audio":
                             # 音频暂时转换为文件类型
                             ir_content.append(
-                                {
-                                    "type": "file",
-                                    "file_data": {
-                                        "data": part["input_audio"]["data"],
-                                        "media_type": f"audio/{part['input_audio']['format']}",
-                                    },
-                                }
+                                FilePart(
+                                    type="file",
+                                    file_data=FileData(
+                                        data=part["input_audio"]["data"],
+                                        media_type=f"audio/{part['input_audio']['format']}",
+                                    ),
+                                )
                             )
 
-                ir_input.append({"role": "user", "content": ir_content})
+                ir_input.append(Message(role="user", content=ir_content))
 
             elif role == "assistant":
                 # Assistant消息
@@ -261,45 +270,43 @@ class OpenAIChatConverter(BaseConverter):
 
                 # 处理文本内容
                 if "content" in msg and msg["content"]:
-                    ir_content.append({"type": "text", "text": msg["content"]})
+                    ir_content.append(TextPart(type="text", text=msg["content"]))
 
                 # 处理工具调用
                 if "tool_calls" in msg and msg["tool_calls"] is not None:
                     for tool_call in msg["tool_calls"]:
-                        ir_content.append(
-                            ToolCallConverter.from_openai_chat(tool_call)
-                        )
+                        ir_content.append(ToolCallConverter.from_openai_chat(tool_call))
 
-                ir_input.append({"role": "assistant", "content": ir_content})
+                ir_input.append(Message(role="assistant", content=ir_content))
 
             elif role == "tool":
                 # Tool消息转换为user消息中的tool_result
                 ir_input.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_call_id": msg["tool_call_id"],
-                                "result": msg["content"],
-                            }
+                    Message(
+                        role="user",
+                        content=[
+                            ToolResultPart(
+                                type="tool_result",
+                                tool_call_id=msg["tool_call_id"],
+                                result=msg["content"],
+                            )
                         ],
-                    }
+                    )
                 )
 
             elif role == "function":
                 # 已弃用的function角色，转换为tool_result
                 ir_input.append(
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_call_id": f"legacy_function_{msg['name']}",
-                                "result": msg.get("content", ""),
-                            }
+                    Message(
+                        role="user",
+                        content=[
+                            ToolResultPart(
+                                type="tool_result",
+                                tool_call_id=f"legacy_function_{msg['name']}",
+                                result=msg.get("content", ""),
+                            )
                         ],
-                    }
+                    )
                 )
 
         return ir_input
@@ -317,7 +324,7 @@ class OpenAIChatConverter(BaseConverter):
         url = FieldMapper.get_image_url(image_part)
         image_data = FieldMapper.get_image_data(image_part)
         detail = image_part.get("detail", "auto")
-        
+
         if url:
             return {
                 "type": "image_url",
@@ -355,7 +362,6 @@ class OpenAIChatConverter(BaseConverter):
         else:
             raise ValueError("File part must have either file_data or file_url")
 
-
     def _convert_image_from_openai(self, image_part: Dict[str, Any]) -> Dict[str, Any]:
         """将OpenAI图像转换为IR格式"""
         image_url_data = image_part["image_url"]
@@ -365,20 +371,19 @@ class OpenAIChatConverter(BaseConverter):
         if url.startswith("data:"):
             # Base64数据URL
             import re
+
             match = re.match(r"data:([^;]+);base64,(.+)", url)
             if match:
                 media_type, data = match.groups()
-                return {
-                    "type": "image",
-                    "image_data": {"data": data, "media_type": media_type},
-                    "detail": detail,
-                }
+                return ImagePart(
+                    type="image",
+                    image_data={"data": data, "media_type": media_type},
+                    detail=detail,
+                )
 
         # 普通URL
-        return {
-            "type": "image",
-            "image_url": url,
-            "detail": detail,
-        }
-
-
+        return ImagePart(
+            type="image",
+            image_url=url,
+            detail=detail,
+        )
