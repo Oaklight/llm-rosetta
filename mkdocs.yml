@@ -1,0 +1,139 @@
+site_name: LLMIR
+site_description: 大语言模型中间表示 - 统一不同LLM提供商的消息格式
+repo_url: https://github.com/Oaklight/llmir
+repo_name: Oaklight/llmir
+
+# Documentation directory
+docs_dir: docs
+
+# Theme configuration
+theme:
+  name: material
+  palette:
+    # 支持自动切换（跟随系统）
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    # 明亮模式
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # 暗黑模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+  language: zh
+
+# Extra configuration
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Oaklight/llmir
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/llmir/
+  alternate:
+    - name: English
+      link: /en/
+      lang: en
+    - name: 中文
+      link: /zh-cn/
+      lang: zh
+
+# Navigation structure
+nav:
+  - 首页: index.md
+  - 快速开始:
+      - getting-started/index.md
+      - 安装: getting-started/installation.md
+      - 基本用法: getting-started/basic-usage.md
+  - 用户指南:
+      - guide/index.md
+      - 转换器:
+          - 概述: guide/converters/index.md
+          - OpenAI Chat: guide/converters/openai-chat.md
+          - OpenAI Responses: guide/converters/openai-responses.md
+          - Anthropic: guide/converters/anthropic.md
+          - Google: guide/converters/google.md
+      - 中间表示: guide/intermediate-representation.md
+      - 自动检测: guide/auto-detection.md
+  - API 参考:
+      - api/index.md
+      - 转换器: api/converters.md
+      - 类型定义: api/types.md
+      - 工具函数: api/utils.md
+  - 开发指南:
+      - development/index.md
+      - 贡献指南: development/contributing.md
+      - 架构设计: development/architecture.md
+  - 示例:
+      - examples/index.md
+      - 基本转换: examples/basic-conversion.md
+      - 多轮对话: examples/multi-turn-chat.md
+      - 工具调用: examples/tool-calling.md
+  - 更新日志: changelog.md
+
+# Extensions
+markdown_extensions:
+  - admonition
+  - codehilite:
+      guess_lang: true
+  - fenced_code
+  - footnotes
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.blocks.details
+  - pymdownx.blocks.tab
+  - pymdownx.progressbar
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+# Plugins
+plugins:
+  - search:
+      lang: zh
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - mkdocstrings:
+      handlers:
+        python:
+          paths:
+            - ../src
+          options:
+            docstring_style: google
+
+# Custom CSS and JS
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Copyright
+copyright: Copyright &copy; 2024 LLMIR
