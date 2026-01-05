@@ -271,12 +271,12 @@ def process_item(item: Union[Message, ExtensionItem]):
 **优先级**: 高  
 **预计时间**: 2-3周
 
-1. **类型定义** (`src/llm_provider_converter/types/ir.py`)
+1. **类型定义** (`src/llmir/types/ir.py`)
    - [ ] 定义所有核心类型
    - [ ] 添加类型守卫函数
    - [ ] 编写类型文档
 
-2. **基础转换器** (`src/llm_provider_converter/converters/`)
+2. **基础转换器** (`src/llmir/converters/`)
    - [ ] 实现Anthropic转换（最简单）
    - [ ] 实现OpenAI转换
    - [ ] 实现Google转换

@@ -10,8 +10,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from llm_provider_converter.converters.anthropic_converter import AnthropicConverter
-from llm_provider_converter.types.ir import extract_text_content, extract_tool_calls
+from llmir.converters.anthropic_converter import AnthropicConverter
+from llmir.types.ir import extract_text_content, extract_tool_calls
 
 # Load environment variables
 load_dotenv()

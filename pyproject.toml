@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llm-provider-converter"
+name = "llmir"
 version = "0.0.1"
-description = "A library to convert between different LLM provider API standards."
+description = "A library to convert between different LLM provider API standards using intermediate representation (IR)."
 readme = "README.md"
 requires-python = ">=3.8"
 classifiers = [
@@ -20,7 +20,7 @@ openai = ["openai"]
 anthropic = ["anthropic"]
 google = ["google-genai"]
 dev = ["python-dotenv", "pytest"]
-all = ["llm-provider-converter[openai,anthropic,google,dev]"]
+all = ["llmir[openai,anthropic,google,dev]"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

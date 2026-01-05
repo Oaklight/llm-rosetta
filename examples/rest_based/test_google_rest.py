@@ -10,8 +10,8 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from llm_provider_converter.converters.google_converter import GoogleConverter
-from llm_provider_converter.types.ir import extract_text_content, extract_tool_calls
+from llmir.converters.google_converter import GoogleConverter
+from llmir.types.ir import extract_text_content, extract_tool_calls
 
 # Load environment variables
 load_dotenv()
