@@ -1,5 +1,5 @@
 """
-LLM Provider Converter - Google GenAI Converter
+LLMIR - Google GenAI Converter
 
 实现IR与Google GenAI SDK格式之间的转换
 """
@@ -28,14 +28,21 @@ from .base import BaseConverter
 
 class GoogleConverter(BaseConverter):
     """Google GenAI格式转换器
+    Google GenAI format converter
 
     处理IR格式与Google GenAI Content/Part格式之间的转换。
+    Handles conversion between IR format and Google GenAI Content/Part format.
 
     主要特点：
     - 角色映射: assistant ↔ model, user ↔ user
     - Part架构: 所有内容都通过Part表示
     - 工具调用: 通过function_call和function_response Part
     - system_instruction: 单独处理system消息
+    Key features:
+    - Role mapping: assistant ↔ model, user ↔ user
+    - Part architecture: all content represented through Parts
+    - Tool calls: through function_call and function_response Parts
+    - system_instruction: separate handling of system messages
     """
 
     def build_config(
@@ -44,21 +51,24 @@ class GoogleConverter(BaseConverter):
         tool_choice: Optional[ToolChoice] = None,
     ) -> Optional[Dict[str, Any]]:
         """构建Google GenAI的config参数
+        Build Google GenAI config parameters
 
         这个方法用于从tools和tool_choice构建Google API调用所需的config字典。
         在多次调用同一个模型时，可以预先构建config以提高效率。
+        This method builds the config dict required for Google API calls from tools and tool_choice.
+        When calling the same model multiple times, config can be pre-built for efficiency.
 
         Args:
-            tools: 工具定义列表
-            tool_choice: 工具选择配置
+            tools: 工具定义列表 Tool definition list
+            tool_choice: 工具选择配置 Tool choice configuration
 
         Returns:
-            Google GenAI的config字典，如果没有工具配置则返回None
+            Google GenAI的config字典，如果没有工具配置则返回None Google GenAI config dict, returns None if no tool configuration
 
         Example:
             >>> converter = GoogleConverter()
             >>> config = converter.build_config(tools=tools_spec)
-            >>> # 在多次调用中重用config
+            >>> # 在多次调用中重用config Reuse config in multiple calls
             >>> response1 = client.models.generate_content(
             ...     model=model_name,
             ...     contents=contents1,
@@ -72,11 +82,11 @@ class GoogleConverter(BaseConverter):
         """
         config = {}
 
-        # 转换工具
+        # 转换工具 Convert tools
         if tools:
             config["tools"] = ToolConverter.batch_convert_tools(tools, "google")
 
-        # 转换工具选择配置
+        # 转换工具选择配置 Convert tool choice configuration
         if tool_choice:
             tool_config = ToolConverter.convert_tool_choice(tool_choice, "google")
             if tool_config:
@@ -91,19 +101,20 @@ class GoogleConverter(BaseConverter):
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为Google GenAI格式
+        Convert IR format to Google GenAI format
 
         Args:
-            ir_input: IR输入列表
-            tools: 工具定义列表
-            tool_choice: 工具选择配置
+            ir_input: IR输入列表 IR input list
+            tools: 工具定义列表 Tool definition list
+            tool_choice: 工具选择配置 Tool choice configuration
 
         Returns:
-            (Google GenAI格式的字典, 警告列表)
+            (Google GenAI格式的字典, 警告列表) (Google GenAI format dict, warning list)
         """
-        # 对于无效格式，让其在处理过程中自然抛出KeyError或TypeError
-        # 不进行预先验证，让错误在访问字段时自然发生
+        # 对于无效格式，让其在处理过程中自然抛出KeyError或TypeError For invalid formats, let KeyError or TypeError be thrown naturally during processing
+        # 不进行预先验证，让错误在访问字段时自然发生 No pre-validation, let errors occur naturally when accessing fields
 
-        # 转换消息
+        # 转换消息 Convert messages
         contents = []
         system_instruction = None
         warnings_list = []
@@ -111,15 +122,15 @@ class GoogleConverter(BaseConverter):
         for item in ir_input:
             if is_message(item):
                 message = item  # type: ignore
-                # 这里会在访问message["role"]时抛出KeyError如果没有role字段
+                # 这里会在访问message["role"]时抛出KeyError如果没有role字段 Will throw KeyError when accessing message["role"] if no role field
                 if message["role"] == "system":
-                    # Google使用system_instruction而不是system消息
+                    # Google使用system_instruction而不是system消息 Google uses system_instruction instead of system messages
                     if system_instruction is None:
                         system_instruction = self._convert_message_to_content(
                             message, ir_input
                         )
                     else:
-                        # 如果有多个system消息，合并它们
+                        # 如果有多个system消息，合并它们 If there are multiple system messages, merge them
                         existing_parts = system_instruction.get("parts", [])
                         new_parts = self._convert_message_to_content(
                             message, ir_input
@@ -130,26 +141,26 @@ class GoogleConverter(BaseConverter):
                     if content:
                         contents.append(content)
             elif is_extension_item(item):
-                # 处理扩展项
+                # 处理扩展项 Handle extension items
                 warnings_list.append(
-                    f"Google GenAI不支持扩展项类型 '{item.get('type')}'，将被忽略"
+                    f"Google GenAI不支持扩展项类型 '{item.get('type')}'，将被忽略 Google GenAI does not support extension item type '{item.get('type')}', will be ignored"
                 )
             else:
-                # 对于既不是消息也不是扩展项的无效项，强制访问role字段来抛出KeyError
-                _ = item["role"]  # 这会抛出KeyError
+                # 对于既不是消息也不是扩展项的无效项，强制访问role字段来抛出KeyError For invalid items that are neither messages nor extension items, force access to role field to throw KeyError
+                _ = item["role"]  # 这会抛出KeyError This will throw KeyError
 
-        # 构建结果
+        # 构建结果 Build result
         result = {"contents": contents}
 
-        # 添加system_instruction
+        # 添加system_instruction Add system_instruction
         if system_instruction:
             result["system_instruction"] = system_instruction
 
-        # 转换工具
+        # 转换工具 Convert tools
         if tools:
             result["tools"] = ToolConverter.batch_convert_tools(tools, "google")
 
-        # 转换工具选择配置
+        # 转换工具选择配置 Convert tool choice configuration
         if tool_choice:
             tool_config = ToolConverter.convert_tool_choice(tool_choice, "google")
             if tool_config:

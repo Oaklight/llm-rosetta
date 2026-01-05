@@ -1,7 +1,8 @@
 """
-LLM Provider Converter - IR (Intermediate Representation) Types
+LLMIR - IR (Intermediate Representation) Types
 
 基于 ir_design_final.md 的最终设计实现
+Based on the final design implementation of ir_design_final.md
 """
 
 from typing import Any, Dict, List, Literal, TypedDict, Union
@@ -9,12 +10,14 @@ from typing import Any, Dict, List, Literal, TypedDict, Union
 from typing_extensions import NotRequired, Required
 
 # ============================================================================
-# 核心消息类型
+# 核心消息类型 Core message types
 # ============================================================================
 
 
 class MessageMetadata(TypedDict, total=False):
-    """消息的元数据，用于存储额外信息"""
+    """消息的元数据，用于存储额外信息
+    Metadata of the message, used to store extra information
+    """
 
     message_id: str
     timestamp: str
@@ -23,7 +26,9 @@ class MessageMetadata(TypedDict, total=False):
 
 
 class StreamingMetadata(TypedDict, total=False):
-    """流式传输的元数据"""
+    """流式传输的元数据
+    Metadata for streaming transmission
+    """
 
     is_streaming: bool
     is_final: bool
@@ -33,8 +38,10 @@ class StreamingMetadata(TypedDict, total=False):
 class Message(TypedDict):
     """
     核心消息类型，代表对话中的一条消息。
+    Core message type, represents a message in the conversation.
 
     这是IR的主要组成部分，90%的场景只需要使用这个类型。
+    This is the main component of IR, 90% of scenarios only need this type.
     """
 
     role: Required[Literal["system", "user", "assistant"]]
@@ -43,53 +50,62 @@ class Message(TypedDict):
 
 
 # ============================================================================
-# 内容部分类型
+# 内容部分类型 Content part types
 # ============================================================================
 
 
 class TextPart(TypedDict):
-    """纯文本内容"""
+    """纯文本内容
+    Plain text content
+    """
 
     type: Required[Literal["text"]]
     text: Required[str]
 
 
 class ImageData(TypedDict):
-    """Base64编码的图像数据"""
+    """Base64编码的图像数据
+    Base64 encoded image data
+    """
 
-    data: Required[str]  # base64编码
-    media_type: Required[str]  # 如 "image/png"
+    data: Required[str]  # base64编码 base64 encoded
+    media_type: Required[str]  # 如 "image/png" e.g. "image/png"
 
 
 class ImagePart(TypedDict):
-    """图像内容，支持URL或base64"""
+    """图像内容，支持URL或base64
+    Image content, supports URL or base64
+    """
 
     type: Required[Literal["image"]]
-    image_url: NotRequired[str]  # URL形式
-    image_data: NotRequired[ImageData]  # base64形式
-    detail: NotRequired[Literal["auto", "low", "high"]]  # OpenAI特性
+    image_url: NotRequired[str]  # URL形式 URL form
+    image_data: NotRequired[ImageData]  # base64形式 base64 form
+    detail: NotRequired[Literal["auto", "low", "high"]]  # OpenAI特性 OpenAI feature
 
 
 class FileData(TypedDict):
-    """Base64编码的文件数据"""
+    """Base64编码的文件数据
+    Base64 encoded file data
+    """
 
-    data: Required[str]  # base64编码
-    media_type: Required[str]  # 如 "application/pdf"
+    data: Required[str]  # base64编码 base64 encoded
+    media_type: Required[str]  # 如 "application/pdf" e.g. "application/pdf"
 
 
 class FilePart(TypedDict):
     """
     文件内容，支持多种文件类型。
+    File content, supports multiple file types.
 
     Examples:
-        - PDF文档
-        - 音频文件
-        - 视频文件
+        - PDF文档 PDF document
+        - 音频文件 Audio file
+        - 视频文件 Video file
     """
 
     type: Required[Literal["file"]]
-    file_url: NotRequired[str]  # URL形式
-    file_data: NotRequired[FileData]  # base64形式
+    file_url: NotRequired[str]  # URL形式 URL form
+    file_data: NotRequired[FileData]  # base64形式 base64 form
     file_name: NotRequired[str]
     file_type: NotRequired[str]  # MIME type
 
@@ -97,16 +113,24 @@ class FilePart(TypedDict):
 class ToolCallPart(TypedDict):
     """
     工具调用内容。
+    Tool call content.
 
     使用两层类型系统：
     - type: 固定为 "tool_call"
     - tool_type: 区分不同的工具类型（function, mcp, web_search等）
+    Uses a two-layer type system:
+    - type: fixed as "tool_call"
+    - tool_type: distinguishes different tool types (function, mcp, web_search, etc.)
 
     这样设计避免了类型爆炸，同时保持扩展性。
+    This design avoids type explosion while maintaining extensibility.
 
     provider_metadata字段用于存储provider特定的元数据，例如：
     - Google的thought_signature（Gemini 3必需，Gemini 2.5推荐）
     - 其他provider的特殊字段
+    The provider_metadata field is used to store provider-specific metadata, e.g.:
+    - Google's thought_signature (required for Gemini 3, recommended for Gemini 2.5)
+    - Other provider's special fields
     """
 
     type: Required[Literal["tool_call"]]
@@ -121,35 +145,41 @@ class ToolCallPart(TypedDict):
             "code_interpreter",
             "file_search",
         ]
-    ]  # 默认为 "function"
-    provider_metadata: NotRequired[Dict[str, Any]]  # Provider特定的元数据
+    ]  # 默认为 "function" Default is "function"
+    provider_metadata: NotRequired[
+        Dict[str, Any]
+    ]  # Provider特定的元数据 Provider-specific metadata
 
 
 class ToolResultPart(TypedDict):
     """
     工具调用的结果。
+    Tool call result.
 
     对应一个ToolCallPart，通过tool_call_id关联。
+    Corresponds to a ToolCallPart, linked by tool_call_id.
     """
 
     type: Required[Literal["tool_result"]]
     tool_call_id: Required[str]
-    result: Required[Any]  # 可以是字符串、对象等
-    is_error: NotRequired[bool]  # 是否是错误结果
+    result: Required[Any]  # 可以是字符串、对象等 Can be string, object, etc.
+    is_error: NotRequired[bool]  # 是否是错误结果 Whether it is an error result
 
 
 class ReasoningPart(TypedDict):
     """
     推理过程内容（如OpenAI的reasoning）。
+    Reasoning process content (e.g. OpenAI's reasoning).
 
     用于存储模型的思考过程，通常不显示给用户。
+    Used to store the model's thought process, usually not shown to the user.
     """
 
     type: Required[Literal["reasoning"]]
     reasoning: Required[str]
 
 
-# 内容部分联合类型
+# 内容部分联合类型 Content part union type
 ContentPart = Union[
     TextPart,
     ImagePart,
@@ -160,19 +190,20 @@ ContentPart = Union[
 ]
 
 # ============================================================================
-# 扩展项类型（用于特殊场景）
+# 扩展项类型（用于特殊场景） Extension item types (for special scenarios)
 # ============================================================================
 
 
 class SystemEvent(TypedDict):
     """
     系统级事件，用于记录会话状态变化。
+    System-level events, used to record session state changes.
 
     Examples:
-        - 会话开始/结束
-        - 会话暂停/恢复
-        - 超时警告
-        - 错误事件
+        - 会话开始/结束 Session start/end
+        - 会话暂停/恢复 Session pause/resume
+        - 超时警告 Timeout warning
+        - 错误事件 Error event
     """
 
     type: Required[Literal["system_event"]]
@@ -187,7 +218,7 @@ class SystemEvent(TypedDict):
             "warning",
         ]
     ]
-    timestamp: Required[str]  # ISO 8601格式
+    timestamp: Required[str]  # ISO 8601格式 ISO 8601 format
     event_data: NotRequired[Dict[str, Any]]
     message: NotRequired[str]
 
@@ -195,10 +226,11 @@ class SystemEvent(TypedDict):
 class BatchMarker(TypedDict):
     """
     批次标记，用于标记一组相关的操作。
+    Batch marker, used to mark a group of related operations.
 
     Examples:
-        - 并行工具调用的开始/结束
-        - 部分结果的进度跟踪
+        - 并行工具调用的开始/结束 Start/end of parallel tool calls
+        - 部分结果的进度跟踪 Progress tracking of partial results
     """
 
     type: Required[Literal["batch_marker"]]
@@ -212,11 +244,12 @@ class BatchMarker(TypedDict):
 class SessionControl(TypedDict):
     """
     会话控制指令，用于控制工具调用的执行。
+    Session control instructions, used to control the execution of tool calls.
 
     Examples:
-        - 取消工具调用
-        - 修改工具调用参数
-        - 暂停/恢复工具执行
+        - 取消工具调用 Cancel tool call
+        - 修改工具调用参数 Modify tool call parameters
+        - 暂停/恢复工具执行 Pause/resume tool execution
     """
 
     type: Required[Literal["session_control"]]
@@ -228,30 +261,32 @@ class SessionControl(TypedDict):
             "resume_tool",
         ]
     ]
-    target_id: Required[str]  # 目标tool_call_id
+    target_id: Required[str]  # 目标tool_call_id Target tool_call_id
     reason: NotRequired[str]
-    new_input: NotRequired[Dict[str, Any]]  # 用于modify_tool
+    new_input: NotRequired[Dict[str, Any]]  # 用于modify_tool Used for modify_tool
 
 
 class ToolChainNode(TypedDict):
     """
     工具链节点，用于表示工具调用的依赖关系。
+    Tool chain node, used to represent dependencies between tool calls.
 
     支持DAG结构，一个工具的输出可以作为另一个工具的输入。
+    Supports DAG structure, the output of one tool can be used as the input of another.
 
     Examples:
-        - 搜索 → 总结
-        - 数据获取 → 分析 → 可视化
+        - 搜索 → 总结 Search → Summarize
+        - 数据获取 → 分析 → 可视化 Data acquisition → Analysis → Visualization
     """
 
     type: Required[Literal["tool_chain_node"]]
     node_id: Required[str]
     tool_call: Required[ToolCallPart]
-    depends_on: NotRequired[List[str]]  # 依赖的节点ID列表
-    auto_execute: NotRequired[bool]  # 是否自动执行
+    depends_on: NotRequired[List[str]]  # 依赖的节点ID列表 List of dependent node IDs
+    auto_execute: NotRequired[bool]  # 是否自动执行 Whether to auto execute
 
 
-# 扩展项联合类型
+# 扩展项联合类型 Extension item union type
 ExtensionItem = Union[
     SystemEvent,
     BatchMarker,
@@ -260,27 +295,31 @@ ExtensionItem = Union[
 ]
 
 # ============================================================================
-# 顶层类型
+# 顶层类型 Top-level types
 # ============================================================================
 
-# 完整的IR输入（支持扩展项）
+# 完整的IR输入（支持扩展项） Complete IR input (supports extension items)
 IRInput = List[Union[Message, ExtensionItem]]
 
-# 简化的IR输入（只有消息）
+# 简化的IR输入（只有消息） Simplified IR input (messages only)
 IRInputSimple = List[Message]
 
 # ============================================================================
-# 类型守卫函数
+# 类型守卫函数 Type guard functions
 # ============================================================================
 
 
 def is_message(item: Union[Message, ExtensionItem]) -> bool:
-    """判断是否是Message"""
+    """判断是否是Message
+    Determine if it is a Message
+    """
     return "role" in item
 
 
 def is_extension_item(item: Union[Message, ExtensionItem]) -> bool:
-    """判断是否是ExtensionItem"""
+    """判断是否是ExtensionItem
+    Determine if it is an ExtensionItem
+    """
     return "type" in item and item.get("type") in [
         "system_event",
         "batch_marker",
@@ -290,17 +329,23 @@ def is_extension_item(item: Union[Message, ExtensionItem]) -> bool:
 
 
 def is_text_part(part: ContentPart) -> bool:
-    """判断是否是文本内容"""
+    """判断是否是文本内容
+    Determine if it is text content
+    """
     return part.get("type") == "text"
 
 
 def is_tool_call_part(part: ContentPart) -> bool:
-    """判断是否是工具调用"""
+    """判断是否是工具调用
+    Determine if it is a tool call
+    """
     return part.get("type") == "tool_call"
 
 
 def is_tool_result_part(part: ContentPart) -> bool:
-    """判断是否是工具结果"""
+    """判断是否是工具结果
+    Determine if it is a tool result
+    """
     return part.get("type") == "tool_result"
 
 

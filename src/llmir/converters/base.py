@@ -1,7 +1,8 @@
 """
-LLM Provider Converter - Base Converter
+LLMIR - Base Converter
 
 定义转换器的基础接口
+Defines the basic interface for converters
 """
 
 from abc import ABC, abstractmethod
@@ -11,7 +12,9 @@ from ..types.ir import IRInput, ToolChoice, ToolDefinition
 
 
 class BaseConverter(ABC):
-    """转换器基类，定义统一的转换接口"""
+    """转换器基类，定义统一的转换接口
+    Base class for converters, defines a unified conversion interface
+    """
 
     @abstractmethod
     def to_provider(
@@ -67,9 +70,9 @@ class BaseConverter(ABC):
                 errors.append(f"Item {i} must be a dictionary")
                 continue
 
-            # 检查是否是Message或ExtensionItem
+            # 检查是否是Message或ExtensionItem Check if it is Message or ExtensionItem
             if "role" in item:
-                # 这是一个Message
+                # 这是一个Message This is a Message
                 if item.get("role") not in ["system", "user", "assistant", "developer"]:
                     errors.append(f"Message {i} has invalid role: {item.get('role')}")
 
@@ -79,7 +82,7 @@ class BaseConverter(ABC):
                     errors.append(f"Message {i} 'content' must be a list")
 
             elif "type" in item:
-                # 这是一个ExtensionItem
+                # 这是一个ExtensionItem This is an ExtensionItem
                 item_type = item.get("type")
                 if item_type not in [
                     "system_event",

@@ -1,7 +1,8 @@
 """
-LLM Provider Converter - 通用工具模块
+LLMIR - Common utility module
 
 提供转换器之间共享的通用工具和辅助函数
+Provides common tools and helper functions shared between converters
 """
 
 from .field_mapper import FieldMapper
