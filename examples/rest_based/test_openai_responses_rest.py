@@ -20,6 +20,7 @@ from examples.tools import available_tools, tools_spec
 from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
+from src.llmir.types.ir import Message
 
 # 加载环境变量
 load_dotenv()
@@ -188,7 +189,7 @@ def test_simple_weather():
                     )
 
                 # 添加tool results到历史
-                ir_messages.append({"role": "user", "content": tool_results})
+                ir_messages.append(Message(role="user", content=tool_results))
 
             elif text_parts:
                 print("\n--- 最终回答 ---")
@@ -286,7 +287,7 @@ def test_travel_planning():
                             "is_error": is_error,
                         }
                     )
-                ir_messages.append({"role": "user", "content": tool_results})
+                ir_messages.append(Message(role="user", content=tool_results))
 
             elif text_parts:
                 print("\n📝 最终回答:")

@@ -7,6 +7,7 @@ import pytest
 from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )
+from llmir.types.ir import ToolCallPart
 
 
 class TestOpenAIResponsesConverter:
@@ -662,7 +663,12 @@ class TestOpenAIResponsesConverter:
             {
                 "role": "user",
                 "content": [
-                    {"type": "tool_call", "id": "user_call", "name": "user_tool"}
+                    ToolCallPart(
+                        type="tool_call",
+                        tool_call_id="user_call",
+                        tool_name="user_tool",
+                        tool_input={},
+                    )
                 ],
             },
             {

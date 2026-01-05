@@ -200,7 +200,9 @@ def test_multi_city_weather():
                     )
 
                 # 添加tool results到历史
-                ir_messages.append({"role": "user", "content": tool_results})
+                from src.llmir.types.ir import Message
+
+                ir_messages.append(Message(role="user", content=tool_results))
 
             elif text_parts:
                 print(f"Text response: {text_parts[0].get('text', 'N/A')[:200]}")

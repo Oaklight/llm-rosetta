@@ -7,6 +7,7 @@ import pytest
 from llmir.converters.openai_chat_converter import (
     OpenAIChatConverter,
 )
+from llmir.types.ir import ToolCallPart
 
 
 class TestOpenAIChatConverter:
@@ -383,7 +384,12 @@ class TestOpenAIChatConverter:
                 "role": "assistant",
                 "content": [
                     {"type": "text", "text": "Let me check"},
-                    {"type": "tool_call", "id": "c1", "name": "tool1", "arguments": {}},
+                    ToolCallPart(
+                        type="tool_call",
+                        tool_call_id="c1",
+                        tool_name="tool1",
+                        tool_input={},
+                    ),
                 ],
             }
         ]
