@@ -197,13 +197,21 @@ class OpenAIChatConverter(BaseConverter):
                     user_content.append(cp)
 
             messages = []
-            if user_content:
-                # 如果只有一个文本部分，使用字符串；否则使用列表
-                # If only one text part, use string; otherwise use list
-                if len(user_content) == 1 and user_content[0].get("type") == "text":
-                    content_val = user_content[0]["text"]
+            # 只有当有用户内容或者没有工具消息时才创建用户消息
+            # Only create user message when there's user content or no tool messages
+            if user_content or not tool_messages:
+                if user_content:
+                    # 如果只有一个文本部分，使用字符串；否则使用列表
+                    # If only one text part, use string; otherwise use list
+                    if len(user_content) == 1 and user_content[0].get("type") == "text":
+                        content_val = user_content[0]["text"]
+                    else:
+                        content_val = user_content
                 else:
-                    content_val = user_content
+                    # 如果没有有效内容（比如文件被忽略），创建空字符串内容
+                    # If no valid content (e.g., files ignored), create empty string content
+                    content_val = ""
+
                 messages.append({"role": "user", "content": content_val})
 
             messages.extend(tool_messages)
@@ -265,7 +273,11 @@ class OpenAIChatConverter(BaseConverter):
             return self._ir_image_to_p(content_part), warnings
 
         elif part_type == "file":
-            return self._ir_file_to_p(content_part), warnings
+            warnings.append(
+                "File content not supported in OpenAI Chat Completions, ignored. "
+                "Use OpenAI Responses API converter for file support."
+            )
+            return None, warnings
 
         elif is_tool_result_part(content_part):
             # Tool result will be handled at message level
@@ -418,25 +430,24 @@ class OpenAIChatConverter(BaseConverter):
         return ImagePart(type="image", image_url=url, detail=detail)
 
     def _ir_file_to_p(self, file_part: FilePart) -> Any:
-        """IR FilePart → Provider File Content / IR文件部分转换为OpenAI文件内容"""
-        if "file_data" in file_part:
-            return {
-                "type": "file",
-                "file": {
-                    "file_data": file_part["file_data"]["data"],
-                    "filename": file_part.get("file_name", "unknown"),
-                },
-            }
-        elif "file_url" in file_part:
-            return {
-                "type": "file",
-                "file": {
-                    "file_url": file_part["file_url"],
-                    "filename": file_part.get("file_name", "unknown"),
-                },
-            }
-        else:
-            raise ValueError("File part must have either file_data or file_url")
+        """IR FilePart → Provider File Content / IR文件部分转换为OpenAI文件内容
+
+        Note: OpenAI Chat Completion endpoint does not support file input
+        """
+        raise NotImplementedError(
+            "OpenAI Chat Completion endpoint does not support file input. "
+            "Use OpenAI Responses API converter for file support."
+        )
+
+    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+        """Provider File Content → IR FilePart / OpenAI文件内容转换为IR文件部分
+
+        Note: OpenAI Chat Completion endpoint does not support file input
+        """
+        raise NotImplementedError(
+            "OpenAI Chat Completion endpoint does not support file input. "
+            "Use OpenAI Responses API converter for file support."
+        )
 
     def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为OpenAI工具调用"""
@@ -557,5 +568,10 @@ class OpenAIChatConverter(BaseConverter):
     def _convert_file_to_openai(self, file_part: Dict[str, Any]) -> Any:
         """将IR文件转换为OpenAI格式（兼容性别名）
         Convert IR file to OpenAI format (compatibility alias)
+
+        Note: OpenAI Chat Completion endpoint does not support file input
         """
-        return self._ir_file_to_p(file_part)
+        raise NotImplementedError(
+            "OpenAI Chat Completion endpoint does not support file input. "
+            "Use OpenAI Responses API converter for file support."
+        )
