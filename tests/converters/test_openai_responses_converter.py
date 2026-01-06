@@ -580,7 +580,7 @@ class TestOpenAIResponsesConverter:
         assert result["input"][0]["type"] == "function_call_output"
         assert result["input"][0]["call_id"] == "call_abc"
         assert result["input"][1]["type"] == "reasoning"
-        assert result["input"][1]["reasoning"] == "some reasoning"
+        assert result["input"][1]["content"] == "some reasoning"
 
     def test_from_provider_with_string_arguments(self):
         """测试 from_provider 对字符串格式的 arguments 的处理"""
@@ -681,7 +681,7 @@ class TestOpenAIResponsesConverter:
         assert result["input"][0]["type"] == "function_call"
         assert result["input"][0]["call_id"] == "user_call"
         assert result["input"][1]["type"] == "reasoning"
-        assert result["input"][1]["reasoning"] == "Assistant reasoning"
+        assert result["input"][1]["content"] == "Assistant reasoning"
 
     def test_from_provider_with_pydantic_and_string_content(self):
         """测试 from_provider 对 Pydantic 模型和字符串内容的处理"""
