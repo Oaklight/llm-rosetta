@@ -16,6 +16,69 @@ class MockConverter(BaseConverter):
     def from_provider(self, provider_data):
         return []
 
+    # ==================== 分层抽象方法实现 Layered abstract method implementations ====================
+
+    def _ir_message_to_p(self, message, ir_input):
+        return {}
+
+    def _ir_content_part_to_p(self, content_part, ir_input):
+        return {}
+
+    def _p_message_to_ir(self, provider_message):
+        return {}
+
+    def _p_content_part_to_ir(self, provider_part):
+        return []
+
+    # ==================== 类型特定转换方法实现 Type-specific conversion method implementations ====================
+
+    def _ir_text_to_p(self, text_part):
+        return {}
+
+    def _p_text_to_ir(self, provider_text):
+        return {"type": "text", "text": ""}
+
+    def _ir_image_to_p(self, image_part):
+        return {}
+
+    def _p_image_to_ir(self, provider_image):
+        return {"type": "image", "image_url": ""}
+
+    def _ir_file_to_p(self, file_part):
+        return {}
+
+    def _p_file_to_ir(self, provider_file):
+        return {"type": "file", "file_url": ""}
+
+    def _ir_tool_call_to_p(self, tool_call_part):
+        return {}
+
+    def _p_tool_call_to_ir(self, provider_tool_call):
+        return {
+            "type": "tool_call",
+            "tool_call_id": "",
+            "tool_name": "",
+            "tool_input": {},
+        }
+
+    def _ir_tool_result_to_p(self, tool_result_part):
+        return {}
+
+    def _p_tool_result_to_ir(self, provider_tool_result):
+        return {"type": "tool_result", "tool_call_id": "", "result": ""}
+
+    def _ir_tool_to_p(self, tool):
+        return {}
+
+    def _p_tool_to_ir(self, provider_tool):
+        return {"type": "function", "name": "", "description": "", "parameters": {}}
+
+    def _ir_tool_choice_to_p(self, tool_choice):
+        return {}
+
+    def _p_tool_choice_to_ir(self, provider_tool_choice):
+        return {"mode": "auto"}
+
 
 class TestBaseConverter:
     """测试 BaseConverter 的验证功能"""
