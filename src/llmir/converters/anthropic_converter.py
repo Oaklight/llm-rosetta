@@ -4,21 +4,24 @@ LLMIR - Anthropic Converter
 实现IR与Anthropic格式之间的转换
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
-    ContentPart,
     FilePart,
     ImagePart,
     IRInput,
     Message,
     ReasoningPart,
     TextPart,
+    ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
     is_extension_item,
     is_message,
+    is_text_part,
+    is_tool_call_part,
+    is_tool_result_part,
 )
 from ..utils import FieldMapper, ToolCallConverter, ToolConverter
 from .base import BaseConverter
@@ -57,23 +60,31 @@ class AnthropicConverter(BaseConverter):
 
                 if message["role"] == "system":
                     # Anthropic的system消息通过API参数传递 Anthropic system messages are passed through API parameters
-                    system_content = self._convert_content_to_anthropic(
-                        message["content"]
+                    system_content, msg_warnings = self._ir_message_to_p(
+                        message, ir_input
                     )
+                    warnings.extend(msg_warnings)
                     # 提取文本内容作为system消息 Extract text content as system message
-                    for block in system_content:
-                        if block.get("type") == "text":
-                            system_messages.append(
-                                TextPart(type="text", text=block["text"])
-                            )
+                    if isinstance(system_content, list):
+                        for block in system_content:
+                            if block.get("type") == "text":
+                                system_messages.append(
+                                    TextPart(type="text", text=block["text"])
+                                )
+                    elif (
+                        isinstance(system_content, dict) and "content" in system_content
+                    ):
+                        for block in system_content["content"]:
+                            if block.get("type") == "text":
+                                system_messages.append(
+                                    TextPart(type="text", text=block["text"])
+                                )
                 else:
                     # 普通消息：直接转换 Normal messages: direct conversion
-                    anthropic_message = {
-                        "role": message["role"],
-                        "content": self._convert_content_to_anthropic(
-                            message["content"]
-                        ),
-                    }
+                    anthropic_message, msg_warnings = self._ir_message_to_p(
+                        message, ir_input
+                    )
+                    warnings.extend(msg_warnings)
                     messages.append(anthropic_message)
 
             elif is_extension_item(item):
@@ -92,7 +103,7 @@ class AnthropicConverter(BaseConverter):
                         # 创建一个assistant消息包含工具调用 Create an assistant message containing tool call
                         anthropic_message = {
                             "role": "assistant",
-                            "content": [ToolCallConverter.to_anthropic(tool_call)],
+                            "content": [self._ir_tool_call_to_p(tool_call)],
                         }
                         messages.append(anthropic_message)
                 elif extension_type in ["batch_marker", "session_control"]:
@@ -107,13 +118,11 @@ class AnthropicConverter(BaseConverter):
 
         # 添加工具定义 Add tool definitions
         if tools:
-            result["tools"] = ToolConverter.batch_convert_tools(tools, "anthropic")
+            result["tools"] = [self._ir_tool_to_p(tool) for tool in tools]
 
         # 添加工具选择 Add tool choice
         if tool_choice:
-            result["tool_choice"] = ToolConverter.convert_tool_choice(
-                tool_choice, "anthropic"
-            )
+            result["tool_choice"] = self._ir_tool_choice_to_p(tool_choice)
 
         return result, warnings
 
@@ -148,10 +157,14 @@ class AnthropicConverter(BaseConverter):
                 )
             elif isinstance(system_content, list):
                 # 内容块列表形式 Content block list form
+                ir_content = []
+                for part in system_content:
+                    converted_parts = self._p_content_part_to_ir(part)
+                    ir_content.extend(converted_parts)
                 ir_input.append(
                     Message(
                         role="system",
-                        content=self._convert_content_from_anthropic(system_content),
+                        content=ir_content,
                     )
                 )
 
@@ -165,162 +178,268 @@ class AnthropicConverter(BaseConverter):
             messages_to_process = []
 
         for msg in messages_to_process:
-            ir_message = Message(
-                role=msg["role"],
-                content=self._convert_content_from_anthropic(msg["content"]),
-            )
+            ir_message = self._p_message_to_ir(msg)
             ir_input.append(ir_message)
 
         return ir_input
 
-    def _convert_content_to_anthropic(
-        self, content: List[ContentPart]
-    ) -> List[Dict[str, Any]]:
-        """将IR内容部分转换为Anthropic内容块
-        Convert IR content parts to Anthropic content blocks
-        """
-        blocks = []
+    # ==================== 分层方法 Layer methods ====================
 
+    def _ir_message_to_p(
+        self, message: Dict[str, Any], ir_input: IRInput
+    ) -> Tuple[Any, List[str]]:
+        """IR Message → Provider Message / IR消息转换为Anthropic消息
+
+        Returns:
+            Tuple[转换后的消息, 警告列表] / Tuple[converted message, warning list]
+        """
+        role = message["role"]
+        content = message["content"]
+        warnings = []
+
+        # 转换内容部分
+        anthropic_content = []
         for part in content:
-            part_type = part.get("type")
+            converted, part_warnings = self._ir_content_part_to_p(part, ir_input)
+            warnings.extend(part_warnings)
+            if converted:
+                anthropic_content.append(converted)
 
-            if part_type == "text":
-                blocks.append(TextPart(type="text", text=part["text"]))
+        if role == "system":
+            # System消息返回内容列表，由调用者处理
+            return anthropic_content, warnings
+        else:
+            # 普通消息返回完整消息结构
+            return {
+                "role": role,
+                "content": anthropic_content,
+            }, warnings
 
-            elif part_type == "image":
-                image_url = FieldMapper.get_image_url(part)
-                image_data = FieldMapper.get_image_data(part)
+    def _ir_content_part_to_p(
+        self, content_part: Dict[str, Any], ir_input: IRInput
+    ) -> Tuple[Any, List[str]]:
+        """IR ContentPart → Provider Content/Part / IR内容部分转换为Anthropic内容"""
+        part_type = content_part.get("type")
+        warnings = []
 
-                if image_data:
-                    # base64形式 base64 form
-                    blocks.append(
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": image_data["media_type"],
-                                "data": image_data["data"],
-                            },
-                        }
-                    )
-                elif image_url:
-                    # URL形式 URL form
-                    # 注意：这里是 provider 格式的字典，不是 IR 格式
-                    blocks.append(
-                        {
-                            "type": "image",
-                            "source": {"type": "url", "url": image_url},
-                        }
-                    )
+        if is_text_part(content_part):
+            return self._ir_text_to_p(content_part), warnings
 
-            elif part_type == "file":
-                # Anthropic支持文档类型 Anthropic supports document type
-                if "file_data" in part:
-                    file_data = part["file_data"]
-                    blocks.append(
-                        {
-                            "type": "document",
-                            "source": {
-                                "type": "base64",
-                                "media_type": file_data["media_type"],
-                                "data": file_data["data"],
-                            },
-                        }
-                    )
-                elif "file_url" in part:
-                    # 注意：这里是 provider 格式的字典，不是 IR 格式
-                    blocks.append(
-                        {
-                            "type": "document",
-                            "source": {"type": "url", "url": part["file_url"]},
-                        }
-                    )
+        elif part_type == "image":
+            return self._ir_image_to_p(content_part), warnings
 
-            elif part_type == "tool_call":
-                blocks.append(ToolCallConverter.to_anthropic(part))
+        elif part_type == "file":
+            return self._ir_file_to_p(content_part), warnings
 
-            elif part_type == "tool_result":
-                blocks.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": part["tool_call_id"],
-                        "content": part["result"],
-                        "is_error": part.get("is_error", False),
-                    }
-                )
+        elif is_tool_call_part(content_part):
+            return self._ir_tool_call_to_p(content_part), warnings
 
-            elif part_type == "reasoning":
-                # Anthropic支持thinking块 Anthropic supports thinking blocks
-                # 注意：这里是 provider 格式的字典，不是 IR 格式
-                blocks.append({"type": "thinking", "thinking": part["reasoning"]})
+        elif is_tool_result_part(content_part):
+            return self._ir_tool_result_to_p(content_part), warnings
 
-        return blocks
+        elif part_type == "reasoning":
+            return self._ir_reasoning_to_p(content_part), warnings
 
-    def _convert_content_from_anthropic(
-        self, content: Union[str, List[Dict[str, Any]]]
-    ) -> List[ContentPart]:
-        """将Anthropic内容转换为IR内容部分
-        Convert Anthropic content to IR content parts
-        """
-        if isinstance(content, str):
-            return [TextPart(type="text", text=content)]
+        return None, warnings
+
+    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+        """Provider Message → IR Message / Anthropic消息转换为IR消息"""
+        if not isinstance(provider_message, dict):
+            return None
+
+        role = provider_message.get("role")
+        content = provider_message.get("content")
 
         ir_content = []
+        if isinstance(content, str):
+            ir_content.append(TextPart(type="text", text=content))
+        elif isinstance(content, list):
+            for part in content:
+                converted_parts = self._p_content_part_to_ir(part)
+                ir_content.extend(converted_parts)
 
-        for block in content:
-            block_type = block.get("type")
+        return Message(role=role, content=ir_content)
 
-            if block_type == "text":
-                ir_content.append(TextPart(type="text", text=block["text"]))
+    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+        """Provider Content/Part → IR ContentPart(s) / Anthropic内容部分转换为IR内容"""
+        if isinstance(provider_part, str):
+            return [TextPart(type="text", text=provider_part)]
 
-            elif block_type == "image":
-                source = block.get("source", {})
-                if source.get("type") == "base64":
-                    ir_content.append(
-                        ImagePart(
-                            type="image",
-                            image_data={
-                                "data": source.get("data", ""),
-                                "media_type": source.get("media_type", ""),
-                            },
-                        )
-                    )
-                elif source.get("type") == "url":
-                    ir_content.append(
-                        ImagePart(type="image", image_url=source.get("url", ""))
-                    )
+        if not isinstance(provider_part, dict):
+            return []
 
-            elif block_type == "document":
-                source = block.get("source", {})
-                if source.get("type") == "base64":
-                    ir_content.append(
-                        FilePart(
-                            type="file",
-                            file_data={
-                                "data": source["data"],
-                                "media_type": source["media_type"],
-                            },
-                        )
-                    )
-                elif source.get("type") == "url":
-                    ir_content.append(FilePart(type="file", file_url=source["url"]))
+        part_type = provider_part.get("type")
 
-            elif block_type in ["tool_use", "server_tool_use"]:
-                ir_content.append(ToolCallConverter.from_anthropic(block))
+        if part_type == "text":
+            return [self._p_text_to_ir(provider_part)]
 
-            elif block_type == "tool_result":
-                ir_content.append(
-                    ToolResultPart(
-                        type="tool_result",
-                        tool_call_id=block.get("tool_use_id", ""),
-                        result=block.get("content", ""),
-                        is_error=block.get("is_error", False),
-                    )
-                )
+        elif part_type == "image":
+            return [self._p_image_to_ir(provider_part)]
 
-            elif block_type == "thinking":
-                ir_content.append(
-                    ReasoningPart(type="reasoning", reasoning=block["thinking"])
-                )
+        elif part_type == "document":
+            return [self._p_file_to_ir(provider_part)]
 
-        return ir_content
+        elif part_type in ["tool_use", "server_tool_use"]:
+            return [self._p_tool_call_to_ir(provider_part)]
+
+        elif part_type == "tool_result":
+            return [self._p_tool_result_to_ir(provider_part)]
+
+        elif part_type == "thinking":
+            return [self._p_reasoning_to_ir(provider_part)]
+
+        return []
+
+    # ==================== 内容类型转换方法 Content type conversion methods ====================
+
+    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+        """IR TextPart → Provider Text Content / IR文本部分转换为Anthropic文本内容"""
+        return TextPart(type="text", text=text_part["text"])
+
+    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+        """Provider Text Content → IR TextPart / Anthropic文本内容转换为IR文本部分"""
+        if isinstance(provider_text, str):
+            return TextPart(type="text", text=provider_text)
+        if isinstance(provider_text, dict) and provider_text.get("type") == "text":
+            return TextPart(type="text", text=provider_text["text"])
+        return None
+
+    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+        """IR ImagePart → Provider Image Content / IR图像部分转换为Anthropic图像内容"""
+        image_url = FieldMapper.get_image_url(image_part)
+        image_data = FieldMapper.get_image_data(image_part)
+
+        if image_data:
+            # base64形式 base64 form
+            return {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": image_data["media_type"],
+                    "data": image_data["data"],
+                },
+            }
+        elif image_url:
+            # URL形式 URL form
+            return {
+                "type": "image",
+                "source": {"type": "url", "url": image_url},
+            }
+        else:
+            raise ValueError("Image part must have either image_url or image_data")
+
+    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+        """Provider Image Content → IR ImagePart / Anthropic图像内容转换为IR图像部分"""
+        source = provider_image.get("source", {})
+        if source.get("type") == "base64":
+            return ImagePart(
+                type="image",
+                image_data={
+                    "data": source.get("data", ""),
+                    "media_type": source.get("media_type", ""),
+                },
+            )
+        elif source.get("type") == "url":
+            return ImagePart(type="image", image_url=source.get("url", ""))
+        return ImagePart(type="image")
+
+    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+        """IR FilePart → Provider File Content / IR文件部分转换为Anthropic文件内容"""
+        if "file_data" in file_part:
+            file_data = file_part["file_data"]
+            return {
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": file_data["media_type"],
+                    "data": file_data["data"],
+                },
+            }
+        elif "file_url" in file_part:
+            return {
+                "type": "document",
+                "source": {"type": "url", "url": file_part["file_url"]},
+            }
+        else:
+            raise ValueError("File part must have either file_data or file_url")
+
+    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+        """Provider File Content → IR FilePart / Anthropic文件内容转换为IR文件部分"""
+        source = provider_file.get("source", {})
+        if source.get("type") == "base64":
+            return FilePart(
+                type="file",
+                file_data={
+                    "data": source["data"],
+                    "media_type": source["media_type"],
+                },
+            )
+        elif source.get("type") == "url":
+            return FilePart(type="file", file_url=source["url"])
+        return FilePart(type="file")
+
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+        """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Anthropic工具调用"""
+        return ToolCallConverter.to_anthropic(tool_call_part)
+
+    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+        """Provider Tool Call → IR ToolCallPart / Anthropic工具调用转换为IR工具调用部分"""
+        return ToolCallConverter.from_anthropic(provider_tool_call)
+
+    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+        """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Anthropic工具结果"""
+        return {
+            "type": "tool_result",
+            "tool_use_id": tool_result_part["tool_call_id"],
+            "content": tool_result_part["result"],
+            "is_error": tool_result_part.get("is_error", False),
+        }
+
+    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+        """Provider Tool Result → IR ToolResultPart / Anthropic工具结果转换为IR工具结果部分"""
+        return ToolResultPart(
+            type="tool_result",
+            tool_call_id=provider_tool_result.get("tool_use_id", ""),
+            result=provider_tool_result.get("content", ""),
+            is_error=provider_tool_result.get("is_error", False),
+        )
+
+    def _ir_reasoning_to_p(self, reasoning_part: Dict[str, Any]) -> Any:
+        """IR ReasoningPart → Provider Reasoning Content / IR推理部分转换为Anthropic推理内容"""
+        return {"type": "thinking", "thinking": reasoning_part["reasoning"]}
+
+    def _p_reasoning_to_ir(self, provider_reasoning: Any) -> Dict[str, Any]:
+        """Provider Reasoning Content → IR ReasoningPart / Anthropic推理内容转换为IR推理部分"""
+        return ReasoningPart(type="reasoning", reasoning=provider_reasoning["thinking"])
+
+    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+        """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为Anthropic工具定义"""
+        return ToolConverter.convert_tool_definition(tool, "anthropic")
+
+    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+        """Provider Tool Definition → IR ToolDefinition / Anthropic工具定义转换为IR工具定义"""
+        # Anthropic工具定义格式 / Anthropic tool definition format
+        return {
+            "type": "function",
+            "name": provider_tool.get("name", ""),
+            "description": provider_tool.get("description", ""),
+            "parameters": provider_tool.get("input_schema", {}),
+        }
+
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+        """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为Anthropic工具选择配置"""
+        return ToolConverter.convert_tool_choice(tool_choice, "anthropic")
+
+    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+        """Provider Tool Choice Config → IR ToolChoice / Anthropic工具选择配置转换为IR工具选择"""
+        # Anthropic工具选择格式 / Anthropic tool choice format
+        if isinstance(provider_tool_choice, dict):
+            choice_type = provider_tool_choice.get("type", "auto")
+            if choice_type == "auto":
+                return {"mode": "auto"}
+            elif choice_type == "any":
+                return {"mode": "required"}
+            elif choice_type == "tool":
+                tool_name = provider_tool_choice.get("name", "")
+                return {"mode": "tool", "tool_name": tool_name}
+        return {"mode": "auto"}
