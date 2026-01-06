@@ -354,10 +354,12 @@ class TestOpenAIChatConverter:
                 ],
             }
         ]
-        result, _ = self.converter.to_provider(messages)
-        file_part = result["messages"][0]["content"][0]
-        assert file_part["type"] == "file"
-        assert file_part["file"]["file_data"] == "base64data"
+        result, warnings = self.converter.to_provider(messages)
+        # 文件内容应该被忽略并产生警告
+        assert len(warnings) == 1
+        assert "File content not supported" in warnings[0]
+        # 消息应该为空，因为文件内容被忽略
+        assert result["messages"][0]["content"] == ""
 
     def test_to_provider_with_image_data(self):
         """测试 to_provider 对 image_data 的处理"""
@@ -493,5 +495,5 @@ class TestOpenAIChatConverter:
 
     def test_file_conversion_errors(self):
         """测试文件转换的错误处理"""
-        with pytest.raises(ValueError, match="must have either"):
+        with pytest.raises(NotImplementedError, match="does not support file input"):
             self.converter._convert_file_to_openai({"type": "file"})
