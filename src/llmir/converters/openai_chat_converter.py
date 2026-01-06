@@ -362,11 +362,11 @@ class OpenAIChatConverter(BaseConverter):
 
     # ==================== 内容类型转换方法 Content type conversion methods ====================
 
-    def _ir_text_to_p(self, text_part: Dict[str, Any]) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为OpenAI文本内容"""
         return {"type": "text", "text": text_part["text"]}
 
-    def _ir_text_to_p_batch(self, content: List[Dict[str, Any]]) -> str:
+    def _ir_text_to_p_batch(self, content: List[TextPart]) -> str:
         """批量转换文本内容为字符串 / Batch convert text content to string"""
         text_parts = []
         for part in content:
@@ -374,7 +374,7 @@ class OpenAIChatConverter(BaseConverter):
                 text_parts.append(part["text"])
         return " ".join(text_parts)
 
-    def _p_text_to_ir(self, provider_text: Any) -> Dict[str, Any]:
+    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
         """Provider Text Content → IR TextPart / OpenAI文本内容转换为IR文本部分"""
         if isinstance(provider_text, str):
             return TextPart(type="text", text=provider_text)
@@ -382,7 +382,7 @@ class OpenAIChatConverter(BaseConverter):
             return TextPart(type="text", text=provider_text["text"])
         return None
 
-    def _ir_image_to_p(self, image_part: Dict[str, Any]) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为OpenAI图像内容"""
         url = FieldMapper.get_image_url(image_part)
         image_data = FieldMapper.get_image_data(image_part)
@@ -399,7 +399,7 @@ class OpenAIChatConverter(BaseConverter):
         else:
             raise ValueError("Image part must have either image_url/url or image_data")
 
-    def _p_image_to_ir(self, provider_image: Any) -> Dict[str, Any]:
+    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / OpenAI图像内容转换为IR图像部分"""
         image_url_data = provider_image.get("image_url", {})
         url = image_url_data.get("url")
@@ -417,7 +417,7 @@ class OpenAIChatConverter(BaseConverter):
 
         return ImagePart(type="image", image_url=url, detail=detail)
 
-    def _ir_file_to_p(self, file_part: Dict[str, Any]) -> Any:
+    def _ir_file_to_p(self, file_part: FilePart) -> Any:
         """IR FilePart → Provider File Content / IR文件部分转换为OpenAI文件内容"""
         if "file_data" in file_part:
             return {
@@ -438,15 +438,15 @@ class OpenAIChatConverter(BaseConverter):
         else:
             raise ValueError("File part must have either file_data or file_url")
 
-    def _ir_tool_call_to_p(self, tool_call_part: Dict[str, Any]) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为OpenAI工具调用"""
         return ToolCallConverter.to_openai_chat(tool_call_part)
 
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> Dict[str, Any]:
+    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / OpenAI工具调用转换为IR工具调用部分"""
         return ToolCallConverter.from_openai_chat(provider_tool_call)
 
-    def _ir_tool_result_to_p(self, tool_result_part: Dict[str, Any]) -> Any:
+    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为OpenAI工具结果"""
         return {
             "role": "tool",
@@ -456,7 +456,7 @@ class OpenAIChatConverter(BaseConverter):
             ),
         }
 
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> Dict[str, Any]:
+    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / OpenAI工具结果转换为IR工具结果部分"""
         return ToolResultPart(
             type="tool_result",
