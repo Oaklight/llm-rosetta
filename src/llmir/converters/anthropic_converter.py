@@ -6,6 +6,13 @@ LLMIR - Anthropic Converter
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from ..exceptions import (
+    ConversionError,
+    ErrorCategory,
+    ErrorSeverity,
+    WarningInfo,
+    create_warning,
+)
 from ..types.ir import (
     ContentPart,
     FilePart,
@@ -20,7 +27,7 @@ from ..types.ir import (
     is_extension_item,
     is_message,
 )
-from ..utils import FieldMapper, ToolCallConverter, ToolConverter
+from ..utils import ErrorConverter, FieldMapper, ToolCallConverter, ToolConverter
 from .base import BaseConverter
 
 
@@ -34,7 +41,7 @@ class AnthropicConverter(BaseConverter):
         ir_input: IRInput,
         tools: Optional[List[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> Tuple[Dict[str, Any], List[Union[str, WarningInfo]]]:
         """
         将IR格式转换为Anthropic格式
         Convert IR format to Anthropic format
@@ -43,79 +50,153 @@ class AnthropicConverter(BaseConverter):
         Anthropic uses nested structure, closest to IR design, conversion is relatively simple
         """
         # 验证输入 Validate input
-        validation_errors = self.validate_ir_input(ir_input)
-        if validation_errors:
-            raise ValueError(f"Invalid IR input: {validation_errors}")
+        self.validate_and_raise(ir_input)
 
         messages = []
         warnings = []
         system_messages = []
 
-        for item in ir_input:
-            if is_message(item):
-                message = item  # type: ignore
+        try:
+            for i, item in enumerate(ir_input):
+                try:
+                    if is_message(item):
+                        message = item  # type: ignore
 
-                if message["role"] == "system":
-                    # Anthropic的system消息通过API参数传递 Anthropic system messages are passed through API parameters
-                    system_content = self._convert_content_to_anthropic(
-                        message["content"]
-                    )
-                    # 提取文本内容作为system消息 Extract text content as system message
-                    for block in system_content:
-                        if block.get("type") == "text":
-                            system_messages.append(
-                                TextPart(type="text", text=block["text"])
+                        if message["role"] == "system":
+                            # Anthropic的system消息通过API参数传递 Anthropic system messages are passed through API parameters
+                            system_content = self._convert_content_to_anthropic(
+                                message["content"], i
                             )
-                else:
-                    # 普通消息：直接转换 Normal messages: direct conversion
-                    anthropic_message = {
-                        "role": message["role"],
-                        "content": self._convert_content_to_anthropic(
-                            message["content"]
-                        ),
-                    }
-                    messages.append(anthropic_message)
+                            # 提取文本内容作为system消息 Extract text content as system message
+                            for block in system_content:
+                                if block.get("type") == "text":
+                                    system_messages.append(
+                                        TextPart(type="text", text=block["text"])
+                                    )
+                        else:
+                            # 普通消息：直接转换 Normal messages: direct conversion
+                            anthropic_message = {
+                                "role": message["role"],
+                                "content": self._convert_content_to_anthropic(
+                                    message["content"], i
+                                ),
+                            }
+                            messages.append(anthropic_message)
 
-            elif is_extension_item(item):
-                extension = item  # type: ignore
-                extension_type = extension.get("type")
+                    elif is_extension_item(item):
+                        extension = item  # type: ignore
+                        extension_type = extension.get("type")
 
-                if extension_type == "system_event":
-                    warnings.append(
-                        f"System event ignored: {extension.get('event_type', 'unknown')}"
+                        if extension_type == "system_event":
+                            warnings.append(
+                                create_warning(
+                                    f"System event ignored: {extension.get('event_type', 'unknown')}",
+                                    category=ErrorCategory.CONVERSION,
+                                    severity=ErrorSeverity.LOW,
+                                    context={
+                                        "item_index": i,
+                                        "extension_type": extension_type,
+                                        "event_type": extension.get("event_type"),
+                                    },
+                                    suggestions=[
+                                        "Anthropic does not support system events"
+                                    ],
+                                )
+                            )
+                        elif extension_type == "tool_chain_node":
+                            warnings.append(
+                                create_warning(
+                                    "Tool chain converted to sequential calls",
+                                    category=ErrorCategory.CONVERSION,
+                                    severity=ErrorSeverity.MEDIUM,
+                                    context={
+                                        "item_index": i,
+                                        "extension_type": extension_type,
+                                    },
+                                    suggestions=[
+                                        "Consider using sequential tool calls instead of tool chains"
+                                    ],
+                                )
+                            )
+                            # 可以将工具链节点展开为普通工具调用 Can expand tool chain nodes into normal tool calls
+                            tool_call = extension.get("tool_call")
+                            if tool_call:
+                                # 创建一个assistant消息包含工具调用 Create an assistant message containing tool call
+                                anthropic_message = {
+                                    "role": "assistant",
+                                    "content": [
+                                        ToolCallConverter.to_anthropic(tool_call)
+                                    ],
+                                }
+                                messages.append(anthropic_message)
+                        elif extension_type in ["batch_marker", "session_control"]:
+                            warnings.append(
+                                create_warning(
+                                    f"Extension item ignored: {extension_type}",
+                                    category=ErrorCategory.CONVERSION,
+                                    severity=ErrorSeverity.LOW,
+                                    context={
+                                        "item_index": i,
+                                        "extension_type": extension_type,
+                                    },
+                                    suggestions=[
+                                        "Anthropic does not support this extension type"
+                                    ],
+                                )
+                            )
+
+                except Exception as e:
+                    # 转换单个项目时出错，包装为ConversionError
+                    conversion_error = self.handle_conversion_error(
+                        e, "IR", "Anthropic", i, {"item": item}
                     )
-                elif extension_type == "tool_chain_node":
-                    warnings.append("Tool chain converted to sequential calls")
-                    # 可以将工具链节点展开为普通工具调用 Can expand tool chain nodes into normal tool calls
-                    tool_call = extension.get("tool_call")
-                    if tool_call:
-                        # 创建一个assistant消息包含工具调用 Create an assistant message containing tool call
-                        anthropic_message = {
-                            "role": "assistant",
-                            "content": [ToolCallConverter.to_anthropic(tool_call)],
-                        }
-                        messages.append(anthropic_message)
-                elif extension_type in ["batch_marker", "session_control"]:
-                    warnings.append(f"Extension item ignored: {extension_type}")
+                    raise conversion_error
 
-        # 构建结果 Build result
-        result = {"messages": messages}
+            # 构建结果 Build result
+            result = {"messages": messages}
 
-        # 添加system消息（如果有） Add system message (if any)
-        if system_messages:
-            result["system"] = system_messages
+            # 添加system消息（如果有） Add system message (if any)
+            if system_messages:
+                result["system"] = system_messages
 
-        # 添加工具定义 Add tool definitions
-        if tools:
-            result["tools"] = ToolConverter.batch_convert_tools(tools, "anthropic")
+            # 添加工具定义 Add tool definitions
+            if tools:
+                try:
+                    result["tools"] = ToolConverter.batch_convert_tools(
+                        tools, "anthropic"
+                    )
+                except Exception as e:
+                    conversion_error = self.handle_conversion_error(
+                        e, "IR tools", "Anthropic tools", context={"tools": tools}
+                    )
+                    raise conversion_error
 
-        # 添加工具选择 Add tool choice
-        if tool_choice:
-            result["tool_choice"] = ToolConverter.convert_tool_choice(
-                tool_choice, "anthropic"
+            # 添加工具选择 Add tool choice
+            if tool_choice:
+                try:
+                    result["tool_choice"] = ToolConverter.convert_tool_choice(
+                        tool_choice, "anthropic"
+                    )
+                except Exception as e:
+                    conversion_error = self.handle_conversion_error(
+                        e,
+                        "IR tool_choice",
+                        "Anthropic tool_choice",
+                        context={"tool_choice": tool_choice},
+                    )
+                    raise conversion_error
+
+            return result, warnings
+
+        except ConversionError:
+            # 重新抛出ConversionError
+            raise
+        except Exception as e:
+            # 包装其他异常为ConversionError
+            conversion_error = self.handle_conversion_error(
+                e, "IR", "Anthropic", context={"ir_input_length": len(ir_input)}
             )
-
-        return result, warnings
+            raise conversion_error
 
     def from_provider(self, provider_data: Any) -> IRInput:
         """
@@ -174,85 +255,152 @@ class AnthropicConverter(BaseConverter):
         return ir_input
 
     def _convert_content_to_anthropic(
-        self, content: List[ContentPart]
+        self, content: List[ContentPart], item_index: Optional[int] = None
     ) -> List[Dict[str, Any]]:
         """将IR内容部分转换为Anthropic内容块
         Convert IR content parts to Anthropic content blocks
         """
         blocks = []
 
-        for part in content:
-            part_type = part.get("type")
+        for part_index, part in enumerate(content):
+            try:
+                part_type = part.get("type")
 
-            if part_type == "text":
-                blocks.append(TextPart(type="text", text=part["text"]))
+                if part_type == "text":
+                    if "text" not in part:
+                        raise ConversionError(
+                            "Text part missing 'text' field",
+                            source_format="IR",
+                            target_format="Anthropic",
+                            item_index=item_index,
+                            context={"part_index": part_index, "part": part},
+                        )
+                    blocks.append(TextPart(type="text", text=part["text"]))
 
-            elif part_type == "image":
-                image_url = FieldMapper.get_image_url(part)
-                image_data = FieldMapper.get_image_data(part)
+                elif part_type == "image":
+                    image_url = FieldMapper.get_image_url(part)
+                    image_data = FieldMapper.get_image_data(part)
 
-                if image_data:
-                    # base64形式 base64 form
-                    blocks.append(
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": image_data["media_type"],
-                                "data": image_data["data"],
-                            },
-                        }
+                    if image_data:
+                        # base64形式 base64 form
+                        blocks.append(
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": image_data["media_type"],
+                                    "data": image_data["data"],
+                                },
+                            }
+                        )
+                    elif image_url:
+                        # URL形式 URL form
+                        # 注意：这里是 provider 格式的字典，不是 IR 格式
+                        blocks.append(
+                            {
+                                "type": "image",
+                                "source": {"type": "url", "url": image_url},
+                            }
+                        )
+                    else:
+                        raise ConversionError(
+                            "Image part must have either image_url or image_data",
+                            source_format="IR",
+                            target_format="Anthropic",
+                            item_index=item_index,
+                            context={"part_index": part_index, "part": part},
+                        )
+
+                elif part_type == "file":
+                    # Anthropic支持文档类型 Anthropic supports document type
+                    if "file_data" in part:
+                        file_data = part["file_data"]
+                        blocks.append(
+                            {
+                                "type": "document",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": file_data["media_type"],
+                                    "data": file_data["data"],
+                                },
+                            }
+                        )
+                    elif "file_url" in part:
+                        # 注意：这里是 provider 格式的字典，不是 IR 格式
+                        blocks.append(
+                            {
+                                "type": "document",
+                                "source": {"type": "url", "url": part["file_url"]},
+                            }
+                        )
+                    else:
+                        raise ConversionError(
+                            "File part must have either file_data or file_url",
+                            source_format="IR",
+                            target_format="Anthropic",
+                            item_index=item_index,
+                            context={"part_index": part_index, "part": part},
+                        )
+
+                elif part_type == "tool_call":
+                    try:
+                        blocks.append(ToolCallConverter.to_anthropic(part))
+                    except Exception as e:
+                        raise ConversionError(
+                            f"Failed to convert tool call: {str(e)}",
+                            source_format="IR",
+                            target_format="Anthropic",
+                            item_index=item_index,
+                            context={"part_index": part_index, "part": part},
+                            original_error=e,
+                        )
+
+                elif part_type == "tool_result":
+                    # 使用ErrorConverter处理工具结果
+                    tool_result_part = ErrorConverter.convert_ir_error_to_provider(
+                        part, "anthropic"
                     )
-                elif image_url:
-                    # URL形式 URL form
+                    blocks.append(tool_result_part)
+
+                elif part_type == "reasoning":
+                    # Anthropic支持thinking块 Anthropic supports thinking blocks
+                    if "reasoning" not in part:
+                        raise ConversionError(
+                            "Reasoning part missing 'reasoning' field",
+                            source_format="IR",
+                            target_format="Anthropic",
+                            item_index=item_index,
+                            context={"part_index": part_index, "part": part},
+                        )
                     # 注意：这里是 provider 格式的字典，不是 IR 格式
-                    blocks.append(
-                        {
-                            "type": "image",
-                            "source": {"type": "url", "url": image_url},
-                        }
+                    blocks.append({"type": "thinking", "thinking": part["reasoning"]})
+
+                else:
+                    raise ConversionError(
+                        f"Unsupported content part type: {part_type}",
+                        source_format="IR",
+                        target_format="Anthropic",
+                        item_index=item_index,
+                        context={"part_index": part_index, "part": part},
+                        suggestions=[
+                            "Use supported content types: text, image, file, tool_call, tool_result, reasoning",
+                            "Check the IR specification for valid content part types",
+                        ],
                     )
 
-            elif part_type == "file":
-                # Anthropic支持文档类型 Anthropic supports document type
-                if "file_data" in part:
-                    file_data = part["file_data"]
-                    blocks.append(
-                        {
-                            "type": "document",
-                            "source": {
-                                "type": "base64",
-                                "media_type": file_data["media_type"],
-                                "data": file_data["data"],
-                            },
-                        }
-                    )
-                elif "file_url" in part:
-                    # 注意：这里是 provider 格式的字典，不是 IR 格式
-                    blocks.append(
-                        {
-                            "type": "document",
-                            "source": {"type": "url", "url": part["file_url"]},
-                        }
-                    )
-
-            elif part_type == "tool_call":
-                blocks.append(ToolCallConverter.to_anthropic(part))
-
-            elif part_type == "tool_result":
-                blocks.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": part["tool_call_id"],
-                        "content": part["result"],
-                        "is_error": part.get("is_error", False),
-                    }
+            except ConversionError:
+                # 重新抛出ConversionError
+                raise
+            except Exception as e:
+                # 包装其他异常
+                raise ConversionError(
+                    f"Unexpected error converting content part: {str(e)}",
+                    source_format="IR",
+                    target_format="Anthropic",
+                    item_index=item_index,
+                    context={"part_index": part_index, "part": part},
+                    original_error=e,
                 )
-
-            elif part_type == "reasoning":
-                # Anthropic支持thinking块 Anthropic supports thinking blocks
-                # 注意：这里是 provider 格式的字典，不是 IR 格式
-                blocks.append({"type": "thinking", "thinking": part["reasoning"]})
 
         return blocks
 

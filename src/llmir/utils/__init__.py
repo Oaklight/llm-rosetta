@@ -5,6 +5,7 @@ LLMIR - Common utility module
 Provides common tools and helper functions shared between converters
 """
 
+from .error_converter import ErrorConverter
 from .field_mapper import FieldMapper
 from .tool_call_converter import ToolCallConverter
 from .tool_converter import ToolConverter
@@ -13,4 +14,5 @@ __all__ = [
     "FieldMapper",
     "ToolCallConverter",
     "ToolConverter",
+    "ErrorConverter",
 ]
