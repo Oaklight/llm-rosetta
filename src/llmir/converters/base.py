@@ -8,7 +8,15 @@ Defines the basic interface for converters (abstract base class, layered templat
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
-from ..types.ir import IRInput, ToolChoice, ToolDefinition
+from ..types.ir import (
+    ImagePart,
+    IRInput,
+    TextPart,
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
 
 
 class BaseConverter(ABC):
@@ -76,42 +84,42 @@ class BaseConverter(ABC):
     # ==================== 共性内容类型转换接口 Common content type conversion interfaces ====================
 
     @abstractmethod
-    def _ir_text_to_p(self, text_part: Dict[str, Any]) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为Provider文本内容"""
         pass
 
     @abstractmethod
-    def _p_text_to_ir(self, provider_text: Any) -> Dict[str, Any]:
+    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
         """Provider Text Content → IR TextPart / Provider文本内容转换为IR文本部分"""
         pass
 
     @abstractmethod
-    def _ir_image_to_p(self, image_part: Dict[str, Any]) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为Provider图像内容"""
         pass
 
     @abstractmethod
-    def _p_image_to_ir(self, provider_image: Any) -> Dict[str, Any]:
+    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / Provider图像内容转换为IR图像部分"""
         pass
 
     @abstractmethod
-    def _ir_tool_call_to_p(self, tool_call_part: Dict[str, Any]) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Provider工具调用"""
         pass
 
     @abstractmethod
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> Dict[str, Any]:
+    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / Provider工具调用转换为IR工具调用部分"""
         pass
 
     @abstractmethod
-    def _ir_tool_result_to_p(self, tool_result_part: Dict[str, Any]) -> Any:
+    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Provider工具结果"""
         pass
 
     @abstractmethod
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> Dict[str, Any]:
+    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / Provider工具结果转换为IR工具结果部分"""
         pass
 
