@@ -13,6 +13,7 @@ from ..types.ir import (
     IRInput,
     Message,
     TextPart,
+    ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
@@ -126,18 +127,16 @@ class GoogleConverter(BaseConverter):
                 if message["role"] == "system":
                     # Google使用system_instruction而不是system消息 Google uses system_instruction instead of system messages
                     if system_instruction is None:
-                        system_instruction = self._convert_message_to_content(
-                            message, ir_input
-                        )
+                        system_instruction = self._ir_message_to_p(message, ir_input)
                     else:
                         # 如果有多个system消息，合并它们 If there are multiple system messages, merge them
                         existing_parts = system_instruction.get("parts", [])
-                        new_parts = self._convert_message_to_content(
-                            message, ir_input
-                        ).get("parts", [])
+                        new_parts = self._ir_message_to_p(message, ir_input).get(
+                            "parts", []
+                        )
                         system_instruction["parts"] = existing_parts + new_parts
                 else:
-                    content = self._convert_message_to_content(message, ir_input)
+                    content = self._ir_message_to_p(message, ir_input)
                     if content:
                         contents.append(content)
             elif is_extension_item(item):
@@ -207,16 +206,16 @@ class GoogleConverter(BaseConverter):
         for candidate in candidates:
             content = candidate.get("content")
             if content:
-                message = self._convert_content_to_message(content)
+                message = self._p_message_to_ir(content)
                 if message:
                     messages.append(message)
 
         return messages
 
-    def _convert_message_to_content(
-        self, message: Dict[str, Any], ir_input: IRInput
-    ) -> Dict[str, Any]:
-        """将IR消息转换为Google Content"""
+    # ==================== 分层转换方法实现 Layered conversion method implementations ====================
+
+    def _ir_message_to_p(self, message: Dict[str, Any], ir_input: IRInput) -> Any:
+        """IR Message → Provider Message / IR消息转换为Provider消息"""
         # 角色映射
         role_mapping = {
             "user": "user",
@@ -229,85 +228,47 @@ class GoogleConverter(BaseConverter):
 
         # 转换内容部分
         for content_part in message["content"]:
-            part = self._convert_content_part_to_part(content_part, ir_input)
+            part = self._ir_content_part_to_p(content_part, ir_input)
             if part:
                 parts.append(part)
 
         content = {"role": google_role, "parts": parts}
         return content
 
-    def _convert_content_part_to_part(
+    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+        """Provider Message → IR Message / Provider消息转换为IR消息"""
+        # 角色映射
+        role_mapping = {"user": "user", "model": "assistant"}
+
+        google_role = provider_message.get("role", "user")
+        ir_role = role_mapping.get(google_role, "user")
+
+        # 转换parts
+        parts = provider_message.get("parts", [])
+        if not isinstance(parts, list):
+            parts = [parts]
+
+        content_parts = []
+        for part in parts:
+            converted_parts = self._p_content_part_to_ir(part)
+            if converted_parts:
+                content_parts.extend(converted_parts)
+
+        if not content_parts:
+            return None
+
+        return {"role": ir_role, "content": content_parts}
+
+    def _ir_content_part_to_p(
         self, content_part: Dict[str, Any], ir_input: IRInput
-    ) -> Optional[Dict[str, Any]]:
-        """将IR内容部分转换为Google Part
-
-        注意：如果content_part包含provider_metadata中的thought_signature，
-        会将其添加到返回的Part中。这对于Gemini 3模型是必需的。
-        """
+    ) -> Any:
+        """IR ContentPart → Provider Content/Part / IR内容部分转换为Provider内容/Part"""
         if is_text_part(content_part):
-            part = {"text": content_part["text"]}
-            # 检查是否有thought_signature需要保留
-            if "provider_metadata" in content_part:
-                metadata = content_part["provider_metadata"]
-                if "google" in metadata and "thought_signature" in metadata["google"]:
-                    part["thoughtSignature"] = metadata["google"]["thought_signature"]
-            return part
-
+            return self._ir_text_to_p(content_part)
         elif content_part["type"] == "image":
-            # Google使用inline_data或file_data
-            # 支持多种字段格式
-            if "image_data" in content_part:
-                image_data = content_part["image_data"]
-                return {
-                    "inline_data": {
-                        "mime_type": image_data["media_type"],
-                        "data": image_data["data"],
-                    }
-                }
-            elif "data" in content_part and "media_type" in content_part:
-                # 直接的data和media_type字段
-                return {
-                    "inline_data": {
-                        "mime_type": content_part["media_type"],
-                        "data": content_part["data"],
-                    }
-                }
-            elif "image_url" in content_part:
-                # 对于URL，Google需要先上传文件或使用file_data
-                warnings.warn(
-                    "Google GenAI不直接支持图片URL，需要先上传文件。"
-                    "请考虑使用file_data或先转换为inline_data。"
-                )
-                return None
-            elif "url" in content_part:
-                # 支持url字段
-                warnings.warn(
-                    "Google GenAI不直接支持图片URL，需要先上传文件。"
-                    "请考虑使用file_data或先转换为inline_data。"
-                )
-                return None
-
+            return self._ir_image_to_p(content_part)
         elif content_part["type"] == "file":
-            if "file_data" in content_part:
-                file_data = content_part["file_data"]
-                return {
-                    "inline_data": {
-                        "mime_type": file_data["media_type"],
-                        "data": file_data["data"],
-                    }
-                }
-            elif "data" in content_part and "media_type" in content_part:
-                # 直接的data和media_type字段
-                return {
-                    "inline_data": {
-                        "mime_type": content_part["media_type"],
-                        "data": content_part["data"],
-                    }
-                }
-            elif "file_url" in content_part:
-                warnings.warn("Google GenAI不直接支持文件URL，需要先上传文件。")
-                return None
-
+            return self._ir_file_to_p(content_part)
         elif content_part["type"] == "audio":
             # 处理音频内容
             if "data" in content_part and "media_type" in content_part:
@@ -328,102 +289,37 @@ class GoogleConverter(BaseConverter):
             else:
                 warnings.warn("不支持的音频格式")
                 return None
-
         elif is_tool_call_part(content_part):
-            return ToolCallConverter.to_google(content_part, preserve_metadata=True)
-
+            return self._ir_tool_call_to_p(content_part)
         elif is_tool_result_part(content_part):
-            # Google的function_response.name需要是函数名，而不是tool_call_id
-            # 我们需要回溯历史记录找到对应的tool_call来获取函数名
-            tool_name = None
-            for msg in ir_input:
-                if not is_message(msg):
-                    continue
-                for part in msg.get("content", []):
-                    if is_tool_call_part(part) and part.get(
-                        "tool_call_id"
-                    ) == content_part.get("tool_call_id"):
-                        tool_name = part.get("tool_name")
-                        break
-                if tool_name:
-                    break
-
-            if not tool_name:
-                warnings.warn(
-                    f"Could not find corresponding tool call for tool_call_id '{content_part.get('tool_call_id')}'. "
-                    "Using tool_call_id as function name, which may cause issues with Google GenAI."
-                )
-                tool_name = content_part.get("tool_call_id")
-
-            # 使用FieldMapper统一处理字段名
-            result_content = FieldMapper.get_result_content(content_part)
-
-            response_data = {"output": result_content}
-            if content_part.get("is_error"):
-                response_data = {"error": result_content}
-
-            return {
-                "function_response": {
-                    "name": tool_name,  # 使用找到的函数名
-                    "response": response_data,
-                }
-            }
-
+            return self._ir_tool_result_to_p_with_context(content_part, ir_input)
         else:
             warnings.warn(f"不支持的内容类型: {content_part['type']}")
             return None
 
-    def _convert_content_to_message(
-        self, content: Dict[str, Any], force_role: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
-        """将Google Content转换为IR消息"""
-        # 角色映射
-        role_mapping = {"user": "user", "model": "assistant"}
-
-        google_role = content.get("role", "user")
-        ir_role = force_role or role_mapping.get(google_role, "user")
-
-        # 转换parts
-        parts = content.get("parts", [])
-        if not isinstance(parts, list):
-            parts = [parts]
-
-        content_parts = []
-        for part in parts:
-            converted_parts = self._convert_part_to_content_parts(part)
-            if converted_parts:
-                content_parts.extend(converted_parts)
-
-        if not content_parts:
-            return None
-
-        return {"role": ir_role, "content": content_parts}
-
-    def _convert_part_to_content_parts(
-        self, part: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
-        """将Google Part转换为一个或多个IR内容部分"""
+    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+        """Provider Content/Part → IR ContentPart(s) / Provider内容/Part转换为IR内容部分"""
         ir_parts = []
-        if "text" in part and part["text"] is not None and part["text"] != "":
-            ir_parts.append(TextPart(type="text", text=part["text"]))
+        if (
+            "text" in provider_part
+            and provider_part["text"] is not None
+            and provider_part["text"] != ""
+        ):
+            ir_parts.append(self._p_text_to_ir(provider_part))
 
         # 支持两种命名格式：function_call（SDK）和 functionCall（REST API）
-        func_call = part.get("function_call") or part.get("functionCall")
+        func_call = provider_part.get("function_call") or provider_part.get(
+            "functionCall"
+        )
         if func_call is not None:
-            ir_parts.append(ToolCallConverter.from_google(part, preserve_metadata=True))
+            ir_parts.append(self._p_tool_call_to_ir(provider_part))
 
-        if "inline_data" in part and part["inline_data"] is not None:
-            inline_data = part["inline_data"]
+        if "inline_data" in provider_part and provider_part["inline_data"] is not None:
+            inline_data = provider_part["inline_data"]
             mime_type = inline_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
-                ir_parts.append(
-                    {
-                        "type": "image",
-                        "data": inline_data["data"],
-                        "media_type": mime_type,
-                    }
-                )
+                ir_parts.append(self._p_image_to_ir(provider_part))
             elif mime_type.startswith("audio/"):
                 # 保持音频类型为 "audio"，这是测试期望的
                 ir_parts.append(
@@ -434,18 +330,10 @@ class GoogleConverter(BaseConverter):
                     }
                 )
             else:
-                ir_parts.append(
-                    {
-                        "type": "file",
-                        "file_data": {
-                            "data": inline_data["data"],
-                            "media_type": mime_type,
-                        },
-                    }
-                )
+                ir_parts.append(self._p_file_to_ir(provider_part))
 
-        if "file_data" in part and part["file_data"] is not None:
-            file_data = part["file_data"]
+        if "file_data" in provider_part and provider_part["file_data"] is not None:
+            file_data = provider_part["file_data"]
             mime_type = file_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
@@ -465,26 +353,17 @@ class GoogleConverter(BaseConverter):
                 ir_parts.append(FilePart(type="file", file_url=file_data["file_uri"]))
 
         # 支持两种命名格式：function_response（SDK）和 functionResponse（REST API）
-        func_response = part.get("function_response") or part.get("functionResponse")
+        func_response = provider_part.get("function_response") or provider_part.get(
+            "functionResponse"
+        )
         if func_response is not None:
-            response_data = func_response.get("response", {})
-
-            # 检查是否是错误响应
-            is_error = "error" in response_data
-            content = response_data.get("error" if is_error else "output", "")
-
-            ir_parts.append(
-                ToolResultPart(
-                    type="tool_result",
-                    tool_call_id=func_response.get("id", func_response.get("name", "")),
-                    result=str(content),
-                    is_error=is_error,
-                )
-            )
+            ir_parts.append(self._p_tool_result_to_ir(provider_part))
 
         # 处理独立的thoughtSignature（在text或其他part中）
         # 这种情况下，signature会附加到最后一个part上
-        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+        thought_sig = provider_part.get("thoughtSignature") or provider_part.get(
+            "thought_signature"
+        )
         if thought_sig and ir_parts:
             # 将signature添加到最后一个part的metadata中
             last_part = ir_parts[-1]
@@ -497,8 +376,211 @@ class GoogleConverter(BaseConverter):
         if not ir_parts:
             # 过滤掉已知的可忽略字段
             ignorable_keys = {"thoughtSignature", "thought_signature"}
-            unknown_keys = set(part.keys()) - ignorable_keys
+            unknown_keys = set(provider_part.keys()) - ignorable_keys
             if unknown_keys:
                 warnings.warn(f"不支持的Part类型: {list(unknown_keys)}")
 
         return ir_parts
+
+    # ==================== 类型特定转换方法实现 Type-specific conversion method implementations ====================
+
+    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+        """IR TextPart → Provider Text Content / IR文本部分转换为Provider文本内容"""
+        part = {"text": text_part["text"]}
+        # 检查是否有thought_signature需要保留
+        if "provider_metadata" in text_part:
+            metadata = text_part["provider_metadata"]
+            if "google" in metadata and "thought_signature" in metadata["google"]:
+                part["thoughtSignature"] = metadata["google"]["thought_signature"]
+        return part
+
+    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+        """Provider Text Content → IR TextPart / Provider文本内容转换为IR文本部分"""
+        return TextPart(type="text", text=provider_text["text"])
+
+    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+        """IR ImagePart → Provider Image Content / IR图像部分转换为Provider图像内容"""
+        # Google使用inline_data或file_data
+        # 支持多种字段格式
+        if "image_data" in image_part:
+            image_data = image_part["image_data"]
+            return {
+                "inline_data": {
+                    "mime_type": image_data["media_type"],
+                    "data": image_data["data"],
+                }
+            }
+        elif "data" in image_part and "media_type" in image_part:
+            # 直接的data和media_type字段
+            return {
+                "inline_data": {
+                    "mime_type": image_part["media_type"],
+                    "data": image_part["data"],
+                }
+            }
+        elif "image_url" in image_part:
+            # 对于URL，Google需要先上传文件或使用file_data
+            warnings.warn(
+                "Google GenAI不直接支持图片URL，需要先上传文件。"
+                "请考虑使用file_data或先转换为inline_data。"
+            )
+            return None
+        elif "url" in image_part:
+            # 支持url字段
+            warnings.warn(
+                "Google GenAI不直接支持图片URL，需要先上传文件。"
+                "请考虑使用file_data或先转换为inline_data。"
+            )
+            return None
+
+    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+        """Provider Image Content → IR ImagePart / Provider图像内容转换为IR图像部分"""
+        inline_data = provider_image["inline_data"]
+        return {
+            "type": "image",
+            "data": inline_data["data"],
+            "media_type": inline_data["mime_type"],
+        }
+
+    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+        """IR FilePart → Provider File Content / IR文件部分转换为Provider文件内容"""
+        if "file_data" in file_part:
+            file_data = file_part["file_data"]
+            return {
+                "inline_data": {
+                    "mime_type": file_data["media_type"],
+                    "data": file_data["data"],
+                }
+            }
+        elif "data" in file_part and "media_type" in file_part:
+            # 直接的data和media_type字段
+            return {
+                "inline_data": {
+                    "mime_type": file_part["media_type"],
+                    "data": file_part["data"],
+                }
+            }
+        elif "file_url" in file_part:
+            warnings.warn("Google GenAI不直接支持文件URL，需要先上传文件。")
+            return None
+
+    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+        """Provider File Content → IR FilePart / Provider文件内容转换为IR文件部分"""
+        inline_data = provider_file["inline_data"]
+        return {
+            "type": "file",
+            "file_data": {
+                "data": inline_data["data"],
+                "media_type": inline_data["mime_type"],
+            },
+        }
+
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+        """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Provider工具调用"""
+        return ToolCallConverter.to_google(tool_call_part, preserve_metadata=True)
+
+    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+        """Provider Tool Call → IR ToolCallPart / Provider工具调用转换为IR工具调用部分"""
+        return ToolCallConverter.from_google(provider_tool_call, preserve_metadata=True)
+
+    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+        """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Provider工具结果"""
+        # 注意：Google转换器需要额外的ir_input参数来查找对应的tool_call
+        # 这里我们使用tool_call_id作为函数名的fallback
+        tool_name = tool_result_part.get("tool_call_id")
+
+        # 使用FieldMapper统一处理字段名
+        result_content = FieldMapper.get_result_content(tool_result_part)
+
+        response_data = {"output": result_content}
+        if tool_result_part.get("is_error"):
+            response_data = {"error": result_content}
+
+        return {
+            "function_response": {
+                "name": tool_name,  # 使用tool_call_id作为函数名
+                "response": response_data,
+            }
+        }
+
+    def _ir_tool_result_to_p_with_context(
+        self, tool_result_part: ToolResultPart, ir_input: IRInput
+    ) -> Any:
+        """IR ToolResultPart → Provider Tool Result with context / 带上下文的IR工具结果部分转换为Provider工具结果"""
+        # Google的function_response.name需要是函数名，而不是tool_call_id
+        # 我们需要回溯历史记录找到对应的tool_call来获取函数名
+        tool_name = None
+        for msg in ir_input:
+            if not is_message(msg):
+                continue
+            for part in msg.get("content", []):
+                if is_tool_call_part(part) and part.get(
+                    "tool_call_id"
+                ) == tool_result_part.get("tool_call_id"):
+                    tool_name = part.get("tool_name")
+                    break
+            if tool_name:
+                break
+
+        if not tool_name:
+            warnings.warn(
+                f"Could not find corresponding tool call for tool_call_id '{tool_result_part.get('tool_call_id')}'. "
+                "Using tool_call_id as function name, which may cause issues with Google GenAI."
+            )
+            tool_name = tool_result_part.get("tool_call_id")
+
+        # 使用FieldMapper统一处理字段名
+        result_content = FieldMapper.get_result_content(tool_result_part)
+
+        response_data = {"output": result_content}
+        if tool_result_part.get("is_error"):
+            response_data = {"error": result_content}
+
+        return {
+            "function_response": {
+                "name": tool_name,  # 使用找到的函数名
+                "response": response_data,
+            }
+        }
+
+    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+        """Provider Tool Result → IR ToolResultPart / Provider工具结果转换为IR工具结果部分"""
+        func_response = provider_tool_result.get(
+            "function_response"
+        ) or provider_tool_result.get("functionResponse")
+        response_data = func_response.get("response", {})
+
+        # 检查是否是错误响应
+        is_error = "error" in response_data
+        content = response_data.get("error" if is_error else "output", "")
+
+        return ToolResultPart(
+            type="tool_result",
+            tool_call_id=func_response.get("id", func_response.get("name", "")),
+            result=str(content),
+            is_error=is_error,
+        )
+
+    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+        """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为Provider工具定义"""
+        return ToolConverter.convert_tool(tool, "google")
+
+    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+        """Provider Tool Definition → IR ToolDefinition / Provider工具定义转换为IR工具定义"""
+        # 这个方法在当前实现中不需要，因为from_provider不处理工具定义
+        # 但为了完整性，提供一个基本实现
+        raise NotImplementedError(
+            "Google converter does not support converting tools from provider format"
+        )
+
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+        """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为Provider工具选择配置"""
+        return ToolConverter.convert_tool_choice(tool_choice, "google")
+
+    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+        """Provider Tool Choice Config → IR ToolChoice / Provider工具选择配置转换为IR工具选择"""
+        # 这个方法在当前实现中不需要，因为from_provider不处理工具选择
+        # 但为了完整性，提供一个基本实现
+        raise NotImplementedError(
+            "Google converter does not support converting tool choice from provider format"
+        )
