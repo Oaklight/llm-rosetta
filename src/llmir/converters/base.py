@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple
 
 from ..types.ir import (
+    FilePart,
     ImagePart,
     IRInput,
     TextPart,
@@ -101,6 +102,16 @@ class BaseConverter(ABC):
     @abstractmethod
     def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / Provider图像内容转换为IR图像部分"""
+        pass
+
+    @abstractmethod
+    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+        """IR FilePart → Provider File Content / IR文件部分转换为Provider文件内容"""
+        pass
+
+    @abstractmethod
+    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+        """Provider File Content → IR FilePart / Provider文件内容转换为IR文件部分"""
         pass
 
     @abstractmethod
