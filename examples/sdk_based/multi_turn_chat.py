@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 from examples.tools import available_tools, tools_spec
 from llmir.converters.anthropic_converter import AnthropicConverter
 from llmir.converters.google_converter import GoogleConverter
-from llmir.converters.openai_chat_converter import OpenAIChatConverter
+from llmir.converters.openai_chat import OpenAIChatConverter
 from llmir.converters.openai_responses_converter import (
     OpenAIResponsesConverter,
 )

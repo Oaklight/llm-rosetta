@@ -4,7 +4,7 @@ LLMIR - Anthropic Converter
 实现IR与Anthropic格式之间的转换
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..types.ir import (
     FilePart,
@@ -35,7 +35,7 @@ class AnthropicConverter(BaseConverter):
     def to_provider(
         self,
         ir_input: IRInput,
-        tools: Optional[List[ToolDefinition]] = None,
+        tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """

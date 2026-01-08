@@ -5,7 +5,7 @@ IR响应消息类型，基于 ir_design_final.md 的最终设计
 IR response message types based on the final design of ir_design_final.md
 """
 
-from typing import Any, Dict, List, Literal, TypedDict, Union
+from typing import Any, Dict, Iterable, List, Literal, TypedDict, Union
 
 from typing_extensions import NotRequired, Required
 
@@ -45,7 +45,7 @@ class Message(TypedDict):
     """
 
     role: Required[Literal["system", "user", "assistant"]]
-    content: Required[List["ContentPart"]]
+    content: Required[Iterable["ContentPart"]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -339,7 +339,9 @@ class ToolChainNode(TypedDict):
     type: Required[Literal["tool_chain_node"]]
     node_id: Required[str]
     tool_call: Required[ToolCallPart]
-    depends_on: NotRequired[List[str]]  # 依赖的节点ID列表 List of dependent node IDs
+    depends_on: NotRequired[
+        Iterable[str]
+    ]  # 依赖的节点ID列表 List of dependent node IDs
     auto_execute: NotRequired[bool]  # 是否自动执行 Whether to auto execute
 
 
@@ -451,10 +453,10 @@ class IRResponse(TypedDict):
 
 
 # 完整的IR输入（支持扩展项） Complete IR input (supports extension items)
-IRInput = List[Union[Message, ExtensionItem]]
+IRInput = Iterable[Union[Message, ExtensionItem]]
 
 # 简化的IR输入（只有消息） Simplified IR input (messages only)
-IRInputSimple = List[Message]
+IRInputSimple = Iterable[Message]
 
 # ============================================================================
 # 类型守卫函数 Type guard functions

@@ -6,7 +6,7 @@ Implement conversion between IR and OpenAI Responses API format
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..types.ir import (
     FileData,
@@ -41,7 +41,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def to_provider(
         self,
         ir_input: IRInput,
-        tools: Optional[List[ToolDefinition]] = None,
+        tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为OpenAI Responses API格式

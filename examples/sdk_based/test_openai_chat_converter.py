@@ -26,7 +26,7 @@ import dotenv
 from openai import OpenAI
 
 from examples.tools import available_tools, tools_spec
-from llmir.converters.openai_chat_converter import OpenAIChatConverter
+from llmir.converters.openai_chat import OpenAIChatConverter
 from llmir.types.ir import (
     ImagePart,
     Message,

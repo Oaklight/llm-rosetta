@@ -116,7 +116,7 @@ class TestBaseConverter:
         ir_input = {"role": "user", "content": []}
         errors = self.converter.validate_ir_input(ir_input)
         assert len(errors) == 1
-        assert "must be a list" in errors[0]
+        assert "must be an iterable" in errors[0]
 
     def test_validate_ir_input_item_not_dict(self):
         """测试列表项不是字典"""
