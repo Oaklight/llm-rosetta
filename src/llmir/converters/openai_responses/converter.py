@@ -6,9 +6,9 @@ Implement conversion between IR and OpenAI Responses API format
 """
 
 import re
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from ..types.ir import (
+from ...types.ir import (
     FileData,
     FilePart,
     ImagePart,
@@ -26,8 +26,10 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
-from ..utils import FieldMapper, ToolCallConverter, ToolConverter
-from .base import BaseConverter
+from ...types.ir_request import IRRequest
+from ...types.ir_response import IRResponse
+from ...utils import FieldMapper, ToolCallConverter, ToolConverter
+from ..base import BaseConverter
 
 
 class OpenAIResponsesConverter(BaseConverter):
@@ -40,7 +42,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: IRInput,
+        ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
@@ -50,6 +52,10 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             Tuple[转换后的数据, 警告信息列表] / Tuple[converted data, warning list]
         """
+        if isinstance(ir_input, dict) and "messages" in ir_input:
+            # Handle IRRequest
+            return self._ir_request_to_p(ir_input)
+
         # 验证输入 / Validate input
         validation_errors = self.validate_ir_input(ir_input)
         if validation_errors:
@@ -105,7 +111,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> IRInput:
+    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
         """将OpenAI Responses API格式转换为IR格式
         Convert OpenAI Responses API format to IR format
 
@@ -124,6 +130,10 @@ class OpenAIResponsesConverter(BaseConverter):
 
         if not isinstance(provider_data, dict):
             raise ValueError("OpenAI Responses data must be a dictionary")
+
+        # If it's a full API response, convert to IRResponse
+        if "id" in provider_data and "output" in provider_data:
+            return self._p_response_to_ir(provider_data)
 
         # 响应数据在output字段，请求数据在input字段
         # Response data in output field, request data in input field
@@ -210,6 +220,261 @@ class OpenAIResponsesConverter(BaseConverter):
         return ir_input
 
     # ==================== 分层方法 Layer methods ====================
+
+    def _ir_request_to_p(
+        self, ir_request: IRRequest
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """将IRRequest转换为OpenAI Responses API请求参数
+        Convert IRRequest to OpenAI Responses API request parameters
+        """
+        warnings = []
+        result = {
+            "model": ir_request["model"],
+        }
+
+        # 1. 处理消息 / Handle messages
+        items = []
+
+        # 处理 system_instruction / Handle system_instruction
+        system_instruction = ir_request.get("system_instruction")
+        if system_instruction:
+            if isinstance(system_instruction, str):
+                result["instructions"] = system_instruction
+            elif isinstance(system_instruction, list):
+                result["instructions"] = self._ir_text_to_p_batch(system_instruction)
+
+        # 处理 messages / Handle messages
+        ir_input = ir_request["messages"]
+        for item in ir_input:
+            if is_message(item):
+                converted, msg_warnings = self._ir_message_to_p(item, ir_input)
+                warnings.extend(msg_warnings)
+                if isinstance(converted, list):
+                    items.extend(converted)
+                elif converted:
+                    items.append(converted)
+            elif is_extension_item(item):
+                # 扩展项处理逻辑与 to_provider 一致
+                extension_type = item.get("type")
+                if extension_type == "system_event":
+                    items.append(
+                        {
+                            "type": "system_event",
+                            "event_type": item.get("event_type"),
+                            "timestamp": item.get("timestamp"),
+                            "message": item.get("message", ""),
+                        }
+                    )
+                elif extension_type == "tool_chain_node":
+                    tool_call = item.get("tool_call")
+                    if tool_call:
+                        items.append(self._ir_tool_call_to_p(tool_call))
+                else:
+                    warnings.append(
+                        f"Extension item ignored in request: {extension_type}"
+                    )
+
+        result["input"] = items
+
+        # 2. 处理工具 / Handle tools
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = ToolConverter.batch_convert_tools(
+                tools, "openai_responses"
+            )
+
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = ToolConverter.convert_tool_choice(
+                tool_choice, "openai_responses"
+            )
+
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            if "disable_parallel" in tool_config:
+                result["parallel_tool_calls"] = not tool_config["disable_parallel"]
+            if "max_calls" in tool_config:
+                result["max_tool_calls"] = tool_config["max_calls"]
+
+        # 3. 处理生成配置 / Handle generation config
+        gen_config = ir_request.get("generation", {})
+        if gen_config:
+            for ir_field, p_field in [
+                ("temperature", "temperature"),
+                ("top_p", "top_p"),
+                ("max_tokens", "max_output_tokens"),
+                ("top_logprobs", "top_logprobs"),
+            ]:
+                if ir_field in gen_config:
+                    result[p_field] = gen_config[ir_field]
+
+            if "truncation" in gen_config:
+                result["truncation"] = gen_config["truncation"]
+
+            # Unmapped fields
+            for field in [
+                "top_k",
+                "frequency_penalty",
+                "presence_penalty",
+                "logit_bias",
+                "seed",
+                "n",
+                "stop_sequences",
+            ]:
+                if field in gen_config:
+                    warnings.append(
+                        f"OpenAI Responses API does not support {field}, ignored"
+                    )
+
+        # 4. 处理响应格式 / Handle response format
+        resp_format = ir_request.get("response_format")
+        if resp_format:
+            fmt_type = resp_format.get("type")
+            if fmt_type == "text":
+                result["text"] = {"type": "text"}
+            elif fmt_type == "json_object":
+                result["text"] = {"type": "json_object"}
+            elif fmt_type == "json_schema":
+                result["text"] = {
+                    "type": "json_schema",
+                    "json_schema": resp_format.get("json_schema", {}),
+                }
+
+        # 5. 处理推理配置 / Handle reasoning config
+        reasoning = ir_request.get("reasoning")
+        if reasoning:
+            reasoning_p = {}
+            if "type" in reasoning:
+                reasoning_p["type"] = reasoning["type"]
+            if "effort" in reasoning:
+                reasoning_p["effort"] = reasoning["effort"]
+            if reasoning_p:
+                result["reasoning"] = reasoning_p
+
+        # 6. 处理流式配置 / Handle stream config
+        stream = ir_request.get("stream")
+        if stream:
+            if "enabled" in stream:
+                result["stream"] = stream["enabled"]
+            if stream.get("include_usage") and result.get("stream"):
+                result["stream_options"] = {"include_obfuscation": True}
+
+        # 7. 处理缓存配置 / Handle cache config
+        cache = ir_request.get("cache")
+        if cache:
+            if "key" in cache:
+                result["prompt_cache_key"] = cache["key"]
+            if "retention" in cache:
+                result["prompt_cache_retention"] = cache["retention"]
+
+        # 8. 处理扩展参数 / Handle provider extensions
+        extensions = ir_request.get("provider_extensions")
+        if extensions:
+            result.update(extensions)
+
+        return result, warnings
+
+    def _ir_text_to_p_batch(self, content: List[TextPart]) -> str:
+        """批量转换文本内容为字符串 / Batch convert text content to string"""
+        text_parts = []
+        for part in content:
+            if is_text_part(part):
+                text_parts.append(part["text"])
+        return " ".join(text_parts)
+
+    def _p_response_to_ir(self, provider_response: Dict[str, Any]) -> IRResponse:
+        """将OpenAI Responses API响应转换为IRResponse
+        Convert OpenAI Responses API response to IRResponse
+        """
+        # OpenAI Responses API uses 'output' list instead of 'choices'
+        # We convert each item in 'output' to a choice if it's a message
+        choices = []
+        output_items = provider_response.get("output", [])
+
+        # Determine finish reason from status
+        status = provider_response.get("status")
+        finish_reason_val = "stop"
+        if status == "completed":
+            finish_reason_val = "stop"
+        elif status == "incomplete":
+            incomplete_details = provider_response.get("incomplete_details", {})
+            reason = incomplete_details.get("reason")
+            if reason == "max_output_tokens":
+                finish_reason_val = "length"
+            elif reason == "content_filter":
+                finish_reason_val = "content_filter"
+            else:
+                finish_reason_val = "stop"
+        elif status == "failed":
+            finish_reason_val = "error"
+        elif status == "cancelled":
+            finish_reason_val = "cancelled"
+
+        # Group output items into messages
+        # In Responses API, output can contain multiple items (message, tool_call, reasoning)
+        # We'll try to reconstruct a single assistant message for the first choice
+        ir_items = []
+        for item in output_items:
+            converted = self._p_item_to_ir(item)
+            if isinstance(converted, list):
+                ir_items.extend(converted)
+            elif converted:
+                ir_items.append(converted)
+
+        # Filter for content parts that belong to a message
+        message_content = [
+            item
+            for item in ir_items
+            if isinstance(item, dict)
+            and "type" in item
+            and item["type"] not in ["system_event"]
+        ]
+
+        if message_content:
+            choices.append(
+                {
+                    "index": 0,
+                    "message": Message(role="assistant", content=message_content),
+                    "finish_reason": {"reason": finish_reason_val},
+                }
+            )
+
+        ir_response = {
+            "id": provider_response.get("id", ""),
+            "object": "response",
+            "created": int(provider_response.get("created_at", 0)),
+            "model": provider_response.get("model", ""),
+            "choices": choices,
+        }
+
+        # 处理使用统计 / Handle usage
+        p_usage = provider_response.get("usage")
+        if p_usage:
+            usage_info = {
+                "prompt_tokens": p_usage.get("input_tokens", 0),
+                "completion_tokens": p_usage.get("output_tokens", 0),
+                "total_tokens": p_usage.get("total_tokens", 0),
+            }
+
+            # 处理详细统计 / Handle detailed statistics
+            p_input_details = p_usage.get("input_tokens_details")
+            if p_input_details:
+                if "cached_tokens" in p_input_details:
+                    usage_info["cache_read_tokens"] = p_input_details["cached_tokens"]
+
+            p_output_details = p_usage.get("output_tokens_details")
+            if p_output_details:
+                if "reasoning_tokens" in p_output_details:
+                    usage_info["reasoning_tokens"] = p_output_details[
+                        "reasoning_tokens"
+                    ]
+
+            ir_response["usage"] = usage_info
+
+        if "service_tier" in provider_response:
+            ir_response["service_tier"] = provider_response["service_tier"]
+
+        return ir_response
 
     def _ir_message_to_p(
         self, message: Dict[str, Any], ir_input: IRInput
@@ -394,7 +659,8 @@ class OpenAIResponsesConverter(BaseConverter):
         item_type = provider_item.get("type")
 
         if item_type == "message":
-            return self._p_message_to_ir(provider_item)
+            msg = self._p_message_to_ir(provider_item)
+            return msg.get("content", []) if msg else []
 
         elif item_type in [
             "function_call",

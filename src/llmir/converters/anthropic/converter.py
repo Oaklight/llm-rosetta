@@ -4,9 +4,9 @@ LLMIR - Anthropic Converter
 实现IR与Anthropic格式之间的转换
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from ..types.ir import (
+from ...types.ir import (
     FilePart,
     ImagePart,
     IRInput,
@@ -23,8 +23,10 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
-from ..utils import FieldMapper, ToolCallConverter, ToolConverter
-from .base import BaseConverter
+from ...types.ir_request import IRRequest
+from ...types.ir_response import IRResponse
+from ...utils import FieldMapper, ToolCallConverter, ToolConverter
+from ..base import BaseConverter
 
 
 class AnthropicConverter(BaseConverter):
@@ -34,7 +36,7 @@ class AnthropicConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: IRInput,
+        ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
@@ -45,6 +47,10 @@ class AnthropicConverter(BaseConverter):
         Anthropic使用嵌套结构，与IR设计最接近，转换相对简单
         Anthropic uses nested structure, closest to IR design, conversion is relatively simple
         """
+        if isinstance(ir_input, dict) and "messages" in ir_input:
+            # Handle IRRequest
+            return self._ir_request_to_p(ir_input)
+
         # 验证输入 Validate input
         validation_errors = self.validate_ir_input(ir_input)
         if validation_errors:
@@ -126,7 +132,7 @@ class AnthropicConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> IRInput:
+    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
         """
         将Anthropic格式转换为IR格式
         Convert Anthropic format to IR format
@@ -141,6 +147,14 @@ class AnthropicConverter(BaseConverter):
 
         if not isinstance(provider_data, dict):
             raise ValueError("Anthropic data must be a dictionary")
+
+        # If it's a full API response, convert to IRResponse
+        if (
+            "id" in provider_data
+            and "type" in provider_data
+            and provider_data["type"] == "message"
+        ):
+            return self._p_response_to_ir(provider_data)
 
         ir_input = []
 
@@ -184,6 +198,215 @@ class AnthropicConverter(BaseConverter):
         return ir_input
 
     # ==================== 分层方法 Layer methods ====================
+
+    def _ir_request_to_p(
+        self, ir_request: IRRequest
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """将IRRequest转换为Anthropic请求参数
+        Convert IRRequest to Anthropic request parameters
+        """
+        warnings = []
+        result = {
+            "model": ir_request["model"],
+        }
+
+        # 1. 处理消息 / Handle messages
+        messages = []
+
+        # 处理 system_instruction / Handle system_instruction
+        system_instruction = ir_request.get("system_instruction")
+        if system_instruction:
+            if isinstance(system_instruction, str):
+                result["system"] = system_instruction
+            elif isinstance(system_instruction, list):
+                result["system"] = self._ir_text_to_p_batch(system_instruction)
+
+        # 处理 messages / Handle messages
+        ir_input = ir_request["messages"]
+        for item in ir_input:
+            if is_message(item):
+                if item["role"] == "system":
+                    # Anthropic system messages are handled above
+                    continue
+                converted, msg_warnings = self._ir_message_to_p(item, ir_input)
+                warnings.extend(msg_warnings)
+                if converted:
+                    messages.append(converted)
+            elif is_extension_item(item):
+                extension_type = item.get("type")
+                if extension_type == "tool_chain_node":
+                    tool_call = item.get("tool_call")
+                    if tool_call:
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "content": [self._ir_tool_call_to_p(tool_call)],
+                            }
+                        )
+                else:
+                    warnings.append(
+                        f"Extension item ignored in request: {extension_type}"
+                    )
+
+        result["messages"] = messages
+
+        # 2. 处理工具 / Handle tools
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = [self._ir_tool_to_p(tool) for tool in tools]
+
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = self._ir_tool_choice_to_p(tool_choice)
+
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            if "disable_parallel" in tool_config:
+                # Anthropic handles this in tool_choice or as a separate param depending on SDK version
+                # Here we follow the mapping doc which suggests it's part of tool_choice
+                if "tool_choice" not in result:
+                    result["tool_choice"] = {"type": "auto"}
+                result["tool_choice"]["disable_parallel_tool_use"] = tool_config[
+                    "disable_parallel"
+                ]
+            if "max_calls" in tool_config:
+                warnings.append("Anthropic does not support max_tool_calls, ignored")
+
+        # 3. 处理生成配置 / Handle generation config
+        gen_config = ir_request.get("generation", {})
+
+        # Anthropic requires max_tokens
+        result["max_tokens"] = gen_config.get("max_tokens", 4096)
+
+        if gen_config:
+            if "temperature" in gen_config:
+                # Anthropic temperature is 0.0-1.0
+                result["temperature"] = min(gen_config["temperature"], 1.0)
+            if "top_p" in gen_config:
+                result["top_p"] = gen_config["top_p"]
+            if "top_k" in gen_config:
+                result["top_k"] = gen_config["top_k"]
+            if "stop_sequences" in gen_config:
+                result["stop_sequences"] = list(gen_config["stop_sequences"])
+
+            # Unmapped fields
+            for field in [
+                "frequency_penalty",
+                "presence_penalty",
+                "logit_bias",
+                "seed",
+                "logprobs",
+                "n",
+            ]:
+                if field in gen_config:
+                    warnings.append(f"Anthropic does not support {field}, ignored")
+
+        # 4. 处理响应格式 / Handle response format
+        if "response_format" in ir_request:
+            warnings.append(
+                "Anthropic does not support response_format, use system instructions or tools instead"
+            )
+
+        # 5. 处理推理配置 / Handle reasoning config
+        reasoning = ir_request.get("reasoning")
+        if reasoning:
+            thinking = {}
+            if reasoning.get("type") == "enabled":
+                thinking["type"] = "enabled"
+                if "budget_tokens" in reasoning:
+                    thinking["budget_tokens"] = reasoning["budget_tokens"]
+                result["thinking"] = thinking
+            elif reasoning.get("type") == "disabled":
+                result["thinking"] = {"type": "disabled"}
+
+        # 6. 处理流式配置 / Handle stream config
+        stream = ir_request.get("stream")
+        if stream:
+            if "enabled" in stream:
+                result["stream"] = stream["enabled"]
+
+        # 7. 处理缓存配置 / Handle cache config
+        # Anthropic cache is block-level, not request-level.
+        # For POC, we might ignore it or apply to system/tools if needed.
+        if "cache" in ir_request:
+            warnings.append(
+                "Anthropic cache control is block-level, request-level cache config ignored"
+            )
+
+        # 8. 处理扩展参数 / Handle provider extensions
+        extensions = ir_request.get("provider_extensions")
+        if extensions:
+            result.update(extensions)
+
+        return result, warnings
+
+    def _ir_text_to_p_batch(self, content: List[TextPart]) -> str:
+        """批量转换文本内容为字符串 / Batch convert text content to string"""
+        text_parts = []
+        for part in content:
+            if is_text_part(part):
+                text_parts.append(part["text"])
+        return " ".join(text_parts)
+
+    def _p_response_to_ir(self, provider_response: Dict[str, Any]) -> IRResponse:
+        """将Anthropic响应转换为IRResponse
+        Convert Anthropic response to IRResponse
+        """
+        import time
+
+        # Anthropic response is a single message, we wrap it in choices[0]
+        ir_message = self._p_message_to_ir(provider_response)
+
+        stop_reason_val = provider_response.get("stop_reason")
+        reason_map = {
+            "end_turn": "stop",
+            "max_tokens": "length",
+            "tool_use": "tool_calls",
+            "stop_sequence": "stop",
+            "refusal": "refusal",
+        }
+
+        choice_info = {
+            "index": 0,
+            "message": ir_message,
+            "finish_reason": {"reason": reason_map.get(stop_reason_val, "stop")},
+        }
+
+        if "stop_sequence" in provider_response:
+            choice_info["finish_reason"]["stop_sequence"] = provider_response[
+                "stop_sequence"
+            ]
+
+        ir_response = {
+            "id": provider_response.get("id", ""),
+            "object": "response",
+            "created": int(time.time()),  # Anthropic doesn't provide timestamp
+            "model": provider_response.get("model", ""),
+            "choices": [choice_info],
+        }
+
+        # 处理使用统计 / Handle usage
+        p_usage = provider_response.get("usage")
+        if p_usage:
+            input_tokens = p_usage.get("input_tokens", 0)
+            output_tokens = p_usage.get("output_tokens", 0)
+            usage_info = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+            }
+
+            if "cache_read_input_tokens" in p_usage:
+                usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
+
+            # Detailed completion tokens (reasoning)
+            # Anthropic thinking tokens are part of output_tokens
+            # If we have thinking blocks, we could potentially count them,
+            # but usually it's provided in usage if supported.
+
+            ir_response["usage"] = usage_info
+
+        return ir_response
 
     def _ir_message_to_p(
         self, message: Dict[str, Any], ir_input: IRInput

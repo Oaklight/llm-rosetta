@@ -5,11 +5,11 @@ LLMIR - Converters Package
 Provides converter implementations between various providers
 """
 
-from .anthropic_converter import AnthropicConverter
 from .base import BaseConverter
-from .google_converter import GoogleConverter
+from .anthropic import AnthropicConverter
+from .google import GoogleConverter
 from .openai_chat import OpenAIChatConverter
-from .openai_responses_converter import OpenAIResponsesConverter
+from .openai_responses import OpenAIResponsesConverter
 
 __all__ = [
     "BaseConverter",
