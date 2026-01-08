@@ -16,10 +16,10 @@ from openai import OpenAI
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from examples.tools import available_tools, tools_spec
-from llmir.converters.anthropic_converter import AnthropicConverter
-from llmir.converters.google_converter import GoogleConverter
+from llmir.converters.anthropic import AnthropicConverter
+from llmir.converters.google import GoogleConverter
 from llmir.converters.openai_chat import OpenAIChatConverter
-from llmir.converters.openai_responses_converter import (
+from llmir.converters.openai_responses import (
     OpenAIResponsesConverter,
 )
 from llmir.types.ir import (
@@ -188,7 +188,10 @@ def main():
     ir_from_openai = openai_converter.from_provider(
         openai_response.choices[0].message.model_dump()
     )
-    ir_messages.extend(ir_from_openai)
+    if isinstance(ir_from_openai, dict) and "choices" in ir_from_openai:
+        ir_messages.append(ir_from_openai["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_openai)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])
@@ -212,7 +215,10 @@ def main():
         ir_from_openai_final = openai_converter.from_provider(
             openai_final_response.choices[0].message.model_dump()
         )
-        ir_messages.extend(ir_from_openai_final)
+        if isinstance(ir_from_openai_final, dict) and "choices" in ir_from_openai_final:
+            ir_messages.append(ir_from_openai_final["choices"][0]["message"])
+        else:
+            ir_messages.extend(ir_from_openai_final)
         display_assistant_response(ir_messages[-1])
 
     # ========================================================================
@@ -248,7 +254,10 @@ def main():
     ir_from_anthropic = anthropic_converter.from_provider(
         anthropic_response.model_dump()
     )
-    ir_messages.extend(ir_from_anthropic)
+    if isinstance(ir_from_anthropic, dict) and "choices" in ir_from_anthropic:
+        ir_messages.append(ir_from_anthropic["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_anthropic)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])
@@ -277,7 +286,13 @@ def main():
         ir_from_anthropic_final = anthropic_converter.from_provider(
             anthropic_final_response.model_dump()
         )
-        ir_messages.extend(ir_from_anthropic_final)
+        if (
+            isinstance(ir_from_anthropic_final, dict)
+            and "choices" in ir_from_anthropic_final
+        ):
+            ir_messages.append(ir_from_anthropic_final["choices"][0]["message"])
+        else:
+            ir_messages.extend(ir_from_anthropic_final)
         display_assistant_response(ir_messages[-1])
 
     # ========================================================================
@@ -312,7 +327,10 @@ def main():
 
     # --- Conversion: Google → IR ---
     ir_from_google = google_converter.from_provider(google_response.model_dump())
-    ir_messages.extend(ir_from_google)
+    if isinstance(ir_from_google, dict) and "choices" in ir_from_google:
+        ir_messages.append(ir_from_google["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_google)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])
@@ -338,7 +356,10 @@ def main():
         ir_from_google_final = google_converter.from_provider(
             google_final_response.model_dump()
         )
-        ir_messages.extend(ir_from_google_final)
+        if isinstance(ir_from_google_final, dict) and "choices" in ir_from_google_final:
+            ir_messages.append(ir_from_google_final["choices"][0]["message"])
+        else:
+            ir_messages.extend(ir_from_google_final)
         display_assistant_response(ir_messages[-1])
 
     # ========================================================================
@@ -384,7 +405,10 @@ def main():
             ir_from_responses = openai_responses_converter.from_provider(
                 responses_response.model_dump()
             )
-            ir_messages.extend(ir_from_responses)
+            if isinstance(ir_from_responses, dict) and "choices" in ir_from_responses:
+                ir_messages.append(ir_from_responses["choices"][0]["message"])
+            else:
+                ir_messages.extend(ir_from_responses)
 
             # --- Display Response ---
             display_assistant_response(ir_messages[-1])
@@ -419,7 +443,15 @@ def main():
                     ir_from_final_responses = openai_responses_converter.from_provider(
                         responses_final_response.model_dump()
                     )
-                    ir_messages.extend(ir_from_final_responses)
+                    if (
+                        isinstance(ir_from_final_responses, dict)
+                        and "choices" in ir_from_final_responses
+                    ):
+                        ir_messages.append(
+                            ir_from_final_responses["choices"][0]["message"]
+                        )
+                    else:
+                        ir_messages.extend(ir_from_final_responses)
                     display_assistant_response(ir_messages[-1])
                 except Exception as e:
                     print(f"Error in final Responses API call: {e}")
@@ -457,7 +489,10 @@ def main():
     ir_from_openai = openai_converter.from_provider(
         openai_response.choices[0].message.model_dump()
     )
-    ir_messages.extend(ir_from_openai)
+    if isinstance(ir_from_openai, dict) and "choices" in ir_from_openai:
+        ir_messages.append(ir_from_openai["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_openai)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])
@@ -500,7 +535,10 @@ def main():
     ir_from_anthropic = anthropic_converter.from_provider(
         anthropic_response.model_dump()
     )
-    ir_messages.extend(ir_from_anthropic)
+    if isinstance(ir_from_anthropic, dict) and "choices" in ir_from_anthropic:
+        ir_messages.append(ir_from_anthropic["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_anthropic)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])
@@ -542,7 +580,10 @@ def main():
 
     # --- Conversion: Google → IR ---
     ir_from_google = google_converter.from_provider(google_response.model_dump())
-    ir_messages.extend(ir_from_google)
+    if isinstance(ir_from_google, dict) and "choices" in ir_from_google:
+        ir_messages.append(ir_from_google["choices"][0]["message"])
+    else:
+        ir_messages.extend(ir_from_google)
 
     # --- Display Response ---
     display_assistant_response(ir_messages[-1])

@@ -5,13 +5,15 @@ LLMIR - Google GenAI Converter
 """
 
 import warnings
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+import time
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from ..types.ir import (
+from ...types.ir import (
     FilePart,
     ImagePart,
     IRInput,
     Message,
+    ReasoningPart,
     TextPart,
     ToolCallPart,
     ToolChoice,
@@ -23,8 +25,10 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
-from ..utils import FieldMapper, ToolCallConverter, ToolConverter
-from .base import BaseConverter
+from ...types.ir_request import IRRequest
+from ...types.ir_response import IRResponse
+from ...utils import FieldMapper, ToolCallConverter, ToolConverter
+from ..base import BaseConverter
 
 
 class GoogleConverter(BaseConverter):
@@ -97,7 +101,7 @@ class GoogleConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: IRInput,
+        ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
@@ -105,13 +109,17 @@ class GoogleConverter(BaseConverter):
         Convert IR format to Google GenAI format
 
         Args:
-            ir_input: IR输入列表 IR input list
+            ir_input: IR输入列表或请求对象 IR input list or request object
             tools: 工具定义列表 Tool definition list
             tool_choice: 工具选择配置 Tool choice configuration
 
         Returns:
             (Google GenAI格式的字典, 警告列表) (Google GenAI format dict, warning list)
         """
+        if isinstance(ir_input, dict) and "messages" in ir_input:
+            # Handle IRRequest
+            return self._ir_request_to_p(ir_input)
+
         # 对于无效格式，让其在处理过程中自然抛出KeyError或TypeError For invalid formats, let KeyError or TypeError be thrown naturally during processing
         # 不进行预先验证，让错误在访问字段时自然发生 No pre-validation, let errors occur naturally when accessing fields
 
@@ -167,12 +175,12 @@ class GoogleConverter(BaseConverter):
 
         return result, warnings_list
 
-    def from_provider(self, provider_data: Any) -> IRInput:
+    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
         """将Google GenAI格式转换为IR格式
 
         Args:
             provider_data: Google GenAI响应对象或字典
-                          自动处理Pydantic模型对象（调用.model_dump()）
+                          自动处理Pydantic model对象（调用.model_dump()）
         """
         # 自动unwrap Pydantic模型对象
         if isinstance(provider_data, tuple):
@@ -183,6 +191,10 @@ class GoogleConverter(BaseConverter):
 
         if not isinstance(provider_data, dict):
             raise ValueError("Google data must be a dictionary")
+
+        # If it's a full API response, convert to IRResponse
+        if "candidates" in provider_data and "response_id" in provider_data:
+            return self._p_response_to_ir(provider_data)
 
         messages = []
 
@@ -213,6 +225,185 @@ class GoogleConverter(BaseConverter):
         return messages
 
     # ==================== 分层转换方法实现 Layered conversion method implementations ====================
+
+    def _ir_request_to_p(
+        self, ir_request: IRRequest
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """将IRRequest转换为Google GenAI请求参数
+        Convert IRRequest to Google GenAI request parameters
+        """
+        warnings_list = []
+        result = {
+            "model": ir_request["model"],
+        }
+
+        # 1. 处理消息 / Handle messages
+        contents = []
+        system_instruction = None
+
+        # 处理 system_instruction / Handle system_instruction
+        ir_system = ir_request.get("system_instruction")
+        if ir_system:
+            if isinstance(ir_system, str):
+                system_instruction = {"role": "user", "parts": [{"text": ir_system}]}
+            elif isinstance(ir_system, list):
+                parts = []
+                for part in ir_system:
+                    if is_text_part(part):
+                        parts.append({"text": part["text"]})
+                system_instruction = {"role": "user", "parts": parts}
+
+        # 处理 messages / Handle messages
+        ir_input = ir_request["messages"]
+        for item in ir_input:
+            if is_message(item):
+                if item["role"] == "system":
+                    # Merge into system_instruction
+                    msg_p = self._ir_message_to_p(item, ir_input)
+                    if system_instruction is None:
+                        system_instruction = msg_p
+                    else:
+                        system_instruction["parts"].extend(msg_p.get("parts", []))
+                else:
+                    content = self._ir_message_to_p(item, ir_input)
+                    if content:
+                        contents.append(content)
+            elif is_extension_item(item):
+                warnings_list.append(
+                    f"Extension item ignored in request: {item.get('type')}"
+                )
+
+        result["contents"] = contents
+        if system_instruction:
+            result["system_instruction"] = system_instruction
+
+        # 2. 处理工具 / Handle tools
+        tools = ir_request.get("tools")
+        tool_choice = ir_request.get("tool_choice")
+        tool_config = ir_request.get("tool_config")
+
+        config = {}
+        if tools:
+            config["tools"] = ToolConverter.batch_convert_tools(tools, "google")
+
+        if tool_choice:
+            tc_p = ToolConverter.convert_tool_choice(tool_choice, "google")
+            if tc_p:
+                config["tool_config"] = tc_p
+
+        if tool_config:
+            if "disable_parallel" in tool_config:
+                # Google handles this in function_calling_config
+                if "tool_config" not in config:
+                    config["tool_config"] = {"function_calling_config": {}}
+                # Note: Google SDK might not have a direct "disable_parallel" field in tool_config
+                # but some versions support it. We follow the mapping or common patterns.
+                # For now, we just pass it through if it's a known field in some versions.
+                pass
+
+        # 3. 处理生成配置 / Handle generation config
+        gen_config = ir_request.get("generation", {})
+        if gen_config:
+            for ir_field, p_field in [
+                ("temperature", "temperature"),
+                ("top_p", "top_p"),
+                ("top_k", "top_k"),
+                ("max_tokens", "max_output_tokens"),
+                ("stop_sequences", "stop_sequences"),
+                ("frequency_penalty", "frequency_penalty"),
+                ("presence_penalty", "presence_penalty"),
+                ("seed", "seed"),
+                ("candidate_count", "candidate_count"),
+            ]:
+                if ir_field in gen_config:
+                    config[p_field] = gen_config[ir_field]
+
+        # 4. 响应格式 / Response format
+        resp_format = ir_request.get("response_format")
+        if resp_format:
+            fmt_type = resp_format.get("type")
+            if fmt_type == "json_object":
+                config["response_mime_type"] = "application/json"
+            elif fmt_type == "json_schema":
+                config["response_mime_type"] = "application/json"
+                config["response_schema"] = resp_format.get("json_schema")
+
+        result["config"] = config
+
+        # 5. 推理配置 / Reasoning config
+        # Google reasoning is usually automatic or model-specific (e.g. Gemini 2.0 Thinking)
+        # We don't have a direct config field for it in GenerateContentConfig yet,
+        # but we can pass it through provider_extensions if needed.
+
+        # 6. 流式配置 / Stream config
+        # Handled by the client method (generate_content vs generate_content_stream)
+
+        # 7. 扩展参数 / Provider extensions
+        extensions = ir_request.get("provider_extensions")
+        if extensions:
+            # Merge into config or top level depending on the field
+            # For Google, most go into config
+            config.update(extensions)
+
+        return result, warnings_list
+
+    def _p_response_to_ir(self, provider_response: Dict[str, Any]) -> IRResponse:
+        """将Google GenAI响应转换为IRResponse
+        Convert Google GenAI response to IRResponse
+        """
+        choices = []
+        candidates = provider_response.get("candidates", [])
+
+        for p_candidate in candidates:
+            content = p_candidate.get("content")
+            message = (
+                self._p_message_to_ir(content)
+                if content
+                else Message(role="assistant", content=[])
+            )
+
+            finish_reason_val = p_candidate.get("finish_reason")
+            # 映射停止原因 / Map finish reason
+            # Google values: STOP, MAX_TOKENS, SAFETY, RECITATION, OTHER
+            reason_map = {
+                "STOP": "stop",
+                "MAX_TOKENS": "length",
+                "SAFETY": "content_filter",
+                "RECITATION": "content_filter",
+                "OTHER": "error",
+            }
+
+            choice_info = {
+                "index": p_candidate.get("index", 0),
+                "message": message,
+                "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
+            }
+            choices.append(choice_info)
+
+        ir_response = {
+            "id": provider_response.get("response_id", ""),
+            "object": "response",
+            "created": int(time.time()),  # Google doesn't provide timestamp
+            "model": provider_response.get("model_version", ""),
+            "choices": choices,
+        }
+
+        # 处理使用统计 / Handle usage
+        p_usage = provider_response.get("usage_metadata")
+        if p_usage:
+            usage_info = {
+                "prompt_tokens": p_usage.get("prompt_token_count", 0),
+                "completion_tokens": p_usage.get("candidates_token_count", 0),
+                "total_tokens": p_usage.get("total_token_count", 0),
+            }
+
+            # 推理 Token / Reasoning tokens
+            if "thoughts_token_count" in p_usage:
+                usage_info["reasoning_tokens"] = p_usage["thoughts_token_count"]
+
+            ir_response["usage"] = usage_info
+
+        return ir_response
 
     def _ir_message_to_p(self, message: Dict[str, Any], ir_input: IRInput) -> Any:
         """IR Message → Provider Message / IR消息转换为Provider消息"""
@@ -250,6 +441,13 @@ class GoogleConverter(BaseConverter):
 
         content_parts = []
         for part in parts:
+            # Handle reasoning (thoughts)
+            if part.get("thought") is True:
+                content_parts.append(
+                    ReasoningPart(type="reasoning", reasoning=part.get("text", ""))
+                )
+                continue
+
             converted_parts = self._p_content_part_to_ir(part)
             if converted_parts:
                 content_parts.extend(converted_parts)

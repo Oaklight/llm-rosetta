@@ -4,7 +4,7 @@ OpenAI Responses API转换器测试
 
 import pytest
 
-from llmir.converters.openai_responses_converter import (
+from llmir.converters.openai_responses import (
     OpenAIResponsesConverter,
 )
 from llmir.types.ir import ToolCallPart

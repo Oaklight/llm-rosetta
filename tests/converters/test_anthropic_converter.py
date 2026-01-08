@@ -4,7 +4,7 @@
 
 import pytest
 
-from llmir.converters.anthropic_converter import AnthropicConverter
+from llmir.converters.anthropic import AnthropicConverter
 from llmir.types.ir import IRInput, ToolChoice, ToolDefinition
 
 
