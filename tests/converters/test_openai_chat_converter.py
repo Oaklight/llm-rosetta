@@ -4,7 +4,7 @@ OpenAI Chat Completions转换器测试
 
 import pytest
 
-from llmir.converters.openai_chat_converter import (
+from llmir.converters.openai_chat import (
     OpenAIChatConverter,
 )
 from llmir.types.ir import ToolCallPart

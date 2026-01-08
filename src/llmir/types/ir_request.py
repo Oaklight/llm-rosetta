@@ -10,7 +10,15 @@ Unified request parameter types based on sdk_body_structures.md
 - 渐进式复杂度：简单场景不需要了解所有参数
 """
 
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, TypedDict, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterable,
+    Literal,
+    TypedDict,
+    Union,
+)
 
 from typing_extensions import NotRequired, Required
 
@@ -40,7 +48,7 @@ class ToolDefinition(TypedDict):
     name: Required[str]
     description: NotRequired[str]
     parameters: NotRequired[Dict[str, Any]]  # JSON Schema
-    required_parameters: NotRequired[List[str]]
+    required_parameters: NotRequired[Iterable[str]]
     metadata: NotRequired[Dict[str, Any]]
 
 
@@ -118,7 +126,7 @@ class GenerationConfig(TypedDict, total=False):
     # OpenAI: stop (str | List[str])
     # Anthropic: stop_sequences (List[str])
     # Google: config.stop_sequences (List[str])
-    stop_sequences: List[str]
+    stop_sequences: Iterable[str]
 
     # 截断策略 Truncation strategy (OpenAI Responses, 少见)
     truncation: Literal["auto", "disabled"]
@@ -252,10 +260,10 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[Union[str, List[Dict[str, Any]]]]
+    system_instruction: NotRequired[Union[str, Iterable[Dict[str, Any]]]]
 
     # ========== 工具相关 Tool Related ==========
-    tools: NotRequired[List[ToolDefinition]]
+    tools: NotRequired[Iterable[ToolDefinition]]
     tool_choice: NotRequired[ToolChoice]
     tool_config: NotRequired[ToolCallConfig]
 

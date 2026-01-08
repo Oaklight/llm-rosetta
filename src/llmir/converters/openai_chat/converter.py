@@ -6,9 +6,9 @@ Implement conversion between IR and OpenAI Chat Completions API format
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
-from ..types.ir import (
+from ...types.ir import (
     FileData,
     FilePart,
     ImagePart,
@@ -25,8 +25,10 @@ from ..types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
-from ..utils import FieldMapper, ToolCallConverter, ToolConverter
-from .base import BaseConverter
+from ...types.ir_request import IRRequest
+from ...utils import FieldMapper, ToolCallConverter, ToolConverter
+from ...types.ir_response import IRResponse
+from ..base import BaseConverter
 
 
 class OpenAIChatConverter(BaseConverter):
@@ -36,8 +38,8 @@ class OpenAIChatConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: IRInput,
-        tools: Optional[List[ToolDefinition]] = None,
+        ir_input: Union[IRInput, IRRequest],
+        tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为OpenAI Chat Completions格式
@@ -46,6 +48,10 @@ class OpenAIChatConverter(BaseConverter):
         OpenAI使用扁平结构，需要将工具调用提取到消息级别
         OpenAI uses flat structure, need to extract tool calls to message level
         """
+        if isinstance(ir_input, dict) and "messages" in ir_input:
+            # Handle IRRequest
+            return self._ir_request_to_p(ir_input)
+
         # 验证输入 / Validate input
         validation_errors = self.validate_ir_input(ir_input)
         if validation_errors:
@@ -98,7 +104,7 @@ class OpenAIChatConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> IRInput:
+    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
         """将OpenAI Chat Completions格式转换为IR格式
         Convert OpenAI Chat Completions format to IR format
 
@@ -118,6 +124,10 @@ class OpenAIChatConverter(BaseConverter):
 
         if not isinstance(provider_data, dict):
             raise ValueError("OpenAI data must be a dictionary")
+
+        # If it's a full API response, convert to IRResponse
+        if "choices" in provider_data and "id" in provider_data:
+            return self._p_response_to_ir(provider_data)
 
         ir_input = []
 
@@ -149,6 +159,159 @@ class OpenAIChatConverter(BaseConverter):
         return ir_input
 
     # ==================== 分层方法 Layer methods ====================
+
+    def _ir_request_to_p(
+        self, ir_request: IRRequest
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        """将IRRequest转换为OpenAI Chat Completions请求参数
+        Convert IRRequest to OpenAI Chat Completions request parameters
+        """
+        warnings = []
+        result = {
+            "model": ir_request["model"],
+        }
+
+        # 1. 处理消息 / Handle messages
+        messages = []
+
+        # 处理 system_instruction / Handle system_instruction
+        system_instruction = ir_request.get("system_instruction")
+        if system_instruction:
+            if isinstance(system_instruction, str):
+                messages.append({"role": "system", "content": system_instruction})
+            elif isinstance(system_instruction, list):
+                messages.append(
+                    {
+                        "role": "system",
+                        "content": self._ir_text_to_p_batch(system_instruction),
+                    }
+                )
+
+        # 处理 messages / Handle messages
+        ir_input = ir_request["messages"]
+        for item in ir_input:
+            if is_message(item):
+                converted, msg_warnings = self._ir_message_to_p(item, ir_input)
+                warnings.extend(msg_warnings)
+                if isinstance(converted, list):
+                    messages.extend(converted)
+                elif converted:
+                    messages.append(converted)
+            elif is_extension_item(item):
+                # 扩展项处理逻辑与 to_provider 一致
+                extension_type = item.get("type")
+                if extension_type == "tool_chain_node":
+                    tool_call = item.get("tool_call")
+                    if tool_call:
+                        messages.append(
+                            {
+                                "role": "assistant",
+                                "tool_calls": [self._ir_tool_call_to_p(tool_call)],
+                            }
+                        )
+                else:
+                    warnings.append(
+                        f"Extension item ignored in request: {extension_type}"
+                    )
+
+        result["messages"] = messages
+
+        # 2. 处理工具 / Handle tools
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = ToolConverter.batch_convert_tools(tools, "openai_chat")
+
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = ToolConverter.convert_tool_choice(
+                tool_choice, "openai"
+            )
+
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            if "disable_parallel" in tool_config:
+                result["parallel_tool_calls"] = not tool_config["disable_parallel"]
+            if "max_calls" in tool_config:
+                warnings.append("OpenAI Chat does not support max_tool_calls, ignored")
+
+        # 3. 处理生成配置 / Handle generation config
+        gen_config = ir_request.get("generation", {})
+        if gen_config:
+            # 直接映射的字段 / Directly mapped fields
+            for ir_field, p_field in [
+                ("temperature", "temperature"),
+                ("top_p", "top_p"),
+                ("frequency_penalty", "frequency_penalty"),
+                ("presence_penalty", "presence_penalty"),
+                ("logit_bias", "logit_bias"),
+                ("seed", "seed"),
+                ("logprobs", "logprobs"),
+                ("top_logprobs", "top_logprobs"),
+                ("n", "n"),
+            ]:
+                if ir_field in gen_config:
+                    result[p_field] = gen_config[ir_field]
+
+            # 特殊处理的字段 / Specially handled fields
+            if "max_tokens" in gen_config:
+                result["max_completion_tokens"] = gen_config["max_tokens"]
+
+            if "stop_sequences" in gen_config:
+                stop = list(gen_config["stop_sequences"])
+                if len(stop) == 1:
+                    result["stop"] = stop[0]
+                elif len(stop) > 1:
+                    result["stop"] = stop
+
+            if "top_k" in gen_config:
+                warnings.append("OpenAI Chat does not support top_k, ignored")
+
+        # 4. 处理响应格式 / Handle response format
+        resp_format = ir_request.get("response_format")
+        if resp_format:
+            fmt_type = resp_format.get("type")
+            if fmt_type == "text":
+                result["response_format"] = {"type": "text"}
+            elif fmt_type == "json_object":
+                result["response_format"] = {"type": "json_object"}
+            elif fmt_type == "json_schema":
+                result["response_format"] = {
+                    "type": "json_schema",
+                    "json_schema": resp_format.get("json_schema", {}),
+                }
+
+        # 5. 处理推理配置 / Handle reasoning config
+        reasoning = ir_request.get("reasoning")
+        if reasoning:
+            if "effort" in reasoning:
+                result["reasoning_effort"] = reasoning["effort"]
+            if "budget_tokens" in reasoning:
+                warnings.append(
+                    "OpenAI Chat does not support reasoning budget_tokens, ignored"
+                )
+
+        # 6. 处理流式配置 / Handle stream config
+        stream = ir_request.get("stream")
+        if stream:
+            if "enabled" in stream:
+                result["stream"] = stream["enabled"]
+            if stream.get("include_usage") and result.get("stream"):
+                result["stream_options"] = {"include_usage": True}
+
+        # 7. 处理缓存配置 / Handle cache config
+        cache = ir_request.get("cache")
+        if cache:
+            if "key" in cache:
+                result["prompt_cache_key"] = cache["key"]
+            if "retention" in cache:
+                result["prompt_cache_retention"] = cache["retention"]
+
+        # 8. 处理扩展参数 / Handle provider extensions
+        extensions = ir_request.get("provider_extensions")
+        if extensions:
+            result.update(extensions)
+
+        return result, warnings
 
     def _ir_message_to_p(
         self, message: Dict[str, Any], ir_input: IRInput
@@ -291,6 +454,79 @@ class OpenAIChatConverter(BaseConverter):
             return None, warnings
 
         return None, warnings
+
+    def _p_response_to_ir(self, provider_response: Dict[str, Any]) -> IRResponse:
+        """将OpenAI Chat Completions响应转换为IRResponse
+        Convert OpenAI Chat Completions response to IRResponse
+        """
+        choices = []
+        for p_choice in provider_response.get("choices", []):
+            message = self._p_message_to_ir(
+                p_choice.get("message", p_choice.get("delta", {}))
+            )
+
+            finish_reason_val = p_choice.get("finish_reason")
+            # 映射停止原因 / Map finish reason
+            reason_map = {
+                "stop": "stop",
+                "length": "length",
+                "tool_calls": "tool_calls",
+                "content_filter": "content_filter",
+                "function_call": "tool_calls",
+            }
+
+            choice_info = {
+                "index": p_choice.get("index", 0),
+                "message": message,
+                "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
+            }
+
+            if "logprobs" in p_choice:
+                choice_info["logprobs"] = p_choice["logprobs"]
+
+            choices.append(choice_info)
+
+        ir_response = {
+            "id": provider_response.get("id", ""),
+            "object": "response",
+            "created": provider_response.get("created", 0),
+            "model": provider_response.get("model", ""),
+            "choices": choices,
+        }
+
+        # 处理使用统计 / Handle usage
+        p_usage = provider_response.get("usage")
+        if p_usage:
+            usage_info = {
+                "prompt_tokens": p_usage.get("prompt_tokens", 0),
+                "completion_tokens": p_usage.get("completion_tokens", 0),
+                "total_tokens": p_usage.get("total_tokens", 0),
+            }
+
+            # 处理详细统计 / Handle detailed statistics
+            p_prompt_details = p_usage.get("prompt_tokens_details")
+            if p_prompt_details:
+                usage_info["prompt_tokens_details"] = p_prompt_details
+                if "cached_tokens" in p_prompt_details:
+                    usage_info["cache_read_tokens"] = p_prompt_details["cached_tokens"]
+
+            p_completion_details = p_usage.get("completion_tokens_details")
+            if p_completion_details:
+                usage_info["completion_tokens_details"] = p_completion_details
+                if "reasoning_tokens" in p_completion_details:
+                    usage_info["reasoning_tokens"] = p_completion_details[
+                        "reasoning_tokens"
+                    ]
+
+            ir_response["usage"] = usage_info
+
+        if "service_tier" in provider_response:
+            ir_response["service_tier"] = provider_response["service_tier"]
+
+        if "system_fingerprint" in provider_response:
+            ir_response["system_fingerprint"] = provider_response["system_fingerprint"]
+
+        return ir_response
 
     def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
         """Provider Message → IR Message / OpenAI消息转换为IR消息"""

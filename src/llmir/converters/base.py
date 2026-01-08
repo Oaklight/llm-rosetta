@@ -6,7 +6,7 @@ Defines the basic interface for converters (abstract base class, layered templat
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from ..types.ir import (
     FilePart,
@@ -18,6 +18,7 @@ from ..types.ir import (
     ToolDefinition,
     ToolResultPart,
 )
+from ..types.ir_request import IRRequest
 
 
 class BaseConverter(ABC):
@@ -28,17 +29,17 @@ class BaseConverter(ABC):
     @abstractmethod
     def to_provider(
         self,
-        ir_input: IRInput,
-        tools: Optional[List[ToolDefinition]] = None,
+        ir_input: Union[IRInput, IRRequest],
+        tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为provider特定格式
         Convert IR format to provider-specific format
 
         Args:
-            ir_input: IR格式的输入 / IR format input
-            tools: 工具定义列表 / Tool definition list
-            tool_choice: 工具选择配置 / Tool choice configuration
+            ir_input: IR格式的输入或完整请求 / IR format input or full request
+            tools: 工具定义列表（如果ir_input不是IRRequest） / Tool definition list (if ir_input is not IRRequest)
+            tool_choice: 工具选择配置（如果ir_input不是IRRequest） / Tool choice configuration (if ir_input is not IRRequest)
 
         Returns:
             Tuple[转换后的数据, 警告信息列表] / Tuple[converted data, warning list]
@@ -46,7 +47,7 @@ class BaseConverter(ABC):
         pass
 
     @abstractmethod
-    def from_provider(self, provider_data: Any) -> IRInput:
+    def from_provider(self, provider_data: Any) -> Union[IRInput, Dict[str, Any]]:
         """将provider特定格式转换为IR格式
         Convert provider-specific format to IR format
 
@@ -54,7 +55,7 @@ class BaseConverter(ABC):
             provider_data: provider特定格式的数据 / Provider-specific format data
 
         Returns:
-            IR格式的数据 / IR format data
+            IR格式的数据（消息列表或完整响应） / IR format data (message list or full response)
         """
         pass
 
@@ -166,8 +167,8 @@ class BaseConverter(ABC):
         """
         errors = []
 
-        if not isinstance(ir_input, list):
-            errors.append("IRInput must be a list")
+        if not isinstance(ir_input, Iterable) or isinstance(ir_input, (str, dict)):
+            errors.append("IRInput must be an iterable (but not a string or dict)")
             return errors
 
         for i, item in enumerate(ir_input):

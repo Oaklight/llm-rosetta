@@ -10,7 +10,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from llmir.converters.openai_chat_converter import (
+from llmir.converters.openai_chat import (
     OpenAIChatConverter,
 )
 from llmir.types.ir import extract_text_content, extract_tool_calls
