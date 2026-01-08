@@ -45,6 +45,7 @@ class OpenAIResponsesConverter(BaseConverter):
         ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
+        **kwargs: Any,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为OpenAI Responses API格式
         Convert IR format to OpenAI Responses API format
@@ -111,7 +112,11 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
+    def from_provider(
+        self,
+        provider_data: Any,
+        **kwargs: Any,
+    ) -> Union[IRInput, IRResponse]:
         """将OpenAI Responses API格式转换为IR格式
         Convert OpenAI Responses API format to IR format
 
@@ -477,7 +482,7 @@ class OpenAIResponsesConverter(BaseConverter):
         return ir_response
 
     def _ir_message_to_p(
-        self, message: Dict[str, Any], ir_input: IRInput
+        self, message: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR Message → Provider Message/Item(s) / IR消息转换为Responses API项目
 
@@ -596,7 +601,7 @@ class OpenAIResponsesConverter(BaseConverter):
         return items, warnings
 
     def _ir_content_part_to_p(
-        self, content_part: Dict[str, Any], ir_input: IRInput
+        self, content_part: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR ContentPart → Provider Content/Item / IR内容部分转换为Responses API内容
 
@@ -699,7 +704,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return None
 
-    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+    def _p_message_to_ir(self, provider_message: Any, **kwargs: Any) -> Dict[str, Any]:
         """Provider Message → IR Message / Responses API消息转换为IR消息"""
         if not isinstance(provider_message, dict):
             return None
@@ -721,7 +726,9 @@ class OpenAIResponsesConverter(BaseConverter):
         # Empty messages (content=[]) are also created because subsequent tool calls may need to be appended
         return Message(role=role, content=ir_content)
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(
+        self, provider_part: Any, **kwargs: Any
+    ) -> List[Dict[str, Any]]:
         """Provider Content/Part → IR ContentPart(s) / Responses API内容部分转换为IR内容"""
         if isinstance(provider_part, str):
             return [TextPart(type="text", text=provider_part)]
@@ -745,11 +752,11 @@ class OpenAIResponsesConverter(BaseConverter):
 
     # ==================== 内容类型转换方法 Content type conversion methods ====================
 
-    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart, **kwargs: Any) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为Responses API文本内容"""
         return {"type": "text", "text": text_part["text"]}
 
-    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+    def _p_text_to_ir(self, provider_text: Any, **kwargs: Any) -> TextPart:
         """Provider Text Content → IR TextPart / Responses API文本内容转换为IR文本部分"""
         if isinstance(provider_text, str):
             return TextPart(type="text", text=provider_text)
@@ -761,7 +768,7 @@ class OpenAIResponsesConverter(BaseConverter):
             return TextPart(type="text", text=provider_text["text"])
         return None
 
-    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart, **kwargs: Any) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为Responses API图像内容
 
         注意：图像始终使用 input_image，因为图像只能作为输入
@@ -786,7 +793,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result
 
-    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+    def _p_image_to_ir(self, provider_image: Any, **kwargs: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / Responses API图像内容转换为IR图像部分"""
         detail = provider_image.get("detail", "auto")
 
@@ -815,7 +822,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return ImagePart(type="image", detail=detail)
 
-    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+    def _ir_file_to_p(self, file_part: FilePart, **kwargs: Any) -> Any:
         """IR FilePart → Provider File Content / IR文件部分转换为Responses API文件内容
 
         注意：文件始终使用 input_file，因为文件只能作为输入
@@ -835,7 +842,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result
 
-    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+    def _p_file_to_ir(self, provider_file: Any, **kwargs: Any) -> FilePart:
         """Provider File Content → IR FilePart / Responses API文件内容转换为IR文件部分"""
         file_name = provider_file.get("filename", "unknown")
 
@@ -862,11 +869,13 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return FilePart(type="file", file_name=file_name)
 
-    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart, **kwargs: Any) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Responses API工具调用"""
         return ToolCallConverter.to_openai_responses(tool_call_part)
 
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+    def _p_tool_call_to_ir(
+        self, provider_tool_call: Any, **kwargs: Any
+    ) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / Responses API工具调用转换为IR工具调用部分
 
         Returns:
@@ -875,7 +884,9 @@ class OpenAIResponsesConverter(BaseConverter):
         tool_call = ToolCallConverter.from_openai_responses(provider_tool_call)
         return tool_call
 
-    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+    def _ir_tool_result_to_p(
+        self, tool_result_part: ToolResultPart, **kwargs: Any
+    ) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Responses API工具结果"""
         return {
             "type": "function_call_output",
@@ -885,7 +896,9 @@ class OpenAIResponsesConverter(BaseConverter):
             ),
         }
 
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+    def _p_tool_result_to_ir(
+        self, provider_tool_result: Any, **kwargs: Any
+    ) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / Responses API工具结果转换为IR工具结果部分
 
         Returns:
@@ -919,11 +932,11 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return None
 
-    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+    def _ir_tool_to_p(self, tool: ToolDefinition, **kwargs: Any) -> Any:
         """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为Responses API工具定义"""
         return ToolConverter.convert_tool_definition(tool, "openai_responses")
 
-    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+    def _p_tool_to_ir(self, provider_tool: Any, **kwargs: Any) -> ToolDefinition:
         """Provider Tool Definition → IR ToolDefinition / Responses API工具定义转换为IR工具定义"""
         # Responses API 工具定义格式 / Responses API tool definition format
         if "function" in provider_tool:
@@ -936,11 +949,13 @@ class OpenAIResponsesConverter(BaseConverter):
             }
         return provider_tool
 
-    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice, **kwargs: Any) -> Any:
         """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为Responses API工具选择配置"""
         return ToolConverter.convert_tool_choice(tool_choice, "openai_responses")
 
-    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+    def _p_tool_choice_to_ir(
+        self, provider_tool_choice: Any, **kwargs: Any
+    ) -> ToolChoice:
         """Provider Tool Choice Config → IR ToolChoice / Responses API工具选择配置转换为IR工具选择"""
         # Responses API tool choice format / Responses API tool choice format
         if isinstance(provider_tool_choice, str):

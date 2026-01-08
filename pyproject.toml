@@ -19,7 +19,15 @@ dependencies = ["typing_extensions>=4.0.0"]
 openai = ["openai"]
 anthropic = ["anthropic"]
 google = ["google-genai"]
-dev = ["python-dotenv", "pytest", "pytest-cov"]
+dev = [
+    "python-dotenv",
+    "pytest",
+    "pytest-cov",
+    "pyright>=1.1.402",
+    "build>=1.2.2.post1",
+    "twine>=6.1.0",
+]
+
 all = ["llmir[openai,anthropic,google,dev]"]
 
 [tool.setuptools.packages.find]

@@ -39,6 +39,7 @@ class AnthropicConverter(BaseConverter):
         ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
+        **kwargs: Any,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """
         将IR格式转换为Anthropic格式
@@ -132,7 +133,11 @@ class AnthropicConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
+    def from_provider(
+        self,
+        provider_data: Any,
+        **kwargs: Any,
+    ) -> Union[IRInput, IRResponse]:
         """
         将Anthropic格式转换为IR格式
         Convert Anthropic format to IR format
@@ -409,7 +414,7 @@ class AnthropicConverter(BaseConverter):
         return ir_response
 
     def _ir_message_to_p(
-        self, message: Dict[str, Any], ir_input: IRInput
+        self, message: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR Message → Provider Message / IR消息转换为Anthropic消息
 
@@ -439,7 +444,7 @@ class AnthropicConverter(BaseConverter):
             }, warnings
 
     def _ir_content_part_to_p(
-        self, content_part: Dict[str, Any], ir_input: IRInput
+        self, content_part: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR ContentPart → Provider Content/Part / IR内容部分转换为Anthropic内容"""
         part_type = content_part.get("type")
@@ -465,7 +470,7 @@ class AnthropicConverter(BaseConverter):
 
         return None, warnings
 
-    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+    def _p_message_to_ir(self, provider_message: Any, **kwargs: Any) -> Dict[str, Any]:
         """Provider Message → IR Message / Anthropic消息转换为IR消息"""
         if not isinstance(provider_message, dict):
             return None
@@ -483,7 +488,9 @@ class AnthropicConverter(BaseConverter):
 
         return Message(role=role, content=ir_content)
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(
+        self, provider_part: Any, **kwargs: Any
+    ) -> List[Dict[str, Any]]:
         """Provider Content/Part → IR ContentPart(s) / Anthropic内容部分转换为IR内容"""
         if isinstance(provider_part, str):
             return [TextPart(type="text", text=provider_part)]
@@ -515,11 +522,11 @@ class AnthropicConverter(BaseConverter):
 
     # ==================== 内容类型转换方法 Content type conversion methods ====================
 
-    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart, **kwargs: Any) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为Anthropic文本内容"""
         return TextPart(type="text", text=text_part["text"])
 
-    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+    def _p_text_to_ir(self, provider_text: Any, **kwargs: Any) -> TextPart:
         """Provider Text Content → IR TextPart / Anthropic文本内容转换为IR文本部分"""
         if isinstance(provider_text, str):
             return TextPart(type="text", text=provider_text)
@@ -527,7 +534,7 @@ class AnthropicConverter(BaseConverter):
             return TextPart(type="text", text=provider_text["text"])
         return None
 
-    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart, **kwargs: Any) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为Anthropic图像内容"""
         image_url = FieldMapper.get_image_url(image_part)
         image_data = FieldMapper.get_image_data(image_part)
@@ -551,7 +558,7 @@ class AnthropicConverter(BaseConverter):
         else:
             raise ValueError("Image part must have either image_url or image_data")
 
-    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+    def _p_image_to_ir(self, provider_image: Any, **kwargs: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / Anthropic图像内容转换为IR图像部分"""
         source = provider_image.get("source", {})
         if source.get("type") == "base64":
@@ -566,7 +573,7 @@ class AnthropicConverter(BaseConverter):
             return ImagePart(type="image", image_url=source.get("url", ""))
         return ImagePart(type="image")
 
-    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+    def _ir_file_to_p(self, file_part: FilePart, **kwargs: Any) -> Any:
         """IR FilePart → Provider File Content / IR文件部分转换为Anthropic文件内容"""
         if "file_data" in file_part:
             file_data = file_part["file_data"]
@@ -586,7 +593,7 @@ class AnthropicConverter(BaseConverter):
         else:
             raise ValueError("File part must have either file_data or file_url")
 
-    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+    def _p_file_to_ir(self, provider_file: Any, **kwargs: Any) -> FilePart:
         """Provider File Content → IR FilePart / Anthropic文件内容转换为IR文件部分"""
         source = provider_file.get("source", {})
         if source.get("type") == "base64":
@@ -601,15 +608,19 @@ class AnthropicConverter(BaseConverter):
             return FilePart(type="file", file_url=source["url"])
         return FilePart(type="file")
 
-    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart, **kwargs: Any) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Anthropic工具调用"""
         return ToolCallConverter.to_anthropic(tool_call_part)
 
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+    def _p_tool_call_to_ir(
+        self, provider_tool_call: Any, **kwargs: Any
+    ) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / Anthropic工具调用转换为IR工具调用部分"""
         return ToolCallConverter.from_anthropic(provider_tool_call)
 
-    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+    def _ir_tool_result_to_p(
+        self, tool_result_part: ToolResultPart, **kwargs: Any
+    ) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Anthropic工具结果"""
         return {
             "type": "tool_result",
@@ -618,7 +629,9 @@ class AnthropicConverter(BaseConverter):
             "is_error": tool_result_part.get("is_error", False),
         }
 
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+    def _p_tool_result_to_ir(
+        self, provider_tool_result: Any, **kwargs: Any
+    ) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / Anthropic工具结果转换为IR工具结果部分"""
         return ToolResultPart(
             type="tool_result",
@@ -635,11 +648,11 @@ class AnthropicConverter(BaseConverter):
         """Provider Reasoning Content → IR ReasoningPart / Anthropic推理内容转换为IR推理部分"""
         return ReasoningPart(type="reasoning", reasoning=provider_reasoning["thinking"])
 
-    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+    def _ir_tool_to_p(self, tool: ToolDefinition, **kwargs: Any) -> Any:
         """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为Anthropic工具定义"""
         return ToolConverter.convert_tool_definition(tool, "anthropic")
 
-    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+    def _p_tool_to_ir(self, provider_tool: Any, **kwargs: Any) -> ToolDefinition:
         """Provider Tool Definition → IR ToolDefinition / Anthropic工具定义转换为IR工具定义"""
         # Anthropic工具定义格式 / Anthropic tool definition format
         return {
@@ -649,11 +662,13 @@ class AnthropicConverter(BaseConverter):
             "parameters": provider_tool.get("input_schema", {}),
         }
 
-    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice, **kwargs: Any) -> Any:
         """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为Anthropic工具选择配置"""
         return ToolConverter.convert_tool_choice(tool_choice, "anthropic")
 
-    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+    def _p_tool_choice_to_ir(
+        self, provider_tool_choice: Any, **kwargs: Any
+    ) -> ToolChoice:
         """Provider Tool Choice Config → IR ToolChoice / Anthropic工具选择配置转换为IR工具选择"""
         # Anthropic工具选择格式 / Anthropic tool choice format
         if isinstance(provider_tool_choice, dict):
