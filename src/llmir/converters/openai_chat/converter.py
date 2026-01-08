@@ -26,8 +26,8 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ...types.ir_request import IRRequest
-from ...utils import FieldMapper, ToolCallConverter, ToolConverter
 from ...types.ir_response import IRResponse
+from ...utils import FieldMapper, ToolCallConverter, ToolConverter
 from ..base import BaseConverter
 
 
@@ -38,32 +38,70 @@ class OpenAIChatConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: Union[IRInput, IRRequest],
-        tools: Optional[Iterable[ToolDefinition]] = None,
-        tool_choice: Optional[ToolChoice] = None,
+        ir_data: Union[IRInput, IRRequest, IRResponse],
+        **kwargs: Any,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为OpenAI Chat Completions格式
         Convert IR format to OpenAI Chat Completions format
 
-        OpenAI使用扁平结构，需要将工具调用提取到消息级别
-        OpenAI uses flat structure, need to extract tool calls to message level
+        智能检测输入类型并调用相应的转换方法：
+        Intelligently detect input type and call appropriate conversion method:
+        - IRRequest → OpenAI Chat Completions请求参数
+        - IRResponse → OpenAI Chat Completions响应
+        - IRInput → OpenAI Chat Completions消息列表
+
+        Args:
+            ir_data: IR格式的数据（请求、响应或消息列表）
+                    IR format data (request, response, or message list)
+            **kwargs: 额外参数，可包含tools、tool_choice等
+                     Additional parameters, may include tools, tool_choice, etc.
+
+        Returns:
+            Tuple[转换后的数据, 警告信息列表]
+            Tuple[converted data, warning list]
         """
-        if isinstance(ir_input, dict) and "messages" in ir_input:
-            # Handle IRRequest
-            return self._ir_request_to_p(ir_input)
+        # 自动检测输入类型 / Auto detect input type
+        if isinstance(ir_data, dict):
+            # 检查是否是IRRequest / Check if it's IRRequest
+            if "messages" in ir_data and "model" in ir_data:
+                return self._ir_request_to_p(ir_data, **kwargs)
+
+            # 检查是否是IRResponse / Check if it's IRResponse
+            elif (
+                "choices" in ir_data
+                and "object" in ir_data
+                and ir_data.get("object") == "response"
+            ):
+                return self._ir_response_to_p(ir_data, **kwargs), []
+
+            # 如果是单个消息字典，包装成列表 / If it's a single message dict, wrap in list
+            elif "role" in ir_data:
+                ir_data = [ir_data]
+            else:
+                raise ValueError(f"Unknown IR dict format: {list(ir_data.keys())}")
+
+        # 处理IRInput（消息列表）/ Handle IRInput (message list)
+        if not isinstance(ir_data, (list, tuple)):
+            raise ValueError(
+                "IR data must be a dict (IRRequest/IRResponse) or iterable (IRInput)"
+            )
 
         # 验证输入 / Validate input
-        validation_errors = self.validate_ir_input(ir_input)
+        validation_errors = self.validate_ir_input(ir_data)
         if validation_errors:
             raise ValueError(f"Invalid IR input: {validation_errors}")
 
         messages = []
         warnings = []
 
-        for item in ir_input:
+        # 从kwargs中提取tools和tool_choice / Extract tools and tool_choice from kwargs
+        tools = kwargs.get("tools")
+        tool_choice = kwargs.get("tool_choice")
+
+        for item in ir_data:
             if is_message(item):
                 message = item  # type: ignore
-                converted, msg_warnings = self._ir_message_to_p(message, ir_input)
+                converted, msg_warnings = self._ir_message_to_p(message, ir_data)
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
@@ -104,19 +142,34 @@ class OpenAIChatConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
+    def from_provider(
+        self,
+        provider_data: Any,
+        **kwargs: Any,
+    ) -> Union[IRInput, IRResponse, IRRequest]:
         """将OpenAI Chat Completions格式转换为IR格式
         Convert OpenAI Chat Completions format to IR format
 
+        智能检测输入类型并调用相应的转换方法：
+        Intelligently detect input type and call appropriate conversion method:
+        - OpenAI Chat Completions请求 → IRRequest
+        - OpenAI Chat Completions响应 → IRResponse
+        - OpenAI Chat Completions消息 → IRInput
+
         Args:
-            provider_data: OpenAI Chat Completions响应对象或字典
-                          OpenAI Chat Completions response object or dict
+            provider_data: OpenAI格式的数据（请求、响应或消息）
+                          OpenAI format data (request, response, or messages)
                           可以是： / Can be:
-                          1. API响应（包含choices字段） / API response (contains choices field)
-                          2. 消息列表（包含messages字段） / Message list (contains messages field)
-                          3. 单个消息对象（包含role字段） / Single message object (contains role field)
+                          1. API响应（包含choices和id字段） / API response (contains choices and id fields)
+                          2. API请求（包含model和messages字段） / API request (contains model and messages fields)
+                          3. 消息列表（包含messages字段） / Message list (contains messages field)
+                          4. 单个消息对象（包含role字段） / Single message object (contains role field)
                           自动处理Pydantic模型对象（调用.model_dump()）
                           Automatically handles Pydantic model objects (calls .model_dump())
+
+        Returns:
+            IR格式的数据（IRRequest、IRResponse或IRInput）
+            IR format data (IRRequest, IRResponse, or IRInput)
         """
         # 自动unwrap Pydantic模型对象 / Auto unwrap Pydantic model objects
         if hasattr(provider_data, "model_dump"):
@@ -125,15 +178,26 @@ class OpenAIChatConverter(BaseConverter):
         if not isinstance(provider_data, dict):
             raise ValueError("OpenAI data must be a dictionary")
 
-        # If it's a full API response, convert to IRResponse
+        # 检测输入类型并调用相应转换方法 / Detect input type and call appropriate conversion method
+
+        # 1. 检查是否是API响应（包含choices和id） / Check if it's API response (contains choices and id)
         if "choices" in provider_data and "id" in provider_data:
             return self._p_response_to_ir(provider_data)
 
+        # 2. 检查是否是API请求（包含model和messages，但没有choices和id） / Check if it's API request (contains model and messages, but no choices and id)
+        if (
+            "model" in provider_data
+            and "messages" in provider_data
+            and "id" not in provider_data
+        ):
+            return self._p_request_to_ir(provider_data, **kwargs)
+
+        # 3. 处理其他格式转换为IRInput / Handle other formats as IRInput
         ir_input = []
 
         # Handle different input formats / 处理不同的输入格式
         if "choices" in provider_data:
-            # This is an API response with choices / 这是一个包含choices的API响应
+            # This is an API response with choices but no id (partial response) / 这是一个包含choices但没有id的API响应（部分响应）
             messages_to_process = []
             for choice in provider_data["choices"]:
                 if "message" in choice:
@@ -161,7 +225,7 @@ class OpenAIChatConverter(BaseConverter):
     # ==================== 分层方法 Layer methods ====================
 
     def _ir_request_to_p(
-        self, ir_request: IRRequest
+        self, ir_request: IRRequest, **kwargs: Any
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IRRequest转换为OpenAI Chat Completions请求参数
         Convert IRRequest to OpenAI Chat Completions request parameters
@@ -314,7 +378,7 @@ class OpenAIChatConverter(BaseConverter):
         return result, warnings
 
     def _ir_message_to_p(
-        self, message: Dict[str, Any], ir_input: IRInput
+        self, message: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR Message → Provider Message / IR消息转换为OpenAI消息
 
@@ -419,7 +483,7 @@ class OpenAIChatConverter(BaseConverter):
         return None, warnings
 
     def _ir_content_part_to_p(
-        self, content_part: Dict[str, Any], ir_input: IRInput
+        self, content_part: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Tuple[Any, List[str]]:
         """IR ContentPart → Provider Content/Part / IR内容部分转换为OpenAI内容
 
@@ -528,7 +592,224 @@ class OpenAIChatConverter(BaseConverter):
 
         return ir_response
 
-    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+    def _p_request_to_ir(
+        self, provider_request: Dict[str, Any], **kwargs: Any
+    ) -> IRRequest:
+        """将OpenAI Chat Completions请求转换为IRRequest
+        Convert OpenAI Chat Completions request to IRRequest
+        """
+        ir_request = {
+            "model": provider_request.get("model", ""),
+            "messages": [],
+        }
+
+        # 1. 处理消息 / Handle messages
+        messages = provider_request.get("messages", [])
+        ir_messages = []
+
+        for msg in messages:
+            if msg.get("role") == "system":
+                # System消息转换为system_instruction
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    ir_request["system_instruction"] = content
+                elif isinstance(content, list):
+                    # 处理多模态system消息
+                    text_parts = []
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            text_parts.append({"type": "text", "text": part["text"]})
+                    ir_request["system_instruction"] = text_parts
+            else:
+                # 普通消息
+                ir_message = self._p_message_to_ir(msg)
+                if ir_message:
+                    ir_messages.append(ir_message)
+
+        ir_request["messages"] = ir_messages
+
+        # 2. 处理工具 / Handle tools
+        tools = provider_request.get("tools")
+        if tools:
+            ir_request["tools"] = [self._p_tool_to_ir(tool) for tool in tools]
+
+        tool_choice = provider_request.get("tool_choice")
+        if tool_choice:
+            ir_request["tool_choice"] = self._p_tool_choice_to_ir(tool_choice)
+
+        parallel_tool_calls = provider_request.get("parallel_tool_calls")
+        if parallel_tool_calls is not None:
+            ir_request["tool_config"] = {"disable_parallel": not parallel_tool_calls}
+
+        # 3. 处理生成配置 / Handle generation config
+        gen_config = {}
+
+        # 直接映射的字段 / Directly mapped fields
+        for p_field, ir_field in [
+            ("temperature", "temperature"),
+            ("top_p", "top_p"),
+            ("frequency_penalty", "frequency_penalty"),
+            ("presence_penalty", "presence_penalty"),
+            ("logit_bias", "logit_bias"),
+            ("seed", "seed"),
+            ("logprobs", "logprobs"),
+            ("top_logprobs", "top_logprobs"),
+            ("n", "n"),
+        ]:
+            if p_field in provider_request:
+                gen_config[ir_field] = provider_request[p_field]
+
+        # 特殊处理的字段 / Specially handled fields
+        if "max_completion_tokens" in provider_request:
+            gen_config["max_tokens"] = provider_request["max_completion_tokens"]
+        elif "max_tokens" in provider_request:
+            gen_config["max_tokens"] = provider_request["max_tokens"]
+
+        if "stop" in provider_request:
+            stop = provider_request["stop"]
+            if isinstance(stop, str):
+                gen_config["stop_sequences"] = [stop]
+            elif isinstance(stop, list):
+                gen_config["stop_sequences"] = stop
+
+        if gen_config:
+            ir_request["generation"] = gen_config
+
+        # 4. 处理响应格式 / Handle response format
+        resp_format = provider_request.get("response_format")
+        if resp_format:
+            ir_request["response_format"] = resp_format
+
+        # 5. 处理推理配置 / Handle reasoning config
+        reasoning_effort = provider_request.get("reasoning_effort")
+        if reasoning_effort:
+            ir_request["reasoning"] = {"effort": reasoning_effort}
+
+        # 6. 处理流式配置 / Handle stream config
+        stream = provider_request.get("stream")
+        stream_options = provider_request.get("stream_options")
+        if stream is not None or stream_options:
+            stream_config = {}
+            if stream is not None:
+                stream_config["enabled"] = stream
+            if stream_options and stream_options.get("include_usage"):
+                stream_config["include_usage"] = True
+            ir_request["stream"] = stream_config
+
+        # 7. 处理缓存配置 / Handle cache config
+        cache_config = {}
+        if "prompt_cache_key" in provider_request:
+            cache_config["key"] = provider_request["prompt_cache_key"]
+        if "prompt_cache_retention" in provider_request:
+            cache_config["retention"] = provider_request["prompt_cache_retention"]
+        if cache_config:
+            ir_request["cache"] = cache_config
+
+        return ir_request
+
+    def _ir_response_to_p(
+        self, ir_response: IRResponse, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """将IRResponse转换为OpenAI Chat Completions响应
+        Convert IRResponse to OpenAI Chat Completions response
+        """
+        provider_response = {
+            "id": ir_response.get("id", ""),
+            "object": "chat.completion",
+            "created": ir_response.get("created", 0),
+            "model": ir_response.get("model", ""),
+            "choices": [],
+        }
+
+        # 处理choices / Handle choices
+        for choice in ir_response.get("choices", []):
+            message = choice.get("message")
+            if not message:
+                continue
+
+            # 转换消息 / Convert message
+            openai_message = {"role": message.get("role", "assistant")}
+
+            # 处理内容 / Handle content
+            content_parts = message.get("content", [])
+            text_parts = []
+            tool_calls = []
+
+            for part in content_parts:
+                if part.get("type") == "text":
+                    text_parts.append(part["text"])
+                elif part.get("type") == "tool_call":
+                    tool_calls.append(self._ir_tool_call_to_p(part))
+
+            # 设置内容 / Set content
+            if text_parts:
+                openai_message["content"] = " ".join(text_parts)
+            elif not tool_calls:
+                openai_message["content"] = ""
+
+            # 设置工具调用 / Set tool calls
+            if tool_calls:
+                openai_message["tool_calls"] = tool_calls
+                if not text_parts:
+                    openai_message["content"] = None
+
+            # 构建choice / Build choice
+            openai_choice = {
+                "index": choice.get("index", 0),
+                "message": openai_message,
+                "finish_reason": choice.get("finish_reason", {}).get("reason", "stop"),
+            }
+
+            # 处理logprobs / Handle logprobs
+            if "logprobs" in choice:
+                openai_choice["logprobs"] = choice["logprobs"]
+
+            provider_response["choices"].append(openai_choice)
+
+        # 处理使用统计 / Handle usage
+        ir_usage = ir_response.get("usage")
+        if ir_usage:
+            usage = {
+                "prompt_tokens": ir_usage.get("prompt_tokens", 0),
+                "completion_tokens": ir_usage.get("completion_tokens", 0),
+                "total_tokens": ir_usage.get("total_tokens", 0),
+            }
+
+            # 处理详细统计 / Handle detailed statistics
+            if "prompt_tokens_details" in ir_usage:
+                usage["prompt_tokens_details"] = ir_usage["prompt_tokens_details"]
+
+            if "completion_tokens_details" in ir_usage:
+                usage["completion_tokens_details"] = ir_usage[
+                    "completion_tokens_details"
+                ]
+
+            if "cache_read_tokens" in ir_usage:
+                if "prompt_tokens_details" not in usage:
+                    usage["prompt_tokens_details"] = {}
+                usage["prompt_tokens_details"]["cached_tokens"] = ir_usage[
+                    "cache_read_tokens"
+                ]
+
+            if "reasoning_tokens" in ir_usage:
+                if "completion_tokens_details" not in usage:
+                    usage["completion_tokens_details"] = {}
+                usage["completion_tokens_details"]["reasoning_tokens"] = ir_usage[
+                    "reasoning_tokens"
+                ]
+
+            provider_response["usage"] = usage
+
+        # 处理其他字段 / Handle other fields
+        if "service_tier" in ir_response:
+            provider_response["service_tier"] = ir_response["service_tier"]
+
+        if "system_fingerprint" in ir_response:
+            provider_response["system_fingerprint"] = ir_response["system_fingerprint"]
+
+        return provider_response
+
+    def _p_message_to_ir(self, provider_message: Any, **kwargs: Any) -> Dict[str, Any]:
         """Provider Message → IR Message / OpenAI消息转换为IR消息"""
         if not isinstance(provider_message, dict):
             return None
@@ -578,7 +859,9 @@ class OpenAIChatConverter(BaseConverter):
 
         return None
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(
+        self, provider_part: Any, **kwargs: Any
+    ) -> List[Dict[str, Any]]:
         """Provider Content/Part → IR ContentPart(s) / OpenAI内容部分转换为IR内容"""
         if isinstance(provider_part, str):
             return [TextPart(type="text", text=provider_part)]
@@ -610,7 +893,7 @@ class OpenAIChatConverter(BaseConverter):
 
     # ==================== 内容类型转换方法 Content type conversion methods ====================
 
-    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart, **kwargs: Any) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为OpenAI文本内容"""
         return {"type": "text", "text": text_part["text"]}
 
@@ -622,7 +905,7 @@ class OpenAIChatConverter(BaseConverter):
                 text_parts.append(part["text"])
         return " ".join(text_parts)
 
-    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+    def _p_text_to_ir(self, provider_text: Any, **kwargs: Any) -> TextPart:
         """Provider Text Content → IR TextPart / OpenAI文本内容转换为IR文本部分"""
         if isinstance(provider_text, str):
             return TextPart(type="text", text=provider_text)
@@ -630,7 +913,7 @@ class OpenAIChatConverter(BaseConverter):
             return TextPart(type="text", text=provider_text["text"])
         return None
 
-    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart, **kwargs: Any) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为OpenAI图像内容"""
         url = FieldMapper.get_image_url(image_part)
         image_data = FieldMapper.get_image_data(image_part)
@@ -647,7 +930,7 @@ class OpenAIChatConverter(BaseConverter):
         else:
             raise ValueError("Image part must have either image_url/url or image_data")
 
-    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+    def _p_image_to_ir(self, provider_image: Any, **kwargs: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / OpenAI图像内容转换为IR图像部分"""
         image_url_data = provider_image.get("image_url", {})
         url = image_url_data.get("url")
@@ -665,7 +948,7 @@ class OpenAIChatConverter(BaseConverter):
 
         return ImagePart(type="image", image_url=url, detail=detail)
 
-    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+    def _ir_file_to_p(self, file_part: FilePart, **kwargs: Any) -> Any:
         """IR FilePart → Provider File Content / IR文件部分转换为OpenAI文件内容
 
         Note: OpenAI Chat Completion endpoint does not support file input
@@ -675,7 +958,7 @@ class OpenAIChatConverter(BaseConverter):
             "Use OpenAI Responses API converter for file support."
         )
 
-    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+    def _p_file_to_ir(self, provider_file: Any, **kwargs: Any) -> FilePart:
         """Provider File Content → IR FilePart / OpenAI文件内容转换为IR文件部分
 
         Note: OpenAI Chat Completion endpoint does not support file input
@@ -685,15 +968,19 @@ class OpenAIChatConverter(BaseConverter):
             "Use OpenAI Responses API converter for file support."
         )
 
-    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart, **kwargs: Any) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为OpenAI工具调用"""
         return ToolCallConverter.to_openai_chat(tool_call_part)
 
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+    def _p_tool_call_to_ir(
+        self, provider_tool_call: Any, **kwargs: Any
+    ) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / OpenAI工具调用转换为IR工具调用部分"""
         return ToolCallConverter.from_openai_chat(provider_tool_call)
 
-    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+    def _ir_tool_result_to_p(
+        self, tool_result_part: ToolResultPart, **kwargs: Any
+    ) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为OpenAI工具结果"""
         return {
             "role": "tool",
@@ -703,7 +990,9 @@ class OpenAIChatConverter(BaseConverter):
             ),
         }
 
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+    def _p_tool_result_to_ir(
+        self, provider_tool_result: Any, **kwargs: Any
+    ) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / OpenAI工具结果转换为IR工具结果部分"""
         return ToolResultPart(
             type="tool_result",
@@ -712,11 +1001,11 @@ class OpenAIChatConverter(BaseConverter):
             is_error=provider_tool_result.get("is_error", False),
         )
 
-    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+    def _ir_tool_to_p(self, tool: ToolDefinition, **kwargs: Any) -> Any:
         """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为OpenAI工具定义"""
         return ToolConverter.convert_tool_definition(tool, "openai_chat")
 
-    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+    def _p_tool_to_ir(self, provider_tool: Any, **kwargs: Any) -> ToolDefinition:
         """Provider Tool Definition → IR ToolDefinition / OpenAI工具定义转换为IR工具定义"""
         # OpenAI Chat 工具定义格式 / OpenAI Chat tool definition format
         if "function" in provider_tool:
@@ -729,11 +1018,13 @@ class OpenAIChatConverter(BaseConverter):
             }
         return provider_tool
 
-    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice, **kwargs: Any) -> Any:
         """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为OpenAI工具选择配置"""
         return ToolConverter.convert_tool_choice(tool_choice, "openai")
 
-    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+    def _p_tool_choice_to_ir(
+        self, provider_tool_choice: Any, **kwargs: Any
+    ) -> ToolChoice:
         """Provider Tool Choice Config → IR ToolChoice / OpenAI工具选择配置转换为IR工具选择"""
         # OpenAI tool choice format / OpenAI工具选择格式
         if isinstance(provider_tool_choice, str):

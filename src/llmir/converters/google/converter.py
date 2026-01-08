@@ -104,6 +104,7 @@ class GoogleConverter(BaseConverter):
         ir_input: Union[IRInput, IRRequest],
         tools: Optional[Iterable[ToolDefinition]] = None,
         tool_choice: Optional[ToolChoice] = None,
+        **kwargs: Any,
     ) -> Tuple[Dict[str, Any], List[str]]:
         """将IR格式转换为Google GenAI格式
         Convert IR format to Google GenAI format
@@ -175,7 +176,11 @@ class GoogleConverter(BaseConverter):
 
         return result, warnings_list
 
-    def from_provider(self, provider_data: Any) -> Union[IRInput, IRResponse]:
+    def from_provider(
+        self,
+        provider_data: Any,
+        **kwargs: Any,
+    ) -> Union[IRInput, IRResponse]:
         """将Google GenAI格式转换为IR格式
 
         Args:
@@ -405,7 +410,9 @@ class GoogleConverter(BaseConverter):
 
         return ir_response
 
-    def _ir_message_to_p(self, message: Dict[str, Any], ir_input: IRInput) -> Any:
+    def _ir_message_to_p(
+        self, message: Dict[str, Any], ir_input: IRInput, **kwargs: Any
+    ) -> Any:
         """IR Message → Provider Message / IR消息转换为Provider消息"""
         # 角色映射
         role_mapping = {
@@ -426,7 +433,7 @@ class GoogleConverter(BaseConverter):
         content = {"role": google_role, "parts": parts}
         return content
 
-    def _p_message_to_ir(self, provider_message: Any) -> Dict[str, Any]:
+    def _p_message_to_ir(self, provider_message: Any, **kwargs: Any) -> Dict[str, Any]:
         """Provider Message → IR Message / Provider消息转换为IR消息"""
         # 角色映射
         role_mapping = {"user": "user", "model": "assistant"}
@@ -458,7 +465,7 @@ class GoogleConverter(BaseConverter):
         return {"role": ir_role, "content": content_parts}
 
     def _ir_content_part_to_p(
-        self, content_part: Dict[str, Any], ir_input: IRInput
+        self, content_part: Dict[str, Any], ir_input: IRInput, **kwargs: Any
     ) -> Any:
         """IR ContentPart → Provider Content/Part / IR内容部分转换为Provider内容/Part"""
         if is_text_part(content_part):
@@ -495,7 +502,9 @@ class GoogleConverter(BaseConverter):
             warnings.warn(f"不支持的内容类型: {content_part['type']}")
             return None
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(
+        self, provider_part: Any, **kwargs: Any
+    ) -> List[Dict[str, Any]]:
         """Provider Content/Part → IR ContentPart(s) / Provider内容/Part转换为IR内容部分"""
         ir_parts = []
         if (
@@ -582,7 +591,7 @@ class GoogleConverter(BaseConverter):
 
     # ==================== 类型特定转换方法实现 Type-specific conversion method implementations ====================
 
-    def _ir_text_to_p(self, text_part: TextPart) -> Any:
+    def _ir_text_to_p(self, text_part: TextPart, **kwargs: Any) -> Any:
         """IR TextPart → Provider Text Content / IR文本部分转换为Provider文本内容"""
         part = {"text": text_part["text"]}
         # 检查是否有thought_signature需要保留
@@ -592,11 +601,11 @@ class GoogleConverter(BaseConverter):
                 part["thoughtSignature"] = metadata["google"]["thought_signature"]
         return part
 
-    def _p_text_to_ir(self, provider_text: Any) -> TextPart:
+    def _p_text_to_ir(self, provider_text: Any, **kwargs: Any) -> TextPart:
         """Provider Text Content → IR TextPart / Provider文本内容转换为IR文本部分"""
         return TextPart(type="text", text=provider_text["text"])
 
-    def _ir_image_to_p(self, image_part: ImagePart) -> Any:
+    def _ir_image_to_p(self, image_part: ImagePart, **kwargs: Any) -> Any:
         """IR ImagePart → Provider Image Content / IR图像部分转换为Provider图像内容"""
         # Google使用inline_data或file_data
         # 支持多种字段格式
@@ -631,7 +640,7 @@ class GoogleConverter(BaseConverter):
             )
             return None
 
-    def _p_image_to_ir(self, provider_image: Any) -> ImagePart:
+    def _p_image_to_ir(self, provider_image: Any, **kwargs: Any) -> ImagePart:
         """Provider Image Content → IR ImagePart / Provider图像内容转换为IR图像部分"""
         inline_data = provider_image["inline_data"]
         return {
@@ -640,7 +649,7 @@ class GoogleConverter(BaseConverter):
             "media_type": inline_data["mime_type"],
         }
 
-    def _ir_file_to_p(self, file_part: FilePart) -> Any:
+    def _ir_file_to_p(self, file_part: FilePart, **kwargs: Any) -> Any:
         """IR FilePart → Provider File Content / IR文件部分转换为Provider文件内容"""
         if "file_data" in file_part:
             file_data = file_part["file_data"]
@@ -662,7 +671,7 @@ class GoogleConverter(BaseConverter):
             warnings.warn("Google GenAI不直接支持文件URL，需要先上传文件。")
             return None
 
-    def _p_file_to_ir(self, provider_file: Any) -> FilePart:
+    def _p_file_to_ir(self, provider_file: Any, **kwargs: Any) -> FilePart:
         """Provider File Content → IR FilePart / Provider文件内容转换为IR文件部分"""
         inline_data = provider_file["inline_data"]
         return {
@@ -673,15 +682,19 @@ class GoogleConverter(BaseConverter):
             },
         }
 
-    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart) -> Any:
+    def _ir_tool_call_to_p(self, tool_call_part: ToolCallPart, **kwargs: Any) -> Any:
         """IR ToolCallPart → Provider Tool Call / IR工具调用部分转换为Provider工具调用"""
         return ToolCallConverter.to_google(tool_call_part, preserve_metadata=True)
 
-    def _p_tool_call_to_ir(self, provider_tool_call: Any) -> ToolCallPart:
+    def _p_tool_call_to_ir(
+        self, provider_tool_call: Any, **kwargs: Any
+    ) -> ToolCallPart:
         """Provider Tool Call → IR ToolCallPart / Provider工具调用转换为IR工具调用部分"""
         return ToolCallConverter.from_google(provider_tool_call, preserve_metadata=True)
 
-    def _ir_tool_result_to_p(self, tool_result_part: ToolResultPart) -> Any:
+    def _ir_tool_result_to_p(
+        self, tool_result_part: ToolResultPart, **kwargs: Any
+    ) -> Any:
         """IR ToolResultPart → Provider Tool Result / IR工具结果部分转换为Provider工具结果"""
         # 注意：Google转换器需要额外的ir_input参数来查找对应的tool_call
         # 这里我们使用tool_call_id作为函数名的fallback
@@ -741,7 +754,9 @@ class GoogleConverter(BaseConverter):
             }
         }
 
-    def _p_tool_result_to_ir(self, provider_tool_result: Any) -> ToolResultPart:
+    def _p_tool_result_to_ir(
+        self, provider_tool_result: Any, **kwargs: Any
+    ) -> ToolResultPart:
         """Provider Tool Result → IR ToolResultPart / Provider工具结果转换为IR工具结果部分"""
         func_response = provider_tool_result.get(
             "function_response"
@@ -759,11 +774,11 @@ class GoogleConverter(BaseConverter):
             is_error=is_error,
         )
 
-    def _ir_tool_to_p(self, tool: ToolDefinition) -> Any:
+    def _ir_tool_to_p(self, tool: ToolDefinition, **kwargs: Any) -> Any:
         """IR ToolDefinition → Provider Tool Definition / IR工具定义转换为Provider工具定义"""
         return ToolConverter.convert_tool(tool, "google")
 
-    def _p_tool_to_ir(self, provider_tool: Any) -> ToolDefinition:
+    def _p_tool_to_ir(self, provider_tool: Any, **kwargs: Any) -> ToolDefinition:
         """Provider Tool Definition → IR ToolDefinition / Provider工具定义转换为IR工具定义"""
         # 这个方法在当前实现中不需要，因为from_provider不处理工具定义
         # 但为了完整性，提供一个基本实现
@@ -771,11 +786,13 @@ class GoogleConverter(BaseConverter):
             "Google converter does not support converting tools from provider format"
         )
 
-    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice) -> Any:
+    def _ir_tool_choice_to_p(self, tool_choice: ToolChoice, **kwargs: Any) -> Any:
         """IR ToolChoice → Provider Tool Choice Config / IR工具选择转换为Provider工具选择配置"""
         return ToolConverter.convert_tool_choice(tool_choice, "google")
 
-    def _p_tool_choice_to_ir(self, provider_tool_choice: Any) -> ToolChoice:
+    def _p_tool_choice_to_ir(
+        self, provider_tool_choice: Any, **kwargs: Any
+    ) -> ToolChoice:
         """Provider Tool Choice Config → IR ToolChoice / Provider工具选择配置转换为IR工具选择"""
         # 这个方法在当前实现中不需要，因为from_provider不处理工具选择
         # 但为了完整性，提供一个基本实现

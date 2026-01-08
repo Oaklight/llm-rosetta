@@ -28,9 +28,6 @@ from .types.ir import (
     ToolDefinition,
     is_extension_item,
     is_message,
-    is_text_part,
-    is_tool_call_part,
-    is_tool_result_part,
 )
 
 __version__ = "0.1.0"
@@ -48,9 +45,7 @@ __all__ = [
     # 类型守卫函数 Type guard functions
     "is_message",
     "is_extension_item",
-    "is_text_part",
-    "is_tool_call_part",
-    "is_tool_result_part",
+    "is_part_type",
     # 转换器 Converters
     "BaseConverter",
     "AnthropicConverter",
