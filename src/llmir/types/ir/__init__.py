@@ -110,7 +110,66 @@ from .response import (
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
 
 # 类型守卫 Type guards
-from .type_guards import is_part_type
+from .type_guards import is_part_type, isinstance_part, get_part_type, TYPE_CLASS_MAP
+
+# ============================================================================
+# 向后兼容类型定义 Backward compatibility type definitions
+# ============================================================================
+
+from typing import Iterable, Union
+
+# 为了向后兼容，定义旧的类型别名
+# For backward compatibility, define old type aliases
+IRInput = Iterable[Union[Message, ExtensionItem]]
+IRInputSimple = Iterable[Message]
+
+
+# 向后兼容的类型守卫函数
+# Backward compatibility type guard functions
+def is_text_part(part):
+    """向后兼容的文本部分检查函数"""
+    return is_part_type(part, TextPart)
+
+
+def is_image_part(part):
+    """向后兼容的图像部分检查函数"""
+    return is_part_type(part, ImagePart)
+
+
+def is_tool_call_part(part):
+    """向后兼容的工具调用部分检查函数"""
+    return is_part_type(part, ToolCallPart)
+
+
+def is_tool_result_part(part):
+    """向后兼容的工具结果部分检查函数"""
+    return is_part_type(part, ToolResultPart)
+
+
+def is_file_part(part):
+    """向后兼容的文件部分检查函数"""
+    return is_part_type(part, FilePart)
+
+
+def is_audio_part(part):
+    """向后兼容的音频部分检查函数"""
+    return is_part_type(part, AudioPart)
+
+
+def is_reasoning_part(part):
+    """向后兼容的推理部分检查函数"""
+    return is_part_type(part, ReasoningPart)
+
+
+def is_refusal_part(part):
+    """向后兼容的拒绝部分检查函数"""
+    return is_part_type(part, RefusalPart)
+
+
+def is_citation_part(part):
+    """向后兼容的引用部分检查函数"""
+    return is_part_type(part, CitationPart)
+
 
 # ============================================================================
 # 导出所有类型 Export all types
@@ -137,6 +196,9 @@ __all__ = [
     "ToolContentPart",
     # 类型守卫函数 Type guard functions
     "is_part_type",
+    "isinstance_part",
+    "get_part_type",
+    "TYPE_CLASS_MAP",
     # ========== 消息类型 Message types ==========
     "Message",
     "BaseMessage",
@@ -182,6 +244,19 @@ __all__ = [
     "ChoiceInfo",
     # 响应类型守卫 Response type guards
     "is_extension_item",
+    # ========== 向后兼容类型 Backward compatibility types ==========
+    "IRInput",
+    "IRInputSimple",
+    # ========== 向后兼容函数 Backward compatibility functions ==========
+    "is_text_part",
+    "is_image_part",
+    "is_tool_call_part",
+    "is_tool_result_part",
+    "is_file_part",
+    "is_audio_part",
+    "is_reasoning_part",
+    "is_refusal_part",
+    "is_citation_part",
     # ========== 辅助函数 Helper functions ==========
     "extract_text_content",
     "extract_tool_calls",
