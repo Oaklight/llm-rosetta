@@ -11,13 +11,15 @@ from .auto_detect import (
     detect_provider,
     get_converter_for_provider,
 )
-from .converters import (
-    AnthropicConverter,
-    BaseConverter,
-    GoogleConverter,
-    OpenAIChatConverter,
-    OpenAIResponsesConverter,
-)
+from .converters.base import BaseConverter
+
+# 注释掉旧的转换器导入，避免导入错误
+# from .converters import (
+#     AnthropicConverter,
+#     GoogleConverter,
+#     OpenAIChatConverter,
+#     OpenAIResponsesConverter,
+# )
 from .types.ir import (
     ContentPart,
     ExtensionItem,
@@ -48,10 +50,11 @@ __all__ = [
     "is_part_type",
     # 转换器 Converters
     "BaseConverter",
-    "AnthropicConverter",
-    "GoogleConverter",
-    "OpenAIChatConverter",
-    "OpenAIResponsesConverter",
+    # 注释掉旧的转换器，避免导入错误
+    # "AnthropicConverter",
+    # "GoogleConverter",
+    # "OpenAIChatConverter",
+    # "OpenAIResponsesConverter",
     # 自动检测和转换 Auto-detection and conversion
     "detect_provider",
     "get_converter_for_provider",
