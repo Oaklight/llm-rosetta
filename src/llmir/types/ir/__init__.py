@@ -28,6 +28,11 @@ This module reorganizes IR type definitions:
 # ============================================================================
 
 # 生成配置类型 Generation configuration types
+# ============================================================================
+# 向后兼容类型定义 Backward compatibility type definitions
+# ============================================================================
+from typing import Iterable, Union
+
 from .configs import (
     CacheConfig,
     GenerationConfig,
@@ -106,17 +111,21 @@ from .response import (
     UsageInfo,
 )
 
+# 流式事件类型 Stream event types
+from .stream import (
+    FinishEvent,
+    IRStreamEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
+
 # 工具类型 Tool types
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
 
 # 类型守卫 Type guards
-from .type_guards import is_part_type, isinstance_part, get_part_type, TYPE_CLASS_MAP
-
-# ============================================================================
-# 向后兼容类型定义 Backward compatibility type definitions
-# ============================================================================
-
-from typing import Iterable, Union
+from .type_guards import TYPE_CLASS_MAP, get_part_type, is_part_type, isinstance_part
 
 # 为了向后兼容，定义旧的类型别名
 # For backward compatibility, define old type aliases
@@ -244,6 +253,13 @@ __all__ = [
     "ChoiceInfo",
     # 响应类型守卫 Response type guards
     "is_extension_item",
+    # ========== 流式事件类型 Stream event types ==========
+    "IRStreamEvent",
+    "TextDeltaEvent",
+    "ToolCallStartEvent",
+    "ToolCallDeltaEvent",
+    "FinishEvent",
+    "UsageEvent",
     # ========== 向后兼容类型 Backward compatibility types ==========
     "IRInput",
     "IRInputSimple",
