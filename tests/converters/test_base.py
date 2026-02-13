@@ -2,8 +2,6 @@
 Tests for BaseConverter
 """
 
-import pytest
-
 from llmir.converters.base import BaseConverter
 
 

@@ -56,12 +56,12 @@ ChatModel = Literal[
 
 class FunctionParameters(TypedDict, total=False):
     """JSON Schema for function parameters.
-    
+
     This represents a JSON Schema object that defines the parameters
     a function accepts. It follows the JSON Schema specification.
-    
+
     Reference: openai.types.shared_params.FunctionParameters
-    
+
     Example:
         {
             "type": "object",

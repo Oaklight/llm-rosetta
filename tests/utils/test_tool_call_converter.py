@@ -2,8 +2,6 @@
 Tests for ToolCallConverter
 """
 
-import json
-
 import pytest
 
 from llmir.utils.tool_call_converter import ToolCallConverter
