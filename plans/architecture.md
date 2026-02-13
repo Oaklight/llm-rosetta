@@ -70,28 +70,34 @@ graph TB
             base_messages[messages.py - BaseMessageOps ABC]
             base_configs[configs.py - BaseConfigOps ABC]
         end
-        subgraph openai_chat_pkg[openai_chat/ - 已重构 ✅]
+        subgraph openai_chat_pkg[openai_chat/ ✅]
             oc_conv[converter.py]
             oc_content[content_ops.py]
             oc_tools[tool_ops.py]
             oc_messages[message_ops.py]
             oc_configs[config_ops.py]
         end
-        subgraph anthropic_pkg[anthropic/ - 待重构 ⏳]
-            an_conv[converter.py - 单文件]
+        subgraph anthropic_pkg[anthropic/ ✅]
+            an_conv[converter.py]
+            an_content[content_ops.py]
+            an_tools[tool_ops.py]
+            an_messages[message_ops.py]
+            an_configs[config_ops.py]
         end
-        subgraph google_pkg[google/ - 待重构 ⏳]
-            go_conv[converter.py - 单文件]
+        subgraph google_pkg[google_genai/ ✅]
+            go_conv[converter.py]
+            go_content[content_ops.py]
+            go_tools[tool_ops.py]
+            go_messages[message_ops.py]
+            go_configs[config_ops.py]
         end
-        subgraph openai_resp_pkg[openai_responses/ - 待重构 ⏳]
-            or_conv[converter.py - 单文件]
+        subgraph openai_resp_pkg[openai_responses/ ✅]
+            or_conv[converter.py]
+            or_content[content_ops.py]
+            or_tools[tool_ops.py]
+            or_messages[message_ops.py]
+            or_configs[config_ops.py]
         end
-    end
-
-    subgraph utils_pkg[utils/ - DEPRECATED]
-        field_mapper[field_mapper.py<br/>FieldMapper]
-        tool_converter[tool_converter.py<br/>ToolConverter]
-        tool_call_converter[tool_call_converter.py<br/>ToolCallConverter]
     end
 
     init --> auto
@@ -103,14 +109,26 @@ graph TB
     oc_messages --> base_messages
     oc_configs --> base_configs
 
-    an_conv -.-> base_conv
-    go_conv -.-> base_conv
-    or_conv -.-> base_conv
+    an_conv --> base_conv
+    an_content --> base_content
+    an_tools --> base_tools
+    an_messages --> base_messages
+    an_configs --> base_configs
+
+    go_conv --> base_conv
+    go_content --> base_content
+    go_tools --> base_tools
+    go_messages --> base_messages
+    go_configs --> base_configs
+
+    or_conv --> base_conv
+    or_content --> base_content
+    or_tools --> base_tools
+    or_messages --> base_messages
+    or_configs --> base_configs
 
     auto --> converters
 ```
-
-> **注**：虚线（`-.->`) 表示待重构的 converter 尚未完全对接新的 Base Ops 架构。
 
 ## 3. IR 类型系统
 
@@ -177,7 +195,7 @@ graph TB
 
 ## 4. Converter 底层向上分层架构（Bottom-Up Ops Pattern）
 
-OpenAI Chat Converter 已完成重构，采用 Ops 组合模式。其余三个 converter 待重构。
+所有 4 个 converter 均已完成 Bottom-Up Ops Pattern 重构，采用 Ops 组合模式。
 
 ### 4.1 Ops 分层设计
 
@@ -379,53 +397,14 @@ classDiagram
 
 ### 4.3 重构状态
 
-| Converter | 状态 | 文件结构 |
-|-----------|------|----------|
-| OpenAI Chat | ✅ 已重构 | `content_ops.py` + `tool_ops.py` + `message_ops.py` + `config_ops.py` + `converter.py` |
-| Anthropic | ⏳ 待重构 | 单文件 `converter.py` (~681 行) |
-| Google GenAI | ⏳ 待重构 | 单文件 `converter.py` (~801 行) |
-| OpenAI Responses | ⏳ 待重构 | 单文件 `converter.py` (~1000 行) |
+| Converter | 状态 | 文件结构 | PR |
+|-----------|------|----------|----|
+| OpenAI Chat | ✅ 已完成 | `content_ops.py` + `tool_ops.py` + `message_ops.py` + `config_ops.py` + `converter.py` | PR #16 |
+| Anthropic | ✅ 已完成 | `content_ops.py` + `tool_ops.py` + `message_ops.py` + `config_ops.py` + `converter.py` | PR #22 |
+| Google GenAI | ✅ 已完成 | `content_ops.py` + `tool_ops.py` + `message_ops.py` + `config_ops.py` + `converter.py` | PR #23 |
+| OpenAI Responses | ✅ 已完成 | `content_ops.py` + `tool_ops.py` + `message_ops.py` + `config_ops.py` + `converter.py` | PR #24 |
 
-## 5. Utils 工具模块 ⚠️ DEPRECATED
-
-> **⚠️ 废弃声明**：`src/llmir/utils/` 模块已废弃（deprecated），不应在新代码中使用。
->
-> - **废弃原因**：新架构采用 Ops 组合模式（见第 4 节），每个 converter 通过自包含的 `content_ops.py`、`tool_ops.py` 等模块实现转换逻辑，不再依赖集中式的 utils 工具类。
-> - **当前状态**：仍被 3 个待重构的旧 converter（Anthropic、Google GenAI、OpenAI Responses）引用，因此暂时保留以维持运行时兼容。
-> - **移除计划**：当上述 3 个 converter 完成 Ops 模式重构后，将删除整个 `src/llmir/utils/` 目录及对应的 `tests/utils/` 测试目录。
-> - **已脱离 utils 的 converter**：OpenAI Chat（✅ 已重构，完全自包含）。
-
-```mermaid
-graph LR
-    subgraph FieldMapper
-        FM1[get_tool_name - 多字段名兼容]
-        FM2[get_tool_input - 多字段名兼容]
-        FM3[get_tool_id - 多字段名兼容]
-        FM4[get_image_url / get_image_data]
-        FM5[normalize_tool_call / normalize_tool_result]
-    end
-
-    subgraph ToolConverter
-        TC1[convert_tool_definition<br/>IR ToolDef → Provider ToolDef]
-        TC2[convert_tool_choice<br/>IR ToolChoice → Provider ToolChoice]
-        TC3[batch_convert_tools]
-    end
-
-    subgraph ToolCallConverter
-        TCC1[to_openai_chat / from_openai_chat]
-        TCC2[to_openai_responses / from_openai_responses]
-        TCC3[to_anthropic / from_anthropic]
-        TCC4[to_google / from_google]
-    end
-
-    TC1 --> FM1
-    TCC1 --> FieldMapper
-    TCC2 --> FieldMapper
-    TCC3 --> FieldMapper
-    TCC4 --> FieldMapper
-```
-
-## 6. 自动检测与便捷转换流程
+## 5. 自动检测与便捷转换流程
 
 ```mermaid
 sequenceDiagram
@@ -446,7 +425,7 @@ sequenceDiagram
     TC->>User: 返回目标格式数据 + warnings
 ```
 
-## 7. Provider 格式差异对照
+## 6. Provider 格式差异对照
 
 | 概念      | OpenAI Chat           | OpenAI Responses        | Anthropic       | Google GenAI               |
 | --------- | --------------------- | ----------------------- | --------------- | -------------------------- |
@@ -460,7 +439,7 @@ sequenceDiagram
 | 推理      | 不支持                | reasoning 项            | thinking 块     | thought=true Part          |
 | 最大Token | max_completion_tokens | max_output_tokens       | max_tokens 必需 | config.max_output_tokens   |
 
-## 8. Adapter 层设计提案
+## 7. Adapter 层设计提案
 
 ### 问题分析
 
@@ -687,14 +666,13 @@ src/llmir/
 ├── converters/                  # 现有 Converter 层（不变）
 │   ├── base/
 │   ├── anthropic/
-│   ├── google/
+│   ├── google_genai/
 │   ├── openai_chat/
 │   └── openai_responses/
-├── types/                       # 现有类型定义（不变）
-└── utils/                       # ⚠️ DEPRECATED - 待重构 converter 迁移后删除
+└── types/                       # 现有类型定义（不变）
 ```
 
-## 9. 测试结构
+## 8. 测试结构
 
 ```
 tests/
@@ -703,24 +681,43 @@ tests/
 ├── test_ir_types.py                 # IR 类型测试
 ├── converters/
 │   ├── test_base.py                 # Base converter 测试
-│   ├── test_anthropic_converter.py
-│   ├── test_anthropic_full_conversion.py
-│   ├── test_google_converter.py
-│   ├── test_google_full_conversion.py
-│   ├── test_openai_responses_converter.py
-│   ├── test_openai_responses_full_conversion.py
-│   └── openai_chat/                 # 重构后的分层测试 ✅
-│       ├── test_content_ops.py      # ContentOps 单元测试
-│       ├── test_tool_ops.py         # ToolOps 单元测试
-│       ├── test_message_ops.py      # MessageOps 单元测试
-│       ├── test_config_ops.py       # ConfigOps 单元测试
-│       └── test_converter.py        # Converter 集成测试
+│   ├── openai_chat/                 # 分层测试 ✅
+│   │   ├── test_content_ops.py
+│   │   ├── test_tool_ops.py
+│   │   ├── test_message_ops.py
+│   │   ├── test_config_ops.py
+│   │   └── test_converter.py
+│   ├── anthropic/                   # 分层测试 ✅
+│   │   ├── test_content_ops.py
+│   │   ├── test_tool_ops.py
+│   │   ├── test_message_ops.py
+│   │   ├── test_config_ops.py
+│   │   └── test_converter.py
+│   ├── google_genai/                # 分层测试 ✅
+│   │   ├── test_content_ops.py
+│   │   ├── test_tool_ops.py
+│   │   ├── test_message_ops.py
+│   │   ├── test_config_ops.py
+│   │   └── test_converter.py
+│   └── openai_responses/            # 分层测试 ✅
+│       ├── test_content_ops.py
+│       ├── test_tool_ops.py
+│       ├── test_message_ops.py
+│       ├── test_config_ops.py
+│       └── test_converter.py
 ├── integration/
-│   └── test_openai_chat_e2e.py      # OpenAI Chat 端到端测试
-├── test_types/
-│   ├── ir/test_ir_types.py
-│   └── openai/chat/test_type_compatibility.py
-└── utils/                           # ⚠️ DEPRECATED - 随 src/llmir/utils/ 一同删除
-    ├── test_tool_call_converter.py
-    └── test_tool_converter.py
+│   ├── test_openai_chat_sdk_e2e.py
+│   ├── test_openai_chat_rest_e2e.py
+│   ├── test_anthropic_sdk_e2e.py
+│   ├── test_anthropic_rest_e2e.py
+│   ├── test_google_genai_sdk_e2e.py
+│   ├── test_google_genai_rest_e2e.py
+│   ├── test_openai_responses_sdk_e2e.py
+│   └── test_openai_responses_rest_e2e.py
+└── test_types/
+    ├── ir/test_ir_types.py
+    ├── openai/chat/test_type_compatibility.py
+    ├── google_genai/test_type_compatibility.py
+    ├── openai_responses/test_type_compatibility.py
+    └── test_anthropic_types.py
 ```
