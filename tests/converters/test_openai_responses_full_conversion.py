@@ -1,7 +1,5 @@
-import pytest
 from llmir.converters.openai_responses import OpenAIResponsesConverter
 from llmir.types.ir_request import IRRequest
-from llmir.types.ir_response import IRResponse
 
 
 def test_openai_responses_request_conversion():

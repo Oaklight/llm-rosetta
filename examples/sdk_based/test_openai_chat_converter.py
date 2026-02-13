@@ -13,11 +13,10 @@ Real API test file - test complete conversion flow for OpenAI Chat Completions A
 6. 流式响应转换 (Streaming response conversion)
 """
 
-import base64
 import json
 import os
 import sys
-from typing import Generator, List
+from typing import Generator
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
@@ -28,11 +27,8 @@ from openai import OpenAI
 from examples.tools import available_tools, tools_spec
 from llmir.converters.openai_chat import OpenAIChatConverter
 from llmir.types.ir import (
-    ImagePart,
     Message,
-    TextPart,
     ToolCallPart,
-    ToolResultPart,
     create_tool_result_message,
     extract_text_content,
     extract_tool_calls,

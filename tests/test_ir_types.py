@@ -10,7 +10,6 @@ Tests for LLMIR IR Types Module
 """
 
 import pytest
-from typing import Any, Dict
 
 # 直接从 IR 模块导入，避免通过主模块导入旧的转换器
 from llmir.types.ir import (
@@ -26,16 +25,12 @@ from llmir.types.ir import (
     RefusalPart,
     CitationPart,
     AudioPart,
-    ContentPart,
-    # Messages
     Message,
     SystemMessage,
     UserMessage,
     AssistantMessage,
     ToolMessage,
     MessageMetadata,
-    StreamingMetadata,
-    # Message type guards
     is_message,
     is_system_message,
     is_user_message,
@@ -56,7 +51,6 @@ from llmir.types.ir import (
     get_part_type,
     TYPE_CLASS_MAP,
     # Extensions
-    ExtensionItem,
     SystemEvent,
     BatchMarker,
     SessionControl,
@@ -76,7 +70,6 @@ from llmir.types.ir import (
     IRRequest,
     IRResponse,
     UsageInfo,
-    FinishReason,
     ChoiceInfo,
 )
 
@@ -86,11 +79,8 @@ class TestContentParts:
 
     def test_text_part_creation(self):
         """测试文本部分创建"""
-        text_part: TextPart = {
-            "type": "text",
-            "text": "Hello, world!"
-        }
-        
+        text_part: TextPart = {"type": "text", "text": "Hello, world!"}
+
         assert text_part["type"] == "text"
         assert text_part["text"] == "Hello, world!"
         assert is_part_type(text_part, TextPart)
@@ -100,9 +90,9 @@ class TestContentParts:
         image_part: ImagePart = {
             "type": "image",
             "image_url": "https://example.com/image.jpg",
-            "detail": "high"
+            "detail": "high",
         }
-        
+
         assert image_part["type"] == "image"
         assert image_part["image_url"] == "https://example.com/image.jpg"
         assert image_part["detail"] == "high"
@@ -112,15 +102,15 @@ class TestContentParts:
         """测试带base64数据的图像部分"""
         image_data: ImageData = {
             "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
-            "media_type": "image/png"
+            "media_type": "image/png",
         }
-        
+
         image_part: ImagePart = {
             "type": "image",
             "image_data": image_data,
-            "detail": "auto"
+            "detail": "auto",
         }
-        
+
         assert image_part["type"] == "image"
         assert image_part["image_data"]["media_type"] == "image/png"
         assert is_part_type(image_part, ImagePart)
@@ -129,16 +119,16 @@ class TestContentParts:
         """测试文件部分创建"""
         file_data: FileData = {
             "data": "SGVsbG8gV29ybGQ=",  # "Hello World" in base64
-            "media_type": "text/plain"
+            "media_type": "text/plain",
         }
-        
+
         file_part: FilePart = {
             "type": "file",
             "file_data": file_data,
             "file_name": "hello.txt",
-            "file_type": "text/plain"
+            "file_type": "text/plain",
         }
-        
+
         assert file_part["type"] == "file"
         assert file_part["file_name"] == "hello.txt"
         assert is_part_type(file_part, FilePart)
@@ -150,9 +140,9 @@ class TestContentParts:
             "tool_call_id": "call_123",
             "tool_name": "get_weather",
             "tool_input": {"location": "Beijing"},
-            "tool_type": "function"
+            "tool_type": "function",
         }
-        
+
         assert tool_call["type"] == "tool_call"
         assert tool_call["tool_name"] == "get_weather"
         assert tool_call["tool_input"]["location"] == "Beijing"
@@ -164,9 +154,9 @@ class TestContentParts:
             "type": "tool_result",
             "tool_call_id": "call_123",
             "result": {"temperature": 25, "condition": "sunny"},
-            "is_error": False
+            "is_error": False,
         }
-        
+
         assert tool_result["type"] == "tool_result"
         assert tool_result["tool_call_id"] == "call_123"
         assert not tool_result["is_error"]
@@ -178,9 +168,9 @@ class TestContentParts:
             "type": "reasoning",
             "reasoning": "Let me think about this step by step...",
             "signature": "reasoning_abc123",
-            "status": "completed"
+            "status": "completed",
         }
-        
+
         assert reasoning["type"] == "reasoning"
         assert reasoning["status"] == "completed"
         assert is_part_type(reasoning, ReasoningPart)
@@ -189,9 +179,9 @@ class TestContentParts:
         """测试拒绝部分创建"""
         refusal: RefusalPart = {
             "type": "refusal",
-            "refusal": "I cannot provide information about that topic."
+            "refusal": "I cannot provide information about that topic.",
         }
-        
+
         assert refusal["type"] == "refusal"
         assert "cannot provide" in refusal["refusal"]
         assert is_part_type(refusal, RefusalPart)
@@ -204,22 +194,18 @@ class TestContentParts:
                 "start_index": 10,
                 "end_index": 25,
                 "title": "Example Article",
-                "url": "https://example.com/article"
-            }
+                "url": "https://example.com/article",
+            },
         }
-        
+
         assert citation["type"] == "citation"
         assert citation["url_citation"]["title"] == "Example Article"
         assert is_part_type(citation, CitationPart)
 
     def test_audio_part_creation(self):
         """测试音频部分创建"""
-        audio: AudioPart = {
-            "type": "audio",
-            "audio_id": "audio_123",
-            "detail": "high"
-        }
-        
+        audio: AudioPart = {"type": "audio", "audio_id": "audio_123", "detail": "high"}
+
         assert audio["type"] == "audio"
         assert audio["audio_id"] == "audio_123"
         assert is_part_type(audio, AudioPart)
@@ -235,17 +221,17 @@ class TestTypeGuards:
             "type": "tool_call",
             "tool_call_id": "call_1",
             "tool_name": "func",
-            "tool_input": {}
+            "tool_input": {},
         }
-        
+
         # 正确的类型检查
         assert is_part_type(text_part, TextPart)
         assert is_part_type(tool_call, ToolCallPart)
-        
+
         # 错误的类型检查
         assert not is_part_type(text_part, ToolCallPart)
         assert not is_part_type(tool_call, TextPart)
-        
+
         # 无效输入
         assert not is_part_type("not a dict", TextPart)
         assert not is_part_type(None, TextPart)
@@ -253,11 +239,11 @@ class TestTypeGuards:
     def test_isinstance_part_function(self):
         """测试类似isinstance的函数"""
         text_part = {"type": "text", "text": "hello"}
-        
+
         # 单个类型检查
         assert isinstance_part(text_part, TextPart)
         assert not isinstance_part(text_part, ToolCallPart)
-        
+
         # 多个类型检查
         assert isinstance_part(text_part, TextPart, ImagePart)
         assert isinstance_part(text_part, ImagePart, TextPart)
@@ -270,9 +256,9 @@ class TestTypeGuards:
             "type": "tool_call",
             "tool_call_id": "call_1",
             "tool_name": "func",
-            "tool_input": {}
+            "tool_input": {},
         }
-        
+
         assert get_part_type(text_part) == TextPart
         assert get_part_type(tool_call) == ToolCallPart
         assert get_part_type({"type": "unknown"}) is None
@@ -284,11 +270,18 @@ class TestTypeGuards:
         assert TYPE_CLASS_MAP["image"] == ImagePart
         assert TYPE_CLASS_MAP["tool_call"] == ToolCallPart
         assert TYPE_CLASS_MAP["tool_result"] == ToolResultPart
-        
+
         # 确保所有基本类型都在映射表中
         expected_types = {
-            "text", "image", "file", "tool_call", "tool_result",
-            "reasoning", "refusal", "citation", "audio"
+            "text",
+            "image",
+            "file",
+            "tool_call",
+            "tool_result",
+            "reasoning",
+            "refusal",
+            "citation",
+            "audio",
         }
         assert set(TYPE_CLASS_MAP.keys()) == expected_types
 
@@ -300,9 +293,9 @@ class TestMessages:
         """测试系统消息创建"""
         system_msg: SystemMessage = {
             "role": "system",
-            "content": [{"type": "text", "text": "You are a helpful assistant."}]
+            "content": [{"type": "text", "text": "You are a helpful assistant."}],
         }
-        
+
         assert system_msg["role"] == "system"
         assert len(system_msg["content"]) == 1
         assert system_msg["content"][0]["type"] == "text"
@@ -315,10 +308,10 @@ class TestMessages:
             "role": "user",
             "content": [
                 {"type": "text", "text": "What's in this image?"},
-                {"type": "image", "image_url": "https://example.com/image.jpg"}
-            ]
+                {"type": "image", "image_url": "https://example.com/image.jpg"},
+            ],
         }
-        
+
         assert user_msg["role"] == "user"
         assert len(user_msg["content"]) == 2
         assert is_user_message(user_msg)
@@ -334,11 +327,11 @@ class TestMessages:
                     "type": "tool_call",
                     "tool_call_id": "call_1",
                     "tool_name": "search",
-                    "tool_input": {"query": "example"}
-                }
-            ]
+                    "tool_input": {"query": "example"},
+                },
+            ],
         }
-        
+
         assert assistant_msg["role"] == "assistant"
         assert len(assistant_msg["content"]) == 2
         assert is_assistant_message(assistant_msg)
@@ -352,11 +345,11 @@ class TestMessages:
                 {
                     "type": "tool_result",
                     "tool_call_id": "call_1",
-                    "result": "Search completed successfully"
+                    "result": "Search completed successfully",
                 }
-            ]
+            ],
         }
-        
+
         assert tool_msg["role"] == "tool"
         assert len(tool_msg["content"]) == 1
         assert is_tool_message(tool_msg)
@@ -367,20 +360,16 @@ class TestMessages:
         metadata: MessageMetadata = {
             "message_id": "msg_123",
             "timestamp": "2024-01-01T00:00:00Z",
-            "streaming": {
-                "is_streaming": True,
-                "is_final": False,
-                "chunk_index": 1
-            },
-            "custom": {"priority": "high"}
+            "streaming": {"is_streaming": True, "is_final": False, "chunk_index": 1},
+            "custom": {"priority": "high"},
         }
-        
+
         user_msg: UserMessage = {
             "role": "user",
             "content": [{"type": "text", "text": "Hello"}],
-            "metadata": metadata
+            "metadata": metadata,
         }
-        
+
         assert user_msg["metadata"]["message_id"] == "msg_123"
         assert user_msg["metadata"]["streaming"]["is_streaming"]
         assert user_msg["metadata"]["custom"]["priority"] == "high"
@@ -392,7 +381,7 @@ class TestMessageCreationFunctions:
     def test_create_system_message(self):
         """测试创建系统消息函数"""
         msg = create_system_message("You are a helpful assistant.")
-        
+
         assert msg["role"] == "system"
         assert len(msg["content"]) == 1
         assert msg["content"][0]["type"] == "text"
@@ -402,7 +391,7 @@ class TestMessageCreationFunctions:
     def test_create_user_message(self):
         """测试创建用户消息函数"""
         msg = create_user_message("Hello, how are you?")
-        
+
         assert msg["role"] == "user"
         assert len(msg["content"]) == 1
         assert msg["content"][0]["type"] == "text"
@@ -412,7 +401,7 @@ class TestMessageCreationFunctions:
     def test_create_assistant_message(self):
         """测试创建助手消息函数"""
         msg = create_assistant_message("I'm doing well, thank you!")
-        
+
         assert msg["role"] == "assistant"
         assert len(msg["content"]) == 1
         assert msg["content"][0]["type"] == "text"
@@ -422,7 +411,7 @@ class TestMessageCreationFunctions:
     def test_create_tool_message(self):
         """测试创建工具消息函数"""
         msg = create_tool_message("call_123", {"result": "success"})
-        
+
         assert msg["role"] == "tool"
         assert len(msg["content"]) == 1
         assert msg["content"][0]["type"] == "tool_result"
@@ -434,7 +423,7 @@ class TestMessageCreationFunctions:
     def test_create_tool_message_with_error(self):
         """测试创建错误工具消息"""
         msg = create_tool_message("call_456", "Error occurred", is_error=True)
-        
+
         assert msg["role"] == "tool"
         assert msg["content"][0]["tool_call_id"] == "call_456"
         assert msg["content"][0]["result"] == "Error occurred"
@@ -443,7 +432,7 @@ class TestMessageCreationFunctions:
     def test_create_tool_result_message(self):
         """测试创建工具结果消息函数"""
         msg = create_tool_result_message("call_789", {"data": "test"})
-        
+
         assert msg["role"] == "tool"
         assert msg["content"][0]["tool_call_id"] == "call_789"
         assert msg["content"][0]["result"]["data"] == "test"
@@ -460,10 +449,10 @@ class TestHelperFunctions:
             "content": [
                 {"type": "text", "text": "Hello "},
                 {"type": "image", "image_url": "https://example.com/image.jpg"},
-                {"type": "text", "text": "world!"}
-            ]
+                {"type": "text", "text": "world!"},
+            ],
         }
-        
+
         text = extract_text_content(message)
         assert text == "Hello world!"
 
@@ -473,9 +462,9 @@ class TestHelperFunctions:
             "role": "user",
             "content": [
                 {"type": "image", "image_url": "https://example.com/image.jpg"}
-            ]
+            ],
         }
-        
+
         text = extract_text_content(message)
         assert text == ""
 
@@ -489,17 +478,17 @@ class TestHelperFunctions:
                     "type": "tool_call",
                     "tool_call_id": "call_1",
                     "tool_name": "search",
-                    "tool_input": {"query": "test"}
+                    "tool_input": {"query": "test"},
                 },
                 {
                     "type": "tool_call",
                     "tool_call_id": "call_2",
                     "tool_name": "calculate",
-                    "tool_input": {"expression": "2+2"}
-                }
-            ]
+                    "tool_input": {"expression": "2+2"},
+                },
+            ],
         }
-        
+
         # 提取所有工具调用
         tool_calls = extract_tool_calls(message)
         assert len(tool_calls) == 2
@@ -515,17 +504,17 @@ class TestHelperFunctions:
                     "type": "tool_call",
                     "tool_call_id": "call_1",
                     "tool_name": "search",
-                    "tool_input": {"query": "test"}
+                    "tool_input": {"query": "test"},
                 },
                 {
                     "type": "tool_call",
                     "tool_call_id": "call_2",
                     "tool_name": "calculate",
-                    "tool_input": {"expression": "2+2"}
-                }
-            ]
+                    "tool_input": {"expression": "2+2"},
+                },
+            ],
         }
-        
+
         # 只提取第一个工具调用
         tool_calls = extract_tool_calls(message, limit=1)
         assert len(tool_calls) == 1
@@ -535,11 +524,9 @@ class TestHelperFunctions:
         """测试提取空工具调用"""
         message: Message = {
             "role": "assistant",
-            "content": [
-                {"type": "text", "text": "No tools needed."}
-            ]
+            "content": [{"type": "text", "text": "No tools needed."}],
         }
-        
+
         tool_calls = extract_tool_calls(message)
         assert len(tool_calls) == 0
 
@@ -553,9 +540,9 @@ class TestExtensionItems:
             "type": "system_event",
             "event_type": "session_start",
             "timestamp": "2024-01-01T00:00:00Z",
-            "message": "Session started successfully"
+            "message": "Session started successfully",
         }
-        
+
         assert event["type"] == "system_event"
         assert event["event_type"] == "session_start"
         assert is_extension_item(event)
@@ -567,9 +554,9 @@ class TestExtensionItems:
             "batch_id": "batch_123",
             "batch_type": "start",
             "total_items": 5,
-            "completed_items": 0
+            "completed_items": 0,
         }
-        
+
         assert marker["type"] == "batch_marker"
         assert marker["batch_id"] == "batch_123"
         assert is_extension_item(marker)
@@ -580,9 +567,9 @@ class TestExtensionItems:
             "type": "session_control",
             "control_type": "cancel_tool",
             "target_id": "call_123",
-            "reason": "User requested cancellation"
+            "reason": "User requested cancellation",
         }
-        
+
         assert control["type"] == "session_control"
         assert control["control_type"] == "cancel_tool"
         assert is_extension_item(control)
@@ -596,12 +583,12 @@ class TestExtensionItems:
                 "type": "tool_call",
                 "tool_call_id": "call_1",
                 "tool_name": "search",
-                "tool_input": {"query": "test"}
+                "tool_input": {"query": "test"},
             },
             "depends_on": ["node_0"],
-            "auto_execute": True
+            "auto_execute": True,
         }
-        
+
         assert node["type"] == "tool_chain_node"
         assert node["node_id"] == "node_1"
         assert node["auto_execute"]
@@ -621,12 +608,12 @@ class TestToolTypes:
                 "type": "object",
                 "properties": {
                     "location": {"type": "string", "description": "City name"}
-                }
+                },
             },
             "required_parameters": ["location"],
-            "metadata": {"version": "1.0"}
+            "metadata": {"version": "1.0"},
         }
-        
+
         assert tool_def["type"] == "function"
         assert tool_def["name"] == "get_weather"
         assert "location" in tool_def["required_parameters"]
@@ -634,27 +621,18 @@ class TestToolTypes:
     def test_tool_choice_creation(self):
         """测试工具选择创建"""
         # Auto choice
-        auto_choice: ToolChoice = {
-            "mode": "auto",
-            "tool_name": ""
-        }
+        auto_choice: ToolChoice = {"mode": "auto", "tool_name": ""}
         assert auto_choice["mode"] == "auto"
-        
+
         # Specific tool choice
-        specific_choice: ToolChoice = {
-            "mode": "tool",
-            "tool_name": "get_weather"
-        }
+        specific_choice: ToolChoice = {"mode": "tool", "tool_name": "get_weather"}
         assert specific_choice["mode"] == "tool"
         assert specific_choice["tool_name"] == "get_weather"
 
     def test_tool_call_config_creation(self):
         """测试工具调用配置创建"""
-        config: ToolCallConfig = {
-            "disable_parallel": True,
-            "max_calls": 3
-        }
-        
+        config: ToolCallConfig = {"disable_parallel": True, "max_calls": 3}
+
         assert config["disable_parallel"]
         assert config["max_calls"] == 3
 
@@ -672,9 +650,9 @@ class TestConfigTypes:
             "stop_sequences": ["END", "\n\n"],
             "frequency_penalty": 0.1,
             "presence_penalty": 0.1,
-            "seed": 42
+            "seed": 42,
         }
-        
+
         assert config["temperature"] == 0.7
         assert config["max_tokens"] == 1000
         assert "END" in config["stop_sequences"]
@@ -685,21 +663,18 @@ class TestConfigTypes:
             "type": "json_schema",
             "json_schema": {
                 "type": "object",
-                "properties": {"result": {"type": "string"}}
+                "properties": {"result": {"type": "string"}},
             },
-            "mime_type": "application/json"
+            "mime_type": "application/json",
         }
-        
+
         assert config["type"] == "json_schema"
         assert "result" in config["json_schema"]["properties"]
 
     def test_stream_config_creation(self):
         """测试流式配置创建"""
-        config: StreamConfig = {
-            "enabled": True,
-            "include_usage": True
-        }
-        
+        config: StreamConfig = {"enabled": True, "include_usage": True}
+
         assert config["enabled"]
         assert config["include_usage"]
 
@@ -708,20 +683,17 @@ class TestConfigTypes:
         config: ReasoningConfig = {
             "effort": "medium",
             "type": "enabled",
-            "budget_tokens": 1000
+            "budget_tokens": 1000,
         }
-        
+
         assert config["effort"] == "medium"
         assert config["type"] == "enabled"
         assert config["budget_tokens"] == 1000
 
     def test_cache_config_creation(self):
         """测试缓存配置创建"""
-        config: CacheConfig = {
-            "key": "cache_key_123",
-            "retention": "24h"
-        }
-        
+        config: CacheConfig = {"key": "cache_key_123", "retention": "24h"}
+
         assert config["key"] == "cache_key_123"
         assert config["retention"] == "24h"
 
@@ -734,21 +706,13 @@ class TestRequestResponseTypes:
         request: IRRequest = {
             "model": "gpt-4o",
             "messages": [
-                {
-                    "role": "user",
-                    "content": [{"type": "text", "text": "Hello!"}]
-                }
+                {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
             "system_instruction": "You are a helpful assistant.",
-            "generation": {
-                "temperature": 0.7,
-                "max_tokens": 1000
-            },
-            "stream": {
-                "enabled": True
-            }
+            "generation": {"temperature": 0.7, "max_tokens": 1000},
+            "stream": {"enabled": True},
         }
-        
+
         assert request["model"] == "gpt-4o"
         assert len(request["messages"]) == 1
         assert request["generation"]["temperature"] == 0.7
@@ -760,9 +724,9 @@ class TestRequestResponseTypes:
             "completion_tokens": 50,
             "total_tokens": 150,
             "prompt_tokens_details": {"cached_tokens": 20},
-            "completion_tokens_details": {"reasoning_tokens": 10}
+            "completion_tokens_details": {"reasoning_tokens": 10},
         }
-        
+
         assert usage["total_tokens"] == 150
         assert usage["prompt_tokens_details"]["cached_tokens"] == 20
 
@@ -772,12 +736,12 @@ class TestRequestResponseTypes:
             "index": 0,
             "message": {
                 "role": "assistant",
-                "content": [{"type": "text", "text": "Hello!"}]
+                "content": [{"type": "text", "text": "Hello!"}],
             },
             "finish_reason": "stop",
-            "logprobs": None
+            "logprobs": None,
         }
-        
+
         assert choice["index"] == 0
         assert choice["finish_reason"] == "stop"
         assert choice["message"]["role"] == "assistant"
@@ -794,18 +758,14 @@ class TestRequestResponseTypes:
                     "index": 0,
                     "message": {
                         "role": "assistant",
-                        "content": [{"type": "text", "text": "Hello!"}]
+                        "content": [{"type": "text", "text": "Hello!"}],
                     },
-                    "finish_reason": "stop"
+                    "finish_reason": "stop",
                 }
             ],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5,
-                "total_tokens": 15
-            }
+            "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
         }
-        
+
         assert response["id"] == "resp_123"
         assert len(response["choices"]) == 1
         assert response["usage"]["total_tokens"] == 15
