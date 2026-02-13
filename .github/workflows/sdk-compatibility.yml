@@ -1,0 +1,83 @@
+name: SDK Compatibility Monitor
+
+on:
+  schedule:
+    - cron: "0 0 * * 0" # Every Sunday at UTC 00:00
+  workflow_dispatch:
+
+jobs:
+  sdk-compatibility:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install project with dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Upgrade SDKs to latest versions
+        run: pip install --upgrade openai anthropic google-genai
+
+      - name: Run type compatibility tests
+        id: tests
+        run: |
+          python -m pytest tests/test_types/ -v 2>&1 | tee test_output.txt
+          exit ${PIPESTATUS[0]}
+        continue-on-error: true
+
+      - name: Create issue on failure
+        if: steps.tests.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const testOutput = fs.readFileSync('test_output.txt', 'utf8');
+
+            const title = '🚨 SDK Compatibility Alert: Type tests failed';
+
+            // Check for existing open issue with the same title
+            const existingIssues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'sdk-compatibility,automated',
+            });
+
+            const duplicate = existingIssues.data.find(issue => issue.title === title);
+            if (duplicate) {
+              console.log(`Issue already exists: #${duplicate.number}`);
+              return;
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              labels: ['sdk-compatibility', 'automated'],
+              body: `## SDK Compatibility Test Failure
+
+            The weekly SDK compatibility check has detected type test failures with the latest SDK versions.
+
+            **Workflow run:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}
+
+            ### Test Output
+
+            \`\`\`
+            ${testOutput.slice(-3000)}
+            \`\`\`
+
+            ### Next Steps
+
+            1. Review the test output above
+            2. Check which SDK version introduced the breaking change
+            3. Update the type definitions in \`src/llmir/types/\` accordingly
+            4. Close this issue once resolved
+            `,
+            });
