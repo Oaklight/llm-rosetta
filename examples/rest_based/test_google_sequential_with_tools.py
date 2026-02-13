@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 from examples.tools import available_tools, tools_spec
-from llmir.converters.google_converter import GoogleConverter
+from llmir.converters.google_genai import GoogleConverter
 
 # 加载环境变量
 load_dotenv()

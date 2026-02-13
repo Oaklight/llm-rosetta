@@ -10,7 +10,7 @@ import os
 import requests
 from dotenv import load_dotenv
 
-from llmir.converters.google_converter import GoogleConverter
+from llmir.converters.google_genai import GoogleConverter
 from llmir.types.ir import extract_text_content, extract_tool_calls
 
 # Load environment variables
