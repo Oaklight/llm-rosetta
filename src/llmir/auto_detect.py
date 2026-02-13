@@ -159,12 +159,10 @@ def get_converter_for_provider(provider: ProviderType):
     Raises:
         ValueError: 如果 provider 类型不支持 If provider type is not supported
     """
-    from .converters import (
-        AnthropicConverter,
-        GoogleConverter,
-        OpenAIChatConverter,
-        OpenAIResponsesConverter,
-    )
+    from .converters.anthropic import AnthropicConverter
+    from .converters.google_genai import GoogleConverter
+    from .converters.openai_chat import OpenAIChatConverter
+    from .converters.openai_responses import OpenAIResponsesConverter
 
     converter_map = {
         "openai_chat": OpenAIChatConverter,
