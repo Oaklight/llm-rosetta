@@ -1,29 +1,31 @@
 """
-OpenAI Chat Converter End-to-End Integration Test
+OpenAI Chat Converter End-to-End Integration Test (REST Version)
 
-Tests the full conversion pipeline with real OpenAI API calls using the
-new refactored converter interfaces:
+Tests the full conversion pipeline with real OpenAI-compatible API calls
+using raw HTTP requests (requests library) and the refactored converter
+interfaces:
 - request_to_provider / request_from_provider
 - response_from_provider / response_to_provider
 - stream_response_from_provider / stream_response_to_provider
 
 Requires:
 - OPENAI_API_KEY in .env
-- Network access (uses proxychains if direct access fails)
+- Network access
 
 Usage:
     conda activate llmir
-    python tests/integration/test_openai_chat_e2e.py
+    python tests/integration/test_openai_chat_rest_e2e.py
 """
 
 import json
 import os
 import sys
+import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import dotenv
-from openai import OpenAI
+import requests
 
 from examples.tools import available_tools, tools_spec
 from llmir.converters.openai_chat import OpenAIChatConverter
@@ -57,7 +59,12 @@ if not openai_api_key:
     print("ERROR: OPENAI_API_KEY not set in .env")
     sys.exit(1)
 
-client = OpenAI(api_key=openai_api_key, base_url=openai_base_url)
+API_URL = f"{openai_base_url}/chat/completions"
+HEADERS = {
+    "Authorization": f"Bearer {openai_api_key}",
+    "Content-Type": "application/json",
+}
+
 converter = OpenAIChatConverter()
 
 
@@ -78,6 +85,78 @@ def ok(name: str) -> None:
 
 def fail(name: str, err: str) -> None:
     print(f"  ✗ FAIL: {name} — {err}")
+
+
+def call_api(provider_req: dict, max_retries: int = 3) -> dict:
+    """Call the OpenAI Chat Completions API and return the response dict.
+
+    Retries on 429 (rate limit) with exponential backoff.
+    """
+    for attempt in range(max_retries):
+        response = requests.post(
+            API_URL, headers=HEADERS, json=provider_req, timeout=60
+        )
+        if response.status_code == 429:
+            wait = 2 ** (attempt + 1)
+            print(f"  [Rate limited, retrying in {wait}s...]")
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        return response.json()
+    # Final attempt without catching
+    response = requests.post(API_URL, headers=HEADERS, json=provider_req, timeout=60)
+    response.raise_for_status()
+    return response.json()
+
+
+def call_api_stream(provider_req: dict, max_retries: int = 3):
+    """Call the OpenAI Chat Completions API with streaming and yield SSE events.
+
+    Retries on 429 (rate limit) with exponential backoff.
+    """
+    provider_req["stream"] = True
+    for attempt in range(max_retries):
+        response = requests.post(
+            API_URL, headers=HEADERS, json=provider_req, timeout=60, stream=True
+        )
+        if response.status_code == 429:
+            wait = 2 ** (attempt + 1)
+            print(f"  [Rate limited, retrying in {wait}s...]")
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+
+        for line in response.iter_lines():
+            if not line:
+                continue
+            decoded = line.decode("utf-8")
+            if decoded.startswith("data: "):
+                data_str = decoded[6:]
+                if data_str.strip() == "[DONE]":
+                    return
+                try:
+                    yield json.loads(data_str)
+                except json.JSONDecodeError:
+                    continue
+        return
+
+    # Final attempt
+    response = requests.post(
+        API_URL, headers=HEADERS, json=provider_req, timeout=60, stream=True
+    )
+    response.raise_for_status()
+    for line in response.iter_lines():
+        if not line:
+            continue
+        decoded = line.decode("utf-8")
+        if decoded.startswith("data: "):
+            data_str = decoded[6:]
+            if data_str.strip() == "[DONE]":
+                return
+            try:
+                yield json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
 
 
 def execute_tool(tc: ToolCallPart) -> str:
@@ -114,11 +193,11 @@ def test_non_stream_basic():
     assert len(provider_req["messages"]) >= 2  # system + user
 
     # Call API
-    response = client.chat.completions.create(**provider_req)
-    print(f"  API finish_reason: {response.choices[0].finish_reason}")
+    response_data = call_api(provider_req)
+    print(f"  API finish_reason: {response_data['choices'][0]['finish_reason']}")
 
     # Provider response → IR
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(response_data)
     assert "choices" in ir_response
     assert len(ir_response["choices"]) >= 1
 
@@ -173,8 +252,8 @@ def test_non_stream_image():
     assert img_part["type"] == "image_url"
     assert "url" in img_part["image_url"]
 
-    response = client.chat.completions.create(**provider_req)
-    ir_response = converter.response_from_provider(response)
+    response_data = call_api(provider_req)
+    ir_response = converter.response_from_provider(response_data)
 
     msg = ir_response["choices"][0]["message"]
     text = extract_text_content(msg)
@@ -216,8 +295,8 @@ def test_non_stream_tool_calls():
     print(f"  Round 1 warnings: {warnings}")
     assert "tools" in provider_req
 
-    response = client.chat.completions.create(**provider_req)
-    ir_response = converter.response_from_provider(response)
+    response_data = call_api(provider_req)
+    ir_response = converter.response_from_provider(response_data)
 
     assistant_msg = ir_response["choices"][0]["message"]
     tool_calls = extract_tool_calls(assistant_msg)
@@ -255,8 +334,8 @@ def test_non_stream_tool_calls():
     provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
     print(f"  Round 2 warnings: {warnings_r2}")
 
-    response_r2 = client.chat.completions.create(**provider_req_r2)
-    ir_response_r2 = converter.response_from_provider(response_r2)
+    response_data_r2 = call_api(provider_req_r2)
+    ir_response_r2 = converter.response_from_provider(response_data_r2)
 
     final_msg = ir_response_r2["choices"][0]["message"]
     final_text = extract_text_content(final_msg)
@@ -290,16 +369,20 @@ def test_stream_text():
 
     provider_req, warnings = converter.request_to_provider(ir_request)
     print(f"  Warnings: {warnings}")
-    assert provider_req.get("stream") is True
 
-    stream = client.chat.completions.create(**provider_req)
+    # Remove stream from provider_req since call_api_stream adds it
+    provider_req.pop("stream", None)
+    # Keep stream_options for usage
+    stream_options = provider_req.pop("stream_options", None)
+    if stream_options:
+        provider_req["stream_options"] = stream_options
 
     collected_text = []
     event_types_seen = set()
     print("  Stream output: ", end="")
 
-    for chunk in stream:
-        ir_events = converter.stream_response_from_provider(chunk)
+    for sse_event in call_api_stream(provider_req):
+        ir_events = converter.stream_response_from_provider(sse_event)
         for event in ir_events:
             event_types_seen.add(event["type"])
 
@@ -349,17 +432,18 @@ def test_stream_tool_calls():
     }
 
     provider_req, warnings = converter.request_to_provider(ir_request)
-    assert provider_req.get("stream") is True
-
-    stream = client.chat.completions.create(**provider_req)
+    provider_req.pop("stream", None)
+    stream_options = provider_req.pop("stream_options", None)
+    if stream_options:
+        provider_req["stream_options"] = stream_options
 
     event_types_seen = set()
     tool_call_ids = []
     tool_names = []
     arg_fragments = []
 
-    for chunk in stream:
-        ir_events = converter.stream_response_from_provider(chunk)
+    for sse_event in call_api_stream(provider_req):
+        ir_events = converter.stream_response_from_provider(sse_event)
         for event in ir_events:
             event_types_seen.add(event["type"])
 
@@ -367,7 +451,8 @@ def test_stream_tool_calls():
                 tool_call_ids.append(event["tool_call_id"])
                 tool_names.append(event["tool_name"])
                 print(
-                    f"  Tool call start: {event['tool_name']} (id={event['tool_call_id']})"
+                    f"  Tool call start: {event['tool_name']} "
+                    f"(id={event['tool_call_id']})"
                 )
             elif event["type"] == "tool_call_delta":
                 arg_fragments.append(event["arguments_delta"])
@@ -447,10 +532,10 @@ def test_response_round_trip():
     }
 
     provider_req, _ = converter.request_to_provider(ir_request)
-    response = client.chat.completions.create(**provider_req)
+    response_data = call_api(provider_req)
 
     # Provider → IR
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(response_data)
     print(f"  IR response id: {ir_response['id']}")
     print(f"  IR response model: {ir_response['model']}")
 
@@ -475,7 +560,7 @@ def test_response_round_trip():
 
 
 def run_all():
-    print("\nOpenAI Chat Converter E2E Tests")
+    print("\nOpenAI Chat Converter E2E Tests (REST Version)")
     print(f"Model: {openai_model}")
     print(f"Base URL: {openai_base_url}")
 
@@ -500,6 +585,8 @@ def run_all():
 
             traceback.print_exc()
             results.append((name, False))
+        # Brief pause between tests to avoid rate limiting
+        time.sleep(3)
 
     # Summary
     section("SUMMARY")
