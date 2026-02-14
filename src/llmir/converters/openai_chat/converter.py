@@ -17,6 +17,7 @@ from ...types.ir.response import IRResponse
 from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
+    ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -512,11 +513,22 @@ class OpenAIChatConverter(BaseConverter):
 
             # Text delta
             content = delta.get("content")
-            if content:
+            if content is not None:
                 events.append(
                     TextDeltaEvent(
                         type="text_delta",
                         text=content,
+                        choice_index=choice_index,
+                    )
+                )
+
+            # Reasoning content delta (OpenAI o1/o3 models)
+            reasoning_content = delta.get("reasoning_content")
+            if reasoning_content is not None:
+                events.append(
+                    ReasoningDeltaEvent(
+                        type="reasoning_delta",
+                        reasoning=reasoning_content,
                         choice_index=choice_index,
                     )
                 )
@@ -527,28 +539,31 @@ class OpenAIChatConverter(BaseConverter):
                 for tc in tool_calls:
                     tc_func = tc.get("function", {})
                     tc_id = tc.get("id")
+                    tc_index = tc.get("index")
 
                     if tc_id:
                         # New tool call starting
-                        events.append(
-                            ToolCallStartEvent(
-                                type="tool_call_start",
-                                tool_call_id=tc_id,
-                                tool_name=tc_func.get("name", ""),
-                                choice_index=choice_index,
-                            )
+                        start_event = ToolCallStartEvent(
+                            type="tool_call_start",
+                            tool_call_id=tc_id,
+                            tool_name=tc_func.get("name", ""),
+                            choice_index=choice_index,
                         )
+                        if tc_index is not None:
+                            start_event["tool_call_index"] = tc_index
+                        events.append(start_event)
 
                     arguments = tc_func.get("arguments")
                     if arguments:
-                        events.append(
-                            ToolCallDeltaEvent(
-                                type="tool_call_delta",
-                                tool_call_id=tc_id or "",
-                                arguments_delta=arguments,
-                                choice_index=choice_index,
-                            )
+                        delta_event = ToolCallDeltaEvent(
+                            type="tool_call_delta",
+                            tool_call_id=tc_id or "",
+                            arguments_delta=arguments,
+                            choice_index=choice_index,
                         )
+                        if tc_index is not None:
+                            delta_event["tool_call_index"] = tc_index
+                        events.append(delta_event)
 
             # Finish reason
             finish_reason = p_choice.get("finish_reason")
@@ -606,43 +621,54 @@ class OpenAIChatConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "tool_call_start":
+        elif event_type == "reasoning_delta":
             choice_index = ir_event.get("choice_index", 0)
             return {
                 "choices": [
                     {
                         "index": choice_index,
-                        "delta": {
-                            "tool_calls": [
-                                {
-                                    "id": ir_event["tool_call_id"],
-                                    "type": "function",
-                                    "function": {
-                                        "name": ir_event["tool_name"],
-                                        "arguments": "",
-                                    },
-                                }
-                            ]
-                        },
+                        "delta": {"reasoning_content": ir_event["reasoning"]},
+                    }
+                ]
+            }
+
+        elif event_type == "tool_call_start":
+            choice_index = ir_event.get("choice_index", 0)
+            tc_entry: Dict[str, Any] = {
+                "id": ir_event["tool_call_id"],
+                "type": "function",
+                "function": {
+                    "name": ir_event["tool_name"],
+                    "arguments": "",
+                },
+            }
+            tc_index = ir_event.get("tool_call_index")
+            if tc_index is not None:
+                tc_entry["index"] = tc_index
+            return {
+                "choices": [
+                    {
+                        "index": choice_index,
+                        "delta": {"tool_calls": [tc_entry]},
                     }
                 ]
             }
 
         elif event_type == "tool_call_delta":
             choice_index = ir_event.get("choice_index", 0)
+            tc_entry: Dict[str, Any] = {
+                "function": {
+                    "arguments": ir_event["arguments_delta"],
+                },
+            }
+            tc_index = ir_event.get("tool_call_index")
+            if tc_index is not None:
+                tc_entry["index"] = tc_index
             return {
                 "choices": [
                     {
                         "index": choice_index,
-                        "delta": {
-                            "tool_calls": [
-                                {
-                                    "function": {
-                                        "arguments": ir_event["arguments_delta"],
-                                    },
-                                }
-                            ]
-                        },
+                        "delta": {"tool_calls": [tc_entry]},
                     }
                 ]
             }
