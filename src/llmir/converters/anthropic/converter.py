@@ -28,6 +28,7 @@ from ...types.ir.response import IRResponse
 from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
+    ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -528,12 +529,20 @@ class AnthropicConverter(BaseConverter):
                     )
                 )
             elif delta_type == "thinking_delta":
-                # Thinking deltas are text-like but for reasoning
-                # We emit them as text deltas for now
+                # Thinking deltas map to ReasoningDeltaEvent
                 events.append(
-                    TextDeltaEvent(
-                        type="text_delta",
-                        text=delta.get("thinking", ""),
+                    ReasoningDeltaEvent(
+                        type="reasoning_delta",
+                        reasoning=delta.get("thinking", ""),
+                    )
+                )
+            elif delta_type == "signature_delta":
+                # Signature deltas for thinking block verification
+                events.append(
+                    ReasoningDeltaEvent(
+                        type="reasoning_delta",
+                        reasoning="",
+                        signature=delta.get("signature", ""),
                     )
                 )
 
@@ -593,6 +602,24 @@ class AnthropicConverter(BaseConverter):
                 "delta": {
                     "type": "text_delta",
                     "text": ir_event["text"],
+                },
+            }
+
+        elif event_type == "reasoning_delta":
+            signature = ir_event.get("signature")
+            if signature is not None:
+                return {
+                    "type": "content_block_delta",
+                    "delta": {
+                        "type": "signature_delta",
+                        "signature": signature,
+                    },
+                }
+            return {
+                "type": "content_block_delta",
+                "delta": {
+                    "type": "thinking_delta",
+                    "thinking": ir_event["reasoning"],
                 },
             }
 
