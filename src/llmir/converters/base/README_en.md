@@ -1,70 +1,127 @@
-# Base Converter Module - Lightweight Modular Architecture
+# Base Converter Module — Bottom-Up Ops Pattern
 
 [中文版](./README_zh.md) | [English Version](./README_en.md)
 
 ## Overview
 
-The Base Converter Module provides abstract base classes and lightweight modular architecture for converters, adopting the **composition over inheritance** design pattern to establish unified and flexible interface specifications for all provider converters.
+The Base Converter Module provides abstract base classes for all provider converters, organized by **functional domains** using the **Bottom-Up Ops Pattern**. Each domain handles a specific aspect of the conversion pipeline, from low-level content parts up to full request/response objects.
+
+All 4 provider converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI) have been refactored to follow this pattern.
 
 ## File Structure
 
 ```
 src/llmir/converters/base/
-├── __init__.py          # Module exports
-├── converter.py         # BaseConverter main converter abstract base class
-├── atomic_ops.py        # BaseAtomicOps atomic conversion operations abstract base class
-├── complex_ops.py       # BaseComplexOps complex conversion operations abstract base class
-├── README_en.md         # English documentation
-└── README_zh.md         # Chinese documentation
+├── __init__.py      # Module exports
+├── content.py       # BaseContentOps — content part conversion (text, image, file, audio, reasoning, refusal, citation)
+├── tools.py         # BaseToolOps — tool conversion (definition, choice, call, result, config)
+├── messages.py      # BaseMessageOps — message conversion (batch/single messages, validation)
+├── configs.py       # BaseConfigOps — configuration conversion (generation, response_format, stream, reasoning, cache)
+└── converter.py     # BaseConverter — top-level converter (composes ops classes via class attributes)
 ```
+
+## Architecture: Bottom-Up Ops Pattern
+
+The conversion pipeline is organized in layers, where higher layers call into lower layers:
+
+```
+L3  Converter       — request_to_provider / request_from_provider / response_*
+ │
+ ├── L2  ConfigOps   — generation, response_format, stream, reasoning, cache
+ ├── L1  MessageOps  — batch message conversion (calls ContentOps + ToolOps)
+ ├── L0.5 ToolOps    — tool definition, choice, call, result, config
+ └── L0  ContentOps  — text, image, file, audio, reasoning, refusal, citation
+```
+
+**Key principles:**
+
+- **Functional domain organization**: Each ops class handles one domain (content, tools, messages, configs)
+- **Clear conversion hierarchy**: content → messages → requests/responses
+- **Composition pattern**: Subclasses specify ops classes via class attributes, not inheritance
+- **Bidirectional conversion**: Every concept has `ir_*_to_p()` and `p_*_to_ir()` methods
 
 ## Module Description
 
-### `converter.py` - BaseConverter Main Converter Abstract Base Class (Lightweight)
+### `content.py` — BaseContentOps
 
-- **Responsibility**: Define core converter interfaces and common logic
-- **Key Features**:
-  - `to_provider()`: Smart conversion interface (IR → Provider)
-  - `from_provider()`: Smart conversion interface (Provider → IR)
-  - `validate_ir_input()`: IR input validation
-  - `atomic_ops_class`: Class attribute to specify atomic operations class
-  - `complex_ops_class`: Class attribute to specify complex operations class
+Handles conversion of individual content parts. All methods are `@staticmethod @abstractmethod`.
 
-**Important Change**: All atomic and complex level abstract methods have been removed, replaced with composition pattern using class attributes to specify ops classes.
+| Content Type | IR → Provider | Provider → IR |
+|-------------|---------------|---------------|
+| Text | `ir_text_to_p(ir_text: TextPart) → Any` | `p_text_to_ir(provider_text) → TextPart` |
+| Image | `ir_image_to_p(ir_image: ImagePart) → Any` | `p_image_to_ir(provider_image) → ImagePart` |
+| File | `ir_file_to_p(ir_file: FilePart) → Any` | `p_file_to_ir(provider_file) → FilePart` |
+| Audio | `ir_audio_to_p(ir_audio: AudioPart) → Any` | `p_audio_to_ir(provider_audio) → AudioPart` |
+| Reasoning | `ir_reasoning_to_p(ir_reasoning: ReasoningPart) → Any` | `p_reasoning_to_ir(provider_reasoning) → ReasoningPart` |
+| Refusal | `ir_refusal_to_p(ir_refusal: RefusalPart) → Any` | `p_refusal_to_ir(provider_refusal) → RefusalPart` |
+| Citation | `ir_citation_to_p(ir_citation: CitationPart) → Any` | `p_citation_to_ir(provider_citation) → CitationPart` |
 
-### `atomic_ops.py` - BaseAtomicOps Atomic Conversion Operations Abstract Base Class
+### `tools.py` — BaseToolOps
 
-- **Responsibility**: Define unified interfaces for basic content type conversions
-- **Abstract Methods**:
-  - Text conversion (`ir_text_to_p()`, `p_text_to_ir()`)
-  - Image conversion (`ir_image_to_p()`, `p_image_to_ir()`)
-  - File conversion (`ir_file_to_p()`, `p_file_to_ir()`)
-  - Tool call conversion (`ir_tool_call_to_p()`, `p_tool_call_to_ir()`)
-  - Tool result conversion (`ir_tool_result_to_p()`, `p_tool_result_to_ir()`)
-  - Tool definition conversion (`ir_tool_to_p()`, `p_tool_to_ir()`)
-  - Tool choice conversion (`ir_tool_choice_to_p()`, `p_tool_choice_to_ir()`)
-  - Content part conversion (`p_content_part_to_ir()`)
+Handles the full tool lifecycle: definition → choice → call → result → config. All methods are `@staticmethod @abstractmethod`.
 
-### `complex_ops.py` - BaseComplexOps Complex Conversion Operations Abstract Base Class
+| Tool Concept | IR → Provider | Provider → IR |
+|-------------|---------------|---------------|
+| Definition | `ir_tool_definition_to_p(ir_tool: ToolDefinition) → Any` | `p_tool_definition_to_ir(provider_tool) → ToolDefinition` |
+| Choice | `ir_tool_choice_to_p(ir_tool_choice: ToolChoice) → Any` | `p_tool_choice_to_ir(provider_tool_choice) → ToolChoice` |
+| Call | `ir_tool_call_to_p(ir_tool_call: ToolCallPart) → Any` | `p_tool_call_to_ir(provider_tool_call) → ToolCallPart` |
+| Result | `ir_tool_result_to_p(ir_tool_result: ToolResultPart) → Any` | `p_tool_result_to_ir(provider_tool_result) → ToolResultPart` |
+| Config | `ir_tool_config_to_p(ir_tool_config: ToolCallConfig) → Any` | `p_tool_config_to_ir(provider_tool_config) → ToolCallConfig` |
 
-- **Responsibility**: Define unified interfaces for message, request, and response level conversions
-- **Abstract Methods**:
-  - Message level conversion (`ir_message_to_p()`, `p_message_to_ir()`)
-  - Content part conversion (`ir_content_part_to_p()`)
-  - Request level conversion (`ir_request_to_p()`, `p_request_to_ir()`)
-  - Response level conversion (`ir_response_to_p()`, `p_response_to_ir()`)
-  - Helper methods (`p_user_message_to_ir()`, `p_assistant_message_to_ir()`)
+### `messages.py` — BaseMessageOps
 
-## Design Advantages
+Handles message-level conversion. Serves as a bridge between content/tool layers and the request/response layer.
 
-1. **Lightweight Design**: BaseConverter reduced from 298 lines to ~100 lines (66% reduction)
-2. **Composition Over Inheritance**: Specify ops classes via class attributes instead of forcing abstract method implementation
-3. **Reduced Boilerplate**: Each converter saves ~60-80 lines of delegation code
-4. **Clear Separation of Concerns**: Atomic operations, complex operations, and main converters each have distinct responsibilities
-5. **Strong Type Constraints**: Ensures consistency across all implementations through abstract base classes
-6. **Extensibility**: Adding new providers only requires implementing ops classes and setting class attributes
-7. **Maintainability**: Modular design facilitates understanding, testing, and maintenance
-8. **Flexibility**: Easy to switch or combine different ops implementations
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `ir_messages_to_p` | `(ir_messages: Iterable[Message \| ExtensionItem]) → Tuple[List[Any], List[str]]` | Batch convert IR messages to provider format (abstract) |
+| `p_messages_to_ir` | `(provider_messages: List[Any]) → List[Message \| ExtensionItem]` | Batch convert provider messages to IR format (abstract) |
+| `ir_message_to_p` | `(ir_message) → Tuple[Any, List[str]]` | Single message convenience method (concrete) |
+| `p_message_to_ir` | `(provider_message) → Message \| ExtensionItem` | Single message convenience method (concrete) |
+| `validate_messages` | `(messages) → List[str]` | Validate message list (concrete, overridable) |
+
+### `configs.py` — BaseConfigOps
+
+Handles conversion of all configuration parameters. All methods are `@staticmethod @abstractmethod`.
+
+| Config Type | IR → Provider | Provider → IR |
+|------------|---------------|---------------|
+| Generation | `ir_generation_config_to_p(ir_config: GenerationConfig) → Any` | `p_generation_config_to_ir(provider_config) → GenerationConfig` |
+| Response Format | `ir_response_format_to_p(ir_format: ResponseFormatConfig) → Any` | `p_response_format_to_ir(provider_format) → ResponseFormatConfig` |
+| Stream | `ir_stream_config_to_p(ir_stream: StreamConfig) → Any` | `p_stream_config_to_ir(provider_stream) → StreamConfig` |
+| Reasoning | `ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig) → Any` | `p_reasoning_config_to_ir(provider_reasoning) → ReasoningConfig` |
+| Cache | `ir_cache_config_to_p(ir_cache: CacheConfig) → Any` | `p_cache_config_to_ir(provider_cache) → CacheConfig` |
+
+### `converter.py` — BaseConverter
+
+Top-level converter that composes all ops classes. Defines 6 abstract methods + 2 convenience methods.
+
+**Class attributes** (set by subclasses):
+
+```python
+content_ops_class: Optional[Type] = None   # → BaseContentOps subclass
+tool_ops_class: Optional[Type] = None      # → BaseToolOps subclass
+message_ops_class: Optional[Type] = None   # → BaseMessageOps subclass
+config_ops_class: Optional[Type] = None    # → BaseConfigOps subclass
+```
+
+**Abstract methods:**
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `request_to_provider` | `(ir_request: IRRequest) → Tuple[Dict, List[str]]` | IR request → provider request |
+| `request_from_provider` | `(provider_request: Dict) → IRRequest` | Provider request → IR request |
+| `response_from_provider` | `(provider_response: Dict) → IRResponse` | Provider response → IR response |
+| `response_to_provider` | `(ir_response: IRResponse) → Dict` | IR response → provider response |
+| `messages_to_provider` | `(messages: Iterable[Message \| ExtensionItem]) → Tuple[List, List[str]]` | IR messages → provider messages |
+| `messages_from_provider` | `(provider_messages: List) → List[Message \| ExtensionItem]` | Provider messages → IR messages |
+
+**Convenience methods** (concrete):
+
+| Method | Description |
+|--------|-------------|
+| `message_to_provider` | Single message wrapper around `messages_to_provider` |
+| `message_from_provider` | Single message wrapper around `messages_from_provider` |
 
 ## Implementation Guide
 
@@ -72,150 +129,138 @@ src/llmir/converters/base/
 
 1. **Create provider directory**:
 
-   ```
-   src/llmir/converters/your_provider/
-   ├── __init__.py
-   ├── converter.py
-   ├── atomic_ops.py
-   └── complex_ops.py
-   ```
+    ```
+    src/llmir/converters/your_provider/
+    ├── __init__.py
+    ├── content_ops.py
+    ├── tool_ops.py
+    ├── message_ops.py
+    ├── config_ops.py
+    └── converter.py
+    ```
 
-2. **Implement atomic operations**:
+2. **Implement content operations**:
 
-   ```python
-   from ..base import BaseAtomicOps
+    ```python
+    from ..base import BaseContentOps
 
-   class YourProviderAtomicOps(BaseAtomicOps):
-       @staticmethod
-       def ir_text_to_p(text_part, **kwargs):
-           # Implement text conversion logic
-           pass
+    class YourProviderContentOps(BaseContentOps):
+        @staticmethod
+        def ir_text_to_p(ir_text, **kwargs):
+            return {"type": "text", "value": ir_text["text"]}
 
-       # Implement other abstract methods...
-   ```
+        @staticmethod
+        def p_text_to_ir(provider_text, **kwargs):
+            return {"type": "text", "text": provider_text["value"]}
 
-3. **Implement complex operations**:
+        # Implement all other abstract methods...
+    ```
 
-   ```python
-   from ..base import BaseComplexOps
+3. **Implement tool operations**:
 
-   class YourProviderComplexOps(BaseComplexOps):
-       @staticmethod
-       def ir_message_to_p(message, ir_input, **kwargs):
-           # Implement message conversion logic
-           pass
+    ```python
+    from ..base import BaseToolOps
 
-       # Implement other abstract methods...
-   ```
+    class YourProviderToolOps(BaseToolOps):
+        @staticmethod
+        def ir_tool_definition_to_p(ir_tool, **kwargs):
+            return {"name": ir_tool["name"], "params": ir_tool["parameters"]}
 
-4. **Implement main converter (lightweight approach)**:
+        # Implement all other abstract methods...
+    ```
 
-   ```python
-   from ..base import BaseConverter
-   from .atomic_ops import YourProviderAtomicOps
-   from .complex_ops import YourProviderComplexOps
+4. **Implement message operations**:
 
-   class YourProviderConverter(BaseConverter):
-       # Set ops class attributes
-       atomic_ops_class = YourProviderAtomicOps
-       complex_ops_class = YourProviderComplexOps
+    ```python
+    from ..base import BaseMessageOps
 
-       def to_provider(self, ir_data, **kwargs):
-           # Directly call ops class static methods
-           converted, warnings = self.complex_ops_class.ir_message_to_p(message, **kwargs)
-           # ... implement conversion logic
-           pass
+    class YourProviderMessageOps(BaseMessageOps):
+        def __init__(self, content_ops, tool_ops):
+            self.content_ops = content_ops
+            self.tool_ops = tool_ops
 
-       def from_provider(self, provider_data, **kwargs):
-           # Directly call ops class static methods
-           ir_message = self.complex_ops_class.p_message_to_ir(provider_message)
-           # ... implement conversion logic
-           pass
-   ```
+        @staticmethod
+        def ir_messages_to_p(ir_messages, **kwargs):
+            # Use content_ops and tool_ops to convert message content
+            ...
 
-   **Note**: No need to implement numerous delegation methods anymore. Simply use `self.atomic_ops_class` and `self.complex_ops_class` to call ops methods directly.
+        # Implement all other abstract methods...
+    ```
+
+5. **Implement config operations**:
+
+    ```python
+    from ..base import BaseConfigOps
+
+    class YourProviderConfigOps(BaseConfigOps):
+        @staticmethod
+        def ir_generation_config_to_p(ir_config, **kwargs):
+            return {"temp": ir_config.get("temperature", 1.0)}
+
+        # Implement all other abstract methods...
+    ```
+
+6. **Compose the converter**:
+
+    ```python
+    from ..base import BaseConverter
+    from .content_ops import YourProviderContentOps
+    from .tool_ops import YourProviderToolOps
+    from .message_ops import YourProviderMessageOps
+    from .config_ops import YourProviderConfigOps
+
+    class YourProviderConverter(BaseConverter):
+        content_ops_class = YourProviderContentOps
+        tool_ops_class = YourProviderToolOps
+        message_ops_class = YourProviderMessageOps
+        config_ops_class = YourProviderConfigOps
+
+        def __init__(self):
+            self.content_ops = self.content_ops_class()
+            self.tool_ops = self.tool_ops_class()
+            self.message_ops = self.message_ops_class(self.content_ops, self.tool_ops)
+            self.config_ops = self.config_ops_class()
+
+        def request_to_provider(self, ir_request, **kwargs):
+            warnings = []
+            result = {"model": ir_request["model"]}
+            # Use self.message_ops, self.config_ops, self.tool_ops
+            # to convert each field of the request
+            ...
+            return result, warnings
+
+        # Implement all other abstract methods...
+    ```
 
 ## Existing Implementations
 
-### Refactored (Lightweight Architecture)
+All 4 provider converters follow the Bottom-Up Ops Pattern:
 
-- ✅ **OpenAI Chat Converter**: Adopted lightweight architecture
-  - [`OpenAIChatConverter`](../openai_chat/converter.py): Main converter (236 lines, 28% reduction)
-  - [`OpenAIChatAtomicOps`](../openai_chat/atomic_ops.py): Atomic operations
-  - [`OpenAIChatComplexOps`](../openai_chat/complex_ops.py): Complex operations
-
-### Pending Refactoring (Traditional Architecture)
-
-- ⏳ **Anthropic Converter**: Uses traditional monolithic architecture
-- ⏳ **Google Converter**: Uses traditional monolithic architecture
-- ⏳ **OpenAI Responses Converter**: Uses traditional monolithic architecture
-
-**Note**: Traditional architecture converters still work normally and can be gradually migrated to lightweight architecture as needed.
-
-## Bidirectional Conversion Support
-
-The new architecture fully supports bidirectional conversion:
-
-1. **IR → Provider**: `ir_*_to_p()` series methods
-2. **Provider → IR**: `p_*_to_ir()` series methods
-
-This enables LLMIR to be used for building AI API bridge services, performing bidirectional conversions between different formats.
+| Provider | Converter | ContentOps | ToolOps | MessageOps | ConfigOps |
+|----------|-----------|------------|---------|------------|-----------|
+| OpenAI Chat | `OpenAIChatConverter` | `OpenAIChatContentOps` | `OpenAIChatToolOps` | `OpenAIChatMessageOps` | `OpenAIChatConfigOps` |
+| OpenAI Responses | `OpenAIResponsesConverter` | `OpenAIResponsesContentOps` | `OpenAIResponsesToolOps` | `OpenAIResponsesMessageOps` | `OpenAIResponsesConfigOps` |
+| Anthropic | `AnthropicConverter` | `AnthropicContentOps` | `AnthropicToolOps` | `AnthropicMessageOps` | `AnthropicConfigOps` |
+| Google GenAI | `GoogleGenAIConverter` | `GoogleGenAIContentOps` | `GoogleGenAIToolOps` | `GoogleGenAIMessageOps` | `GoogleGenAIConfigOps` |
 
 ## Method Naming Convention
 
 - **`ir_*_to_p()`**: Convert from IR format to Provider format
 - **`p_*_to_ir()`**: Convert from Provider format to IR format
-- **`*_message_*`**: Message-level operations
-- **`*_request_*`**: Request-level operations
-- **`*_response_*`**: Response-level operations
-- **`*_content_part_*`**: Content part operations
-- **`*_tool_*`**: Tool-related operations
-
-## Type Safety
-
-All abstract methods include proper type hints to ensure:
-
-- Input parameter types are clearly defined
-- Return types are explicitly specified
-- Optional parameters are properly marked
-- Generic types are used where appropriate
-
-## Error Handling
-
-Base classes provide common error handling patterns:
-
-- Input validation for IR data
-- Type checking for provider data
-- Graceful handling of unsupported features
-- Warning collection for lossy conversions
+- **`*_text_*`**, **`*_image_*`**, etc.: Content type operations
+- **`*_tool_definition_*`**, **`*_tool_call_*`**, etc.: Tool lifecycle operations
+- **`*_messages_*`**: Batch message operations
+- **`*_generation_config_*`**, **`*_stream_config_*`**, etc.: Configuration operations
+- **`*_request_*`**, **`*_response_*`**: Top-level request/response operations
 
 ## Testing Strategy
 
-The modular architecture facilitates comprehensive testing:
+Each ops class can be tested independently:
 
-- **Unit tests**: Test individual atomic operations
-- **Integration tests**: Test complex operations and workflows
-- **End-to-end tests**: Test complete conversion pipelines
-- **Compatibility tests**: Ensure backward compatibility
+- **ContentOps tests**: Test individual content part conversions
+- **ToolOps tests**: Test tool definition, choice, call, result conversions
+- **MessageOps tests**: Test batch message conversion with mixed content types
+- **ConfigOps tests**: Test configuration parameter conversions
+- **Converter tests**: Test full request/response conversion pipelines
 
-## Refactoring Results
-
-Through adopting the lightweight architecture, we achieved:
-
-- **Code Reduction**: BaseConverter reduced by 66%, OpenAIChatConverter by 28%
-- **Clearer Architecture**: Composition over inheritance, clearer responsibilities
-- **100% Backward Compatible**: All 137 tests passed
-- **Easier Maintenance**: Reduced boilerplate code, improved code quality
-
-For detailed refactoring information, please refer to the project documentation.
-
-## Future Roadmap
-
-The lightweight modular architecture enables systematic refactoring of existing converters:
-
-1. **Anthropic Converter**: Can be refactored following the same pattern
-2. **Google Converter**: Can be refactored following the same pattern
-3. **OpenAI Responses Converter**: Can be refactored following the same pattern
-4. **New Providers**: Only need to implement ops classes and set class attributes
-
-This creates a consistent, maintainable, and extensible foundation for the entire LLMIR converter ecosystem.
+See `tests/test_converters_base.py` for base module tests and `tests/converters/<provider>/` for provider-specific tests.
