@@ -18,6 +18,15 @@ from ...types.ir import (
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
+from ...types.ir.stream import (
+    FinishEvent,
+    IRStreamEvent,
+    ReasoningDeltaEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 from ..base import BaseConverter
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
@@ -553,6 +562,226 @@ class OpenAIResponsesConverter(BaseConverter):
     def _convert_file_from_responses(self, file_part):
         """Convert Responses API file to IR format (compatibility alias)."""
         return self.content_ops.p_file_to_ir(file_part)
+
+    # ==================== Stream Support ====================
+
+    def stream_response_from_provider(
+        self, event: Dict[str, Any]
+    ) -> List[IRStreamEvent]:
+        """Convert an OpenAI Responses SSE event to IR stream events.
+
+        OpenAI Responses API uses fine-grained SSE events with a ``type`` field
+        (e.g. ``response.output_text.delta``) instead of the ``choices[].delta``
+        structure used by Chat Completions.
+
+        A single event typically produces zero or one IR events, but
+        ``response.completed`` may produce both a ``FinishEvent`` and a
+        ``UsageEvent``.
+
+        Args:
+            event: OpenAI Responses SSE event dict (or SDK object).
+
+        Returns:
+            List of IR stream events extracted from the event.
+        """
+        event = self._normalize(event)
+        events: List[IRStreamEvent] = []
+        event_type = event.get("type", "")
+
+        # --- Text delta ---
+        if event_type == "response.output_text.delta":
+            events.append(
+                TextDeltaEvent(
+                    type="text_delta",
+                    text=event.get("delta", ""),
+                )
+            )
+
+        # --- Reasoning summary delta ---
+        elif event_type == "response.reasoning_summary_text.delta":
+            events.append(
+                ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning=event.get("delta", ""),
+                )
+            )
+
+        # --- Tool call start (function_call item added) ---
+        elif event_type == "response.output_item.added":
+            item = event.get("item", {})
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                start_event = ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id=item.get("call_id", ""),
+                    tool_name=item.get("name", ""),
+                )
+                output_index = event.get("output_index")
+                if output_index is not None:
+                    start_event["tool_call_index"] = output_index
+                events.append(start_event)
+
+        # --- Tool call arguments delta ---
+        elif event_type == "response.function_call_arguments.delta":
+            delta_event = ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id=event.get("call_id", ""),
+                arguments_delta=event.get("delta", ""),
+            )
+            output_index = event.get("output_index")
+            if output_index is not None:
+                delta_event["tool_call_index"] = output_index
+            events.append(delta_event)
+
+        # --- Response completed ---
+        elif event_type == "response.completed":
+            response = event.get("response", event)
+
+            # Determine finish reason from status
+            status = response.get("status", "completed")
+            if status == "completed":
+                reason = "stop"
+            elif status == "incomplete":
+                incomplete_details = response.get("incomplete_details", {})
+                inc_reason = (
+                    incomplete_details.get("reason", "")
+                    if isinstance(incomplete_details, dict)
+                    else ""
+                )
+                if inc_reason == "max_output_tokens":
+                    reason = "length"
+                elif inc_reason == "content_filter":
+                    reason = "content_filter"
+                else:
+                    reason = "stop"
+            else:
+                reason = "stop"
+
+            # Check if any output item is a function_call to set tool_calls reason
+            output_items = response.get("output", [])
+            if isinstance(output_items, list):
+                for item in output_items:
+                    if isinstance(item, dict) and item.get("type") == "function_call":
+                        reason = "tool_calls"
+                        break
+
+            events.append(
+                FinishEvent(
+                    type="finish",
+                    finish_reason={"reason": reason},
+                )
+            )
+
+            # Extract usage if present
+            usage = response.get("usage")
+            if isinstance(usage, dict):
+                events.append(
+                    UsageEvent(
+                        type="usage",
+                        usage={
+                            "prompt_tokens": usage.get("input_tokens", 0),
+                            "completion_tokens": usage.get("output_tokens", 0),
+                            "total_tokens": usage.get("total_tokens", 0),
+                        },
+                    )
+                )
+
+        # --- Response failed ---
+        elif event_type == "response.failed":
+            events.append(
+                FinishEvent(
+                    type="finish",
+                    finish_reason={"reason": "error"},
+                )
+            )
+
+        # All other event types (response.created, response.in_progress,
+        # response.output_item.done, response.content_part.added,
+        # response.content_part.done, response.output_text.done,
+        # response.function_call_arguments.done, etc.) are ignored.
+
+        return events
+
+    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+        """Convert an IR stream event to an OpenAI Responses SSE event.
+
+        Args:
+            ir_event: IR stream event.
+
+        Returns:
+            OpenAI Responses SSE event dict.
+        """
+        event_type = ir_event["type"]
+
+        if event_type == "text_delta":
+            return {
+                "type": "response.output_text.delta",
+                "delta": ir_event["text"],
+            }
+
+        elif event_type == "reasoning_delta":
+            return {
+                "type": "response.reasoning_summary_text.delta",
+                "delta": ir_event["reasoning"],
+            }
+
+        elif event_type == "tool_call_start":
+            result: Dict[str, Any] = {
+                "type": "response.output_item.added",
+                "item": {
+                    "type": "function_call",
+                    "call_id": ir_event["tool_call_id"],
+                    "name": ir_event["tool_name"],
+                },
+            }
+            tc_index = ir_event.get("tool_call_index")
+            if tc_index is not None:
+                result["output_index"] = tc_index
+            return result
+
+        elif event_type == "tool_call_delta":
+            result: Dict[str, Any] = {
+                "type": "response.function_call_arguments.delta",
+                "call_id": ir_event["tool_call_id"],
+                "delta": ir_event["arguments_delta"],
+            }
+            tc_index = ir_event.get("tool_call_index")
+            if tc_index is not None:
+                result["output_index"] = tc_index
+            return result
+
+        elif event_type == "finish":
+            reason = ir_event["finish_reason"]["reason"]
+            status = "completed"
+            response: Dict[str, Any] = {"status": status}
+
+            if reason == "length":
+                response["status"] = "incomplete"
+                response["incomplete_details"] = {"reason": "max_output_tokens"}
+            elif reason == "error":
+                response["status"] = "failed"
+
+            return {
+                "type": "response.completed",
+                "response": response,
+            }
+
+        elif event_type == "usage":
+            usage = ir_event["usage"]
+            return {
+                "type": "response.completed",
+                "response": {
+                    "status": "completed",
+                    "usage": {
+                        "input_tokens": usage.get("prompt_tokens", 0),
+                        "output_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                    },
+                },
+            }
+
+        return {}
+
+    # ==================== Backward Compatibility ====================
 
     def validate_ir_input(self, ir_input):
         """Validate IR input for backward compatibility.
