@@ -14,7 +14,9 @@ Google-specific:
 Also maintains backward compatibility with the old to_provider/from_provider API.
 """
 
+import json
 import time
+import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from ...types.ir import (
@@ -29,6 +31,15 @@ from ...types.ir import (
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
+from ...types.ir.stream import (
+    FinishEvent,
+    IRStreamEvent,
+    ReasoningDeltaEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 from ..base import BaseConverter
 from .config_ops import GoogleGenAIConfigOps
 from .content_ops import GoogleGenAIContentOps
@@ -581,6 +592,259 @@ class GoogleGenAIConverter(BaseConverter):
                     messages.append(message)
 
         return messages
+
+    # ==================== Stream Support ====================
+
+    def stream_response_from_provider(
+        self, chunk: Dict[str, Any]
+    ) -> List[IRStreamEvent]:
+        """Convert a Google GenAI stream chunk to IR stream events.
+
+        Google GenAI stream chunks are complete ``GenerateContentResponse``
+        objects. Each chunk contains incremental content in
+        ``candidates[].content.parts[]``.
+
+        For text parts → ``TextDeltaEvent``
+        For thought parts (``thought: true``) → ``ReasoningDeltaEvent``
+        For function_call parts → ``ToolCallStartEvent`` + ``ToolCallDeltaEvent``
+            (Google sends complete function calls, not incremental deltas)
+        For finish_reason → ``FinishEvent``
+        For usage_metadata → ``UsageEvent``
+
+        Args:
+            chunk: Google GenAI stream chunk dict (or SDK object).
+
+        Returns:
+            List of IR stream events extracted from the chunk.
+        """
+        chunk = self._normalize(chunk)
+        events: List[IRStreamEvent] = []
+
+        for candidate in chunk.get("candidates", []):
+            choice_index = candidate.get("index", 0)
+            content = candidate.get("content", {})
+            parts = content.get("parts", [])
+
+            for part in parts:
+                # Check for thought/reasoning content
+                is_thought = part.get("thought", False)
+
+                if "text" in part and part["text"] is not None:
+                    if is_thought:
+                        events.append(
+                            ReasoningDeltaEvent(
+                                type="reasoning_delta",
+                                reasoning=part["text"],
+                                choice_index=choice_index,
+                            )
+                        )
+                    else:
+                        events.append(
+                            TextDeltaEvent(
+                                type="text_delta",
+                                text=part["text"],
+                                choice_index=choice_index,
+                            )
+                        )
+
+                # Handle function_call (Google sends complete calls, not deltas)
+                func_call = part.get("function_call") or part.get("functionCall")
+                if func_call:
+                    # Generate a unique tool_call_id since Google doesn't provide one
+                    tool_call_id = func_call.get("id") or (
+                        f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
+                    )
+                    tool_name = func_call.get("name", "")
+                    args = func_call.get("args", {})
+
+                    # Emit ToolCallStartEvent
+                    events.append(
+                        ToolCallStartEvent(
+                            type="tool_call_start",
+                            tool_call_id=tool_call_id,
+                            tool_name=tool_name,
+                            choice_index=choice_index,
+                        )
+                    )
+
+                    # Emit ToolCallDeltaEvent with complete arguments JSON
+                    args_json = (
+                        json.dumps(args) if isinstance(args, dict) else str(args)
+                    )
+                    events.append(
+                        ToolCallDeltaEvent(
+                            type="tool_call_delta",
+                            tool_call_id=tool_call_id,
+                            arguments_delta=args_json,
+                            choice_index=choice_index,
+                        )
+                    )
+
+            # Finish reason
+            finish_reason = candidate.get("finish_reason")
+            if finish_reason:
+                reason_map = {
+                    "STOP": "stop",
+                    "MAX_TOKENS": "length",
+                    "SAFETY": "content_filter",
+                    "RECITATION": "content_filter",
+                    "MALFORMED_FUNCTION_CALL": "error",
+                    "OTHER": "error",
+                }
+                events.append(
+                    FinishEvent(
+                        type="finish",
+                        finish_reason={"reason": reason_map.get(finish_reason, "stop")},
+                        choice_index=choice_index,
+                    )
+                )
+
+        # Usage metadata (typically in the last chunk)
+        usage = chunk.get("usage_metadata")
+        if usage:
+            usage_info: Dict[str, Any] = {
+                "prompt_tokens": usage.get("prompt_token_count", 0),
+                "completion_tokens": usage.get("candidates_token_count", 0),
+                "total_tokens": usage.get("total_token_count", 0),
+            }
+
+            # Reasoning tokens
+            if "thoughts_token_count" in usage:
+                usage_info["reasoning_tokens"] = usage["thoughts_token_count"]
+
+            events.append(
+                UsageEvent(
+                    type="usage",
+                    usage=usage_info,
+                )
+            )
+
+        return events
+
+    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+        """Convert an IR stream event to a Google GenAI stream chunk.
+
+        Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR
+        stream event.
+
+        Args:
+            ir_event: IR stream event.
+
+        Returns:
+            Google GenAI stream chunk dict.
+        """
+        event_type = ir_event["type"]
+
+        if event_type == "text_delta":
+            choice_index = ir_event.get("choice_index", 0)
+            return {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": ir_event["text"]}],
+                        },
+                    }
+                ]
+            }
+
+        elif event_type == "reasoning_delta":
+            choice_index = ir_event.get("choice_index", 0)
+            return {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [{"thought": True, "text": ir_event["reasoning"]}],
+                        },
+                    }
+                ]
+            }
+
+        elif event_type == "tool_call_start":
+            # Google sends complete function calls, so tool_call_start
+            # creates a function_call part with empty args (args come in delta)
+            choice_index = ir_event.get("choice_index", 0)
+            return {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "function_call": {
+                                        "name": ir_event["tool_name"],
+                                        "args": {},
+                                    }
+                                }
+                            ],
+                        },
+                    }
+                ]
+            }
+
+        elif event_type == "tool_call_delta":
+            # Google sends complete function calls; reconstruct from delta args
+            choice_index = ir_event.get("choice_index", 0)
+            try:
+                args = json.loads(ir_event["arguments_delta"])
+            except (json.JSONDecodeError, TypeError):
+                args = {}
+            return {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [
+                                {
+                                    "function_call": {
+                                        "name": "",
+                                        "args": args,
+                                    }
+                                }
+                            ],
+                        },
+                    }
+                ]
+            }
+
+        elif event_type == "finish":
+            choice_index = ir_event.get("choice_index", 0)
+            reason = ir_event["finish_reason"]["reason"]
+            reason_map = {
+                "stop": "STOP",
+                "length": "MAX_TOKENS",
+                "content_filter": "SAFETY",
+                "tool_calls": "STOP",
+                "error": "OTHER",
+            }
+            return {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "finish_reason": reason_map.get(reason, "STOP"),
+                    }
+                ]
+            }
+
+        elif event_type == "usage":
+            usage = ir_event["usage"]
+            usage_metadata: Dict[str, Any] = {
+                "prompt_token_count": usage.get("prompt_tokens", 0),
+                "candidates_token_count": usage.get("completion_tokens", 0),
+                "total_token_count": usage.get("total_tokens", 0),
+            }
+
+            if "reasoning_tokens" in usage:
+                usage_metadata["thoughts_token_count"] = usage["reasoning_tokens"]
+
+            return {"usage_metadata": usage_metadata}
+
+        return {}
 
 
 # Backward compatibility alias
