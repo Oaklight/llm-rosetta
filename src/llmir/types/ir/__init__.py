@@ -115,6 +115,7 @@ from .response import (
 from .stream import (
     FinishEvent,
     IRStreamEvent,
+    ReasoningDeltaEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -256,6 +257,7 @@ __all__ = [
     # ========== 流式事件类型 Stream event types ==========
     "IRStreamEvent",
     "TextDeltaEvent",
+    "ReasoningDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
     "FinishEvent",

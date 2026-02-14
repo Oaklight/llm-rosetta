@@ -6,6 +6,7 @@ IR stream event type definitions for supporting SSE chunk-level real-time conver
 
 包含以下事件类型：
 - TextDeltaEvent: 文本增量事件
+- ReasoningDeltaEvent: 推理/思考内容增量事件
 - ToolCallStartEvent: 工具调用开始事件
 - ToolCallDeltaEvent: 工具调用增量事件
 - FinishEvent: 完成事件
@@ -13,6 +14,7 @@ IR stream event type definitions for supporting SSE chunk-level real-time conver
 
 Contains the following event types:
 - TextDeltaEvent: Text delta event
+- ReasoningDeltaEvent: Reasoning/thinking content delta event
 - ToolCallStartEvent: Tool call start event
 - ToolCallDeltaEvent: Tool call delta event
 - FinishEvent: Finish event
@@ -41,6 +43,18 @@ class TextDeltaEvent(TypedDict):
     choice_index: NotRequired[int]
 
 
+class ReasoningDeltaEvent(TypedDict):
+    """Reasoning/thinking content delta event.
+
+    Emitted when a new reasoning/thinking text fragment is received from the model.
+    """
+
+    type: Required[Literal["reasoning_delta"]]
+    reasoning: Required[str]  # The reasoning text delta
+    signature: NotRequired[str]  # Anthropic thinking signature delta
+    choice_index: NotRequired[int]
+
+
 class ToolCallStartEvent(TypedDict):
     """Tool call start event.
 
@@ -50,6 +64,7 @@ class ToolCallStartEvent(TypedDict):
     type: Required[Literal["tool_call_start"]]
     tool_call_id: Required[str]
     tool_name: Required[str]
+    tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
 
 
@@ -62,6 +77,7 @@ class ToolCallDeltaEvent(TypedDict):
     type: Required[Literal["tool_call_delta"]]
     tool_call_id: Required[str]
     arguments_delta: Required[str]  # JSON string fragment
+    tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
 
 
@@ -92,6 +108,7 @@ class UsageEvent(TypedDict):
 
 IRStreamEvent = Union[
     TextDeltaEvent,
+    ReasoningDeltaEvent,
     ToolCallStartEvent,
     ToolCallDeltaEvent,
     FinishEvent,
@@ -104,6 +121,7 @@ IRStreamEvent = Union[
 
 __all__ = [
     "TextDeltaEvent",
+    "ReasoningDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
     "FinishEvent",
