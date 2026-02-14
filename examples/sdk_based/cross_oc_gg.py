@@ -32,6 +32,7 @@ from common import (  # noqa: E402
     CONVERSATION_TURNS,
     TOOLS_SPEC,
     build_user_message,
+    convert_image_urls_to_inline,
     get_google_config,
     get_openai_chat_config,
     print_assistant_response,
@@ -255,6 +256,9 @@ def send_openai_chat(ir_messages, model, client):
 def send_google_genai(ir_messages, model, client):
     """Convert IR messages to Google GenAI format, send, and return IR assistant message.
 
+    Image URLs in the IR messages are converted to inline base64 data
+    before conversion, since Google GenAI SDK does not support image URLs.
+
     Args:
         ir_messages: List of IR messages representing the conversation history.
         model: Google GenAI model name.
@@ -263,9 +267,12 @@ def send_google_genai(ir_messages, model, client):
     Returns:
         IR assistant message dict extracted from the response.
     """
+    # Convert image URLs to inline base64 for Google compatibility
+    safe_messages = convert_image_urls_to_inline(ir_messages)
+
     ir_request = {
         "model": model,
-        "messages": ir_messages,
+        "messages": safe_messages,
         "tools": TOOLS_SPEC,
         "tool_choice": {"mode": "auto"},
     }
