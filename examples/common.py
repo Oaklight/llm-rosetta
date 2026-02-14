@@ -5,9 +5,13 @@ conversation turn definitions, and helper functions used by all
 cross-provider example scripts.
 """
 
+import base64
+import copy
 import json
 import os
 from typing import Dict, List
+
+import httpx
 
 from llmir.types.ir import (
     UserMessage,
@@ -369,3 +373,78 @@ def get_google_config() -> dict:
         "api_key": os.environ.get("GOOGLE_API_KEY", ""),
         "model": os.environ.get("GOOGLE_MODEL", "gemini-2.0-flash"),
     }
+
+
+# ============================================================================
+# Google GenAI image URL workaround
+# ============================================================================
+
+
+def download_image_as_base64(url: str) -> tuple[str, str]:
+    """Download image from URL and return (base64_data, mime_type).
+
+    Args:
+        url: The image URL to download.
+
+    Returns:
+        Tuple of (base64-encoded image data, MIME type string).
+    """
+    response = httpx.get(
+        url,
+        follow_redirects=True,
+        headers={"User-Agent": "LLMIR-Example/1.0"},
+        timeout=60.0,
+    )
+    response.raise_for_status()
+    content_type = response.headers.get("content-type", "image/jpeg")
+    b64 = base64.b64encode(response.content).decode("utf-8")
+    return b64, content_type
+
+
+def convert_image_urls_to_inline(ir_messages: list) -> list:
+    """Convert image URL parts to inline base64 data for Google GenAI compatibility.
+
+    Google GenAI SDK does not directly support image URLs. This function
+    creates a copy of the messages and replaces any ImagePart with
+    ``image_url`` to use ``image_data`` (base64) instead.
+
+    The original ``ir_messages`` list is NOT modified.
+
+    Args:
+        ir_messages: List of IR messages (not modified).
+
+    Returns:
+        New list of IR messages with image URLs replaced by inline data.
+    """
+    converted = []
+    for msg in ir_messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            converted.append(msg)
+            continue
+
+        needs_conversion = any(
+            p.get("type") == "image" and p.get("image_url") for p in content
+        )
+        if not needs_conversion:
+            converted.append(msg)
+            continue
+
+        new_content = []
+        for part in content:
+            if part.get("type") == "image" and part.get("image_url"):
+                b64, mime = download_image_as_base64(part["image_url"])
+                new_content.append(
+                    {
+                        "type": "image",
+                        "image_data": {
+                            "data": b64,
+                            "media_type": mime,
+                        },
+                    }
+                )
+            else:
+                new_content.append(copy.deepcopy(part))
+        converted.append({**msg, "content": new_content})
+
+    return converted
