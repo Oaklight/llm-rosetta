@@ -19,6 +19,7 @@ import time
 import uuid
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
+
 from ...types.ir import (
     ExtensionItem,
     IRInput,
@@ -41,6 +42,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.stream_context import StreamContext
 from .config_ops import GoogleGenAIConfigOps
 from .content_ops import GoogleGenAIContentOps
 from .message_ops import GoogleGenAIMessageOps
@@ -596,7 +598,9 @@ class GoogleGenAIConverter(BaseConverter):
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
-        self, chunk: Dict[str, Any]
+        self,
+        chunk: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert a Google GenAI stream chunk to IR stream events.
 
@@ -721,7 +725,11 @@ class GoogleGenAIConverter(BaseConverter):
 
         return events
 
-    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+    def stream_response_to_provider(
+        self,
+        ir_event: IRStreamEvent,
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to a Google GenAI stream chunk.
 
         Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR

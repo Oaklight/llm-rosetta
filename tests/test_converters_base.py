@@ -10,7 +10,7 @@ Tests for LLMIR Converters Base Module
 """
 
 from abc import ABC
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import pytest
 
@@ -20,6 +20,7 @@ from llmir.converters.base import (
     BaseConverter,
     BaseMessageOps,
     BaseToolOps,
+    StreamContext,
 )
 from llmir.types.ir import (
     AudioPart,
@@ -438,11 +439,17 @@ class MockConverter(BaseConverter):
         return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
 
     def stream_response_from_provider(
-        self, chunk: Dict[str, Any]
+        self,
+        chunk: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         return []
 
-    def stream_response_to_provider(self, event: IRStreamEvent) -> Dict[str, Any]:
+    def stream_response_to_provider(
+        self,
+        event: IRStreamEvent,
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         return {}
 
 

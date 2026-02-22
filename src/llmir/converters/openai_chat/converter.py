@@ -6,7 +6,7 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from ...types.ir import (
     ExtensionItem,
@@ -24,6 +24,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.stream_context import StreamContext
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
 from .message_ops import OpenAIChatMessageOps
@@ -492,7 +493,9 @@ class OpenAIChatConverter(BaseConverter):
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
-        self, chunk: Dict[str, Any]
+        self,
+        chunk: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert an OpenAI SSE chunk to IR stream events.
 
@@ -599,7 +602,11 @@ class OpenAIChatConverter(BaseConverter):
 
         return events
 
-    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+    def stream_response_to_provider(
+        self,
+        ir_event: IRStreamEvent,
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI SSE chunk.
 
         Args:

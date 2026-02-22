@@ -9,7 +9,7 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from ...types.ir import (
     ExtensionItem,
@@ -28,6 +28,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.stream_context import StreamContext
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
 from .message_ops import OpenAIResponsesMessageOps
@@ -566,7 +567,9 @@ class OpenAIResponsesConverter(BaseConverter):
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
-        self, event: Dict[str, Any]
+        self,
+        event: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert an OpenAI Responses SSE event to IR stream events.
 
@@ -701,7 +704,11 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return events
 
-    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+    def stream_response_to_provider(
+        self,
+        ir_event: IRStreamEvent,
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI Responses SSE event.
 
         Args:

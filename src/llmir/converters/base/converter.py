@@ -13,6 +13,7 @@ from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
 from ...types.ir.stream import IRStreamEvent
+from .stream_context import StreamContext
 
 
 class BaseConverter(ABC):
@@ -168,6 +169,7 @@ class BaseConverter(ABC):
     def stream_response_from_provider(
         self,
         chunk: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert a provider-native stream chunk to a list of IR stream events.
 
@@ -178,6 +180,10 @@ class BaseConverter(ABC):
         Args:
             chunk: Provider-native stream chunk (dict or SDK object that will
                 be normalized internally by each concrete converter).
+            context: Optional stream context for stateful conversions.
+                When provided, converters may emit lifecycle events
+                (StreamStart/End, ContentBlockStart/End) and track
+                cross-chunk state.
 
         Returns:
             List of IR stream events extracted from the chunk.
@@ -188,14 +194,20 @@ class BaseConverter(ABC):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-    ) -> Dict[str, Any]:
-        """Convert an IR stream event to a provider-native stream chunk.
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        """Convert an IR stream event to provider-native stream chunk(s).
+
+        Some IR events (e.g., lifecycle events) may need to produce multiple
+        provider chunks, or may be silently consumed (returning an empty list).
 
         Args:
             event: IR stream event to convert.
+            context: Optional stream context for stateful conversions.
 
         Returns:
-            Provider-native stream chunk dict.
+            A single provider-native stream chunk dict, or a list of chunk
+            dicts when the event maps to multiple provider-level messages.
         """
         pass
 

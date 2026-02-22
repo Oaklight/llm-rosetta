@@ -15,7 +15,7 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 from ...types.ir import (
     ExtensionItem,
@@ -35,6 +35,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
+from ..base.stream_context import StreamContext
 from .config_ops import AnthropicConfigOps
 from .content_ops import AnthropicContentOps
 from .message_ops import AnthropicMessageOps
@@ -456,7 +457,9 @@ class AnthropicConverter(BaseConverter):
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
-        self, event: Dict[str, Any]
+        self,
+        event: Dict[str, Any],
+        context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert an Anthropic SSE event to IR stream events.
 
@@ -585,7 +588,11 @@ class AnthropicConverter(BaseConverter):
 
         return events
 
-    def stream_response_to_provider(self, ir_event: IRStreamEvent) -> Dict[str, Any]:
+    def stream_response_to_provider(
+        self,
+        ir_event: IRStreamEvent,
+        context: Optional[StreamContext] = None,
+    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an Anthropic SSE event.
 
         Args:
