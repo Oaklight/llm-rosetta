@@ -113,9 +113,13 @@ from .response import (
 
 # 流式事件类型 Stream event types
 from .stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -256,6 +260,10 @@ __all__ = [
     "is_extension_item",
     # ========== 流式事件类型 Stream event types ==========
     "IRStreamEvent",
+    "StreamStartEvent",
+    "StreamEndEvent",
+    "ContentBlockStartEvent",
+    "ContentBlockEndEvent",
     "TextDeltaEvent",
     "ReasoningDeltaEvent",
     "ToolCallStartEvent",
