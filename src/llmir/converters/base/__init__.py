@@ -22,11 +22,14 @@ from .configs import BaseConfigOps
 from .content import BaseContentOps
 from .converter import BaseConverter
 from .messages import BaseMessageOps
+from .stream_context import StreamContext
 from .tools import BaseToolOps
 
 __all__ = [
     # 主转换器 Main converter
     "BaseConverter",
+    # 流式上下文 Stream context
+    "StreamContext",
     # 功能域操作类 Functional domain operation classes
     "BaseContentOps",
     "BaseToolOps",
