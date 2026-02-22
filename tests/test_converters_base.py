@@ -9,45 +9,46 @@ Tests for LLMIR Converters Base Module
 - BaseConfigOps 配置操作抽象基类
 """
 
-import pytest
 from abc import ABC
-from typing import Any, Dict, List, Tuple, Union, Iterable
+from typing import Any, Dict, Iterable, List, Tuple, Union
+
+import pytest
 
 from llmir.converters.base import (
-    BaseConverter,
+    BaseConfigOps,
     BaseContentOps,
+    BaseConverter,
     BaseMessageOps,
     BaseToolOps,
-    BaseConfigOps,
 )
 from llmir.types.ir import (
-    # Content parts
-    TextPart,
-    ImagePart,
-    FilePart,
     AudioPart,
-    ToolCallPart,
-    ToolResultPart,
-    ReasoningPart,
-    RefusalPart,
+    CacheConfig,
     CitationPart,
-    # Messages
-    Message,
     ExtensionItem,
-    ToolDefinition,
-    ToolChoice,
-    ToolCallConfig,
+    FilePart,
     # Configs
     GenerationConfig,
-    ResponseFormatConfig,
-    StreamConfig,
-    ReasoningConfig,
-    CacheConfig,
+    ImagePart,
     # Request/Response
     IRRequest,
     IRResponse,
+    # Messages
+    Message,
+    ReasoningConfig,
+    ReasoningPart,
+    RefusalPart,
+    ResponseFormatConfig,
+    StreamConfig,
+    # Content parts
+    TextPart,
+    ToolCallConfig,
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
 )
-
+from llmir.types.ir.stream import IRStreamEvent
 
 # ============================================================================
 # Mock implementations for testing
@@ -435,6 +436,14 @@ class MockConverter(BaseConverter):
         self, provider_messages: List[Any], **kwargs: Any
     ) -> List[Union[Message, ExtensionItem]]:
         return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
+
+    def stream_response_from_provider(
+        self, chunk: Dict[str, Any]
+    ) -> List[IRStreamEvent]:
+        return []
+
+    def stream_response_to_provider(self, event: IRStreamEvent) -> Dict[str, Any]:
+        return {}
 
 
 # ============================================================================

@@ -12,6 +12,7 @@ from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
+from ...types.ir.stream import IRStreamEvent
 
 
 class BaseConverter(ABC):
@@ -158,6 +159,43 @@ class BaseConverter(ABC):
 
         Returns:
             IR格式的消息列表
+        """
+        pass
+
+    # ==================== Stream转换接口 Stream conversion interface ====================
+
+    @abstractmethod
+    def stream_response_from_provider(
+        self,
+        chunk: Dict[str, Any],
+    ) -> List[IRStreamEvent]:
+        """Convert a provider-native stream chunk to a list of IR stream events.
+
+        A single provider chunk may produce zero or more IR events depending on
+        the provider's SSE protocol.  For example, a chunk that carries both a
+        text delta and a finish reason would yield two events.
+
+        Args:
+            chunk: Provider-native stream chunk (dict or SDK object that will
+                be normalized internally by each concrete converter).
+
+        Returns:
+            List of IR stream events extracted from the chunk.
+        """
+        pass
+
+    @abstractmethod
+    def stream_response_to_provider(
+        self,
+        event: IRStreamEvent,
+    ) -> Dict[str, Any]:
+        """Convert an IR stream event to a provider-native stream chunk.
+
+        Args:
+            event: IR stream event to convert.
+
+        Returns:
+            Provider-native stream chunk dict.
         """
         pass
 
