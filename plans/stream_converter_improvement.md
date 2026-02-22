@@ -530,8 +530,9 @@ eliminate duplication across all 4 converters.
   `ContentBlockEndEvent`. Update `IRStreamEvent` union and `__all__`.
 - New file `src/llmir/converters/base/stream_context.py`:
   Implement `StreamContext` class.
-- [`src/llmir/converters/base/converter.py`](../src/llmir/converters/base/converter.py):
+- ✅ [`src/llmir/converters/base/converter.py`](../src/llmir/converters/base/converter.py):
   Add abstract `stream_response_from_provider` and `stream_response_to_provider`.
+  — *Done: implemented at lines 168 and 187.*
   Extract `_normalize()` as a base static method.
 - [`src/llmir/converters/base/__init__.py`](../src/llmir/converters/base/__init__.py):
   Export `StreamContext`.
@@ -614,7 +615,8 @@ methods have default `pass` or are added with backward-compatible signatures).
 
 **Changes**:
 - Remove `_normalize()` from all 4 converter files (use inherited base method).
-- Update or retire [`analysis/stream_converter_review.md`](../analysis/stream_converter_review.md).
+- ✅ ~~Update or retire [`analysis/stream_converter_review.md`](../analysis/stream_converter_review.md).~~
+  — *Done: file has been deleted.*
 - Add docstrings to `StreamContext` explaining usage patterns.
 - Ensure all `to_provider` methods return `{}` → raise `ValueError` or
   return `None` for unknown event types (P2-1).
@@ -644,6 +646,28 @@ graph TD
 
 Phases 2–5 are independent of each other and can be implemented in parallel
 or in any order after Phase 1 is complete.
+
+### Branch Strategy
+
+- **Main development branch**: `feature/stream-converter-improvements` (already
+  created; contains the BaseConverter stream abstract methods and this plan
+  document).
+- Each Phase is implemented on a sub-branch off
+  `feature/stream-converter-improvements`:
+  - Phase 1: `feature/stream-phase1-ir-types`
+  - Phase 2: `feature/stream-phase2-openai-chat`
+  - Phase 3: `feature/stream-phase3-anthropic`
+  - Phase 4: `feature/stream-phase4-google-genai`
+  - Phase 5: `feature/stream-phase5-openai-responses`
+  - Phase 6: `feature/stream-phase6-cleanup`
+- Each Phase is merged back into `feature/stream-converter-improvements` via PR
+  upon completion.
+- **Phase 1** is a prerequisite for Phases 2–5 and must be completed first.
+- **Phases 2–5** are independent of each other and can be implemented in
+  parallel or in any order.
+- **Phase 6** is executed after all of Phases 2–5 are complete.
+- Once all Phases are done, `feature/stream-converter-improvements` is merged
+  back into `main` via PR.
 
 ---
 
