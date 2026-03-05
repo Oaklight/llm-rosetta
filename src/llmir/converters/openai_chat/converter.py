@@ -18,6 +18,8 @@ from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -501,8 +503,14 @@ class OpenAIChatConverter(BaseConverter):
 
         A single chunk may produce multiple events (e.g., text delta + finish).
 
+        When a ``context`` is provided, lifecycle events (``StreamStartEvent``,
+        ``StreamEndEvent``) are emitted and cross-chunk state is tracked.
+        Without a context the behaviour is identical to the previous
+        implementation (backward compatible).
+
         Args:
             chunk: OpenAI SSE chunk dict (or SDK object).
+            context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the chunk.
@@ -510,7 +518,29 @@ class OpenAIChatConverter(BaseConverter):
         chunk = self._normalize(chunk)
         events: List[IRStreamEvent] = []
 
-        for p_choice in chunk.get("choices", []):
+        # --- StreamStartEvent (only with context, on first chunk) ---
+        if context is not None and not context.is_started:
+            response_id = chunk.get("id")
+            model = chunk.get("model")
+            created = chunk.get("created")
+            if response_id and model:
+                context.response_id = response_id
+                context.model = model
+                if created is not None:
+                    context.created = created
+                context.mark_started()
+                start_event: StreamStartEvent = {
+                    "type": "stream_start",
+                    "response_id": response_id,
+                    "model": model,
+                }
+                if created is not None:
+                    start_event["created"] = created
+                events.append(start_event)
+
+        choices = chunk.get("choices", [])
+
+        for p_choice in choices:
             choice_index = p_choice.get("index", 0)
             delta = p_choice.get("delta", {})
 
@@ -546,15 +576,19 @@ class OpenAIChatConverter(BaseConverter):
 
                     if tc_id:
                         # New tool call starting
-                        start_event = ToolCallStartEvent(
+                        start_event_tc = ToolCallStartEvent(
                             type="tool_call_start",
                             tool_call_id=tc_id,
                             tool_name=tc_func.get("name", ""),
                             choice_index=choice_index,
                         )
                         if tc_index is not None:
-                            start_event["tool_call_index"] = tc_index
-                        events.append(start_event)
+                            start_event_tc["tool_call_index"] = tc_index
+                        events.append(start_event_tc)
+
+                        # Register tool call in context
+                        if context is not None:
+                            context.register_tool_call(tc_id, tc_func.get("name", ""))
 
                     arguments = tc_func.get("arguments")
                     if arguments:
@@ -600,6 +634,11 @@ class OpenAIChatConverter(BaseConverter):
                 )
             )
 
+        # --- StreamEndEvent (only with context, when choices is empty list) ---
+        if context is not None and isinstance(choices, list) and len(choices) == 0:
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+
         return events
 
     def stream_response_to_provider(
@@ -609,17 +648,63 @@ class OpenAIChatConverter(BaseConverter):
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI SSE chunk.
 
+        When a ``context`` is provided and the stream has been started,
+        top-level fields (``id``, ``object``, ``model``, ``created``) are
+        populated on every output chunk.
+
         Args:
             ir_event: IR stream event.
+            context: Optional stream context for stateful conversions.
 
         Returns:
-            OpenAI SSE chunk dict.
+            OpenAI SSE chunk dict, or a list of chunk dicts.
         """
         event_type = ir_event["type"]
+        result: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
-        if event_type == "text_delta":
+        if event_type == "stream_start":
+            # Store metadata in context if provided
+            if context is not None:
+                context.response_id = ir_event["response_id"]
+                context.model = ir_event["model"]
+                context.created = ir_event.get("created", 0)
+                context.mark_started()
+            result = {
+                "id": ir_event["response_id"],
+                "object": "chat.completion.chunk",
+                "model": ir_event["model"],
+                "created": ir_event.get("created", 0),
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant"},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+            return result
+
+        elif event_type == "stream_end":
+            if context is not None:
+                context.mark_ended()
+            result = {
+                "id": context.response_id if context else "",
+                "object": "chat.completion.chunk",
+                "model": context.model if context else "",
+                "created": context.created if context else 0,
+                "choices": [],
+            }
+            return result
+
+        elif event_type == "content_block_start":
+            return {}
+
+        elif event_type == "content_block_end":
+            return {}
+
+        elif event_type == "text_delta":
             choice_index = ir_event.get("choice_index", 0)
-            return {
+            result = {
                 "choices": [
                     {
                         "index": choice_index,
@@ -630,7 +715,7 @@ class OpenAIChatConverter(BaseConverter):
 
         elif event_type == "reasoning_delta":
             choice_index = ir_event.get("choice_index", 0)
-            return {
+            result = {
                 "choices": [
                     {
                         "index": choice_index,
@@ -652,7 +737,7 @@ class OpenAIChatConverter(BaseConverter):
             tc_index = ir_event.get("tool_call_index")
             if tc_index is not None:
                 tc_entry["index"] = tc_index
-            return {
+            result = {
                 "choices": [
                     {
                         "index": choice_index,
@@ -663,26 +748,26 @@ class OpenAIChatConverter(BaseConverter):
 
         elif event_type == "tool_call_delta":
             choice_index = ir_event.get("choice_index", 0)
-            tc_entry: Dict[str, Any] = {
+            tc_delta_entry: Dict[str, Any] = {
                 "function": {
                     "arguments": ir_event["arguments_delta"],
                 },
             }
             tc_index = ir_event.get("tool_call_index")
             if tc_index is not None:
-                tc_entry["index"] = tc_index
-            return {
+                tc_delta_entry["index"] = tc_index
+            result = {
                 "choices": [
                     {
                         "index": choice_index,
-                        "delta": {"tool_calls": [tc_entry]},
+                        "delta": {"tool_calls": [tc_delta_entry]},
                     }
                 ]
             }
 
         elif event_type == "finish":
             choice_index = ir_event.get("choice_index", 0)
-            return {
+            result = {
                 "choices": [
                     {
                         "index": choice_index,
@@ -694,7 +779,7 @@ class OpenAIChatConverter(BaseConverter):
 
         elif event_type == "usage":
             usage = ir_event["usage"]
-            return {
+            result = {
                 "usage": {
                     "prompt_tokens": usage.get("prompt_tokens", 0),
                     "completion_tokens": usage.get("completion_tokens", 0),
@@ -702,4 +787,20 @@ class OpenAIChatConverter(BaseConverter):
                 }
             }
 
-        return {}
+        # Populate top-level fields when context is available and started
+        if (
+            context is not None
+            and context.is_started
+            and isinstance(result, dict)
+            and result
+        ):
+            if "id" not in result:
+                result["id"] = context.response_id
+            if "object" not in result:
+                result["object"] = "chat.completion.chunk"
+            if "model" not in result:
+                result["model"] = context.model
+            if "created" not in result:
+                result["created"] = context.created
+
+        return result
