@@ -517,35 +517,6 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result, warnings
 
-    def from_provider(self, provider_data, **kwargs):
-        """Backward-compatible conversion method.
-
-        Handles both full API responses and plain input/output item lists.
-
-        Args:
-            provider_data: OpenAI Responses API response or request dict.
-
-        Returns:
-            IRResponse (for full API responses) or list of IR messages.
-        """
-        # Auto unwrap Pydantic model objects
-        if hasattr(provider_data, "model_dump"):
-            provider_data = provider_data.model_dump()
-
-        if not isinstance(provider_data, dict):
-            raise ValueError("OpenAI Responses data must be a dictionary")
-
-        # If it's a full API response, convert to IRResponse
-        if "id" in provider_data and "output" in provider_data:
-            return self.response_from_provider(provider_data, **kwargs)
-
-        # Otherwise, convert items to IR messages
-        items = provider_data.get("output") or provider_data.get("input", [])
-        if not isinstance(items, list):
-            raise ValueError("OpenAI Responses output/input must be a list")
-
-        return self.message_ops.p_messages_to_ir(items)
-
     # ==================== Compatibility Aliases ====================
 
     def _convert_image_to_responses(self, image_part):

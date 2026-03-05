@@ -316,16 +316,18 @@ class TestConvert:
 
     def test_convert_google_to_anthropic(self):
         """测试从 Google 转换到 Anthropic"""
-        # Google 响应格式（包含 candidates）
+        # Google 请求格式（包含 contents）
         google_body = {
-            "candidates": [{"content": {"role": "model", "parts": [{"text": "Hi!"}]}}]
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi!"}]}],
+            "config": {},
         }
 
         anthropic_body = convert(google_body, "anthropic", source_provider="google")
 
         assert "messages" in anthropic_body
         assert len(anthropic_body["messages"]) == 1
-        assert anthropic_body["messages"][0]["role"] == "assistant"
+        assert anthropic_body["messages"][0]["role"] == "user"
         assert anthropic_body["messages"][0]["content"][0]["text"] == "Hi!"
 
     def test_convert_with_explicit_source(self):
@@ -364,8 +366,10 @@ class TestConvert:
 
         google_body = convert(openai_body, "google")
 
-        assert "tools" in google_body
-        assert len(google_body["tools"]) == 1
+        # Google puts tools inside config
+        assert "config" in google_body
+        assert "tools" in google_body["config"]
+        assert len(google_body["config"]["tools"]) == 1
 
     def test_convert_undetectable_source(self):
         """测试无法检测源格式时抛出错误"""

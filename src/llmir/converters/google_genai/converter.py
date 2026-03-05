@@ -24,7 +24,6 @@ from ...types.ir import (
     ExtensionItem,
     IRInput,
     Message,
-    TextPart,
     ToolChoice,
     ToolDefinition,
     is_message,
@@ -538,62 +537,6 @@ class GoogleGenAIConverter(BaseConverter):
                 result["tool_config"] = tool_config
 
         return result, warnings_list
-
-    def from_provider(
-        self,
-        provider_data: Any,
-        **kwargs: Any,
-    ) -> Union[IRInput, IRResponse]:
-        """Convert Google GenAI format to IR format (backward compatibility).
-
-        Args:
-            provider_data: Google GenAI response object or dict.
-                          Auto-handles Pydantic model objects.
-
-        Returns:
-            IR messages list or IRResponse.
-        """
-        # Auto-unwrap Pydantic model objects
-        if isinstance(provider_data, tuple):
-            provider_data = provider_data[0]
-
-        if hasattr(provider_data, "model_dump"):
-            provider_data = provider_data.model_dump()
-
-        if not isinstance(provider_data, dict):
-            raise ValueError("Google data must be a dictionary")
-
-        # If it's a full API response, convert to IRResponse
-        if "candidates" in provider_data and "response_id" in provider_data:
-            return self.response_from_provider(provider_data)
-
-        messages = []
-
-        # The actual response is in the 'candidates' field
-        candidates = provider_data.get("candidates", [])
-        if not candidates:
-            # Handle cases with no candidates, e.g., safety block
-            prompt_feedback = provider_data.get("prompt_feedback")
-            if prompt_feedback and prompt_feedback.get("block_reason"):
-                block_reason = prompt_feedback.get("block_reason")
-                block_message = f"Request was blocked. Reason: {block_reason}"
-                messages.append(
-                    {
-                        "role": "assistant",
-                        "content": [TextPart(type="text", text=block_message)],
-                    }
-                )
-            return messages
-
-        # Process all candidates
-        for candidate in candidates:
-            content = candidate.get("content")
-            if content:
-                message = self.message_ops._p_message_to_ir(content)
-                if message:
-                    messages.append(message)
-
-        return messages
 
     # ==================== Stream Support ====================
 

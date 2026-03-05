@@ -225,38 +225,10 @@ def convert(
     target_converter = get_converter_for_provider(target_provider)
 
     # 执行转换: source -> IR -> target Perform conversion: source -> IR -> target
-    ir_input = source_converter.from_provider(source_body)
-
-    # 提取工具和工具选择（如果有） Extract tools and tool choice (if any)
-    tools = source_body.get("tools")
-    tool_choice = source_body.get("tool_choice")
-
-    # 标准化工具定义格式 Standardize tool definition format
-    # OpenAI Chat 格式的工具定义是 {"type": "function", "function": {...}} OpenAI Chat tool definition format is {"type": "function", "function": {...}}
-    # 需要提取为标准格式 {"type": "function", "name": ..., "description": ..., "parameters": ...} Need to extract to standard format {"type": "function", "name": ..., "description": ..., "parameters": ...}
-    if tools and isinstance(tools, list) and len(tools) > 0:
-        normalized_tools = []
-        for tool in tools:
-            if isinstance(tool, dict):
-                # 如果工具有 function 字段，提取它 If tool has function field, extract it
-                if "function" in tool:
-                    func = tool["function"]
-                    normalized_tool = {
-                        "type": tool.get("type", "function"),
-                        "name": func.get("name"),
-                        "description": func.get("description", ""),
-                        "parameters": func.get("parameters", {}),
-                    }
-                    normalized_tools.append(normalized_tool)
-                else:
-                    # 已经是标准格式 Already in standard format
-                    normalized_tools.append(tool)
-        tools = normalized_tools if normalized_tools else tools
+    ir_request = source_converter.request_from_provider(source_body)
 
     # 转换到目标格式 Convert to target format
-    target_body, warnings = target_converter.to_provider(
-        ir_input, tools=tools, tool_choice=tool_choice
-    )
+    target_body, warnings = target_converter.request_to_provider(ir_request)
 
     # 如果有警告，可以选择记录或返回 If there are warnings, can choose to log or return
     if warnings:
