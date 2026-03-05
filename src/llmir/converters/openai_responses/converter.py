@@ -19,9 +19,13 @@ from ...types.ir import (
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
 from ...types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -552,8 +556,15 @@ class OpenAIResponsesConverter(BaseConverter):
         ``response.completed`` may produce both a ``FinishEvent`` and a
         ``UsageEvent``.
 
+        When a ``context`` is provided, lifecycle events (``StreamStartEvent``,
+        ``ContentBlockStartEvent``, ``ContentBlockEndEvent``,
+        ``StreamEndEvent``) are emitted and cross-event state is tracked.
+        Without a context the behaviour is identical to the previous
+        implementation (backward compatible).
+
         Args:
             event: OpenAI Responses SSE event dict (or SDK object).
+            context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the event.
@@ -562,8 +573,28 @@ class OpenAIResponsesConverter(BaseConverter):
         events: List[IRStreamEvent] = []
         event_type = event.get("type", "")
 
+        # --- Response created (session start) ---
+        if event_type == "response.created":
+            if context is not None:
+                response = event.get("response", {})
+                response_id = response.get("id", "")
+                model = response.get("model", "")
+                created = int(response.get("created_at", 0))
+                context.response_id = response_id
+                context.model = model
+                context.created = created
+                context.mark_started()
+                start_event: StreamStartEvent = {
+                    "type": "stream_start",
+                    "response_id": response_id,
+                    "model": model,
+                }
+                if created:
+                    start_event["created"] = created
+                events.append(start_event)
+
         # --- Text delta ---
-        if event_type == "response.output_text.delta":
+        elif event_type == "response.output_text.delta":
             events.append(
                 TextDeltaEvent(
                     type="text_delta",
@@ -580,19 +611,80 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
             )
 
-        # --- Tool call start (function_call item added) ---
+        # --- Output item added ---
         elif event_type == "response.output_item.added":
             item = event.get("item", {})
-            if isinstance(item, dict) and item.get("type") == "function_call":
-                start_event = ToolCallStartEvent(
-                    type="tool_call_start",
-                    tool_call_id=item.get("call_id", ""),
-                    tool_name=item.get("name", ""),
+            if isinstance(item, dict):
+                item_type = item.get("type", "")
+
+                if item_type == "function_call":
+                    # Register tool call in context
+                    if context is not None:
+                        context.register_tool_call(
+                            item.get("call_id", ""), item.get("name", "")
+                        )
+
+                    start_event_tc = ToolCallStartEvent(
+                        type="tool_call_start",
+                        tool_call_id=item.get("call_id", ""),
+                        tool_name=item.get("name", ""),
+                    )
+                    output_index = event.get("output_index")
+                    if output_index is not None:
+                        start_event_tc["tool_call_index"] = output_index
+                    events.append(start_event_tc)
+
+                elif item_type == "message" and context is not None:
+                    # Message item added → ContentBlockStartEvent
+                    block_index = context.next_block_index()
+                    events.append(
+                        ContentBlockStartEvent(
+                            type="content_block_start",
+                            block_index=block_index,
+                            block_type="text",
+                        )
+                    )
+
+        # --- Content part added ---
+        elif event_type == "response.content_part.added":
+            if context is not None:
+                part = event.get("part", {})
+                part_type = part.get("type", "") if isinstance(part, dict) else ""
+                block_type = "text"
+                if part_type == "output_text":
+                    block_type = "text"
+                elif part_type == "summary_text":
+                    block_type = "thinking"
+                block_index = context.next_block_index()
+                events.append(
+                    ContentBlockStartEvent(
+                        type="content_block_start",
+                        block_index=block_index,
+                        block_type=block_type,
+                    )
                 )
-                output_index = event.get("output_index")
-                if output_index is not None:
-                    start_event["tool_call_index"] = output_index
-                events.append(start_event)
+
+        # --- Content part done ---
+        elif event_type == "response.content_part.done":
+            if context is not None:
+                events.append(
+                    ContentBlockEndEvent(
+                        type="content_block_end",
+                        block_index=context.current_block_index,
+                    )
+                )
+
+        # --- Output item done ---
+        elif event_type == "response.output_item.done":
+            if context is not None:
+                item = event.get("item", {})
+                if isinstance(item, dict) and item.get("type") == "message":
+                    events.append(
+                        ContentBlockEndEvent(
+                            type="content_block_end",
+                            block_index=context.current_block_index,
+                        )
+                    )
 
         # --- Tool call arguments delta ---
         elif event_type == "response.function_call_arguments.delta":
@@ -659,6 +751,11 @@ class OpenAIResponsesConverter(BaseConverter):
                     )
                 )
 
+            # Emit StreamEndEvent after other events
+            if context is not None:
+                context.mark_ended()
+                events.append(StreamEndEvent(type="stream_end"))
+
         # --- Response failed ---
         elif event_type == "response.failed":
             events.append(
@@ -668,9 +765,13 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
             )
 
-        # All other event types (response.created, response.in_progress,
-        # response.output_item.done, response.content_part.added,
-        # response.content_part.done, response.output_text.done,
+            # Emit StreamEndEvent after FinishEvent
+            if context is not None:
+                context.mark_ended()
+                events.append(StreamEndEvent(type="stream_end"))
+
+        # All other event types (response.in_progress,
+        # response.output_text.done,
         # response.function_call_arguments.done, etc.) are ignored.
 
         return events
@@ -682,15 +783,65 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI Responses SSE event.
 
+        When a ``context`` is provided, ``UsageEvent`` stores usage info in
+        the context instead of emitting a duplicate ``response.completed``,
+        and ``FinishEvent`` merges any pending usage into its
+        ``response.completed`` output.
+
         Args:
             ir_event: IR stream event.
+            context: Optional stream context for stateful conversions.
 
         Returns:
-            OpenAI Responses SSE event dict.
+            OpenAI Responses SSE event dict, or a list of dicts.
         """
         event_type = ir_event["type"]
 
-        if event_type == "text_delta":
+        if event_type == "stream_start":
+            # Store metadata in context if provided
+            if context is not None:
+                context.response_id = ir_event["response_id"]
+                context.model = ir_event["model"]
+                context.created = ir_event.get("created", 0)
+                context.mark_started()
+            return {
+                "type": "response.created",
+                "response": {
+                    "id": ir_event["response_id"],
+                    "object": "response",
+                    "model": ir_event["model"],
+                    "status": "in_progress",
+                    "output": [],
+                },
+            }
+
+        elif event_type == "stream_end":
+            if context is not None:
+                context.mark_ended()
+            return {}
+
+        elif event_type == "content_block_start":
+            block_type = ir_event["block_type"]
+            if block_type == "text":
+                return {
+                    "type": "response.content_part.added",
+                    "part": {
+                        "type": "output_text",
+                        "text": "",
+                    },
+                }
+            # Other block types are no-ops for now
+            return {}
+
+        elif event_type == "content_block_end":
+            return {
+                "type": "response.content_part.done",
+                "part": {
+                    "type": "output_text",
+                },
+            }
+
+        elif event_type == "text_delta":
             return {
                 "type": "response.output_text.delta",
                 "delta": ir_event["text"],
@@ -738,6 +889,14 @@ class OpenAIResponsesConverter(BaseConverter):
             elif reason == "error":
                 response["status"] = "failed"
 
+            # Merge pending usage from context if available
+            if context is not None and context.pending_usage is not None:
+                response["usage"] = {
+                    "input_tokens": context.pending_usage.get("prompt_tokens", 0),
+                    "output_tokens": context.pending_usage.get("completion_tokens", 0),
+                    "total_tokens": context.pending_usage.get("total_tokens", 0),
+                }
+
             return {
                 "type": "response.completed",
                 "response": response,
@@ -745,6 +904,14 @@ class OpenAIResponsesConverter(BaseConverter):
 
         elif event_type == "usage":
             usage = ir_event["usage"]
+
+            # With context: store usage for later merging, avoid duplicate
+            # response.completed
+            if context is not None:
+                context.pending_usage = dict(usage)
+                return {}
+
+            # Without context: preserve backward-compatible behavior
             return {
                 "type": "response.completed",
                 "response": {

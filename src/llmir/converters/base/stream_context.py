@@ -18,6 +18,8 @@ class StreamContext:
         created: Unix timestamp of the response creation.
         current_block_index: Current 0-based content block index.
         tool_call_id_map: Mapping from tool_call_id to tool_name.
+        pending_usage: Usage info stored by UsageEvent for later merging
+            into a FinishEvent (prevents duplicate terminal events).
     """
 
     def __init__(self) -> None:
@@ -26,6 +28,7 @@ class StreamContext:
         self.created: int = 0
         self.current_block_index: int = -1
         self.tool_call_id_map: dict[str, str] = {}  # tool_call_id -> tool_name
+        self.pending_usage: dict | None = None
         self._started: bool = False
         self._ended: bool = False
 
