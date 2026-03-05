@@ -61,31 +61,6 @@ class OpenAIResponsesConverter(BaseConverter):
         self.message_ops = self.message_ops_class(self.content_ops, self.tool_ops)
         self.config_ops = self.config_ops_class()
 
-    # ==================== Normalization ====================
-
-    @staticmethod
-    def _normalize(data: Any) -> dict:
-        """Normalize SDK objects to plain dicts.
-
-        Handles Pydantic models (``model_dump()``), dataclasses, and other
-        objects with dict-like conversion methods.
-
-        Args:
-            data: Input data, possibly an SDK object.
-
-        Returns:
-            Plain dict representation.
-        """
-        if isinstance(data, dict):
-            return data
-        if hasattr(data, "model_dump"):
-            return data.model_dump()
-        if hasattr(data, "to_dict"):
-            return data.to_dict()
-        if hasattr(data, "__dict__"):
-            return dict(data.__dict__)
-        raise TypeError(f"Cannot normalize {type(data).__name__} to dict")
-
     # ==================== Top-level Interfaces ====================
 
     def request_to_provider(

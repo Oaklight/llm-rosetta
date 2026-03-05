@@ -211,6 +211,35 @@ class BaseConverter(ABC):
         """
         pass
 
+    # ==================== Normalization ====================
+
+    @staticmethod
+    def _normalize(data: Any) -> dict:
+        """Normalize SDK objects to plain dicts.
+
+        Handles Pydantic models (``model_dump()``), dataclasses, and other
+        objects with dict-like conversion methods.  Subclasses may override
+        this to handle provider-specific quirks (e.g. tuple unwrapping).
+
+        Args:
+            data: Input data, possibly an SDK object.
+
+        Returns:
+            Plain dict representation.
+
+        Raises:
+            TypeError: If data cannot be normalized.
+        """
+        if isinstance(data, dict):
+            return data
+        if hasattr(data, "model_dump"):
+            return data.model_dump()
+        if hasattr(data, "to_dict"):
+            return data.to_dict()
+        if hasattr(data, "__dict__"):
+            return dict(data.__dict__)
+        raise TypeError(f"Cannot normalize {type(data).__name__} to dict")
+
     # ==================== 便利方法 Convenience methods ====================
 
     def message_to_provider(
