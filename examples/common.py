@@ -7,8 +7,13 @@ cross-provider example scripts.
 
 import base64
 import copy
+import hashlib
 import json
+import logging
 import os
+import tempfile
+import time
+from pathlib import Path
 from typing import Dict, List
 
 import httpx
@@ -379,26 +384,151 @@ def get_google_config() -> dict:
 # Google GenAI image URL workaround
 # ============================================================================
 
+logger = logging.getLogger(__name__)
+
+# Persistent cache directory under system temp
+_IMAGE_CACHE_DIR = Path(tempfile.gettempdir()) / "llmir_image_cache"
+
+# User-Agent per Wikimedia policy: include project URL for contact
+_USER_AGENT = (
+    "LLMIR-Example/1.0 (https://github.com/llmir/llmir; bot-contact) "
+    "python-httpx/" + httpx.__version__
+)
+
+# Retry settings for HTTP 429
+_MAX_RETRIES = 3
+_INITIAL_BACKOFF = 2.0  # seconds
+
+
+def _get_cache_path(url: str) -> Path:
+    """Return the cache file path for a given URL.
+
+    Uses SHA-256 hash of the URL as the filename to avoid filesystem issues.
+
+    Args:
+        url: The image URL.
+
+    Returns:
+        Path to the cache file.
+    """
+    url_hash = hashlib.sha256(url.encode()).hexdigest()
+    return _IMAGE_CACHE_DIR / url_hash
+
+
+def _load_from_cache(url: str) -> tuple[str, str] | None:
+    """Try to load image data from local file cache.
+
+    The cache stores raw image bytes in ``<hash>.data`` and the MIME type
+    in ``<hash>.meta``.
+
+    Args:
+        url: The image URL to look up.
+
+    Returns:
+        Tuple of (base64-encoded data, mime_type) if cached, None otherwise.
+    """
+    cache_path = _get_cache_path(url)
+    data_file = cache_path.with_suffix(".data")
+    meta_file = cache_path.with_suffix(".meta")
+
+    if data_file.exists() and meta_file.exists():
+        try:
+            raw_bytes = data_file.read_bytes()
+            mime_type = meta_file.read_text().strip()
+            b64 = base64.b64encode(raw_bytes).decode("utf-8")
+            logger.debug("Cache hit for %s", url)
+            return b64, mime_type
+        except OSError:
+            # Corrupted cache entry; fall through to download
+            pass
+    return None
+
+
+def _save_to_cache(url: str, raw_bytes: bytes, mime_type: str) -> None:
+    """Save downloaded image data to local file cache.
+
+    Args:
+        url: The image URL (used as cache key).
+        raw_bytes: Raw image bytes.
+        mime_type: MIME type of the image.
+    """
+    try:
+        _IMAGE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cache_path = _get_cache_path(url)
+        cache_path.with_suffix(".data").write_bytes(raw_bytes)
+        cache_path.with_suffix(".meta").write_text(mime_type)
+        logger.debug("Cached image for %s", url)
+    except OSError as e:
+        logger.warning("Failed to cache image for %s: %s", url, e)
+
 
 def download_image_as_base64(url: str) -> tuple[str, str]:
     """Download image from URL and return (base64_data, mime_type).
+
+    Features:
+        - Local file cache (under system temp dir) to avoid redundant downloads.
+        - Proper User-Agent header per Wikimedia policy.
+        - Exponential backoff retry on HTTP 429 (rate limit) errors.
 
     Args:
         url: The image URL to download.
 
     Returns:
         Tuple of (base64-encoded image data, MIME type string).
+
+    Raises:
+        httpx.HTTPStatusError: If the request fails after all retries.
     """
-    response = httpx.get(
-        url,
-        follow_redirects=True,
-        headers={"User-Agent": "LLMIR-Example/1.0"},
-        timeout=60.0,
-    )
-    response.raise_for_status()
-    content_type = response.headers.get("content-type", "image/jpeg")
-    b64 = base64.b64encode(response.content).decode("utf-8")
-    return b64, content_type
+    # Check local file cache first
+    cached = _load_from_cache(url)
+    if cached is not None:
+        return cached
+
+    # Download with retry logic for 429 errors
+    last_exc: httpx.HTTPStatusError | None = None
+    for attempt in range(_MAX_RETRIES):
+        response = httpx.get(
+            url,
+            follow_redirects=True,
+            headers={"User-Agent": _USER_AGENT},
+            timeout=60.0,
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            if response.status_code == 429 and attempt < _MAX_RETRIES - 1:
+                # Use Retry-After header if available, otherwise exponential backoff
+                retry_after = response.headers.get("retry-after")
+                if retry_after and retry_after.isdigit():
+                    wait = float(retry_after)
+                else:
+                    wait = _INITIAL_BACKOFF * (2**attempt)
+                logger.warning(
+                    "HTTP 429 for %s, retrying in %.1fs (attempt %d/%d)",
+                    url,
+                    wait,
+                    attempt + 1,
+                    _MAX_RETRIES,
+                )
+                time.sleep(wait)
+                last_exc = e
+                continue
+            raise
+        else:
+            # Success
+            content_type = response.headers.get("content-type", "image/jpeg")
+            raw_bytes = response.content
+
+            # Save to cache for future use
+            _save_to_cache(url, raw_bytes, content_type)
+
+            b64 = base64.b64encode(raw_bytes).decode("utf-8")
+            return b64, content_type
+
+    # All retries exhausted (should not normally reach here)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError(f"Failed to download image from {url}")
 
 
 def convert_image_urls_to_inline(ir_messages: list) -> list:
