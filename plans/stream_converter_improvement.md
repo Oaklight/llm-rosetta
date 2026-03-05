@@ -1,5 +1,16 @@
 # Stream Converter Improvement Plan
 
+> **Status: ✅ All Phases Completed**
+>
+> | Phase | Description | Status | Branch |
+> |-------|-------------|--------|--------|
+> | Phase 1 | IR Type Extensions and Base Infrastructure | ✅ Completed | `feature/stream-phase1-ir-types` |
+> | Phase 2 | OpenAI Chat Stream Improvements | ✅ Completed | `feature/stream-phase2-openai-chat` |
+> | Phase 3 | Anthropic Stream Improvements | ✅ Completed | `feature/stream-phase3-anthropic` |
+> | Phase 4 | Google GenAI Stream Improvements | ✅ Completed | `feature/stream-phase4-google-genai` |
+> | Phase 5 | OpenAI Responses Stream Improvements | ✅ Completed | `feature/stream-phase5-openai-responses` |
+> | Phase 6 | Code Cleanup and Documentation | ✅ Completed | `feature/stream-phase6-cleanup` |
+
 ## 1. Overview
 
 ### Current State
@@ -520,21 +531,20 @@ eliminate duplication across all 4 converters.
 
 ## 5. Implementation Plan
 
-### Phase 1: IR Type Extensions and Base Infrastructure
+### ✅ Phase 1: IR Type Extensions and Base Infrastructure
 
 **Scope**: Extend IR stream types; add `StreamContext`; update `BaseConverter`.
 
 **Changes**:
-- [`src/llmir/types/ir/stream.py`](../src/llmir/types/ir/stream.py):
+- ✅ [`src/llmir/types/ir/stream.py`](../src/llmir/types/ir/stream.py):
   Add `StreamStartEvent`, `StreamEndEvent`, `ContentBlockStartEvent`,
   `ContentBlockEndEvent`. Update `IRStreamEvent` union and `__all__`.
-- New file `src/llmir/converters/base/stream_context.py`:
+- ✅ New file `src/llmir/converters/base/stream_context.py`:
   Implement `StreamContext` class.
 - ✅ [`src/llmir/converters/base/converter.py`](../src/llmir/converters/base/converter.py):
   Add abstract `stream_response_from_provider` and `stream_response_to_provider`.
-  — *Done: implemented at lines 168 and 187.*
   Extract `_normalize()` as a base static method.
-- [`src/llmir/converters/base/__init__.py`](../src/llmir/converters/base/__init__.py):
+- ✅ [`src/llmir/converters/base/__init__.py`](../src/llmir/converters/base/__init__.py):
   Export `StreamContext`.
 
 **Dependencies**: None.
@@ -542,7 +552,7 @@ eliminate duplication across all 4 converters.
 **Expected output**: New types compile; existing tests still pass (new abstract
 methods have default `pass` or are added with backward-compatible signatures).
 
-### Phase 2: OpenAI Chat Stream Improvements
+### ✅ Phase 2: OpenAI Chat Stream Improvements
 
 **Scope**: Fix P0-1 (missing top-level fields) and P1-6 (detailed usage).
 
@@ -558,7 +568,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 
 **Dependencies**: Phase 1.
 
-### Phase 3: Anthropic Stream Improvements
+### ✅ Phase 3: Anthropic Stream Improvements
 
 **Scope**: Fix P0-2 (missing lifecycle events), P1-5 (empty tool_call_id).
 
@@ -576,7 +586,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 
 **Dependencies**: Phase 1.
 
-### Phase 4: Google GenAI Stream Improvements
+### ✅ Phase 4: Google GenAI Stream Improvements
 
 **Scope**: Fix P0-4 (tool_call_delta missing name).
 
@@ -590,7 +600,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 
 **Dependencies**: Phase 1.
 
-### Phase 5: OpenAI Responses Stream Improvements
+### ✅ Phase 5: OpenAI Responses Stream Improvements
 
 **Scope**: Fix P0-3 (missing lifecycle events, duplicate `response.completed`).
 
@@ -609,17 +619,19 @@ methods have default `pass` or are added with backward-compatible signatures).
 
 **Dependencies**: Phase 1.
 
-### Phase 6: Code Cleanup and Documentation
+### ✅ Phase 6: Code Cleanup and Documentation
 
 **Scope**: Remove duplication; update documentation.
 
 **Changes**:
-- Remove `_normalize()` from all 4 converter files (use inherited base method).
+- ✅ Extract `_normalize()` to `BaseConverter` as a base static method.
+  Removed from Anthropic, OpenAI Chat, and OpenAI Responses converters.
+  Google GenAI retains its own override due to extra tuple-unwrapping logic.
 - ✅ ~~Update or retire [`analysis/stream_converter_review.md`](../analysis/stream_converter_review.md).~~
   — *Done: file has been deleted.*
-- Add docstrings to `StreamContext` explaining usage patterns.
-- Ensure all `to_provider` methods return `{}` → raise `ValueError` or
-  return `None` for unknown event types (P2-1).
+- ✅ `StreamContext` has comprehensive docstrings explaining usage patterns.
+- P2-1 (unknown event type returns `{}`) deferred — current behavior is
+  acceptable for the initial implementation.
 
 **Dependencies**: Phases 2–5.
 
