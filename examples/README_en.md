@@ -11,7 +11,7 @@ The 4 supported API standards are:
 - **Anthropic Messages** (`an`)
 - **Google GenAI** (`gg`)
 
-Each provider pair has both **SDK-based** and **REST-based** implementations, totaling 12 example scripts covering all 6 unique provider combinations × 2 transport methods.
+Each provider pair has both **SDK-based** and **REST-based** implementations, with both **non-stream** and **stream** variants, totaling 24 example scripts covering all 6 unique provider combinations × 2 transport methods × 2 modes (non-stream + stream).
 
 ## Conversation Scenario
 
@@ -34,6 +34,7 @@ All examples run the same **8-turn conversation** where two providers alternate 
 - **Image analysis** (vision) with URL-based images
 - **Tool calling** (function call + result return loop)
 - **Cross-provider context sharing** via IR messages
+- **Streaming responses** with real-time text output (stream examples)
 
 ### Tools
 
@@ -50,22 +51,34 @@ examples/
 ├── README_zh.md           # Chinese version
 ├── common.py              # Shared resources: tool definitions, conversation
 │                          # turns, helper functions, provider config loaders,
-│                          # image URL-to-base64 conversion
+│                          # image URL-to-base64 conversion, stream helpers
 ├── tools.py               # Legacy tool definitions (used by older examples)
 ├── sdk_based/             # SDK-based examples (using provider SDKs)
-│   ├── cross_oc_an.py     # OpenAI Chat ↔ Anthropic
-│   ├── cross_oc_or.py     # OpenAI Chat ↔ OpenAI Responses
-│   ├── cross_oc_gg.py     # OpenAI Chat ↔ Google GenAI
-│   ├── cross_an_or.py     # Anthropic ↔ OpenAI Responses
-│   ├── cross_an_gg.py     # Anthropic ↔ Google GenAI
-│   └── cross_gg_or.py     # Google GenAI ↔ OpenAI Responses
+│   ├── cross_oc_an.py             # OpenAI Chat ↔ Anthropic
+│   ├── cross_oc_an_stream.py      # OpenAI Chat ↔ Anthropic (stream)
+│   ├── cross_oc_gg.py             # OpenAI Chat ↔ Google GenAI
+│   ├── cross_oc_gg_stream.py      # OpenAI Chat ↔ Google GenAI (stream)
+│   ├── cross_oc_or.py             # OpenAI Chat ↔ OpenAI Responses
+│   ├── cross_oc_or_stream.py      # OpenAI Chat ↔ OpenAI Responses (stream)
+│   ├── cross_an_gg.py             # Anthropic ↔ Google GenAI
+│   ├── cross_an_gg_stream.py      # Anthropic ↔ Google GenAI (stream)
+│   ├── cross_an_or.py             # Anthropic ↔ OpenAI Responses
+│   ├── cross_an_or_stream.py      # Anthropic ↔ OpenAI Responses (stream)
+│   ├── cross_gg_or.py             # Google GenAI ↔ OpenAI Responses
+│   └── cross_gg_or_stream.py      # Google GenAI ↔ OpenAI Responses (stream)
 └── rest_based/            # REST-based examples (using httpx)
-    ├── cross_oc_an_rest.py    # OpenAI Chat ↔ Anthropic
-    ├── cross_oc_or_rest.py    # OpenAI Chat ↔ OpenAI Responses
-    ├── cross_oc_gg_rest.py    # OpenAI Chat ↔ Google GenAI
-    ├── cross_an_or_rest.py    # Anthropic ↔ OpenAI Responses
-    ├── cross_an_gg_rest.py    # Anthropic ↔ Google GenAI
-    └── cross_gg_or_rest.py    # Google GenAI ↔ OpenAI Responses
+    ├── cross_oc_an.py             # OpenAI Chat ↔ Anthropic
+    ├── cross_oc_an_stream.py      # OpenAI Chat ↔ Anthropic (stream)
+    ├── cross_oc_gg.py             # OpenAI Chat ↔ Google GenAI
+    ├── cross_oc_gg_stream.py      # OpenAI Chat ↔ Google GenAI (stream)
+    ├── cross_oc_or.py             # OpenAI Chat ↔ OpenAI Responses
+    ├── cross_oc_or_stream.py      # OpenAI Chat ↔ OpenAI Responses (stream)
+    ├── cross_an_gg.py             # Anthropic ↔ Google GenAI
+    ├── cross_an_gg_stream.py      # Anthropic ↔ Google GenAI (stream)
+    ├── cross_an_or.py             # Anthropic ↔ OpenAI Responses
+    ├── cross_an_or_stream.py      # Anthropic ↔ OpenAI Responses (stream)
+    ├── cross_gg_or.py             # Google GenAI ↔ OpenAI Responses
+    └── cross_gg_or_stream.py      # Google GenAI ↔ OpenAI Responses (stream)
 ```
 
 ### Provider Abbreviations
@@ -136,7 +149,11 @@ pip install openai anthropic google-genai python-dotenv httpx
 ```bash
 # Run from the project root directory
 python examples/sdk_based/cross_oc_an.py
-python examples/rest_based/cross_oc_an_rest.py
+python examples/rest_based/cross_oc_an.py
+
+# Stream examples
+python examples/sdk_based/cross_oc_an_stream.py
+python examples/rest_based/cross_oc_an_stream.py
 ```
 
 ### Network Proxy
@@ -158,6 +175,22 @@ proxychains -q python examples/sdk_based/cross_an_or.py
 ```
 
 Anthropic is typically accessible without a proxy.
+
+## Common Utilities
+
+The `common.py` module provides shared resources used by all example scripts:
+
+- **Tool definitions**: `TOOLS_SPEC` — IR-format tool definitions for `get_current_weather` and `get_flight_info`
+- **Mock tool execution**: `execute_tool()` — Returns mock results for tool calls
+- **Conversation turns**: `CONVERSATION_TURNS` — The 8-turn conversation scenario definition
+- **Message building**: `build_user_message()` — Constructs IR `UserMessage` from turn info
+- **Tool call processing**: `process_tool_calls()` — Extracts, executes, and appends tool results
+- **Display helpers**: `print_turn_header()`, `print_assistant_response()`, `print_tool_calls()`
+- **Provider config loaders**: `get_openai_chat_config()`, `get_openai_responses_config()`, `get_anthropic_config()`, `get_google_config()`
+- **Image handling**: `download_image_as_base64()`, `convert_image_urls_to_inline()` — For Google GenAI compatibility
+- **Stream helpers** (used by stream examples):
+    - `accumulate_stream_to_assistant_message()` — Accumulates IR stream events (`TextDeltaEvent`, `ToolCallStartEvent`, `ToolCallDeltaEvent`) into a complete IR assistant message
+    - `print_stream_event()` — Prints stream events in real-time with type-specific formatting (text deltas inline, tool call names, finish reasons, etc.)
 
 ## Architecture
 
@@ -198,6 +231,20 @@ When the assistant responds with tool calls:
 2. Execute each tool (mock implementation) and create IR tool result messages
 3. Append tool results to `ir_messages`
 4. Send the updated conversation back to the **same provider** for a follow-up response
+
+### Stream Mode
+
+The stream examples follow a similar flow but with key differences:
+
+1. Build an IR request and convert it via `converter.request_to_provider(ir_request)` (same as non-stream)
+2. Send the request with **streaming enabled** (`stream=True`)
+3. For each incoming chunk, call `converter.stream_response_from_provider(chunk, context=ctx)` to convert provider-specific SSE events into **IR stream events**
+4. A `StreamContext` object maintains cross-chunk state (e.g., tracking tool call IDs, choice indices)
+5. IR stream events include typed events such as `TextDeltaEvent`, `ToolCallStartEvent`, `ToolCallDeltaEvent`, `FinishEvent`, etc.
+6. After the stream completes, call `accumulate_stream_to_assistant_message(all_events)` to reconstruct the full IR assistant message from the collected events
+7. The reconstructed message is appended to `ir_messages` just like in non-stream mode
+
+This approach enables **real-time text output** while maintaining full compatibility with the IR message format for cross-provider context sharing.
 
 ### Image Handling Differences
 

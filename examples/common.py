@@ -578,3 +578,121 @@ def convert_image_urls_to_inline(ir_messages: list) -> list:
         converted.append({**msg, "content": new_content})
 
     return converted
+
+
+# ============================================================================
+# Stream helper functions
+# ============================================================================
+
+
+def accumulate_stream_to_assistant_message(ir_events: list) -> dict:
+    """Accumulate IR stream events into a complete IR assistant message.
+
+    Processes TextDeltaEvent, ToolCallStartEvent, and ToolCallDeltaEvent
+    to reconstruct the full assistant message from streamed chunks.
+
+    Args:
+        ir_events: List of IR stream event dicts.
+
+    Returns:
+        An IR assistant message dict with role and content parts.
+    """
+    # Accumulate text by choice_index
+    text_buffers: dict[int, list[str]] = {}
+    # Accumulate tool calls in order: list of (tool_call_id, tool_name, args_buffer)
+    tool_calls: list[tuple[str, str, list[str]]] = {}
+    # Track tool_call_id -> index in tool_calls for delta appending
+    tool_call_index_map: dict[str, int] = {}
+    # Track the last registered tool_call_id for Anthropic compatibility
+    last_tool_call_id: str = ""
+
+    tool_calls = []
+
+    for event in ir_events:
+        event_type = event.get("type", "")
+
+        if event_type == "text_delta":
+            choice_idx = event.get("choice_index", 0)
+            if choice_idx not in text_buffers:
+                text_buffers[choice_idx] = []
+            text_buffers[choice_idx].append(event["text"])
+
+        elif event_type == "tool_call_start":
+            tc_id = event["tool_call_id"]
+            tc_name = event["tool_name"]
+            idx = len(tool_calls)
+            tool_calls.append((tc_id, tc_name, []))
+            tool_call_index_map[tc_id] = idx
+            last_tool_call_id = tc_id
+
+        elif event_type == "tool_call_delta":
+            tc_id = event["tool_call_id"]
+            # Anthropic may send empty tool_call_id in deltas
+            if not tc_id:
+                tc_id = last_tool_call_id
+            if tc_id in tool_call_index_map:
+                idx = tool_call_index_map[tc_id]
+                tool_calls[idx][2].append(event["arguments_delta"])
+
+    # Assemble content parts
+    content: list[dict] = []
+
+    # Add text parts (sorted by choice_index)
+    for choice_idx in sorted(text_buffers.keys()):
+        full_text = "".join(text_buffers[choice_idx])
+        if full_text:
+            content.append({"type": "text", "text": full_text})
+
+    # Add tool call parts
+    for tc_id, tc_name, args_fragments in tool_calls:
+        args_str = "".join(args_fragments)
+        try:
+            tool_input = json.loads(args_str) if args_str else {}
+        except json.JSONDecodeError:
+            tool_input = {}
+        content.append(
+            {
+                "type": "tool_call",
+                "tool_call_id": tc_id,
+                "tool_name": tc_name,
+                "tool_input": tool_input,
+            }
+        )
+
+    return {"role": "assistant", "content": content}
+
+
+def print_stream_event(event: dict) -> None:
+    """Print a stream event in real-time for demonstration purposes.
+
+    Handles different event types with appropriate formatting:
+    - stream_start: prints model info
+    - text_delta: prints text fragment inline
+    - tool_call_start: prints tool name
+    - tool_call_delta: prints argument fragment inline
+    - finish: prints finish reason
+    - stream_end: prints end marker
+
+    Args:
+        event: An IR stream event dict.
+    """
+    event_type = event.get("type", "")
+
+    if event_type == "stream_start":
+        print(f"[Stream started: model={event.get('model', '')}]")
+    elif event_type == "text_delta":
+        print(event["text"], end="", flush=True)
+    elif event_type == "tool_call_start":
+        print(f"\n[Tool call: {event['tool_name']}]")
+    elif event_type == "tool_call_delta":
+        print(event["arguments_delta"], end="", flush=True)
+    elif event_type == "finish":
+        finish_reason = event.get("finish_reason", {})
+        reason = (
+            finish_reason.get("reason", "unknown")
+            if isinstance(finish_reason, dict)
+            else str(finish_reason)
+        )
+        print(f"\n[Finished: {reason}]")
+    elif event_type == "stream_end":
+        print("[Stream ended]")

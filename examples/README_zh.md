@@ -11,7 +11,7 @@
 - **Anthropic Messages** (`an`)
 - **Google GenAI** (`gg`)
 
-每对 provider 组合都有 **SDK** 和 **REST** 两种实现，共计 12 个示例脚本，覆盖所有 6 种唯一 provider 组合 × 2 种传输方式。
+每对 provider 组合都有 **SDK** 和 **REST** 两种实现，同时提供**非流式**和**流式**两种模式，共计 24 个示例脚本，覆盖所有 6 种唯一 provider 组合 × 2 种传输方式 × 2 种模式（非流式 + 流式）。
 
 ## 对话场景
 
@@ -34,6 +34,7 @@
 - **图像分析**（视觉），使用 URL 引用的图片
 - **工具调用**（函数调用 + 结果返回循环）
 - **跨 provider 上下文共享**，通过 IR 消息实现
+- **流式响应**，支持实时文本输出（stream 示例）
 
 ### 工具
 
@@ -49,22 +50,35 @@ examples/
 ├── README.md              # 英文版说明
 ├── README_zh.md           # 本文件（中文版）
 ├── common.py              # 公共资源：工具定义、对话轮次、辅助函数、
-│                          # provider 配置加载器、图片 URL 转 base64
+│                          # provider 配置加载器、图片 URL 转 base64、
+│                          # stream 辅助函数
 ├── tools.py               # 旧版工具定义（供早期示例使用）
 ├── sdk_based/             # SDK 版本示例（使用 provider SDK）
-│   ├── cross_oc_an.py     # OpenAI Chat ↔ Anthropic
-│   ├── cross_oc_or.py     # OpenAI Chat ↔ OpenAI Responses
-│   ├── cross_oc_gg.py     # OpenAI Chat ↔ Google GenAI
-│   ├── cross_an_or.py     # Anthropic ↔ OpenAI Responses
-│   ├── cross_an_gg.py     # Anthropic ↔ Google GenAI
-│   └── cross_gg_or.py     # Google GenAI ↔ OpenAI Responses
+│   ├── cross_oc_an.py             # OpenAI Chat ↔ Anthropic
+│   ├── cross_oc_an_stream.py      # OpenAI Chat ↔ Anthropic（流式）
+│   ├── cross_oc_gg.py             # OpenAI Chat ↔ Google GenAI
+│   ├── cross_oc_gg_stream.py      # OpenAI Chat ↔ Google GenAI（流式）
+│   ├── cross_oc_or.py             # OpenAI Chat ↔ OpenAI Responses
+│   ├── cross_oc_or_stream.py      # OpenAI Chat ↔ OpenAI Responses（流式）
+│   ├── cross_an_gg.py             # Anthropic ↔ Google GenAI
+│   ├── cross_an_gg_stream.py      # Anthropic ↔ Google GenAI（流式）
+│   ├── cross_an_or.py             # Anthropic ↔ OpenAI Responses
+│   ├── cross_an_or_stream.py      # Anthropic ↔ OpenAI Responses（流式）
+│   ├── cross_gg_or.py             # Google GenAI ↔ OpenAI Responses
+│   └── cross_gg_or_stream.py      # Google GenAI ↔ OpenAI Responses（流式）
 └── rest_based/            # REST 版本示例（使用 httpx）
-    ├── cross_oc_an_rest.py    # OpenAI Chat ↔ Anthropic
-    ├── cross_oc_or_rest.py    # OpenAI Chat ↔ OpenAI Responses
-    ├── cross_oc_gg_rest.py    # OpenAI Chat ↔ Google GenAI
-    ├── cross_an_or_rest.py    # Anthropic ↔ OpenAI Responses
-    ├── cross_an_gg_rest.py    # Anthropic ↔ Google GenAI
-    └── cross_gg_or_rest.py    # Google GenAI ↔ OpenAI Responses
+    ├── cross_oc_an.py             # OpenAI Chat ↔ Anthropic
+    ├── cross_oc_an_stream.py      # OpenAI Chat ↔ Anthropic（流式）
+    ├── cross_oc_gg.py             # OpenAI Chat ↔ Google GenAI
+    ├── cross_oc_gg_stream.py      # OpenAI Chat ↔ Google GenAI（流式）
+    ├── cross_oc_or.py             # OpenAI Chat ↔ OpenAI Responses
+    ├── cross_oc_or_stream.py      # OpenAI Chat ↔ OpenAI Responses（流式）
+    ├── cross_an_gg.py             # Anthropic ↔ Google GenAI
+    ├── cross_an_gg_stream.py      # Anthropic ↔ Google GenAI（流式）
+    ├── cross_an_or.py             # Anthropic ↔ OpenAI Responses
+    ├── cross_an_or_stream.py      # Anthropic ↔ OpenAI Responses（流式）
+    ├── cross_gg_or.py             # Google GenAI ↔ OpenAI Responses
+    └── cross_gg_or_stream.py      # Google GenAI ↔ OpenAI Responses（流式）
 ```
 
 ### Provider 缩写说明
@@ -135,7 +149,11 @@ pip install openai anthropic google-genai python-dotenv httpx
 ```bash
 # 从项目根目录运行
 python examples/sdk_based/cross_oc_an.py
-python examples/rest_based/cross_oc_an_rest.py
+python examples/rest_based/cross_oc_an.py
+
+# 流式示例
+python examples/sdk_based/cross_oc_an_stream.py
+python examples/rest_based/cross_oc_an_stream.py
 ```
 
 ### 网络代理
@@ -157,6 +175,22 @@ proxychains -q python examples/sdk_based/cross_an_or.py
 ```
 
 Anthropic 通常可以直接访问，无需代理。
+
+## 公共工具模块
+
+`common.py` 模块提供所有示例脚本共享的公共资源：
+
+- **工具定义**：`TOOLS_SPEC` — IR 格式的工具定义，包含 `get_current_weather` 和 `get_flight_info`
+- **模拟工具执行**：`execute_tool()` — 返回工具调用的模拟结果
+- **对话轮次**：`CONVERSATION_TURNS` — 8 轮对话场景定义
+- **消息构建**：`build_user_message()` — 从轮次信息构建 IR `UserMessage`
+- **工具调用处理**：`process_tool_calls()` — 提取、执行工具调用并追加结果
+- **显示辅助**：`print_turn_header()`、`print_assistant_response()`、`print_tool_calls()`
+- **Provider 配置加载器**：`get_openai_chat_config()`、`get_openai_responses_config()`、`get_anthropic_config()`、`get_google_config()`
+- **图片处理**：`download_image_as_base64()`、`convert_image_urls_to_inline()` — 用于 Google GenAI 兼容性
+- **Stream 辅助函数**（供流式示例使用）：
+    - `accumulate_stream_to_assistant_message()` — 将 IR stream 事件（`TextDeltaEvent`、`ToolCallStartEvent`、`ToolCallDeltaEvent`）累积为完整的 IR assistant 消息
+    - `print_stream_event()` — 实时打印 stream 事件，根据事件类型进行格式化输出（文本增量内联显示、工具调用名称、完成原因等）
 
 ## 架构说明
 
@@ -197,6 +231,20 @@ Anthropic 通常可以直接访问，无需代理。
 2. 执行每个工具（模拟实现）并创建 IR 工具结果消息
 3. 将工具结果追加到 `ir_messages`
 4. 将更新后的对话发送回**同一个 provider** 获取后续响应
+
+### 流式模式
+
+流式示例遵循类似的流程，但有以下关键区别：
+
+1. 构建 IR 请求并通过 `converter.request_to_provider(ir_request)` 转换（与非流式相同）
+2. 发送请求时**启用流式**（`stream=True`）
+3. 对于每个传入的 chunk，调用 `converter.stream_response_from_provider(chunk, context=ctx)` 将 provider 特定的 SSE 事件转换为 **IR stream 事件**
+4. `StreamContext` 对象维护跨 chunk 的状态（例如跟踪 tool call ID、choice index）
+5. IR stream 事件包含类型化事件，如 `TextDeltaEvent`、`ToolCallStartEvent`、`ToolCallDeltaEvent`、`FinishEvent` 等
+6. 流结束后，调用 `accumulate_stream_to_assistant_message(all_events)` 从收集的事件中重建完整的 IR assistant 消息
+7. 重建的消息像非流式模式一样追加到 `ir_messages`
+
+这种方式实现了**实时文本输出**，同时保持与 IR 消息格式的完全兼容，支持跨 provider 上下文共享。
 
 ### 图片处理差异
 
