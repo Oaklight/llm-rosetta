@@ -4,6 +4,7 @@ Google GenAI stream converter unit tests.
 
 import json
 
+from llmir.converters.base.stream_context import StreamContext
 from llmir.converters.google_genai import GoogleGenAIConverter
 
 
@@ -636,3 +637,333 @@ class TestStreamRoundTrip:
         events = self.converter.stream_response_from_provider(chunk)
         restored = self.converter.stream_response_to_provider(events[0])
         assert restored["usage_metadata"]["total_token_count"] == 30
+
+
+class TestStreamResponseFromProviderWithContext:
+    """Tests for stream_response_from_provider with StreamContext."""
+
+    def setup_method(self):
+        self.converter = GoogleGenAIConverter()
+
+    def test_first_chunk_emits_stream_start(self):
+        """First chunk with context emits StreamStartEvent."""
+        context = StreamContext()
+        chunk = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hello"}],
+                    },
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk, context=context)
+        assert events[0]["type"] == "stream_start"
+        assert events[0]["response_id"] == ""
+        assert events[0]["model"] == "gemini-2.0-flash"
+        assert context.is_started
+        # Text delta should follow
+        assert events[1]["type"] == "text_delta"
+        assert events[1]["text"] == "Hello"
+
+    def test_stream_start_with_response_id(self):
+        """StreamStartEvent captures response_id from chunk."""
+        context = StreamContext()
+        chunk = {
+            "response_id": "resp_abc123",
+            "model_version": "gemini-2.0-flash",
+            "candidates": [],
+        }
+        events = self.converter.stream_response_from_provider(chunk, context=context)
+        assert events[0]["type"] == "stream_start"
+        assert events[0]["response_id"] == "resp_abc123"
+        assert context.response_id == "resp_abc123"
+        assert context.model == "gemini-2.0-flash"
+
+    def test_stream_start_only_on_first_chunk(self):
+        """StreamStartEvent is only emitted for the first chunk."""
+        context = StreamContext()
+        chunk1 = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hello"}],
+                    },
+                }
+            ],
+        }
+        chunk2 = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": " world"}],
+                    },
+                }
+            ],
+        }
+        events1 = self.converter.stream_response_from_provider(chunk1, context=context)
+        events2 = self.converter.stream_response_from_provider(chunk2, context=context)
+        assert any(e["type"] == "stream_start" for e in events1)
+        assert not any(e["type"] == "stream_start" for e in events2)
+
+    def test_finish_reason_emits_stream_end(self):
+        """Chunk with finish_reason emits StreamEndEvent when context provided."""
+        context = StreamContext()
+        # First chunk to start the stream
+        chunk1 = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hi"}],
+                    },
+                }
+            ],
+        }
+        self.converter.stream_response_from_provider(chunk1, context=context)
+
+        # Final chunk with finish_reason
+        chunk2 = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": []},
+                    "finish_reason": "STOP",
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk2, context=context)
+        types = [e["type"] for e in events]
+        assert "finish" in types
+        assert "stream_end" in types
+        # stream_end should be the last event
+        assert events[-1]["type"] == "stream_end"
+        assert context.is_ended
+
+    def test_no_stream_end_without_finish_reason(self):
+        """No StreamEndEvent when chunk has no finish_reason."""
+        context = StreamContext()
+        chunk = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "partial"}],
+                    },
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk, context=context)
+        assert not any(e["type"] == "stream_end" for e in events)
+        assert not context.is_ended
+
+    def test_tool_call_registered_in_context(self):
+        """Tool calls are registered in context."""
+        context = StreamContext()
+        chunk = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "function_call": {
+                                    "name": "get_weather",
+                                    "args": {"city": "NYC"},
+                                }
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk, context=context)
+        start = [e for e in events if e["type"] == "tool_call_start"][0]
+        tool_call_id = start["tool_call_id"]
+        assert context.get_tool_name(tool_call_id) == "get_weather"
+
+    def test_without_context_no_lifecycle_events(self):
+        """Without context, no StreamStartEvent or StreamEndEvent."""
+        chunk = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": "Hello"}],
+                    },
+                    "finish_reason": "STOP",
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk)
+        types = [e["type"] for e in events]
+        assert "stream_start" not in types
+        assert "stream_end" not in types
+        # Original events should still be present
+        assert "text_delta" in types
+        assert "finish" in types
+
+    def test_without_context_tool_call_still_works(self):
+        """Without context, tool calls still produce start+delta events."""
+        chunk = {
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "function_call": {
+                                    "name": "search",
+                                    "args": {"q": "test"},
+                                }
+                            }
+                        ],
+                    },
+                }
+            ],
+        }
+        events = self.converter.stream_response_from_provider(chunk)
+        types = [e["type"] for e in events]
+        assert "tool_call_start" in types
+        assert "tool_call_delta" in types
+
+
+class TestStreamResponseToProviderWithContext:
+    """Tests for stream_response_to_provider with StreamContext."""
+
+    def setup_method(self):
+        self.converter = GoogleGenAIConverter()
+
+    def test_stream_start_produces_initial_chunk(self):
+        """StreamStartEvent produces initial chunk with model_version."""
+        event = {
+            "type": "stream_start",
+            "response_id": "resp_123",
+            "model": "gemini-2.0-flash",
+        }
+        result = self.converter.stream_response_to_provider(event)
+        assert result["candidates"] == []
+        assert result["model_version"] == "gemini-2.0-flash"
+
+    def test_stream_start_stores_context(self):
+        """StreamStartEvent stores metadata in context."""
+        context = StreamContext()
+        event = {
+            "type": "stream_start",
+            "response_id": "resp_123",
+            "model": "gemini-2.0-flash",
+        }
+        self.converter.stream_response_to_provider(event, context=context)
+        assert context.response_id == "resp_123"
+        assert context.model == "gemini-2.0-flash"
+        assert context.is_started
+
+    def test_stream_end_returns_empty_dict(self):
+        """StreamEndEvent returns empty dict."""
+        event = {"type": "stream_end"}
+        result = self.converter.stream_response_to_provider(event)
+        assert result == {}
+
+    def test_stream_end_marks_context_ended(self):
+        """StreamEndEvent marks context as ended."""
+        context = StreamContext()
+        context.mark_started()
+        event = {"type": "stream_end"}
+        self.converter.stream_response_to_provider(event, context=context)
+        assert context.is_ended
+
+    def test_content_block_start_returns_empty_dict(self):
+        """ContentBlockStartEvent returns empty dict."""
+        event = {
+            "type": "content_block_start",
+            "block_index": 0,
+            "block_type": "text",
+        }
+        result = self.converter.stream_response_to_provider(event)
+        assert result == {}
+
+    def test_content_block_end_returns_empty_dict(self):
+        """ContentBlockEndEvent returns empty dict."""
+        event = {
+            "type": "content_block_end",
+            "block_index": 0,
+        }
+        result = self.converter.stream_response_to_provider(event)
+        assert result == {}
+
+    def test_tool_call_delta_with_context_recovers_name(self):
+        """tool_call_delta with context recovers tool name (P0 fix)."""
+        context = StreamContext()
+        context.register_tool_call("call_1", "get_weather")
+
+        event = {
+            "type": "tool_call_delta",
+            "tool_call_id": "call_1",
+            "arguments_delta": '{"city": "NYC"}',
+            "choice_index": 0,
+        }
+        result = self.converter.stream_response_to_provider(event, context=context)
+        fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
+        assert fc["name"] == "get_weather"
+        assert fc["args"] == {"city": "NYC"}
+
+    def test_tool_call_delta_without_context_name_empty(self):
+        """tool_call_delta without context has empty name."""
+        event = {
+            "type": "tool_call_delta",
+            "tool_call_id": "call_1",
+            "arguments_delta": '{"city": "NYC"}',
+            "choice_index": 0,
+        }
+        result = self.converter.stream_response_to_provider(event)
+        fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
+        assert fc["name"] == ""
+
+    def test_tool_call_delta_context_unknown_id_name_empty(self):
+        """tool_call_delta with context but unknown ID has empty name."""
+        context = StreamContext()
+        context.register_tool_call("call_other", "other_func")
+
+        event = {
+            "type": "tool_call_delta",
+            "tool_call_id": "call_unknown",
+            "arguments_delta": "{}",
+            "choice_index": 0,
+        }
+        result = self.converter.stream_response_to_provider(event, context=context)
+        fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
+        assert fc["name"] == ""
+
+    def test_stream_start_without_context(self):
+        """StreamStartEvent without context still produces chunk."""
+        event = {
+            "type": "stream_start",
+            "response_id": "resp_123",
+            "model": "gemini-2.0-flash",
+        }
+        result = self.converter.stream_response_to_provider(event)
+        assert result["candidates"] == []
+        assert result["model_version"] == "gemini-2.0-flash"
+
+    def test_stream_end_without_context(self):
+        """StreamEndEvent without context returns empty dict."""
+        event = {"type": "stream_end"}
+        result = self.converter.stream_response_to_provider(event)
+        assert result == {}
