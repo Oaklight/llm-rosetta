@@ -165,12 +165,12 @@ def test_non_stream_basic():
     response_data = call_api(provider_req)
     print(f"  Response keys: {list(response_data.keys())}")
 
-    # Provider response → IR using from_provider (REST response format)
-    ir_messages = converter.from_provider(response_data)
-    assert isinstance(ir_messages, list)
-    assert len(ir_messages) >= 1
+    # Provider response → IR
+    ir_response = converter.response_from_provider(response_data)
+    assert "choices" in ir_response
+    assert len(ir_response["choices"]) >= 1
 
-    msg = ir_messages[0]
+    msg = ir_response["choices"][0]["message"]
     text = extract_text_content(msg)
     print(f"  Response text: {text}")
     assert "4" in text
@@ -210,10 +210,10 @@ def test_non_stream_tool_calls():
     print(f"  Round 1 warnings: {warnings}")
 
     response_data = call_api(provider_req)
-    ir_messages = converter.from_provider(response_data)
-    assert len(ir_messages) >= 1
+    ir_response = converter.response_from_provider(response_data)
+    assert len(ir_response["choices"]) >= 1
 
-    assistant_msg = ir_messages[0]
+    assistant_msg = ir_response["choices"][0]["message"]
     tool_calls = extract_tool_calls(assistant_msg)
     print(f"  Tool calls: {len(tool_calls)}")
     assert len(tool_calls) >= 1, "Expected at least one tool call"
@@ -250,9 +250,9 @@ def test_non_stream_tool_calls():
     print(f"  Round 2 warnings: {warnings_r2}")
 
     response_data_r2 = call_api(provider_req_r2)
-    ir_messages_r2 = converter.from_provider(response_data_r2)
+    ir_response_r2 = converter.response_from_provider(response_data_r2)
 
-    final_msg = ir_messages_r2[0]
+    final_msg = ir_response_r2["choices"][0]["message"]
     final_text = extract_text_content(final_msg)
     print(f"  Final response: {final_text[:120]}...")
     assert len(final_text) > 5
@@ -371,8 +371,8 @@ def test_multi_turn():
 
     provider_req, _ = converter.request_to_provider(ir_request)
     response_data = call_api(provider_req)
-    ir_messages = converter.from_provider(response_data)
-    assistant_msg_1 = ir_messages[0]
+    ir_response = converter.response_from_provider(response_data)
+    assistant_msg_1 = ir_response["choices"][0]["message"]
     text_1 = extract_text_content(assistant_msg_1)
     print(f"  Turn 1 response: {text_1[:80]}...")
 
@@ -395,8 +395,8 @@ def test_multi_turn():
 
     provider_req_2, _ = converter.request_to_provider(ir_request_2)
     response_data_2 = call_api(provider_req_2)
-    ir_messages_2 = converter.from_provider(response_data_2)
-    text_2 = extract_text_content(ir_messages_2[0])
+    ir_response_2 = converter.response_from_provider(response_data_2)
+    text_2 = extract_text_content(ir_response_2["choices"][0]["message"])
     print(f"  Turn 2 response: {text_2[:80]}...")
     assert "alice" in text_2.lower()
 
