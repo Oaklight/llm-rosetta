@@ -35,6 +35,8 @@ from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
     TextDeltaEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
@@ -558,14 +560,37 @@ class GoogleGenAIConverter(BaseConverter):
         For finish_reason → ``FinishEvent``
         For usage_metadata → ``UsageEvent``
 
+        When a ``context`` is provided, lifecycle events (``StreamStartEvent``,
+        ``StreamEndEvent``) are emitted and cross-chunk state is tracked.
+        Without a context the behaviour is identical to the previous
+        implementation (backward compatible).
+
         Args:
             chunk: Google GenAI stream chunk dict (or SDK object).
+            context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the chunk.
         """
         chunk = self._normalize(chunk)
         events: List[IRStreamEvent] = []
+
+        # --- StreamStartEvent (only with context, on first chunk) ---
+        if context is not None and not context.is_started:
+            response_id = chunk.get("response_id", "")
+            model = chunk.get("model_version", "")
+            context.response_id = response_id
+            context.model = model
+            context.mark_started()
+            events.append(
+                StreamStartEvent(
+                    type="stream_start",
+                    response_id=response_id,
+                    model=model,
+                )
+            )
+
+        has_finish_reason = False
 
         for candidate in chunk.get("candidates", []):
             choice_index = candidate.get("index", 0)
@@ -604,6 +629,10 @@ class GoogleGenAIConverter(BaseConverter):
                     tool_name = func_call.get("name", "")
                     args = func_call.get("args", {})
 
+                    # Register tool call in context
+                    if context is not None:
+                        context.register_tool_call(tool_call_id, tool_name)
+
                     # Emit ToolCallStartEvent
                     events.append(
                         ToolCallStartEvent(
@@ -630,6 +659,7 @@ class GoogleGenAIConverter(BaseConverter):
             # Finish reason
             finish_reason = candidate.get("finish_reason")
             if finish_reason:
+                has_finish_reason = True
                 reason_map = {
                     "STOP": "stop",
                     "MAX_TOKENS": "length",
@@ -666,6 +696,11 @@ class GoogleGenAIConverter(BaseConverter):
                 )
             )
 
+        # --- StreamEndEvent (only with context, when finish_reason present) ---
+        if context is not None and has_finish_reason:
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+
         return events
 
     def stream_response_to_provider(
@@ -678,15 +713,42 @@ class GoogleGenAIConverter(BaseConverter):
         Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR
         stream event.
 
+        When a ``context`` is provided, tool call names can be recovered from
+        the context for ``tool_call_delta`` events (fixing the P0 issue of
+        lost tool names).
+
         Args:
             ir_event: IR stream event.
+            context: Optional stream context for stateful conversions.
 
         Returns:
             Google GenAI stream chunk dict.
         """
         event_type = ir_event["type"]
 
-        if event_type == "text_delta":
+        if event_type == "stream_start":
+            # Store metadata in context if provided
+            if context is not None:
+                context.response_id = ir_event["response_id"]
+                context.model = ir_event["model"]
+                context.mark_started()
+            return {
+                "candidates": [],
+                "model_version": ir_event["model"],
+            }
+
+        elif event_type == "stream_end":
+            if context is not None:
+                context.mark_ended()
+            return {}
+
+        elif event_type == "content_block_start":
+            return {}
+
+        elif event_type == "content_block_end":
+            return {}
+
+        elif event_type == "text_delta":
             choice_index = ir_event.get("choice_index", 0)
             return {
                 "candidates": [
@@ -744,6 +806,12 @@ class GoogleGenAIConverter(BaseConverter):
                 args = json.loads(ir_event["arguments_delta"])
             except (json.JSONDecodeError, TypeError):
                 args = {}
+
+            # Recover tool name from context (P0 fix)
+            tool_name = ""
+            if context is not None:
+                tool_name = context.get_tool_name(ir_event["tool_call_id"])
+
             return {
                 "candidates": [
                     {
@@ -753,7 +821,7 @@ class GoogleGenAIConverter(BaseConverter):
                             "parts": [
                                 {
                                     "function_call": {
-                                        "name": "",
+                                        "name": tool_name,
                                         "args": args,
                                     }
                                 }
