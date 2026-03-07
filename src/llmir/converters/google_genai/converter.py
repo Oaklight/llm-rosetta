@@ -311,7 +311,9 @@ class GoogleGenAIConverter(BaseConverter):
                 else {"role": "assistant", "content": []}
             )
 
-            finish_reason_val = p_candidate.get("finish_reason")
+            finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
+                "finishReason"
+            )
             reason_map = {
                 "STOP": "stop",
                 "MAX_TOKENS": "length",
@@ -329,25 +331,41 @@ class GoogleGenAIConverter(BaseConverter):
             choices.append(choice_info)
 
         ir_response: Dict[str, Any] = {
-            "id": provider_response.get("response_id", ""),
+            "id": provider_response.get("response_id")
+            or provider_response.get("responseId")
+            or "",
             "object": "response",
             "created": int(time.time()),  # Google doesn't provide timestamp
-            "model": provider_response.get("model_version", ""),
+            "model": provider_response.get("model_version")
+            or provider_response.get("modelVersion")
+            or "",
             "choices": choices,
         }
 
         # Handle usage
-        p_usage = provider_response.get("usage_metadata")
+        p_usage = provider_response.get("usage_metadata") or provider_response.get(
+            "usageMetadata"
+        )
         if p_usage:
             usage_info: Dict[str, Any] = {
-                "prompt_tokens": p_usage.get("prompt_token_count", 0),
-                "completion_tokens": p_usage.get("candidates_token_count", 0),
-                "total_tokens": p_usage.get("total_token_count", 0),
+                "prompt_tokens": p_usage.get(
+                    "prompt_token_count", p_usage.get("promptTokenCount", 0)
+                ),
+                "completion_tokens": p_usage.get(
+                    "candidates_token_count",
+                    p_usage.get("candidatesTokenCount", 0),
+                ),
+                "total_tokens": p_usage.get(
+                    "total_token_count", p_usage.get("totalTokenCount", 0)
+                ),
             }
 
             # Reasoning tokens
-            if "thoughts_token_count" in p_usage:
-                usage_info["reasoning_tokens"] = p_usage["thoughts_token_count"]
+            thoughts = p_usage.get("thoughts_token_count") or p_usage.get(
+                "thoughtsTokenCount"
+            )
+            if thoughts is not None:
+                usage_info["reasoning_tokens"] = thoughts
 
             ir_response["usage"] = usage_info
 
@@ -577,8 +595,8 @@ class GoogleGenAIConverter(BaseConverter):
 
         # --- StreamStartEvent (only with context, on first chunk) ---
         if context is not None and not context.is_started:
-            response_id = chunk.get("response_id", "")
-            model = chunk.get("model_version", "")
+            response_id = chunk.get("response_id") or chunk.get("responseId") or ""
+            model = chunk.get("model_version") or chunk.get("modelVersion") or ""
             context.response_id = response_id
             context.model = model
             context.mark_started()
@@ -657,7 +675,9 @@ class GoogleGenAIConverter(BaseConverter):
                     )
 
             # Finish reason
-            finish_reason = candidate.get("finish_reason")
+            finish_reason = candidate.get("finish_reason") or candidate.get(
+                "finishReason"
+            )
             if finish_reason:
                 has_finish_reason = True
                 reason_map = {
@@ -677,17 +697,27 @@ class GoogleGenAIConverter(BaseConverter):
                 )
 
         # Usage metadata (typically in the last chunk)
-        usage = chunk.get("usage_metadata")
+        usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
         if usage:
             usage_info: Dict[str, Any] = {
-                "prompt_tokens": usage.get("prompt_token_count", 0),
-                "completion_tokens": usage.get("candidates_token_count", 0),
-                "total_tokens": usage.get("total_token_count", 0),
+                "prompt_tokens": usage.get(
+                    "prompt_token_count", usage.get("promptTokenCount", 0)
+                ),
+                "completion_tokens": usage.get(
+                    "candidates_token_count",
+                    usage.get("candidatesTokenCount", 0),
+                ),
+                "total_tokens": usage.get(
+                    "total_token_count", usage.get("totalTokenCount", 0)
+                ),
             }
 
             # Reasoning tokens
-            if "thoughts_token_count" in usage:
-                usage_info["reasoning_tokens"] = usage["thoughts_token_count"]
+            thoughts = usage.get("thoughts_token_count") or usage.get(
+                "thoughtsTokenCount"
+            )
+            if thoughts is not None:
+                usage_info["reasoning_tokens"] = thoughts
 
             events.append(
                 UsageEvent(
