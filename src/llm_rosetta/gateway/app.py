@@ -687,12 +687,24 @@ def _cmd_add_provider(args: argparse.Namespace) -> None:
     data, path = _load_or_create_config(config_path)
 
     name: str = args.name
-    api_key: str = args.api_key or input(f"API key env placeholder for '{name}' [${{{name.upper()}_API_KEY}}]: ").strip()
+    default_key = f"${{{name.upper()}_API_KEY}}"
+    default_url = _DEFAULT_BASE_URLS.get(name, "")
+
+    # api_key: CLI flag > interactive > auto-default
+    api_key: str = args.api_key or ""
     if not api_key:
-        api_key = f"${{{name.upper()}_API_KEY}}"
-    base_url: str = args.base_url or input(f"Base URL [{_DEFAULT_BASE_URLS.get(name, '')}]: ").strip()
+        if sys.stdin.isatty():
+            api_key = input(f"API key env placeholder for '{name}' [{default_key}]: ").strip()
+        if not api_key:
+            api_key = default_key
+
+    # base_url: CLI flag > interactive > auto-default
+    base_url: str = args.base_url or ""
     if not base_url:
-        base_url = _DEFAULT_BASE_URLS.get(name, "")
+        if default_url:
+            base_url = default_url  # known provider — use default silently
+        elif sys.stdin.isatty():
+            base_url = input(f"Base URL (required): ").strip()
     if not base_url:
         print("Error: --base-url is required for non-standard providers.", file=sys.stderr)
         sys.exit(1)
