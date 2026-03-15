@@ -4,14 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "llmir"
-version = "0.0.1"
-description = "A library to convert between different LLM provider API standards using intermediate representation (IR)."
+dynamic = ["version"]
+authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
+description = "LLMIR: A library to convert between different LLM provider API standards using intermediate representation (IR)."
 readme = "README.md"
 requires-python = ">=3.8"
+license = "MIT"
 classifiers = [
+    "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = ["typing_extensions>=4.0.0"]
 
@@ -30,5 +39,16 @@ dev = [
 
 all = ["llmir[openai,anthropic,google,dev]"]
 
+[project.urls]
+Documentation = "https://llmir.readthedocs.io"
+Repository = "https://github.com/Oaklight/llmir"
+Issues = "https://github.com/Oaklight/llmir/issues"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"llmir" = ["py.typed"]
+
+[tool.setuptools.dynamic]
+version = { attr = "llmir.__version__" }
