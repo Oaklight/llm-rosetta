@@ -4,8 +4,19 @@ Anthropic Converter integration tests.
 Tests the top-level AnthropicConverter with full request/response conversion.
 """
 
+from typing import Any, cast
+
 from llm_rosetta.converters.anthropic import AnthropicConverter
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.types.ir import (
+    FinishEvent,
+    IRRequest,
+    IRResponse,
+    Message,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 
 
 class TestAnthropicConverter:
@@ -182,7 +193,7 @@ class TestAnthropicConverter:
         }
         ir_request = self.converter.request_from_provider(provider_request)
         assert ir_request["model"] == "claude-3-5-sonnet-20241022"
-        assert len(ir_request["messages"]) == 1
+        assert len(list(ir_request["messages"])) == 1
         assert ir_request["generation"]["max_tokens"] == 1024
 
     def test_request_from_provider_with_system(self):
@@ -226,7 +237,9 @@ class TestAnthropicConverter:
                     ],
                 }
 
-        ir_request = self.converter.request_from_provider(MockPydanticModel())
+        ir_request = self.converter.request_from_provider(
+            cast(dict[str, Any], MockPydanticModel())
+        )
         assert ir_request["model"] == "claude-3-5-sonnet-20241022"
 
     # ==================== response_from_provider ====================
@@ -254,7 +267,7 @@ class TestAnthropicConverter:
         choice = result["choices"][0]
         assert choice["index"] == 0
         assert choice["message"]["role"] == "assistant"
-        assert choice["message"]["content"][0]["text"] == "Hello! How can I help?"
+        assert list(choice["message"]["content"])[0]["text"] == "Hello! How can I help?"
         assert choice["finish_reason"]["reason"] == "stop"
 
         assert result["usage"]["prompt_tokens"] == 15
@@ -282,7 +295,7 @@ class TestAnthropicConverter:
         result = self.converter.response_from_provider(provider_response)
         choice = result["choices"][0]
         assert choice["finish_reason"]["reason"] == "tool_calls"
-        tc = choice["message"]["content"][0]
+        tc = list(choice["message"]["content"])[0]
         assert tc["type"] == "tool_call"
         assert tc["tool_name"] == "get_weather"
 
@@ -319,34 +332,39 @@ class TestAnthropicConverter:
                     "usage": {"input_tokens": 5, "output_tokens": 10},
                 }
 
-        result = self.converter.response_from_provider(MockResponse())
+        result = self.converter.response_from_provider(
+            cast(dict[str, Any], MockResponse())
+        )
         assert result["id"] == "msg_pydantic"
 
     # ==================== response_to_provider ====================
 
     def test_response_to_provider_basic(self):
         """Test basic response to provider."""
-        ir_response = {
-            "id": "resp_123",
-            "object": "response",
-            "created": 1700000000,
-            "model": "claude-3-5-sonnet-20241022",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": "Hello!"}],
-                    },
-                    "finish_reason": {"reason": "stop"},
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_123",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3-5-sonnet-20241022",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hello!"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
             },
-        }
+        )
         result = self.converter.response_to_provider(ir_response)
         assert result["id"] == "resp_123"
         assert result["type"] == "message"
@@ -359,30 +377,33 @@ class TestAnthropicConverter:
 
     def test_response_to_provider_with_tool_calls(self):
         """Test response to provider with tool calls."""
-        ir_response = {
-            "id": "resp_tc",
-            "object": "response",
-            "created": 1700000000,
-            "model": "claude-3-5-sonnet-20241022",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_call",
-                                "tool_call_id": "call_123",
-                                "tool_name": "search",
-                                "tool_input": {"q": "test"},
-                                "tool_type": "function",
-                            }
-                        ],
-                    },
-                    "finish_reason": {"reason": "tool_calls"},
-                }
-            ],
-        }
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_tc",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3-5-sonnet-20241022",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_call",
+                                    "tool_call_id": "call_123",
+                                    "tool_name": "search",
+                                    "tool_input": {"q": "test"},
+                                    "tool_type": "function",
+                                }
+                            ],
+                        },
+                        "finish_reason": {"reason": "tool_calls"},
+                    }
+                ],
+            },
+        )
         result = self.converter.response_to_provider(ir_response)
         assert result["stop_reason"] == "tool_use"
         assert result["content"][0]["type"] == "tool_use"
@@ -392,9 +413,12 @@ class TestAnthropicConverter:
 
     def test_messages_to_provider(self):
         """Test messages_to_provider delegates to message_ops."""
-        messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ]
+        messages = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         result, warnings = self.converter.messages_to_provider(messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
@@ -406,7 +430,8 @@ class TestAnthropicConverter:
         ]
         result = self.converter.messages_from_provider(provider_messages)
         assert len(result) == 1
-        assert result[0]["role"] == "user"
+        msg = cast(Any, result[0])
+        assert msg["role"] == "user"
 
     # ==================== Stream Support ====================
 
@@ -497,57 +522,143 @@ class TestAnthropicConverter:
     # ==================== stream_response_to_provider ====================
 
     def test_stream_to_provider_text_delta(self):
-        """Test IR text delta → Anthropic SSE event."""
-        ir_event = {"type": "text_delta", "text": "Hello"}
-        result = self.converter.stream_response_to_provider(ir_event)
+        """Test IR text delta -> Anthropic SSE event."""
+        ir_event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "text_delta"
         assert result["delta"]["text"] == "Hello"
 
     def test_stream_to_provider_tool_call_start(self):
-        """Test IR tool call start → Anthropic SSE event."""
-        ir_event = {
-            "type": "tool_call_start",
-            "tool_call_id": "tc_123",
-            "tool_name": "search",
-        }
-        result = self.converter.stream_response_to_provider(ir_event)
+        """Test IR tool call start -> Anthropic SSE event."""
+        ir_event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "tc_123",
+                "tool_name": "search",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
         assert result["type"] == "content_block_start"
         assert result["content_block"]["type"] == "tool_use"
         assert result["content_block"]["id"] == "tc_123"
 
     def test_stream_to_provider_tool_call_delta(self):
-        """Test IR tool call delta → Anthropic SSE event."""
-        ir_event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "tc_123",
-            "arguments_delta": '{"q":',
-        }
-        result = self.converter.stream_response_to_provider(ir_event)
+        """Test IR tool call delta -> Anthropic SSE event."""
+        ir_event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "tc_123",
+                "arguments_delta": '{"q":',
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "input_json_delta"
 
     def test_stream_to_provider_finish(self):
-        """Test IR finish → Anthropic SSE event."""
-        ir_event = {
-            "type": "finish",
-            "finish_reason": {"reason": "stop"},
-        }
-        result = self.converter.stream_response_to_provider(ir_event)
+        """Test IR finish -> Anthropic SSE event."""
+        ir_event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "stop"},
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
         assert result["type"] == "message_delta"
         assert result["delta"]["stop_reason"] == "end_turn"
 
     def test_stream_to_provider_usage(self):
-        """Test IR usage → Anthropic SSE event."""
-        ir_event = {
-            "type": "usage",
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
+        """Test IR usage -> Anthropic SSE event."""
+        ir_event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
             },
-        }
-        result = self.converter.stream_response_to_provider(ir_event)
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
         assert result["type"] == "message_delta"
         assert result["usage"]["input_tokens"] == 10
         assert result["usage"]["output_tokens"] == 20
+
+
+class TestAnthropicConverterFullRoundTrip:
+    """Full round-trip conversion tests."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    def test_request_round_trip(self):
+        """Test IRRequest -> Anthropic -> IRRequest round-trip."""
+        ir_request: IRRequest = {
+            "model": "claude-3-5-sonnet-20241022",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
+            ],
+            "system_instruction": "Be helpful.",
+            "generation": {"temperature": 0.7, "max_tokens": 100},
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                    "required_parameters": [],
+                    "metadata": {},
+                }
+            ],
+            "tool_choice": {"mode": "auto", "tool_name": ""},
+        }
+        provider, _ = self.converter.request_to_provider(ir_request)
+        restored = self.converter.request_from_provider(provider)
+
+        assert restored["model"] == "claude-3-5-sonnet-20241022"
+        assert restored["system_instruction"] == "Be helpful."
+        assert restored["generation"]["temperature"] == 0.7
+        assert restored["generation"]["max_tokens"] == 100
+        tools = list(restored["tools"])
+        assert len(tools) == 1
+        assert tools[0]["name"] == "search"
+
+    def test_response_round_trip(self):
+        """Test Anthropic response -> IR -> Anthropic round-trip."""
+        provider_response = {
+            "id": "msg_rt",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3-5-sonnet-20241022",
+            "content": [{"type": "text", "text": "Hello!"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir_response = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir_response)
+
+        assert restored["id"] == "msg_rt"
+        assert restored["type"] == "message"
+        assert restored["content"][0]["text"] == "Hello!"
+        assert restored["stop_reason"] == "end_turn"
+        assert restored["usage"]["input_tokens"] == 10
+
+    def test_stream_event_round_trip(self):
+        """Test stream event round-trip."""
+        original = {
+            "type": "content_block_delta",
+            "delta": {"type": "text_delta", "text": "Hello"},
+        }
+        events = self.converter.stream_response_from_provider(original)
+        assert len(events) == 1
+
+        restored = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(events[0]),
+        )
+        assert restored["delta"]["text"] == "Hello"

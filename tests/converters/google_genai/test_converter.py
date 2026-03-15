@@ -4,10 +4,17 @@ Google GenAI Converter integration tests.
 Tests the top-level GoogleGenAIConverter with full request/response conversion.
 """
 
+from typing import Any, cast
+
 import pytest
 
 from llm_rosetta.converters.google_genai import GoogleConverter, GoogleGenAIConverter
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.types.ir import (
+    IRRequest,
+    IRResponse,
+    Message,
+    ToolDefinition,
+)
 
 
 class TestGoogleGenAIConverter:
@@ -219,8 +226,9 @@ class TestGoogleGenAIConverter:
         }
         ir_request = self.converter.request_from_provider(provider_request)
         assert ir_request["model"] == "gemini-2.0-flash"
-        assert len(ir_request["messages"]) == 1
-        assert ir_request["messages"][0]["content"][0]["text"] == "Hello"
+        messages = list(ir_request["messages"])
+        assert len(messages) == 1
+        assert list(messages[0]["content"])[0]["text"] == "Hello"
 
     def test_request_from_provider_with_system_instruction_string(self):
         """Test request from provider with string system instruction."""
@@ -269,8 +277,9 @@ class TestGoogleGenAIConverter:
             },
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert len(ir_request["tools"]) == 1
-        assert ir_request["tools"][0]["name"] == "search"
+        tools = list(ir_request["tools"])
+        assert len(tools) == 1
+        assert tools[0]["name"] == "search"
 
     def test_request_from_provider_with_tool_config(self):
         """Test request from provider with tool config."""
@@ -329,7 +338,9 @@ class TestGoogleGenAIConverter:
                     "config": {},
                 }
 
-        ir_request = self.converter.request_from_provider(MockPydanticModel())
+        ir_request = self.converter.request_from_provider(
+            cast(dict[str, Any], MockPydanticModel())
+        )
         assert ir_request["model"] == "gemini-2.0-flash"
 
     # ==================== response_from_provider ====================
@@ -364,7 +375,7 @@ class TestGoogleGenAIConverter:
         choice = result["choices"][0]
         assert choice["index"] == 0
         assert choice["message"]["role"] == "assistant"
-        assert choice["message"]["content"][0]["text"] == "Hello! How can I help?"
+        assert list(choice["message"]["content"])[0]["text"] == "Hello! How can I help?"
         assert choice["finish_reason"]["reason"] == "stop"
 
         assert result["usage"]["prompt_tokens"] == 15
@@ -396,7 +407,7 @@ class TestGoogleGenAIConverter:
         }
         result = self.converter.response_from_provider(provider_response)
         choice = result["choices"][0]
-        tc = choice["message"]["content"][0]
+        tc = list(choice["message"]["content"])[0]
         assert tc["type"] == "tool_call"
         assert tc["tool_name"] == "get_weather"
 
@@ -421,10 +432,11 @@ class TestGoogleGenAIConverter:
         }
         result = self.converter.response_from_provider(provider_response)
         choice = result["choices"][0]
-        assert choice["message"]["content"][0]["type"] == "reasoning"
-        assert choice["message"]["content"][0]["reasoning"] == "Let me think..."
-        assert choice["message"]["content"][1]["type"] == "text"
-        assert choice["message"]["content"][1]["text"] == "The answer is 42."
+        content = list(choice["message"]["content"])
+        assert content[0]["type"] == "reasoning"
+        assert content[0]["reasoning"] == "Let me think..."
+        assert content[1]["type"] == "text"
+        assert content[1]["text"] == "The answer is 42."
 
     def test_response_from_provider_with_thoughts_token_count(self):
         """Test response with thoughts_token_count in usage."""
@@ -495,7 +507,9 @@ class TestGoogleGenAIConverter:
                     ],
                 }
 
-        result = self.converter.response_from_provider(MockResponse())
+        result = self.converter.response_from_provider(
+            cast(dict[str, Any], MockResponse())
+        )
         assert result["id"] == "resp-pydantic"
 
     def test_response_from_provider_no_content(self):
@@ -518,27 +532,30 @@ class TestGoogleGenAIConverter:
 
     def test_response_to_provider_basic(self):
         """Test basic response to provider."""
-        ir_response = {
-            "id": "resp_123",
-            "object": "response",
-            "created": 1700000000,
-            "model": "gemini-2.0-flash",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": "Hello!"}],
-                    },
-                    "finish_reason": {"reason": "stop"},
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_123",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hello!"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
             },
-        }
+        )
         result = self.converter.response_to_provider(ir_response)
         assert result["response_id"] == "resp_123"
         assert result["model_version"] == "gemini-2.0-flash"
@@ -553,30 +570,33 @@ class TestGoogleGenAIConverter:
 
     def test_response_to_provider_with_tool_calls(self):
         """Test response to provider with tool calls."""
-        ir_response = {
-            "id": "resp_tc",
-            "object": "response",
-            "created": 1700000000,
-            "model": "gemini-2.0-flash",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [
-                            {
-                                "type": "tool_call",
-                                "tool_call_id": "call_123",
-                                "tool_name": "search",
-                                "tool_input": {"q": "test"},
-                                "tool_type": "function",
-                            }
-                        ],
-                    },
-                    "finish_reason": {"reason": "tool_calls"},
-                }
-            ],
-        }
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_tc",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_call",
+                                    "tool_call_id": "call_123",
+                                    "tool_name": "search",
+                                    "tool_input": {"q": "test"},
+                                    "tool_type": "function",
+                                }
+                            ],
+                        },
+                        "finish_reason": {"reason": "tool_calls"},
+                    }
+                ],
+            },
+        )
         result = self.converter.response_to_provider(ir_response)
         candidate = result["candidates"][0]
         assert candidate["finish_reason"] == "STOP"
@@ -585,25 +605,28 @@ class TestGoogleGenAIConverter:
 
     def test_response_to_provider_with_reasoning(self):
         """Test response to provider with reasoning parts."""
-        ir_response = {
-            "id": "resp_think",
-            "object": "response",
-            "created": 1700000000,
-            "model": "gemini-2.0-flash",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [
-                            {"type": "reasoning", "reasoning": "Thinking..."},
-                            {"type": "text", "text": "Answer."},
-                        ],
-                    },
-                    "finish_reason": {"reason": "stop"},
-                }
-            ],
-        }
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_think",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {"type": "reasoning", "reasoning": "Thinking..."},
+                                {"type": "text", "text": "Answer."},
+                            ],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+            },
+        )
         result = self.converter.response_to_provider(ir_response)
         parts = result["candidates"][0]["content"]["parts"]
         assert parts[0]["thought"] is True
@@ -612,28 +635,31 @@ class TestGoogleGenAIConverter:
 
     def test_response_to_provider_with_reasoning_tokens(self):
         """Test response to provider with reasoning tokens in usage."""
-        ir_response = {
-            "id": "resp_rt",
-            "object": "response",
-            "created": 1700000000,
-            "model": "gemini-2.0-flash",
-            "choices": [
-                {
-                    "index": 0,
-                    "message": {
-                        "role": "assistant",
-                        "content": [{"type": "text", "text": "Hi"}],
-                    },
-                    "finish_reason": {"reason": "stop"},
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-                "reasoning_tokens": 50,
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_rt",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hi"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                    "reasoning_tokens": 50,
+                },
             },
-        }
+        )
         result = self.converter.response_to_provider(ir_response)
         assert result["usage_metadata"]["thoughts_token_count"] == 50
 
@@ -647,22 +673,25 @@ class TestGoogleGenAIConverter:
             "error": "OTHER",
         }
         for ir_reason, google_reason in reason_map.items():
-            ir_response = {
-                "id": f"resp_{ir_reason}",
-                "object": "response",
-                "created": 1700000000,
-                "model": "gemini-2.0-flash",
-                "choices": [
-                    {
-                        "index": 0,
-                        "message": {
-                            "role": "assistant",
-                            "content": [{"type": "text", "text": "Hi"}],
-                        },
-                        "finish_reason": {"reason": ir_reason},
-                    }
-                ],
-            }
+            ir_response = cast(
+                IRResponse,
+                {
+                    "id": f"resp_{ir_reason}",
+                    "object": "response",
+                    "created": 1700000000,
+                    "model": "gemini-2.0-flash",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "Hi"}],
+                            },
+                            "finish_reason": {"reason": ir_reason},
+                        }
+                    ],
+                },
+            )
             result = self.converter.response_to_provider(ir_response)
             assert result["candidates"][0]["finish_reason"] == google_reason, (
                 f"Failed for {ir_reason}"
@@ -672,9 +701,12 @@ class TestGoogleGenAIConverter:
 
     def test_messages_to_provider(self):
         """Test messages_to_provider delegates to message_ops."""
-        messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ]
+        messages = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         result, warnings = self.converter.messages_to_provider(messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
@@ -687,8 +719,9 @@ class TestGoogleGenAIConverter:
         ]
         result = self.converter.messages_from_provider(provider_messages)
         assert len(result) == 1
-        assert result[0]["role"] == "user"
-        assert result[0]["content"][0]["text"] == "Hello"
+        msg = cast(Any, result[0])
+        assert msg["role"] == "user"
+        assert list(msg["content"])[0]["text"] == "Hello"
 
     # ==================== _normalize ====================
 
@@ -732,14 +765,17 @@ class TestGoogleGenAIConverter:
 
     def test_build_config_with_tools(self):
         """Test build_config with tools."""
-        tools = [
-            {
-                "type": "function",
-                "name": "search",
-                "description": "Search",
-                "parameters": {"type": "object", "properties": {}},
-            }
-        ]
+        tools = cast(
+            list[ToolDefinition],
+            [
+                {
+                    "type": "function",
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ],
+        )
         config = self.converter.build_config(tools=tools)
         assert config is not None
         assert len(config["tools"]) == 1
@@ -757,13 +793,16 @@ class TestGoogleGenAIConverter:
 
     def test_to_provider_with_ir_input(self):
         """Test to_provider with IRInput (message list)."""
-        ir_input = [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "Be helpful."}],
-            },
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ]
+        ir_input = cast(
+            list[Message],
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Be helpful."}],
+                },
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         result, warnings = self.converter.to_provider(ir_input)
         assert "system_instruction" in result
         assert result["system_instruction"]["parts"][0]["text"] == "Be helpful."
@@ -771,28 +810,37 @@ class TestGoogleGenAIConverter:
 
     def test_to_provider_with_ir_request(self):
         """Test to_provider with IRRequest (dict with messages key)."""
-        ir_request = {
-            "model": "gemini-2.0-flash",
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
-            ],
-        }
+        ir_request = cast(
+            IRRequest,
+            {
+                "model": "gemini-2.0-flash",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                ],
+            },
+        )
         result, warnings = self.converter.to_provider(ir_request)
         assert result["model"] == "gemini-2.0-flash"
 
     def test_to_provider_with_tools(self):
         """Test to_provider with tools parameter."""
-        ir_input = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ]
-        tools = [
-            {
-                "type": "function",
-                "name": "search",
-                "description": "Search",
-                "parameters": {"type": "object", "properties": {}},
-            }
-        ]
+        ir_input = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
+        tools = cast(
+            list[ToolDefinition],
+            [
+                {
+                    "type": "function",
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ],
+        )
         result, warnings = self.converter.to_provider(ir_input, tools=tools)
         assert len(result["tools"]) == 1
 
@@ -822,7 +870,7 @@ class TestGoogleGenAIConverterFullRoundTrip:
         self.converter = GoogleGenAIConverter()
 
     def test_request_round_trip(self):
-        """Test IRRequest → Google → IRRequest round-trip."""
+        """Test IRRequest -> Google -> IRRequest round-trip."""
         ir_request: IRRequest = {
             "model": "gemini-2.0-flash",
             "messages": [
@@ -848,11 +896,12 @@ class TestGoogleGenAIConverterFullRoundTrip:
         assert restored["model"] == "gemini-2.0-flash"
         assert restored["generation"]["temperature"] == 0.7
         assert restored["generation"]["max_tokens"] == 100
-        assert len(restored["tools"]) == 1
-        assert restored["tools"][0]["name"] == "search"
+        tools = list(restored["tools"])
+        assert len(tools) == 1
+        assert tools[0]["name"] == "search"
 
     def test_response_round_trip(self):
-        """Test Google response → IR → Google round-trip."""
+        """Test Google response -> IR -> Google round-trip."""
         provider_response = {
             "response_id": "resp-rt",
             "model_version": "gemini-2.0-flash",
@@ -882,16 +931,21 @@ class TestGoogleGenAIConverterFullRoundTrip:
         assert restored["usage_metadata"]["total_token_count"] == 15
 
     def test_message_round_trip(self):
-        """Test message round-trip: IR → Google → IR."""
-        original = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
-        ]
+        """Test message round-trip: IR -> Google -> IR."""
+        original = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
+            ],
+        )
         provider, _ = self.converter.messages_to_provider(original)
         restored = self.converter.messages_from_provider(provider)
 
         assert len(restored) == 2
-        assert restored[0]["role"] == "user"
-        assert restored[0]["content"][0]["text"] == "Hello"
-        assert restored[1]["role"] == "assistant"
-        assert restored[1]["content"][0]["text"] == "Hi!"
+        r0 = cast(Any, restored[0])
+        r1 = cast(Any, restored[1])
+        assert r0["role"] == "user"
+        assert list(r0["content"])[0]["text"] == "Hello"
+        assert r1["role"] == "assistant"
+        assert list(r1["content"])[0]["text"] == "Hi!"
