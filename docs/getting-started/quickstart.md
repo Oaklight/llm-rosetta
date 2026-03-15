@@ -9,7 +9,7 @@ title: 快速开始
 核心工作流：**提供商 A → IR → 提供商 B**。
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
@@ -40,14 +40,14 @@ response = client.messages.create(**anthropic_request)
 ir_response = anthropic_conv.response_from_provider(response.model_dump())
 
 # 提取文本
-from llmir import extract_text_content
+from llm_rosetta import extract_text_content
 text = extract_text_content(ir_response["choices"][0]["message"])
 ```
 
 ## 自动检测
 
 ```python
-from llmir import detect_provider, convert
+from llm_rosetta import detect_provider, convert
 
 # 从请求结构自动检测提供商
 provider = detect_provider(some_request)

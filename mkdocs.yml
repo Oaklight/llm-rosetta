@@ -1,5 +1,5 @@
-site_name: LLMIR
-site_description: 大语言模型中间表示 - LLM 提供商之间的统一消息格式转换库
+site_name: LLM-Rosetta
+site_description: 大语言模型罗塞塔石 - LLM 提供商之间的统一消息格式转换库
 site_author: Peng Ding
 site_url: https://llmir.readthedocs.io/zh/
 repo_name: Oaklight/llmir
@@ -78,7 +78,7 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/Oaklight/llmir
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/llmir/
+      link: https://pypi.org/project/llm-rosetta/
 
 nav:
   - 首页: index.md

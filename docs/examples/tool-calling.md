@@ -4,12 +4,12 @@ title: 工具调用
 
 # 工具调用
 
-LLMIR 提供统一的工具定义格式，适用于所有提供商。
+LLM-Rosetta 提供统一的工具定义格式，适用于所有提供商。
 
 ## 以 IR 格式定义工具
 
 ```python
-from llmir import ToolDefinition
+from llm_rosetta import ToolDefinition
 
 tools = [
     {
@@ -35,7 +35,7 @@ tools = [
 ## 跨提供商工具调用
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()

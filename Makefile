@@ -1,4 +1,4 @@
-# Zensical Documentation Build Script for LLMIR
+# Zensical Documentation Build Script for LLM-Rosetta
 #
 
 # You can set these variables from the command line.

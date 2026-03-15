@@ -4,4 +4,4 @@ title: IR 类型
 
 # IR 类型 API
 
-::: llmir.types.ir
+::: llm_rosetta.types.ir

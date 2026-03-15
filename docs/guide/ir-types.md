@@ -9,7 +9,7 @@ title: IR 类型
 ## 消息
 
 ```python
-from llmir import SystemMessage, UserMessage, AssistantMessage, ToolMessage
+from llm_rosetta import SystemMessage, UserMessage, AssistantMessage, ToolMessage
 ```
 
 | 类型 | 角色 | 典型内容 |
@@ -71,7 +71,7 @@ ir_response: IRResponse = {
 ## 工具类型
 
 ```python
-from llmir import ToolDefinition, ToolChoice
+from llm_rosetta import ToolDefinition, ToolChoice
 
 tool: ToolDefinition = {
     "type": "function",
@@ -92,7 +92,7 @@ tool: ToolDefinition = {
 ## 辅助函数
 
 ```python
-from llmir import extract_text_content, extract_tool_calls, create_tool_result_message
+from llm_rosetta import extract_text_content, extract_tool_calls, create_tool_result_message
 
 # 从消息中提取文本
 text = extract_text_content(message)

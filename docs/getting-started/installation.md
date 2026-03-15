@@ -7,7 +7,7 @@ title: 安装
 ## 基本安装
 
 ```bash
-pip install llmir
+pip install llm-rosetta
 ```
 
 核心库仅有最少依赖（`typing_extensions>=4.0.0`）。
@@ -27,12 +27,12 @@ pip install anthropic
 pip install google-genai
 
 # 所有提供商
-pip install llmir[openai,anthropic,google]
+pip install llm-rosetta[openai,anthropic,google]
 ```
 
 !!! note
 
-    提供商 SDK 仅在直接调用 API 时需要。LLMIR 的转换函数使用纯字典，不依赖 SDK。
+    提供商 SDK 仅在直接调用 API 时需要。LLM-Rosetta 的转换函数使用纯字典，不依赖 SDK。
 
 ## 开发安装
 

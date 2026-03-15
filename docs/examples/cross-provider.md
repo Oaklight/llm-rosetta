@@ -4,7 +4,7 @@ title: 跨提供商对话
 
 # 跨提供商对话
 
-此示例展示了在两个不同 LLM 提供商之间交替进行多轮对话，使用 LLMIR 实现消息的无缝转换。
+此示例展示了在两个不同 LLM 提供商之间交替进行多轮对话，使用 LLM-Rosetta 实现消息的无缝转换。
 
 ## 概念
 
@@ -20,7 +20,7 @@ title: 跨提供商对话
 ## 示例：OpenAI ↔ Anthropic
 
 ```python
-from llmir import (
+from llm_rosetta import (
     OpenAIChatConverter, AnthropicConverter,
     extract_text_content, IRRequest,
 )

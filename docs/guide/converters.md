@@ -7,7 +7,7 @@ title: 使用转换器
 ## 创建转换器
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 converter = OpenAIChatConverter()
 ```
@@ -50,7 +50,7 @@ provider_messages, warnings = converter.messages_to_provider(ir_messages)
 ## 跨提供商工作流
 
 ```python
-from llmir import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
 
 openai_conv = OpenAIChatConverter()
 google_conv = GoogleGenAIConverter()

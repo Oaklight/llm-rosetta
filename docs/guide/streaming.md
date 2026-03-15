@@ -4,7 +4,7 @@ title: 流式处理
 
 # 流式处理
 
-LLMIR 支持在提供商之间转换流式数据块。
+LLM-Rosetta 支持在提供商之间转换流式数据块。
 
 ## 流式事件
 
@@ -22,7 +22,7 @@ LLMIR 支持在提供商之间转换流式数据块。
 ## 转换流式数据块
 
 ```python
-from llmir.converters.base import StreamContext
+from llm_rosetta.converters.base import StreamContext
 
 converter = OpenAIChatConverter()
 ctx = StreamContext()
@@ -41,7 +41,7 @@ for chunk in provider_stream:
 流式传输完成后，重建完整消息：
 
 ```python
-from llmir import accumulate_stream_to_assistant_message
+from llm_rosetta import accumulate_stream_to_assistant_message
 
 full_message = accumulate_stream_to_assistant_message(all_events)
 ```
