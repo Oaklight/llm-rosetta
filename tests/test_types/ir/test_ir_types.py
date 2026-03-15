@@ -9,6 +9,8 @@ Tests for LLM-Rosetta IR Types Module
 - 扩展项类型
 """
 
+from typing import cast
+
 import pytest
 
 # 直接从 IR 模块导入，避免通过主模块导入旧的转换器
@@ -297,8 +299,9 @@ class TestMessages:
         }
 
         assert system_msg["role"] == "system"
-        assert len(system_msg["content"]) == 1
-        assert system_msg["content"][0]["type"] == "text"
+        content = cast(list, system_msg["content"])
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
         assert is_system_message(system_msg)
         assert is_message(system_msg)
 
@@ -313,7 +316,8 @@ class TestMessages:
         }
 
         assert user_msg["role"] == "user"
-        assert len(user_msg["content"]) == 2
+        content = cast(list, user_msg["content"])
+        assert len(content) == 2
         assert is_user_message(user_msg)
         assert is_message(user_msg)
 
@@ -333,7 +337,8 @@ class TestMessages:
         }
 
         assert assistant_msg["role"] == "assistant"
-        assert len(assistant_msg["content"]) == 2
+        content = cast(list, assistant_msg["content"])
+        assert len(content) == 2
         assert is_assistant_message(assistant_msg)
         assert is_message(assistant_msg)
 
@@ -351,7 +356,8 @@ class TestMessages:
         }
 
         assert tool_msg["role"] == "tool"
-        assert len(tool_msg["content"]) == 1
+        content = cast(list, tool_msg["content"])
+        assert len(content) == 1
         assert is_tool_message(tool_msg)
         assert is_message(tool_msg)
 
@@ -383,9 +389,10 @@ class TestMessageCreationFunctions:
         msg = create_system_message("You are a helpful assistant.")
 
         assert msg["role"] == "system"
-        assert len(msg["content"]) == 1
-        assert msg["content"][0]["type"] == "text"
-        assert msg["content"][0]["text"] == "You are a helpful assistant."
+        content = cast(list, msg["content"])
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == "You are a helpful assistant."
         assert is_system_message(msg)
 
     def test_create_user_message(self):
@@ -393,9 +400,10 @@ class TestMessageCreationFunctions:
         msg = create_user_message("Hello, how are you?")
 
         assert msg["role"] == "user"
-        assert len(msg["content"]) == 1
-        assert msg["content"][0]["type"] == "text"
-        assert msg["content"][0]["text"] == "Hello, how are you?"
+        content = cast(list, msg["content"])
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == "Hello, how are you?"
         assert is_user_message(msg)
 
     def test_create_assistant_message(self):
@@ -403,9 +411,10 @@ class TestMessageCreationFunctions:
         msg = create_assistant_message("I'm doing well, thank you!")
 
         assert msg["role"] == "assistant"
-        assert len(msg["content"]) == 1
-        assert msg["content"][0]["type"] == "text"
-        assert msg["content"][0]["text"] == "I'm doing well, thank you!"
+        content = cast(list, msg["content"])
+        assert len(content) == 1
+        assert content[0]["type"] == "text"
+        assert content[0]["text"] == "I'm doing well, thank you!"
         assert is_assistant_message(msg)
 
     def test_create_tool_message(self):
@@ -413,11 +422,12 @@ class TestMessageCreationFunctions:
         msg = create_tool_message("call_123", {"result": "success"})
 
         assert msg["role"] == "tool"
-        assert len(msg["content"]) == 1
-        assert msg["content"][0]["type"] == "tool_result"
-        assert msg["content"][0]["tool_call_id"] == "call_123"
-        assert msg["content"][0]["result"]["result"] == "success"
-        assert not msg["content"][0]["is_error"]
+        content = cast(list, msg["content"])
+        assert len(content) == 1
+        assert content[0]["type"] == "tool_result"
+        assert content[0]["tool_call_id"] == "call_123"
+        assert content[0]["result"]["result"] == "success"
+        assert not content[0]["is_error"]
         assert is_tool_message(msg)
 
     def test_create_tool_message_with_error(self):
@@ -425,18 +435,20 @@ class TestMessageCreationFunctions:
         msg = create_tool_message("call_456", "Error occurred", is_error=True)
 
         assert msg["role"] == "tool"
-        assert msg["content"][0]["tool_call_id"] == "call_456"
-        assert msg["content"][0]["result"] == "Error occurred"
-        assert msg["content"][0]["is_error"]
+        content = cast(list, msg["content"])
+        assert content[0]["tool_call_id"] == "call_456"
+        assert content[0]["result"] == "Error occurred"
+        assert content[0]["is_error"]
 
     def test_create_tool_result_message(self):
         """测试创建工具结果消息函数"""
         msg = create_tool_result_message("call_789", {"data": "test"})
 
         assert msg["role"] == "tool"
-        assert msg["content"][0]["tool_call_id"] == "call_789"
-        assert msg["content"][0]["result"]["data"] == "test"
-        assert not msg["content"][0]["is_error"]
+        content = cast(list, msg["content"])
+        assert content[0]["tool_call_id"] == "call_789"
+        assert content[0]["result"]["data"] == "test"
+        assert not content[0]["is_error"]
 
 
 class TestHelperFunctions:
@@ -738,19 +750,18 @@ class TestRequestResponseTypes:
                 "role": "assistant",
                 "content": [{"type": "text", "text": "Hello!"}],
             },
-            "finish_reason": "stop",
-            "logprobs": None,
+            "finish_reason": {"reason": "stop"},
         }
 
         assert choice["index"] == 0
-        assert choice["finish_reason"] == "stop"
+        assert choice["finish_reason"]["reason"] == "stop"
         assert choice["message"]["role"] == "assistant"
 
     def test_ir_response_creation(self):
         """测试IR响应创建"""
         response: IRResponse = {
             "id": "resp_123",
-            "object": "chat.completion",
+            "object": "response",
             "created": 1640995200,
             "model": "gpt-4o",
             "choices": [
@@ -760,7 +771,7 @@ class TestRequestResponseTypes:
                         "role": "assistant",
                         "content": [{"type": "text", "text": "Hello!"}],
                     },
-                    "finish_reason": "stop",
+                    "finish_reason": {"reason": "stop"},
                 }
             ],
             "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
