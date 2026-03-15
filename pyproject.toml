@@ -11,6 +11,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 classifiers = [
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -26,6 +27,7 @@ dependencies = ['typing_extensions>=4.0.0; python_version < "3.11"']
 openai = ["openai"]
 anthropic = ["anthropic"]
 google = ["google-genai"]
+gateway = ["starlette>=0.27.0", "uvicorn>=0.24.0", "httpx>=0.25.0"]
 dev = [
     "python-dotenv",
     "pytest",
@@ -35,7 +37,7 @@ dev = [
     "twine>=6.1.0",
 ]
 
-all = ["llm-rosetta[openai,anthropic,google,dev]"]
+all = ["llm-rosetta[openai,anthropic,google,gateway,dev]"]
 
 [project.urls]
 Documentation = "https://llm-rosetta.readthedocs.io"

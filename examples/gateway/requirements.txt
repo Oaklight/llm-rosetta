@@ -1,0 +1,4 @@
+# Install llm-rosetta with gateway extras (starlette, uvicorn, httpx)
+# From the repo root:  pip install -e ".[gateway]"
+# Or standalone:       pip install "llm-rosetta[gateway]"
+llm-rosetta[gateway]
