@@ -9,6 +9,8 @@ This module tests:
 Reference: tests/test_types/openai/chat/test_type_compatibility.py
 """
 
+from typing import Any, cast
+
 import pytest
 
 from llm_rosetta.types.google import (
@@ -478,7 +480,9 @@ class TestResponseTypes:
             "finish_reason": "STOP",
             "index": 0,
         }
+        assert candidate["content"] is not None
         fc = candidate["content"]["parts"][0]
+        assert fc["function_call"] is not None
         assert fc["function_call"]["name"] == "get_weather"
 
     def test_candidate_with_citation_metadata(self):
@@ -741,9 +745,9 @@ class TestSDKCompatibility:
                 name="get_weather",
                 description="Get the current weather",
                 parameters=sdk_types.Schema(
-                    type="OBJECT",
+                    type=cast(Any, "OBJECT"),
                     properties={
-                        "location": sdk_types.Schema(type="STRING"),
+                        "location": sdk_types.Schema(type=cast(Any, "STRING")),
                     },
                     required=["location"],
                 ),
@@ -785,8 +789,8 @@ class TestSDKCompatibility:
             from google.genai import types as sdk_types
 
             sdk_safety = sdk_types.SafetySetting(
-                category="HARM_CATEGORY_HARASSMENT",
-                threshold="BLOCK_MEDIUM_AND_ABOVE",
+                category=cast(Any, "HARM_CATEGORY_HARASSMENT"),
+                threshold=cast(Any, "BLOCK_MEDIUM_AND_ABOVE"),
             )
             safety_dict = sdk_safety.model_dump(exclude_none=True)
 
@@ -827,7 +831,7 @@ class TestSDKCompatibility:
                             parts=[sdk_types.Part(text="Hello!")],
                             role="model",
                         ),
-                        finish_reason="STOP",
+                        finish_reason=cast(Any, "STOP"),
                         index=0,
                     )
                 ],
@@ -861,11 +865,11 @@ class TestSDKCompatibility:
                     parts=[sdk_types.Part(text="Safe response")],
                     role="model",
                 ),
-                finish_reason="STOP",
+                finish_reason=cast(Any, "STOP"),
                 safety_ratings=[
                     sdk_types.SafetyRating(
-                        category="HARM_CATEGORY_HARASSMENT",
-                        probability="NEGLIGIBLE",
+                        category=cast(Any, "HARM_CATEGORY_HARASSMENT"),
+                        probability=cast(Any, "NEGLIGIBLE"),
                         blocked=False,
                     )
                 ],

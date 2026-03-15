@@ -11,6 +11,8 @@ This approach is superior because:
 3. It catches issues like extra fields, wrong types, missing required fields
 """
 
+from typing import Any, cast
+
 import pytest
 
 
@@ -56,6 +58,7 @@ def test_chat_completion_response():
             sdk_validated.choices[0].message.content
             == llm_rosetta_response["choices"][0]["message"]["content"]
         )
+        assert sdk_validated.usage is not None
         assert sdk_validated.usage.total_tokens == 21
 
     except ImportError:
@@ -108,10 +111,8 @@ def test_tool_call_response():
         sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
         assert sdk_validated.choices[0].message.tool_calls is not None
         assert len(sdk_validated.choices[0].message.tool_calls) == 1
-        assert (
-            sdk_validated.choices[0].message.tool_calls[0].function.name
-            == "get_weather"
-        )
+        tc = cast(Any, sdk_validated.choices[0].message.tool_calls[0])
+        assert tc.function.name == "get_weather"
 
     except ImportError:
         pytest.skip("OpenAI SDK not available")
@@ -158,7 +159,10 @@ def test_response_with_optional_fields():
 
         # Validate with SDK
         sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
+        assert sdk_validated.usage is not None
+        assert sdk_validated.usage.prompt_tokens_details is not None
         assert sdk_validated.usage.prompt_tokens_details.cached_tokens == 5
+        assert sdk_validated.usage.completion_tokens_details is not None
         assert sdk_validated.usage.completion_tokens_details.reasoning_tokens == 3
         assert sdk_validated.system_fingerprint == "fp_test123"
 
@@ -209,7 +213,7 @@ def test_message_params():
             ],
         }
         sdk_user_multi = SDKUserMessageParam(**user_multimodal)
-        assert len(sdk_user_multi["content"]) == 2
+        assert len(cast(list, sdk_user_multi["content"])) == 2
 
         # Assistant message with tool calls
         assistant_msg: ChatCompletionAssistantMessageParam = {
@@ -273,7 +277,9 @@ def test_usage_statistics():
             "completion_tokens_details": {"reasoning_tokens": 8},
         }
         sdk_detailed = SDKCompletionUsage.model_validate(detailed_usage)
+        assert sdk_detailed.prompt_tokens_details is not None
         assert sdk_detailed.prompt_tokens_details.cached_tokens == 5
+        assert sdk_detailed.completion_tokens_details is not None
         assert sdk_detailed.completion_tokens_details.reasoning_tokens == 8
 
     except ImportError:
@@ -330,18 +336,21 @@ def test_tool_definitions():
             "function": {
                 "name": "get_weather",
                 "description": "Get current weather",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "location": {"type": "string", "description": "City name"}
+                "parameters": cast(
+                    Any,
+                    {
+                        "type": "object",
+                        "properties": {
+                            "location": {"type": "string", "description": "City name"}
+                        },
+                        "required": ["location"],
                     },
-                    "required": ["location"],
-                },
+                ),
             },
         }
 
         # Validate with SDK
-        sdk_tool = SDKToolParam(**tool_def)
+        sdk_tool = SDKToolParam(**cast(Any, tool_def))
         assert sdk_tool["type"] == "function"
         assert sdk_tool["function"]["name"] == "get_weather"
 
