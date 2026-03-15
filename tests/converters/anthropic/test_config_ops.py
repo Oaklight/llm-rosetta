@@ -2,9 +2,12 @@
 Anthropic ConfigOps unit tests.
 """
 
+from typing import cast
+
 import pytest
 
 from llm_rosetta.converters.anthropic.config_ops import AnthropicConfigOps
+from llm_rosetta.types.ir import GenerationConfig, ReasoningConfig
 
 
 class TestAnthropicConfigOps:
@@ -14,12 +17,12 @@ class TestAnthropicConfigOps:
 
     def test_ir_generation_config_basic(self):
         """Test basic generation config conversion."""
-        ir_config = {
+        ir_config = cast(GenerationConfig, {
             "temperature": 0.7,
             "max_tokens": 1024,
             "top_p": 0.9,
             "top_k": 50,
-        }
+        })
         result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["max_tokens"] == 1024
@@ -33,23 +36,23 @@ class TestAnthropicConfigOps:
 
     def test_ir_generation_config_temperature_clamped(self):
         """Test temperature is clamped to 1.0 max."""
-        ir_config = {"temperature": 1.5}
+        ir_config = cast(GenerationConfig, {"temperature": 1.5})
         result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 1.0
 
     def test_ir_generation_config_stop_sequences(self):
         """Test stop_sequences conversion."""
-        ir_config = {"stop_sequences": ["\n\nHuman:", "END"]}
+        ir_config = cast(GenerationConfig, {"stop_sequences": ["\n\nHuman:", "END"]})
         result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         assert result["stop_sequences"] == ["\n\nHuman:", "END"]
 
     def test_ir_generation_config_unsupported_fields(self):
         """Test unsupported fields produce warnings."""
-        ir_config = {
+        ir_config = cast(GenerationConfig, {
             "frequency_penalty": 0.5,
             "presence_penalty": 0.3,
             "seed": 42,
-        }
+        })
         with pytest.warns(UserWarning):
             result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         # Unsupported fields should not be in result
@@ -130,14 +133,14 @@ class TestAnthropicConfigOps:
 
     def test_ir_reasoning_config_enabled(self):
         """Test reasoning enabled → Anthropic thinking param."""
-        ir_reasoning = {"type": "enabled", "budget_tokens": 2048}
+        ir_reasoning = cast(ReasoningConfig, {"type": "enabled", "budget_tokens": 2048})
         result = AnthropicConfigOps.ir_reasoning_config_to_p(ir_reasoning)
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 2048
 
     def test_ir_reasoning_config_disabled(self):
         """Test reasoning disabled → Anthropic thinking param."""
-        ir_reasoning = {"type": "disabled"}
+        ir_reasoning = cast(ReasoningConfig, {"type": "disabled"})
         result = AnthropicConfigOps.ir_reasoning_config_to_p(ir_reasoning)
         assert result["thinking"]["type"] == "disabled"
 

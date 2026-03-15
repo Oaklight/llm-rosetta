@@ -2,9 +2,13 @@
 OpenAI Chat ConfigOps unit tests.
 """
 
+
 import pytest
 
+from typing import cast
+
 from llm_rosetta.converters.openai_chat.config_ops import OpenAIChatConfigOps
+from llm_rosetta.types.ir import CacheConfig, GenerationConfig
 
 
 class TestOpenAIChatConfigOps:
@@ -14,7 +18,7 @@ class TestOpenAIChatConfigOps:
 
     def test_ir_generation_config_to_p_direct_fields(self):
         """Test direct mapping fields."""
-        ir_config = {
+        ir_config = cast(GenerationConfig, {
             "temperature": 0.7,
             "top_p": 0.9,
             "frequency_penalty": 0.5,
@@ -23,7 +27,7 @@ class TestOpenAIChatConfigOps:
             "logprobs": True,
             "top_logprobs": 5,
             "n": 2,
-        }
+        })
         result = OpenAIChatConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["top_p"] == 0.9
@@ -85,7 +89,7 @@ class TestOpenAIChatConfigOps:
 
     def test_generation_config_round_trip(self):
         """Test generation config round-trip."""
-        original = {"temperature": 0.8, "max_tokens": 150, "stop_sequences": ["X"]}
+        original = cast(GenerationConfig, {"temperature": 0.8, "max_tokens": 150, "stop_sequences": ["X"]})
         provider = OpenAIChatConfigOps.ir_generation_config_to_p(original)
         # Build a provider-like dict for reverse conversion
         restored = OpenAIChatConfigOps.p_generation_config_to_ir(provider)
@@ -181,7 +185,7 @@ class TestOpenAIChatConfigOps:
 
     def test_cache_config_round_trip(self):
         """Test cache config round-trip."""
-        original = {"key": "my-key", "retention": "24h"}
+        original = cast(CacheConfig, {"key": "my-key", "retention": "24h"})
         provider = OpenAIChatConfigOps.ir_cache_config_to_p(original)
         restored = OpenAIChatConfigOps.p_cache_config_to_ir(provider)
         assert restored["key"] == original["key"]
