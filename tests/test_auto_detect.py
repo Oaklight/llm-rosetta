@@ -2,6 +2,8 @@
 Tests for auto-detection and conversion functionality
 """
 
+from typing import Any, cast
+
 import pytest
 
 from llm_rosetta.auto_detect import convert, detect_provider, get_converter_for_provider
@@ -229,8 +231,8 @@ class TestDetectProvider:
         """测试无效输入"""
         assert detect_provider({}) is None
         assert detect_provider({"unknown": "field"}) is None
-        assert detect_provider("not a dict") is None
-        assert detect_provider(None) is None
+        assert detect_provider(cast(Any, "not a dict")) is None
+        assert detect_provider(cast(Any, None)) is None
 
     def test_detect_empty_messages(self):
         """测试空消息列表"""
@@ -273,7 +275,7 @@ class TestGetConverterForProvider:
     def test_get_invalid_provider(self):
         """测试无效的 provider"""
         with pytest.raises(ValueError, match="Unsupported provider"):
-            get_converter_for_provider("invalid_provider")
+            get_converter_for_provider(cast(Any, "invalid_provider"))
 
 
 class TestConvert:
