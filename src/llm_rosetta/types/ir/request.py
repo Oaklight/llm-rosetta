@@ -11,7 +11,8 @@ Unified request parameter types based on sdk_body_structures.md
 """
 
 import sys
-from typing import Any, Dict, Iterable, TypedDict, Union
+from typing import Any, TypedDict
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -55,7 +56,7 @@ class IRRequest(TypedDict):
 
     # ========== 必需字段 Required Fields ==========
     model: Required[str]
-    messages: Required[Message]
+    messages: Required[Iterable[Message]]
 
     # ========== 系统指令 System Instruction ==========
     # 映射关系:
@@ -63,7 +64,7 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[Union[str, Iterable[Dict[str, Any]]]]
+    system_instruction: NotRequired[str | Iterable[dict[str, Any]]]
 
     # ========== 工具相关 Tool Related ==========
     tools: NotRequired[Iterable[ToolDefinition]]
@@ -91,7 +92,7 @@ class IRRequest(TypedDict):
     # - 安全配置: safety_identifier, safety_settings (少见)
     # - 会话配置: conversation, previous_response_id (少见，OpenAI Responses)
     # - 其他: truncation已移到generation，verbosity等
-    provider_extensions: NotRequired[Dict[str, Any]]
+    provider_extensions: NotRequired[dict[str, Any]]
 
 
 # ============================================================================

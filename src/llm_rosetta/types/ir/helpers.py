@@ -5,7 +5,7 @@ IR辅助函数，用于处理IR消息和内容
 IR helper functions for processing IR messages and content
 """
 
-from typing import Any, List, Union
+from typing import Any, cast
 
 from .messages import Message, ToolMessage, create_tool_message
 from .parts import TextPart, ToolCallPart
@@ -36,8 +36,8 @@ def extract_text_content(message: Message) -> str:
 
 
 def extract_tool_calls(
-    message: Message, limit: Union[int, None] = None
-) -> List[ToolCallPart]:
+    message: Message, limit: int | None = None
+) -> list[ToolCallPart]:
     """从消息中提取工具调用
     Extract tool calls from message
 
@@ -66,8 +66,8 @@ def extract_tool_calls(
     ]
 
     if limit is not None:
-        return tool_calls[:limit]
-    return tool_calls
+        return cast(list[ToolCallPart], tool_calls[:limit])
+    return cast(list[ToolCallPart], tool_calls)
 
 
 # ============================================================================

@@ -31,7 +31,7 @@ This module reorganizes IR type definitions:
 # ============================================================================
 # 向后兼容类型定义 Backward compatibility type definitions
 # ============================================================================
-from typing import Iterable, Union
+from collections.abc import Iterable
 
 from .configs import (
     CacheConfig,
@@ -158,7 +158,7 @@ from .type_guards import (
 
 # 为了向后兼容，定义旧的类型别名
 # For backward compatibility, define old type aliases
-IRInput = Iterable[Union[Message, ExtensionItem]]
+IRInput = Iterable[Message | ExtensionItem]
 IRInputSimple = Iterable[Message]
 
 

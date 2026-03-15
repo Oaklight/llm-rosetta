@@ -6,7 +6,7 @@ IR content parts type definitions
 """
 
 import sys
-from typing import Any, Dict, Literal, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -25,6 +25,7 @@ class TextPart(TypedDict):
 
     type: Required[Literal["text"]]
     text: Required[str]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ImageData(TypedDict):
@@ -47,6 +48,7 @@ class ImagePart(TypedDict):
     data: NotRequired[str]  # 直接base64数据 Direct base64 data
     media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
     detail: NotRequired[Literal["auto", "low", "high"]]  # OpenAI特性 OpenAI feature
+    file_id: NotRequired[str]  # OpenAI file ID
 
 
 class FileData(TypedDict):
@@ -74,6 +76,7 @@ class FilePart(TypedDict):
     file_data: NotRequired[FileData]  # base64形式 base64 form
     file_name: NotRequired[str]
     file_type: NotRequired[str]  # MIME type
+    file_id: NotRequired[str]  # OpenAI file ID
     data: NotRequired[str]  # 直接base64数据 Direct base64 data
     media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
 
@@ -109,7 +112,7 @@ class ToolCallPart(TypedDict):
     type: Required[Literal["tool_call"]]
     tool_call_id: Required[str]
     tool_name: Required[str]
-    tool_input: Required[Dict[str, Any]]
+    tool_input: Required[dict[str, Any]]
     tool_type: NotRequired[
         Literal[
             "function",
@@ -120,7 +123,7 @@ class ToolCallPart(TypedDict):
         ]
     ]  # 默认为 "function" Default is "function"
     provider_metadata: NotRequired[
-        Dict[str, Any]
+        dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata
 
 
@@ -179,6 +182,7 @@ class ReasoningPart(TypedDict):
     status: NotRequired[
         Literal["in_progress", "completed", "incomplete"]
     ]  # 推理状态 Reasoning status
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class UrlCitation(TypedDict, total=False):
