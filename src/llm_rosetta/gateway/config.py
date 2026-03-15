@@ -10,6 +10,8 @@ from typing import Any
 
 from llm_rosetta.auto_detect import ProviderType
 
+from .providers import ProviderInfo, build_provider_info
+
 logger = logging.getLogger("llm-rosetta-gateway")
 
 # ---------------------------------------------------------------------------
@@ -101,25 +103,31 @@ class GatewayConfig:
     """Parsed and validated gateway configuration."""
 
     def __init__(self, raw: dict[str, Any]) -> None:
-        self.providers: dict[str, dict[str, str]] = raw.get("providers", {})
+        self._raw_providers: dict[str, dict[str, str]] = raw.get("providers", {})
         self.models: dict[str, ProviderType] = raw.get("models", {})
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
         self._validate()
 
+        # Build ProviderInfo objects (with key rotation support)
+        self.providers: dict[str, ProviderInfo] = {
+            name: build_provider_info(name, cfg)
+            for name, cfg in self._raw_providers.items()
+        }
+
     def _validate(self) -> None:
-        if not self.providers:
+        if not self._raw_providers:
             raise ValueError("config: 'providers' section is empty")
         if not self.models:
             raise ValueError("config: 'models' section is empty")
         for model, provider in self.models.items():
-            if provider not in self.providers:
+            if provider not in self._raw_providers:
                 raise ValueError(
                     f"config: model '{model}' references unknown provider '{provider}'"
                 )
 
-    def resolve_model(self, model: str) -> tuple[ProviderType, dict[str, str]]:
-        """Return (provider_type, provider_config) for a model name.
+    def resolve_model(self, model: str) -> tuple[ProviderType, ProviderInfo]:
+        """Return (provider_type, provider_info) for a model name.
 
         Raises KeyError if the model is not in the routing table.
         """

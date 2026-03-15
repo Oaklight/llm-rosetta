@@ -23,51 +23,25 @@ from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.stream_context import StreamContext
 
 from .banner import print_banner
-from .config import PATHS_TO_TRY, GatewayConfig, discover_config, load_config, load_config_raw
+from .config import (
+    PATHS_TO_TRY,
+    GatewayConfig,
+    discover_config,
+    load_config,
+    load_config_raw,
+)
+from .providers import (
+    ProviderInfo,
+    get_default_base_url,
+    get_default_api_key_env,
+    known_provider_types,
+)
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
 # ---------------------------------------------------------------------------
 # Upstream request building
 # ---------------------------------------------------------------------------
-
-_UPSTREAM_URL_TEMPLATES = {
-    "openai_chat": "{base_url}/chat/completions",
-    "openai_responses": "{base_url}/responses",
-    "anthropic": "{base_url}/v1/messages",
-    "google": "{base_url}/v1beta/models/{model}:generateContent",
-    "google_stream": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
-}
-
-
-def _build_auth_headers(provider_type: ProviderType, api_key: str) -> dict[str, str]:
-    """Return provider-specific authentication headers."""
-    if provider_type in ("openai_chat", "openai_responses"):
-        return {"Authorization": f"Bearer {api_key}"}
-    elif provider_type == "anthropic":
-        return {
-            "x-api-key": api_key,
-            "anthropic-version": "2023-06-01",
-        }
-    elif provider_type == "google":
-        return {"x-goog-api-key": api_key}
-    return {}
-
-
-def _build_upstream_url(
-    provider_type: ProviderType,
-    provider_cfg: dict[str, str],
-    model: str,
-    *,
-    stream: bool,
-) -> str:
-    """Construct the full upstream URL for a provider."""
-    base_url = provider_cfg["base_url"].rstrip("/")
-    if provider_type == "google" and stream:
-        template = _UPSTREAM_URL_TEMPLATES["google_stream"]
-    else:
-        template = _UPSTREAM_URL_TEMPLATES[provider_type]
-    return template.format(base_url=base_url, model=model)
 
 
 def _fixup_google_body(provider_request: dict[str, Any]) -> dict[str, Any]:
@@ -117,17 +91,17 @@ def _fixup_google_body(provider_request: dict[str, Any]) -> dict[str, Any]:
 
 def _prepare_upstream(
     target_provider: ProviderType,
-    provider_cfg: dict[str, str],
+    provider_info: ProviderInfo,
     provider_request: dict[str, Any],
     model: str,
     *,
     stream: bool,
 ) -> tuple[str, dict[str, str], dict[str, Any]]:
     """Return (url, headers, body) ready for the upstream HTTP call."""
-    url = _build_upstream_url(target_provider, provider_cfg, model, stream=stream)
+    url = provider_info.upstream_url(model, stream=stream)
     headers = {
         "Content-Type": "application/json",
-        **_build_auth_headers(target_provider, provider_cfg["api_key"]),
+        **provider_info.auth_headers(),
     }
 
     # Provider-specific body fixups
@@ -294,7 +268,7 @@ def _get_client() -> httpx.AsyncClient:
 async def _handle_non_streaming(
     source_provider: ProviderType,
     target_provider: ProviderType,
-    provider_cfg: dict[str, str],
+    provider_info: ProviderInfo,
     body: dict[str, Any],
     model: str,
 ) -> Response:
@@ -322,7 +296,7 @@ async def _handle_non_streaming(
 
     # 3. Build upstream request
     url, headers, upstream_body = _prepare_upstream(
-        target_provider, provider_cfg, target_body, model, stream=False
+        target_provider, provider_info, target_body, model, stream=False
     )
 
     # 4. Forward to upstream
@@ -365,7 +339,7 @@ async def _handle_non_streaming(
 async def _handle_streaming(
     source_provider: ProviderType,
     target_provider: ProviderType,
-    provider_cfg: dict[str, str],
+    provider_info: ProviderInfo,
     body: dict[str, Any],
     model: str,
 ) -> Response:
@@ -393,7 +367,7 @@ async def _handle_streaming(
 
     # 3. Build upstream request (with stream=True)
     url, headers, upstream_body = _prepare_upstream(
-        target_provider, provider_cfg, target_body, model, stream=True
+        target_provider, provider_info, target_body, model, stream=True
     )
 
     format_sse = _SSE_FORMATTERS[source_provider]
@@ -501,7 +475,7 @@ async def _proxy_handler(
 
     # Resolve target provider
     try:
-        target_provider, provider_cfg = _config.resolve_model(model)
+        target_provider, provider_info = _config.resolve_model(model)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
         return _error_response_for_source(
@@ -523,11 +497,11 @@ async def _proxy_handler(
 
     if is_stream:
         return await _handle_streaming(
-            source_provider, target_provider, provider_cfg, body, model
+            source_provider, target_provider, provider_info, body, model
         )
     else:
         return await _handle_non_streaming(
-            source_provider, target_provider, provider_cfg, body, model
+            source_provider, target_provider, provider_info, body, model
         )
 
 
@@ -632,7 +606,10 @@ def _open_in_editor(config_path: str | None = None) -> None:
                 except FileNotFoundError:
                     continue
                 except Exception as exc:
-                    print(f"Error: failed to open {editor} for {path}: {exc}", file=sys.stderr)
+                    print(
+                        f"Error: failed to open {editor} for {path}: {exc}",
+                        file=sys.stderr,
+                    )
                     sys.exit(1)
 
     print("Error: no config file found to edit. Searched:", file=sys.stderr)
@@ -645,19 +622,7 @@ def _open_in_editor(config_path: str | None = None) -> None:
 # CLI: ``add`` subcommand helpers
 # ---------------------------------------------------------------------------
 
-_KNOWN_PROVIDERS: list[str] = [
-    "openai_chat",
-    "openai_responses",
-    "anthropic",
-    "google",
-]
-
-_DEFAULT_BASE_URLS: dict[str, str] = {
-    "openai_chat": "https://api.openai.com/v1",
-    "openai_responses": "https://api.openai.com/v1",
-    "anthropic": "https://api.anthropic.com",
-    "google": "https://generativelanguage.googleapis.com",
-}
+_KNOWN_PROVIDERS = known_provider_types()
 
 _CONFIG_TEMPLATE: dict[str, Any] = {
     "providers": {},
@@ -687,14 +652,16 @@ def _cmd_add_provider(args: argparse.Namespace) -> None:
     data, path = _load_or_create_config(config_path)
 
     name: str = args.name
-    default_key = f"${{{name.upper()}_API_KEY}}"
-    default_url = _DEFAULT_BASE_URLS.get(name, "")
+    default_key = f"${{{get_default_api_key_env(name)}}}"
+    default_url = get_default_base_url(name)
 
     # api_key: CLI flag > interactive > auto-default
     api_key: str = args.api_key or ""
     if not api_key:
         if sys.stdin.isatty():
-            api_key = input(f"API key env placeholder for '{name}' [{default_key}]: ").strip()
+            api_key = input(
+                f"API key env placeholder for '{name}' [{default_key}]: "
+            ).strip()
         if not api_key:
             api_key = default_key
 
@@ -704,9 +671,11 @@ def _cmd_add_provider(args: argparse.Namespace) -> None:
         if default_url:
             base_url = default_url  # known provider — use default silently
         elif sys.stdin.isatty():
-            base_url = input(f"Base URL (required): ").strip()
+            base_url = input("Base URL (required): ").strip()
     if not base_url:
-        print("Error: --base-url is required for non-standard providers.", file=sys.stderr)
+        print(
+            "Error: --base-url is required for non-standard providers.", file=sys.stderr
+        )
         sys.exit(1)
 
     data.setdefault("providers", {})[name] = {"api_key": api_key, "base_url": base_url}
@@ -732,7 +701,10 @@ def _cmd_add_model(args: argparse.Namespace) -> None:
         print("Error: provider is required.", file=sys.stderr)
         sys.exit(1)
     if provider not in providers:
-        print(f"Warning: provider '{provider}' not yet in config. Add it with: llm-rosetta-gateway add provider {provider}", file=sys.stderr)
+        print(
+            f"Warning: provider '{provider}' not yet in config. Add it with: llm-rosetta-gateway add provider {provider}",
+            file=sys.stderr,
+        )
 
     data.setdefault("models", {})[model_name] = provider
     _write_jsonc(path, data)
@@ -788,7 +760,9 @@ def main() -> None:
 
     prov_parser = add_sub.add_parser("provider", help="Add a provider entry")
     prov_parser.add_argument("name", help="Provider name (e.g. openai_chat, anthropic)")
-    prov_parser.add_argument("--api-key", default=None, help="API key or ${ENV_VAR} placeholder")
+    prov_parser.add_argument(
+        "--api-key", default=None, help="API key or ${ENV_VAR} placeholder"
+    )
     prov_parser.add_argument("--base-url", default=None, help="Provider base URL")
 
     model_parser = add_sub.add_parser("model", help="Add a model routing entry")
@@ -809,7 +783,7 @@ def main() -> None:
         elif args.add_type == "model":
             _cmd_add_model(args)
         else:
-            sub.choices["add"].print_help()  # type: ignore[union-attr]
+            sub.choices["add"].print_help()
         return
 
     # --- normal server startup ---
