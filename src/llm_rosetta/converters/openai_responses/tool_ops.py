@@ -13,7 +13,7 @@ format with type/name/description/parameters at the top level.
 """
 
 import json
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -104,7 +104,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
-        return result
+        return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
@@ -141,7 +141,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         elif mode in ("tool", "function"):
             tool_name = ir_tool_choice.get("tool_name")
             if not tool_name and "function" in ir_tool_choice:
-                tool_name = ir_tool_choice["function"].get("name")
+                tool_name = cast(dict, ir_tool_choice)["function"].get("name")
             if tool_name:
                 return {"type": "function", "function": {"name": tool_name}}
             return "required"
@@ -166,19 +166,19 @@ class OpenAIResponsesToolOps(BaseToolOps):
         """
         if isinstance(provider_tool_choice, str):
             if provider_tool_choice == "none":
-                return {"mode": "none", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "none", "tool_name": ""})
             elif provider_tool_choice == "auto":
-                return {"mode": "auto", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
             elif provider_tool_choice == "required":
-                return {"mode": "any", "tool_name": ""}
-            return {"mode": "auto", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "any", "tool_name": ""})
+            return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         if isinstance(provider_tool_choice, dict):
             if provider_tool_choice.get("type") == "function":
                 func = provider_tool_choice.get("function", {})
-                return {"mode": "tool", "tool_name": func.get("name", "")}
+                return cast(ToolChoice, {"mode": "tool", "tool_name": func.get("name", "")})
 
-        return {"mode": "auto", "tool_name": ""}
+        return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
     # ==================== Tool Call ====================
 
@@ -322,14 +322,17 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "computer_call": "computer_use",
                 "code_interpreter_call": "code_interpreter",
             }
-            return ToolCallPart(
-                type="tool_call",
-                tool_call_id=provider_tool_call.get(
-                    "call_id", provider_tool_call.get("id", "")
-                ),
-                tool_name=provider_tool_call.get("name", item_type),
-                tool_input=tool_input,
-                tool_type=tool_type_map.get(item_type, "function"),
+            return cast(
+                ToolCallPart,
+                {
+                    "type": "tool_call",
+                    "tool_call_id": provider_tool_call.get(
+                        "call_id", provider_tool_call.get("id", "")
+                    ),
+                    "tool_name": provider_tool_call.get("name", item_type),
+                    "tool_input": tool_input,
+                    "tool_type": tool_type_map.get(item_type, "function"),
+                },
             )
         else:
             raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")
@@ -434,4 +437,4 @@ class OpenAIResponsesToolOps(BaseToolOps):
             if max_calls is not None:
                 result["max_calls"] = max_calls
 
-        return result
+        return cast(ToolCallConfig, result)

@@ -15,7 +15,7 @@ Key Anthropic differences:
 """
 
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -115,7 +115,7 @@ class AnthropicConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
-            return result
+            return cast(GenerationConfig, result)
 
         if "max_tokens" in provider_config:
             result["max_tokens"] = provider_config["max_tokens"]
@@ -132,7 +132,7 @@ class AnthropicConfigOps(BaseConfigOps):
         if "stop_sequences" in provider_config:
             result["stop_sequences"] = provider_config["stop_sequences"]
 
-        return result
+        return cast(GenerationConfig, result)
 
     # ==================== Response Format ====================
 
@@ -170,7 +170,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             Empty IR ResponseFormatConfig.
         """
-        return {}
+        return cast(ResponseFormatConfig, {})
 
     # ==================== Stream Config ====================
 
@@ -216,13 +216,13 @@ class AnthropicConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
-            return result
+            return cast(StreamConfig, result)
 
         stream = provider_stream.get("stream")
         if stream is not None:
             result["enabled"] = stream
 
-        return result
+        return cast(StreamConfig, result)
 
     # ==================== Reasoning Config ====================
 
@@ -277,11 +277,11 @@ class AnthropicConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         thinking = provider_reasoning.get("thinking")
         if not isinstance(thinking, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         thinking_type = thinking.get("type")
         if thinking_type:
@@ -291,7 +291,7 @@ class AnthropicConfigOps(BaseConfigOps):
         if budget_tokens is not None:
             result["budget_tokens"] = budget_tokens
 
-        return result
+        return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
 
@@ -327,4 +327,4 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             Empty IR CacheConfig.
         """
-        return {}
+        return cast(CacheConfig, {})

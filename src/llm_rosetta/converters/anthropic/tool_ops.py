@@ -8,7 +8,7 @@ choice strategies, and call configurations.
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -81,7 +81,7 @@ class AnthropicToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
-        return result
+        return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
@@ -138,16 +138,16 @@ class AnthropicToolOps(BaseToolOps):
         if isinstance(provider_tool_choice, dict):
             choice_type = provider_tool_choice.get("type", "auto")
             if choice_type == "auto":
-                return {"mode": "auto", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
             elif choice_type == "any":
-                return {"mode": "any", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "any", "tool_name": ""})
             elif choice_type == "tool":
                 tool_name = provider_tool_choice.get("name", "")
-                return {"mode": "tool", "tool_name": tool_name}
+                return cast(ToolChoice, {"mode": "tool", "tool_name": tool_name})
             elif choice_type == "none":
-                return {"mode": "none", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "none", "tool_name": ""})
 
-        return {"mode": "auto", "tool_name": ""}
+        return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
     # ==================== Tool Call ====================
 
@@ -295,4 +295,4 @@ class AnthropicToolOps(BaseToolOps):
             if disable_parallel is not None:
                 result["disable_parallel"] = disable_parallel
 
-        return result
+        return cast(ToolCallConfig, result)

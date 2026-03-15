@@ -7,7 +7,7 @@ cache, and response format configurations.
 """
 
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -67,7 +67,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         ]
         for field in _DIRECT_FIELDS:
             if field in ir_config:
-                result[field] = ir_config[field]
+                result[field] = cast(dict, ir_config)[field]
 
         # Renamed fields
         if "max_tokens" in ir_config:
@@ -107,7 +107,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
-            return result
+            return cast(GenerationConfig, result)
 
         # Direct mapping fields
         _DIRECT_FIELDS = [
@@ -139,7 +139,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
             elif isinstance(stop, list):
                 result["stop_sequences"] = stop
 
-        return result
+        return cast(GenerationConfig, result)
 
     # ==================== Response Format ====================
 
@@ -181,7 +181,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
             IR ResponseFormatConfig.
         """
         if not isinstance(provider_format, dict):
-            return {}
+            return cast(ResponseFormatConfig, {})
 
         result: Dict[str, Any] = {}
         fmt_type = provider_format.get("type")
@@ -191,7 +191,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         if fmt_type == "json_schema" and "json_schema" in provider_format:
             result["json_schema"] = provider_format["json_schema"]
 
-        return result
+        return cast(ResponseFormatConfig, result)
 
     # ==================== Stream Config ====================
 
@@ -232,7 +232,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
-            return result
+            return cast(StreamConfig, result)
 
         stream = provider_stream.get("stream")
         if stream is not None:
@@ -242,7 +242,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         if stream_options and stream_options.get("include_usage"):
             result["include_usage"] = True
 
-        return result
+        return cast(StreamConfig, result)
 
     # ==================== Reasoning Config ====================
 
@@ -288,13 +288,13 @@ class OpenAIChatConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         effort = provider_reasoning.get("reasoning_effort")
         if effort:
             result["effort"] = effort
 
-        return result
+        return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
 
@@ -335,11 +335,11 @@ class OpenAIChatConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_cache, dict):
-            return result
+            return cast(CacheConfig, result)
 
         if "prompt_cache_key" in provider_cache:
             result["key"] = provider_cache["prompt_cache_key"]
         if "prompt_cache_retention" in provider_cache:
             result["retention"] = provider_cache["prompt_cache_retention"]
 
-        return result
+        return cast(CacheConfig, result)

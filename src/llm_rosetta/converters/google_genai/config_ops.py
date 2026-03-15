@@ -14,7 +14,7 @@ Google-specific:
 """
 
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -71,7 +71,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         ]
         for field in _DIRECT_FIELDS:
             if field in ir_config:
-                result[field] = ir_config[field]
+                result[field] = cast(dict, ir_config)[field]
 
         # Renamed fields
         if "max_tokens" in ir_config:
@@ -112,7 +112,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
-            return result
+            return cast(GenerationConfig, result)
 
         # Direct mapping fields
         _DIRECT_FIELDS = [
@@ -136,7 +136,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if "candidate_count" in provider_config:
             result["candidate_count"] = provider_config["candidate_count"]
 
-        return result
+        return cast(GenerationConfig, result)
 
     # ==================== Response Format ====================
 
@@ -180,7 +180,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             IR ResponseFormatConfig.
         """
         if not isinstance(provider_format, dict):
-            return {}
+            return cast(ResponseFormatConfig, {})
 
         result: Dict[str, Any] = {}
         mime_type = provider_format.get("response_mime_type")
@@ -193,7 +193,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             else:
                 result["type"] = "json_object"
 
-        return result
+        return cast(ResponseFormatConfig, result)
 
     # ==================== Stream Config ====================
 
@@ -231,13 +231,13 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
-            return result
+            return cast(StreamConfig, result)
 
         stream = provider_stream.get("stream")
         if stream is not None:
             result["enabled"] = stream
 
-        return result
+        return cast(StreamConfig, result)
 
     # ==================== Reasoning Config ====================
 
@@ -287,7 +287,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         thinking_config = provider_reasoning.get("thinking_config")
         if thinking_config:
@@ -295,7 +295,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             if budget is not None:
                 result["budget_tokens"] = budget
 
-        return result
+        return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
 
@@ -340,9 +340,9 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_cache, dict):
-            return result
+            return cast(CacheConfig, result)
 
         if "cached_content" in provider_cache:
             result["key"] = provider_cache["cached_content"]
 
-        return result
+        return cast(CacheConfig, result)

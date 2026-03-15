@@ -12,7 +12,7 @@ Note: Responses API uses different field names than Chat API:
 """
 
 import warnings
-from typing import Any, Dict
+from typing import Any, Dict, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -62,7 +62,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         _DIRECT_FIELDS = ["temperature", "top_p", "top_logprobs"]
         for field in _DIRECT_FIELDS:
             if field in ir_config:
-                result[field] = ir_config[field]
+                result[field] = cast(dict, ir_config)[field]
 
         # Renamed fields
         if "max_tokens" in ir_config:
@@ -108,7 +108,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
-            return result
+            return cast(GenerationConfig, result)
 
         # Direct mapping fields
         _DIRECT_FIELDS = ["temperature", "top_p", "top_logprobs"]
@@ -124,7 +124,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         if "truncation" in provider_config:
             result["truncation"] = provider_config["truncation"]
 
-        return result
+        return cast(GenerationConfig, result)
 
     # ==================== Response Format ====================
 
@@ -168,7 +168,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             IR ResponseFormatConfig.
         """
         if not isinstance(provider_format, dict):
-            return {}
+            return cast(ResponseFormatConfig, {})
 
         result: Dict[str, Any] = {}
         fmt_type = provider_format.get("type")
@@ -178,7 +178,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         if fmt_type == "json_schema" and "json_schema" in provider_format:
             result["json_schema"] = provider_format["json_schema"]
 
-        return result
+        return cast(ResponseFormatConfig, result)
 
     # ==================== Stream Config ====================
 
@@ -219,7 +219,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
-            return result
+            return cast(StreamConfig, result)
 
         stream = provider_stream.get("stream")
         if stream is not None:
@@ -229,7 +229,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         if stream_options and stream_options.get("include_usage"):
             result["include_usage"] = True
 
-        return result
+        return cast(StreamConfig, result)
 
     # ==================== Reasoning Config ====================
 
@@ -285,12 +285,12 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         # Handle both top-level reasoning object and nested
         reasoning = provider_reasoning.get("reasoning", provider_reasoning)
         if not isinstance(reasoning, dict):
-            return result
+            return cast(ReasoningConfig, result)
 
         if "type" in reasoning:
             result["type"] = reasoning["type"]
@@ -298,7 +298,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         if "effort" in reasoning:
             result["effort"] = reasoning["effort"]
 
-        return result
+        return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
 
@@ -339,11 +339,11 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: Dict[str, Any] = {}
 
         if not isinstance(provider_cache, dict):
-            return result
+            return cast(CacheConfig, result)
 
         if "prompt_cache_key" in provider_cache:
             result["key"] = provider_cache["prompt_cache_key"]
         if "prompt_cache_retention" in provider_cache:
             result["retention"] = provider_cache["prompt_cache_retention"]
 
-        return result
+        return cast(CacheConfig, result)

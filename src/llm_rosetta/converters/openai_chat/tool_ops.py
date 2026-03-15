@@ -9,7 +9,7 @@ Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverte
 """
 
 import json
-from typing import Any, Dict, Union
+from typing import Any, Dict, Union, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -91,7 +91,7 @@ class OpenAIChatToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
-        return result
+        return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
@@ -147,19 +147,19 @@ class OpenAIChatToolOps(BaseToolOps):
         """
         if isinstance(provider_tool_choice, str):
             if provider_tool_choice == "none":
-                return {"mode": "none", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "none", "tool_name": ""})
             elif provider_tool_choice == "auto":
-                return {"mode": "auto", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
             elif provider_tool_choice == "required":
-                return {"mode": "any", "tool_name": ""}
-            return {"mode": "auto", "tool_name": ""}
+                return cast(ToolChoice, {"mode": "any", "tool_name": ""})
+            return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         if isinstance(provider_tool_choice, dict):
             if provider_tool_choice.get("type") == "function":
                 func = provider_tool_choice.get("function", {})
-                return {"mode": "tool", "tool_name": func.get("name", "")}
+                return cast(ToolChoice, {"mode": "tool", "tool_name": func.get("name", "")})
 
-        return {"mode": "auto", "tool_name": ""}
+        return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
     # ==================== Tool Call ====================
 
@@ -297,4 +297,4 @@ class OpenAIChatToolOps(BaseToolOps):
             if parallel is not None:
                 result["disable_parallel"] = not parallel
 
-        return result
+        return cast(ToolCallConfig, result)

@@ -16,7 +16,7 @@ Google-specific:
 
 import uuid
 import warnings
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -95,7 +95,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
-        return result
+        return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
@@ -129,9 +129,9 @@ class GoogleGenAIToolOps(BaseToolOps):
             config: Dict[str, Any] = {"function_calling_config": {"mode": "ANY"}}
             tool_name = ir_tool_choice.get("tool_name")
             if tool_name:
-                config["function_calling_config"]["allowed_function_names"] = [
-                    tool_name
-                ]
+                cast(dict, config["function_calling_config"])[
+                    "allowed_function_names"
+                ] = [tool_name]
             return config
 
         return None
@@ -147,7 +147,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             IR ToolChoice.
         """
         if not isinstance(provider_tool_choice, dict):
-            return {"mode": "auto", "tool_name": ""}
+            return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         fcc = provider_tool_choice.get("function_calling_config", {})
         mode = fcc.get("mode", "AUTO")
@@ -163,9 +163,9 @@ class GoogleGenAIToolOps(BaseToolOps):
         # Check for specific tool names
         allowed_names = fcc.get("allowed_function_names", [])
         if allowed_names and ir_mode == "any":
-            return {"mode": "tool", "tool_name": allowed_names[0]}
+            return cast(ToolChoice, {"mode": "tool", "tool_name": allowed_names[0]})
 
-        return {"mode": ir_mode, "tool_name": ""}
+        return cast(ToolChoice, {"mode": ir_mode, "tool_name": ""})
 
     # ==================== Tool Call ====================
 
@@ -243,7 +243,7 @@ class GoogleGenAIToolOps(BaseToolOps):
                     "google": {"thought_signature": thought_sig}
                 }
 
-        return ToolCallPart(**tool_call_kwargs)
+        return cast(ToolCallPart, tool_call_kwargs)
 
     # ==================== Tool Result ====================
 
@@ -398,4 +398,4 @@ class GoogleGenAIToolOps(BaseToolOps):
         Returns:
             IR ToolCallConfig.
         """
-        return {}
+        return cast(ToolCallConfig, {})
