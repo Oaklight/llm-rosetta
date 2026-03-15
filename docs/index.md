@@ -8,7 +8,7 @@ hide:
 # LLM-Rosetta
 
 [![PyPI version](https://badge.fury.io/py/llm-rosetta.svg?icon=si%3Apython)](https://badge.fury.io/py/llm-rosetta)
-[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllmir)
+[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllm-rosetta.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllm-rosetta)
 
 **大语言模型罗塞塔石（Large Language Model Rosetta Stone）** — 用于 LLM 提供商 API 之间的统一消息格式转换库。
 

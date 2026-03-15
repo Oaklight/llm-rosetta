@@ -1,9 +1,9 @@
 site_name: LLM-Rosetta
 site_description: 大语言模型罗塞塔石 - LLM 提供商之间的统一消息格式转换库
 site_author: Peng Ding
-site_url: https://llmir.readthedocs.io/zh/
-repo_name: Oaklight/llmir
-repo_url: https://github.com/Oaklight/llmir
+site_url: https://llm-rosetta.readthedocs.io/zh/
+repo_name: Oaklight/llm-rosetta
+repo_url: https://github.com/Oaklight/llm-rosetta
 copyright: Copyright &copy; 2024 Peng Ding
 
 theme:
@@ -76,7 +76,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/Oaklight/llmir
+      link: https://github.com/Oaklight/llm-rosetta
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/llm-rosetta/
   alternate:

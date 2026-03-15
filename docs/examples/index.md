@@ -18,8 +18,8 @@ LLM-Rosetta 包含全面的跨提供商对话示例。
 示例脚本位于仓库的 `examples/` 目录中：
 
 ```bash
-git clone https://github.com/Oaklight/llmir.git
-cd llmir/examples
+git clone https://github.com/Oaklight/llm-rosetta.git
+cd llm-rosetta/examples
 
 # 设置 API 密钥
 cp .env.example .env
