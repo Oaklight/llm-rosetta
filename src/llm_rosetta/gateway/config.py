@@ -107,11 +107,12 @@ class GatewayConfig:
         self.models: dict[str, ProviderType] = raw.get("models", {})
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
+        self.proxy: str | None = raw.get("server", {}).get("proxy")
         self._validate()
 
         # Build ProviderInfo objects (with key rotation support)
         self.providers: dict[str, ProviderInfo] = {
-            name: build_provider_info(name, cfg)
+            name: build_provider_info(name, cfg, global_proxy=self.proxy)
             for name, cfg in self._raw_providers.items()
         }
 

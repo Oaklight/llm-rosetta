@@ -61,6 +61,7 @@ class ProviderInfo:
         auth_header_fn: AuthHeaderFn,
         url_template: str,
         stream_url_template: str | None = None,
+        proxy_url: str | None = None,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -68,6 +69,7 @@ class ProviderInfo:
         self._auth_header_fn = auth_header_fn
         self._url_template = url_template
         self._stream_url_template = stream_url_template
+        self.proxy_url = proxy_url
 
     # -- public helpers used by the proxy -----------------------------------
 
@@ -162,11 +164,16 @@ def known_provider_types() -> list[str]:
 def build_provider_info(
     provider_type: str,
     cfg: dict[str, str],
+    *,
+    global_proxy: str | None = None,
 ) -> ProviderInfo:
     """Create a :class:`ProviderInfo` from a provider config dict.
 
     *cfg* is the dict from the JSONC config, e.g.
     ``{"api_key": "sk-...", "base_url": "https://..."}``
+
+    *global_proxy* is the server-level proxy URL (from ``server.proxy``).
+    A per-provider ``"proxy"`` key in *cfg* takes precedence.
 
     For known provider types the auth and URL logic is looked up from the
     registry.  Unknown types fall back to Bearer-token auth and a simple
@@ -188,6 +195,9 @@ def build_provider_info(
             provider_type,
         )
 
+    # Per-provider proxy overrides global proxy
+    proxy_url = cfg.get("proxy") or global_proxy or None
+
     return ProviderInfo(
         name=provider_type,
         api_key=cfg["api_key"],
@@ -195,4 +205,5 @@ def build_provider_info(
         auth_header_fn=auth_fn,
         url_template=url_tpl,
         stream_url_template=stream_tpl,
+        proxy_url=proxy_url,
     )
