@@ -17,7 +17,7 @@ Note: This layer will call methods from content.py and tools.py to handle messag
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Iterable, List, Tuple, Union
+from typing import Any, Iterable, List, Optional, Tuple, Union, cast
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
@@ -117,7 +117,7 @@ class BaseMessageOps(ABC):
 
     def p_message_to_ir(
         self, provider_message: Any, **kwargs: Any
-    ) -> Union[Message, ExtensionItem]:
+    ) -> Optional[Union[Message, ExtensionItem]]:
         """Provider Message → IR Message（便利方法）
         将Provider消息转换为IR消息（便利方法）
 
@@ -173,7 +173,7 @@ class BaseMessageOps(ABC):
 
                 if "content" not in item:
                     errors.append(f"Message {i} missing required 'content' field")
-                elif not isinstance(item["content"], list):
+                elif not isinstance(cast(dict, item)["content"], list):
                     errors.append(f"Message {i} 'content' must be a list")
 
             elif "type" in item:
