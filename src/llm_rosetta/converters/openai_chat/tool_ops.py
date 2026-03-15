@@ -157,7 +157,9 @@ class OpenAIChatToolOps(BaseToolOps):
         if isinstance(provider_tool_choice, dict):
             if provider_tool_choice.get("type") == "function":
                 func = provider_tool_choice.get("function", {})
-                return cast(ToolChoice, {"mode": "tool", "tool_name": func.get("name", "")})
+                return cast(
+                    ToolChoice, {"mode": "tool", "tool_name": func.get("name", "")}
+                )
 
         return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 

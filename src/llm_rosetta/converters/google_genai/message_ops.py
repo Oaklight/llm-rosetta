@@ -122,9 +122,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                 )
             else:
                 # Unknown item type, skip
-                warnings.warn(
-                    f"Unknown item type in ir_messages, will be ignored"
-                )
+                warnings.warn("Unknown item type in ir_messages, will be ignored")
 
         return contents, warnings_list
 

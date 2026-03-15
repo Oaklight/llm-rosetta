@@ -6,7 +6,7 @@ IR type guard system providing TypeGuard functions for type narrowing
 """
 
 import sys
-from typing import Any, Dict, Mapping, Type, TypeVar, Union, get_args, get_origin
+from typing import Any, Dict, Mapping, Type, TypeVar, Union
 
 if sys.version_info >= (3, 10):
     from typing import TypeGuard
