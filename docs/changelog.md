@@ -12,6 +12,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **LLM-Rosetta Gateway**: REST gateway application for cross-provider HTTP proxying
 - CLI entry point (`llm-rosetta-gateway`) and package structure for the gateway
+- Gateway config auto-discovery at `./config.jsonc`, `~/.config/llm-rosetta-gateway/config.jsonc`, `~/.llm-rosetta-gateway/config.jsonc`
+- `--edit` / `-e` flag to open config file in `$EDITOR` (falls back to nano/vi/vim)
+- `--version` / `-V` flag showing current version
+- ASCII art startup banner with `--no-banner` to suppress
+- `add provider <name>` subcommand for adding provider entries to config (with `--api-key`, `--base-url` flags or interactive prompts; known providers auto-fill defaults)
+- `add model <name>` subcommand for adding model routing entries (with `--provider` flag or interactive prompt)
 
 ### Changed
 

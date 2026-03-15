@@ -55,10 +55,33 @@ API keys support `${ENV_VAR}` syntax — values are read from environment variab
 
 ```bash
 # CLI command (after pip install)
-llm-rosetta-gateway --config config.jsonc
+llm-rosetta-gateway
+
+# Or specify a config file explicitly
+llm-rosetta-gateway --config /path/to/config.jsonc
 
 # Or as a Python module
-python -m llm_rosetta.gateway --config config.jsonc
+python -m llm_rosetta.gateway
+```
+
+The gateway auto-discovers config files at these locations (first match wins):
+
+1. `./config.jsonc` (current directory)
+2. `~/.config/llm-rosetta-gateway/config.jsonc`
+3. `~/.llm-rosetta-gateway/config.jsonc`
+
+You can also bootstrap a config file using the `add` subcommands:
+
+```bash
+# Add providers with sensible defaults
+llm-rosetta-gateway add provider openai_chat
+llm-rosetta-gateway add provider anthropic
+llm-rosetta-gateway add provider google
+
+# Add model routing entries
+llm-rosetta-gateway add model gpt-4o --provider openai_chat
+llm-rosetta-gateway add model claude-sonnet-4-20250514 --provider anthropic
+llm-rosetta-gateway add model gemini-2.0-flash --provider google
 ```
 
 ### 3. Send requests
@@ -147,13 +170,33 @@ When a request arrives with `"model": "claude-sonnet-4-20250514"`, the gateway l
 ### CLI Options
 
 ```
-llm-rosetta-gateway [OPTIONS]
+llm-rosetta-gateway [OPTIONS] [COMMAND]
 
-  --config PATH      Config file path (default: config.jsonc)
-  --host HOST        Override server host
-  --port PORT        Override server port
-  --log-level LEVEL  Log level: debug, info, warning, error (default: info)
+Options:
+  --config, -c PATH    Config file path (auto-discovered if omitted)
+  --version, -V        Show version and exit
+  --no-banner          Suppress the startup banner
+  --edit, -e           Open config file in $EDITOR for editing
+  --host HOST          Override server host
+  --port PORT          Override server port
+  --log-level LEVEL    Log level: debug, info, warning, error (default: info)
+
+Commands:
+  add provider <name>  Add a provider entry to config
+    --api-key KEY        API key or ${ENV_VAR} placeholder
+    --base-url URL       Provider base URL (auto-filled for known providers)
+
+  add model <name>     Add a model routing entry to config
+    --provider NAME      Target provider name
 ```
+
+#### Config auto-discovery
+
+When `--config` is not specified, the gateway searches these paths in order:
+
+1. `./config.jsonc` — current working directory
+2. `~/.config/llm-rosetta-gateway/config.jsonc` — XDG standard location
+3. `~/.llm-rosetta-gateway/config.jsonc` — dotfile convention
 
 ## Programmatic Usage
 
