@@ -17,7 +17,7 @@ Also maintains backward compatibility with the old to_provider/from_provider API
 import json
 import time
 import uuid
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 
 from ...types.ir import (
@@ -28,6 +28,8 @@ from ...types.ir import (
     ToolDefinition,
     is_message,
     is_text_part,
+    is_tool_call_part,
+    is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
@@ -41,6 +43,18 @@ from ...types.ir.stream import (
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     UsageEvent,
+)
+from ...types.ir.type_guards import (
+    is_content_block_end_event,
+    is_content_block_start_event,
+    is_finish_event,
+    is_reasoning_delta_event,
+    is_stream_end_event,
+    is_stream_start_event,
+    is_text_delta_event,
+    is_tool_call_delta_event,
+    is_tool_call_start_event,
+    is_usage_event,
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
@@ -283,7 +297,7 @@ class GoogleGenAIConverter(BaseConverter):
         if "thinking_config" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
-        return ir_request
+        return cast(IRRequest, ir_request)
 
     def response_from_provider(
         self,
@@ -369,7 +383,7 @@ class GoogleGenAIConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        return ir_response
+        return cast(IRResponse, ir_response)
 
     def response_to_provider(
         self,
@@ -408,12 +422,11 @@ class GoogleGenAIConverter(BaseConverter):
             parts: List[Dict[str, Any]] = []
 
             for part in message.get("content", []):
-                part_type = part.get("type")
-                if part_type == "text":
+                if is_text_part(part):
                     parts.append(self.content_ops.ir_text_to_p(part))
-                elif part_type == "tool_call":
+                elif is_tool_call_part(part):
                     parts.append(self.tool_ops.ir_tool_call_to_p(part))
-                elif part_type == "reasoning":
+                elif is_reasoning_part(part):
                     parts.append(self.content_ops.ir_reasoning_to_p(part))
 
             finish_reason = choice.get("finish_reason", {})
@@ -735,7 +748,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def stream_response_to_provider(
         self,
-        ir_event: IRStreamEvent,
+        event: IRStreamEvent,
         context: Optional[StreamContext] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to a Google GenAI stream chunk.
@@ -748,68 +761,66 @@ class GoogleGenAIConverter(BaseConverter):
         lost tool names).
 
         Args:
-            ir_event: IR stream event.
+            event: IR stream event.
             context: Optional stream context for stateful conversions.
 
         Returns:
             Google GenAI stream chunk dict.
         """
-        event_type = ir_event["type"]
-
-        if event_type == "stream_start":
+        if is_stream_start_event(event):
             # Store metadata in context if provided
             if context is not None:
-                context.response_id = ir_event["response_id"]
-                context.model = ir_event["model"]
+                context.response_id = event["response_id"]
+                context.model = event["model"]
                 context.mark_started()
             return {
                 "candidates": [],
-                "model_version": ir_event["model"],
+                "model_version": event["model"],
             }
 
-        elif event_type == "stream_end":
+        elif is_stream_end_event(event):
             if context is not None:
                 context.mark_ended()
             return {}
 
-        elif event_type == "content_block_start":
+        elif is_content_block_start_event(event):
             return {}
 
-        elif event_type == "content_block_end":
+        elif is_content_block_end_event(event):
             return {}
 
-        elif event_type == "text_delta":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_text_delta_event(event):
+            choice_index = event.get("choice_index", 0)
             return {
                 "candidates": [
                     {
                         "index": choice_index,
                         "content": {
                             "role": "model",
-                            "parts": [{"text": ir_event["text"]}],
+                            "parts": [{"text": event["text"]}],
                         },
                     }
                 ]
             }
 
-        elif event_type == "reasoning_delta":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_reasoning_delta_event(event):
+            choice_index = event.get("choice_index", 0)
             return {
                 "candidates": [
                     {
                         "index": choice_index,
                         "content": {
                             "role": "model",
-                            "parts": [{"thought": True, "text": ir_event["reasoning"]}],
+                            "parts": [{"thought": True, "text": event["reasoning"]}],
                         },
                     }
                 ]
             }
 
-        elif event_type == "tool_call_start":
+        elif is_tool_call_start_event(event):
             # Google sends complete function calls, so tool_call_start
             # creates a function_call part with empty args (args come in delta)
-            choice_index = ir_event.get("choice_index", 0)
+            choice_index = event.get("choice_index", 0)
             return {
                 "candidates": [
                     {
@@ -819,7 +830,7 @@ class GoogleGenAIConverter(BaseConverter):
                             "parts": [
                                 {
                                     "function_call": {
-                                        "name": ir_event["tool_name"],
+                                        "name": event["tool_name"],
                                         "args": {},
                                     }
                                 }
@@ -829,18 +840,18 @@ class GoogleGenAIConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "tool_call_delta":
+        elif is_tool_call_delta_event(event):
             # Google sends complete function calls; reconstruct from delta args
-            choice_index = ir_event.get("choice_index", 0)
+            choice_index = event.get("choice_index", 0)
             try:
-                args = json.loads(ir_event["arguments_delta"])
+                args = json.loads(event["arguments_delta"])
             except (json.JSONDecodeError, TypeError):
                 args = {}
 
             # Recover tool name from context (P0 fix)
             tool_name = ""
             if context is not None:
-                tool_name = context.get_tool_name(ir_event["tool_call_id"])
+                tool_name = context.get_tool_name(event["tool_call_id"])
 
             return {
                 "candidates": [
@@ -861,9 +872,9 @@ class GoogleGenAIConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "finish":
-            choice_index = ir_event.get("choice_index", 0)
-            reason = ir_event["finish_reason"]["reason"]
+        elif is_finish_event(event):
+            choice_index = event.get("choice_index", 0)
+            reason = event["finish_reason"]["reason"]
             reason_map = {
                 "stop": "STOP",
                 "length": "MAX_TOKENS",
@@ -880,8 +891,8 @@ class GoogleGenAIConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "usage":
-            usage = ir_event["usage"]
+        elif is_usage_event(event):
+            usage = event["usage"]
             usage_metadata: Dict[str, Any] = {
                 "prompt_token_count": usage.get("prompt_tokens", 0),
                 "candidates_token_count": usage.get("completion_tokens", 0),

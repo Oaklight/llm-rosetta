@@ -9,12 +9,14 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 from ...types.ir import (
     ExtensionItem,
     Message,
     is_text_part,
+    is_tool_call_part,
+    is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
@@ -30,6 +32,18 @@ from ...types.ir.stream import (
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     UsageEvent,
+)
+from ...types.ir.type_guards import (
+    is_content_block_end_event,
+    is_content_block_start_event,
+    is_finish_event,
+    is_reasoning_delta_event,
+    is_stream_end_event,
+    is_stream_start_event,
+    is_text_delta_event,
+    is_tool_call_delta_event,
+    is_tool_call_start_event,
+    is_usage_event,
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
@@ -248,7 +262,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return ir_request
+        return cast(IRRequest, ir_request)
 
     def response_from_provider(
         self,
@@ -344,7 +358,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if "service_tier" in provider_response:
             ir_response["service_tier"] = provider_response["service_tier"]
 
-        return ir_response
+        return cast(IRResponse, ir_response)
 
     def response_to_provider(
         self,
@@ -376,8 +390,7 @@ class OpenAIResponsesConverter(BaseConverter):
             content_parts = message.get("content", [])
 
             for part in content_parts:
-                part_type = part.get("type")
-                if part_type == "text":
+                if is_text_part(part):
                     provider_response["output"].append(
                         {
                             "type": "message",
@@ -385,11 +398,11 @@ class OpenAIResponsesConverter(BaseConverter):
                             "content": [{"type": "output_text", "text": part["text"]}],
                         }
                     )
-                elif part_type == "tool_call":
+                elif is_tool_call_part(part):
                     provider_response["output"].append(
                         self.tool_ops.ir_tool_call_to_p(part)
                     )
-                elif part_type == "reasoning":
+                elif is_reasoning_part(part):
                     provider_response["output"].append(
                         self.content_ops.ir_reasoning_to_p(part)
                     )
@@ -518,7 +531,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        event: Dict[str, Any],
+        chunk: Dict[str, Any],
         context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert an OpenAI Responses SSE event to IR stream events.
@@ -538,20 +551,20 @@ class OpenAIResponsesConverter(BaseConverter):
         implementation (backward compatible).
 
         Args:
-            event: OpenAI Responses SSE event dict (or SDK object).
+            chunk: OpenAI Responses SSE event dict (or SDK object).
             context: Optional stream context for stateful conversions.
 
         Returns:
             List of IR stream events extracted from the event.
         """
-        event = self._normalize(event)
+        chunk = self._normalize(chunk)
         events: List[IRStreamEvent] = []
-        event_type = event.get("type", "")
+        event_type = chunk.get("type", "")
 
         # --- Response created (session start) ---
         if event_type == "response.created":
             if context is not None:
-                response = event.get("response", {})
+                response = chunk.get("response", {})
                 response_id = response.get("id", "")
                 model = response.get("model", "")
                 created = int(response.get("created_at", 0))
@@ -573,7 +586,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(
                 TextDeltaEvent(
                     type="text_delta",
-                    text=event.get("delta", ""),
+                    text=chunk.get("delta", ""),
                 )
             )
 
@@ -582,13 +595,13 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(
                 ReasoningDeltaEvent(
                     type="reasoning_delta",
-                    reasoning=event.get("delta", ""),
+                    reasoning=chunk.get("delta", ""),
                 )
             )
 
         # --- Output item added ---
         elif event_type == "response.output_item.added":
-            item = event.get("item", {})
+            item = chunk.get("item", {})
             if isinstance(item, dict):
                 item_type = item.get("type", "")
 
@@ -604,7 +617,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         tool_call_id=item.get("call_id", ""),
                         tool_name=item.get("name", ""),
                     )
-                    output_index = event.get("output_index")
+                    output_index = chunk.get("output_index")
                     if output_index is not None:
                         start_event_tc["tool_call_index"] = output_index
                     events.append(start_event_tc)
@@ -623,7 +636,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # --- Content part added ---
         elif event_type == "response.content_part.added":
             if context is not None:
-                part = event.get("part", {})
+                part = chunk.get("part", {})
                 part_type = part.get("type", "") if isinstance(part, dict) else ""
                 block_type = "text"
                 if part_type == "output_text":
@@ -652,7 +665,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # --- Output item done ---
         elif event_type == "response.output_item.done":
             if context is not None:
-                item = event.get("item", {})
+                item = chunk.get("item", {})
                 if isinstance(item, dict) and item.get("type") == "message":
                     events.append(
                         ContentBlockEndEvent(
@@ -665,17 +678,17 @@ class OpenAIResponsesConverter(BaseConverter):
         elif event_type == "response.function_call_arguments.delta":
             delta_event = ToolCallDeltaEvent(
                 type="tool_call_delta",
-                tool_call_id=event.get("call_id", ""),
-                arguments_delta=event.get("delta", ""),
+                tool_call_id=chunk.get("call_id", ""),
+                arguments_delta=chunk.get("delta", ""),
             )
-            output_index = event.get("output_index")
+            output_index = chunk.get("output_index")
             if output_index is not None:
                 delta_event["tool_call_index"] = output_index
             events.append(delta_event)
 
         # --- Response completed ---
         elif event_type == "response.completed":
-            response = event.get("response", event)
+            response = chunk.get("response", chunk)
 
             # Determine finish reason from status
             status = response.get("status", "completed")
@@ -753,7 +766,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def stream_response_to_provider(
         self,
-        ir_event: IRStreamEvent,
+        event: IRStreamEvent,
         context: Optional[StreamContext] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI Responses SSE event.
@@ -764,39 +777,37 @@ class OpenAIResponsesConverter(BaseConverter):
         ``response.completed`` output.
 
         Args:
-            ir_event: IR stream event.
+            event: IR stream event.
             context: Optional stream context for stateful conversions.
 
         Returns:
             OpenAI Responses SSE event dict, or a list of dicts.
         """
-        event_type = ir_event["type"]
-
-        if event_type == "stream_start":
+        if is_stream_start_event(event):
             # Store metadata in context if provided
             if context is not None:
-                context.response_id = ir_event["response_id"]
-                context.model = ir_event["model"]
-                context.created = ir_event.get("created", 0)
+                context.response_id = event["response_id"]
+                context.model = event["model"]
+                context.created = event.get("created", 0)
                 context.mark_started()
             return {
                 "type": "response.created",
                 "response": {
-                    "id": ir_event["response_id"],
+                    "id": event["response_id"],
                     "object": "response",
-                    "model": ir_event["model"],
+                    "model": event["model"],
                     "status": "in_progress",
                     "output": [],
                 },
             }
 
-        elif event_type == "stream_end":
+        elif is_stream_end_event(event):
             if context is not None:
                 context.mark_ended()
             return {}
 
-        elif event_type == "content_block_start":
-            block_type = ir_event["block_type"]
+        elif is_content_block_start_event(event):
+            block_type = event["block_type"]
             if block_type == "text":
                 return {
                     "type": "response.content_part.added",
@@ -808,7 +819,7 @@ class OpenAIResponsesConverter(BaseConverter):
             # Other block types are no-ops for now
             return {}
 
-        elif event_type == "content_block_end":
+        elif is_content_block_end_event(event):
             return {
                 "type": "response.content_part.done",
                 "part": {
@@ -816,45 +827,45 @@ class OpenAIResponsesConverter(BaseConverter):
                 },
             }
 
-        elif event_type == "text_delta":
+        elif is_text_delta_event(event):
             return {
                 "type": "response.output_text.delta",
-                "delta": ir_event["text"],
+                "delta": event["text"],
             }
 
-        elif event_type == "reasoning_delta":
+        elif is_reasoning_delta_event(event):
             return {
                 "type": "response.reasoning_summary_text.delta",
-                "delta": ir_event["reasoning"],
+                "delta": event["reasoning"],
             }
 
-        elif event_type == "tool_call_start":
+        elif is_tool_call_start_event(event):
             result: Dict[str, Any] = {
                 "type": "response.output_item.added",
                 "item": {
                     "type": "function_call",
-                    "call_id": ir_event["tool_call_id"],
-                    "name": ir_event["tool_name"],
+                    "call_id": event["tool_call_id"],
+                    "name": event["tool_name"],
                 },
             }
-            tc_index = ir_event.get("tool_call_index")
+            tc_index = event.get("tool_call_index")
             if tc_index is not None:
                 result["output_index"] = tc_index
             return result
 
-        elif event_type == "tool_call_delta":
+        elif is_tool_call_delta_event(event):
             result: Dict[str, Any] = {
                 "type": "response.function_call_arguments.delta",
-                "call_id": ir_event["tool_call_id"],
-                "delta": ir_event["arguments_delta"],
+                "call_id": event["tool_call_id"],
+                "delta": event["arguments_delta"],
             }
-            tc_index = ir_event.get("tool_call_index")
+            tc_index = event.get("tool_call_index")
             if tc_index is not None:
                 result["output_index"] = tc_index
             return result
 
-        elif event_type == "finish":
-            reason = ir_event["finish_reason"]["reason"]
+        elif is_finish_event(event):
+            reason = event["finish_reason"]["reason"]
             status = "completed"
             response: Dict[str, Any] = {"status": status}
 
@@ -877,8 +888,8 @@ class OpenAIResponsesConverter(BaseConverter):
                 "response": response,
             }
 
-        elif event_type == "usage":
-            usage = ir_event["usage"]
+        elif is_usage_event(event):
+            usage = event["usage"]
 
             # With context: store usage for later merging, avoid duplicate
             # response.completed

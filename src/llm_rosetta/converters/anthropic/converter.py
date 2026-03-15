@@ -15,13 +15,16 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 from ...types.ir import (
     ExtensionItem,
     Message,
     TextPart,
     is_part_type,
+    is_text_part,
+    is_tool_call_part,
+    is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
@@ -37,6 +40,18 @@ from ...types.ir.stream import (
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     UsageEvent,
+)
+from ...types.ir.type_guards import (
+    is_content_block_end_event,
+    is_content_block_start_event,
+    is_finish_event,
+    is_reasoning_delta_event,
+    is_stream_end_event,
+    is_stream_start_event,
+    is_text_delta_event,
+    is_tool_call_delta_event,
+    is_tool_call_start_event,
+    is_usage_event,
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
@@ -251,7 +266,7 @@ class AnthropicConverter(BaseConverter):
                 {"stream": stream}
             )
 
-        return ir_request
+        return cast(IRRequest, ir_request)
 
     def response_from_provider(
         self,
@@ -319,7 +334,7 @@ class AnthropicConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        return ir_response
+        return cast(IRResponse, ir_response)
 
     def response_to_provider(
         self,
@@ -354,12 +369,11 @@ class AnthropicConverter(BaseConverter):
                 anthropic_content: List[Dict[str, Any]] = []
 
                 for part in content_parts:
-                    part_type = part.get("type")
-                    if part_type == "text":
+                    if is_text_part(part):
                         anthropic_content.append(self.content_ops.ir_text_to_p(part))
-                    elif part_type == "tool_call":
+                    elif is_tool_call_part(part):
                         anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
-                    elif part_type == "reasoning":
+                    elif is_reasoning_part(part):
                         anthropic_content.append(
                             self.content_ops.ir_reasoning_to_p(part)
                         )
@@ -434,7 +448,7 @@ class AnthropicConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        event: Dict[str, Any],
+        chunk: Dict[str, Any],
         context: Optional[StreamContext] = None,
     ) -> List[IRStreamEvent]:
         """Convert an Anthropic SSE event to IR stream events.
@@ -449,18 +463,18 @@ class AnthropicConverter(BaseConverter):
         - ``ping`` → ignored
 
         Args:
-            event: Anthropic SSE event dict (or SDK object).
+            chunk: Anthropic SSE event dict (or SDK object).
 
         Returns:
             List of IR stream events extracted from the event.
         """
-        event = self._normalize(event)
+        chunk = self._normalize(chunk)
         events: List[IRStreamEvent] = []
 
-        event_type = event.get("type", "")
+        event_type = chunk.get("type", "")
 
         if event_type == "message_start":
-            message = event.get("message", {})
+            message = chunk.get("message", {})
 
             # Emit StreamStartEvent when context is provided
             if context is not None:
@@ -492,9 +506,9 @@ class AnthropicConverter(BaseConverter):
                 )
 
         elif event_type == "content_block_start":
-            content_block = event.get("content_block", {})
+            content_block = chunk.get("content_block", {})
             block_type = content_block.get("type", "")
-            block_index = event.get("index", 0)
+            block_index = chunk.get("index", 0)
 
             # Emit ContentBlockStartEvent when context is provided
             if context is not None:
@@ -524,7 +538,7 @@ class AnthropicConverter(BaseConverter):
                 )
 
         elif event_type == "content_block_delta":
-            delta = event.get("delta", {})
+            delta = chunk.get("delta", {})
             delta_type = delta.get("type", "")
 
             if delta_type == "text_delta":
@@ -569,7 +583,7 @@ class AnthropicConverter(BaseConverter):
         elif event_type == "content_block_stop":
             # Emit ContentBlockEndEvent when context is provided
             if context is not None:
-                block_index = event.get("index", 0)
+                block_index = chunk.get("index", 0)
                 events.append(
                     ContentBlockEndEvent(
                         type="content_block_end",
@@ -578,7 +592,7 @@ class AnthropicConverter(BaseConverter):
                 )
 
         elif event_type == "message_delta":
-            delta = event.get("delta", {})
+            delta = chunk.get("delta", {})
             stop_reason = delta.get("stop_reason")
 
             if stop_reason:
@@ -596,7 +610,7 @@ class AnthropicConverter(BaseConverter):
                 )
 
             # Final usage
-            usage = event.get("usage")
+            usage = chunk.get("usage")
             if usage:
                 events.append(
                     UsageEvent(
@@ -624,46 +638,44 @@ class AnthropicConverter(BaseConverter):
 
     def stream_response_to_provider(
         self,
-        ir_event: IRStreamEvent,
+        event: IRStreamEvent,
         context: Optional[StreamContext] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an Anthropic SSE event.
 
         Args:
-            ir_event: IR stream event.
+            event: IR stream event.
 
         Returns:
             Anthropic SSE event dict.
         """
-        event_type = ir_event["type"]
-
-        if event_type == "stream_start":
+        if is_stream_start_event(event):
             # Store metadata in context if provided
             if context is not None:
-                context.response_id = ir_event["response_id"]
-                context.model = ir_event["model"]
+                context.response_id = event["response_id"]
+                context.model = event["model"]
                 context.mark_started()
             return {
                 "type": "message_start",
                 "message": {
-                    "id": ir_event["response_id"],
+                    "id": event["response_id"],
                     "type": "message",
                     "role": "assistant",
-                    "model": ir_event["model"],
+                    "model": event["model"],
                     "content": [],
                     "stop_reason": None,
                     "usage": {"input_tokens": 0, "output_tokens": 0},
                 },
             }
 
-        elif event_type == "stream_end":
+        elif is_stream_end_event(event):
             if context is not None:
                 context.mark_ended()
             return {"type": "message_stop"}
 
-        elif event_type == "content_block_start":
-            block_index = ir_event["block_index"]
-            block_type = ir_event["block_type"]
+        elif is_content_block_start_event(event):
+            block_index = event["block_index"]
+            block_type = event["block_type"]
 
             if context is not None:
                 context.next_block_index()
@@ -684,26 +696,26 @@ class AnthropicConverter(BaseConverter):
                 # tool_use content_block_start is handled by ToolCallStartEvent
                 return {}
 
-        elif event_type == "content_block_end":
+        elif is_content_block_end_event(event):
             return {
                 "type": "content_block_stop",
-                "index": ir_event["block_index"],
+                "index": event["block_index"],
             }
 
-        elif event_type == "text_delta":
+        elif is_text_delta_event(event):
             result: Dict[str, Any] = {
                 "type": "content_block_delta",
                 "delta": {
                     "type": "text_delta",
-                    "text": ir_event["text"],
+                    "text": event["text"],
                 },
             }
             if context is not None and context.current_block_index >= 0:
                 result["index"] = context.current_block_index
             return result
 
-        elif event_type == "reasoning_delta":
-            signature = ir_event.get("signature")
+        elif is_reasoning_delta_event(event):
+            signature = event.get("signature")
             if signature is not None:
                 result = {
                     "type": "content_block_delta",
@@ -717,20 +729,20 @@ class AnthropicConverter(BaseConverter):
                     "type": "content_block_delta",
                     "delta": {
                         "type": "thinking_delta",
-                        "thinking": ir_event["reasoning"],
+                        "thinking": event["reasoning"],
                     },
                 }
             if context is not None and context.current_block_index >= 0:
                 result["index"] = context.current_block_index
             return result
 
-        elif event_type == "tool_call_start":
+        elif is_tool_call_start_event(event):
             result = {
                 "type": "content_block_start",
                 "content_block": {
                     "type": "tool_use",
-                    "id": ir_event["tool_call_id"],
-                    "name": ir_event["tool_name"],
+                    "id": event["tool_call_id"],
+                    "name": event["tool_name"],
                     "input": {},
                 },
             }
@@ -738,20 +750,20 @@ class AnthropicConverter(BaseConverter):
                 result["index"] = context.current_block_index
             return result
 
-        elif event_type == "tool_call_delta":
+        elif is_tool_call_delta_event(event):
             result = {
                 "type": "content_block_delta",
                 "delta": {
                     "type": "input_json_delta",
-                    "partial_json": ir_event["arguments_delta"],
+                    "partial_json": event["arguments_delta"],
                 },
             }
             if context is not None and context.current_block_index >= 0:
                 result["index"] = context.current_block_index
             return result
 
-        elif event_type == "finish":
-            reason = ir_event["finish_reason"]["reason"]
+        elif is_finish_event(event):
+            reason = event["finish_reason"]["reason"]
             reason_map = {
                 "stop": "end_turn",
                 "length": "max_tokens",
@@ -765,8 +777,8 @@ class AnthropicConverter(BaseConverter):
                 },
             }
 
-        elif event_type == "usage":
-            usage = ir_event["usage"]
+        elif is_usage_event(event):
+            usage = event["usage"]
             return {
                 "type": "message_delta",
                 "usage": {

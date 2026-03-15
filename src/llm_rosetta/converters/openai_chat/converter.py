@@ -6,11 +6,13 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
 
 from ...types.ir import (
     ExtensionItem,
     Message,
+    is_text_part,
+    is_tool_call_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
@@ -24,6 +26,18 @@ from ...types.ir.stream import (
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     UsageEvent,
+)
+from ...types.ir.type_guards import (
+    is_content_block_end_event,
+    is_content_block_start_event,
+    is_finish_event,
+    is_reasoning_delta_event,
+    is_stream_end_event,
+    is_stream_start_event,
+    is_text_delta_event,
+    is_tool_call_delta_event,
+    is_tool_call_start_event,
+    is_usage_event,
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
@@ -249,7 +263,7 @@ class OpenAIChatConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return ir_request
+        return cast(IRRequest, ir_request)
 
     def response_from_provider(
         self,
@@ -331,7 +345,7 @@ class OpenAIChatConverter(BaseConverter):
         if "system_fingerprint" in provider_response:
             ir_response["system_fingerprint"] = provider_response["system_fingerprint"]
 
-        return ir_response
+        return cast(IRResponse, ir_response)
 
     def response_to_provider(
         self,
@@ -366,9 +380,9 @@ class OpenAIChatConverter(BaseConverter):
             tool_calls: List[Dict[str, Any]] = []
 
             for part in content_parts:
-                if part.get("type") == "text":
+                if is_text_part(part):
                     text_parts.append(part["text"])
-                elif part.get("type") == "tool_call":
+                elif is_tool_call_part(part):
                     tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
 
             if text_parts:
@@ -618,7 +632,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def stream_response_to_provider(
         self,
-        ir_event: IRStreamEvent,
+        event: IRStreamEvent,
         context: Optional[StreamContext] = None,
     ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
         """Convert an IR stream event to an OpenAI SSE chunk.
@@ -628,27 +642,26 @@ class OpenAIChatConverter(BaseConverter):
         populated on every output chunk.
 
         Args:
-            ir_event: IR stream event.
+            event: IR stream event.
             context: Optional stream context for stateful conversions.
 
         Returns:
             OpenAI SSE chunk dict, or a list of chunk dicts.
         """
-        event_type = ir_event["type"]
         result: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
 
-        if event_type == "stream_start":
+        if is_stream_start_event(event):
             # Store metadata in context if provided
             if context is not None:
-                context.response_id = ir_event["response_id"]
-                context.model = ir_event["model"]
-                context.created = ir_event.get("created", 0)
+                context.response_id = event["response_id"]
+                context.model = event["model"]
+                context.created = event.get("created", 0)
                 context.mark_started()
             result = {
-                "id": ir_event["response_id"],
+                "id": event["response_id"],
                 "object": "chat.completion.chunk",
-                "model": ir_event["model"],
-                "created": ir_event.get("created", 0),
+                "model": event["model"],
+                "created": event.get("created", 0),
                 "choices": [
                     {
                         "index": 0,
@@ -659,7 +672,7 @@ class OpenAIChatConverter(BaseConverter):
             }
             return result
 
-        elif event_type == "stream_end":
+        elif is_stream_end_event(event):
             if context is not None:
                 context.mark_ended()
             result = {
@@ -671,45 +684,45 @@ class OpenAIChatConverter(BaseConverter):
             }
             return result
 
-        elif event_type == "content_block_start":
+        elif is_content_block_start_event(event):
             return {}
 
-        elif event_type == "content_block_end":
+        elif is_content_block_end_event(event):
             return {}
 
-        elif event_type == "text_delta":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_text_delta_event(event):
+            choice_index = event.get("choice_index", 0)
             result = {
                 "choices": [
                     {
                         "index": choice_index,
-                        "delta": {"content": ir_event["text"]},
+                        "delta": {"content": event["text"]},
                     }
                 ]
             }
 
-        elif event_type == "reasoning_delta":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_reasoning_delta_event(event):
+            choice_index = event.get("choice_index", 0)
             result = {
                 "choices": [
                     {
                         "index": choice_index,
-                        "delta": {"reasoning_content": ir_event["reasoning"]},
+                        "delta": {"reasoning_content": event["reasoning"]},
                     }
                 ]
             }
 
-        elif event_type == "tool_call_start":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_tool_call_start_event(event):
+            choice_index = event.get("choice_index", 0)
             tc_entry: Dict[str, Any] = {
-                "id": ir_event["tool_call_id"],
+                "id": event["tool_call_id"],
                 "type": "function",
                 "function": {
-                    "name": ir_event["tool_name"],
+                    "name": event["tool_name"],
                     "arguments": "",
                 },
             }
-            tc_index = ir_event.get("tool_call_index")
+            tc_index = event.get("tool_call_index")
             if tc_index is not None:
                 tc_entry["index"] = tc_index
             result = {
@@ -721,14 +734,14 @@ class OpenAIChatConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "tool_call_delta":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_tool_call_delta_event(event):
+            choice_index = event.get("choice_index", 0)
             tc_delta_entry: Dict[str, Any] = {
                 "function": {
-                    "arguments": ir_event["arguments_delta"],
+                    "arguments": event["arguments_delta"],
                 },
             }
-            tc_index = ir_event.get("tool_call_index")
+            tc_index = event.get("tool_call_index")
             if tc_index is not None:
                 tc_delta_entry["index"] = tc_index
             result = {
@@ -740,20 +753,20 @@ class OpenAIChatConverter(BaseConverter):
                 ]
             }
 
-        elif event_type == "finish":
-            choice_index = ir_event.get("choice_index", 0)
+        elif is_finish_event(event):
+            choice_index = event.get("choice_index", 0)
             result = {
                 "choices": [
                     {
                         "index": choice_index,
                         "delta": {},
-                        "finish_reason": ir_event["finish_reason"]["reason"],
+                        "finish_reason": event["finish_reason"]["reason"],
                     }
                 ]
             }
 
-        elif event_type == "usage":
-            usage = ir_event["usage"]
+        elif is_usage_event(event):
+            usage = event["usage"]
             result = {
                 "usage": {
                     "prompt_tokens": usage.get("prompt_tokens", 0),
