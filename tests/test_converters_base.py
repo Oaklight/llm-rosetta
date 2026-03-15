@@ -10,7 +10,7 @@ Tests for LLM-Rosetta Converters Base Module
 """
 
 from abc import ABC
-from typing import Any, Union
+from typing import Any, Union, cast
 from collections.abc import Iterable
 
 import pytest
@@ -24,6 +24,7 @@ from llm_rosetta.converters.base import (
     StreamContext,
 )
 from llm_rosetta.types.ir import (
+    AssistantMessage,
     AudioPart,
     CacheConfig,
     CitationPart,
@@ -49,6 +50,7 @@ from llm_rosetta.types.ir import (
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
+    UserMessage,
 )
 from llm_rosetta.types.ir.stream import IRStreamEvent
 
@@ -143,20 +145,23 @@ class MockMessageOps(BaseMessageOps):
 
         for item in ir_messages:
             if "role" in item:  # Message
-                provider_msg = {"role": item["role"], "content": []}
+                msg = cast(Message, item)
+                provider_msg = {"role": msg["role"], "content": []}
 
-                for part in item.get("content", []):
+                for part in msg.get("content", []):
                     if part.get("type") == "text":
+                        text_part = cast(TextPart, part)
                         provider_msg["content"].append(
-                            {"type": "text", "text": part["text"]}
+                            {"type": "text", "text": text_part["text"]}
                         )
                     elif part.get("type") == "tool_call":
+                        tool_part = cast(ToolCallPart, part)
                         provider_msg["content"].append(
                             {
                                 "type": "tool_call",
-                                "id": part["tool_call_id"],
-                                "name": part["tool_name"],
-                                "arguments": part["tool_input"],
+                                "id": tool_part["tool_call_id"],
+                                "name": tool_part["tool_name"],
+                                "arguments": tool_part["tool_input"],
                             }
                         )
                     else:
@@ -310,14 +315,14 @@ class MockConfigOps(BaseConfigOps):
     def p_generation_config_to_ir(
         provider_config: Any, **kwargs: Any
     ) -> GenerationConfig:
-        result = {}
+        result: dict[str, Any] = {}
         if "temperature" in provider_config:
             result["temperature"] = provider_config["temperature"]
         if "max_tokens" in provider_config:
             result["max_tokens"] = provider_config["max_tokens"]
         if "top_p" in provider_config:
             result["top_p"] = provider_config["top_p"]
-        return result
+        return cast(GenerationConfig, result)
 
     @staticmethod
     def ir_response_format_to_p(
@@ -372,7 +377,7 @@ class MockConverter(BaseConverter):
     def request_to_provider(
         self, ir_request: IRRequest, **kwargs: Any
     ) -> tuple[dict[str, Any], list[str]]:
-        provider_request = {"model": ir_request["model"]}
+        provider_request: dict[str, Any] = {"model": ir_request["model"]}
         warnings = []
 
         # 转换消息
@@ -399,8 +404,11 @@ class MockConverter(BaseConverter):
         ir_request: IRRequest = {"model": provider_request["model"], "messages": []}
 
         if "messages" in provider_request:
-            ir_request["messages"] = self.message_ops_class.p_messages_to_ir(
-                provider_request["messages"], **kwargs
+            ir_request["messages"] = cast(
+                list[Message],
+                self.message_ops_class.p_messages_to_ir(
+                    provider_request["messages"], **kwargs
+                ),
             )
 
         return ir_request
@@ -501,9 +509,9 @@ class TestBaseConverter:
         ir_request: IRRequest = {
             "model": "test-model",
             "messages": [
-                {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
             ],
-            "generation": {"temperature": 0.7, "max_tokens": 100},
+            "generation": cast(GenerationConfig, {"temperature": 0.7, "max_tokens": 100}),
         }
 
         provider_request, warnings = self.converter.request_to_provider(ir_request)
@@ -526,14 +534,15 @@ class TestBaseConverter:
         ir_request = self.converter.request_from_provider(provider_request)
 
         assert ir_request["model"] == "test-model"
-        assert len(ir_request["messages"]) == 1
-        assert ir_request["messages"][0]["role"] == "user"
+        messages_list = cast(list[Message], ir_request["messages"])
+        assert len(messages_list) == 1
+        assert cast(UserMessage, messages_list[0])["role"] == "user"
 
     def test_messages_to_provider(self):
         """测试消息转换到provider"""
-        messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            {
+        messages: list[Message] = [
+            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
+            cast(AssistantMessage, {
                 "role": "assistant",
                 "content": [
                     {"type": "text", "text": "Hi there!"},
@@ -544,7 +553,7 @@ class TestBaseConverter:
                         "tool_input": {"query": "test"},
                     },
                 ],
-            },
+            }),
         ]
 
         provider_messages, warnings = self.converter.messages_to_provider(messages)
@@ -563,12 +572,14 @@ class TestBaseConverter:
         ir_messages = self.converter.messages_from_provider(provider_messages)
 
         assert len(ir_messages) == 1
-        assert ir_messages[0]["role"] == "user"
-        assert ir_messages[0]["content"][0]["type"] == "text"
+        msg = cast(UserMessage, ir_messages[0])
+        assert msg["role"] == "user"
+        content = cast(list[TextPart], msg["content"])
+        assert content[0]["type"] == "text"
 
     def test_message_to_provider_convenience(self):
         """测试单个消息转换便利方法"""
-        message = {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+        message = cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
 
         provider_message, warnings = self.converter.message_to_provider(message)
 
@@ -584,8 +595,10 @@ class TestBaseConverter:
 
         ir_message = self.converter.message_from_provider(provider_message)
 
-        assert ir_message["role"] == "user"
-        assert ir_message["content"][0]["type"] == "text"
+        msg = cast(UserMessage, ir_message)
+        assert msg["role"] == "user"
+        content = cast(list[TextPart], msg["content"])
+        assert content[0]["type"] == "text"
 
 
 class TestBaseContentOps:
@@ -702,9 +715,9 @@ class TestBaseMessageOps:
 
     def test_messages_conversion(self):
         """测试消息批量转换"""
-        ir_messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            {
+        ir_messages: list[Message] = [
+            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
+            cast(AssistantMessage, {
                 "role": "assistant",
                 "content": [
                     {"type": "text", "text": "Hi!"},
@@ -715,7 +728,7 @@ class TestBaseMessageOps:
                         "tool_input": {"query": "test"},
                     },
                 ],
-            },
+            }),
         ]
 
         # IR → Provider
@@ -728,18 +741,18 @@ class TestBaseMessageOps:
         # Provider → IR
         converted_back = self.message_ops.p_messages_to_ir(provider_messages)
         assert len(converted_back) == 2
-        assert converted_back[0]["role"] == "user"
-        assert converted_back[1]["role"] == "assistant"
+        assert cast(UserMessage, converted_back[0])["role"] == "user"
+        assert cast(AssistantMessage, converted_back[1])["role"] == "assistant"
 
     def test_extension_item_handling(self):
         """测试扩展项处理"""
-        items = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            {
+        items: list[Message | ExtensionItem] = [
+            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
+            cast(ExtensionItem, {
                 "type": "system_event",
                 "event_type": "session_start",
                 "timestamp": "2024-01-01T00:00:00Z",
-            },
+            }),
         ]
 
         provider_messages, warnings = self.message_ops.ir_messages_to_p(items)
@@ -752,21 +765,23 @@ class TestBaseMessageOps:
     def test_validate_messages(self):
         """测试消息验证"""
         # 有效消息
-        valid_messages = [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+        valid_messages: list[Message | ExtensionItem] = [
+            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
         ]
         errors = self.message_ops.validate_messages(valid_messages)
         assert len(errors) == 0
 
         # 无效消息 - 不是列表
-        invalid_messages = "not a list"
-        errors = self.message_ops.validate_messages(invalid_messages)
+        errors = self.message_ops.validate_messages(
+            cast(Iterable[Union[Message, ExtensionItem]], "not a list")
+        )
         assert len(errors) > 0
         assert "must be an iterable" in errors[0]
 
         # 无效消息 - 缺少role或type
-        invalid_messages = [{"some_field": "value"}]
-        errors = self.message_ops.validate_messages(invalid_messages)
+        errors = self.message_ops.validate_messages(
+            cast(Iterable[Union[Message, ExtensionItem]], [{"some_field": "value"}])
+        )
         assert len(errors) > 0
         assert "must have either 'role'" in errors[0]
 
