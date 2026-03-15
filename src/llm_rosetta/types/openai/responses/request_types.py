@@ -12,7 +12,8 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/responses/
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, Iterable, List, Literal, Optional, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import Required
@@ -91,7 +92,7 @@ ResponseInputParam = Union[
     TextInputParam,
     ImageInputParam,
     AudioInputParam,
-    List[Union[TextInputParam, ImageInputParam, AudioInputParam]],
+    list[TextInputParam | ImageInputParam | AudioInputParam],
 ]
 """Input content for the Responses API.
 
@@ -177,13 +178,13 @@ class FunctionToolParam(TypedDict, total=False):
     type: Required[Literal["function"]]
     """Tool type, always 'function'."""
 
-    function: Required[Dict[str, Any]]
+    function: Required[dict[str, Any]]
     """Function definition containing name, description, and parameters."""
 
 
 ToolChoice = Union[
     Literal["auto", "none", "required"],
-    Dict[str, Any],
+    dict[str, Any],
 ]
 """Tool choice configuration.
 
@@ -198,7 +199,7 @@ Reference: openai.types.responses.response_create_params.ToolChoice
 # Metadata Types
 # ============================================================================
 
-Metadata = Dict[str, str]
+Metadata = dict[str, str]
 """Metadata key-value pairs. Up to 16 pairs allowed.
 
 Reference: openai.types.shared.Metadata
@@ -226,7 +227,7 @@ class Conversation(TypedDict, total=False):
     id: Required[str]
     """The conversation ID."""
 
-    messages: List[Dict[str, Any]]
+    messages: list[dict[str, Any]]
     """Previous messages in the conversation."""
 
 
@@ -245,17 +246,17 @@ class ResponseCreateParams(TypedDict, total=False):
     """
 
     # Required parameters
-    input: Required[Union[str, ResponseInputParam]]
+    input: Required[str | ResponseInputParam]
     """Input content. Can be a simple string or structured input."""
 
     model: Required[str]
     """The model ID to use for generation."""
 
     # Content parameters
-    instructions: Optional[str]
+    instructions: str | None
     """System instructions, similar to a system message."""
 
-    conversation: Optional[Conversation]
+    conversation: Conversation | None
     """Conversation context for multi-turn interactions."""
 
     # Tool-related parameters
@@ -265,95 +266,95 @@ class ResponseCreateParams(TypedDict, total=False):
     tool_choice: ToolChoice
     """How the model should choose which tool to use."""
 
-    parallel_tool_calls: Optional[bool]
+    parallel_tool_calls: bool | None
     """Whether to allow parallel tool calls."""
 
-    max_tool_calls: Optional[int]
+    max_tool_calls: int | None
     """Maximum number of tool calls allowed."""
 
     # Generation control parameters
-    temperature: Optional[float]
+    temperature: float | None
     """Sampling temperature (0.0-2.0). Lower values are more deterministic."""
 
-    top_p: Optional[float]
+    top_p: float | None
     """Nucleus sampling parameter (0.0-1.0)."""
 
-    max_output_tokens: Optional[int]
+    max_output_tokens: int | None
     """Maximum number of output tokens to generate."""
 
-    top_logprobs: Optional[int]
+    top_logprobs: int | None
     """Number of top log probabilities to return."""
 
-    frequency_penalty: Optional[float]
+    frequency_penalty: float | None
     """Frequency penalty (-2.0 to 2.0)."""
 
-    presence_penalty: Optional[float]
+    presence_penalty: float | None
     """Presence penalty (-2.0 to 2.0)."""
 
-    logit_bias: Optional[Dict[str, int]]
+    logit_bias: dict[str, int] | None
     """Token logit bias. Keys are token IDs, values are bias values."""
 
     # Control parameters
-    stream: Optional[Literal[False]]
+    stream: Literal[False] | None
     """Whether to stream the response."""
 
-    stream_options: Optional[StreamOptions]
+    stream_options: StreamOptions | None
     """Options for streaming responses."""
 
-    response_format: Dict[str, Any]
+    response_format: dict[str, Any]
     """Response format configuration."""
 
-    truncation: Optional[Literal["auto", "disabled"]]
+    truncation: Literal["auto", "disabled"] | None
     """Truncation strategy for input."""
 
     user: str
     """User identifier for tracking."""
 
-    metadata: Optional[Metadata]
+    metadata: Metadata | None
     """Metadata key-value pairs (up to 16)."""
 
     # Other parameters
-    background: Optional[bool]
+    background: bool | None
     """Whether to run the response in the background."""
 
-    include: Optional[List[ResponseIncludable]]
+    include: list[ResponseIncludable] | None
     """Additional data to include in the response."""
 
-    previous_response_id: Optional[str]
+    previous_response_id: str | None
     """ID of the previous response for continuation."""
 
-    prompt: Optional[ResponsePromptParam]
+    prompt: ResponsePromptParam | None
     """Prompt template reference."""
 
     prompt_cache_key: str
     """Key for prompt caching."""
 
-    prompt_cache_retention: Optional[Literal["in-memory", "24h"]]
+    prompt_cache_retention: Literal["in-memory", "24h"] | None
     """Prompt cache retention policy."""
 
-    reasoning: Optional[Reasoning]
+    reasoning: Reasoning | None
     """Reasoning configuration."""
 
     safety_identifier: str
     """Safety identifier."""
 
-    service_tier: Optional[Literal["auto", "default", "flex", "scale", "priority"]]
+    service_tier: Literal["auto", "default", "flex", "scale", "priority"] | None
     """Service tier for request routing."""
 
-    store: Optional[bool]
+    store: bool | None
     """Whether to store the response."""
 
     text: ResponseTextConfigParam
     """Text output configuration."""
 
     # Additional fields
-    audio: Dict[str, Any]
+    audio: dict[str, Any]
     """Audio configuration."""
 
-    modalities: List[str]
+    modalities: list[str]
     """Supported modalities."""
 
-    prediction: Dict[str, Any]
+    prediction: dict[str, Any]
     """Prediction configuration."""
 
     reasoning_effort: Literal["low", "medium", "high"]

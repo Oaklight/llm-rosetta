@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, Optional, Tuple
+from typing import Any
+from collections.abc import AsyncIterator
 
 import httpx
 import uvicorn
@@ -35,7 +36,7 @@ _UPSTREAM_URL_TEMPLATES = {
 }
 
 
-def _build_auth_headers(provider_type: ProviderType, api_key: str) -> Dict[str, str]:
+def _build_auth_headers(provider_type: ProviderType, api_key: str) -> dict[str, str]:
     """Return provider-specific authentication headers."""
     if provider_type in ("openai_chat", "openai_responses"):
         return {"Authorization": f"Bearer {api_key}"}
@@ -51,7 +52,7 @@ def _build_auth_headers(provider_type: ProviderType, api_key: str) -> Dict[str, 
 
 def _build_upstream_url(
     provider_type: ProviderType,
-    provider_cfg: Dict[str, str],
+    provider_cfg: dict[str, str],
     model: str,
     *,
     stream: bool,
@@ -65,7 +66,7 @@ def _build_upstream_url(
     return template.format(base_url=base_url, model=model)
 
 
-def _fixup_google_body(provider_request: Dict[str, Any]) -> Dict[str, Any]:
+def _fixup_google_body(provider_request: dict[str, Any]) -> dict[str, Any]:
     """Flatten Google SDK-style nested config to REST API top-level keys.
 
     ``request_to_provider()`` nests tools/tool_config/generation params
@@ -74,7 +75,7 @@ def _fixup_google_body(provider_request: Dict[str, Any]) -> Dict[str, Any]:
 
     Reference: examples/rest_based/cross_oc_gg_stream.py:170-183
     """
-    body: Dict[str, Any] = {"contents": provider_request["contents"]}
+    body: dict[str, Any] = {"contents": provider_request["contents"]}
     config = provider_request.get("config", {})
 
     # Lift specific keys from config to top level
@@ -112,12 +113,12 @@ def _fixup_google_body(provider_request: Dict[str, Any]) -> Dict[str, Any]:
 
 def _prepare_upstream(
     target_provider: ProviderType,
-    provider_cfg: Dict[str, str],
-    provider_request: Dict[str, Any],
+    provider_cfg: dict[str, str],
+    provider_request: dict[str, Any],
     model: str,
     *,
     stream: bool,
-) -> Tuple[str, Dict[str, str], Dict[str, Any]]:
+) -> tuple[str, dict[str, str], dict[str, Any]]:
     """Return (url, headers, body) ready for the upstream HTTP call."""
     url = _build_upstream_url(target_provider, provider_cfg, model, stream=stream)
     headers = {
@@ -148,7 +149,7 @@ def _prepare_upstream(
 # ---------------------------------------------------------------------------
 
 
-def _iter_sse_lines(line: str) -> Optional[Tuple[Optional[str], Optional[str]]]:
+def _iter_sse_lines(line: str) -> tuple[str | None, str | None] | None:
     """Parse a single SSE line into (field, value) or None if not relevant.
 
     Returns:
@@ -175,7 +176,7 @@ def _is_openai_done(data: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _format_sse_openai_chat(chunk: Dict[str, Any]) -> str:
+def _format_sse_openai_chat(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Chat SSE line."""
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
@@ -184,19 +185,19 @@ def _format_sse_openai_chat_done() -> str:
     return "data: [DONE]\n\n"
 
 
-def _format_sse_anthropic(chunk: Dict[str, Any]) -> str:
+def _format_sse_anthropic(chunk: dict[str, Any]) -> str:
     """Format a chunk as Anthropic SSE (event: type\\ndata: json)."""
     event_type = chunk.get("type", "unknown")
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-def _format_sse_openai_responses(chunk: Dict[str, Any]) -> str:
+def _format_sse_openai_responses(chunk: dict[str, Any]) -> str:
     """Format a chunk as OpenAI Responses SSE (event: type\\ndata: json)."""
     event_type = chunk.get("type", "unknown")
     return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
-def _format_sse_google(chunk: Dict[str, Any]) -> str:
+def _format_sse_google(chunk: dict[str, Any]) -> str:
     """Format a chunk as Google SSE line."""
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
@@ -258,7 +259,7 @@ def _error_response_for_source(
 # ---------------------------------------------------------------------------
 
 
-def _detect_stream_request(source_provider: ProviderType, body: Dict[str, Any]) -> bool:
+def _detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -> bool:
     """Detect if the incoming request asks for streaming."""
     if source_provider in ("openai_chat", "openai_responses", "anthropic"):
         return bool(body.get("stream", False))
@@ -266,9 +267,7 @@ def _detect_stream_request(source_provider: ProviderType, body: Dict[str, Any]) 
     return False
 
 
-def _extract_model(
-    source_provider: ProviderType, body: Dict[str, Any]
-) -> Optional[str]:
+def _extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str | None:
     """Extract the model name from a source-format request body."""
     return body.get("model")
 
@@ -278,7 +277,7 @@ def _extract_model(
 # ---------------------------------------------------------------------------
 
 # Shared httpx client (created once, reused across requests)
-_http_client: Optional[httpx.AsyncClient] = None
+_http_client: httpx.AsyncClient | None = None
 
 
 def _get_client() -> httpx.AsyncClient:
@@ -291,8 +290,8 @@ def _get_client() -> httpx.AsyncClient:
 async def _handle_non_streaming(
     source_provider: ProviderType,
     target_provider: ProviderType,
-    provider_cfg: Dict[str, str],
-    body: Dict[str, Any],
+    provider_cfg: dict[str, str],
+    body: dict[str, Any],
     model: str,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
@@ -362,8 +361,8 @@ async def _handle_non_streaming(
 async def _handle_streaming(
     source_provider: ProviderType,
     target_provider: ProviderType,
-    provider_cfg: Dict[str, str],
-    body: Dict[str, Any],
+    provider_cfg: dict[str, str],
+    body: dict[str, Any],
     model: str,
 ) -> Response:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
@@ -468,13 +467,13 @@ async def _handle_streaming(
 # ---------------------------------------------------------------------------
 
 # Global config — set at startup
-_config: Optional[GatewayConfig] = None
+_config: GatewayConfig | None = None
 
 
 async def _proxy_handler(
     request: Request,
     source_provider: ProviderType,
-    model_override: Optional[str] = None,
+    model_override: str | None = None,
     force_stream: bool = False,
 ) -> Response:
     """Shared handler for all proxy endpoints."""

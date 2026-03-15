@@ -7,7 +7,8 @@ These are used for type hints and validation in the LLM-Rosetta conversion layer
 from __future__ import annotations
 
 import sys
-from typing import Dict, Iterable, List, Literal, Optional, TypedDict, Union
+from typing import Literal, TypedDict, Union
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import Required
@@ -57,15 +58,15 @@ class TextBlockParam(TypedDict, total=False):
 
     text: Required[str]
     type: Required[Literal["text"]]
-    cache_control: Optional[CacheControlEphemeralParam]
-    citations: Optional[Iterable[TextCitationParam]]
+    cache_control: CacheControlEphemeralParam | None
+    citations: Iterable[TextCitationParam] | None
 
 
 # Message parameter
 class MessageParam(TypedDict, total=False):
     """Message parameter for request."""
 
-    content: Required[Union[str, Iterable[TextBlockParam]]]
+    content: Required[str | Iterable[TextBlockParam]]
     """Message content - can be a string or list of content blocks."""
 
     role: Required[Literal["user", "assistant"]]
@@ -77,11 +78,11 @@ class InputSchemaTyped(TypedDict, total=False):
     """Typed input schema for tool parameters."""
 
     type: Required[Literal["object"]]
-    properties: Optional[Dict[str, object]]
-    required: Optional[List[str]]
+    properties: dict[str, object] | None
+    required: list[str] | None
 
 
-InputSchema = Union[InputSchemaTyped, Dict[str, object]]
+InputSchema = Union[InputSchemaTyped, dict[str, object]]
 """Tool input schema - JSON Schema format."""
 
 
@@ -97,10 +98,10 @@ class ToolParam(TypedDict, total=False):
     description: str
     """Description of what this tool does."""
 
-    cache_control: Optional[CacheControlEphemeralParam]
+    cache_control: CacheControlEphemeralParam | None
     """Create a cache control breakpoint at this content block."""
 
-    type: Optional[Literal["custom"]]
+    type: Literal["custom"] | None
     """Tool type, typically 'custom'."""
 
 
@@ -191,10 +192,10 @@ class MessageCreateParamsBase(TypedDict, total=False):
     service_tier: Literal["auto", "standard_only"]
     """Determines whether to use priority capacity or standard capacity."""
 
-    stop_sequences: List[str]
+    stop_sequences: list[str]
     """Custom text sequences that will cause the model to stop generating."""
 
-    system: Union[str, Iterable[TextBlockParam]]
+    system: str | Iterable[TextBlockParam]
     """System prompt."""
 
     temperature: float

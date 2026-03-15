@@ -5,13 +5,10 @@ IR类型守卫系统，提供TypeGuard函数用于类型收窄
 IR type guard system providing TypeGuard functions for type narrowing
 """
 
-import sys
-from typing import Any, Dict, Mapping, Type, TypeVar, Union
+from typing import Any, TypeVar
+from collections.abc import Mapping
 
-if sys.version_info >= (3, 10):
-    from typing import TypeGuard
-else:
-    from typing_extensions import TypeGuard
+from typing import TypeGuard
 
 from .parts import (
     AudioPart,
@@ -163,7 +160,7 @@ def is_usage_event(event: IRStreamEvent) -> TypeGuard[UsageEvent]:
 # ============================================================================
 
 
-def is_part_type(part: Any, part_class: Type[T]) -> bool:
+def is_part_type(part: Any, part_class: type[T]) -> bool:
     """
     通用的类型检查函数，类似isinstance但针对TypedDict优化
     Generic type checking function, similar to isinstance but optimized for TypedDict
@@ -195,7 +192,7 @@ def is_part_type(part: Any, part_class: Type[T]) -> bool:
 
 
 # Internal mapping from TypedDict class to expected "type" string
-_TYPE_STRING_MAP: Dict[type, str] = {
+_TYPE_STRING_MAP: dict[type, str] = {
     TextPart: "text",
     ImagePart: "image",
     FilePart: "file",
@@ -223,7 +220,7 @@ _TYPE_STRING_MAP: Dict[type, str] = {
 # ============================================================================
 
 # 类型字符串到类型类的映射
-TYPE_CLASS_MAP: Dict[str, Type[ContentPart]] = {
+TYPE_CLASS_MAP: dict[str, type[ContentPart]] = {
     "text": TextPart,
     "image": ImagePart,
     "file": FilePart,
@@ -236,7 +233,7 @@ TYPE_CLASS_MAP: Dict[str, Type[ContentPart]] = {
 }
 
 
-def get_part_type(part: Any) -> Union[Type[ContentPart], None]:
+def get_part_type(part: Any) -> type[ContentPart] | None:
     """
     获取内容部分的具体类型
     Get the specific type of content part
@@ -251,7 +248,7 @@ def get_part_type(part: Any) -> Union[Type[ContentPart], None]:
     return None
 
 
-def isinstance_part(part: Any, *part_types: Type[ContentPart]) -> bool:
+def isinstance_part(part: Any, *part_types: type[ContentPart]) -> bool:
     """
     类似isinstance的函数，支持多个类型检查
     isinstance-like function supporting multiple type checking

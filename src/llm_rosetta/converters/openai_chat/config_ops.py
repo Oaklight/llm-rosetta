@@ -7,7 +7,7 @@ cache, and response format configurations.
 """
 
 import warnings
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -51,7 +51,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # Direct mapping fields
         _DIRECT_FIELDS = [
@@ -104,7 +104,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             IR GenerationConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
             return cast(GenerationConfig, result)
@@ -160,7 +160,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         elif fmt_type == "json_object":
             return {"response_format": {"type": "json_object"}}
         elif fmt_type == "json_schema":
-            rf: Dict[str, Any] = {"type": "json_schema"}
+            rf: dict[str, Any] = {"type": "json_schema"}
             json_schema = ir_format.get("json_schema")
             if json_schema:
                 rf["json_schema"] = json_schema
@@ -183,7 +183,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         if not isinstance(provider_format, dict):
             return cast(ResponseFormatConfig, {})
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         fmt_type = provider_format.get("type")
         if fmt_type:
             result["type"] = fmt_type
@@ -209,7 +209,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "enabled" in ir_stream:
             result["stream"] = ir_stream["enabled"]
@@ -229,7 +229,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             IR StreamConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
             return cast(StreamConfig, result)
@@ -260,7 +260,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "effort" in ir_reasoning:
             result["reasoning_effort"] = ir_reasoning["effort"]
@@ -285,7 +285,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             IR ReasoningConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
             return cast(ReasoningConfig, result)
@@ -312,7 +312,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "key" in ir_cache:
             result["prompt_cache_key"] = ir_cache["key"]
@@ -332,7 +332,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             IR CacheConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_cache, dict):
             return cast(CacheConfig, result)

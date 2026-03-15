@@ -10,7 +10,8 @@ Tests for LLM-Rosetta Converters Base Module
 """
 
 from abc import ABC
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Union
+from collections.abc import Iterable
 
 import pytest
 
@@ -60,7 +61,7 @@ class MockContentOps(BaseContentOps):
     """Mock implementation of BaseContentOps for testing"""
 
     @staticmethod
-    def ir_text_to_p(ir_text: TextPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_text_to_p(ir_text: TextPart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "text", "content": ir_text["text"]}
 
     @staticmethod
@@ -68,7 +69,7 @@ class MockContentOps(BaseContentOps):
         return {"type": "text", "text": provider_text.get("content", "")}
 
     @staticmethod
-    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> dict[str, Any]:
         result = {"type": "image"}
         if "image_url" in ir_image:
             result["url"] = ir_image["image_url"]
@@ -90,7 +91,7 @@ class MockContentOps(BaseContentOps):
         return result
 
     @staticmethod
-    def ir_file_to_p(ir_file: FilePart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_file_to_p(ir_file: FilePart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "file", "name": ir_file.get("file_name", "unknown")}
 
     @staticmethod
@@ -98,7 +99,7 @@ class MockContentOps(BaseContentOps):
         return {"type": "file", "file_name": provider_file.get("name", "unknown")}
 
     @staticmethod
-    def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "audio", "id": ir_audio["audio_id"]}
 
     @staticmethod
@@ -106,7 +107,7 @@ class MockContentOps(BaseContentOps):
         return {"type": "audio", "audio_id": provider_audio.get("id", "unknown")}
 
     @staticmethod
-    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "reasoning", "content": ir_reasoning.get("reasoning", "")}
 
     @staticmethod
@@ -114,7 +115,7 @@ class MockContentOps(BaseContentOps):
         return {"type": "reasoning", "reasoning": provider_reasoning.get("content", "")}
 
     @staticmethod
-    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "refusal", "message": ir_refusal["refusal"]}
 
     @staticmethod
@@ -122,7 +123,7 @@ class MockContentOps(BaseContentOps):
         return {"type": "refusal", "refusal": provider_refusal.get("message", "")}
 
     @staticmethod
-    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict[str, Any]:
         return {"type": "citation", "data": ir_citation}
 
     @staticmethod
@@ -136,7 +137,7 @@ class MockMessageOps(BaseMessageOps):
     @staticmethod
     def ir_messages_to_p(
         ir_messages: Iterable[Union[Message, ExtensionItem]], **kwargs: Any
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         provider_messages = []
         warnings = []
 
@@ -169,8 +170,8 @@ class MockMessageOps(BaseMessageOps):
 
     @staticmethod
     def p_messages_to_ir(
-        provider_messages: List[Any], **kwargs: Any
-    ) -> List[Union[Message, ExtensionItem]]:
+        provider_messages: list[Any], **kwargs: Any
+    ) -> list[Union[Message, ExtensionItem]]:
         ir_messages = []
 
         for msg in provider_messages:
@@ -200,7 +201,7 @@ class MockToolOps(BaseToolOps):
     @staticmethod
     def ir_tool_definition_to_p(
         ir_tool: ToolDefinition, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "name": ir_tool["name"],
             "description": ir_tool["description"],
@@ -239,7 +240,7 @@ class MockToolOps(BaseToolOps):
         return {"mode": "auto", "tool_name": ""}
 
     @staticmethod
-    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> Dict[str, Any]:
+    def ir_tool_call_to_p(ir_tool_call: ToolCallPart, **kwargs: Any) -> dict[str, Any]:
         return {
             "id": ir_tool_call["tool_call_id"],
             "name": ir_tool_call["tool_name"],
@@ -258,7 +259,7 @@ class MockToolOps(BaseToolOps):
     @staticmethod
     def ir_tool_result_to_p(
         ir_tool_result: ToolResultPart, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "call_id": ir_tool_result["tool_call_id"],
             "result": ir_tool_result["result"],
@@ -275,7 +276,7 @@ class MockToolOps(BaseToolOps):
     @staticmethod
     def ir_tool_config_to_p(
         ir_tool_config: ToolCallConfig, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "parallel_calls": not ir_tool_config.get("disable_parallel", False),
             "max_calls": ir_tool_config.get("max_calls", 10),
@@ -295,7 +296,7 @@ class MockConfigOps(BaseConfigOps):
     @staticmethod
     def ir_generation_config_to_p(
         ir_config: GenerationConfig, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         result = {}
         if "temperature" in ir_config:
             result["temperature"] = ir_config["temperature"]
@@ -321,7 +322,7 @@ class MockConfigOps(BaseConfigOps):
     @staticmethod
     def ir_response_format_to_p(
         ir_format: ResponseFormatConfig, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {"type": ir_format.get("type", "text")}
 
     @staticmethod
@@ -331,7 +332,7 @@ class MockConfigOps(BaseConfigOps):
         return {"type": provider_format.get("type", "text")}
 
     @staticmethod
-    def ir_stream_config_to_p(ir_stream: StreamConfig, **kwargs: Any) -> Dict[str, Any]:
+    def ir_stream_config_to_p(ir_stream: StreamConfig, **kwargs: Any) -> dict[str, Any]:
         return {"stream": ir_stream.get("enabled", False)}
 
     @staticmethod
@@ -341,7 +342,7 @@ class MockConfigOps(BaseConfigOps):
     @staticmethod
     def ir_reasoning_config_to_p(
         ir_reasoning: ReasoningConfig, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {"reasoning_effort": ir_reasoning.get("effort", "medium")}
 
     @staticmethod
@@ -351,7 +352,7 @@ class MockConfigOps(BaseConfigOps):
         return {"effort": provider_reasoning.get("reasoning_effort", "medium")}
 
     @staticmethod
-    def ir_cache_config_to_p(ir_cache: CacheConfig, **kwargs: Any) -> Dict[str, Any]:
+    def ir_cache_config_to_p(ir_cache: CacheConfig, **kwargs: Any) -> dict[str, Any]:
         return {"cache_key": ir_cache.get("key", "")}
 
     @staticmethod
@@ -370,7 +371,7 @@ class MockConverter(BaseConverter):
 
     def request_to_provider(
         self, ir_request: IRRequest, **kwargs: Any
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         provider_request = {"model": ir_request["model"]}
         warnings = []
 
@@ -393,7 +394,7 @@ class MockConverter(BaseConverter):
         return provider_request, warnings
 
     def request_from_provider(
-        self, provider_request: Dict[str, Any], **kwargs: Any
+        self, provider_request: dict[str, Any], **kwargs: Any
     ) -> IRRequest:
         ir_request: IRRequest = {"model": provider_request["model"], "messages": []}
 
@@ -405,7 +406,7 @@ class MockConverter(BaseConverter):
         return ir_request
 
     def response_from_provider(
-        self, provider_response: Dict[str, Any], **kwargs: Any
+        self, provider_response: dict[str, Any], **kwargs: Any
     ) -> IRResponse:
         return {
             "id": provider_response.get("id", ""),
@@ -418,7 +419,7 @@ class MockConverter(BaseConverter):
 
     def response_to_provider(
         self, ir_response: IRResponse, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return {
             "id": ir_response["id"],
             "object": ir_response["object"],
@@ -430,26 +431,26 @@ class MockConverter(BaseConverter):
 
     def messages_to_provider(
         self, messages: Iterable[Union[Message, ExtensionItem]], **kwargs: Any
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         return self.message_ops_class.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
-        self, provider_messages: List[Any], **kwargs: Any
-    ) -> List[Union[Message, ExtensionItem]]:
+        self, provider_messages: list[Any], **kwargs: Any
+    ) -> list[Union[Message, ExtensionItem]]:
         return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
 
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         return []
 
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         return {}
 
 

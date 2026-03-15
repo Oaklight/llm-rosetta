@@ -7,7 +7,8 @@ Handles bidirectional conversion of system, user, assistant, and tool messages.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -53,9 +54,9 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Union[Message, ExtensionItem]],
+        ir_messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Chat messages.
 
         Processes each IR message by role and converts to OpenAI format.
@@ -68,8 +69,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
         Returns:
             Tuple of (converted messages list, warnings list).
         """
-        messages: List[Dict[str, Any]] = []
-        warnings: List[str] = []
+        messages: list[dict[str, Any]] = []
+        warnings: list[str] = []
 
         for item in ir_messages:
             if is_message(item):
@@ -81,13 +82,13 @@ class OpenAIChatMessageOps(BaseMessageOps):
                     messages.append(converted)
             elif is_extension_item(item):
                 ext_warnings = self._handle_extension_item(
-                    cast(Dict[str, Any], item), messages
+                    cast(dict[str, Any], item), messages
                 )
                 warnings.extend(ext_warnings)
 
         return messages, warnings
 
-    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.
 
         Args:
@@ -98,7 +99,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         """
         role = message.get("role")
         content = message.get("content", [])
-        warnings: List[str] = []
+        warnings: list[str] = []
 
         if role == "system":
             return self._ir_system_to_p(content), warnings
@@ -111,7 +112,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return None, warnings
 
-    def _ir_system_to_p(self, content: Iterable) -> Dict[str, Any]:
+    def _ir_system_to_p(self, content: Iterable) -> dict[str, Any]:
         """Convert IR system message content to OpenAI system message.
 
         Concatenates all text parts into a single string.
@@ -123,14 +124,14 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return {"role": "system", "content": " ".join(text_parts)}
 
     def _ir_user_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Any, List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[Any, list[str]]:
         """Convert IR user message content to OpenAI user message(s).
 
         ToolResultParts in user messages are split into separate tool role messages.
         """
-        user_content_parts: List[Dict[str, Any]] = []
-        tool_messages: List[Dict[str, Any]] = []
+        user_content_parts: list[dict[str, Any]] = []
+        tool_messages: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
@@ -154,7 +155,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
                     f"Unsupported content part type in user message: {part.get('type')}"
                 )
 
-        result_messages: List[Dict[str, Any]] = []
+        result_messages: list[dict[str, Any]] = []
 
         # Build user message if there's user content or no tool messages
         if user_content_parts or not tool_messages:
@@ -176,14 +177,14 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return result_messages, warnings
 
     def _ir_assistant_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Dict[str, Any], List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR assistant message content to OpenAI assistant message.
 
         Text parts are concatenated. Tool calls are collected into tool_calls list.
         """
-        text_parts: List[str] = []
-        tool_calls: List[Dict[str, Any]] = []
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
         refusal_text = None
 
         for part in content:
@@ -205,7 +206,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
                     f"Unsupported content part type in assistant message: {part.get('type')}"
                 )
 
-        openai_message: Dict[str, Any] = {"role": "assistant"}
+        openai_message: dict[str, Any] = {"role": "assistant"}
 
         # Set text content
         if text_parts:
@@ -228,13 +229,13 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return openai_message, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Any, List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[Any, list[str]]:
         """Convert IR tool message content to OpenAI tool role message(s).
 
         Each ToolResultPart becomes a separate tool role message.
         """
-        tool_messages: List[Dict[str, Any]] = []
+        tool_messages: list[dict[str, Any]] = []
 
         for part in content:
             if is_tool_result_part(part):
@@ -245,13 +246,13 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return tool_messages, warnings
 
     def _handle_extension_item(
-        self, item: Dict[str, Any], messages: List[Dict[str, Any]]
-    ) -> List[str]:
+        self, item: dict[str, Any], messages: list[dict[str, Any]]
+    ) -> list[str]:
         """Handle extension items during IR → Provider conversion.
 
         Returns list of warnings.
         """
-        warnings: List[str] = []
+        warnings: list[str] = []
         extension_type = item.get("type")
 
         if extension_type == "system_event":
@@ -277,9 +278,9 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def p_messages_to_ir(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """OpenAI Chat messages → IR Messages.
 
         Converts each OpenAI message to the appropriate IR message type.
@@ -290,7 +291,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: List[Union[Message, ExtensionItem]] = []
+        ir_messages: list[Message | ExtensionItem] = []
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
@@ -326,7 +327,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return None
 
-    def _p_system_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def _p_system_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI system message → IR SystemMessage."""
         content = msg.get("content", "")
         if isinstance(content, str):
@@ -342,10 +343,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
             return {"role": "system", "content": parts}
         return {"role": "system", "content": [TextPart(type="text", text=str(content))]}
 
-    def _p_user_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def _p_user_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI user message → IR UserMessage."""
         content = msg.get("content", "")
-        ir_content: List[ContentPart] = []
+        ir_content: list[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -356,9 +357,9 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return {"role": "user", "content": ir_content}
 
-    def _p_assistant_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def _p_assistant_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI assistant message → IR AssistantMessage."""
-        ir_content: List[ContentPart] = []
+        ir_content: list[ContentPart] = []
 
         # Handle text content
         content = msg.get("content")
@@ -389,7 +390,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return {"role": "assistant", "content": ir_content}
 
-    def _p_tool_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def _p_tool_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI tool role message → IR ToolMessage."""
         return {
             "role": "tool",
@@ -402,7 +403,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             ],
         }
 
-    def _p_function_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+    def _p_function_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI deprecated function role message → IR ToolMessage.
 
         Generates a legacy tool_call_id from the function name.
@@ -418,7 +419,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             ],
         }
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single OpenAI content part to IR content part(s).
 
         Args:

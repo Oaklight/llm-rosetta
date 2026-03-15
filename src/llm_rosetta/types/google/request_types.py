@@ -10,7 +10,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/google/genai/types.py
 from __future__ import annotations
 
 import sys
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, TypedDict
 
 if sys.version_info >= (3, 11):
     from typing import Required
@@ -50,46 +50,46 @@ class Schema(TypedDict, total=False):
     A select subset of an OpenAPI 3.0 schema object.
     """
 
-    type: Optional[str]
+    type: str | None
     """Required. Data type."""
 
-    description: Optional[str]
+    description: str | None
     """Optional. A brief description of the parameter."""
 
-    enum: Optional[List[str]]
+    enum: list[str] | None
     """Optional. Possible values of the element."""
 
-    example: Optional[Any]
+    example: Any | None
     """Optional. Example of the object."""
 
-    format: Optional[str]
+    format: str | None
     """Optional. The format of the data."""
 
-    items: Optional[Schema]
+    items: Schema | None
     """Optional. Schema of the elements of Type.ARRAY."""
 
-    max_items: Optional[int]
+    max_items: int | None
     """Optional. Maximum number of the elements for Type.ARRAY."""
 
-    min_items: Optional[int]
+    min_items: int | None
     """Optional. Minimum number of the elements for Type.ARRAY."""
 
-    maximum: Optional[float]
+    maximum: float | None
     """Optional. Maximum value of the Type.INTEGER and Type.NUMBER."""
 
-    minimum: Optional[float]
+    minimum: float | None
     """Optional. Minimum value of the Type.INTEGER and Type.NUMBER."""
 
-    nullable: Optional[bool]
+    nullable: bool | None
     """Optional. Indicates if the value may be null."""
 
-    properties: Optional[Dict[str, Schema]]
+    properties: dict[str, Schema] | None
     """Optional. Properties of Type.OBJECT."""
 
-    required: Optional[List[str]]
+    required: list[str] | None
     """Optional. Required properties of Type.OBJECT."""
 
-    title: Optional[str]
+    title: str | None
     """Optional. The title of the Schema."""
 
 
@@ -104,24 +104,24 @@ class FunctionDeclaration(TypedDict, total=False):
     Reference: google.genai.types.FunctionDeclaration
     """
 
-    name: Optional[str]
+    name: str | None
     """Required. The name of the function to call."""
 
-    description: Optional[str]
+    description: str | None
     """Optional. Description and purpose of the function."""
 
-    parameters: Optional[Schema]
+    parameters: Schema | None
     """Optional. Describes the parameters to this function in JSON Schema
     Object format."""
 
-    parameters_json_schema: Optional[Any]
+    parameters_json_schema: Any | None
     """Optional. Describes the parameters in JSON Schema format.
     Mutually exclusive with ``parameters``."""
 
-    response: Optional[Schema]
+    response: Schema | None
     """Optional. Describes the output from this function in JSON Schema format."""
 
-    response_json_schema: Optional[Any]
+    response_json_schema: Any | None
     """Optional. Describes the output in JSON Schema format.
     Mutually exclusive with ``response``."""
 
@@ -137,16 +137,16 @@ class Tool(TypedDict, total=False):
     Reference: google.genai.types.Tool
     """
 
-    function_declarations: Optional[List[FunctionDeclaration]]
+    function_declarations: list[FunctionDeclaration] | None
     """List of function declarations that the tool supports."""
 
-    code_execution: Optional[Dict[str, Any]]
+    code_execution: dict[str, Any] | None
     """Optional. CodeExecution tool type."""
 
-    google_search: Optional[Dict[str, Any]]
+    google_search: dict[str, Any] | None
     """Optional. GoogleSearch tool type."""
 
-    google_search_retrieval: Optional[Dict[str, Any]]
+    google_search_retrieval: dict[str, Any] | None
     """Optional. Specialized retrieval tool powered by Google Search."""
 
 
@@ -161,14 +161,14 @@ class SafetySetting(TypedDict, total=False):
     Reference: google.genai.types.SafetySetting
     """
 
-    category: Optional[str]
+    category: str | None
     """Required. Harm category (e.g., 'HARM_CATEGORY_HARASSMENT')."""
 
-    method: Optional[str]
+    method: str | None
     """Optional. Specify if the threshold is used for probability or severity
     score."""
 
-    threshold: Optional[str]
+    threshold: str | None
     """Required. The harm block threshold
     (e.g., 'BLOCK_MEDIUM_AND_ABOVE')."""
 
@@ -184,14 +184,14 @@ class ThinkingConfig(TypedDict, total=False):
     Reference: google.genai.types.ThinkingConfig
     """
 
-    include_thoughts: Optional[bool]
+    include_thoughts: bool | None
     """Indicates whether to include thoughts in the response."""
 
-    thinking_budget: Optional[int]
+    thinking_budget: int | None
     """Indicates the thinking budget in tokens.
     0 is DISABLED. -1 is AUTOMATIC."""
 
-    thinking_level: Optional[str]
+    thinking_level: str | None
     """Optional. The thinking level for the model."""
 
 
@@ -210,84 +210,84 @@ class GenerateContentConfig(TypedDict, total=False):
     """
 
     # System instruction
-    system_instruction: Optional[Union[Content, str]]
+    system_instruction: Content | str | None
     """Instructions for the model to steer it toward better performance."""
 
     # Generation parameters
-    temperature: Optional[float]
+    temperature: float | None
     """Controls the degree of randomness in token selection."""
 
-    top_p: Optional[float]
+    top_p: float | None
     """Nucleus sampling parameter."""
 
-    top_k: Optional[float]
+    top_k: float | None
     """Top-k sampling parameter."""
 
-    candidate_count: Optional[int]
+    candidate_count: int | None
     """Number of response variations to return."""
 
-    max_output_tokens: Optional[int]
+    max_output_tokens: int | None
     """Maximum number of tokens that can be generated in the response."""
 
-    stop_sequences: Optional[List[str]]
+    stop_sequences: list[str] | None
     """List of strings that tells the model to stop generating text."""
 
-    response_logprobs: Optional[bool]
+    response_logprobs: bool | None
     """Whether to return the log probabilities of the tokens."""
 
-    logprobs: Optional[int]
+    logprobs: int | None
     """Number of top candidate tokens to return the log probabilities for."""
 
-    presence_penalty: Optional[float]
+    presence_penalty: float | None
     """Positive values penalize tokens that already appear in the generated
     text."""
 
-    frequency_penalty: Optional[float]
+    frequency_penalty: float | None
     """Positive values penalize tokens that repeatedly appear in the generated
     text."""
 
-    seed: Optional[int]
+    seed: int | None
     """Random seed for reproducible outputs."""
 
-    response_mime_type: Optional[str]
+    response_mime_type: str | None
     """Output response MIME type of the generated candidate text."""
 
-    response_schema: Optional[Union[Schema, Dict[str, Any]]]
+    response_schema: Schema | dict[str, Any] | None
     """The Schema object for structured output definitions."""
 
-    response_json_schema: Optional[Any]
+    response_json_schema: Any | None
     """Optional. Output schema in JSON Schema format.
     Mutually exclusive with ``response_schema``."""
 
-    response_modalities: Optional[List[str]]
+    response_modalities: list[str] | None
     """The requested modalities of the response."""
 
     # Safety and tools
-    safety_settings: Optional[List[SafetySetting]]
+    safety_settings: list[SafetySetting] | None
     """Safety settings to block unsafe content in the response."""
 
-    tools: Optional[List[Tool]]
+    tools: list[Tool] | None
     """Tools that the model may use to generate a response."""
 
-    tool_config: Optional[Dict[str, Any]]
+    tool_config: dict[str, Any] | None
     """Associates model output to a specific function call."""
 
     # Caching
-    cached_content: Optional[str]
+    cached_content: str | None
     """Resource name of a context cache."""
 
     # Thinking
-    thinking_config: Optional[ThinkingConfig]
+    thinking_config: ThinkingConfig | None
     """The thinking features configuration."""
 
     # Media
-    media_resolution: Optional[str]
+    media_resolution: str | None
     """If specified, the media resolution to use."""
 
-    speech_config: Optional[Union[str, Dict[str, Any]]]
+    speech_config: str | dict[str, Any] | None
     """The speech generation configuration."""
 
-    audio_timestamp: Optional[bool]
+    audio_timestamp: bool | None
     """If enabled, audio timestamp will be included in the request."""
 
 
@@ -308,8 +308,8 @@ class GenerateContentRequest(TypedDict, total=False):
     model: Required[str]
     """Required. Model ID, e.g. 'gemini-2.0-flash'."""
 
-    contents: Required[Union[List[Content], List[Part], str]]
+    contents: Required[list[Content] | list[Part] | str]
     """Required. Input content list."""
 
-    config: Optional[GenerateContentConfig]
+    config: GenerateContentConfig | None
     """Optional. Model configuration parameters."""

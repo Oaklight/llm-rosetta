@@ -19,7 +19,8 @@ Contains various configuration parameters for controlling model generation behav
 - Cache configuration
 """
 
-from typing import Any, Dict, Iterable, Literal, TypedDict
+from typing import Any, Literal, TypedDict
+from collections.abc import Iterable
 
 # ============================================================================
 # 生成控制配置 Generation control configuration
@@ -79,7 +80,7 @@ class GenerationConfig(TypedDict, total=False):
     presence_penalty: float
 
     # Logit偏置 Logit bias (OpenAI)
-    logit_bias: Dict[str, int]
+    logit_bias: dict[str, int]
 
     # 随机种子 Random seed (OpenAI, Google)
     seed: int
@@ -146,7 +147,7 @@ class ResponseFormatConfig(TypedDict, total=False):
     """
 
     type: Literal["text", "json_object", "json_schema"]
-    json_schema: Dict[str, Any]  # 当type为json_schema时使用
+    json_schema: dict[str, Any]  # 当type为json_schema时使用
     mime_type: str  # Google的response_mime_type
 
 

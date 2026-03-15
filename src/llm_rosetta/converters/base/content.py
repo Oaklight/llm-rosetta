@@ -12,7 +12,7 @@ Handles all types of content part conversions:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 from ...types.ir import (
     AudioPart,
@@ -179,7 +179,7 @@ class BaseContentOps(ABC):
     @abstractmethod
     def p_reasoning_to_ir(
         provider_reasoning: Any, **kwargs: Any
-    ) -> Optional[ReasoningPart]:
+    ) -> ReasoningPart | None:
         """Provider Reasoning Content → IR ReasoningPart
         将Provider推理内容转换为IR推理部分
 

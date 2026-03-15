@@ -9,7 +9,7 @@ Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverte
 """
 
 import json
-from typing import Any, Dict, Union, cast
+from typing import Any, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -44,7 +44,7 @@ class OpenAIChatToolOps(BaseToolOps):
             OpenAI Chat tool definition dict.
         """
         if ir_tool.get("type", "function") == "function":
-            func_def: Dict[str, Any] = {
+            func_def: dict[str, Any] = {
                 "name": ir_tool["name"],
                 "description": ir_tool.get("description", ""),
             }
@@ -76,7 +76,7 @@ class OpenAIChatToolOps(BaseToolOps):
             IR ToolDefinition.
         """
         func = provider_tool.get("function", {})
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "type": "function",
             "name": func.get("name", ""),
             "description": func.get("description", ""),
@@ -96,9 +96,7 @@ class OpenAIChatToolOps(BaseToolOps):
     # ==================== Tool Choice ====================
 
     @staticmethod
-    def ir_tool_choice_to_p(
-        ir_tool_choice: ToolChoice, **kwargs: Any
-    ) -> Union[str, dict]:
+    def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> str | dict:
         """IR ToolChoice → OpenAI Chat tool_choice parameter.
 
         Mapping:
@@ -271,7 +269,7 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "disable_parallel" in ir_tool_config:
             result["parallel_tool_calls"] = not ir_tool_config["disable_parallel"]
@@ -292,7 +290,7 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             IR ToolCallConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if isinstance(provider_tool_config, dict):
             parallel = provider_tool_config.get("parallel_tool_calls")

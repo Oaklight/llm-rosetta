@@ -9,7 +9,7 @@ Self-contained: does not depend on utils/FieldMapper.
 """
 
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 from ...types.ir import (
     AudioPart,
@@ -259,7 +259,7 @@ class AnthropicContentOps(BaseContentOps):
     # ==================== Refusal ====================
 
     @staticmethod
-    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> Optional[dict]:
+    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict | None:
         """IR RefusalPart → Anthropic refusal content.
 
         Anthropic does not have a dedicated refusal content type.
@@ -298,7 +298,7 @@ class AnthropicContentOps(BaseContentOps):
     # ==================== Citation ====================
 
     @staticmethod
-    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> Optional[dict]:
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
         """IR CitationPart → Anthropic citation content.
 
         Anthropic citations are part of TextBlock (as ``citations`` field).

@@ -11,7 +11,8 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 """
 
 import sys
-from typing import Iterable, Literal, Optional, TypedDict, Union
+from typing import Literal, TypedDict, Union
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -130,7 +131,7 @@ class ChatCompletionSystemMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["system"]]
-    content: Required[Union[str, Iterable[ChatCompletionContentPartTextParam]]]
+    content: Required[str | Iterable[ChatCompletionContentPartTextParam]]
     name: NotRequired[str]
 
 
@@ -141,7 +142,7 @@ class ChatCompletionDeveloperMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["developer"]]
-    content: Required[Union[str, Iterable[ChatCompletionContentPartTextParam]]]
+    content: Required[str | Iterable[ChatCompletionContentPartTextParam]]
     name: NotRequired[str]
 
 
@@ -152,7 +153,7 @@ class ChatCompletionUserMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["user"]]
-    content: Required[Union[str, Iterable[ChatCompletionContentPartParam]]]
+    content: Required[str | Iterable[ChatCompletionContentPartParam]]
     name: NotRequired[str]
 
 
@@ -163,11 +164,11 @@ class ChatCompletionAssistantMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["assistant"]]
-    content: NotRequired[Union[str, None]]
+    content: NotRequired[str | None]
     name: NotRequired[str]
     tool_calls: NotRequired[Iterable[ChatCompletionMessageToolCallParam]]
     function_call: NotRequired[FunctionCall]  # Deprecated
-    refusal: NotRequired[Optional[str]]
+    refusal: NotRequired[str | None]
 
 
 class ChatCompletionToolMessageParam(TypedDict, total=False):
@@ -177,7 +178,7 @@ class ChatCompletionToolMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["tool"]]
-    content: Required[Union[str, Iterable[ChatCompletionContentPartTextParam]]]
+    content: Required[str | Iterable[ChatCompletionContentPartTextParam]]
     tool_call_id: Required[str]
 
 
@@ -188,7 +189,7 @@ class ChatCompletionFunctionMessageParam(TypedDict, total=False):
     """
 
     role: Required[Literal["function"]]
-    content: Required[Optional[str]]
+    content: Required[str | None]
     name: Required[str]
 
 

@@ -14,7 +14,8 @@ Google-specific:
 """
 
 import warnings
-from typing import Any, Dict, Iterable, List, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -71,9 +72,9 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Union[Message, ExtensionItem]],
+        ir_messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """IR Messages → Google GenAI Content list + system_instruction.
 
         Processes each IR message by role and converts to Google format.
@@ -95,8 +96,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             Tuple of (converted Content list, warnings list).
         """
-        contents: List[Dict[str, Any]] = []
-        warnings_list: List[str] = []
+        contents: list[dict[str, Any]] = []
+        warnings_list: list[str] = []
 
         # Convert ir_messages to list for context lookup
         ir_input_list = (
@@ -128,7 +129,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def _ir_message_to_p(
         self, message: Message, ir_input: Any = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Convert a single IR message to Google Content format.
 
         Args:
@@ -139,7 +140,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             Google Content dict with role and parts.
         """
         google_role = _IR_TO_GOOGLE_ROLE.get(message["role"], "user")
-        parts: List[Dict[str, Any]] = []
+        parts: list[dict[str, Any]] = []
 
         for content_part in message.get("content", []):
             part = self._ir_content_part_to_p(content_part, ir_input)
@@ -188,9 +189,9 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def p_messages_to_ir(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Google GenAI Content list → IR Messages.
 
         Converts each Google Content to the appropriate IR message type.
@@ -201,7 +202,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: List[Union[Message, ExtensionItem]] = []
+        ir_messages: list[Message | ExtensionItem] = []
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
@@ -230,7 +231,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         if not isinstance(parts, list):
             parts = [parts]
 
-        content_parts: List[ContentPart] = []
+        content_parts: list[ContentPart] = []
         for part in parts:
             # Handle reasoning (thoughts)
             if part.get("thought") is True:
@@ -272,8 +273,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     @staticmethod
     def extract_system_instruction(
-        ir_messages: Iterable[Union[Message, ExtensionItem]],
-    ) -> Tuple[Any, List[Union[Message, ExtensionItem]]]:
+        ir_messages: Iterable[Message | ExtensionItem],
+    ) -> tuple[Any, list[Message | ExtensionItem]]:
         """Extract system messages from IR message list.
 
         Returns the system_instruction Content dict and the remaining
@@ -285,12 +286,12 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             Tuple of (system_instruction Content dict or None, remaining messages).
         """
-        system_instruction: Dict[str, Any] | None = None
-        remaining: List[Union[Message, ExtensionItem]] = []
+        system_instruction: dict[str, Any] | None = None
+        remaining: list[Message | ExtensionItem] = []
 
         for item in ir_messages:
             if is_message(item) and item.get("role") == "system":
-                parts: List[Dict[str, str]] = []
+                parts: list[dict[str, str]] = []
                 for part in cast(Iterable[ContentPart], item.get("content", [])):
                     if is_text_part(part):
                         parts.append({"text": part["text"]})

@@ -11,7 +11,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 """
 
 import sys
-from typing import List, Literal, Optional, TypedDict, Union
+from typing import Literal, TypedDict, Union
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -30,8 +30,8 @@ class PromptTokensDetails(TypedDict, total=False):
     Reference: openai.types.CompletionUsage.PromptTokensDetails
     """
 
-    cached_tokens: NotRequired[Optional[int]]
-    audio_tokens: NotRequired[Optional[int]]
+    cached_tokens: NotRequired[int | None]
+    audio_tokens: NotRequired[int | None]
 
 
 class CompletionTokensDetails(TypedDict, total=False):
@@ -40,10 +40,10 @@ class CompletionTokensDetails(TypedDict, total=False):
     Reference: openai.types.CompletionUsage.CompletionTokensDetails
     """
 
-    reasoning_tokens: NotRequired[Optional[int]]
-    audio_tokens: NotRequired[Optional[int]]
-    accepted_prediction_tokens: NotRequired[Optional[int]]
-    rejected_prediction_tokens: NotRequired[Optional[int]]
+    reasoning_tokens: NotRequired[int | None]
+    audio_tokens: NotRequired[int | None]
+    accepted_prediction_tokens: NotRequired[int | None]
+    rejected_prediction_tokens: NotRequired[int | None]
 
 
 class CompletionUsage(TypedDict, total=False):
@@ -55,8 +55,8 @@ class CompletionUsage(TypedDict, total=False):
     prompt_tokens: Required[int]
     completion_tokens: Required[int]
     total_tokens: Required[int]
-    prompt_tokens_details: NotRequired[Optional[PromptTokensDetails]]
-    completion_tokens_details: NotRequired[Optional[CompletionTokensDetails]]
+    prompt_tokens_details: NotRequired[PromptTokensDetails | None]
+    completion_tokens_details: NotRequired[CompletionTokensDetails | None]
 
 
 # ============================================================================
@@ -158,12 +158,12 @@ class ChatCompletionMessage(TypedDict, total=False):
     """
 
     role: Required[Literal["assistant"]]
-    content: NotRequired[Optional[str]]
-    refusal: NotRequired[Optional[str]]
-    tool_calls: NotRequired[Optional[List[ChatCompletionMessageToolCallUnion]]]
-    function_call: NotRequired[Optional["FunctionCallResponse"]]  # Deprecated
-    annotations: NotRequired[Optional[List[Annotation]]]
-    audio: NotRequired[Optional[ChatCompletionAudio]]
+    content: NotRequired[str | None]
+    refusal: NotRequired[str | None]
+    tool_calls: NotRequired[list[ChatCompletionMessageToolCallUnion] | None]
+    function_call: NotRequired["FunctionCallResponse | None"]  # Deprecated
+    annotations: NotRequired[list[Annotation] | None]
+    audio: NotRequired[ChatCompletionAudio | None]
 
 
 class FunctionCallResponse(TypedDict):
@@ -189,7 +189,7 @@ class TopLogprob(TypedDict):
 
     token: str
     logprob: float
-    bytes: Optional[List[int]]
+    bytes: list[int] | None
 
 
 class ChatCompletionTokenLogprob(TypedDict):
@@ -200,8 +200,8 @@ class ChatCompletionTokenLogprob(TypedDict):
 
     token: str
     logprob: float
-    bytes: Optional[List[int]]
-    top_logprobs: List[TopLogprob]
+    bytes: list[int] | None
+    top_logprobs: list[TopLogprob]
 
 
 class ChoiceLogprobs(TypedDict):
@@ -210,8 +210,8 @@ class ChoiceLogprobs(TypedDict):
     Reference: openai.types.chat.ChatCompletion.Choice.Logprobs
     """
 
-    content: Optional[List[ChatCompletionTokenLogprob]]
-    refusal: Optional[List[ChatCompletionTokenLogprob]]
+    content: list[ChatCompletionTokenLogprob] | None
+    refusal: list[ChatCompletionTokenLogprob] | None
 
 
 # ============================================================================
@@ -230,7 +230,7 @@ class Choice(TypedDict, total=False):
     finish_reason: Required[
         Literal["stop", "length", "tool_calls", "content_filter", "function_call"]
     ]
-    logprobs: NotRequired[Optional[ChoiceLogprobs]]
+    logprobs: NotRequired[ChoiceLogprobs | None]
 
 
 # ============================================================================
@@ -250,9 +250,9 @@ class ChatCompletion(TypedDict, total=False):
     object: Required[Literal["chat.completion"]]
     created: Required[int]
     model: Required[str]
-    choices: Required[List[Choice]]
-    usage: NotRequired[Optional[CompletionUsage]]
+    choices: Required[list[Choice]]
+    usage: NotRequired[CompletionUsage | None]
     service_tier: NotRequired[
-        Optional[Literal["auto", "default", "flex", "scale", "priority"]]
+        Literal["auto", "default", "flex", "scale", "priority"] | None
     ]
-    system_fingerprint: NotRequired[Optional[str]]
+    system_fingerprint: NotRequired[str | None]

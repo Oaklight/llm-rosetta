@@ -17,7 +17,8 @@ Note: This layer will call methods from content.py and tools.py to handle messag
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
@@ -36,8 +37,8 @@ class BaseMessageOps(ABC):
     @staticmethod
     @abstractmethod
     def ir_messages_to_p(
-        ir_messages: Iterable[Union[Message, ExtensionItem]], **kwargs: Any
-    ) -> Tuple[List[Any], List[str]]:
+        ir_messages: Iterable[Message | ExtensionItem], **kwargs: Any
+    ) -> tuple[list[Any], list[str]]:
         """IR Messages → Provider Messages
         将IR消息列表转换为Provider消息列表
 
@@ -65,8 +66,8 @@ class BaseMessageOps(ABC):
     @staticmethod
     @abstractmethod
     def p_messages_to_ir(
-        provider_messages: List[Any], **kwargs: Any
-    ) -> List[Union[Message, ExtensionItem]]:
+        provider_messages: list[Any], **kwargs: Any
+    ) -> list[Message | ExtensionItem]:
         """Provider Messages → IR Messages
         将Provider消息列表转换为IR消息列表
 
@@ -94,8 +95,8 @@ class BaseMessageOps(ABC):
     # ==================== 单个消息转换（可选的便利方法） Single message conversion (optional convenience methods) ====================
 
     def ir_message_to_p(
-        self, ir_message: Union[Message, ExtensionItem], **kwargs: Any
-    ) -> Tuple[Any, List[str]]:
+        self, ir_message: Message | ExtensionItem, **kwargs: Any
+    ) -> tuple[Any, list[str]]:
         """IR Message → Provider Message（便利方法）
         将单个IR消息转换为Provider消息（便利方法）
 
@@ -117,7 +118,7 @@ class BaseMessageOps(ABC):
 
     def p_message_to_ir(
         self, provider_message: Any, **kwargs: Any
-    ) -> Optional[Union[Message, ExtensionItem]]:
+    ) -> Message | ExtensionItem | None:
         """Provider Message → IR Message（便利方法）
         将Provider消息转换为IR消息（便利方法）
 
@@ -140,8 +141,8 @@ class BaseMessageOps(ABC):
     # ==================== 辅助方法（子类可选实现） Helper methods (optional for subclasses) ====================
 
     def validate_messages(
-        self, messages: Iterable[Union[Message, ExtensionItem]]
-    ) -> List[str]:
+        self, messages: Iterable[Message | ExtensionItem]
+    ) -> list[str]:
         """验证消息列表的有效性（可选实现）
         Validate message list validity (optional implementation)
 

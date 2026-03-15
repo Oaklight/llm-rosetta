@@ -7,7 +7,7 @@ Handles bidirectional conversion of text, image, and other content parts.
 
 import re
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 from ...types.ir import (
     AudioPart,
@@ -175,7 +175,7 @@ class OpenAIChatContentOps(BaseContentOps):
     # ==================== Reasoning ====================
 
     @staticmethod
-    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> Optional[dict]:
+    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict | None:
         """IR ReasoningPart → OpenAI reasoning content.
 
         OpenAI Chat Completions does not support reasoning content in requests.
@@ -238,7 +238,7 @@ class OpenAIChatContentOps(BaseContentOps):
     # ==================== Citation ====================
 
     @staticmethod
-    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> Optional[dict]:
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
         """IR CitationPart → OpenAI annotation.
 
         Maps URL citations to OpenAI annotation format.

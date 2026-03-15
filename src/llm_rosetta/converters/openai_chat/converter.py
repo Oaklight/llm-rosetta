@@ -6,7 +6,8 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
@@ -73,7 +74,7 @@ class OpenAIChatConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to OpenAI Chat Completions request parameters.
 
         Orchestrates all Ops classes to build the complete provider request.
@@ -84,11 +85,11 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings: List[str] = []
-        result: Dict[str, Any] = {"model": ir_request["model"]}
+        warnings: list[str] = []
+        result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → system message
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
         system_instruction = ir_request.get("system_instruction")
         if system_instruction:
             if isinstance(system_instruction, str):
@@ -166,7 +167,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def request_from_provider(
         self,
-        provider_request: Dict[str, Any],
+        provider_request: dict[str, Any],
         **kwargs: Any,
     ) -> IRRequest:
         """Convert OpenAI Chat Completions request to IRRequest.
@@ -179,14 +180,14 @@ class OpenAIChatConverter(BaseConverter):
         """
         provider_request = self._normalize(provider_request)
 
-        ir_request: Dict[str, Any] = {
+        ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
         }
 
         # 1. Messages - separate system messages as system_instruction
         messages = provider_request.get("messages", [])
-        ir_messages: List[Dict[str, Any]] = []
+        ir_messages: list[dict[str, Any]] = []
 
         for msg in messages:
             if isinstance(msg, dict) and msg.get("role") == "system":
@@ -267,7 +268,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def response_from_provider(
         self,
-        provider_response: Dict[str, Any],
+        provider_response: dict[str, Any],
         **kwargs: Any,
     ) -> IRResponse:
         """Convert OpenAI Chat Completions response to IRResponse.
@@ -295,7 +296,7 @@ class OpenAIChatConverter(BaseConverter):
                 "function_call": "tool_calls",
             }
 
-            choice_info: Dict[str, Any] = {
+            choice_info: dict[str, Any] = {
                 "index": p_choice.get("index", 0),
                 "message": message,
                 "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
@@ -306,7 +307,7 @@ class OpenAIChatConverter(BaseConverter):
 
             choices.append(choice_info)
 
-        ir_response: Dict[str, Any] = {
+        ir_response: dict[str, Any] = {
             "id": provider_response.get("id", ""),
             "object": "response",
             "created": provider_response.get("created", 0),
@@ -317,7 +318,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            usage_info: Dict[str, Any] = {
+            usage_info: dict[str, Any] = {
                 "prompt_tokens": p_usage.get("prompt_tokens", 0),
                 "completion_tokens": p_usage.get("completion_tokens", 0),
                 "total_tokens": p_usage.get("total_tokens", 0),
@@ -351,7 +352,7 @@ class OpenAIChatConverter(BaseConverter):
         self,
         ir_response: IRResponse,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Convert IRResponse to OpenAI Chat Completions response.
 
         Args:
@@ -360,7 +361,7 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             OpenAI response dict.
         """
-        provider_response: Dict[str, Any] = {
+        provider_response: dict[str, Any] = {
             "id": ir_response.get("id", ""),
             "object": "chat.completion",
             "created": ir_response.get("created", 0),
@@ -373,11 +374,11 @@ class OpenAIChatConverter(BaseConverter):
             if not message:
                 continue
 
-            openai_message: Dict[str, Any] = {"role": message.get("role", "assistant")}
+            openai_message: dict[str, Any] = {"role": message.get("role", "assistant")}
 
             content_parts = message.get("content", [])
-            text_parts: List[str] = []
-            tool_calls: List[Dict[str, Any]] = []
+            text_parts: list[str] = []
+            tool_calls: list[dict[str, Any]] = []
 
             for part in content_parts:
                 if is_text_part(part):
@@ -395,7 +396,7 @@ class OpenAIChatConverter(BaseConverter):
                 if not text_parts:
                     openai_message["content"] = None
 
-            openai_choice: Dict[str, Any] = {
+            openai_choice: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "message": openai_message,
                 "finish_reason": choice.get("finish_reason", {}).get("reason", "stop"),
@@ -409,7 +410,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: Dict[str, Any] = {
+            usage: dict[str, Any] = {
                 "prompt_tokens": ir_usage.get("prompt_tokens", 0),
                 "completion_tokens": ir_usage.get("completion_tokens", 0),
                 "total_tokens": ir_usage.get("total_tokens", 0),
@@ -449,9 +450,9 @@ class OpenAIChatConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Union[Message, ExtensionItem]],
+        messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to OpenAI Chat message format.
 
         Delegates to message_ops.
@@ -466,9 +467,9 @@ class OpenAIChatConverter(BaseConverter):
 
     def messages_from_provider(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Convert OpenAI Chat messages to IR message list.
 
         Delegates to message_ops.
@@ -485,9 +486,9 @@ class OpenAIChatConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         """Convert an OpenAI SSE chunk to IR stream events.
 
         A single chunk may produce multiple events (e.g., text delta + finish).
@@ -505,7 +506,7 @@ class OpenAIChatConverter(BaseConverter):
             List of IR stream events extracted from the chunk.
         """
         chunk = self._normalize(chunk)
-        events: List[IRStreamEvent] = []
+        events: list[IRStreamEvent] = []
 
         # --- StreamStartEvent (only with context, on first chunk) ---
         if context is not None and not context.is_started:
@@ -633,8 +634,8 @@ class OpenAIChatConverter(BaseConverter):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to an OpenAI SSE chunk.
 
         When a ``context`` is provided and the stream has been started,
@@ -648,7 +649,7 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             OpenAI SSE chunk dict, or a list of chunk dicts.
         """
-        result: Union[Dict[str, Any], List[Dict[str, Any]]] = {}
+        result: dict[str, Any] | list[dict[str, Any]] = {}
 
         if is_stream_start_event(event):
             # Store metadata in context if provided
@@ -714,7 +715,7 @@ class OpenAIChatConverter(BaseConverter):
 
         elif is_tool_call_start_event(event):
             choice_index = event.get("choice_index", 0)
-            tc_entry: Dict[str, Any] = {
+            tc_entry: dict[str, Any] = {
                 "id": event["tool_call_id"],
                 "type": "function",
                 "function": {
@@ -736,7 +737,7 @@ class OpenAIChatConverter(BaseConverter):
 
         elif is_tool_call_delta_event(event):
             choice_index = event.get("choice_index", 0)
-            tc_delta_entry: Dict[str, Any] = {
+            tc_delta_entry: dict[str, Any] = {
                 "function": {
                     "arguments": event["arguments_delta"],
                 },

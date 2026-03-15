@@ -16,7 +16,7 @@ Google-specific:
 
 import uuid
 import warnings
-from typing import Any, Dict, Optional, cast
+from typing import Any, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -50,7 +50,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         Returns:
             Google Tool dict with function_declarations.
         """
-        func_decl: Dict[str, Any] = {
+        func_decl: dict[str, Any] = {
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
         }
@@ -81,7 +81,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             func = provider_tool
 
         parameters = func.get("parameters", {})
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "type": "function",
             "name": func.get("name", ""),
             "description": func.get("description", ""),
@@ -100,9 +100,7 @@ class GoogleGenAIToolOps(BaseToolOps):
     # ==================== Tool Choice ====================
 
     @staticmethod
-    def ir_tool_choice_to_p(
-        ir_tool_choice: ToolChoice, **kwargs: Any
-    ) -> Optional[dict]:
+    def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> dict | None:
         """IR ToolChoice → Google GenAI ToolConfig/FunctionCallingConfig.
 
         Mapping:
@@ -126,7 +124,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         elif mode == "any":
             return {"function_calling_config": {"mode": "ANY"}}
         elif mode == "tool":
-            config: Dict[str, Any] = {"function_calling_config": {"mode": "ANY"}}
+            config: dict[str, Any] = {"function_calling_config": {"mode": "ANY"}}
             tool_name = ir_tool_choice.get("tool_name")
             if tool_name:
                 cast(dict, config["function_calling_config"])[
@@ -184,7 +182,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         tool_name = ir_tool_call.get("tool_name", ir_tool_call.get("name", ""))
         tool_input = ir_tool_call.get("tool_input", ir_tool_call.get("arguments", {}))
 
-        part: Dict[str, Any] = {
+        part: dict[str, Any] = {
             "function_call": {
                 "name": tool_name,
                 "args": tool_input,
@@ -224,7 +222,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         if not tool_call_id:
             tool_call_id = f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
 
-        tool_call_kwargs: Dict[str, Any] = {
+        tool_call_kwargs: dict[str, Any] = {
             "type": "tool_call",
             "tool_call_id": tool_call_id,
             "tool_name": func_call["name"],
@@ -271,7 +269,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             or ""
         )
 
-        response_data: Dict[str, Any] = {"output": result_content}
+        response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):
             response_data = {"error": result_content}
 
@@ -330,7 +328,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             or ""
         )
 
-        response_data: Dict[str, Any] = {"output": result_content}
+        response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):
             response_data = {"error": result_content}
 

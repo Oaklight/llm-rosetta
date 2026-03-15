@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, Tuple
+from typing import Any
 
 from llm_rosetta.auto_detect import ProviderType
 
@@ -47,7 +47,7 @@ def _substitute_env_vars(text: str) -> str:
     return _ENV_VAR_RE.sub(_replace, text)
 
 
-def load_config(path: str) -> Dict[str, Any]:
+def load_config(path: str) -> dict[str, Any]:
     """Load and parse a JSONC config file with env-var substitution."""
     with open(path) as f:
         raw = f.read()
@@ -64,9 +64,9 @@ def load_config(path: str) -> Dict[str, Any]:
 class GatewayConfig:
     """Parsed and validated gateway configuration."""
 
-    def __init__(self, raw: Dict[str, Any]) -> None:
-        self.providers: Dict[str, Dict[str, str]] = raw.get("providers", {})
-        self.models: Dict[str, ProviderType] = raw.get("models", {})
+    def __init__(self, raw: dict[str, Any]) -> None:
+        self.providers: dict[str, dict[str, str]] = raw.get("providers", {})
+        self.models: dict[str, ProviderType] = raw.get("models", {})
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
         self._validate()
@@ -82,7 +82,7 @@ class GatewayConfig:
                     f"config: model '{model}' references unknown provider '{provider}'"
                 )
 
-    def resolve_model(self, model: str) -> Tuple[ProviderType, Dict[str, str]]:
+    def resolve_model(self, model: str) -> tuple[ProviderType, dict[str, str]]:
         """Return (provider_type, provider_config) for a model name.
 
         Raises KeyError if the model is not in the routing table.

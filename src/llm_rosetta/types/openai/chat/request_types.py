@@ -13,14 +13,11 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 import sys
 from typing import (
     TYPE_CHECKING,
-    Dict,
-    Iterable,
-    List,
     Literal,
-    Optional,
     TypedDict,
     Union,
 )
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -98,7 +95,7 @@ class FunctionDefinition(TypedDict, total=False):
     name: Required[str]
     description: NotRequired[str]
     parameters: NotRequired[FunctionParameters]
-    strict: NotRequired[Optional[bool]]
+    strict: NotRequired[bool | None]
 
 
 class ChatCompletionFunctionToolParam(TypedDict, total=False):
@@ -159,8 +156,8 @@ class ResponseFormatJSONSchemaSchema(TypedDict, total=False):
 
     name: Required[str]
     description: NotRequired[str]
-    schema: NotRequired[Dict[str, object]]
-    strict: NotRequired[Optional[bool]]
+    schema: NotRequired[dict[str, object]]
+    strict: NotRequired[bool | None]
 
 
 class ResponseFormatJSONSchema(TypedDict):
@@ -193,7 +190,7 @@ class ChatCompletionStreamOptionsParam(TypedDict, total=False):
 # Metadata Types
 # ============================================================================
 
-Metadata = Dict[str, str]  # Up to 16 key-value pairs
+Metadata = dict[str, str]  # Up to 16 key-value pairs
 
 
 # ============================================================================
@@ -211,7 +208,7 @@ class CompletionCreateParams(TypedDict, total=False):
 
     # Required parameters
     messages: Required[Iterable["ChatCompletionMessageParam"]]
-    model: Required[Union[str, ChatModel]]
+    model: Required[str | ChatModel]
 
     # Tool related parameters
     tools: NotRequired[Iterable[ChatCompletionFunctionToolParam]]
@@ -219,32 +216,32 @@ class CompletionCreateParams(TypedDict, total=False):
     parallel_tool_calls: NotRequired[bool]
 
     # Generation control parameters
-    temperature: NotRequired[Optional[float]]
-    top_p: NotRequired[Optional[float]]
-    max_completion_tokens: NotRequired[Optional[int]]
-    max_tokens: NotRequired[Optional[int]]  # Deprecated, use max_completion_tokens
-    n: NotRequired[Optional[int]]
-    frequency_penalty: NotRequired[Optional[float]]
-    presence_penalty: NotRequired[Optional[float]]
-    logit_bias: NotRequired[Optional[Dict[str, int]]]
-    seed: NotRequired[Optional[int]]
-    top_logprobs: NotRequired[Optional[int]]
-    logprobs: NotRequired[Optional[bool]]
+    temperature: NotRequired[float | None]
+    top_p: NotRequired[float | None]
+    max_completion_tokens: NotRequired[int | None]
+    max_tokens: NotRequired[int | None]  # Deprecated, use max_completion_tokens
+    n: NotRequired[int | None]
+    frequency_penalty: NotRequired[float | None]
+    presence_penalty: NotRequired[float | None]
+    logit_bias: NotRequired[dict[str, int] | None]
+    seed: NotRequired[int | None]
+    top_logprobs: NotRequired[int | None]
+    logprobs: NotRequired[bool | None]
 
     # Control parameters
-    stop: NotRequired[Union[Optional[str], List[str], None]]
-    stream: NotRequired[Optional[Literal[False]]]
-    stream_options: NotRequired[Optional[ChatCompletionStreamOptionsParam]]
+    stop: NotRequired[str | None | list[str] | None]
+    stream: NotRequired[Literal[False] | None]
+    stream_options: NotRequired[ChatCompletionStreamOptionsParam | None]
     response_format: NotRequired[ResponseFormat]
     user: NotRequired[str]
-    metadata: NotRequired[Optional[Metadata]]
+    metadata: NotRequired[Metadata | None]
 
     # Reasoning parameters
-    reasoning_effort: NotRequired[Optional[ReasoningEffort]]
+    reasoning_effort: NotRequired[ReasoningEffort | None]
 
     # Service tier (optional, for request routing)
     service_tier: NotRequired[
-        Optional[Literal["auto", "default", "flex", "scale", "priority"]]
+        Literal["auto", "default", "flex", "scale", "priority"] | None
     ]
 
 

@@ -12,7 +12,8 @@ Output items include messages, function_call, reasoning, etc.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -52,9 +53,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Union[Message, ExtensionItem]],
+        ir_messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Responses input items.
 
         Converts IR messages to a flat list of Responses API items.
@@ -67,8 +68,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         Returns:
             Tuple of (converted items list, warnings list).
         """
-        items: List[Dict[str, Any]] = []
-        warnings: List[str] = []
+        items: list[dict[str, Any]] = []
+        warnings: list[str] = []
 
         for item in ir_messages:
             if is_message(item):
@@ -80,13 +81,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     items.append(converted)
             elif is_extension_item(item):
                 ext_warnings = self._handle_extension_item(
-                    cast(Dict[str, Any], item), items
+                    cast(dict[str, Any], item), items
                 )
                 warnings.extend(ext_warnings)
 
         return items, warnings
 
-    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
         """Convert a single IR message to Responses API items.
 
         Args:
@@ -97,7 +98,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         """
         role = message.get("role")
         content = message.get("content", [])
-        warnings: List[str] = []
+        warnings: list[str] = []
 
         if role in ("system", "user", "developer"):
             return self._ir_input_message_to_p(role, content, warnings)
@@ -109,15 +110,15 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return [], warnings
 
     def _ir_input_message_to_p(
-        self, role: str, content: Iterable, warnings: List[str]
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        self, role: str, content: Iterable, warnings: list[str]
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR system/user/developer message to Responses API items.
 
         Content parts are converted to input_text/input_image/input_file.
         Tool calls and tool results are extracted as separate items.
         """
-        content_parts: List[Dict[str, Any]] = []
-        extra_items: List[Dict[str, Any]] = []
+        content_parts: list[dict[str, Any]] = []
+        extra_items: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
@@ -142,7 +143,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     f"Unsupported content part type in {role} message: {part.get('type')}"
                 )
 
-        result_items: List[Dict[str, Any]] = []
+        result_items: list[dict[str, Any]] = []
 
         # Add message item if there are content parts
         if content_parts:
@@ -160,17 +161,17 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_assistant_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
         Text parts become output_text in a message item.
         Tool calls become separate function_call items.
         Reasoning parts become separate reasoning items.
         """
-        content_parts: List[Dict[str, Any]] = []
-        tool_items: List[Dict[str, Any]] = []
-        reasoning_items: List[Dict[str, Any]] = []
+        content_parts: list[dict[str, Any]] = []
+        tool_items: list[dict[str, Any]] = []
+        reasoning_items: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
@@ -191,7 +192,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     f"{part.get('type')}"
                 )
 
-        result_items: List[Dict[str, Any]] = []
+        result_items: list[dict[str, Any]] = []
 
         # Add reasoning items first (they come before the message)
         result_items.extend(reasoning_items)
@@ -212,13 +213,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[List[Dict[str, Any]], List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR tool message content to Responses API function_call_output items.
 
         Each ToolResultPart becomes a separate function_call_output item.
         """
-        tool_result_items: List[Dict[str, Any]] = []
+        tool_result_items: list[dict[str, Any]] = []
 
         for part in content:
             if is_tool_result_part(part):
@@ -227,13 +228,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return tool_result_items, warnings
 
     def _handle_extension_item(
-        self, item: Dict[str, Any], items: List[Dict[str, Any]]
-    ) -> List[str]:
+        self, item: dict[str, Any], items: list[dict[str, Any]]
+    ) -> list[str]:
         """Handle extension items during IR → Provider conversion.
 
         Returns list of warnings.
         """
-        warnings: List[str] = []
+        warnings: list[str] = []
         extension_type = item.get("type")
 
         if extension_type == "system_event":
@@ -259,9 +260,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     def p_messages_to_ir(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """OpenAI Responses items → IR Messages.
 
         Converts a flat list of Responses API items to IR messages.
@@ -273,8 +274,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_input: List[Any] = []
-        current_message: Dict[str, Any] | None = None
+        ir_input: list[Any] = []
+        current_message: dict[str, Any] | None = None
 
         for item in provider_messages:
             item_type = item.get("type") if isinstance(item, dict) else None
@@ -360,7 +361,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         role = provider_message.get("role")
         content = provider_message.get("content")
 
-        ir_content: List[ContentPart] = []
+        ir_content: list[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -374,7 +375,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         # may need to be appended
         return {"role": role, "content": ir_content}
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Responses API content part to IR content part(s).
 
         Args:

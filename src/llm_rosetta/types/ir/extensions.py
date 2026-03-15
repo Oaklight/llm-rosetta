@@ -6,7 +6,8 @@ IR extension type definitions for special scenario extensions
 """
 
 import sys
-from typing import Any, Dict, Iterable, Literal, Type, TypedDict, TypeGuard, Union
+from typing import Any, Literal, TypedDict, TypeGuard, Union
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -43,7 +44,7 @@ class SystemEvent(TypedDict):
         ]
     ]
     timestamp: Required[str]  # ISO 8601格式 ISO 8601 format
-    event_data: NotRequired[Dict[str, Any]]
+    event_data: NotRequired[dict[str, Any]]
     message: NotRequired[str]
 
 
@@ -62,7 +63,7 @@ class BatchMarker(TypedDict):
     batch_type: Required[Literal["start", "end", "partial"]]
     total_items: NotRequired[int]
     completed_items: NotRequired[int]
-    metadata: NotRequired[Dict[str, Any]]
+    metadata: NotRequired[dict[str, Any]]
 
 
 class SessionControl(TypedDict):
@@ -87,7 +88,7 @@ class SessionControl(TypedDict):
     ]
     target_id: Required[str]  # 目标tool_call_id Target tool_call_id
     reason: NotRequired[str]
-    new_input: NotRequired[Dict[str, Any]]  # 用于modify_tool Used for modify_tool
+    new_input: NotRequired[dict[str, Any]]  # 用于modify_tool Used for modify_tool
 
 
 class ToolChainNode(TypedDict):
@@ -105,7 +106,7 @@ class ToolChainNode(TypedDict):
 
     type: Required[Literal["tool_chain_node"]]
     node_id: Required[str]
-    tool_call: Required[Dict[str, Any]]  # ToolCallPart
+    tool_call: Required[dict[str, Any]]  # ToolCallPart
     depends_on: NotRequired[
         Iterable[str]
     ]  # 依赖的节点ID列表 List of dependent node IDs
@@ -126,7 +127,7 @@ ExtensionItem = Union[
 # ============================================================================
 
 # 扩展项类型映射表 Extension item type mapping table
-EXTENSION_TYPE_MAP: Dict[str, Type[ExtensionItem]] = {
+EXTENSION_TYPE_MAP: dict[str, type[ExtensionItem]] = {
     "system_event": SystemEvent,
     "batch_marker": BatchMarker,
     "session_control": SessionControl,
@@ -135,7 +136,7 @@ EXTENSION_TYPE_MAP: Dict[str, Type[ExtensionItem]] = {
 
 
 def is_extension_type(
-    item: Any, extension_class: Type[ExtensionItem]
+    item: Any, extension_class: type[ExtensionItem]
 ) -> TypeGuard[ExtensionItem]:
     """
     通用的扩展项类型检查函数，类似isinstance但针对TypedDict优化
@@ -218,7 +219,7 @@ def is_extension_item(item: Any) -> TypeGuard[ExtensionItem]:
     return is_extension_type(item, extension_class)
 
 
-def get_extension_type(item: Any) -> Union[Type[ExtensionItem], None]:
+def get_extension_type(item: Any) -> type[ExtensionItem] | None:
     """
     获取扩展项的具体类型
     Get the specific type of extension item
@@ -247,7 +248,7 @@ def get_extension_type(item: Any) -> Union[Type[ExtensionItem], None]:
     return None
 
 
-def isinstance_extension(item: Any, *extension_types: Type[ExtensionItem]) -> bool:
+def isinstance_extension(item: Any, *extension_types: type[ExtensionItem]) -> bool:
     """
     类似isinstance的函数，支持多个扩展项类型检查
     isinstance-like function supporting multiple extension type checking

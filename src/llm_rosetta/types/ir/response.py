@@ -6,7 +6,7 @@ IR response type definitions including response statistics
 """
 
 import sys
-from typing import Any, Dict, List, Literal, TypedDict
+from typing import Any, Literal, TypedDict
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -39,10 +39,10 @@ class UsageInfo(TypedDict):
 
     # 详细统计（可选） Detailed statistics (optional)
     prompt_tokens_details: NotRequired[
-        Dict[str, int]
+        dict[str, int]
     ]  # 输入详细统计 Input details (如缓存Token数 e.g. cached token count)
     completion_tokens_details: NotRequired[
-        Dict[str, int]
+        dict[str, int]
     ]  # 输出详细统计 Output details (如推理Token数 e.g. reasoning token count)
     cache_read_tokens: NotRequired[int]  # 缓存读取Token数 Cache read token count
 
@@ -83,7 +83,7 @@ class ChoiceInfo(TypedDict):
     index: Required[int]  # 选择索引 Choice index
     message: Required[Message]  # 生成的消息 Generated message
     finish_reason: Required[FinishReason]  # 停止原因 Stop reason
-    logprobs: NotRequired[Dict[str, Any]]  # Log概率信息 Log probability information
+    logprobs: NotRequired[dict[str, Any]]  # Log概率信息 Log probability information
 
 
 # ============================================================================
@@ -107,7 +107,7 @@ class IRResponse(TypedDict):
         int
     ]  # 创建时间戳（Unix时间戳） Creation timestamp (Unix timestamp)
     model: Required[str]  # 使用的模型 Used model
-    choices: Required[List[ChoiceInfo]]  # 选择结果列表 Choice result list
+    choices: Required[list[ChoiceInfo]]  # 选择结果列表 Choice result list
 
     # 可选字段 Optional fields
     usage: NotRequired[UsageInfo]  # Token使用统计 Token usage statistics

@@ -8,7 +8,7 @@ choice strategies, and call configurations.
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -47,7 +47,7 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             Anthropic tool definition dict.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
             "input_schema": ir_tool.get("parameters", {}),
@@ -67,7 +67,7 @@ class AnthropicToolOps(BaseToolOps):
             IR ToolDefinition.
         """
         parameters = provider_tool.get("input_schema", {})
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "type": "function",
             "name": provider_tool.get("name", ""),
             "description": provider_tool.get("description", ""),
@@ -88,7 +88,7 @@ class AnthropicToolOps(BaseToolOps):
     @staticmethod
     def ir_tool_choice_to_p(
         ir_tool_choice: ToolChoice, **kwargs: Any
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """IR ToolChoice → Anthropic tool_choice parameter.
 
         Mapping:
@@ -104,7 +104,7 @@ class AnthropicToolOps(BaseToolOps):
             Anthropic tool_choice dict.
         """
         mode = ir_tool_choice.get("mode", "auto")
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if mode == "none":
             result["type"] = "none"
@@ -221,7 +221,7 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             Anthropic tool_result content block dict.
         """
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "type": "tool_result",
             "tool_use_id": ir_tool_result["tool_call_id"],
             "content": ir_tool_result.get("result", ""),
@@ -268,7 +268,7 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             Dict of fields to merge into tool_choice.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "disable_parallel" in ir_tool_config:
             result["disable_parallel_tool_use"] = ir_tool_config["disable_parallel"]
@@ -288,7 +288,7 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             IR ToolCallConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if isinstance(provider_tool_config, dict):
             disable_parallel = provider_tool_config.get("disable_parallel_tool_use")

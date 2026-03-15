@@ -6,7 +6,8 @@ IR message type definitions with independent role TypedDicts
 """
 
 import sys
-from typing import Any, Dict, Iterable, Literal, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -44,7 +45,7 @@ class MessageMetadata(TypedDict, total=False):
     message_id: str
     timestamp: str
     streaming: StreamingMetadata
-    custom: Dict[str, Any]
+    custom: dict[str, Any]
 
 
 # ============================================================================

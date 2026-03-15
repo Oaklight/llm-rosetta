@@ -6,7 +6,8 @@ IR tool-related type definitions
 """
 
 import sys
-from typing import Any, Dict, Iterable, Literal, TypedDict
+from typing import Any, Literal, TypedDict
+from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired
@@ -39,9 +40,9 @@ class ToolDefinition(TypedDict):
     ]
     name: str
     description: str
-    parameters: Dict[str, Any]  # JSON Schema
+    parameters: dict[str, Any]  # JSON Schema
     required_parameters: NotRequired[Iterable[str]]
-    metadata: NotRequired[Dict[str, Any]]
+    metadata: NotRequired[dict[str, Any]]
 
 
 # ============================================================================

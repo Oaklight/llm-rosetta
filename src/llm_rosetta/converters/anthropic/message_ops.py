@@ -12,7 +12,8 @@ Key Anthropic differences:
 - All content is block-based (no string shorthand in structured mode)
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -55,9 +56,9 @@ class AnthropicMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Union[Message, ExtensionItem]],
+        ir_messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """IR Messages → Anthropic messages.
 
         Processes each IR message by role and converts to Anthropic format.
@@ -69,8 +70,8 @@ class AnthropicMessageOps(BaseMessageOps):
         Returns:
             Tuple of (converted messages list, warnings list).
         """
-        messages: List[Dict[str, Any]] = []
-        warnings: List[str] = []
+        messages: list[dict[str, Any]] = []
+        warnings: list[str] = []
 
         for item in ir_messages:
             if is_message(item):
@@ -87,13 +88,13 @@ class AnthropicMessageOps(BaseMessageOps):
                     messages.append(converted)
             elif is_extension_item(item):
                 ext_warnings = self._handle_extension_item(
-                    cast(Dict[str, Any], item), messages
+                    cast(dict[str, Any], item), messages
                 )
                 warnings.extend(ext_warnings)
 
         return messages, warnings
 
-    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
         """Convert a single IR message to Anthropic format.
 
         Args:
@@ -104,7 +105,7 @@ class AnthropicMessageOps(BaseMessageOps):
         """
         role = message.get("role")
         content = message.get("content", [])
-        warnings: List[str] = []
+        warnings: list[str] = []
 
         if role == "system":
             return self._ir_system_to_p(content), warnings
@@ -117,25 +118,25 @@ class AnthropicMessageOps(BaseMessageOps):
 
         return None, warnings
 
-    def _ir_system_to_p(self, content: Iterable) -> List[Dict[str, Any]]:
+    def _ir_system_to_p(self, content: Iterable) -> list[dict[str, Any]]:
         """Convert IR system message content to Anthropic system content blocks.
 
         Returns list of text blocks for the top-level ``system`` parameter.
         """
-        blocks: List[Dict[str, Any]] = []
+        blocks: list[dict[str, Any]] = []
         for part in content:
             if is_text_part(part):
                 blocks.append(self.content_ops.ir_text_to_p(part))
         return blocks
 
     def _ir_user_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Dict[str, Any], List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR user message content to Anthropic user message.
 
         All content parts become content blocks in the user message.
         """
-        anthropic_content: List[Dict[str, Any]] = []
+        anthropic_content: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
@@ -162,14 +163,14 @@ class AnthropicMessageOps(BaseMessageOps):
         return {"role": "user", "content": anthropic_content}, warnings
 
     def _ir_assistant_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Dict[str, Any], List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR assistant message content to Anthropic assistant message.
 
         All content parts become content blocks in the assistant message.
         Anthropic supports mixed content blocks (text, tool_use, thinking).
         """
-        anthropic_content: List[Dict[str, Any]] = []
+        anthropic_content: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
@@ -196,13 +197,13 @@ class AnthropicMessageOps(BaseMessageOps):
         return {"role": "assistant", "content": anthropic_content}, warnings
 
     def _ir_tool_to_p(
-        self, content: Iterable, warnings: List[str]
-    ) -> Tuple[Any, List[str]]:
+        self, content: Iterable, warnings: list[str]
+    ) -> tuple[Any, list[str]]:
         """Convert IR tool message content to Anthropic user message with tool_result.
 
         In Anthropic, tool results are sent as content blocks in a user message.
         """
-        anthropic_content: List[Dict[str, Any]] = []
+        anthropic_content: list[dict[str, Any]] = []
 
         for part in content:
             if is_tool_result_part(part):
@@ -211,13 +212,13 @@ class AnthropicMessageOps(BaseMessageOps):
         return {"role": "user", "content": anthropic_content}, warnings
 
     def _handle_extension_item(
-        self, item: Dict[str, Any], messages: List[Dict[str, Any]]
-    ) -> List[str]:
+        self, item: dict[str, Any], messages: list[dict[str, Any]]
+    ) -> list[str]:
         """Handle extension items during IR → Provider conversion.
 
         Returns list of warnings.
         """
-        warnings: List[str] = []
+        warnings: list[str] = []
         extension_type = item.get("type")
 
         if extension_type == "system_event":
@@ -243,9 +244,9 @@ class AnthropicMessageOps(BaseMessageOps):
 
     def p_messages_to_ir(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Anthropic messages → IR Messages.
 
         Converts each Anthropic message to the appropriate IR message type.
@@ -256,7 +257,7 @@ class AnthropicMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: List[Union[Message, ExtensionItem]] = []
+        ir_messages: list[Message | ExtensionItem] = []
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
@@ -280,7 +281,7 @@ class AnthropicMessageOps(BaseMessageOps):
         role = provider_message.get("role")
         content = provider_message.get("content")
 
-        ir_content: List[ContentPart] = []
+        ir_content: list[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -291,7 +292,7 @@ class AnthropicMessageOps(BaseMessageOps):
 
         return {"role": role, "content": ir_content}
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Anthropic content block to IR content part(s).
 
         Args:

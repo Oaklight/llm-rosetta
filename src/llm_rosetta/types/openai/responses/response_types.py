@@ -14,7 +14,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/responses/
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 __all__ = [
     # Status and error types
@@ -181,10 +181,10 @@ class ResponseOutputText(TypedDict, total=False):
     text: str
     """The text content."""
 
-    annotations: List[Dict[str, Any]]
+    annotations: list[dict[str, Any]]
     """Annotations on the text (e.g., URL citations, file citations)."""
 
-    logprobs: Optional[List[Dict[str, Any]]]
+    logprobs: list[dict[str, Any]] | None
     """Log probability information for the text."""
 
 
@@ -221,7 +221,7 @@ class ResponseOutputMessage(TypedDict, total=False):
     role: Literal["assistant"]
     """Message role, always 'assistant'."""
 
-    content: List[Union[ResponseOutputText, ResponseOutputRefusal]]
+    content: list[ResponseOutputText | ResponseOutputRefusal]
     """Message content list."""
 
     status: Literal["in_progress", "completed", "incomplete"]
@@ -274,16 +274,16 @@ class ResponseReasoningItem(TypedDict, total=False):
     id: str
     """Unique ID of the reasoning item."""
 
-    summary: List[ReasoningSummary]
+    summary: list[ReasoningSummary]
     """Reasoning summary content."""
 
-    content: Optional[List[ReasoningContent]]
+    content: list[ReasoningContent] | None
     """Full reasoning text content (if included)."""
 
-    encrypted_content: Optional[str]
+    encrypted_content: str | None
     """Encrypted reasoning content."""
 
-    status: Optional[Literal["in_progress", "completed", "incomplete"]]
+    status: Literal["in_progress", "completed", "incomplete"] | None
     """Reasoning status."""
 
 
@@ -310,10 +310,10 @@ class ResponseFunctionToolCall(TypedDict, total=False):
     arguments: str
     """JSON string of function arguments."""
 
-    id: Optional[str]
+    id: str | None
     """Platform-level unique ID for the tool call."""
 
-    status: Optional[Literal["in_progress", "completed", "incomplete"]]
+    status: Literal["in_progress", "completed", "incomplete"] | None
     """Execution status."""
 
 
@@ -335,7 +335,7 @@ class ResponseCustomToolCall(TypedDict, total=False):
     input: str
     """Model-generated input data for the tool."""
 
-    id: Optional[str]
+    id: str | None
     """Platform-level unique ID."""
 
 
@@ -462,10 +462,10 @@ class ResponseCodeInterpreterToolCall(TypedDict, total=False):
     container_id: str
     """ID of the container running the code."""
 
-    code: Optional[str]
+    code: str | None
     """The code to execute."""
 
-    outputs: Optional[List[CodeInterpreterOutput]]
+    outputs: list[CodeInterpreterOutput] | None
     """Code execution outputs (logs or images)."""
 
     status: Literal["in_progress", "completed", "incomplete", "interpreting", "failed"]
@@ -492,10 +492,10 @@ class ResponseFileSearchToolCall(TypedDict, total=False):
     query: str
     """The search query."""
 
-    results: Optional[List[Dict[str, Any]]]
+    results: list[dict[str, Any]] | None
     """Search results."""
 
-    status: Optional[str]
+    status: str | None
     """Execution status."""
 
 
@@ -519,10 +519,10 @@ class ResponseComputerToolCall(TypedDict, total=False):
     action: str
     """The computer action to perform."""
 
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     """Action parameters."""
 
-    status: Optional[str]
+    status: str | None
     """Execution status."""
 
 
@@ -546,10 +546,10 @@ class ResponseFunctionShellToolCall(TypedDict, total=False):
     command: str
     """The shell command to execute."""
 
-    output: Optional[str]
+    output: str | None
     """Command output."""
 
-    status: Optional[str]
+    status: str | None
     """Execution status."""
 
 
@@ -571,7 +571,7 @@ class ResponseApplyPatchToolCall(TypedDict, total=False):
     file_path: str
     """Target file path for the patch."""
 
-    status: Optional[str]
+    status: str | None
     """Execution status."""
 
 
@@ -638,18 +638,18 @@ class McpCall(TypedDict, total=False):
     arguments: str
     """JSON string of tool arguments."""
 
-    approval_request_id: Optional[str]
+    approval_request_id: str | None
     """ID for approval/rejection of the call."""
 
-    output: Optional[str]
+    output: str | None
     """Tool output."""
 
-    error: Optional[str]
+    error: str | None
     """Error information."""
 
-    status: Optional[
-        Literal["in_progress", "completed", "incomplete", "calling", "failed"]
-    ]
+    status: (
+        Literal["in_progress", "completed", "incomplete", "calling", "failed"] | None
+    )
     """Execution status."""
 
 
@@ -665,7 +665,7 @@ class McpListTools(TypedDict, total=False):
     server_label: str
     """Label of the MCP server."""
 
-    tools: List[Dict[str, Any]]
+    tools: list[dict[str, Any]]
     """List of available tools on the server."""
 
 
@@ -711,7 +711,7 @@ class LocalShellCall(TypedDict, total=False):
     command: str
     """The shell command to execute."""
 
-    output: Optional[str]
+    output: str | None
     """Command output."""
 
 
@@ -730,10 +730,10 @@ class ImageGenerationCall(TypedDict, total=False):
     prompt: str
     """The image generation prompt."""
 
-    image_url: Optional[str]
+    image_url: str | None
     """URL of the generated image."""
 
-    status: Optional[str]
+    status: str | None
     """Generation status."""
 
 
@@ -810,7 +810,7 @@ class Response(TypedDict, total=False):
     object: Literal["response"]
     """Object type, always 'response'."""
 
-    output: List[ResponseOutputItem]
+    output: list[ResponseOutputItem]
     """Core output content list - contains all output items."""
 
     parallel_tool_calls: bool
@@ -819,84 +819,80 @@ class Response(TypedDict, total=False):
     tool_choice: Any
     """Tool choice configuration."""
 
-    tools: List[Dict[str, Any]]
+    tools: list[dict[str, Any]]
     """Available tools list."""
 
     # Optional fields
-    background: Optional[bool]
+    background: bool | None
     """Whether the response runs in the background."""
 
-    conversation: Optional[Dict[str, Any]]
+    conversation: dict[str, Any] | None
     """Conversation information."""
 
-    error: Optional[ResponseError]
+    error: ResponseError | None
     """Error information, if any."""
 
-    incomplete_details: Optional[IncompleteDetails]
+    incomplete_details: IncompleteDetails | None
     """Details about why the response is incomplete."""
 
-    instructions: Optional[Any]
+    instructions: Any | None
     """System instructions used for this response."""
 
-    max_output_tokens: Optional[int]
+    max_output_tokens: int | None
     """Maximum number of output tokens."""
 
-    max_tool_calls: Optional[int]
+    max_tool_calls: int | None
     """Maximum number of tool calls."""
 
-    metadata: Optional[Dict[str, str]]
+    metadata: dict[str, str] | None
     """Metadata key-value pairs."""
 
-    previous_response_id: Optional[str]
+    previous_response_id: str | None
     """ID of the previous response."""
 
-    prompt: Optional[Dict[str, Any]]
+    prompt: dict[str, Any] | None
     """Prompt template information."""
 
-    prompt_cache_key: Optional[str]
+    prompt_cache_key: str | None
     """Key for prompt caching."""
 
-    prompt_cache_retention: Optional[Literal["in-memory", "24h"]]
+    prompt_cache_retention: Literal["in-memory", "24h"] | None
     """Prompt cache retention policy."""
 
-    reasoning: Optional[Dict[str, Any]]
+    reasoning: dict[str, Any] | None
     """Reasoning configuration and output."""
 
-    safety_identifier: Optional[str]
+    safety_identifier: str | None
     """Safety identifier."""
 
-    service_tier: Optional[Literal["auto", "default", "flex", "scale", "priority"]]
+    service_tier: Literal["auto", "default", "flex", "scale", "priority"] | None
     """Service tier for request routing."""
 
-    status: Optional[
+    status: (
         Literal[
-            "completed",
-            "failed",
-            "in_progress",
-            "cancelled",
-            "queued",
-            "incomplete",
+            "completed", "failed", "in_progress", "cancelled", "queued", "incomplete"
         ]
-    ]
+        | None
+    )
     """Response status."""
 
-    temperature: Optional[float]
+    temperature: float | None
     """Sampling temperature."""
 
-    text: Optional[Dict[str, Any]]
+    text: dict[str, Any] | None
     """Text configuration."""
 
-    top_logprobs: Optional[int]
+    top_logprobs: int | None
     """Number of top log probabilities returned."""
 
-    top_p: Optional[float]
+    top_p: float | None
     """Nucleus sampling parameter."""
 
-    truncation: Optional[Literal["auto", "disabled"]]
+    truncation: Literal["auto", "disabled"] | None
     """Truncation strategy."""
 
-    usage: Optional[ResponseUsage]
+    usage: ResponseUsage | None
     """Token usage details."""
 
-    user: Optional[str]
+    user: str | None
     """User identifier."""

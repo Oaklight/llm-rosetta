@@ -13,7 +13,7 @@ format with type/name/description/parameters at the top level.
 """
 
 import json
-from typing import Any, Dict, Union, cast
+from typing import Any, cast
 
 from ...types.ir import (
     ToolCallPart,
@@ -48,7 +48,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             OpenAI Responses tool definition dict.
         """
         if ir_tool.get("type", "function") == "function":
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "type": "function",
                 "name": ir_tool["name"],
                 "description": ir_tool.get("description", ""),
@@ -81,7 +81,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         # Handle nested format ({"type": "function", "function": {...}})
         if "function" in provider_tool and isinstance(provider_tool["function"], dict):
             func = provider_tool["function"]
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "type": "function",
                 "name": func.get("name", ""),
                 "description": func.get("description", ""),
@@ -109,9 +109,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
     # ==================== Tool Choice ====================
 
     @staticmethod
-    def ir_tool_choice_to_p(
-        ir_tool_choice: ToolChoice, **kwargs: Any
-    ) -> Union[str, dict]:
+    def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> str | dict:
         """IR ToolChoice → OpenAI Responses tool_choice parameter.
 
         Mapping:
@@ -404,7 +402,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "disable_parallel" in ir_tool_config:
             result["parallel_tool_calls"] = not ir_tool_config["disable_parallel"]
@@ -428,7 +426,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             IR ToolCallConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if isinstance(provider_tool_config, dict):
             parallel = provider_tool_config.get("parallel_tool_calls")

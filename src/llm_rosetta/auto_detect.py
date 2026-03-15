@@ -5,12 +5,12 @@ LLM Provider Auto-Detection
 Utility functions for auto-detecting LLM provider request body formats
 """
 
-from typing import Any, Dict, Literal, Optional
+from typing import Any, Literal
 
 ProviderType = Literal["openai_chat", "openai_responses", "anthropic", "google"]
 
 
-def detect_provider(body: Dict[str, Any]) -> Optional[ProviderType]:
+def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     """自动检测 provider 类型
     Auto-detect provider type
 
@@ -178,10 +178,10 @@ def get_converter_for_provider(provider: ProviderType):
 
 
 def convert(
-    source_body: Dict[str, Any],
+    source_body: dict[str, Any],
     target_provider: ProviderType,
-    source_provider: Optional[ProviderType] = None,
-) -> Dict[str, Any]:
+    source_provider: ProviderType | None = None,
+) -> dict[str, Any]:
     """自动检测源 provider 并转换到目标 provider 格式
     Auto-detect source provider and convert to target provider format
 

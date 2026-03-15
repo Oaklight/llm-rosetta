@@ -14,7 +14,7 @@ Google-specific:
 """
 
 import warnings
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -56,7 +56,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # Direct mapping fields
         _DIRECT_FIELDS = [
@@ -109,7 +109,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             IR GenerationConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
             return cast(GenerationConfig, result)
@@ -153,7 +153,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         fmt_type = ir_format.get("type", "text")
 
         if fmt_type == "json_object":
@@ -182,7 +182,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if not isinstance(provider_format, dict):
             return cast(ResponseFormatConfig, {})
 
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         mime_type = provider_format.get("response_mime_type")
 
         if mime_type == "application/json":
@@ -211,7 +211,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict with stream flag (for caller to interpret).
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "enabled" in ir_stream:
             result["stream"] = ir_stream["enabled"]
@@ -228,7 +228,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             IR StreamConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
             return cast(StreamConfig, result)
@@ -255,7 +255,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge (may be empty).
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # Google doesn't have a direct reasoning_effort equivalent
         if "effort" in ir_reasoning:
@@ -284,7 +284,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             IR ReasoningConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
             return cast(ReasoningConfig, result)
@@ -312,7 +312,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "key" in ir_cache:
             # Google uses cached_content resource name
@@ -337,7 +337,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             IR CacheConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_cache, dict):
             return cast(CacheConfig, result)

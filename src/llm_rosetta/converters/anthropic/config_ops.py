@@ -15,7 +15,7 @@ Key Anthropic differences:
 """
 
 import warnings
-from typing import Any, Dict, cast
+from typing import Any, cast
 
 from ...types.ir.configs import (
     CacheConfig,
@@ -58,7 +58,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             Dict of Anthropic request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         # max_tokens is required for Anthropic
         result["max_tokens"] = ir_config.get("max_tokens", 4096)
@@ -112,7 +112,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             IR GenerationConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_config, dict):
             return cast(GenerationConfig, result)
@@ -189,7 +189,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             Dict of Anthropic request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if "enabled" in ir_stream:
             result["stream"] = ir_stream["enabled"]
@@ -213,7 +213,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             IR StreamConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_stream, dict):
             return cast(StreamConfig, result)
@@ -242,11 +242,11 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             Dict of Anthropic request fields to merge.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         reasoning_type = ir_reasoning.get("type")
         if reasoning_type == "enabled":
-            thinking: Dict[str, Any] = {"type": "enabled"}
+            thinking: dict[str, Any] = {"type": "enabled"}
             if "budget_tokens" in ir_reasoning:
                 thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
             result["thinking"] = thinking
@@ -274,7 +274,7 @@ class AnthropicConfigOps(BaseConfigOps):
         Returns:
             IR ReasoningConfig.
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if not isinstance(provider_reasoning, dict):
             return cast(ReasoningConfig, result)
