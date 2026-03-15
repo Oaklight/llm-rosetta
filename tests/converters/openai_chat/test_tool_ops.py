@@ -5,7 +5,9 @@ OpenAI Chat ToolOps unit tests.
 import json
 
 from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
-from llm_rosetta.types.ir import ToolCallPart
+from typing import cast
+
+from llm_rosetta.types.ir import ToolCallConfig, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
 
 
 class TestOpenAIChatToolOps:
@@ -15,7 +17,7 @@ class TestOpenAIChatToolOps:
 
     def test_ir_tool_definition_to_p(self):
         """Test IR ToolDefinition → OpenAI tool definition."""
-        ir_tool = {
+        ir_tool = cast(ToolDefinition, {
             "type": "function",
             "name": "get_weather",
             "description": "Get current weather",
@@ -26,7 +28,7 @@ class TestOpenAIChatToolOps:
             },
             "required_parameters": ["location"],
             "metadata": {},
-        }
+        })
         result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["function"]["name"] == "get_weather"
@@ -56,14 +58,14 @@ class TestOpenAIChatToolOps:
 
     def test_tool_definition_round_trip(self):
         """Test tool definition round-trip."""
-        ir_tool = {
+        ir_tool = cast(ToolDefinition, {
             "type": "function",
             "name": "search",
             "description": "Search the web",
             "parameters": {"type": "object", "properties": {}},
             "required_parameters": [],
             "metadata": {},
-        }
+        })
         provider = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
         restored = OpenAIChatToolOps.p_tool_definition_to_ir(provider)
         assert restored["name"] == ir_tool["name"]
@@ -123,7 +125,7 @@ class TestOpenAIChatToolOps:
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""
         for mode in ["none", "auto", "any"]:
-            ir = {"mode": mode, "tool_name": ""}
+            ir = cast(ToolChoice, {"mode": mode, "tool_name": ""})
             provider = OpenAIChatToolOps.ir_tool_choice_to_p(ir)
             restored = OpenAIChatToolOps.p_tool_choice_to_ir(provider)
             assert restored["mode"] == mode
@@ -191,11 +193,11 @@ class TestOpenAIChatToolOps:
 
     def test_ir_tool_result_to_p(self):
         """Test IR ToolResultPart → OpenAI tool message."""
-        ir_tr = {
+        ir_tr = cast(ToolResultPart, {
             "type": "tool_result",
             "tool_call_id": "call_123",
             "result": "Sunny, 25°C",
-        }
+        })
         result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
         assert result["role"] == "tool"
         assert result["tool_call_id"] == "call_123"
@@ -215,11 +217,11 @@ class TestOpenAIChatToolOps:
 
     def test_tool_result_round_trip(self):
         """Test tool result round-trip."""
-        original = {
+        original = cast(ToolResultPart, {
             "type": "tool_result",
             "tool_call_id": "call_rt",
             "result": "42",
-        }
+        })
         provider = OpenAIChatToolOps.ir_tool_result_to_p(original)
         restored = OpenAIChatToolOps.p_tool_result_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]
@@ -245,7 +247,7 @@ class TestOpenAIChatToolOps:
 
     def test_tool_config_round_trip(self):
         """Test tool config round-trip."""
-        original = {"disable_parallel": True}
+        original = cast(ToolCallConfig, {"disable_parallel": True})
         provider = OpenAIChatToolOps.ir_tool_config_to_p(original)
         restored = OpenAIChatToolOps.p_tool_config_to_ir(provider)
         assert restored["disable_parallel"] == original["disable_parallel"]

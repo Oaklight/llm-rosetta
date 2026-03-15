@@ -3,9 +3,10 @@ OpenAI Responses ToolOps unit tests.
 """
 
 import json
+from typing import Any, cast
 
 from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
-from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.types.ir import ToolCallConfig, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
 
 
 class TestOpenAIResponsesToolOps:
@@ -15,18 +16,21 @@ class TestOpenAIResponsesToolOps:
 
     def test_ir_tool_definition_to_p(self):
         """Test IR ToolDefinition → OpenAI Responses flat tool definition."""
-        ir_tool = {
-            "type": "function",
-            "name": "get_weather",
-            "description": "Get current weather",
-            "parameters": {
-                "type": "object",
-                "properties": {"location": {"type": "string"}},
-                "required": ["location"],
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get current weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                    "required": ["location"],
+                },
+                "required_parameters": ["location"],
+                "metadata": {},
             },
-            "required_parameters": ["location"],
-            "metadata": {},
-        }
+        )
         result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
@@ -36,14 +40,17 @@ class TestOpenAIResponsesToolOps:
 
     def test_ir_tool_definition_to_p_non_function(self):
         """Test non-function tool type → custom wrapper."""
-        ir_tool = {
-            "type": "web_search",
-            "name": "search",
-            "description": "Search the web",
-            "parameters": {},
-            "required_parameters": [],
-            "metadata": {},
-        }
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "web_search",
+                "name": "search",
+                "description": "Search the web",
+                "parameters": {},
+                "required_parameters": [],
+                "metadata": {},
+            },
+        )
         result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "custom"
         assert result["name"] == "web_search_search"
@@ -89,14 +96,17 @@ class TestOpenAIResponsesToolOps:
 
     def test_tool_definition_round_trip(self):
         """Test tool definition round-trip."""
-        ir_tool = {
-            "type": "function",
-            "name": "calculate",
-            "description": "Calculate expression",
-            "parameters": {"type": "object", "properties": {}},
-            "required_parameters": [],
-            "metadata": {},
-        }
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "calculate",
+                "description": "Calculate expression",
+                "parameters": {"type": "object", "properties": {}},
+                "required_parameters": [],
+                "metadata": {},
+            },
+        )
         provider = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         restored = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider)
         assert restored["name"] == ir_tool["name"]
@@ -107,42 +117,42 @@ class TestOpenAIResponsesToolOps:
     def test_ir_tool_choice_none(self):
         """Test mode:none → 'none'."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"mode": "none", "tool_name": ""}
+            cast(ToolChoice, {"mode": "none", "tool_name": ""})
         )
         assert result == "none"
 
     def test_ir_tool_choice_auto(self):
         """Test mode:auto → 'auto'."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"mode": "auto", "tool_name": ""}
+            cast(ToolChoice, {"mode": "auto", "tool_name": ""})
         )
         assert result == "auto"
 
     def test_ir_tool_choice_any(self):
         """Test mode:any → 'required'."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"mode": "any", "tool_name": ""}
+            cast(ToolChoice, {"mode": "any", "tool_name": ""})
         )
         assert result == "required"
 
     def test_ir_tool_choice_required(self):
         """Test mode:required → 'required'."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"mode": "required", "tool_name": ""}
+            cast(Any, {"mode": "required", "tool_name": ""})
         )
         assert result == "required"
 
     def test_ir_tool_choice_specific(self):
         """Test mode:tool → specific function dict."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"mode": "tool", "tool_name": "get_weather"}
+            cast(ToolChoice, {"mode": "tool", "tool_name": "get_weather"})
         )
         assert result == {"type": "function", "function": {"name": "get_weather"}}
 
     def test_ir_tool_choice_legacy_type_field(self):
         """Test legacy 'type' field support."""
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
-            {"type": "auto", "tool_name": ""}
+            cast(Any, {"type": "auto", "tool_name": ""})
         )
         assert result == "auto"
 
@@ -177,14 +187,14 @@ class TestOpenAIResponsesToolOps:
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""
         for mode in ["none", "auto"]:
-            ir = {"mode": mode, "tool_name": ""}
+            ir = cast(ToolChoice, {"mode": mode, "tool_name": ""})
             provider = OpenAIResponsesToolOps.ir_tool_choice_to_p(ir)
             restored = OpenAIResponsesToolOps.p_tool_choice_to_ir(provider)
             assert restored["mode"] == mode
 
     def test_tool_choice_any_round_trip(self):
         """Test mode:any round-trip (any → required → any)."""
-        ir = {"mode": "any", "tool_name": ""}
+        ir = cast(ToolChoice, {"mode": "any", "tool_name": ""})
         provider = OpenAIResponsesToolOps.ir_tool_choice_to_p(ir)
         assert provider == "required"
         restored = OpenAIResponsesToolOps.p_tool_choice_to_ir(provider)
@@ -426,21 +436,27 @@ class TestOpenAIResponsesToolOps:
 
     def test_ir_tool_config_to_p_disable_parallel(self):
         """Test IR ToolCallConfig disable_parallel → parallel_tool_calls."""
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p({"disable_parallel": True})
+        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+            cast(ToolCallConfig, {"disable_parallel": True})
+        )
         assert result["parallel_tool_calls"] is False
 
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p({"disable_parallel": False})
+        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+            cast(ToolCallConfig, {"disable_parallel": False})
+        )
         assert result["parallel_tool_calls"] is True
 
     def test_ir_tool_config_to_p_max_calls(self):
         """Test IR ToolCallConfig max_calls → max_tool_calls."""
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p({"max_calls": 5})
+        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+            cast(ToolCallConfig, {"max_calls": 5})
+        )
         assert result["max_tool_calls"] == 5
 
     def test_ir_tool_config_to_p_both(self):
         """Test IR ToolCallConfig with both fields."""
         result = OpenAIResponsesToolOps.ir_tool_config_to_p(
-            {"disable_parallel": True, "max_calls": 3}
+            cast(ToolCallConfig, {"disable_parallel": True, "max_calls": 3})
         )
         assert result["parallel_tool_calls"] is False
         assert result["max_tool_calls"] == 3
@@ -469,7 +485,7 @@ class TestOpenAIResponsesToolOps:
 
     def test_tool_config_round_trip(self):
         """Test tool config round-trip."""
-        original = {"disable_parallel": True, "max_calls": 5}
+        original = cast(ToolCallConfig, {"disable_parallel": True, "max_calls": 5})
         provider = OpenAIResponsesToolOps.ir_tool_config_to_p(original)
         restored = OpenAIResponsesToolOps.p_tool_config_to_ir(provider)
         assert restored["disable_parallel"] == original["disable_parallel"]

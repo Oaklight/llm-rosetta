@@ -2,8 +2,11 @@
 Anthropic ToolOps unit tests.
 """
 
+
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
-from llm_rosetta.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
+from typing import cast
+
+from llm_rosetta.types.ir import ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
 
 
 class TestAnthropicToolOps:
@@ -109,7 +112,7 @@ class TestAnthropicToolOps:
 
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""
-        original = {"mode": "tool", "tool_name": "search"}
+        original = cast(ToolChoice, {"mode": "tool", "tool_name": "search"})
         provider = AnthropicToolOps.ir_tool_choice_to_p(original)
         restored = AnthropicToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == original["mode"]
