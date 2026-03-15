@@ -34,8 +34,19 @@ lint-fix:
 # Run tests
 test:
 	@echo "Running tests..."
-	pytest tests/ -v --tb=short
+	pytest tests/ --ignore=tests/integration -v --tb=short
 	@echo "Tests completed."
+
+# Run integration tests (requires API keys; uses proxychains if available)
+test-integration:
+	@echo "Running integration tests..."
+	@if command -v proxychains >/dev/null 2>&1; then \
+		echo "(using proxychains)"; \
+		proxychains -q pytest tests/integration/ -v --tb=short; \
+	else \
+		pytest tests/integration/ -v --tb=short; \
+	fi
+	@echo "Integration tests completed."
 
 # ──────────────────────────────────────────────
 # Package targets
@@ -74,7 +85,8 @@ help:
 	@echo "Development:"
 	@echo "  lint           - Run ruff linter and format check"
 	@echo "  lint-fix       - Auto-fix lint and formatting issues"
-	@echo "  test           - Run tests with pytest"
+	@echo "  test               - Run unit tests with pytest"
+	@echo "  test-integration   - Run integration tests via proxychains"
 	@echo ""
 	@echo "Package targets:"
 	@echo "  build-package  - Build the Python package"
@@ -91,4 +103,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test build-package push-package clean-package build push clean help
+.PHONY: all lint lint-fix test test-integration build-package push-package clean-package build push clean help

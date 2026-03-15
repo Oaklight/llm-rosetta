@@ -254,15 +254,17 @@ def _extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str |
 # Core proxy logic
 # ---------------------------------------------------------------------------
 
-# Shared httpx client (created once, reused across requests)
-_http_client: httpx.AsyncClient | None = None
+# Shared httpx clients keyed by proxy URL (None = direct connection)
+_http_clients: dict[str | None, httpx.AsyncClient] = {}
 
 
-def _get_client() -> httpx.AsyncClient:
-    global _http_client
-    if _http_client is None:
-        _http_client = httpx.AsyncClient(timeout=300.0)
-    return _http_client
+def _get_client(proxy_url: str | None = None) -> httpx.AsyncClient:
+    if proxy_url not in _http_clients:
+        _http_clients[proxy_url] = httpx.AsyncClient(
+            timeout=300.0,
+            proxy=proxy_url,
+        )
+    return _http_clients[proxy_url]
 
 
 async def _handle_non_streaming(
@@ -300,7 +302,7 @@ async def _handle_non_streaming(
     )
 
     # 4. Forward to upstream
-    client = _get_client()
+    client = _get_client(provider_info.proxy_url)
     try:
         upstream_resp = await client.post(url, json=upstream_body, headers=headers)
     except httpx.HTTPError as exc:
@@ -377,7 +379,7 @@ async def _handle_streaming(
         from_ctx = StreamContext()  # upstream -> IR
         to_ctx = StreamContext()  # IR -> source
 
-        client = _get_client()
+        client = _get_client(provider_info.proxy_url)
         async with client.stream(
             "POST", url, json=upstream_body, headers=headers
         ) as upstream_resp:
@@ -574,10 +576,9 @@ def create_app(config: GatewayConfig) -> Starlette:
     ]
 
     async def on_shutdown() -> None:
-        global _http_client
-        if _http_client is not None:
-            await _http_client.aclose()
-            _http_client = None
+        for client in _http_clients.values():
+            await client.aclose()
+        _http_clients.clear()
 
     return Starlette(routes=routes, on_shutdown=[on_shutdown])
 
@@ -746,6 +747,11 @@ def main() -> None:
     parser.add_argument("--host", default=None, help="Override server host")
     parser.add_argument("--port", type=int, default=None, help="Override server port")
     parser.add_argument(
+        "--proxy",
+        default=None,
+        help="HTTP/SOCKS proxy URL for upstream requests (overrides config)",
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         choices=["debug", "info", "warning", "error"],
@@ -806,6 +812,11 @@ def main() -> None:
         sys.exit(1)
 
     raw_config = load_config(config_path)
+
+    # CLI --proxy overrides config-level server.proxy
+    if args.proxy:
+        raw_config.setdefault("server", {})["proxy"] = args.proxy
+
     config = GatewayConfig(raw_config)
 
     host = args.host or config.host
