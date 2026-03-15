@@ -1,23 +1,10 @@
-#!/usr/bin/env python3
-"""llm-rosetta Gateway — HTTP proxy/translator between LLM provider formats.
-
-Users send requests in any of the 4 supported formats (OpenAI Chat,
-OpenAI Responses, Anthropic, Google GenAI) and the gateway converts
-and forwards them to the configured upstream provider.
-
-Usage:
-    python gateway.py                          # uses ./config.jsonc
-    python gateway.py --config /path/to/config.jsonc
-    python gateway.py --port 9000              # override port
-"""
+"""llm-rosetta Gateway — core ASGI application and CLI entry point."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import logging
-import os
-import re
 from typing import Any, AsyncIterator, Dict, Optional, Tuple
 
 import httpx
@@ -31,93 +18,13 @@ from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.stream_context import StreamContext
 
+from .config import GatewayConfig, load_config
+
 logger = logging.getLogger("llm-rosetta-gateway")
-
-# ---------------------------------------------------------------------------
-# JSONC loader
-# ---------------------------------------------------------------------------
-
-_JSONC_COMMENT_RE = re.compile(
-    r'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*[\s\S]*?\*/', re.MULTILINE
-)
-_ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
-
-
-def _strip_jsonc_comments(text: str) -> str:
-    """Remove // and /* */ comments from JSONC, preserving strings."""
-
-    def _replace(m: re.Match) -> str:
-        if m.group(1) is not None:
-            return m.group(1)  # quoted string — keep it
-        return ""
-
-    return _JSONC_COMMENT_RE.sub(_replace, text)
-
-
-def _substitute_env_vars(text: str) -> str:
-    """Replace ${ENV_VAR} placeholders with environment variable values."""
-
-    def _replace(m: re.Match) -> str:
-        var_name = m.group(1)
-        value = os.environ.get(var_name)
-        if value is None:
-            logger.warning("Environment variable %s is not set", var_name)
-            return m.group(0)  # leave placeholder intact
-        return value
-
-    return _ENV_VAR_RE.sub(_replace, text)
-
-
-def load_config(path: str) -> Dict[str, Any]:
-    """Load and parse a JSONC config file with env-var substitution."""
-    with open(path) as f:
-        raw = f.read()
-    stripped = _strip_jsonc_comments(raw)
-    substituted = _substitute_env_vars(stripped)
-    return json.loads(substituted)
-
-
-# ---------------------------------------------------------------------------
-# Config types / validation
-# ---------------------------------------------------------------------------
-
-
-class GatewayConfig:
-    """Parsed and validated gateway configuration."""
-
-    def __init__(self, raw: Dict[str, Any]) -> None:
-        self.providers: Dict[str, Dict[str, str]] = raw.get("providers", {})
-        self.models: Dict[str, ProviderType] = raw.get("models", {})
-        self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
-        self.port: int = raw.get("server", {}).get("port", 8765)
-        self._validate()
-
-    def _validate(self) -> None:
-        if not self.providers:
-            raise ValueError("config: 'providers' section is empty")
-        if not self.models:
-            raise ValueError("config: 'models' section is empty")
-        for model, provider in self.models.items():
-            if provider not in self.providers:
-                raise ValueError(
-                    f"config: model '{model}' references unknown provider '{provider}'"
-                )
-
-    def resolve_model(self, model: str) -> Tuple[ProviderType, Dict[str, str]]:
-        """Return (provider_type, provider_config) for a model name.
-
-        Raises KeyError if the model is not in the routing table.
-        """
-        provider_type = self.models[model]
-        return provider_type, self.providers[provider_type]
-
 
 # ---------------------------------------------------------------------------
 # Upstream request building
 # ---------------------------------------------------------------------------
-
-# Provider → (URL path template, auth-header builder)
-# {base_url} and {model} are substituted at call time.
 
 _UPSTREAM_URL_TEMPLATES = {
     "openai_chat": "{base_url}/chat/completions",
@@ -347,7 +254,7 @@ def _error_response_for_source(
 
 
 # ---------------------------------------------------------------------------
-# Request body → streaming flag detection
+# Request body helpers
 # ---------------------------------------------------------------------------
 
 
@@ -357,11 +264,6 @@ def _detect_stream_request(source_provider: ProviderType, body: Dict[str, Any]) 
         return bool(body.get("stream", False))
     # Google streaming is determined by the endpoint path, not the body
     return False
-
-
-# ---------------------------------------------------------------------------
-# Extract model from source request
-# ---------------------------------------------------------------------------
 
 
 def _extract_model(
@@ -393,11 +295,11 @@ async def _handle_non_streaming(
     body: Dict[str, Any],
     model: str,
 ) -> Response:
-    """Non-streaming proxy: convert → forward → convert back → respond."""
+    """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
-    # 1. Source → IR
+    # 1. Source -> IR
     try:
         ir_request = source_converter.request_from_provider(body)
     except Exception as exc:
@@ -405,7 +307,7 @@ async def _handle_non_streaming(
             source_provider, 400, f"Failed to parse request: {exc}"
         )
 
-    # 2. IR → Target
+    # 2. IR -> Target
     try:
         target_body, warnings = target_converter.request_to_provider(ir_request)
     except Exception as exc:
@@ -437,7 +339,7 @@ async def _handle_non_streaming(
             media_type="application/json",
         )
 
-    # 6. Target response → IR
+    # 6. Target response -> IR
     try:
         upstream_json = upstream_resp.json()
         ir_response = target_converter.response_from_provider(upstream_json)
@@ -446,7 +348,7 @@ async def _handle_non_streaming(
             source_provider, 502, f"Failed to parse upstream response: {exc}"
         )
 
-    # 7. IR → Source response
+    # 7. IR -> Source response
     try:
         source_response = source_converter.response_to_provider(ir_response)
     except Exception as exc:
@@ -464,11 +366,11 @@ async def _handle_streaming(
     body: Dict[str, Any],
     model: str,
 ) -> Response:
-    """Streaming proxy: convert → forward → stream-convert back → SSE."""
+    """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
-    # 1. Source → IR
+    # 1. Source -> IR
     try:
         ir_request = source_converter.request_from_provider(body)
     except Exception as exc:
@@ -476,7 +378,7 @@ async def _handle_streaming(
             source_provider, 400, f"Failed to parse request: {exc}"
         )
 
-    # 2. IR → Target
+    # 2. IR -> Target
     try:
         target_body, warnings = target_converter.request_to_provider(ir_request)
     except Exception as exc:
@@ -495,8 +397,8 @@ async def _handle_streaming(
 
     async def event_generator() -> AsyncIterator[str]:
         """Stream SSE events from upstream, converting each chunk."""
-        from_ctx = StreamContext()  # upstream → IR
-        to_ctx = StreamContext()  # IR → source
+        from_ctx = StreamContext()  # upstream -> IR
+        to_ctx = StreamContext()  # IR -> source
 
         client = _get_client()
         async with client.stream(
@@ -537,12 +439,12 @@ async def _handle_streaming(
                     logger.warning("Skipping malformed SSE data: %s", value[:200])
                     continue
 
-                # Upstream chunk → IR events
+                # Upstream chunk -> IR events
                 ir_events = target_converter.stream_response_from_provider(
                     chunk, context=from_ctx
                 )
 
-                # IR events → source-format chunks
+                # IR events -> source-format chunks
                 for ir_event in ir_events:
                     source_chunks = source_converter.stream_response_to_provider(
                         ir_event, context=to_ctx
@@ -609,7 +511,7 @@ async def _proxy_handler(
     is_stream = force_stream or _detect_stream_request(source_provider, body)
 
     logger.info(
-        "%s → %s | model=%s stream=%s",
+        "%s -> %s | model=%s stream=%s",
         source_provider,
         target_provider,
         model,
@@ -742,7 +644,3 @@ def main() -> None:
 
     app = create_app(config)
     uvicorn.run(app, host=host, port=port, log_level=args.log_level)
-
-
-if __name__ == "__main__":
-    main()

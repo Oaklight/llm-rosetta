@@ -2,3 +2,7 @@
 # From the repo root:  pip install -e ".[gateway]"
 # Or standalone:       pip install "llm-rosetta[gateway]"
 llm-rosetta[gateway]
+
+# Usage:
+#   llm-rosetta-gateway --config config.jsonc
+#   python -m llm_rosetta.gateway --config config.jsonc
