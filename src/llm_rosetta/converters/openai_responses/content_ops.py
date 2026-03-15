@@ -145,7 +145,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
                 "type": "image",
                 "file_id": provider_image["file_id"],
                 "detail": detail,
-            }  # type: ignore
+            }
 
         return ImagePart(type="image", detail=detail)
 
@@ -210,7 +210,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
                 "type": "file",
                 "file_name": file_name,
                 "file_id": provider_file["file_id"],
-            }  # type: ignore
+            }
 
         return FilePart(type="file", file_name=file_name)
 
