@@ -27,11 +27,14 @@ import dotenv
 from google import genai
 from google.genai import types
 
+from typing import Any, cast
+
 from examples.tools import available_tools, tools_spec
 from llm_rosetta.converters.google_genai import GoogleGenAIConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
+    ToolDefinition,
     create_tool_result_message,
     extract_text_content,
     extract_tool_calls,
@@ -234,7 +237,7 @@ def test_non_stream_basic():
     print(f"  SDK response type: {type(response).__name__}")
 
     # Provider response → IR (SDK returns Pydantic model)
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
     assert "choices" in ir_response
     assert len(ir_response["choices"]) >= 1
 
@@ -274,7 +277,7 @@ def test_non_stream_tool_calls():
                 ],
             },
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
     }
 
@@ -289,7 +292,7 @@ def test_non_stream_tool_calls():
         contents=sdk_contents,
         config=sdk_config,
     )
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
 
     assistant_msg = ir_response["choices"][0]["message"]
     tool_calls = extract_tool_calls(assistant_msg)
@@ -321,7 +324,7 @@ def test_non_stream_tool_calls():
             assistant_msg,
             tool_result_msg,
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
     }
 
     provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
@@ -335,7 +338,7 @@ def test_non_stream_tool_calls():
         contents=sdk_contents_r2,
         config=sdk_config_r2,
     )
-    ir_response_r2 = converter.response_from_provider(response_r2)
+    ir_response_r2 = converter.response_from_provider(cast(dict[str, Any], response_r2))
 
     final_msg = ir_response_r2["choices"][0]["message"]
     final_text = extract_text_content(final_msg)
@@ -361,7 +364,7 @@ def test_request_round_trip():
         "messages": [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
         "generation": {
             "temperature": 0.7,
@@ -377,10 +380,11 @@ def test_request_round_trip():
     # provider → IR
     restored = converter.request_from_provider(provider_req)
     print(f"  Restored model: {restored['model']}")
-    print(f"  Restored messages count: {len(restored['messages'])}")
+    messages = list(restored["messages"])
+    print(f"  Restored messages count: {len(messages)}")
 
     assert restored["model"] == google_model
-    assert len(restored["messages"]) >= 1
+    assert len(messages) >= 1
     assert "tools" in restored
 
     ok("Request round-trip conversion")
@@ -414,7 +418,7 @@ def test_response_round_trip():
     )
 
     # Provider → IR (SDK Pydantic model)
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
     print(f"  IR response id: {ir_response['id']}")
     print(f"  IR choices: {len(ir_response['choices'])}")
 
@@ -466,7 +470,7 @@ def test_multi_turn():
         contents=sdk_contents,
         config=sdk_config,
     )
-    ir_response = converter.response_from_provider(response)
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
     assistant_msg_1 = ir_response["choices"][0]["message"]
     text_1 = extract_text_content(assistant_msg_1)
     print(f"  Turn 1 response: {text_1[:80]}...")
@@ -497,7 +501,7 @@ def test_multi_turn():
         contents=sdk_contents_2,
         config=sdk_config_2,
     )
-    ir_response_2 = converter.response_from_provider(response_2)
+    ir_response_2 = converter.response_from_provider(cast(dict[str, Any], response_2))
     text_2 = extract_text_content(ir_response_2["choices"][0]["message"])
     print(f"  Turn 2 response: {text_2[:80]}...")
     assert "alice" in text_2.lower()

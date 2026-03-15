@@ -26,11 +26,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import anthropic
 import dotenv
 
+from typing import Any, cast
+
 from examples.tools import available_tools, tools_spec
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
+    ToolDefinition,
     create_tool_result_message,
     extract_text_content,
     extract_tool_calls,
@@ -151,7 +154,7 @@ def test_non_stream_tool_calls():
                 ],
             },
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
     }
 
@@ -192,7 +195,7 @@ def test_non_stream_tool_calls():
             assistant_msg,
             tool_result_msg,
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
     }
 
     provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
@@ -244,7 +247,7 @@ def test_stream_text():
 
     with client.messages.stream(**provider_req) as stream:
         for event in stream:
-            ir_events = converter.stream_response_from_provider(event)
+            ir_events = converter.stream_response_from_provider(cast(dict[str, Any], event))
             for ir_event in ir_events:
                 event_types_seen.add(ir_event["type"])
 
@@ -288,7 +291,7 @@ def test_stream_tool_calls():
                 ],
             },
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
         "stream": {"enabled": True},
     }
@@ -303,7 +306,7 @@ def test_stream_tool_calls():
 
     with client.messages.stream(**provider_req) as stream:
         for event in stream:
-            ir_events = converter.stream_response_from_provider(event)
+            ir_events = converter.stream_response_from_provider(cast(dict[str, Any], event))
             for ir_event in ir_events:
                 event_types_seen.add(ir_event["type"])
 
@@ -348,11 +351,11 @@ def test_request_round_trip():
         "messages": [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
         "generation": {
             "temperature": 0.7,
-            "max_output_tokens": 100,
+            "max_tokens": 100,
         },
     }
 
@@ -364,10 +367,11 @@ def test_request_round_trip():
     # provider → IR
     restored = converter.request_from_provider(provider_req)
     print(f"  Restored model: {restored['model']}")
-    print(f"  Restored messages count: {len(restored['messages'])}")
+    messages = list(restored["messages"])
+    print(f"  Restored messages count: {len(messages)}")
 
     assert restored["model"] == anthropic_model
-    assert len(restored["messages"]) >= 1
+    assert len(messages) >= 1
     assert "system_instruction" in restored
     assert "tools" in restored
 

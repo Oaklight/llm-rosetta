@@ -26,11 +26,15 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import dotenv
 import requests
 
+from typing import cast
+
 from examples.tools import available_tools, tools_spec
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir import (
     IRRequest,
+    Message,
     ToolCallPart,
+    ToolDefinition,
     extract_text_content,
     extract_tool_calls,
 )
@@ -180,7 +184,7 @@ def test_non_stream_tool_calls():
                 ],
             },
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
     }
 
@@ -206,7 +210,7 @@ def test_non_stream_tool_calls():
     # Round 2: Send tool result
     ir_request_r2: IRRequest = {
         "model": openai_model,
-        "messages": [
+        "messages": cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -227,8 +231,8 @@ def test_non_stream_tool_calls():
                     }
                 ],
             },
-        ],
-        "tools": tools_spec,
+        ]),
+        "tools": cast(list[ToolDefinition], tools_spec),
     }
 
     provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
@@ -264,7 +268,7 @@ def test_request_round_trip():
                 "content": [{"type": "text", "text": "Hello"}],
             },
         ],
-        "tools": tools_spec,
+        "tools": cast(list[ToolDefinition], tools_spec),
         "tool_choice": {"mode": "auto"},
         "generation": {
             "temperature": 0.7,
@@ -280,10 +284,11 @@ def test_request_round_trip():
     # provider → IR
     restored = converter.request_from_provider(provider_req)
     print(f"  Restored model: {restored['model']}")
-    print(f"  Restored messages count: {len(restored['messages'])}")
+    messages = list(restored["messages"])
+    print(f"  Restored messages count: {len(messages)}")
 
     assert restored["model"] == openai_model
-    assert len(restored["messages"]) >= 1
+    assert len(messages) >= 1
     assert "system_instruction" in restored
     assert "tools" in restored
 
