@@ -37,7 +37,7 @@ pip install llm-rosetta[openai,anthropic,google]
 ## Development Installation
 
 ```bash
-git clone https://github.com/Oaklight/llmir.git
-cd llmir
+git clone https://github.com/Oaklight/llm-rosetta.git
+cd llm-rosetta
 pip install -e ".[dev]"
 ```

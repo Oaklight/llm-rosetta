@@ -1,9 +1,9 @@
 site_name: LLM-Rosetta
 site_description: Large Language Model Rosetta Stone - Unified message format conversion for LLM providers
 site_author: Peng Ding
-site_url: https://llmir.readthedocs.io/en/
-repo_name: Oaklight/llmir
-repo_url: https://github.com/Oaklight/llmir
+site_url: https://llm-rosetta.readthedocs.io/en/
+repo_name: Oaklight/llm-rosetta
+repo_url: https://github.com/Oaklight/llm-rosetta
 copyright: Copyright &copy; 2024 Peng Ding
 
 theme:
@@ -76,7 +76,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/Oaklight/llmir
+      link: https://github.com/Oaklight/llm-rosetta
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/llm-rosetta/
   alternate:

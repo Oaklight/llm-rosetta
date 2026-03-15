@@ -18,8 +18,8 @@ LLM-Rosetta includes comprehensive examples demonstrating cross-provider convers
 The example scripts are in the `examples/` directory of the repository:
 
 ```bash
-git clone https://github.com/Oaklight/llmir.git
-cd llmir/examples
+git clone https://github.com/Oaklight/llm-rosetta.git
+cd llm-rosetta/examples
 
 # Set up API keys
 cp .env.example .env
