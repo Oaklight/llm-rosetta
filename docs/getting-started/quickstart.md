@@ -9,7 +9,7 @@ title: Quick Start
 The core workflow: **Provider A → IR → Provider B**.
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
@@ -40,14 +40,14 @@ response = client.messages.create(**anthropic_request)
 ir_response = anthropic_conv.response_from_provider(response.model_dump())
 
 # Extract text
-from llmir import extract_text_content
+from llm_rosetta import extract_text_content
 text = extract_text_content(ir_response["choices"][0]["message"])
 ```
 
 ## Auto Detection
 
 ```python
-from llmir import detect_provider, convert
+from llm_rosetta import detect_provider, convert
 
 # Detect provider from request structure
 provider = detect_provider(some_request)

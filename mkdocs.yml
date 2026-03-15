@@ -1,5 +1,5 @@
-site_name: LLMIR
-site_description: Large Language Model Intermediate Representation - Unified message format conversion for LLM providers
+site_name: LLM-Rosetta
+site_description: Large Language Model Rosetta Stone - Unified message format conversion for LLM providers
 site_author: Peng Ding
 site_url: https://llmir.readthedocs.io/
 repo_name: Oaklight/llmir
@@ -78,7 +78,7 @@ extra:
     - icon: fontawesome/brands/github
       link: https://github.com/Oaklight/llmir
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/llmir/
+      link: https://pypi.org/project/llm-rosetta/
 
 nav:
   - Home: index.md

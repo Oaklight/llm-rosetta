@@ -5,25 +5,25 @@ hide:
   - navigation
 ---
 
-# LLMIR
+# LLM-Rosetta
 
-[![PyPI version](https://badge.fury.io/py/llmir.svg?icon=si%3Apython)](https://badge.fury.io/py/llmir)
+[![PyPI version](https://badge.fury.io/py/llm-rosetta.svg?icon=si%3Apython)](https://badge.fury.io/py/llm-rosetta)
 [![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllmir)
 
-**Large Language Model Intermediate Representation** — a unified message format conversion library for LLM provider APIs.
+**Large Language Model Rosetta Stone** — a unified message format conversion library for LLM provider APIs.
 
 ## Overview
 
-Different LLM providers (OpenAI, Anthropic, Google) use incompatible API formats. LLMIR solves this with a hub-and-spoke architecture: each provider converts to/from a central Intermediate Representation (IR), requiring only N converters instead of N².
+Different LLM providers (OpenAI, Anthropic, Google) use incompatible API formats. LLM-Rosetta solves this with a hub-and-spoke architecture: each provider converts to/from a central Intermediate Representation (IR), requiring only N converters instead of N².
 
 ## Quick Start
 
 ```bash
-pip install llmir
+pip install llm-rosetta
 ```
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()

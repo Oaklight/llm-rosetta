@@ -9,7 +9,7 @@ The Intermediate Representation uses TypedDict-based types for zero-overhead typ
 ## Messages
 
 ```python
-from llmir import SystemMessage, UserMessage, AssistantMessage, ToolMessage
+from llm_rosetta import SystemMessage, UserMessage, AssistantMessage, ToolMessage
 ```
 
 | Type | Role | Typical Content |
@@ -71,7 +71,7 @@ ir_response: IRResponse = {
 ## Tool Types
 
 ```python
-from llmir import ToolDefinition, ToolChoice
+from llm_rosetta import ToolDefinition, ToolChoice
 
 tool: ToolDefinition = {
     "type": "function",
@@ -92,7 +92,7 @@ tool: ToolDefinition = {
 ## Helper Functions
 
 ```python
-from llmir import extract_text_content, extract_tool_calls, create_tool_result_message
+from llm_rosetta import extract_text_content, extract_tool_calls, create_tool_result_message
 
 # Extract text from a message
 text = extract_text_content(message)

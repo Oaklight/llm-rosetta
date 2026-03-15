@@ -12,7 +12,7 @@ build:
       # Download the source code from the main repository for mkdocstrings
       - git clone https://github.com/Oaklight/llmir.git src_repo
       - mkdir -p src
-      - cp -r src_repo/src/llmir src/
+      - cp -r src_repo/src/llm_rosetta src/
       - rm -rf src_repo
     install:
       - pip install -r requirements.txt

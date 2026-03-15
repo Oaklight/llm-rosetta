@@ -7,7 +7,7 @@ title: Installation
 ## Basic Installation
 
 ```bash
-pip install llmir
+pip install llm-rosetta
 ```
 
 The core library has minimal dependencies (`typing_extensions>=4.0.0`).
@@ -27,12 +27,12 @@ pip install anthropic
 pip install google-genai
 
 # All providers
-pip install llmir[openai,anthropic,google]
+pip install llm-rosetta[openai,anthropic,google]
 ```
 
 !!! note
 
-    Provider SDKs are only needed for making API calls. LLMIR's conversion functions work with plain dictionaries and don't require the SDKs.
+    Provider SDKs are only needed for making API calls. LLM-Rosetta's conversion functions work with plain dictionaries and don't require the SDKs.
 
 ## Development Installation
 

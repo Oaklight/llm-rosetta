@@ -4,12 +4,12 @@ title: Auto Detection
 
 # Auto Detection
 
-LLMIR can automatically detect which provider format a request uses.
+LLM-Rosetta can automatically detect which provider format a request uses.
 
 ## Detecting Provider
 
 ```python
-from llmir import detect_provider
+from llm_rosetta import detect_provider
 
 provider = detect_provider(request_dict)
 # Returns: "openai_chat", "openai_responses", "anthropic", "google", or None
@@ -18,7 +18,7 @@ provider = detect_provider(request_dict)
 ## Getting a Converter
 
 ```python
-from llmir import get_converter_for_provider
+from llm_rosetta import get_converter_for_provider
 
 converter = get_converter_for_provider("anthropic")
 ```
@@ -26,7 +26,7 @@ converter = get_converter_for_provider("anthropic")
 ## Convenience Conversion
 
 ```python
-from llmir import convert
+from llm_rosetta import convert
 
 # Auto-detect source, convert to target
 result = convert(

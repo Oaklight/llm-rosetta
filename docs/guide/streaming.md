@@ -4,7 +4,7 @@ title: Streaming
 
 # Streaming
 
-LLMIR supports converting streaming chunks between providers.
+LLM-Rosetta supports converting streaming chunks between providers.
 
 ## Stream Events
 
@@ -22,7 +22,7 @@ Streaming produces a sequence of `IRStreamEvent` types:
 ## Converting Stream Chunks
 
 ```python
-from llmir.converters.base import StreamContext
+from llm_rosetta.converters.base import StreamContext
 
 converter = OpenAIChatConverter()
 ctx = StreamContext()
@@ -41,7 +41,7 @@ for chunk in provider_stream:
 After streaming completes, reconstruct the full message:
 
 ```python
-from llmir import accumulate_stream_to_assistant_message
+from llm_rosetta import accumulate_stream_to_assistant_message
 
 full_message = accumulate_stream_to_assistant_message(all_events)
 ```

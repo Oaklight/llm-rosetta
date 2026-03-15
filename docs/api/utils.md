@@ -4,4 +4,4 @@ title: Utilities
 
 # Utilities API
 
-::: llmir.auto_detect
+::: llm_rosetta.auto_detect

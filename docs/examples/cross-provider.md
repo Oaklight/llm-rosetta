@@ -4,7 +4,7 @@ title: Cross-Provider Conversation
 
 # Cross-Provider Conversation
 
-This example demonstrates a multi-turn conversation that alternates between two different LLM providers, using LLMIR to convert messages seamlessly.
+This example demonstrates a multi-turn conversation that alternates between two different LLM providers, using LLM-Rosetta to convert messages seamlessly.
 
 ## Concept
 
@@ -20,7 +20,7 @@ The conversation history is maintained in IR format. Before each API call, the f
 ## Example: OpenAI ↔ Anthropic
 
 ```python
-from llmir import (
+from llm_rosetta import (
     OpenAIChatConverter, AnthropicConverter,
     extract_text_content, IRRequest, TextPart, UserMessage,
 )

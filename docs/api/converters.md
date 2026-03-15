@@ -4,12 +4,12 @@ title: Converters
 
 # Converters API
 
-::: llmir.converters.base.converter.BaseConverter
+::: llm_rosetta.converters.base.converter.BaseConverter
 
-::: llmir.converters.openai_chat.converter.OpenAIChatConverter
+::: llm_rosetta.converters.openai_chat.converter.OpenAIChatConverter
 
-::: llmir.converters.openai_responses.converter.OpenAIResponsesConverter
+::: llm_rosetta.converters.openai_responses.converter.OpenAIResponsesConverter
 
-::: llmir.converters.anthropic.converter.AnthropicConverter
+::: llm_rosetta.converters.anthropic.converter.AnthropicConverter
 
-::: llmir.converters.google_genai.converter.GoogleGenAIConverter
+::: llm_rosetta.converters.google_genai.converter.GoogleGenAIConverter

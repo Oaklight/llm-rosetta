@@ -7,7 +7,7 @@ title: Using Converters
 ## Creating a Converter
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 converter = OpenAIChatConverter()
 ```
@@ -50,7 +50,7 @@ provider_messages, warnings = converter.messages_to_provider(ir_messages)
 ## Cross-Provider Workflow
 
 ```python
-from llmir import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
 
 openai_conv = OpenAIChatConverter()
 google_conv = GoogleGenAIConverter()

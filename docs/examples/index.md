@@ -4,7 +4,7 @@ title: Examples
 
 # Examples
 
-LLMIR includes comprehensive examples demonstrating cross-provider conversations.
+LLM-Rosetta includes comprehensive examples demonstrating cross-provider conversations.
 
 ## Available Examples
 

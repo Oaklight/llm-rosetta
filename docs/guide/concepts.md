@@ -10,7 +10,7 @@ With N LLM providers, direct conversion between every pair requires N×(N-1) con
 
 ## Hub-and-Spoke Solution
 
-LLMIR introduces a central **Intermediate Representation (IR)** as the hub. Each provider only needs one converter to/from the IR, reducing the total to 2×N converters (8 for 4 providers).
+LLM-Rosetta introduces a central **Intermediate Representation (IR)** as the hub. Each provider only needs one converter to/from the IR, reducing the total to 2×N converters (8 for 4 providers).
 
 ```text
 Provider A ←→ IR ←→ Provider B

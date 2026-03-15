@@ -4,12 +4,12 @@ title: Tool Calling
 
 # Tool Calling
 
-LLMIR provides a unified tool definition format that works across all providers.
+LLM-Rosetta provides a unified tool definition format that works across all providers.
 
 ## Defining Tools in IR Format
 
 ```python
-from llmir import ToolDefinition
+from llm_rosetta import ToolDefinition
 
 tools = [
     {
@@ -35,7 +35,7 @@ tools = [
 ## Cross-Provider Tool Calling
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
