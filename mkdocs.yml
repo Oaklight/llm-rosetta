@@ -79,6 +79,13 @@ extra:
       link: https://github.com/Oaklight/llmir
     - icon: fontawesome/brands/python
       link: https://pypi.org/project/llm-rosetta/
+  alternate:
+    - name: English
+      link: /
+      lang: en
+    - name: 中文
+      link: /zh/
+      lang: zh
 
 nav:
   - Home: index.md
@@ -91,6 +98,8 @@ nav:
       - IR Types: guide/ir-types.md
       - Streaming: guide/streaming.md
       - Auto Detection: guide/auto-detection.md
+  - Gateway:
+      - gateway/index.md
   - Examples:
       - examples/index.md
       - Cross-Provider Conversation: examples/cross-provider.md
