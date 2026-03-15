@@ -14,15 +14,22 @@ Google-specific:
 """
 
 import warnings
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 from ...types.ir import (
+    ContentPart,
     ExtensionItem,
     Message,
     ReasoningPart,
+    is_audio_part,
     is_extension_item,
+    is_file_part,
+    is_image_part,
     is_message,
+    is_reasoning_part,
     is_text_part,
+    is_tool_call_part,
+    is_tool_result_part,
 )
 from ..base import BaseMessageOps
 from .content_ops import GoogleGenAIContentOps
@@ -98,12 +105,13 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
         for item in ir_input_list:
             if is_message(item):
-                role = item.get("role")
+                msg = cast(Message, item)
+                role = msg.get("role")
                 if role == "system":
                     # System messages are handled at converter level
                     # Skip them here
                     continue
-                content = self._ir_message_to_p(item, ir_input_list)
+                content = self._ir_message_to_p(msg, ir_input_list)
                 if content:
                     contents.append(content)
             elif is_extension_item(item):
@@ -113,13 +121,15 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                     f"'{item.get('type')}', will be ignored"
                 )
             else:
-                # Force access to role field to throw KeyError for invalid items
-                _ = item["role"]
+                # Unknown item type, skip
+                warnings.warn(
+                    f"Unknown item type in ir_messages, will be ignored"
+                )
 
         return contents, warnings_list
 
     def _ir_message_to_p(
-        self, message: Dict[str, Any], ir_input: Any = None
+        self, message: Message, ir_input: Any = None
     ) -> Dict[str, Any]:
         """Convert a single IR message to Google Content format.
 
@@ -141,7 +151,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         return {"role": google_role, "parts": parts}
 
     def _ir_content_part_to_p(
-        self, content_part: Dict[str, Any], ir_input: Any = None
+        self, content_part: ContentPart, ir_input: Any = None
     ) -> Any:
         """Convert a single IR content part to Google Part format.
 
@@ -154,28 +164,26 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             Google Part dict, or None if unsupported.
         """
-        part_type = content_part.get("type")
-
-        if part_type == "text":
+        if is_text_part(content_part):
             return self.content_ops.ir_text_to_p(content_part)
-        elif part_type == "image":
+        elif is_image_part(content_part):
             return self.content_ops.ir_image_to_p(content_part)
-        elif part_type == "file":
+        elif is_file_part(content_part):
             return self.content_ops.ir_file_to_p(content_part)
-        elif part_type == "audio":
+        elif is_audio_part(content_part):
             return self.content_ops.ir_audio_to_p(content_part)
-        elif part_type == "reasoning":
+        elif is_reasoning_part(content_part):
             return self.content_ops.ir_reasoning_to_p(content_part)
-        elif part_type == "tool_call":
+        elif is_tool_call_part(content_part):
             return self.tool_ops.ir_tool_call_to_p(content_part)
-        elif part_type == "tool_result":
+        elif is_tool_result_part(content_part):
             if ir_input is not None:
                 return self.tool_ops.ir_tool_result_to_p_with_context(
                     content_part, ir_input
                 )
             return self.tool_ops.ir_tool_result_to_p(content_part)
         else:
-            warnings.warn(f"不支持的内容类型: {part_type}")
+            warnings.warn(f"不支持的内容类型: {content_part.get('type')}")
             return None
 
     # ==================== Provider → IR ====================
@@ -224,7 +232,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         if not isinstance(parts, list):
             parts = [parts]
 
-        content_parts: List[Dict[str, Any]] = []
+        content_parts: List[ContentPart] = []
         for part in parts:
             # Handle reasoning (thoughts)
             if part.get("thought") is True:
@@ -249,7 +257,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             # Handle content parts (text, image, file, audio)
             converted_parts = self.content_ops.p_part_to_ir(part)
             if converted_parts:
-                content_parts.extend(converted_parts)
+                content_parts.extend(cast(list, converted_parts))
             else:
                 # Check for unknown part types
                 ignorable_keys = {"thoughtSignature", "thought_signature"}
@@ -279,19 +287,21 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             Tuple of (system_instruction Content dict or None, remaining messages).
         """
-        system_instruction = None
+        system_instruction: Dict[str, Any] | None = None
         remaining: List[Union[Message, ExtensionItem]] = []
 
         for item in ir_messages:
             if is_message(item) and item.get("role") == "system":
-                parts = []
-                for part in item.get("content", []):
+                parts: List[Dict[str, str]] = []
+                for part in cast(Iterable[ContentPart], item.get("content", [])):
                     if is_text_part(part):
                         parts.append({"text": part["text"]})
                 if system_instruction is None:
                     system_instruction = {"role": "user", "parts": parts}
                 else:
-                    system_instruction["parts"].extend(parts)
+                    existing_parts = system_instruction["parts"]
+                    if isinstance(existing_parts, list):
+                        existing_parts.extend(parts)
             else:
                 remaining.append(item)
 

@@ -12,16 +12,24 @@ Key Anthropic differences:
 - All content is block-based (no string shorthand in structured mode)
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 from ...types.ir import (
+    ContentPart,
     ExtensionItem,
     Message,
     TextPart,
-    ToolResultPart,
+    is_audio_part,
+    is_citation_part,
     is_extension_item,
+    is_file_part,
+    is_image_part,
     is_message,
-    is_part_type,
+    is_reasoning_part,
+    is_refusal_part,
+    is_text_part,
+    is_tool_call_part,
+    is_tool_result_part,
 )
 from ..base import BaseMessageOps
 from .content_ops import AnthropicContentOps
@@ -66,23 +74,26 @@ class AnthropicMessageOps(BaseMessageOps):
 
         for item in ir_messages:
             if is_message(item):
-                role = item.get("role")
+                msg = cast(Message, item)
+                role = msg.get("role")
                 if role == "system":
                     # System messages handled at converter level
                     continue
-                converted, msg_warnings = self._ir_message_to_p(item)
+                converted, msg_warnings = self._ir_message_to_p(msg)
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
                 elif converted is not None:
                     messages.append(converted)
             elif is_extension_item(item):
-                ext_warnings = self._handle_extension_item(item, messages)
+                ext_warnings = self._handle_extension_item(
+                    cast(Dict[str, Any], item), messages
+                )
                 warnings.extend(ext_warnings)
 
         return messages, warnings
 
-    def _ir_message_to_p(self, message: Dict[str, Any]) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
         """Convert a single IR message to Anthropic format.
 
         Args:
@@ -113,7 +124,7 @@ class AnthropicMessageOps(BaseMessageOps):
         """
         blocks: List[Dict[str, Any]] = []
         for part in content:
-            if is_part_type(part, TextPart):
+            if is_text_part(part):
                 blocks.append(self.content_ops.ir_text_to_p(part))
         return blocks
 
@@ -127,27 +138,25 @@ class AnthropicMessageOps(BaseMessageOps):
         anthropic_content: List[Dict[str, Any]] = []
 
         for part in content:
-            part_type = part.get("type")
-
-            if part_type == "text":
+            if is_text_part(part):
                 anthropic_content.append(self.content_ops.ir_text_to_p(part))
-            elif part_type == "image":
+            elif is_image_part(part):
                 anthropic_content.append(self.content_ops.ir_image_to_p(part))
-            elif part_type == "file":
+            elif is_file_part(part):
                 anthropic_content.append(self.content_ops.ir_file_to_p(part))
-            elif part_type == "tool_result":
+            elif is_tool_result_part(part):
                 anthropic_content.append(self.tool_ops.ir_tool_result_to_p(part))
-            elif part_type == "audio":
+            elif is_audio_part(part):
                 warnings.append(
                     "Audio content not supported in Anthropic Messages API, ignored"
                 )
-            elif part_type == "reasoning":
+            elif is_reasoning_part(part):
                 warnings.append(
                     "Reasoning content in user message not supported, ignored"
                 )
             else:
                 warnings.append(
-                    f"Unsupported content part type in user message: {part_type}"
+                    f"Unsupported content part type in user message: {part.get('type')}"
                 )
 
         return {"role": "user", "content": anthropic_content}, warnings
@@ -163,27 +172,25 @@ class AnthropicMessageOps(BaseMessageOps):
         anthropic_content: List[Dict[str, Any]] = []
 
         for part in content:
-            part_type = part.get("type")
-
-            if part_type == "text":
+            if is_text_part(part):
                 anthropic_content.append(self.content_ops.ir_text_to_p(part))
-            elif part_type == "tool_call":
+            elif is_tool_call_part(part):
                 anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
-            elif part_type == "reasoning":
+            elif is_reasoning_part(part):
                 anthropic_content.append(self.content_ops.ir_reasoning_to_p(part))
-            elif part_type == "refusal":
+            elif is_refusal_part(part):
                 # Convert refusal to text since Anthropic has no refusal type
                 refusal_block = self.content_ops.ir_refusal_to_p(part)
                 if refusal_block:
                     anthropic_content.append(refusal_block)
-            elif part_type == "citation":
+            elif is_citation_part(part):
                 # Citations are part of TextBlock in Anthropic, skip
                 warnings.append(
                     "Citation content is part of TextBlock in Anthropic, ignored"
                 )
             else:
                 warnings.append(
-                    f"Unsupported content part type in assistant message: {part_type}"
+                    f"Unsupported content part type in assistant message: {part.get('type')}"
                 )
 
         return {"role": "assistant", "content": anthropic_content}, warnings
@@ -198,7 +205,7 @@ class AnthropicMessageOps(BaseMessageOps):
         anthropic_content: List[Dict[str, Any]] = []
 
         for part in content:
-            if is_part_type(part, ToolResultPart):
+            if is_tool_result_part(part):
                 anthropic_content.append(self.tool_ops.ir_tool_result_to_p(part))
 
         return {"role": "user", "content": anthropic_content}, warnings
@@ -273,7 +280,7 @@ class AnthropicMessageOps(BaseMessageOps):
         role = provider_message.get("role")
         content = provider_message.get("content")
 
-        ir_content: List[Dict[str, Any]] = []
+        ir_content: List[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -284,7 +291,7 @@ class AnthropicMessageOps(BaseMessageOps):
 
         return {"role": role, "content": ir_content}
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
         """Convert a single Anthropic content block to IR content part(s).
 
         Args:

@@ -7,16 +7,27 @@ Handles bidirectional conversion of system, user, assistant, and tool messages.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 from ...types.ir import (
+    ContentPart,
     ExtensionItem,
+    FileData,
+    FilePart,
     Message,
+    RefusalPart,
     TextPart,
     ToolResultPart,
+    is_citation_part,
     is_extension_item,
+    is_file_part,
+    is_image_part,
     is_message,
-    is_part_type,
+    is_reasoning_part,
+    is_refusal_part,
+    is_text_part,
+    is_tool_call_part,
+    is_tool_result_part,
 )
 from ..base import BaseMessageOps
 from .content_ops import OpenAIChatContentOps
@@ -62,19 +73,21 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         for item in ir_messages:
             if is_message(item):
-                converted, msg_warnings = self._ir_message_to_p(item)
+                converted, msg_warnings = self._ir_message_to_p(cast(Message, item))
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
                 elif converted is not None:
                     messages.append(converted)
             elif is_extension_item(item):
-                ext_warnings = self._handle_extension_item(item, messages)
+                ext_warnings = self._handle_extension_item(
+                    cast(Dict[str, Any], item), messages
+                )
                 warnings.extend(ext_warnings)
 
         return messages, warnings
 
-    def _ir_message_to_p(self, message: Dict[str, Any]) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
         """Convert a single IR message to OpenAI format.
 
         Args:
@@ -105,7 +118,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         """
         text_parts = []
         for part in content:
-            if is_part_type(part, TextPart):
+            if is_text_part(part):
                 text_parts.append(part["text"])
         return {"role": "system", "content": " ".join(text_parts)}
 
@@ -120,27 +133,25 @@ class OpenAIChatMessageOps(BaseMessageOps):
         tool_messages: List[Dict[str, Any]] = []
 
         for part in content:
-            part_type = part.get("type")
-
-            if part_type == "text":
+            if is_text_part(part):
                 user_content_parts.append(self.content_ops.ir_text_to_p(part))
-            elif part_type == "image":
+            elif is_image_part(part):
                 user_content_parts.append(self.content_ops.ir_image_to_p(part))
-            elif part_type == "tool_result":
+            elif is_tool_result_part(part):
                 # ToolResultPart in user message → separate tool role message
                 tool_messages.append(self.tool_ops.ir_tool_result_to_p(part))
-            elif part_type == "file":
+            elif is_file_part(part):
                 warnings.append(
                     "File content not supported in OpenAI Chat Completions, ignored. "
                     "Use OpenAI Responses API converter for file support."
                 )
-            elif part_type == "reasoning":
+            elif is_reasoning_part(part):
                 warnings.append(
                     "Reasoning content not supported in OpenAI Chat Completions, ignored"
                 )
             else:
                 warnings.append(
-                    f"Unsupported content part type in user message: {part_type}"
+                    f"Unsupported content part type in user message: {part.get('type')}"
                 )
 
         result_messages: List[Dict[str, Any]] = []
@@ -176,24 +187,22 @@ class OpenAIChatMessageOps(BaseMessageOps):
         refusal_text = None
 
         for part in content:
-            part_type = part.get("type")
-
-            if part_type == "text":
+            if is_text_part(part):
                 text_parts.append(part["text"])
-            elif part_type == "tool_call":
+            elif is_tool_call_part(part):
                 tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
-            elif part_type == "reasoning":
+            elif is_reasoning_part(part):
                 warnings.append(
                     "Reasoning content not supported in OpenAI Chat Completions, ignored"
                 )
-            elif part_type == "refusal":
+            elif is_refusal_part(part):
                 refusal_text = part.get("refusal", "")
-            elif part_type == "citation":
+            elif is_citation_part(part):
                 # Citations are annotations, handled at response level
                 pass
             else:
                 warnings.append(
-                    f"Unsupported content part type in assistant message: {part_type}"
+                    f"Unsupported content part type in assistant message: {part.get('type')}"
                 )
 
         openai_message: Dict[str, Any] = {"role": "assistant"}
@@ -228,7 +237,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         tool_messages: List[Dict[str, Any]] = []
 
         for part in content:
-            if is_part_type(part, ToolResultPart):
+            if is_tool_result_part(part):
                 tool_messages.append(self.tool_ops.ir_tool_result_to_p(part))
 
         if len(tool_messages) == 1:
@@ -336,7 +345,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
     def _p_user_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         """OpenAI user message → IR UserMessage."""
         content = msg.get("content", "")
-        ir_content: List[Dict[str, Any]] = []
+        ir_content: List[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -349,7 +358,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def _p_assistant_to_ir(self, msg: Dict[str, Any]) -> Dict[str, Any]:
         """OpenAI assistant message → IR AssistantMessage."""
-        ir_content: List[Dict[str, Any]] = []
+        ir_content: List[ContentPart] = []
 
         # Handle text content
         content = msg.get("content")
@@ -364,7 +373,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         # Handle refusal
         refusal = msg.get("refusal")
         if refusal:
-            ir_content.append({"type": "refusal", "refusal": refusal})
+            ir_content.append(RefusalPart(type="refusal", refusal=refusal))
 
         # Handle tool calls
         tool_calls = msg.get("tool_calls")
@@ -409,7 +418,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             ],
         }
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
         """Convert a single OpenAI content part to IR content part(s).
 
         Args:
@@ -434,13 +443,13 @@ class OpenAIChatMessageOps(BaseMessageOps):
             # Audio input → FilePart as fallback
             audio_data = provider_part.get("input_audio", {})
             return [
-                {
-                    "type": "file",
-                    "file_data": {
-                        "data": audio_data.get("data", ""),
-                        "media_type": f"audio/{audio_data.get('format', 'wav')}",
-                    },
-                }
+                FilePart(
+                    type="file",
+                    file_data=FileData(
+                        data=audio_data.get("data", ""),
+                        media_type=f"audio/{audio_data.get('format', 'wav')}",
+                    ),
+                )
             ]
 
         return []

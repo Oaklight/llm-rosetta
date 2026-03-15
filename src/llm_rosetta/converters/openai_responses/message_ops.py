@@ -12,15 +12,18 @@ Output items include messages, function_call, reasoning, etc.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union, cast
 
 from ...types.ir import (
+    ContentPart,
     ExtensionItem,
     Message,
     TextPart,
     is_extension_item,
+    is_file_part,
+    is_image_part,
     is_message,
-    is_part_type,
+    is_reasoning_part,
     is_text_part,
     is_tool_call_part,
     is_tool_result_part,
@@ -69,19 +72,21 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         for item in ir_messages:
             if is_message(item):
-                converted, msg_warnings = self._ir_message_to_p(item)
+                converted, msg_warnings = self._ir_message_to_p(cast(Message, item))
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     items.extend(converted)
                 elif converted is not None:
                     items.append(converted)
             elif is_extension_item(item):
-                ext_warnings = self._handle_extension_item(item, items)
+                ext_warnings = self._handle_extension_item(
+                    cast(Dict[str, Any], item), items
+                )
                 warnings.extend(ext_warnings)
 
         return items, warnings
 
-    def _ir_message_to_p(self, message: Dict[str, Any]) -> Tuple[Any, List[str]]:
+    def _ir_message_to_p(self, message: Message) -> Tuple[Any, List[str]]:
         """Convert a single IR message to Responses API items.
 
         Args:
@@ -115,15 +120,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         extra_items: List[Dict[str, Any]] = []
 
         for part in content:
-            part_type = part.get("type")
-
             if is_text_part(part):
                 content_parts.append(
                     self.content_ops.ir_text_to_p(part, context="input")
                 )
-            elif part_type == "image":
+            elif is_image_part(part):
                 content_parts.append(self.content_ops.ir_image_to_p(part))
-            elif part_type == "file":
+            elif is_file_part(part):
                 content_parts.append(self.content_ops.ir_file_to_p(part))
             elif is_tool_call_part(part):
                 # Tool calls become separate function_call items
@@ -131,12 +134,12 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             elif is_tool_result_part(part):
                 # Tool results become separate function_call_output items
                 extra_items.append(self.tool_ops.ir_tool_result_to_p(part))
-            elif part_type == "reasoning":
+            elif is_reasoning_part(part):
                 # Reasoning becomes a separate reasoning item
                 extra_items.append(self.content_ops.ir_reasoning_to_p(part))
             else:
                 warnings.append(
-                    f"Unsupported content part type in {role} message: {part_type}"
+                    f"Unsupported content part type in {role} message: {part.get('type')}"
                 )
 
         result_items: List[Dict[str, Any]] = []
@@ -180,7 +183,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     content_parts.append({"type": "output_text", "text": part["text"]})
             elif is_tool_call_part(part):
                 tool_items.append(self.tool_ops.ir_tool_call_to_p(part))
-            elif part.get("type") == "reasoning":
+            elif is_reasoning_part(part):
                 reasoning_items.append(self.content_ops.ir_reasoning_to_p(part))
             else:
                 warnings.append(
@@ -218,10 +221,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         tool_result_items: List[Dict[str, Any]] = []
 
         for part in content:
-            if is_part_type(part, type("ToolResultPart", (), {})):
-                # Use duck typing check instead
-                pass
-            if part.get("type") == "tool_result":
+            if is_tool_result_part(part):
                 tool_result_items.append(self.tool_ops.ir_tool_result_to_p(part))
 
         return tool_result_items, warnings
@@ -273,8 +273,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_input: List[Union[Message, ExtensionItem]] = []
-        current_message = None
+        ir_input: List[Any] = []
+        current_message: Dict[str, Any] | None = None
 
         for item in provider_messages:
             item_type = item.get("type") if isinstance(item, dict) else None
@@ -297,7 +297,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 # Tool call: convert to ToolCallPart
                 tool_call = self.tool_ops.p_tool_call_to_ir(item)
                 if current_message and current_message.get("role") == "assistant":
-                    current_message["content"].append(tool_call)
+                    cast(list, current_message["content"]).append(tool_call)
                 else:
                     if current_message:
                         ir_input.append(current_message)
@@ -307,7 +307,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 # Tool result: convert to ToolResultPart
                 tool_result = self.tool_ops.p_tool_result_to_ir(item)
                 if current_message and current_message.get("role") == "user":
-                    current_message["content"].append(tool_result)
+                    cast(list, current_message["content"]).append(tool_result)
                 else:
                     if current_message:
                         ir_input.append(current_message)
@@ -318,7 +318,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 reasoning = self.content_ops.p_reasoning_to_ir(item)
                 if reasoning:
                     if current_message and current_message.get("role") == "assistant":
-                        current_message["content"].append(reasoning)
+                        cast(list, current_message["content"]).append(reasoning)
                     else:
                         if current_message:
                             ir_input.append(current_message)
@@ -360,7 +360,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         role = provider_message.get("role")
         content = provider_message.get("content")
 
-        ir_content: List[Dict[str, Any]] = []
+        ir_content: List[ContentPart] = []
 
         if isinstance(content, str):
             ir_content.append(TextPart(type="text", text=content))
@@ -374,7 +374,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         # may need to be appended
         return {"role": role, "content": ir_content}
 
-    def _p_content_part_to_ir(self, provider_part: Any) -> List[Dict[str, Any]]:
+    def _p_content_part_to_ir(self, provider_part: Any) -> List[ContentPart]:
         """Convert a single Responses API content part to IR content part(s).
 
         Args:
