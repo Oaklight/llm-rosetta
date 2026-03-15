@@ -62,9 +62,7 @@ def extract_tool_calls(
         >>> first_three = extract_tool_calls(message, limit=3)
     """
     tool_calls = [
-        part  # type: ignore
-        for part in message.get("content", [])
-        if is_part_type(part, ToolCallPart)
+        part for part in message.get("content", []) if is_part_type(part, ToolCallPart)
     ]
 
     if limit is not None:

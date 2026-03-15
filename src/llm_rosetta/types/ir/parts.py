@@ -44,6 +44,8 @@ class ImagePart(TypedDict):
     type: Required[Literal["image"]]
     image_url: NotRequired[str]  # URL形式 URL form
     image_data: NotRequired[ImageData]  # base64形式 base64 form
+    data: NotRequired[str]  # 直接base64数据 Direct base64 data
+    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
     detail: NotRequired[Literal["auto", "low", "high"]]  # OpenAI特性 OpenAI feature
 
 
@@ -72,6 +74,8 @@ class FilePart(TypedDict):
     file_data: NotRequired[FileData]  # base64形式 base64 form
     file_name: NotRequired[str]
     file_type: NotRequired[str]  # MIME type
+    data: NotRequired[str]  # 直接base64数据 Direct base64 data
+    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
 
 
 # ============================================================================
@@ -177,6 +181,25 @@ class ReasoningPart(TypedDict):
     ]  # 推理状态 Reasoning status
 
 
+class UrlCitation(TypedDict, total=False):
+    """URL引用详情
+    URL citation details
+    """
+
+    start_index: int
+    end_index: int
+    title: str
+    url: str
+
+
+class TextCitation(TypedDict, total=False):
+    """文本引用详情
+    Text citation details
+    """
+
+    cited_text: str
+
+
 class CitationPart(TypedDict):
     """
     引用/注释内容（如OpenAI的annotations、Anthropic的citations）。
@@ -188,14 +211,18 @@ class CitationPart(TypedDict):
 
     type: Required[Literal["citation"]]
     # OpenAI-style URL citation
-    url_citation: NotRequired[
-        Dict[
-            Literal["start_index", "end_index", "title", "url"],
-            Any,
-        ]
-    ]
+    url_citation: NotRequired[UrlCitation]
     # Anthropic-style text citation
-    text_citation: NotRequired[Dict[Literal["cited_text"], Any]]
+    text_citation: NotRequired[TextCitation]
+
+
+class AudioData(TypedDict):
+    """Base64编码的音频数据
+    Base64 encoded audio data
+    """
+
+    data: Required[str]  # base64编码 base64 encoded
+    media_type: Required[str]  # 如 "audio/wav" e.g. "audio/wav"
 
 
 class AudioPart(TypedDict):
@@ -208,7 +235,11 @@ class AudioPart(TypedDict):
     """
 
     type: Required[Literal["audio"]]
-    audio_id: Required[str]  # 音频ID Audio ID
+    audio_id: NotRequired[str]  # 音频ID Audio ID
+    audio_data: NotRequired[AudioData]  # base64形式 base64 form
+    data: NotRequired[str]  # 直接base64数据 Direct base64 data
+    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
+    url: NotRequired[str]  # URL形式 URL form
     detail: NotRequired[
         Literal["auto", "low", "high"]
     ]  # 音频细节级别 Audio detail level
@@ -289,7 +320,10 @@ __all__ = [
     "ReasoningPart",
     "RefusalPart",
     "CitationPart",
+    "UrlCitation",
+    "TextCitation",
     "AudioPart",
+    "AudioData",
     # 角色特定内容类型 Role-specific content types
     "SystemContentPart",
     "UserContentPart",

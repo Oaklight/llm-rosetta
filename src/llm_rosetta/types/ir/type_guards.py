@@ -1,11 +1,17 @@
 """
 LLM-Rosetta - IR Type Guards
 
-IR类型守卫系统，提供类似isinstance的智能类型检查
-IR type guard system providing isinstance-like intelligent type checking
+IR类型守卫系统，提供TypeGuard函数用于类型收窄
+IR type guard system providing TypeGuard functions for type narrowing
 """
 
-from typing import Any, Dict, Type, TypeVar, TypedDict, Union, get_args, get_origin
+import sys
+from typing import Any, Dict, Mapping, Type, TypeVar, Union, get_args, get_origin
+
+if sys.version_info >= (3, 10):
+    from typing import TypeGuard
+else:
+    from typing_extensions import TypeGuard
 
 from .parts import (
     AudioPart,
@@ -19,9 +25,142 @@ from .parts import (
     ToolCallPart,
     ToolResultPart,
 )
+from .stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
+    FinishEvent,
+    IRStreamEvent,
+    ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 
 # TypeVar for generic type checking
-T = TypeVar("T", bound=TypedDict)
+T = TypeVar("T", bound=Mapping[str, Any])
+
+
+# ============================================================================
+# ContentPart TypeGuard functions
+# ============================================================================
+
+
+def is_text_part(part: ContentPart) -> TypeGuard[TextPart]:
+    """Check if a content part is a TextPart."""
+    return isinstance(part, dict) and part.get("type") == "text"
+
+
+def is_image_part(part: ContentPart) -> TypeGuard[ImagePart]:
+    """Check if a content part is an ImagePart."""
+    return isinstance(part, dict) and part.get("type") == "image"
+
+
+def is_file_part(part: ContentPart) -> TypeGuard[FilePart]:
+    """Check if a content part is a FilePart."""
+    return isinstance(part, dict) and part.get("type") == "file"
+
+
+def is_audio_part(part: ContentPart) -> TypeGuard[AudioPart]:
+    """Check if a content part is an AudioPart."""
+    return isinstance(part, dict) and part.get("type") == "audio"
+
+
+def is_tool_call_part(part: ContentPart) -> TypeGuard[ToolCallPart]:
+    """Check if a content part is a ToolCallPart."""
+    return isinstance(part, dict) and part.get("type") == "tool_call"
+
+
+def is_tool_result_part(part: ContentPart) -> TypeGuard[ToolResultPart]:
+    """Check if a content part is a ToolResultPart."""
+    return isinstance(part, dict) and part.get("type") == "tool_result"
+
+
+def is_reasoning_part(part: ContentPart) -> TypeGuard[ReasoningPart]:
+    """Check if a content part is a ReasoningPart."""
+    return isinstance(part, dict) and part.get("type") == "reasoning"
+
+
+def is_refusal_part(part: ContentPart) -> TypeGuard[RefusalPart]:
+    """Check if a content part is a RefusalPart."""
+    return isinstance(part, dict) and part.get("type") == "refusal"
+
+
+def is_citation_part(part: ContentPart) -> TypeGuard[CitationPart]:
+    """Check if a content part is a CitationPart."""
+    return isinstance(part, dict) and part.get("type") == "citation"
+
+
+# ============================================================================
+# IRStreamEvent TypeGuard functions
+# ============================================================================
+
+
+def is_stream_start_event(event: IRStreamEvent) -> TypeGuard[StreamStartEvent]:
+    """Check if a stream event is a StreamStartEvent."""
+    return isinstance(event, dict) and event.get("type") == "stream_start"
+
+
+def is_stream_end_event(event: IRStreamEvent) -> TypeGuard[StreamEndEvent]:
+    """Check if a stream event is a StreamEndEvent."""
+    return isinstance(event, dict) and event.get("type") == "stream_end"
+
+
+def is_content_block_start_event(
+    event: IRStreamEvent,
+) -> TypeGuard[ContentBlockStartEvent]:
+    """Check if a stream event is a ContentBlockStartEvent."""
+    return isinstance(event, dict) and event.get("type") == "content_block_start"
+
+
+def is_content_block_end_event(
+    event: IRStreamEvent,
+) -> TypeGuard[ContentBlockEndEvent]:
+    """Check if a stream event is a ContentBlockEndEvent."""
+    return isinstance(event, dict) and event.get("type") == "content_block_end"
+
+
+def is_text_delta_event(event: IRStreamEvent) -> TypeGuard[TextDeltaEvent]:
+    """Check if a stream event is a TextDeltaEvent."""
+    return isinstance(event, dict) and event.get("type") == "text_delta"
+
+
+def is_reasoning_delta_event(
+    event: IRStreamEvent,
+) -> TypeGuard[ReasoningDeltaEvent]:
+    """Check if a stream event is a ReasoningDeltaEvent."""
+    return isinstance(event, dict) and event.get("type") == "reasoning_delta"
+
+
+def is_tool_call_start_event(
+    event: IRStreamEvent,
+) -> TypeGuard[ToolCallStartEvent]:
+    """Check if a stream event is a ToolCallStartEvent."""
+    return isinstance(event, dict) and event.get("type") == "tool_call_start"
+
+
+def is_tool_call_delta_event(
+    event: IRStreamEvent,
+) -> TypeGuard[ToolCallDeltaEvent]:
+    """Check if a stream event is a ToolCallDeltaEvent."""
+    return isinstance(event, dict) and event.get("type") == "tool_call_delta"
+
+
+def is_finish_event(event: IRStreamEvent) -> TypeGuard[FinishEvent]:
+    """Check if a stream event is a FinishEvent."""
+    return isinstance(event, dict) and event.get("type") == "finish"
+
+
+def is_usage_event(event: IRStreamEvent) -> TypeGuard[UsageEvent]:
+    """Check if a stream event is a UsageEvent."""
+    return isinstance(event, dict) and event.get("type") == "usage"
+
+
+# ============================================================================
+# Generic type checking (backward compatible)
+# ============================================================================
 
 
 def is_part_type(part: Any, part_class: Type[T]) -> bool:
@@ -40,117 +179,44 @@ def is_part_type(part: Any, part_class: Type[T]) -> bool:
         >>> part = {"type": "text", "text": "hello"}
         >>> is_part_type(part, TextPart)  # True
         >>> is_part_type(part, ToolCallPart)  # False
-
-        >>> tool_call = {"type": "tool_call", "tool_call_id": "1", "tool_name": "func", "tool_input": {}}
-        >>> is_part_type(tool_call, ToolCallPart)  # True
     """
     if not isinstance(part, dict):
         return False
 
-    # 简化的类型检查：直接使用 type 字段和类型映射
     part_type = part.get("type")
     if not part_type:
         return False
 
-    # 获取期望的类型值
-    expected_type = None
-    if part_class == TextPart:
-        expected_type = "text"
-    elif part_class == ImagePart:
-        expected_type = "image"
-    elif part_class == FilePart:
-        expected_type = "file"
-    elif part_class == ToolCallPart:
-        expected_type = "tool_call"
-    elif part_class == ToolResultPart:
-        expected_type = "tool_result"
-    elif part_class == ReasoningPart:
-        expected_type = "reasoning"
-    elif part_class == RefusalPart:
-        expected_type = "refusal"
-    elif part_class == CitationPart:
-        expected_type = "citation"
-    elif part_class == AudioPart:
-        expected_type = "audio"
-    else:
+    expected_type = _TYPE_STRING_MAP.get(part_class)
+    if expected_type is None:
         return False
 
-    # 检查类型是否匹配
-    if part_type != expected_type:
-        return False
-
-    # 基本的必需字段检查
-    if part_class == TextPart:
-        return "text" in part
-    elif part_class == ToolCallPart:
-        return all(
-            field in part for field in ["tool_call_id", "tool_name", "tool_input"]
-        )
-    elif part_class == ToolResultPart:
-        return all(field in part for field in ["tool_call_id", "result"])
-    elif part_class == ImagePart:
-        return "image_url" in part or "image_data" in part
-    elif part_class == FilePart:
-        return "file_url" in part or "file_data" in part
-    elif part_class == AudioPart:
-        return "audio_id" in part
-    elif part_class == RefusalPart:
-        return "refusal" in part
-
-    return True
+    return part_type == expected_type
 
 
-def _extract_literal_value(annotation: Any) -> Union[str, None]:
-    """
-    从类型注解中提取Literal的值
-    Extract Literal value from type annotation
-    """
-    origin = get_origin(annotation)
-    if origin is Union:
-        # 处理Required[Literal["text"]]这种情况
-        args = get_args(annotation)
-        for arg in args:
-            if hasattr(arg, "__origin__") and str(arg.__origin__) == "typing.Literal":
-                literal_args = get_args(arg)
-                if literal_args:
-                    return literal_args[0]
-    elif (
-        hasattr(annotation, "__origin__")
-        and str(annotation.__origin__) == "typing.Literal"
-    ):
-        # 直接的Literal类型
-        literal_args = get_args(annotation)
-        if literal_args:
-            return literal_args[0]
-
-    return None
-
-
-def _is_required_field(annotation: Any) -> bool:
-    """
-    检查字段是否是必需的（Required）
-    Check if field is required (Required)
-    """
-    origin = get_origin(annotation)
-    if origin is Union:
-        args = get_args(annotation)
-        # 检查是否有Required标记
-        for arg in args:
-            if hasattr(arg, "__origin__") and "Required" in str(arg.__origin__):
-                return True
-    return False
-
-
-# ============================================================================
-# 预定义的类型检查函数已移除，请使用通用的 is_part_type 函数
-# Predefined type checking functions removed, please use the generic is_part_type function
-# ============================================================================
-
-# 示例用法 Example usage:
-# is_part_type(part, TextPart)      # 替代 is_text_part(part)
-# is_part_type(part, ToolCallPart)  # 替代 is_tool_call_part(part)
-# is_part_type(part, ImagePart)     # 替代 is_image_part(part)
-
+# Internal mapping from TypedDict class to expected "type" string
+_TYPE_STRING_MAP: Dict[type, str] = {
+    TextPart: "text",
+    ImagePart: "image",
+    FilePart: "file",
+    ToolCallPart: "tool_call",
+    ToolResultPart: "tool_result",
+    ReasoningPart: "reasoning",
+    RefusalPart: "refusal",
+    CitationPart: "citation",
+    AudioPart: "audio",
+    # Stream events
+    StreamStartEvent: "stream_start",
+    StreamEndEvent: "stream_end",
+    ContentBlockStartEvent: "content_block_start",
+    ContentBlockEndEvent: "content_block_end",
+    TextDeltaEvent: "text_delta",
+    ReasoningDeltaEvent: "reasoning_delta",
+    ToolCallStartEvent: "tool_call_start",
+    ToolCallDeltaEvent: "tool_call_delta",
+    FinishEvent: "finish",
+    UsageEvent: "usage",
+}
 
 # ============================================================================
 # 类型映射表 Type mapping table
@@ -169,38 +235,18 @@ TYPE_CLASS_MAP: Dict[str, Type[ContentPart]] = {
     "audio": AudioPart,
 }
 
-# 类型类到检查函数的映射已移除，请直接使用 is_part_type
-# Type class to check function mapping removed, please use is_part_type directly
-
 
 def get_part_type(part: Any) -> Union[Type[ContentPart], None]:
     """
     获取内容部分的具体类型
     Get the specific type of content part
-
-    Args:
-        part: 内容部分 Content part
-
-    Returns:
-        对应的类型类，如果无法确定则返回None
-        Corresponding type class, None if cannot be determined
-
-    Examples:
-        >>> part = {"type": "text", "text": "hello"}
-        >>> get_part_type(part)  # TextPart
-
-        >>> tool_call = {"type": "tool_call", "tool_call_id": "1", "tool_name": "func", "tool_input": {}}
-        >>> get_part_type(tool_call)  # ToolCallPart
     """
     if not isinstance(part, dict):
         return None
 
     part_type = part.get("type")
     if part_type in TYPE_CLASS_MAP:
-        type_class = TYPE_CLASS_MAP[part_type]
-        # 验证是否真的匹配这个类型
-        if is_part_type(part, type_class):
-            return type_class
+        return TYPE_CLASS_MAP[part_type]
 
     return None
 
@@ -209,19 +255,6 @@ def isinstance_part(part: Any, *part_types: Type[ContentPart]) -> bool:
     """
     类似isinstance的函数，支持多个类型检查
     isinstance-like function supporting multiple type checking
-
-    Args:
-        part: 要检查的内容部分 Content part to check
-        *part_types: 一个或多个类型类 One or more type classes
-
-    Returns:
-        是否匹配任一指定类型 Whether it matches any of the specified types
-
-    Examples:
-        >>> part = {"type": "text", "text": "hello"}
-        >>> isinstance_part(part, TextPart)  # True
-        >>> isinstance_part(part, TextPart, ImagePart)  # True
-        >>> isinstance_part(part, ToolCallPart)  # False
     """
     for part_type in part_types:
         if is_part_type(part, part_type):
@@ -234,10 +267,31 @@ def isinstance_part(part: Any, *part_types: Type[ContentPart]) -> bool:
 # ============================================================================
 
 __all__ = [
-    # 核心函数 Core functions
+    # ContentPart TypeGuard functions
+    "is_text_part",
+    "is_image_part",
+    "is_file_part",
+    "is_audio_part",
+    "is_tool_call_part",
+    "is_tool_result_part",
+    "is_reasoning_part",
+    "is_refusal_part",
+    "is_citation_part",
+    # IRStreamEvent TypeGuard functions
+    "is_stream_start_event",
+    "is_stream_end_event",
+    "is_content_block_start_event",
+    "is_content_block_end_event",
+    "is_text_delta_event",
+    "is_reasoning_delta_event",
+    "is_tool_call_start_event",
+    "is_tool_call_delta_event",
+    "is_finish_event",
+    "is_usage_event",
+    # Generic functions
     "is_part_type",
     "isinstance_part",
     "get_part_type",
-    # 映射表 Mapping tables
+    # Mapping tables
     "TYPE_CLASS_MAP",
 ]

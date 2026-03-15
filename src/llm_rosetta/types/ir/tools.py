@@ -5,7 +5,13 @@ IR工具相关类型定义
 IR tool-related type definitions
 """
 
+import sys
 from typing import Any, Dict, Iterable, Literal, TypedDict
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 # ============================================================================
 # 工具定义类型 Tool definition types
@@ -34,8 +40,8 @@ class ToolDefinition(TypedDict):
     name: str
     description: str
     parameters: Dict[str, Any]  # JSON Schema
-    required_parameters: Iterable[str]
-    metadata: Dict[str, Any]
+    required_parameters: NotRequired[Iterable[str]]
+    metadata: NotRequired[Dict[str, Any]]
 
 
 # ============================================================================
@@ -55,7 +61,7 @@ class ToolChoice(TypedDict):
     """
 
     mode: Literal["none", "auto", "any", "tool"]
-    tool_name: str  # 当mode为"tool"时必需
+    tool_name: NotRequired[str]  # 当mode为"tool"时必需
 
 
 # ============================================================================
