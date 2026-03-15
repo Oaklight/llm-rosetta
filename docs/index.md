@@ -1,9 +1,6 @@
 ---
 title: Home
-summary: LLMIR - Large Language Model Intermediate Representation
-description: LLMIR is a Python library that provides unified intermediate representation for handling message formats from different LLM providers, supporting OpenAI, Anthropic, Google, and other major providers.
-keywords: python, llm, large language model, intermediate representation, openai, anthropic, google
-author: LLMIR Team
+author: Oaklight
 hide:
   - navigation
 ---
@@ -11,64 +8,70 @@ hide:
 # LLMIR
 
 [![PyPI version](https://badge.fury.io/py/llmir.svg?icon=si%3Apython)](https://badge.fury.io/py/llmir)
-[![GitHub version](https://badge.fury.io/gh/Oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/Oaklight%2Fllmir)
+[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllmir)
 
-**Large Language Model Intermediate Representation** - Unified message format conversion for different LLM providers.
+**Large Language Model Intermediate Representation** — a unified message format conversion library for LLM provider APIs.
 
-## 🚀 Quick Start
+## Overview
+
+Different LLM providers (OpenAI, Anthropic, Google) use incompatible API formats. LLMIR solves this with a hub-and-spoke architecture: each provider converts to/from a central Intermediate Representation (IR), requiring only N converters instead of N².
+
+## Quick Start
 
 ```bash
 pip install llmir
 ```
 
 ```python
-from llmir import auto_detect, convert_to_openai
+from llmir import OpenAIChatConverter, AnthropicConverter
 
-# Auto-detect and convert message format
-messages = [{"role": "user", "content": "Hello, world!"}]
-provider = auto_detect(messages)
-openai_format = convert_to_openai(messages, provider)
+openai_conv = OpenAIChatConverter()
+anthropic_conv = AnthropicConverter()
+
+# OpenAI format → IR → Anthropic format
+ir_request = openai_conv.request_from_provider(openai_request)
+anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
 ```
 
-## 🎯 Core Features
+## Supported Providers
 
-- **🔄 Unified Conversion**: Support for OpenAI, Anthropic, Google, and other major LLM providers
-- **🤖 Auto Detection**: Intelligent identification of message format sources
-- **⚡ High Performance**: Optimized conversion algorithms with minimal performance overhead
-- **🛡️ Type Safety**: Complete TypeScript-style type annotations
-- **📚 Easy to Use**: Simple API design for quick adoption
-- **🔧 Extensible**: Support for custom converters and formats
+| Provider | API | Converter |
+|----------|-----|-----------|
+| OpenAI | Chat Completions | `OpenAIChatConverter` |
+| OpenAI | Responses | `OpenAIResponsesConverter` |
+| Anthropic | Messages | `AnthropicConverter` |
+| Google | GenAI | `GoogleGenAIConverter` |
 
-## 🛠️ Supported Providers
+## Key Features
 
-LLMIR currently supports message format conversion for the following LLM providers:
+- **Hub-and-Spoke Architecture** — central IR eliminates N² conversion problem
+- **Bidirectional Conversion** — requests, responses, and messages in both directions
+- **Streaming Support** — convert streaming chunks with stateful context management
+- **Tool Calling** — unified tool definition and tool call handling across providers
+- **Auto Detection** — automatically detect provider format from request structure
+- **Type Safe** — full TypedDict annotations for all types
+- **Zero Runtime Overhead** — pure dict transformations, no validation cost
 
-- **OpenAI** - Chat Completions and Responses API
-- **Anthropic** - Claude message format
-- **Google** - Gemini/PaLM message format
-- **Universal Format** - Standardized intermediate representation
+## Architecture
 
-## 📖 Documentation Navigation
+```text
+OpenAI Chat ──────┐
+                   │
+OpenAI Responses ──┤
+                   ├──── IR (Intermediate Representation)
+Anthropic ─────────┤
+                   │
+Google GenAI ──────┘
+```
 
-- **[Getting Started](getting-started/)** - Installation and basic usage
-- **[User Guide](guide/)** - Detailed usage guide and best practices
-- **[API Reference](api/)** - Complete API documentation
-- **[Examples](examples/)** - Real-world use cases and code examples
+## Documentation
 
-## 🌟 Why Choose LLMIR?
+- **[Getting Started](getting-started/installation.md)** — Installation and first steps
+- **[Guide](guide/concepts.md)** — Core concepts, converters, IR types, streaming
+- **[Examples](examples/)** — Cross-provider conversations, tool calling
+- **[API Reference](api/)** — Complete API documentation
+- **[Changelog](changelog.md)** — Version history
 
-- **🎯 Focused**: Specifically designed for LLM message format conversion
-- **🔧 Flexible**: Support for multiple conversion modes and custom configurations
-- **📈 Reliable**: Thoroughly tested and suitable for production environments
-- **🌐 Open Source**: MIT license with community-driven development
-- **📚 Well Documented**: Comprehensive documentation and examples
+## License
 
-## 🤝 Get Involved
-
-- **[GitHub Repository](https://github.com/Oaklight/llmir)** - Source code and issue tracking
-- **[中文文档](../zh/)** - Chinese documentation
-- **[Development Guide](development/)** - Contributing code and development guide
-
----
-
-_LLMIR: Making LLM message format conversion simple and reliable._
+MIT License
