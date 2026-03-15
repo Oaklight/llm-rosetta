@@ -19,11 +19,27 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - 使用 `ruff` 格式化整个代码库
 - 更新 Makefile，增加 `lint`、`test` 和 `build` 目标
 - 新增 `ty`（类型检查器）配置
+- 在 `pyproject.toml` 中配置 `ruff` lint 规则（`E`、`F`、`UP`）；忽略 `UP007`（Union 语法）和 `E501`（行长度）
+- 现代化 `src/`、`tests/`、`examples/` 和 `scripts/` 中的 typing 导入 — 将 `typing.Dict`、`List`、`Tuple`、`Optional`、`Type` 替换为标准库内建类型
 
 ### 修复
 
 - 补充 `types` 包缺失的 `__init__.py`
-- 更新文档中 `git clone` URL，从 `llmir` 改为 `llm-rosetta`
+- 更新文档中 `git clone` URL，从 `llm-rosetta` 改为 `llm-rosetta`
+- 解决 `src/` 中所有 `ty` 类型检查器诊断（31 → 0）：
+    - 修复 `is_part_type()` TypeGuard 类型窄化 — 替换为特定类型守卫函数（`is_text_part` 等）
+    - 补充缺失的 TypedDict 字段：`TextPart`/`ReasoningPart` 上的 `provider_metadata`，`ImagePart`/`FilePart` 上的 `file_id`
+    - 修复 `IRRequest.messages` 类型，从 `Required[Message]` 改为 `Required[Iterable[Message]]`
+    - 使用 `cast()` 桥接 `dict[str, Any]` 中间值到 TypedDict 返回类型
+    - 修复转换器响应构建器中的 dict 字面量类型推断冲突
+- 解决 `tests/` 中所有 `ty` 类型检查器诊断（1506 → 0）：
+    - 为传递给期望 TypedDict 参数的函数的 dict 字面量添加 `cast()` 包装（`GenerationConfig`、`IRRequest`、`IRResponse`、`ToolDefinition`、`ToolChoice` 等）
+    - 使用 `cast(list[Any], ...)` 或 `cast(Message, ...)` 窄化 `Message | ExtensionItem` 联合类型结果
+    - 将 `Iterable` 内容字段转换为 `list` 以支持下标和 `len()` 访问
+    - 在对可选返回类型进行下标访问前添加 `assert ... is not None` 守卫
+    - 修复 `FinishReason`，从裸字符串改为 TypedDict 形式 `{"reason": "stop"}`
+    - 修复 `IRResponse.object` 字面量，从 `"chat.completion"` 改为 `"response"`
+- 解决 `src/` 和 `tests/` 中所有 `ruff` lint 违规（UP035 弃用导入、F401 未使用导入）
 
 ---
 
@@ -31,8 +47,8 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 变更
 
-- **项目从 LLMIR 重命名为 LLM-Rosetta**，涵盖所有代码、文档及配置
-- 包名从 `llmir` 改为 `llm_rosetta`；`pyproject.toml` 相应更新
+- **项目从 LLM-Rosetta 重命名为 LLM-Rosetta**，涵盖所有代码、文档及配置
+- 包名从 `llm-rosetta` 改为 `llm_rosetta`；`pyproject.toml` 相应更新
 - 使用 Zensical 全面重写英文 (`docs_en`) 和中文 (`docs_zh`) 文档
 - README（中/英）更新品牌标识、徽章及 `pyproject.toml` 元数据
 
@@ -168,7 +184,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 变更
 
-- **包重命名**：从 `llm-provider-converter` 改为 `llmir`
+- **包重命名**：从 `llm-provider-converter` 改为 `llm-rosetta`
 - 所有提供商标准化 IR 格式用法
 - 示例中使用 `Message` 类标准化消息创建
 - 测试套件从 unittest 迁移至 pytest
