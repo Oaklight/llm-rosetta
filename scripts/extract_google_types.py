@@ -7,7 +7,7 @@
 import inspect
 import json
 import os
-from typing import Any, Dict, get_type_hints
+from typing import Any, get_type_hints
 
 # 确保使用conda环境中的Python
 # 如果需要，可以取消下面的注释并修改路径
@@ -15,7 +15,7 @@ from typing import Any, Dict, get_type_hints
 import google.genai.types as types
 
 
-def get_class_info(cls) -> Dict[str, Any]:
+def get_class_info(cls) -> dict[str, Any]:
     """提取类的详细信息，包括字段、类型注解和文档字符串"""
     result = {
         "name": cls.__name__,
@@ -76,7 +76,7 @@ def get_class_info(cls) -> Dict[str, Any]:
     return result
 
 
-def get_union_type_info(type_obj) -> Dict[str, Any]:
+def get_union_type_info(type_obj) -> dict[str, Any]:
     """提取Union类型的信息"""
     result = {
         "name": str(type_obj),
@@ -86,7 +86,7 @@ def get_union_type_info(type_obj) -> Dict[str, Any]:
     return result
 
 
-def extract_types_info() -> Dict[str, Any]:
+def extract_types_info() -> dict[str, Any]:
     """提取所有相关类型的信息"""
     result = {"classes": {}, "type_aliases": {}, "enums": {}}
 
@@ -135,7 +135,7 @@ def main():
     generate_markdown(types_info)
 
 
-def generate_markdown(types_info: Dict[str, Any]):
+def generate_markdown(types_info: dict[str, Any]):
     """生成Markdown文档"""
     with open("docs/provider_messages_typing_schemas/google.md", "w") as f:
         f.write("# Google GenAI ContentListUnionDict 类型定义\n\n")

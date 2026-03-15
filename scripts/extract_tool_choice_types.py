@@ -9,7 +9,7 @@ import inspect
 import json
 import os
 import sys
-from typing import Any, Dict, List, Type, get_type_hints
+from typing import Any, get_type_hints
 
 # 添加conda环境路径
 sys.path.append(
@@ -20,7 +20,7 @@ import anthropic
 from google import genai
 
 
-def get_class_info(cls: Type) -> Dict[str, Any]:
+def get_class_info(cls: type) -> dict[str, Any]:
     """获取类的详细信息，包括字段、类型注解和文档字符串"""
     result = {
         "name": getattr(cls, "__name__", str(cls)),
@@ -64,7 +64,7 @@ def get_class_info(cls: Type) -> Dict[str, Any]:
     return result
 
 
-def find_classes_by_name(module: Any, name_patterns: List[str]) -> List[Type]:
+def find_classes_by_name(module: Any, name_patterns: list[str]) -> list[type]:
     """在模块中查找名称匹配指定模式的类"""
     classes = []
     visited = set()
@@ -103,7 +103,7 @@ def find_classes_by_name(module: Any, name_patterns: List[str]) -> List[Type]:
     return classes
 
 
-def extract_openai_tool_choice_types() -> List[Dict[str, Any]]:
+def extract_openai_tool_choice_types() -> list[dict[str, Any]]:
     """提取OpenAI的工具选择相关类型"""
     # 只提取特定的类型
     target_classes = [
@@ -132,7 +132,7 @@ def extract_openai_tool_choice_types() -> List[Dict[str, Any]]:
     return [get_class_info(cls) for cls in classes]
 
 
-def extract_anthropic_tool_choice_types() -> List[Dict[str, Any]]:
+def extract_anthropic_tool_choice_types() -> list[dict[str, Any]]:
     """提取Anthropic的工具选择相关类型"""
     # 只提取特定的类型
     target_classes = ["ToolChoiceParam", "ToolParam"]
@@ -154,7 +154,7 @@ def extract_anthropic_tool_choice_types() -> List[Dict[str, Any]]:
     return [get_class_info(cls) for cls in classes]
 
 
-def extract_google_tool_config_types() -> List[Dict[str, Any]]:
+def extract_google_tool_config_types() -> list[dict[str, Any]]:
     """提取Google GenAI的工具配置相关类型"""
     # 只提取特定的类型
     target_classes = ["ToolConfig", "Tool", "FunctionDeclaration"]

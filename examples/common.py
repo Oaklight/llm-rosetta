@@ -14,7 +14,6 @@ import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List
 
 import httpx
 
@@ -144,7 +143,7 @@ def execute_tool(tool_name: str, tool_input: dict) -> str:
 # Conversation turn definitions
 # ============================================================================
 
-CONVERSATION_TURNS: List[Dict] = [
+CONVERSATION_TURNS: list[dict] = [
     {
         "turn": 1,
         "provider_index": 0,  # Provider A
