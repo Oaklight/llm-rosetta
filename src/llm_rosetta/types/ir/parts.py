@@ -5,9 +5,13 @@ IR内容部分类型定义
 IR content parts type definitions
 """
 
-from typing import Any, Dict, Literal, Union
+import sys
+from typing import Any, Dict, Literal, TypedDict, Union
 
-from typing_extensions import NotRequired, Required, TypedDict
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 # ============================================================================
 # 基础内容部分类型 Basic content part types

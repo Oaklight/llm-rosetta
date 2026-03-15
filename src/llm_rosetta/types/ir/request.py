@@ -10,9 +10,13 @@ Unified request parameter types based on sdk_body_structures.md
 - 渐进式复杂度：简单场景不需要了解所有参数
 """
 
-from typing import Any, Dict, Iterable, Union
+import sys
+from typing import Any, Dict, Iterable, TypedDict, Union
 
-from typing_extensions import NotRequired, Required, TypedDict
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 from .configs import (
     CacheConfig,

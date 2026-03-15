@@ -10,8 +10,13 @@ Reference: openai.types.chat.ChatCompletion
 SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 """
 
-from typing import List, Literal, Optional, Union
-from typing_extensions import NotRequired, Required, TypedDict
+import sys
+from typing import List, Literal, Optional, TypedDict, Union
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 
 # ============================================================================

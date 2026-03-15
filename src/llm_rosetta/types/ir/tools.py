@@ -5,9 +5,7 @@ IR工具相关类型定义
 IR tool-related type definitions
 """
 
-from typing import Any, Dict, Iterable, Literal
-
-from typing_extensions import TypedDict
+from typing import Any, Dict, Iterable, Literal, TypedDict
 
 # ============================================================================
 # 工具定义类型 Tool definition types

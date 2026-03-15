@@ -5,9 +5,7 @@ IR类型守卫系统，提供类似isinstance的智能类型检查
 IR type guard system providing isinstance-like intelligent type checking
 """
 
-from typing import Any, Dict, Type, TypeVar, Union
-
-from typing_extensions import TypedDict, get_args, get_origin
+from typing import Any, Dict, Type, TypeVar, TypedDict, Union, get_args, get_origin
 
 from .parts import (
     AudioPart,

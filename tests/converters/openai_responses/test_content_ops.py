@@ -4,7 +4,9 @@ OpenAI Responses ContentOps unit tests.
 
 import pytest
 
-from llm_rosetta.converters.openai_responses.content_ops import OpenAIResponsesContentOps
+from llm_rosetta.converters.openai_responses.content_ops import (
+    OpenAIResponsesContentOps,
+)
 from llm_rosetta.types.ir import CitationPart, ImagePart, ReasoningPart, TextPart
 
 

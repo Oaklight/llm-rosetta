@@ -6,8 +6,13 @@ These are used for type hints and validation in the LLM-Rosetta conversion layer
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Union
-from typing_extensions import Literal, Required, TypedDict
+import sys
+from typing import Dict, Iterable, List, Literal, Optional, TypedDict, Union
+
+if sys.version_info >= (3, 11):
+    from typing import Required
+else:
+    from typing_extensions import Required
 
 __all__ = [
     "CacheControlEphemeralParam",

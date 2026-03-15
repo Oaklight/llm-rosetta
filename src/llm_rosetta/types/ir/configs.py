@@ -19,9 +19,7 @@ Contains various configuration parameters for controlling model generation behav
 - Cache configuration
 """
 
-from typing import Any, Dict, Iterable, Literal
-
-from typing_extensions import TypedDict
+from typing import Any, Dict, Iterable, Literal, TypedDict
 
 # ============================================================================
 # 生成控制配置 Generation control configuration

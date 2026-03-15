@@ -9,9 +9,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/google/genai/types.py
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
-
-from typing_extensions import TypedDict
+from typing import Any, Dict, List, Optional, TypedDict, Union
 
 __all__ = [
     # Blob / inline data

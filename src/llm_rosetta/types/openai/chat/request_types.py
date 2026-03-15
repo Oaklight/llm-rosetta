@@ -10,8 +10,22 @@ Reference: openai.types.chat.completion_create_params
 SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 """
 
-from typing import TYPE_CHECKING, Dict, Iterable, List, Literal, Optional, Union
-from typing_extensions import NotRequired, Required, TypedDict
+import sys
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    TypedDict,
+    Union,
+)
+
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 
 # ============================================================================

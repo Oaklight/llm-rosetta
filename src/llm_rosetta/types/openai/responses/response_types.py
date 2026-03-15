@@ -14,9 +14,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/responses/
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Union
-
-from typing_extensions import Literal, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict, Union
 
 __all__ = [
     # Status and error types

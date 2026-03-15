@@ -5,9 +5,13 @@ IR消息类型定义，包含独立角色的TypedDict
 IR message type definitions with independent role TypedDicts
 """
 
-from typing import Any, Dict, Iterable, Literal, Union
+import sys
+from typing import Any, Dict, Iterable, Literal, TypedDict, Union
 
-from typing_extensions import NotRequired, Required, TypedDict
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 from .parts import (
     AssistantContentPart,

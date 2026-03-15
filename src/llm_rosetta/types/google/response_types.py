@@ -10,9 +10,7 @@ SDK Source: <python_env>/lib/python3.10/site-packages/google/genai/types.py
 from __future__ import annotations
 
 import datetime
-from typing import Any, Dict, List, Optional
-
-from typing_extensions import Literal, TypedDict
+from typing import Any, Dict, List, Literal, Optional, TypedDict
 
 from .content_types import Content
 

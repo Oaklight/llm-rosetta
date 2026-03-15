@@ -5,9 +5,13 @@ IR扩展项类型定义，用于特殊场景的扩展功能
 IR extension type definitions for special scenario extensions
 """
 
-from typing import Any, Dict, Iterable, Literal, Type, Union
+import sys
+from typing import Any, Dict, Iterable, Literal, Type, TypedDict, TypeGuard, Union
 
-from typing_extensions import NotRequired, Required, TypedDict, TypeGuard
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 # ============================================================================
 # 扩展项类型（用于特殊场景） Extension item types (for special scenarios)

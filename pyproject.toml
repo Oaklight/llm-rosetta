@@ -8,13 +8,11 @@ dynamic = ["version"]
 authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
 description = "LLM-Rosetta: A library to convert between different LLM provider API standards using intermediate representation (IR)."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = "MIT"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -22,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ["typing_extensions>=4.0.0"]
+dependencies = ['typing_extensions>=4.0.0; python_version < "3.11"']
 
 [project.optional-dependencies]
 openai = ["openai"]
@@ -32,7 +30,7 @@ dev = [
     "python-dotenv",
     "pytest",
     "pytest-cov",
-    "pyright>=1.1.402",
+    "ty>=0.0.21",
     "build>=1.2.2.post1",
     "twine>=6.1.0",
 ]
@@ -55,3 +53,9 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }
+
+[tool.ty.environment]
+python-version = "3.10"
+
+[tool.ty.src]
+include = ["src", "tests"]

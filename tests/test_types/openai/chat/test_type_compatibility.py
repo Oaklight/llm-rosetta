@@ -19,7 +19,9 @@ def test_chat_completion_response():
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
+        from llm_rosetta.types.openai.chat import (
+            ChatCompletion as LLMRosettaChatCompletion,
+        )
 
         # Create response using LLM-Rosetta replica
         llm_rosetta_response: LLMRosettaChatCompletion = {
@@ -65,7 +67,9 @@ def test_tool_call_response():
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
+        from llm_rosetta.types.openai.chat import (
+            ChatCompletion as LLMRosettaChatCompletion,
+        )
 
         # Create tool call response using LLM-Rosetta replica
         llm_rosetta_response: LLMRosettaChatCompletion = {
@@ -118,7 +122,9 @@ def test_response_with_optional_fields():
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
+        from llm_rosetta.types.openai.chat import (
+            ChatCompletion as LLMRosettaChatCompletion,
+        )
 
         # Create response with optional fields
         llm_rosetta_response: LLMRosettaChatCompletion = {

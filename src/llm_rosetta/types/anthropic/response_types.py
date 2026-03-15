@@ -6,8 +6,7 @@ These are used for type hints and validation in the LLM-Rosetta conversion layer
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
-from typing_extensions import Literal, TypedDict
+from typing import Dict, List, Literal, Optional, TypedDict
 
 __all__ = [
     "StopReason",

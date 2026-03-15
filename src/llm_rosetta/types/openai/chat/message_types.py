@@ -10,9 +10,13 @@ Reference: openai.types.chat.*MessageParam
 SDK Source: <python_env>/lib/python3.10/site-packages/openai/types/chat/
 """
 
-from typing import Iterable, Literal, Optional, Union
+import sys
+from typing import Iterable, Literal, Optional, TypedDict, Union
 
-from typing_extensions import NotRequired, Required, TypedDict
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 # ============================================================================
 # Content Part Types

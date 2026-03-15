@@ -5,9 +5,13 @@ IR响应类型定义，包含响应统计信息
 IR response type definitions including response statistics
 """
 
-from typing import Any, Dict, List, Literal
+import sys
+from typing import Any, Dict, List, Literal, TypedDict
 
-from typing_extensions import NotRequired, Required, TypedDict
+if sys.version_info >= (3, 11):
+    from typing import NotRequired, Required
+else:
+    from typing_extensions import NotRequired, Required
 
 from .extensions import ExtensionItem, is_extension_item
 from .messages import Message
