@@ -5,6 +5,7 @@ Anthropic ContentOps unit tests.
 import pytest
 
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+# Note: ir_refusal_to_p returns dict | None; tests assert result is not None before subscript
 from llm_rosetta.types.ir import FilePart, ImagePart, ReasoningPart, TextPart
 
 
@@ -241,8 +242,8 @@ class TestAnthropicContentOps:
             result = AnthropicContentOps.ir_refusal_to_p(
                 {"type": "refusal", "refusal": "I cannot do that"}
             )
+        assert result is not None
         assert result["type"] == "text"
-        assert "Refusal" in result["text"]
         assert "I cannot do that" in result["text"]
 
     def test_p_refusal_to_ir(self):

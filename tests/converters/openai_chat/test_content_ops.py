@@ -2,10 +2,13 @@
 OpenAI Chat ContentOps unit tests.
 """
 
+
 import pytest
 
 from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llm_rosetta.types.ir import ImagePart, TextPart
+from typing import cast
+
+from llm_rosetta.types.ir import CitationPart, ImagePart, TextPart
 
 
 class TestOpenAIChatContentOps:
@@ -167,7 +170,7 @@ class TestOpenAIChatContentOps:
 
     def test_ir_citation_to_p_url(self):
         """Test IR CitationPart with url_citation → OpenAI annotation."""
-        ir_citation = {
+        ir_citation = cast(CitationPart, {
             "type": "citation",
             "url_citation": {
                 "start_index": 0,
@@ -175,8 +178,9 @@ class TestOpenAIChatContentOps:
                 "title": "Test",
                 "url": "https://example.com",
             },
-        }
+        })
         result = OpenAIChatContentOps.ir_citation_to_p(ir_citation)
+        assert result is not None
         assert result["type"] == "url_citation"
         assert result["url"] == "https://example.com"
 
