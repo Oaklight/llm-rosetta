@@ -81,7 +81,7 @@ extra:
       link: https://pypi.org/project/llm-rosetta/
   alternate:
     - name: English
-      link: /
+      link: /en/
       lang: en
     - name: 中文
       link: /zh/
