@@ -2,9 +2,13 @@
 Anthropic MessageOps unit tests.
 """
 
+from typing import Any, Union, cast
+
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.anthropic.message_ops import AnthropicMessageOps
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+from llm_rosetta.types.ir import Message
+from llm_rosetta.types.ir.extensions import ExtensionItem
 
 
 class TestAnthropicMessageOps:
@@ -20,7 +24,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_user_message_to_p(self):
         """Test IR user message → Anthropic user message."""
-        ir_messages = [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]
+        ir_messages = cast(list[Message], [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
@@ -30,9 +34,9 @@ class TestAnthropicMessageOps:
 
     def test_ir_assistant_message_to_p(self):
         """Test IR assistant message → Anthropic assistant message."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]}
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
@@ -40,20 +44,20 @@ class TestAnthropicMessageOps:
 
     def test_ir_system_message_skipped(self):
         """Test IR system message is skipped (handled at converter level)."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "system",
                 "content": [{"type": "text", "text": "You are helpful."}],
             },
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
 
     def test_ir_assistant_with_tool_call(self):
         """Test IR assistant message with tool call → Anthropic."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [
@@ -67,7 +71,7 @@ class TestAnthropicMessageOps:
                     },
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -79,7 +83,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_user_with_tool_result(self):
         """Test IR user message with tool result → Anthropic."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -90,7 +94,7 @@ class TestAnthropicMessageOps:
                     }
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -100,7 +104,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_tool_message_to_p(self):
         """Test IR tool message → Anthropic user message with tool_result."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "tool",
                 "content": [
@@ -111,7 +115,7 @@ class TestAnthropicMessageOps:
                     }
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -120,7 +124,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_user_with_image(self):
         """Test IR user message with image → Anthropic."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -130,7 +134,7 @@ class TestAnthropicMessageOps:
                     }
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -139,7 +143,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_user_with_file(self):
         """Test IR user message with file → Anthropic."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -152,7 +156,7 @@ class TestAnthropicMessageOps:
                     }
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -160,7 +164,7 @@ class TestAnthropicMessageOps:
 
     def test_ir_assistant_with_reasoning(self):
         """Test IR assistant message with reasoning → Anthropic."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [
@@ -168,7 +172,7 @@ class TestAnthropicMessageOps:
                     {"type": "text", "text": "Here is my answer."},
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -178,20 +182,20 @@ class TestAnthropicMessageOps:
 
     def test_extension_item_system_event(self):
         """Test extension item system_event produces warning."""
-        ir_messages = [
+        ir_messages = cast(list[Union[Message, ExtensionItem]], [
             {
                 "type": "system_event",
                 "event_type": "session_start",
                 "timestamp": "2024-01-01T00:00:00Z",
             },
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 0
         assert any("System event ignored" in w for w in warnings)
 
     def test_extension_item_tool_chain_node(self):
         """Test extension item tool_chain_node → assistant message."""
-        ir_messages = [
+        ir_messages = cast(list[Union[Message, ExtensionItem]], [
             {
                 "type": "tool_chain_node",
                 "node_id": "node_1",
@@ -203,7 +207,7 @@ class TestAnthropicMessageOps:
                     "tool_type": "function",
                 },
             },
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
@@ -212,9 +216,9 @@ class TestAnthropicMessageOps:
 
     def test_extension_item_batch_marker(self):
         """Test extension item batch_marker produces warning."""
-        ir_messages = [
+        ir_messages = cast(list[Union[Message, ExtensionItem]], [
             {"type": "batch_marker", "batch_id": "b1", "batch_type": "start"},
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 0
         assert any("batch_marker" in w for w in warnings)
@@ -226,7 +230,7 @@ class TestAnthropicMessageOps:
         provider_messages = [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         assert len(result) == 1
         assert result[0]["role"] == "user"
         assert result[0]["content"][0]["type"] == "text"
@@ -237,7 +241,7 @@ class TestAnthropicMessageOps:
         provider_messages = [
             {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]}
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
         assert result[0]["content"][0]["text"] == "Hi!"
@@ -245,7 +249,7 @@ class TestAnthropicMessageOps:
     def test_p_string_content_to_ir(self):
         """Test Anthropic message with string content → IR."""
         provider_messages = [{"role": "user", "content": "Hello string"}]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         assert len(result) == 1
         assert result[0]["content"][0]["type"] == "text"
         assert result[0]["content"][0]["text"] == "Hello string"
@@ -265,7 +269,7 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         tc = result[0]["content"][0]
         assert tc["type"] == "tool_call"
         assert tc["tool_call_id"] == "toolu_123"
@@ -286,7 +290,7 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         tc = result[0]["content"][0]
         assert tc["type"] == "tool_call"
         assert tc["tool_type"] == "web_search"
@@ -306,7 +310,7 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         tr = result[0]["content"][0]
         assert tr["type"] == "tool_result"
         assert tr["tool_call_id"] == "tool_789"
@@ -323,7 +327,7 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         assert len(result[0]["content"]) == 2
         assert result[0]["content"][0]["type"] == "reasoning"
         assert result[0]["content"][0]["reasoning"] == "Let me think..."
@@ -346,7 +350,7 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         img = result[0]["content"][0]
         assert img["type"] == "image"
         assert img["image_data"]["media_type"] == "image/png"
@@ -368,19 +372,19 @@ class TestAnthropicMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(provider_messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
         file_part = result[0]["content"][0]
         assert file_part["type"] == "file"
         assert file_part["file_data"]["media_type"] == "application/pdf"
 
     def test_round_trip_messages(self):
         """Test message round-trip: IR → Provider → IR."""
-        original = [
+        original = cast(list[Message], [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
             {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
-        ]
+        ])
         provider, _ = self.message_ops.ir_messages_to_p(original)
-        restored = self.message_ops.p_messages_to_ir(provider)
+        restored = cast(list[Any], self.message_ops.p_messages_to_ir(provider))
         assert len(restored) == 2
         assert restored[0]["role"] == "user"
         assert restored[0]["content"][0]["text"] == "Hello"

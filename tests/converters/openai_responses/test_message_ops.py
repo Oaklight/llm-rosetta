@@ -2,6 +2,8 @@
 OpenAI Responses MessageOps unit tests.
 """
 
+from typing import Any, Union, cast
+
 from llm_rosetta.converters.openai_responses.content_ops import (
     OpenAIResponsesContentOps,
 )
@@ -9,7 +11,8 @@ from llm_rosetta.converters.openai_responses.message_ops import (
     OpenAIResponsesMessageOps,
 )
 from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
-from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
+from llm_rosetta.types.ir.extensions import ExtensionItem
 
 
 class TestOpenAIResponsesMessageOps:
@@ -25,12 +28,12 @@ class TestOpenAIResponsesMessageOps:
 
     def test_system_message_to_p(self):
         """Test IR system message → OpenAI Responses message item."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "system",
                 "content": [{"type": "text", "text": "You are helpful."}],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         assert result[0]["type"] == "message"
@@ -41,7 +44,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_user_text_message_to_p(self):
         """Test IR user text message → OpenAI Responses message item."""
-        messages = [{"role": "user", "content": [{"type": "text", "text": "Hello!"}]}]
+        messages = cast(list[Message], [{"role": "user", "content": [{"type": "text", "text": "Hello!"}]}])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         assert result[0]["type"] == "message"
@@ -51,7 +54,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_user_multimodal_message_to_p(self):
         """Test IR user multimodal message → OpenAI Responses items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -62,7 +65,7 @@ class TestOpenAIResponsesMessageOps:
                     },
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         msg = result[0]
@@ -74,7 +77,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_user_message_with_file_to_p(self):
         """Test IR user message with file → OpenAI Responses items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -86,7 +89,7 @@ class TestOpenAIResponsesMessageOps:
                     },
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         msg = result[0]
@@ -95,24 +98,24 @@ class TestOpenAIResponsesMessageOps:
 
     def test_developer_message_to_p(self):
         """Test IR developer message → OpenAI Responses developer message item."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "developer",
                 "content": [{"type": "text", "text": "Developer instructions"}],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         assert result[0]["role"] == "developer"
 
     def test_assistant_text_message_to_p(self):
         """Test IR assistant text message → OpenAI Responses output items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [{"type": "text", "text": "Hi there!"}],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         msg = result[0]
@@ -123,7 +126,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_assistant_tool_call_message_to_p(self):
         """Test IR assistant with tool calls → function_call items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [
@@ -135,7 +138,7 @@ class TestOpenAIResponsesMessageOps:
                     )
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         assert result[0]["type"] == "function_call"
@@ -144,7 +147,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_assistant_text_and_tool_calls_to_p(self):
         """Test assistant with both text and tool calls → multiple items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [
@@ -157,7 +160,7 @@ class TestOpenAIResponsesMessageOps:
                     ),
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         # Should produce a message item + a function_call item
         assert len(result) == 2
@@ -167,7 +170,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_assistant_reasoning_to_p(self):
         """Test assistant with reasoning → reasoning item."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "assistant",
                 "content": [
@@ -175,7 +178,7 @@ class TestOpenAIResponsesMessageOps:
                     {"type": "text", "text": "The answer is 42"},
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         # Reasoning items come first, then message
         assert len(result) == 2
@@ -184,7 +187,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_tool_message_to_p(self):
         """Test IR tool message → function_call_output items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "tool",
                 "content": [
@@ -195,7 +198,7 @@ class TestOpenAIResponsesMessageOps:
                     )
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 1
         assert result[0]["type"] == "function_call_output"
@@ -204,7 +207,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_user_message_with_tool_result_to_p(self):
         """Test user message with ToolResultPart → function_call_output items."""
-        messages = [
+        messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [
@@ -215,14 +218,14 @@ class TestOpenAIResponsesMessageOps:
                     },
                 ],
             }
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         # Tool results become separate function_call_output items
         assert any(item["type"] == "function_call_output" for item in result)
 
     def test_extension_items_handling(self):
         """Test extension items produce warnings or are handled."""
-        items = [
+        items = cast(list[Union[Message, ExtensionItem]], [
             {
                 "type": "system_event",
                 "event_type": "session_start",
@@ -238,21 +241,21 @@ class TestOpenAIResponsesMessageOps:
                 "control_type": "cancel_tool",
                 "target_id": "call_1",
             },
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(items)
         # system_event is converted, batch_marker and session_control produce warnings
         assert len(warnings) >= 2
 
     def test_multi_turn_to_p(self):
         """Test multi-turn conversation → multiple items."""
-        messages = [
+        messages = cast(list[Message], [
             {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
             {
                 "role": "assistant",
                 "content": [{"type": "text", "text": "Hi!"}],
             },
             {"role": "user", "content": [{"type": "text", "text": "How are you?"}]},
-        ]
+        ])
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert len(result) == 3
         assert result[0]["role"] == "user"
@@ -263,7 +266,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_message_to_ir_user(self):
         """Test OpenAI Responses user message → IR UserMessage."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "message",
@@ -271,7 +274,7 @@ class TestOpenAIResponsesMessageOps:
                     "content": [{"type": "input_text", "text": "Hello"}],
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "user"
         assert result[0]["content"][0]["type"] == "text"
@@ -279,7 +282,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_message_to_ir_system(self):
         """Test OpenAI Responses system message → IR SystemMessage."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "message",
@@ -287,14 +290,14 @@ class TestOpenAIResponsesMessageOps:
                     "content": [{"type": "input_text", "text": "Be helpful"}],
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "system"
         assert result[0]["content"][0]["text"] == "Be helpful"
 
     def test_p_message_to_ir_assistant(self):
         """Test OpenAI Responses assistant message → IR AssistantMessage."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "message",
@@ -302,7 +305,7 @@ class TestOpenAIResponsesMessageOps:
                     "content": [{"type": "output_text", "text": "Hello!"}],
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
         assert result[0]["content"][0]["type"] == "text"
@@ -310,7 +313,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_message_to_ir_string_content(self):
         """Test OpenAI Responses message with string content → IR."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "message",
@@ -318,14 +321,14 @@ class TestOpenAIResponsesMessageOps:
                     "content": "Hello string",
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["content"][0]["type"] == "text"
         assert result[0]["content"][0]["text"] == "Hello string"
 
     def test_p_function_call_to_ir(self):
         """Test OpenAI Responses function_call → IR assistant with ToolCallPart."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "function_call",
@@ -334,7 +337,7 @@ class TestOpenAIResponsesMessageOps:
                     "arguments": '{"city": "NYC"}',
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
         tc = result[0]["content"][0]
@@ -345,7 +348,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_function_call_output_to_ir(self):
         """Test OpenAI Responses function_call_output → IR user with ToolResultPart."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "function_call_output",
@@ -353,7 +356,7 @@ class TestOpenAIResponsesMessageOps:
                     "output": "Sunny, 25°C",
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "user"
         tr = result[0]["content"][0]
@@ -363,9 +366,9 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_reasoning_to_ir(self):
         """Test OpenAI Responses reasoning item → IR assistant with ReasoningPart."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [{"type": "reasoning", "content": "Let me think..."}]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
         assert result[0]["content"][0]["type"] == "reasoning"
@@ -373,15 +376,15 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_reasoning_empty_to_ir(self):
         """Test OpenAI Responses reasoning with empty content → skipped."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [{"type": "reasoning", "content": None}]
-        )
+        ))
         # Empty reasoning returns None, so no content is added
         assert len(result) == 0
 
     def test_p_system_event_to_ir(self):
         """Test OpenAI Responses system_event → IR extension item."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "system_event",
@@ -390,14 +393,14 @@ class TestOpenAIResponsesMessageOps:
                     "message": "Session started",
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert result[0]["type"] == "system_event"
         assert result[0]["event_type"] == "session_start"
 
     def test_p_consecutive_tool_calls_grouped(self):
         """Test consecutive function_call items are grouped into one assistant message."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "function_call",
@@ -412,7 +415,7 @@ class TestOpenAIResponsesMessageOps:
                     "arguments": '{"tz": "EST"}',
                 },
             ]
-        )
+        ))
         # Both should be in the same assistant message
         assert len(result) == 1
         assert result[0]["role"] == "assistant"
@@ -420,7 +423,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_p_multimodal_message_to_ir(self):
         """Test OpenAI Responses multimodal message → IR with multiple parts."""
-        result = self.message_ops.p_messages_to_ir(
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(
             [
                 {
                     "type": "message",
@@ -435,7 +438,7 @@ class TestOpenAIResponsesMessageOps:
                     ],
                 }
             ]
-        )
+        ))
         assert len(result) == 1
         assert len(result[0]["content"]) == 2
         assert result[0]["content"][0]["type"] == "text"
@@ -468,7 +471,7 @@ class TestOpenAIResponsesMessageOps:
                 ],
             },
         ]
-        result = self.message_ops.p_messages_to_ir(items)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(items))
         assert len(result) == 4
         assert result[0]["role"] == "user"
         assert result[1]["role"] == "assistant"  # function_call
@@ -481,7 +484,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_messages_round_trip_simple(self):
         """Test simple messages round-trip: IR → Provider → IR."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "system",
                 "content": [{"type": "text", "text": "Be helpful"}],
@@ -494,9 +497,9 @@ class TestOpenAIResponsesMessageOps:
                 "role": "assistant",
                 "content": [{"type": "text", "text": "Hi!"}],
             },
-        ]
+        ])
         provider_items, _ = self.message_ops.ir_messages_to_p(ir_messages)
-        restored = self.message_ops.p_messages_to_ir(provider_items)
+        restored = cast(list[Any], self.message_ops.p_messages_to_ir(provider_items))
 
         assert len(restored) == 3
         assert restored[0]["role"] == "system"
@@ -508,7 +511,7 @@ class TestOpenAIResponsesMessageOps:
 
     def test_messages_round_trip_with_tool_calls(self):
         """Test messages round-trip with tool calls."""
-        ir_messages = [
+        ir_messages = cast(list[Message], [
             {
                 "role": "user",
                 "content": [{"type": "text", "text": "What's the weather?"}],
@@ -524,9 +527,9 @@ class TestOpenAIResponsesMessageOps:
                     )
                 ],
             },
-        ]
+        ])
         provider_items, _ = self.message_ops.ir_messages_to_p(ir_messages)
-        restored = self.message_ops.p_messages_to_ir(provider_items)
+        restored = cast(list[Any], self.message_ops.p_messages_to_ir(provider_items))
 
         assert len(restored) == 2
         assert restored[0]["role"] == "user"
