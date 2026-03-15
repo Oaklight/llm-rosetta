@@ -206,5 +206,11 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# misc
-references/
+# IDE
+.vscode/
+.kilocode/
+
+# Worktrees and local directories
+docs_en/
+docs_zh/
+reference/
