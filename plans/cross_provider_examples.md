@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-本文档设计 LLMIR 项目的跨 provider 多轮对话 examples，展示 4 种 API 标准之间的两两跨 provider 多轮对话，包含图像和工具调用。提供 REST 和 SDK 两种实现方式。
+本文档设计 LLM-Rosetta 项目的跨 provider 多轮对话 examples，展示 4 种 API 标准之间的两两跨 provider 多轮对话，包含图像和工具调用。提供 REST 和 SDK 两种实现方式。
 
 ### 1.1 四种 Provider
 
@@ -368,7 +368,7 @@ examples/
 """
 Cross-Provider Multi-Turn Conversation: Anthropic ↔ OpenAI Chat (SDK)
 
-Demonstrates LLMIR's ability to maintain a unified conversation history
+Demonstrates LLM-Rosetta's ability to maintain a unified conversation history
 across Anthropic Messages API and OpenAI Chat Completions API,
 with image analysis and tool calling.
 
@@ -398,9 +398,9 @@ from examples.common import (
     execute_tool_calls,
     tools_spec,
 )
-from llmir.converters.anthropic import AnthropicConverter
-from llmir.converters.openai_chat import OpenAIChatConverter
-from llmir.types.ir import (
+from llm-rosetta.converters.anthropic import AnthropicConverter
+from llm-rosetta.converters.openai_chat import OpenAIChatConverter
+from llm-rosetta.types.ir import (
     Message,
     create_tool_result_message,
     extract_text_content,
@@ -603,9 +603,9 @@ from examples.common import (
     execute_tool_calls,
     tools_spec,
 )
-from llmir.converters.anthropic import AnthropicConverter
-from llmir.converters.openai_chat import OpenAIChatConverter
-from llmir.types.ir import (
+from llm-rosetta.converters.anthropic import AnthropicConverter
+from llm-rosetta.converters.openai_chat import OpenAIChatConverter
+from llm-rosetta.types.ir import (
     Message,
     extract_tool_calls,
 )

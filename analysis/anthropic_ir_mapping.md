@@ -1,6 +1,6 @@
 # Anthropic Messages API 与 IR Types 映射文档
 
-本文档详细说明了 LLMIR 的 IR types 与 Anthropic Messages API 的类型映射关系。
+本文档详细说明了 LLM-Rosetta 的 IR types 与 Anthropic Messages API 的类型映射关系。
 
 ## 目录
 
@@ -566,6 +566,6 @@ ir_response: IRResponse = {
 
 ## 参考资料
 
-- Anthropic SDK 源码：`/data/pding/miniforge3/envs/llmir/lib/python3.10/site-packages/anthropic/types/`
-- IR Request Types：`src/llmir/types/ir_request.py`
-- IR Response Types：`src/llmir/types/ir_response.py`
+- Anthropic SDK 源码：`/data/pding/miniforge3/envs/llm-rosetta/lib/python3.10/site-packages/anthropic/types/`
+- IR Request Types：`src/llm-rosetta/types/ir_request.py`
+- IR Response Types：`src/llm-rosetta/types/ir_response.py`

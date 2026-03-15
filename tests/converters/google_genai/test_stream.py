@@ -4,8 +4,8 @@ Google GenAI stream converter unit tests.
 
 import json
 
-from llmir.converters.base.stream_context import StreamContext
-from llmir.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.converters.base.stream_context import StreamContext
+from llm_rosetta.converters.google_genai import GoogleGenAIConverter
 
 
 class TestStreamResponseFromProvider:

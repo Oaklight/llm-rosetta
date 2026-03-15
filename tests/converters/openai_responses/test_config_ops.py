@@ -4,7 +4,7 @@ OpenAI Responses ConfigOps unit tests.
 
 import pytest
 
-from llmir.converters.openai_responses.config_ops import OpenAIResponsesConfigOps
+from llm_rosetta.converters.openai_responses.config_ops import OpenAIResponsesConfigOps
 
 
 class TestOpenAIResponsesConfigOps:

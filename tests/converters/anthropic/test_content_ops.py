@@ -4,8 +4,8 @@ Anthropic ContentOps unit tests.
 
 import pytest
 
-from llmir.converters.anthropic.content_ops import AnthropicContentOps
-from llmir.types.ir import FilePart, ImagePart, ReasoningPart, TextPart
+from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+from llm_rosetta.types.ir import FilePart, ImagePart, ReasoningPart, TextPart
 
 
 class TestAnthropicContentOps:

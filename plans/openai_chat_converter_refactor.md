@@ -8,24 +8,24 @@
 
 ### 现有代码问题
 
-- [`converter.py`](src/llmir/converters/openai_chat/converter.py) 包含 1102 行代码，所有逻辑混在一起
+- [`converter.py`](src/llm-rosetta/converters/openai_chat/converter.py) 包含 1102 行代码，所有逻辑混在一起
 - 使用旧的 `to_provider`/`from_provider` 万能接口，需要内部做类型检测
-- 依赖 `utils/` 中的 [`ToolCallConverter`](src/llmir/utils/tool_call_converter.py)、[`ToolConverter`](src/llmir/utils/tool_converter.py)、[`FieldMapper`](src/llmir/utils/field_mapper.py)，这些工具类的逻辑应该内化到 Ops 类中
+- 依赖 `utils/` 中的 [`ToolCallConverter`](src/llm-rosetta/utils/tool_call_converter.py)、[`ToolConverter`](src/llm-rosetta/utils/tool_converter.py)、[`FieldMapper`](src/llm-rosetta/utils/field_mapper.py)，这些工具类的逻辑应该内化到 Ops 类中
 - 不支持 stream chunk 级别的转换
 - 缺少 `request_to_provider`、`request_from_provider` 等显式接口
 
 ### 现有 Base 类已就绪
 
-- [`BaseConverter`](src/llmir/converters/base/converter.py) - 已定义 6 个显式抽象方法
-- [`BaseContentOps`](src/llmir/converters/base/content.py) - 已定义所有内容类型的双向转换抽象方法
-- [`BaseToolOps`](src/llmir/converters/base/tools.py) - 已定义工具定义/选择/调用/结果/配置的双向转换抽象方法
-- [`BaseMessageOps`](src/llmir/converters/base/messages.py) - 已定义批量消息转换抽象方法
-- [`BaseConfigOps`](src/llmir/converters/base/configs.py) - 已定义生成/响应格式/流式/推理/缓存配置的双向转换抽象方法
+- [`BaseConverter`](src/llm-rosetta/converters/base/converter.py) - 已定义 6 个显式抽象方法
+- [`BaseContentOps`](src/llm-rosetta/converters/base/content.py) - 已定义所有内容类型的双向转换抽象方法
+- [`BaseToolOps`](src/llm-rosetta/converters/base/tools.py) - 已定义工具定义/选择/调用/结果/配置的双向转换抽象方法
+- [`BaseMessageOps`](src/llm-rosetta/converters/base/messages.py) - 已定义批量消息转换抽象方法
+- [`BaseConfigOps`](src/llm-rosetta/converters/base/configs.py) - 已定义生成/响应格式/流式/推理/缓存配置的双向转换抽象方法
 
 ## 3. 目标文件结构
 
 ```
-src/llmir/converters/openai_chat/
+src/llm-rosetta/converters/openai_chat/
 ├── __init__.py          # 导出 OpenAIChatConverter 及各 Ops 类
 ├── converter.py         # OpenAIChatConverter - 顶层编排 (~250行)
 ├── content_ops.py       # OpenAIChatContentOps - 内容转换 (~120行)
@@ -33,7 +33,7 @@ src/llmir/converters/openai_chat/
 ├── message_ops.py       # OpenAIChatMessageOps - 消息转换 (~200行)
 └── config_ops.py        # OpenAIChatConfigOps - 配置转换 (~120行)
 
-src/llmir/types/ir/
+src/llm-rosetta/types/ir/
 └── stream.py            # IRStreamEvent 类型定义 (~80行)
 
 tests/converters/openai_chat/
@@ -48,7 +48,7 @@ tests/converters/openai_chat/
 
 ## 4. 各模块详细设计
 
-### 4.1 IRStreamEvent 类型 (`src/llmir/types/ir/stream.py`)
+### 4.1 IRStreamEvent 类型 (`src/llm-rosetta/types/ir/stream.py`)
 
 新增 IR 层面的 stream 事件类型，用于支持 SSE chunk 级别的实时转换。
 
@@ -107,9 +107,9 @@ IRStreamEvent = Union[
 | `ir_citation_to_p` | `CitationPart` | `dict` | 映射到 annotations |
 
 **从现有代码提取的逻辑：**
-- [`_ir_image_to_p`](src/llmir/converters/openai_chat/converter.py:914) - 图像 URL/base64 转换
-- [`_p_image_to_ir`](src/llmir/converters/openai_chat/converter.py:931) - data URI 解析
-- [`_ir_text_to_p`](src/llmir/converters/openai_chat/converter.py:894) - 文本转换
+- [`_ir_image_to_p`](src/llm-rosetta/converters/openai_chat/converter.py:914) - 图像 URL/base64 转换
+- [`_p_image_to_ir`](src/llm-rosetta/converters/openai_chat/converter.py:931) - data URI 解析
+- [`_ir_text_to_p`](src/llm-rosetta/converters/openai_chat/converter.py:894) - 文本转换
 
 ### 4.3 OpenAIChatToolOps (`tool_ops.py`)
 
@@ -291,7 +291,7 @@ graph LR
 
 按底向上的顺序实施，每层完成后可独立测试：
 
-1. **IRStreamEvent 类型** - 新增 `src/llmir/types/ir/stream.py`，更新 `__init__.py` 导出
+1. **IRStreamEvent 类型** - 新增 `src/llm-rosetta/types/ir/stream.py`，更新 `__init__.py` 导出
 2. **ContentOps** - 最底层，纯数据映射，无依赖
 3. **ToolOps** - 底层，纯数据映射，无依赖
 4. **MessageOps** - 中层，依赖 ContentOps + ToolOps
@@ -329,11 +329,11 @@ graph LR
 
 ### 保留的依赖
 
-- [`BaseConverter`](src/llmir/converters/base/converter.py) - 继承
-- [`BaseContentOps`](src/llmir/converters/base/content.py) - 继承
-- [`BaseToolOps`](src/llmir/converters/base/tools.py) - 继承
-- [`BaseMessageOps`](src/llmir/converters/base/messages.py) - 继承
-- [`BaseConfigOps`](src/llmir/converters/base/configs.py) - 继承
+- [`BaseConverter`](src/llm-rosetta/converters/base/converter.py) - 继承
+- [`BaseContentOps`](src/llm-rosetta/converters/base/content.py) - 继承
+- [`BaseToolOps`](src/llm-rosetta/converters/base/tools.py) - 继承
+- [`BaseMessageOps`](src/llm-rosetta/converters/base/messages.py) - 继承
+- [`BaseConfigOps`](src/llm-rosetta/converters/base/configs.py) - 继承
 - 所有 IR 类型定义 - 使用
 
 ### 不再依赖
@@ -344,7 +344,7 @@ graph LR
 
 ### 删除的代码
 
-- 现有的 [`converter.py`](src/llmir/converters/openai_chat/converter.py) 将被完全替换
+- 现有的 [`converter.py`](src/llm-rosetta/converters/openai_chat/converter.py) 将被完全替换
 
 ## 8. 风险与注意事项
 

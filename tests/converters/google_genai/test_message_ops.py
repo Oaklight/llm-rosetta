@@ -4,9 +4,9 @@ Google GenAI MessageOps unit tests.
 
 import pytest
 
-from llmir.converters.google_genai.content_ops import GoogleGenAIContentOps
-from llmir.converters.google_genai.message_ops import GoogleGenAIMessageOps
-from llmir.converters.google_genai.tool_ops import GoogleGenAIToolOps
+from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOps
+from llm_rosetta.converters.google_genai.message_ops import GoogleGenAIMessageOps
+from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
 
 
 class TestGoogleGenAIMessageOps:

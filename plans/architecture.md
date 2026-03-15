@@ -1,6 +1,6 @@
-# LLMIR 项目架构
+# LLM-Rosetta 项目架构
 
-LLMIR（LLM Intermediate Representation）是一个用于在不同 LLM Provider API 格式之间进行转换的 Python 库。核心思想是通过统一的中间表示（IR）作为枢纽，实现 Provider 之间的格式互转。
+LLM-Rosetta（LLM Intermediate Representation）是一个用于在不同 LLM Provider API 格式之间进行转换的 Python 库。核心思想是通过统一的中间表示（IR）作为枢纽，实现 Provider 之间的格式互转。
 
 ## 1. 整体架构：Hub-and-Spoke 模式
 
@@ -13,7 +13,7 @@ graph LR
         GO[Google GenAI]
     end
 
-    subgraph LLMIR Core
+    subgraph LLM-Rosetta Core
         IR[IR - Intermediate Representation]
     end
 
@@ -37,7 +37,7 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph llmir - 顶层包
+    subgraph llm-rosetta - 顶层包
         init[__init__.py<br/>导出核心类型和便捷函数]
         auto[auto_detect.py<br/>Provider 自动检测与便捷转换]
     end
@@ -644,7 +644,7 @@ sequenceDiagram
 ### 目录结构建议
 
 ```
-src/llmir/
+src/llm-rosetta/
 ├── adapters/                    # 新增 Adapter 层
 │   ├── __init__.py
 │   ├── base.py                  # BaseAdapter

@@ -6,7 +6,7 @@
 
 本分析基于对实际安装的 SDK 源码的检查，包括：
 
-- 直接查看 `/data/pding/miniforge3/envs/llmir/lib/python3.10/site-packages/` 中的类型定义
+- 直接查看 `/data/pding/miniforge3/envs/llm-rosetta/lib/python3.10/site-packages/` 中的类型定义
 - 分析每个 SDK 的响应类型结构
 - 深入研究内容字段的内部组织方式
 - 识别跨 SDK 的共同模式和独特特性

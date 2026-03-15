@@ -1,6 +1,6 @@
 # IR Types to Google GenAI SDK Mapping
 
-本文档详细描述了 LLMIR IR (Intermediate Representation) 类型与 `google-genai` SDK 原生类型之间的映射关系。
+本文档详细描述了 LLM-Rosetta IR (Intermediate Representation) 类型与 `google-genai` SDK 原生类型之间的映射关系。
 
 ## 1. Request Mapping (请求映射)
 

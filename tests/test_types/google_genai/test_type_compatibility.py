@@ -1,4 +1,4 @@
-"""Test compatibility between LLMIR Google GenAI type replicas and Google SDK types.
+"""Test compatibility between LLM-Rosetta Google GenAI type replicas and Google SDK types.
 
 This module tests:
 - All TypedDict replicas can be correctly instantiated
@@ -11,7 +11,7 @@ Reference: tests/test_types/openai/chat/test_type_compatibility.py
 
 import pytest
 
-from llmir.types.google import (
+from llm_rosetta.types.google import (
     Blob,
     Candidate,
     Citation,
@@ -622,7 +622,7 @@ class TestGoogleInit:
 
     def test_all_exports(self):
         """Test that all expected types are exported from __init__."""
-        from llmir.types.google import __all__
+        from llm_rosetta.types.google import __all__
 
         expected = [
             # Content types

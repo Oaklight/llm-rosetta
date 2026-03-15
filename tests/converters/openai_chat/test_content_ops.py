@@ -4,8 +4,8 @@ OpenAI Chat ContentOps unit tests.
 
 import pytest
 
-from llmir.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llmir.types.ir import ImagePart, TextPart
+from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
+from llm_rosetta.types.ir import ImagePart, TextPart
 
 
 class TestOpenAIChatContentOps:

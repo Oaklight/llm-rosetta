@@ -4,7 +4,7 @@ Anthropic ConfigOps unit tests.
 
 import pytest
 
-from llmir.converters.anthropic.config_ops import AnthropicConfigOps
+from llm_rosetta.converters.anthropic.config_ops import AnthropicConfigOps
 
 
 class TestAnthropicConfigOps:

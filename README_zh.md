@@ -1,24 +1,24 @@
-# LLMIR
+# LLM-Rosetta
 
-[![PyPI version](https://badge.fury.io/py/llmir.svg)](https://badge.fury.io/py/llmir)
-[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg)](https://badge.fury.io/gh/oaklight%2Fllmir)
+[![PyPI version](https://badge.fury.io/py/llm-rosetta.svg)](https://badge.fury.io/py/llm-rosetta)
+[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllm-rosetta.svg)](https://badge.fury.io/gh/oaklight%2Fllm-rosetta)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llmir)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llm-rosetta)
 
 [English Version](README_en.md) | [中文版](README_zh.md)
 
-**Large Language Model Intermediate Representation** — 一个通过中心化中间表示（IR）的轴辐式架构，在不同 LLM 提供商 API 格式之间进行转换的 Python 库。
+**Large Language Model Rosetta Stone** — 一个通过中心化中间表示（IR）的轴辐式架构，在不同 LLM 提供商 API 格式之间进行转换的 Python 库。
 
 ## 完整文档
 
 完整文档请访问：
 
-- **English**: [https://llmir.readthedocs.io/en/latest/](https://llmir.readthedocs.io/en/latest/)
-- **中文**: [https://llmir.readthedocs.io/zh-cn/latest/](https://llmir.readthedocs.io/zh-cn/latest/)
+- **English**: [https://llm-rosetta.readthedocs.io/en/latest/](https://llm-rosetta.readthedocs.io/en/latest/)
+- **中文**: [https://llm-rosetta.readthedocs.io/zh-cn/latest/](https://llm-rosetta.readthedocs.io/zh-cn/latest/)
 
 ## 解决的问题
 
-当构建需要对接多个 LLM 提供商的应用时，你会面临 N² 转换问题——每对提供商之间都需要专门的转换逻辑。LLMIR 通过轴辐式（hub-and-spoke）方案解决这一问题：每个提供商只需要一个与共享 IR 格式之间的转换器。
+当构建需要对接多个 LLM 提供商的应用时，你会面临 N² 转换问题——每对提供商之间都需要专门的转换逻辑。LLM-Rosetta 通过轴辐式（hub-and-spoke）方案解决这一问题：每个提供商只需要一个与共享 IR 格式之间的转换器。
 
 ```
 Provider A ──→ IR ──→ Provider B
@@ -51,19 +51,19 @@ Provider C ──→ IR ──→ Provider D
 安装核心包（需要 **Python >= 3.8**）：
 
 ```bash
-pip install llmir
+pip install llm-rosetta
 ```
 
 ### 安装提供商 SDK
 
 ```bash
 # 单个提供商
-pip install llmir[openai]
-pip install llmir[anthropic]
-pip install llmir[google]
+pip install llm-rosetta[openai]
+pip install llm-rosetta[anthropic]
+pip install llm-rosetta[google]
 
 # 所有提供商
-pip install llmir[openai,anthropic,google]
+pip install llm-rosetta[openai,anthropic,google]
 ```
 
 ### 可选依赖
@@ -77,7 +77,7 @@ pip install llmir[openai,anthropic,google]
 ## 快速开始
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 # 创建转换器
 openai_conv = OpenAIChatConverter()
@@ -91,7 +91,7 @@ anthropic_request = anthropic_conv.request_to_provider(ir_messages)
 ### 自动检测
 
 ```python
-from llmir import convert, detect_provider
+from llm_rosetta import convert, detect_provider
 
 # 自动检测提供商并转换
 provider = detect_provider(some_response)
@@ -101,8 +101,8 @@ ir_messages = convert(some_response, direction="from_provider")
 ### 跨提供商对话
 
 ```python
-from llmir import OpenAIChatConverter, GoogleGenAIConverter
-from llmir.types.ir import Message, ContentPart
+from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta.types.ir import Message, ContentPart
 
 # 共享的 IR 消息历史
 ir_messages = []
@@ -119,7 +119,7 @@ google_request = google_conv.request_to_provider({"messages": ir_messages})
 
 ## 相关项目
 
-LLMIR 是 ToolRegistry 生态系统的一部分：
+LLM-Rosetta 是 ToolRegistry 生态系统的一部分：
 
 - **[ToolRegistry](https://github.com/Oaklight/ToolRegistry)** — LLM 函数调用的工具注册与管理
 - **[ToolRegistry Hub](https://github.com/Oaklight/toolregistry-hub)** — 开箱即用的工具集合
@@ -127,7 +127,7 @@ LLMIR 是 ToolRegistry 生态系统的一部分：
 
 ## 贡献
 
-欢迎贡献！请访问 [GitHub 仓库](https://github.com/Oaklight/llmir) 开始参与。
+欢迎贡献！请访问 [GitHub 仓库](https://github.com/Oaklight/llm-rosetta) 开始参与。
 
 ## 许可证
 

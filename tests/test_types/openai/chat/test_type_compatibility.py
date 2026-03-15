@@ -1,7 +1,7 @@
-"""Test compatibility between LLMIR OpenAI Chat type replicas and OpenAI SDK types.
+"""Test compatibility between LLM-Rosetta OpenAI Chat type replicas and OpenAI SDK types.
 
 This module uses the RECOMMENDED testing approach:
-- Create objects using LLMIR TypedDict replicas
+- Create objects using LLM-Rosetta TypedDict replicas
 - Validate them using OpenAI SDK's Pydantic models
 - This ensures our replicas can generate SDK-compatible data
 
@@ -15,14 +15,14 @@ import pytest
 
 
 def test_chat_completion_response():
-    """Test creating ChatCompletion response with LLMIR replica and validating with SDK."""
+    """Test creating ChatCompletion response with LLM-Rosetta replica and validating with SDK."""
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llmir.types.openai.chat import ChatCompletion as LLMIRChatCompletion
+        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
 
-        # Create response using LLMIR replica
-        llmir_response: LLMIRChatCompletion = {
+        # Create response using LLM-Rosetta replica
+        llm_rosetta_response: LLMRosettaChatCompletion = {
             "id": "chatcmpl-123",
             "object": "chat.completion",
             "created": 1677652288,
@@ -45,14 +45,14 @@ def test_chat_completion_response():
         }
 
         # Validate with SDK - this is the critical test!
-        sdk_validated = SDKChatCompletion.model_validate(llmir_response)
+        sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
 
         # Verify the validated object matches our input
-        assert sdk_validated.id == llmir_response["id"]
-        assert sdk_validated.model == llmir_response["model"]
+        assert sdk_validated.id == llm_rosetta_response["id"]
+        assert sdk_validated.model == llm_rosetta_response["model"]
         assert (
             sdk_validated.choices[0].message.content
-            == llmir_response["choices"][0]["message"]["content"]
+            == llm_rosetta_response["choices"][0]["message"]["content"]
         )
         assert sdk_validated.usage.total_tokens == 21
 
@@ -61,14 +61,14 @@ def test_chat_completion_response():
 
 
 def test_tool_call_response():
-    """Test creating tool call response with LLMIR replica and validating with SDK."""
+    """Test creating tool call response with LLM-Rosetta replica and validating with SDK."""
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llmir.types.openai.chat import ChatCompletion as LLMIRChatCompletion
+        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
 
-        # Create tool call response using LLMIR replica
-        llmir_response: LLMIRChatCompletion = {
+        # Create tool call response using LLM-Rosetta replica
+        llm_rosetta_response: LLMRosettaChatCompletion = {
             "id": "chatcmpl-456",
             "object": "chat.completion",
             "created": 1677652288,
@@ -101,7 +101,7 @@ def test_tool_call_response():
         }
 
         # Validate with SDK
-        sdk_validated = SDKChatCompletion.model_validate(llmir_response)
+        sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
         assert sdk_validated.choices[0].message.tool_calls is not None
         assert len(sdk_validated.choices[0].message.tool_calls) == 1
         assert (
@@ -118,10 +118,10 @@ def test_response_with_optional_fields():
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llmir.types.openai.chat import ChatCompletion as LLMIRChatCompletion
+        from llm_rosetta.types.openai.chat import ChatCompletion as LLMRosettaChatCompletion
 
         # Create response with optional fields
-        llmir_response: LLMIRChatCompletion = {
+        llm_rosetta_response: LLMRosettaChatCompletion = {
             "id": "chatcmpl-detailed",
             "object": "chat.completion",
             "created": 1234567890,
@@ -151,7 +151,7 @@ def test_response_with_optional_fields():
         }
 
         # Validate with SDK
-        sdk_validated = SDKChatCompletion.model_validate(llmir_response)
+        sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
         assert sdk_validated.usage.prompt_tokens_details.cached_tokens == 5
         assert sdk_validated.usage.completion_tokens_details.reasoning_tokens == 3
         assert sdk_validated.system_fingerprint == "fp_test123"
@@ -176,7 +176,7 @@ def test_message_params():
             ChatCompletionUserMessageParam as SDKUserMessageParam,
         )
 
-        from llmir.types.openai.chat import (
+        from llm_rosetta.types.openai.chat import (
             ChatCompletionAssistantMessageParam,
             ChatCompletionSystemMessageParam,
             ChatCompletionToolMessageParam,
@@ -241,13 +241,13 @@ def test_message_params():
 
 
 def test_usage_statistics():
-    """Test creating usage statistics with LLMIR replica and validating with SDK."""
+    """Test creating usage statistics with LLM-Rosetta replica and validating with SDK."""
     try:
         from openai.types.completion_usage import (
             CompletionUsage as SDKCompletionUsage,
         )
 
-        from llmir.types.openai.chat import CompletionUsage
+        from llm_rosetta.types.openai.chat import CompletionUsage
 
         # Basic usage
         basic_usage: CompletionUsage = {
@@ -281,7 +281,7 @@ def test_response_formats():
     by ensuring our replicas match the expected format.
     """
     try:
-        from llmir.types.openai.chat import (
+        from llm_rosetta.types.openai.chat import (
             ResponseFormatJSONObject,
             ResponseFormatJSONSchema,
             ResponseFormatText,
@@ -311,13 +311,13 @@ def test_response_formats():
 
 
 def test_tool_definitions():
-    """Test creating tool definitions with LLMIR replica and validating with SDK."""
+    """Test creating tool definitions with LLM-Rosetta replica and validating with SDK."""
     try:
         from openai.types.chat.chat_completion_tool_param import (
             ChatCompletionToolParam as SDKToolParam,
         )
 
-        from llmir.types.openai.chat import ChatCompletionFunctionToolParam
+        from llm_rosetta.types.openai.chat import ChatCompletionFunctionToolParam
 
         tool_def: ChatCompletionFunctionToolParam = {
             "type": "function",
@@ -347,22 +347,22 @@ def test_comprehensive_sdk_validation():
     """Comprehensive test creating complete request/response cycle with SDK validation.
 
     This test demonstrates the full workflow:
-    1. Create LLMIR replica types for request and response
+    1. Create LLM-Rosetta replica types for request and response
     2. Validate both with OpenAI SDK
     3. Ensure end-to-end compatibility
     """
     try:
         from openai.types.chat import ChatCompletion as SDKChatCompletion
 
-        from llmir.types.openai.chat import (
-            ChatCompletion as LLMIRChatCompletion,
+        from llm_rosetta.types.openai.chat import (
+            ChatCompletion as LLMRosettaChatCompletion,
         )
-        from llmir.types.openai.chat import (
-            CompletionCreateParams as LLMIRCompletionCreateParams,
+        from llm_rosetta.types.openai.chat import (
+            CompletionCreateParams as LLMRosettaCompletionCreateParams,
         )
 
-        # Create request params using LLMIR replica
-        llmir_request: LLMIRCompletionCreateParams = {
+        # Create request params using LLM-Rosetta replica
+        llm_rosetta_request: LLMRosettaCompletionCreateParams = {
             "model": "gpt-4o",
             "messages": [
                 {
@@ -376,11 +376,11 @@ def test_comprehensive_sdk_validation():
 
         # Note: We can't directly validate CompletionCreateParams with SDK
         # because it's used as **kwargs, but we can verify structure
-        assert llmir_request["model"] == "gpt-4o"
-        assert len(llmir_request["messages"]) == 1
+        assert llm_rosetta_request["model"] == "gpt-4o"
+        assert len(llm_rosetta_request["messages"]) == 1
 
-        # Create response using LLMIR replica
-        llmir_response: LLMIRChatCompletion = {
+        # Create response using LLM-Rosetta replica
+        llm_rosetta_response: LLMRosettaChatCompletion = {
             "id": "chatcmpl-comprehensive",
             "object": "chat.completion",
             "created": 1234567890,
@@ -403,12 +403,12 @@ def test_comprehensive_sdk_validation():
         }
 
         # Validate response with SDK
-        sdk_validated = SDKChatCompletion.model_validate(llmir_response)
+        sdk_validated = SDKChatCompletion.model_validate(llm_rosetta_response)
         assert sdk_validated.id == "chatcmpl-comprehensive"
         assert sdk_validated.choices[0].message.content == "I'm doing well, thank you!"
 
         print("✓ Comprehensive SDK validation successful")
-        print("  LLMIR replicas are fully compatible with OpenAI SDK")
+        print("  LLM-Rosetta replicas are fully compatible with OpenAI SDK")
 
     except ImportError:
         pytest.skip("OpenAI SDK not available")

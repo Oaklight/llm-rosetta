@@ -13,7 +13,7 @@ Requires:
 - Network access
 
 Usage:
-    conda activate llmir
+    conda activate llm_rosetta
     python tests/integration/test_openai_chat_rest_e2e.py
 """
 
@@ -28,8 +28,8 @@ import dotenv
 import requests
 
 from examples.tools import available_tools, tools_spec
-from llmir.converters.openai_chat import OpenAIChatConverter
-from llmir.types.ir import (
+from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
     create_tool_result_message,

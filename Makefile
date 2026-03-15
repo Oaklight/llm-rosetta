@@ -1,7 +1,7 @@
 # Makefile for cicada pip package
 
 # Variables
-PACKAGE_NAME := llmir
+PACKAGE_NAME := llm_rosetta
 DIST_DIR := dist
 
 # Default target

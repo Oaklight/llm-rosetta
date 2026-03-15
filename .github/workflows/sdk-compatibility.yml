@@ -77,7 +77,7 @@ jobs:
 
             1. Review the test output above
             2. Check which SDK version introduced the breaking change
-            3. Update the type definitions in \`src/llmir/types/\` accordingly
+            3. Update the type definitions in \`src/llm_rosetta/types/\` accordingly
             4. Close this issue once resolved
             `,
             });

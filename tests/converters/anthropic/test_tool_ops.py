@@ -2,8 +2,8 @@
 Anthropic ToolOps unit tests.
 """
 
-from llmir.converters.anthropic.tool_ops import AnthropicToolOps
-from llmir.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
+from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+from llm_rosetta.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
 
 
 class TestAnthropicToolOps:

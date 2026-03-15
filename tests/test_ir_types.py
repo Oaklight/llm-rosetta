@@ -1,5 +1,5 @@
 """
-Tests for LLMIR IR Types Module
+Tests for LLM-Rosetta IR Types Module
 
 测试 IR 类型模块的所有组件：
 - 类型定义和验证
@@ -12,7 +12,7 @@ Tests for LLMIR IR Types Module
 import pytest
 
 # 直接从 IR 模块导入，避免通过主模块导入旧的转换器
-from llmir.types.ir import (
+from llm_rosetta.types.ir import (
     # Content parts
     TextPart,
     ImagePart,

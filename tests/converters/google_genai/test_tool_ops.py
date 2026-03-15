@@ -4,8 +4,8 @@ Google GenAI ToolOps unit tests.
 
 import pytest
 
-from llmir.converters.google_genai.tool_ops import GoogleGenAIToolOps
-from llmir.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
+from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+from llm_rosetta.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
 
 
 class TestGoogleGenAIToolOps:

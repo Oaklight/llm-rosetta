@@ -2,9 +2,9 @@
 Anthropic MessageOps unit tests.
 """
 
-from llmir.converters.anthropic.content_ops import AnthropicContentOps
-from llmir.converters.anthropic.message_ops import AnthropicMessageOps
-from llmir.converters.anthropic.tool_ops import AnthropicToolOps
+from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+from llm_rosetta.converters.anthropic.message_ops import AnthropicMessageOps
+from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
 
 
 class TestAnthropicMessageOps:

@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "llmir"
+name = "llm-rosetta"
 dynamic = ["version"]
 authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
-description = "LLMIR: A library to convert between different LLM provider API standards using intermediate representation (IR)."
+description = "LLM-Rosetta: A library to convert between different LLM provider API standards using intermediate representation (IR)."
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
@@ -37,18 +37,21 @@ dev = [
     "twine>=6.1.0",
 ]
 
-all = ["llmir[openai,anthropic,google,dev]"]
+all = ["llm-rosetta[openai,anthropic,google,dev]"]
 
 [project.urls]
-Documentation = "https://llmir.readthedocs.io"
-Repository = "https://github.com/Oaklight/llmir"
-Issues = "https://github.com/Oaklight/llmir/issues"
+Documentation = "https://llm-rosetta.readthedocs.io"
+Repository = "https://github.com/Oaklight/llm-rosetta"
+Issues = "https://github.com/Oaklight/llm-rosetta/issues"
+
+[project.scripts]
+llm-rosetta-gateway = "llm_rosetta.gateway:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llmir" = ["py.typed"]
+"llm_rosetta" = ["py.typed"]
 
 [tool.setuptools.dynamic]
-version = { attr = "llmir.__version__" }
+version = { attr = "llm_rosetta.__version__" }

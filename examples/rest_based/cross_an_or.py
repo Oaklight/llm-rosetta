@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-provider multi-turn conversation: Anthropic <-> OpenAI Responses (REST).
 
-Demonstrates LLMIR's ability to maintain conversation context across
+Demonstrates LLM-Rosetta's ability to maintain conversation context across
 different LLM providers using raw HTTP requests via httpx.
 Odd turns use Anthropic, even turns use OpenAI Responses.
 
@@ -43,7 +43,7 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llmir import AnthropicConverter, OpenAIResponsesConverter  # noqa: E402
+from llm_rosetta import AnthropicConverter, OpenAIResponsesConverter  # noqa: E402
 
 # Initialize converters
 an_converter = AnthropicConverter()

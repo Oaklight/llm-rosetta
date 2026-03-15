@@ -4,7 +4,7 @@ OpenAI Responses Converter integration tests.
 
 import pytest
 
-from llmir.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 
 
 class TestOpenAIResponsesConverter:

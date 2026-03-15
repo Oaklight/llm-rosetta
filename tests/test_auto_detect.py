@@ -4,7 +4,7 @@ Tests for auto-detection and conversion functionality
 
 import pytest
 
-from llmir.auto_detect import convert, detect_provider, get_converter_for_provider
+from llm_rosetta.auto_detect import convert, detect_provider, get_converter_for_provider
 
 
 class TestDetectProvider:
@@ -244,28 +244,28 @@ class TestGetConverterForProvider:
 
     def test_get_openai_chat_converter(self):
         """测试获取 OpenAI Chat 转换器"""
-        from llmir.converters import OpenAIChatConverter
+        from llm_rosetta.converters import OpenAIChatConverter
 
         converter = get_converter_for_provider("openai_chat")
         assert isinstance(converter, OpenAIChatConverter)
 
     def test_get_openai_responses_converter(self):
         """测试获取 OpenAI Responses 转换器"""
-        from llmir.converters import OpenAIResponsesConverter
+        from llm_rosetta.converters import OpenAIResponsesConverter
 
         converter = get_converter_for_provider("openai_responses")
         assert isinstance(converter, OpenAIResponsesConverter)
 
     def test_get_anthropic_converter(self):
         """测试获取 Anthropic 转换器"""
-        from llmir.converters import AnthropicConverter
+        from llm_rosetta.converters import AnthropicConverter
 
         converter = get_converter_for_provider("anthropic")
         assert isinstance(converter, AnthropicConverter)
 
     def test_get_google_converter(self):
         """测试获取 Google 转换器"""
-        from llmir.converters import GoogleConverter
+        from llm_rosetta.converters import GoogleConverter
 
         converter = get_converter_for_provider("google")
         assert isinstance(converter, GoogleConverter)

@@ -1,4 +1,4 @@
-# 竞品分析：llm-bridge vs llmx vs llm_api_adapter vs universal-llm vs llmir
+# 竞品分析：llm-bridge vs llmx vs llm_api_adapter vs universal-llm vs llm-rosetta
 
 ## 执行摘要
 
@@ -8,7 +8,7 @@
 - **llmx**: Python 实现，提供统一的 LLM 调用接口，支持本地模型。
 - **llm_api_adapter**: Python 实现，基于 Adapter 模式的统一调用接口，内置成本计算。
 - **universal-llm**: Python 实现，纯 HTTP 的统一调用接口，零 SDK 依赖。
-- **llmir**: 我们的 Python 项目，基于中间表示(IR)的转换系统。
+- **llm-rosetta**: 我们的 Python 项目，基于中间表示(IR)的转换系统。
 
 ## 1. llm-bridge 分析
 
@@ -242,7 +242,7 @@ class OpenAIClient(BaseLLMClient):
 
 ---
 
-## 5. llmir 分析（我们的项目）
+## 5. llm-rosetta 分析（我们的项目）
 
 ### 5.1 项目概况
 
@@ -286,7 +286,7 @@ Provider Format ←→ IR Format ←→ Provider Format
 
 ## 6. 功能对比矩阵
 
-| 功能              | llm-bridge | llmx     | llm_api_adapter | universal-llm | llmir (我们) |
+| 功能              | llm-bridge | llmx     | llm_api_adapter | universal-llm | llm-rosetta (我们) |
 | ----------------- | ---------- | -------- | --------------- | ------------- | ------------ |
 | **核心定位**      | 格式转换   | 调用接口 | 调用接口        | 调用接口      | 格式转换     |
 | **基础功能**      |
@@ -327,11 +327,11 @@ Provider Format ←→ IR Format ←→ Provider Format
 - **llmx**: **简单易用优先**。提供最简单的 API 来调用不同模型，包括本地模型，适合快速原型和研究。
 - **llm_api_adapter**: **企业级调用优先**。在统一调用的基础上，增加了成本、错误、定价等企业级功能。
 - **universal-llm**: **极简主义优先**。无 SDK 依赖，纯 HTTP，通过环境变量配置，适合追求轻量和不想被 SDK 锁定的开发者。
-- **llmir (我们)**: **结构化与扩展性优先**。通过清晰的 IR 设计，支持复杂的双向转换和工具链等高级场景。
+- **llm-rosetta (我们)**: **结构化与扩展性优先**。通过清晰的 IR 设计，支持复杂的双向转换和工具链等高级场景。
 
 ### 7.2 结论
 
-我们的项目`llmir`在**格式转换**和**复杂场景支持**（如工具链）方面具有明显优势，与`llm-bridge`定位相似但使用 Python 实现。
+我们的项目`llm-rosetta`在**格式转换**和**复杂场景支持**（如工具链）方面具有明显优势，与`llm-bridge`定位相似但使用 Python 实现。
 
 其他三个项目（`llmx`, `llm_api_adapter`, `universal-llm`）则专注于**统一调用**，每个项目各有侧重：
 

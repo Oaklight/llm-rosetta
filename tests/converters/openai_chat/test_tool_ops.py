@@ -4,8 +4,8 @@ OpenAI Chat ToolOps unit tests.
 
 import json
 
-from llmir.converters.openai_chat.tool_ops import OpenAIChatToolOps
-from llmir.types.ir import ToolCallPart
+from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+from llm_rosetta.types.ir import ToolCallPart
 
 
 class TestOpenAIChatToolOps:

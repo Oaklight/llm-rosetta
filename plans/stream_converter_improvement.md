@@ -15,8 +15,8 @@
 
 ### Current State
 
-The LLMIR stream conversion layer supports 6 IR event types defined in
-[`stream.py`](../src/llmir/types/ir/stream.py): `TextDeltaEvent`,
+The LLM-Rosetta stream conversion layer supports 6 IR event types defined in
+[`stream.py`](../src/llm-rosetta/types/ir/stream.py): `TextDeltaEvent`,
 `ReasoningDeltaEvent`, `ToolCallStartEvent`, `ToolCallDeltaEvent`,
 `FinishEvent`, and `UsageEvent`. All 4 providers (OpenAI Chat, Anthropic,
 Google GenAI, OpenAI Responses) implement `stream_response_from_provider` and
@@ -49,11 +49,11 @@ Man-in-the-Middle proxy scenario.
 
 | # | Problem | Impact | Files |
 |---|---------|--------|-------|
-| P0-1 | **OpenAI Chat `to_provider` missing top-level fields**: Each chunk lacks `id`, `object: "chat.completion.chunk"`, `model`, `created`. First chunk lacks `role: "assistant"` in delta. | SDK clients reject or misparse chunks. | [`openai_chat/converter.py`](../src/llmir/converters/openai_chat/converter.py) |
-| P0-2 | **Anthropic `to_provider` missing lifecycle events**: No `message_start`, `content_block_start` (text/thinking), `content_block_stop`, `message_stop` events generated. `content_block_delta` lacks `index` field. | Anthropic SDK client cannot reconstruct the message. | [`anthropic/converter.py`](../src/llmir/converters/anthropic/converter.py) |
-| P0-3 | **OpenAI Responses `to_provider` missing lifecycle events**: No `response.created`, `response.in_progress`, `response.output_item.added` (message), `response.content_part.added` events. Both `finish` and `usage` emit `response.completed` causing **duplicate terminal events**. | Responses SDK client receives malformed stream. | [`openai_responses/converter.py`](../src/llmir/converters/openai_responses/converter.py) |
-| P0-4 | **Google GenAI `to_provider` tool_call_delta missing `name`**: `tool_call_delta` generates `function_call` with `name: ""` because the stateless converter has no access to the tool name from the earlier `tool_call_start`. | Google SDK receives malformed function call. | [`google_genai/converter.py`](../src/llmir/converters/google_genai/converter.py) |
-| P0-5 | **IR layer lacks session-level metadata event**: No IR event type carries response ID, model name, or creation timestamp. This information is needed by `to_provider` to populate top-level fields. | Cannot produce structurally complete output for any provider. | [`stream.py`](../src/llmir/types/ir/stream.py) |
+| P0-1 | **OpenAI Chat `to_provider` missing top-level fields**: Each chunk lacks `id`, `object: "chat.completion.chunk"`, `model`, `created`. First chunk lacks `role: "assistant"` in delta. | SDK clients reject or misparse chunks. | [`openai_chat/converter.py`](../src/llm-rosetta/converters/openai_chat/converter.py) |
+| P0-2 | **Anthropic `to_provider` missing lifecycle events**: No `message_start`, `content_block_start` (text/thinking), `content_block_stop`, `message_stop` events generated. `content_block_delta` lacks `index` field. | Anthropic SDK client cannot reconstruct the message. | [`anthropic/converter.py`](../src/llm-rosetta/converters/anthropic/converter.py) |
+| P0-3 | **OpenAI Responses `to_provider` missing lifecycle events**: No `response.created`, `response.in_progress`, `response.output_item.added` (message), `response.content_part.added` events. Both `finish` and `usage` emit `response.completed` causing **duplicate terminal events**. | Responses SDK client receives malformed stream. | [`openai_responses/converter.py`](../src/llm-rosetta/converters/openai_responses/converter.py) |
+| P0-4 | **Google GenAI `to_provider` tool_call_delta missing `name`**: `tool_call_delta` generates `function_call` with `name: ""` because the stateless converter has no access to the tool name from the earlier `tool_call_start`. | Google SDK receives malformed function call. | [`google_genai/converter.py`](../src/llm-rosetta/converters/google_genai/converter.py) |
+| P0-5 | **IR layer lacks session-level metadata event**: No IR event type carries response ID, model name, or creation timestamp. This information is needed by `to_provider` to populate top-level fields. | Cannot produce structurally complete output for any provider. | [`stream.py`](../src/llm-rosetta/types/ir/stream.py) |
 | P0-6 | **Stateless design prevents context propagation**: Anthropic `ToolCallDeltaEvent.tool_call_id` is always `""`. Google `to_provider` cannot recover tool name for deltas. OpenAI Chat cannot populate `id`/`model` per chunk. | Fundamental architectural limitation. | All converter files |
 
 ### P1 — Improves Completeness and Correctness
@@ -62,18 +62,18 @@ Man-in-the-Middle proxy scenario.
 |---|---------|--------|-------|
 | P1-1 | **`from_provider` discards session metadata**: OpenAI Chat ignores `id`/`model`/`created`/`role` from chunks. Anthropic ignores `message.id`/`message.model` from `message_start`. OpenAI Responses ignores `response.created` payload. | Metadata lost; cannot round-trip. | All converter files |
 | P1-2 | **Provider-specific events silently dropped**: Anthropic `content_block_stop`/`message_stop`/`ping`/`content_block_start(text/thinking)`. Google `executable_code`/`code_execution_result`/`inline_data`/`grounding_metadata`. OpenAI Chat `refusal`/`logprobs`/`system_fingerprint`. OpenAI Responses all `*.done` events, `refusal.delta/done`, `content_part.added/done`. | Information loss in proxy scenarios. | All converter files |
-| P1-3 | **BaseConverter does not declare stream abstract methods**: 4 converters each implement stream methods independently with no base class contract. Parameter naming is inconsistent (`chunk` vs `event`). | No compile-time enforcement; inconsistent API. | [`base/converter.py`](../src/llmir/converters/base/converter.py) |
+| P1-3 | **BaseConverter does not declare stream abstract methods**: 4 converters each implement stream methods independently with no base class contract. Parameter naming is inconsistent (`chunk` vs `event`). | No compile-time enforcement; inconsistent API. | [`base/converter.py`](../src/llm-rosetta/converters/base/converter.py) |
 | P1-4 | **`_normalize()` duplicated across all 4 converters**: Nearly identical static method in each converter. | Code duplication; maintenance burden. | All converter files |
-| P1-5 | **Anthropic `ToolCallDeltaEvent.tool_call_id` always empty**: Delta events don't repeat the ID; stateless converter cannot fill it. | Consumer cannot correlate deltas to tool calls. | [`anthropic/converter.py`](../src/llmir/converters/anthropic/converter.py) |
-| P1-6 | **OpenAI Chat stream usage lacks detailed fields**: `prompt_tokens_details` and `completion_tokens_details` not extracted in stream path (but handled in non-stream `response_from_provider`). | Inconsistency between stream and non-stream paths. | [`openai_chat/converter.py`](../src/llmir/converters/openai_chat/converter.py) |
+| P1-5 | **Anthropic `ToolCallDeltaEvent.tool_call_id` always empty**: Delta events don't repeat the ID; stateless converter cannot fill it. | Consumer cannot correlate deltas to tool calls. | [`anthropic/converter.py`](../src/llm-rosetta/converters/anthropic/converter.py) |
+| P1-6 | **OpenAI Chat stream usage lacks detailed fields**: `prompt_tokens_details` and `completion_tokens_details` not extracted in stream path (but handled in non-stream `response_from_provider`). | Inconsistency between stream and non-stream paths. | [`openai_chat/converter.py`](../src/llm-rosetta/converters/openai_chat/converter.py) |
 
 ### P2 — Nice-to-Have Improvements
 
 | # | Problem | Impact | Files |
 |---|---------|--------|-------|
 | P2-1 | **Unknown event type returns empty `{}`**: All 4 converters return `{}` for unrecognized IR event types in `to_provider`. | Silent failure; hard to debug. | All converter files |
-| P2-2 | **No `ErrorEvent` in IR**: No standard way to propagate mid-stream errors. | Error information lost. | [`stream.py`](../src/llmir/types/ir/stream.py) |
-| P2-3 | **Anthropic `message_start` emits partial `UsageEvent`**: Only `input_tokens` available; `completion_tokens=0`. May confuse consumers. | Misleading usage data. | [`anthropic/converter.py`](../src/llmir/converters/anthropic/converter.py) |
+| P2-2 | **No `ErrorEvent` in IR**: No standard way to propagate mid-stream errors. | Error information lost. | [`stream.py`](../src/llm-rosetta/types/ir/stream.py) |
+| P2-3 | **Anthropic `message_start` emits partial `UsageEvent`**: Only `input_tokens` available; `completion_tokens=0`. May confuse consumers. | Misleading usage data. | [`anthropic/converter.py`](../src/llm-rosetta/converters/anthropic/converter.py) |
 | P2-4 | **`analysis/stream_converter_review.md` outdated**: P0 issues listed there (missing `ReasoningDeltaEvent`, `thinking_delta` mapping) have been fixed. Document no longer reflects reality. | Misleading documentation. | [`analysis/stream_converter_review.md`](../analysis/stream_converter_review.md) |
 
 ---
@@ -244,7 +244,7 @@ Key changes:
 
 ### 3.3 BaseConverter Stream Abstract Methods
 
-Add to [`base/converter.py`](../src/llmir/converters/base/converter.py):
+Add to [`base/converter.py`](../src/llm-rosetta/converters/base/converter.py):
 
 ```python
 from ..types.ir.stream import IRStreamEvent
@@ -299,7 +299,7 @@ eliminate duplication across all 4 converters.
 
 ### 4.1 OpenAI Chat Completions
 
-**File**: [`src/llmir/converters/openai_chat/converter.py`](../src/llmir/converters/openai_chat/converter.py)
+**File**: [`src/llm-rosetta/converters/openai_chat/converter.py`](../src/llm-rosetta/converters/openai_chat/converter.py)
 
 #### `stream_response_from_provider` changes
 
@@ -351,7 +351,7 @@ eliminate duplication across all 4 converters.
 
 ### 4.2 Anthropic Messages API
 
-**File**: [`src/llmir/converters/anthropic/converter.py`](../src/llmir/converters/anthropic/converter.py)
+**File**: [`src/llm-rosetta/converters/anthropic/converter.py`](../src/llm-rosetta/converters/anthropic/converter.py)
 
 #### `stream_response_from_provider` changes
 
@@ -421,7 +421,7 @@ eliminate duplication across all 4 converters.
 
 ### 4.3 Google GenAI
 
-**File**: [`src/llmir/converters/google_genai/converter.py`](../src/llmir/converters/google_genai/converter.py)
+**File**: [`src/llm-rosetta/converters/google_genai/converter.py`](../src/llm-rosetta/converters/google_genai/converter.py)
 
 #### `stream_response_from_provider` changes
 
@@ -447,7 +447,7 @@ eliminate duplication across all 4 converters.
 
 ### 4.4 OpenAI Responses API
 
-**File**: [`src/llmir/converters/openai_responses/converter.py`](../src/llmir/converters/openai_responses/converter.py)
+**File**: [`src/llm-rosetta/converters/openai_responses/converter.py`](../src/llm-rosetta/converters/openai_responses/converter.py)
 
 #### `stream_response_from_provider` changes
 
@@ -536,15 +536,15 @@ eliminate duplication across all 4 converters.
 **Scope**: Extend IR stream types; add `StreamContext`; update `BaseConverter`.
 
 **Changes**:
-- ✅ [`src/llmir/types/ir/stream.py`](../src/llmir/types/ir/stream.py):
+- ✅ [`src/llm-rosetta/types/ir/stream.py`](../src/llm-rosetta/types/ir/stream.py):
   Add `StreamStartEvent`, `StreamEndEvent`, `ContentBlockStartEvent`,
   `ContentBlockEndEvent`. Update `IRStreamEvent` union and `__all__`.
-- ✅ New file `src/llmir/converters/base/stream_context.py`:
+- ✅ New file `src/llm-rosetta/converters/base/stream_context.py`:
   Implement `StreamContext` class.
-- ✅ [`src/llmir/converters/base/converter.py`](../src/llmir/converters/base/converter.py):
+- ✅ [`src/llm-rosetta/converters/base/converter.py`](../src/llm-rosetta/converters/base/converter.py):
   Add abstract `stream_response_from_provider` and `stream_response_to_provider`.
   Extract `_normalize()` as a base static method.
-- ✅ [`src/llmir/converters/base/__init__.py`](../src/llmir/converters/base/__init__.py):
+- ✅ [`src/llm-rosetta/converters/base/__init__.py`](../src/llm-rosetta/converters/base/__init__.py):
   Export `StreamContext`.
 
 **Dependencies**: None.
@@ -557,7 +557,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 **Scope**: Fix P0-1 (missing top-level fields) and P1-6 (detailed usage).
 
 **Changes**:
-- [`src/llmir/converters/openai_chat/converter.py`](../src/llmir/converters/openai_chat/converter.py):
+- [`src/llm-rosetta/converters/openai_chat/converter.py`](../src/llm-rosetta/converters/openai_chat/converter.py):
   - `stream_response_from_provider`: Emit `StreamStartEvent` from first chunk;
     extract detailed usage; emit `StreamEndEvent`.
   - `stream_response_to_provider`: Populate `id`/`object`/`model`/`created`
@@ -573,7 +573,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 **Scope**: Fix P0-2 (missing lifecycle events), P1-5 (empty tool_call_id).
 
 **Changes**:
-- [`src/llmir/converters/anthropic/converter.py`](../src/llmir/converters/anthropic/converter.py):
+- [`src/llm-rosetta/converters/anthropic/converter.py`](../src/llm-rosetta/converters/anthropic/converter.py):
   - `stream_response_from_provider`: Emit `StreamStartEvent` from `message_start`;
     emit `ContentBlockStartEvent`/`ContentBlockEndEvent`; fill `tool_call_id`
     from context; emit `StreamEndEvent` from `message_stop`.
@@ -591,7 +591,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 **Scope**: Fix P0-4 (tool_call_delta missing name).
 
 **Changes**:
-- [`src/llmir/converters/google_genai/converter.py`](../src/llmir/converters/google_genai/converter.py):
+- [`src/llm-rosetta/converters/google_genai/converter.py`](../src/llm-rosetta/converters/google_genai/converter.py):
   - `stream_response_from_provider`: Emit `StreamStartEvent`/`StreamEndEvent`.
   - `stream_response_to_provider`: Use context to recover tool name for
     `tool_call_delta`; handle new event types (mostly no-ops for Google).
@@ -605,7 +605,7 @@ methods have default `pass` or are added with backward-compatible signatures).
 **Scope**: Fix P0-3 (missing lifecycle events, duplicate `response.completed`).
 
 **Changes**:
-- [`src/llmir/converters/openai_responses/converter.py`](../src/llmir/converters/openai_responses/converter.py):
+- [`src/llm-rosetta/converters/openai_responses/converter.py`](../src/llm-rosetta/converters/openai_responses/converter.py):
   - `stream_response_from_provider`: Emit `StreamStartEvent` from
     `response.created`; emit `ContentBlockStartEvent`/`ContentBlockEndEvent`
     from `content_part.added`/`content_part.done`; emit `StreamEndEvent`

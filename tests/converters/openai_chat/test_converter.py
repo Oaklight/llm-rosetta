@@ -4,7 +4,7 @@ OpenAI Chat Converter integration tests (non-stream + stream).
 
 import pytest
 
-from llmir.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.openai_chat import OpenAIChatConverter
 
 
 class TestOpenAIChatConverter:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-provider multi-turn conversation: OpenAI Chat <-> Google GenAI (REST, Stream).
 
-Demonstrates LLMIR's ability to maintain conversation context across
+Demonstrates LLM-Rosetta's ability to maintain conversation context across
 different LLM providers using raw HTTP requests via httpx with streaming.
 Odd turns use OpenAI Chat, even turns use Google GenAI.
 
@@ -45,8 +45,8 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llmir import GoogleGenAIConverter, OpenAIChatConverter  # noqa: E402
-from llmir.converters.base.stream_context import StreamContext  # noqa: E402
+from llm_rosetta import GoogleGenAIConverter, OpenAIChatConverter  # noqa: E402
+from llm_rosetta.converters.base.stream_context import StreamContext  # noqa: E402
 
 # Initialize converters
 oc_converter = OpenAIChatConverter()

@@ -4,8 +4,8 @@ Anthropic Converter integration tests.
 Tests the top-level AnthropicConverter with full request/response conversion.
 """
 
-from llmir.converters.anthropic import AnthropicConverter
-from llmir.types.ir.request import IRRequest
+from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.types.ir.request import IRRequest
 
 
 class TestAnthropicConverter:

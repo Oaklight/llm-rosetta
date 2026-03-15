@@ -1,24 +1,24 @@
-# LLMIR
+# LLM-Rosetta
 
-[![PyPI version](https://badge.fury.io/py/llmir.svg)](https://badge.fury.io/py/llmir)
-[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg)](https://badge.fury.io/gh/oaklight%2Fllmir)
+[![PyPI version](https://badge.fury.io/py/llm-rosetta.svg)](https://badge.fury.io/py/llm-rosetta)
+[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllm-rosetta.svg)](https://badge.fury.io/gh/oaklight%2Fllm-rosetta)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llmir)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llm-rosetta)
 
 [English Version](README_en.md) | [中文版](README_zh.md)
 
-**Large Language Model Intermediate Representation** — A Python library for converting between different LLM provider API formats using a hub-and-spoke architecture with a central IR (Intermediate Representation).
+**Large Language Model Rosetta Stone** — A Python library for converting between different LLM provider API formats using a hub-and-spoke architecture with a central IR (Intermediate Representation).
 
 ## Full Documentation
 
 Full documentation is available at:
 
-- **English**: [https://llmir.readthedocs.io/en/latest/](https://llmir.readthedocs.io/en/latest/)
-- **中文**: [https://llmir.readthedocs.io/zh-cn/latest/](https://llmir.readthedocs.io/zh-cn/latest/)
+- **English**: [https://llm-rosetta.readthedocs.io/en/latest/](https://llm-rosetta.readthedocs.io/en/latest/)
+- **中文**: [https://llm-rosetta.readthedocs.io/zh-cn/latest/](https://llm-rosetta.readthedocs.io/zh-cn/latest/)
 
 ## The Problem
 
-When building applications that work with multiple LLM providers, you face an N² conversion problem — every provider pair requires its own conversion logic. LLMIR solves this with a hub-and-spoke approach: each provider only needs a single converter to/from the shared IR format.
+When building applications that work with multiple LLM providers, you face an N² conversion problem — every provider pair requires its own conversion logic. LLM-Rosetta solves this with a hub-and-spoke approach: each provider only needs a single converter to/from the shared IR format.
 
 ```
 Provider A ──→ IR ──→ Provider B
@@ -51,19 +51,19 @@ Provider C ──→ IR ──→ Provider D
 Install the core package (requires **Python >= 3.8**):
 
 ```bash
-pip install llmir
+pip install llm-rosetta
 ```
 
 ### Installing with Provider SDKs
 
 ```bash
 # Individual providers
-pip install llmir[openai]
-pip install llmir[anthropic]
-pip install llmir[google]
+pip install llm-rosetta[openai]
+pip install llm-rosetta[anthropic]
+pip install llm-rosetta[google]
 
 # All providers
-pip install llmir[openai,anthropic,google]
+pip install llm-rosetta[openai,anthropic,google]
 ```
 
 ### Optional Dependencies
@@ -77,7 +77,7 @@ pip install llmir[openai,anthropic,google]
 ## Quick Start
 
 ```python
-from llmir import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
 
 # Create converters
 openai_conv = OpenAIChatConverter()
@@ -91,7 +91,7 @@ anthropic_request = anthropic_conv.request_to_provider(ir_messages)
 ### Auto-Detection
 
 ```python
-from llmir import convert, detect_provider
+from llm_rosetta import convert, detect_provider
 
 # Automatically detect provider and convert
 provider = detect_provider(some_response)
@@ -101,8 +101,8 @@ ir_messages = convert(some_response, direction="from_provider")
 ### Cross-Provider Conversation
 
 ```python
-from llmir import OpenAIChatConverter, GoogleGenAIConverter
-from llmir.types.ir import Message, ContentPart
+from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta.types.ir import Message, ContentPart
 
 # Shared IR message history
 ir_messages = []
@@ -119,7 +119,7 @@ google_request = google_conv.request_to_provider({"messages": ir_messages})
 
 ## Related Projects
 
-LLMIR is part of the ToolRegistry ecosystem:
+LLM-Rosetta is part of the ToolRegistry ecosystem:
 
 - **[ToolRegistry](https://github.com/Oaklight/ToolRegistry)** — Tool registration and management for LLM function calling
 - **[ToolRegistry Hub](https://github.com/Oaklight/toolregistry-hub)** — Ready-to-use tool collection
@@ -127,7 +127,7 @@ LLMIR is part of the ToolRegistry ecosystem:
 
 ## Contributing
 
-Contributions are welcome! Please visit the [GitHub repository](https://github.com/Oaklight/llmir) to get started.
+Contributions are welcome! Please visit the [GitHub repository](https://github.com/Oaklight/llm-rosetta) to get started.
 
 ## License
 

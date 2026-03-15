@@ -18,7 +18,7 @@ from typing import Dict, List
 
 import httpx
 
-from llmir.types.ir import (
+from llm_rosetta.types.ir import (
     UserMessage,
     create_tool_result_message,
     extract_text_content,
@@ -387,11 +387,11 @@ def get_google_config() -> dict:
 logger = logging.getLogger(__name__)
 
 # Persistent cache directory under system temp
-_IMAGE_CACHE_DIR = Path(tempfile.gettempdir()) / "llmir_image_cache"
+_IMAGE_CACHE_DIR = Path(tempfile.gettempdir()) / "llm_rosetta_image_cache"
 
 # User-Agent per Wikimedia policy: include project URL for contact
 _USER_AGENT = (
-    "LLMIR-Example/1.0 (https://github.com/llmir/llmir; bot-contact) "
+    "LLM-Rosetta-Example/1.0 (https://github.com/llm-rosetta/llm-rosetta; bot-contact) "
     "python-httpx/" + httpx.__version__
 )
 

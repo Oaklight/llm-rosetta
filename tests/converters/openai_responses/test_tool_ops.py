@@ -4,8 +4,8 @@ OpenAI Responses ToolOps unit tests.
 
 import json
 
-from llmir.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
-from llmir.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
 
 
 class TestOpenAIResponsesToolOps:

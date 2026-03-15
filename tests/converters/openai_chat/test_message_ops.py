@@ -2,10 +2,10 @@
 OpenAI Chat MessageOps unit tests.
 """
 
-from llmir.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llmir.converters.openai_chat.message_ops import OpenAIChatMessageOps
-from llmir.converters.openai_chat.tool_ops import OpenAIChatToolOps
-from llmir.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
+from llm_rosetta.converters.openai_chat.message_ops import OpenAIChatMessageOps
+from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
+from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
 
 
 class TestOpenAIChatMessageOps:

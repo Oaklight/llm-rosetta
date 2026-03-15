@@ -4,7 +4,7 @@ OpenAI Chat ConfigOps unit tests.
 
 import pytest
 
-from llmir.converters.openai_chat.config_ops import OpenAIChatConfigOps
+from llm_rosetta.converters.openai_chat.config_ops import OpenAIChatConfigOps
 
 
 class TestOpenAIChatConfigOps:

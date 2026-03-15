@@ -2,8 +2,8 @@
 Anthropic Messages API stream converter unit tests.
 """
 
-from llmir.converters.anthropic import AnthropicConverter
-from llmir.converters.base.stream_context import StreamContext
+from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.base.stream_context import StreamContext
 
 
 class TestStreamResponseFromProvider:

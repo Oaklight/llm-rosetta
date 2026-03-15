@@ -4,7 +4,7 @@ Google GenAI ConfigOps unit tests.
 
 import pytest
 
-from llmir.converters.google_genai.config_ops import GoogleGenAIConfigOps
+from llm_rosetta.converters.google_genai.config_ops import GoogleGenAIConfigOps
 
 
 class TestGoogleGenAIConfigOps:

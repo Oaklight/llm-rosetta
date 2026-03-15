@@ -6,8 +6,8 @@ Tests the top-level GoogleGenAIConverter with full request/response conversion.
 
 import pytest
 
-from llmir.converters.google_genai import GoogleConverter, GoogleGenAIConverter
-from llmir.types.ir.request import IRRequest
+from llm_rosetta.converters.google_genai import GoogleConverter, GoogleGenAIConverter
+from llm_rosetta.types.ir.request import IRRequest
 
 
 class TestGoogleGenAIConverter:

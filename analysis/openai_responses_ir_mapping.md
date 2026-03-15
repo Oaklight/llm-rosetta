@@ -1,6 +1,6 @@
 # OpenAI Responses API 与 IR Types 映射文档
 
-本文档详细说明了 LLMIR 的 IR types 与 OpenAI Responses API 原生类型之间的映射关系。
+本文档详细说明了 LLM-Rosetta 的 IR types 与 OpenAI Responses API 原生类型之间的映射关系。
 
 ## 目录
 
@@ -686,4 +686,4 @@ def openai_to_ir_response(openai_response: Response) -> IRResponse:
 
 - [OpenAI Responses API 文档](https://platform.openai.com/docs/api-reference/responses)
 - [OpenAI SDK Types](https://github.com/openai/openai-python/tree/main/src/openai/types/responses)
-- [LLMIR IR Types 设计](./ir_design_final.md)
+- [LLM-Rosetta IR Types 设计](./ir_design_final.md)

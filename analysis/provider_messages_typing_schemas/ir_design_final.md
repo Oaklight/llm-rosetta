@@ -846,7 +846,7 @@ def convert_message(msg: Message) -> Any:
 ### 1. 项目结构
 
 ```
-src/llmir/
+src/llm-rosetta/
 ├── types/
 │   ├── __init__.py
 │   ├── ir.py              # IR类型定义
@@ -954,7 +954,7 @@ def test_tool_call_conversion():
 ### 4. 使用示例
 
 ```python
-from llmir import IRInput, to_anthropic, to_openai, to_google
+from llm-rosetta import IRInput, to_anthropic, to_openai, to_google
 
 # 创建IR消息
 ir_input: IRInput = [

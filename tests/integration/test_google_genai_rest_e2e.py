@@ -12,7 +12,7 @@ Requires:
 - Network access (uses proxychains if direct access fails)
 
 Usage:
-    conda activate llmir
+    conda activate llm_rosetta
     proxychains -q python tests/integration/test_google_genai_rest_e2e.py
 """
 
@@ -27,8 +27,8 @@ import dotenv
 import requests
 
 from examples.tools import available_tools, tools_spec
-from llmir.converters.google_genai import GoogleGenAIConverter
-from llmir.types.ir import (
+from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
     create_tool_result_message,

@@ -4,8 +4,8 @@ Google GenAI ContentOps unit tests.
 
 import pytest
 
-from llmir.converters.google_genai.content_ops import GoogleGenAIContentOps
-from llmir.types.ir import ImagePart, ReasoningPart, TextPart
+from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOps
+from llm_rosetta.types.ir import ImagePart, ReasoningPart, TextPart
 
 
 class TestGoogleGenAIContentOps:

@@ -2,8 +2,8 @@
 OpenAI Chat Completions stream converter unit tests.
 """
 
-from llmir.converters.base.stream_context import StreamContext
-from llmir.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.base.stream_context import StreamContext
+from llm_rosetta.converters.openai_chat import OpenAIChatConverter
 
 
 class TestStreamResponseFromProvider:

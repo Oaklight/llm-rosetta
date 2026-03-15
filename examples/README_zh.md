@@ -1,8 +1,8 @@
-# LLMIR 跨 Provider 示例
+# LLM-Rosetta 跨 Provider 示例
 
 ## 概述
 
-这些示例展示了 **LLMIR** 在 **4 种不同 LLM API 标准**之间进行跨 provider 多轮对话的能力。通过 IR（中间表示）消息格式，对话上下文可以在不同 provider 之间无缝传递。
+这些示例展示了 **LLM-Rosetta** 在 **4 种不同 LLM API 标准**之间进行跨 provider 多轮对话的能力。通过 IR（中间表示）消息格式，对话上下文可以在不同 provider 之间无缝传递。
 
 支持的 4 种 API 标准：
 
@@ -131,7 +131,7 @@ GOOGLE_MODEL=gemini-2.0-flash
 ### Conda 环境
 
 ```bash
-conda activate llmir
+conda activate llm-rosetta
 ```
 
 ### 依赖安装

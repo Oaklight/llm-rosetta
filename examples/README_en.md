@@ -1,8 +1,8 @@
-# LLMIR Cross-Provider Examples
+# LLM-Rosetta Cross-Provider Examples
 
 ## Overview
 
-These examples demonstrate **LLMIR**'s ability to conduct multi-turn conversations across **4 different LLM API standards**, seamlessly switching between providers while maintaining full conversation context through the IR (Intermediate Representation) message format.
+These examples demonstrate **LLM-Rosetta**'s ability to conduct multi-turn conversations across **4 different LLM API standards**, seamlessly switching between providers while maintaining full conversation context through the IR (Intermediate Representation) message format.
 
 The 4 supported API standards are:
 
@@ -131,7 +131,7 @@ GOOGLE_MODEL=gemini-2.0-flash
 ### Conda Environment
 
 ```bash
-conda activate llmir
+conda activate llm-rosetta
 ```
 
 ### Dependencies

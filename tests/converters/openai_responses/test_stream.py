@@ -2,8 +2,8 @@
 OpenAI Responses API stream converter unit tests.
 """
 
-from llmir.converters.base.stream_context import StreamContext
-from llmir.converters.openai_responses import OpenAIResponsesConverter
+from llm_rosetta.converters.base.stream_context import StreamContext
+from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 
 
 class TestStreamResponseFromProvider:

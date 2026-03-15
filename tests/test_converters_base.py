@@ -1,5 +1,5 @@
 """
-Tests for LLMIR Converters Base Module
+Tests for LLM-Rosetta Converters Base Module
 
 测试 converters/base 模块的所有组件：
 - BaseConverter 抽象基类
@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import pytest
 
-from llmir.converters.base import (
+from llm_rosetta.converters.base import (
     BaseConfigOps,
     BaseContentOps,
     BaseConverter,
@@ -22,7 +22,7 @@ from llmir.converters.base import (
     BaseToolOps,
     StreamContext,
 )
-from llmir.types.ir import (
+from llm_rosetta.types.ir import (
     AudioPart,
     CacheConfig,
     CitationPart,
@@ -49,7 +49,7 @@ from llmir.types.ir import (
     ToolDefinition,
     ToolResultPart,
 )
-from llmir.types.ir.stream import IRStreamEvent
+from llm_rosetta.types.ir.stream import IRStreamEvent
 
 # ============================================================================
 # Mock implementations for testing
