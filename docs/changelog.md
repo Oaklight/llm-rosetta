@@ -12,6 +12,12 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 - **LLM-Rosetta Gateway**：跨提供商 HTTP 代理的 REST 网关应用
 - CLI 入口 (`llm-rosetta-gateway`) 及网关包结构
+- 网关配置文件自动发现：依次搜索 `./config.jsonc`、`~/.config/llm-rosetta-gateway/config.jsonc`、`~/.llm-rosetta-gateway/config.jsonc`
+- `--edit` / `-e` 标志：在 `$EDITOR` 中打开配置文件（回退到 nano/vi/vim）
+- `--version` / `-V` 标志：显示当前版本
+- ASCII 艺术启动横幅，支持 `--no-banner` 选项抑制显示
+- `add provider <name>` 子命令：添加提供商条目到配置（支持 `--api-key`、`--base-url` 参数或交互式提示；已知提供商自动填充默认值）
+- `add model <name>` 子命令：添加模型路由条目（支持 `--provider` 参数或交互式提示）
 
 ### 变更
 

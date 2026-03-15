@@ -55,10 +55,33 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取。
 
 ```bash
 # CLI 命令（pip install 后可用）
-llm-rosetta-gateway --config config.jsonc
+llm-rosetta-gateway
+
+# 或显式指定配置文件
+llm-rosetta-gateway --config /path/to/config.jsonc
 
 # 或作为 Python 模块运行
-python -m llm_rosetta.gateway --config config.jsonc
+python -m llm_rosetta.gateway
+```
+
+网关会按以下顺序自动搜索配置文件（首个匹配生效）：
+
+1. `./config.jsonc`（当前目录）
+2. `~/.config/llm-rosetta-gateway/config.jsonc`
+3. `~/.llm-rosetta-gateway/config.jsonc`
+
+也可以使用 `add` 子命令快速创建配置文件：
+
+```bash
+# 添加提供商（自动填充默认值）
+llm-rosetta-gateway add provider openai_chat
+llm-rosetta-gateway add provider anthropic
+llm-rosetta-gateway add provider google
+
+# 添加模型路由条目
+llm-rosetta-gateway add model gpt-4o --provider openai_chat
+llm-rosetta-gateway add model claude-sonnet-4-20250514 --provider anthropic
+llm-rosetta-gateway add model gemini-2.0-flash --provider google
 ```
 
 ### 3. 发送请求
@@ -147,13 +170,33 @@ curl http://localhost:8765/v1/chat/completions \
 ### CLI 选项
 
 ```
-llm-rosetta-gateway [OPTIONS]
+llm-rosetta-gateway [选项] [命令]
 
-  --config PATH      配置文件路径（默认：config.jsonc）
-  --host HOST        覆盖服务器主机
-  --port PORT        覆盖服务器端口
-  --log-level LEVEL  日志级别：debug, info, warning, error（默认：info）
+选项:
+  --config, -c PATH    配置文件路径（未指定时自动搜索）
+  --version, -V        显示版本并退出
+  --no-banner          抑制启动横幅显示
+  --edit, -e           在 $EDITOR 中打开配置文件进行编辑
+  --host HOST          覆盖服务器主机
+  --port PORT          覆盖服务器端口
+  --log-level LEVEL    日志级别：debug, info, warning, error（默认：info）
+
+命令:
+  add provider <name>  添加提供商条目到配置
+    --api-key KEY        API 密钥或 ${ENV_VAR} 占位符
+    --base-url URL       提供商基础 URL（已知提供商自动填充）
+
+  add model <name>     添加模型路由条目到配置
+    --provider NAME      目标提供商名称
 ```
+
+#### 配置文件自动发现
+
+未指定 `--config` 时，网关按以下顺序搜索配置文件：
+
+1. `./config.jsonc` — 当前工作目录
+2. `~/.config/llm-rosetta-gateway/config.jsonc` — XDG 标准位置
+3. `~/.llm-rosetta-gateway/config.jsonc` — dotfile 约定
 
 ## 编程方式使用
 
