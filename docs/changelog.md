@@ -19,11 +19,27 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - Applied `ruff` formatter across the entire codebase
 - Updated Makefile with `lint`, `test`, and `build` targets
 - Added `ty` (type checker) configuration
+- Configured `ruff` lint rules (`E`, `F`, `UP`) in `pyproject.toml`; ignore `UP007` (Union syntax) and `E501` (line length)
+- Modernized typing imports across `src/`, `tests/`, `examples/`, and `scripts/` — replaced `typing.Dict`, `List`, `Tuple`, `Optional`, `Type` with stdlib builtins
 
 ### Fixed
 
 - Added missing `__init__.py` for `types` package
-- Updated `git clone` URL from `llmir` to `llm-rosetta` in documentation
+- Updated `git clone` URL from `llm-rosetta` to `llm-rosetta` in documentation
+- Resolved all `ty` type checker diagnostics in `src/` (31 → 0):
+    - Fixed `is_part_type()` TypeGuard narrowing — replaced with specific type guard functions (`is_text_part`, etc.)
+    - Added missing TypedDict fields: `provider_metadata` on `TextPart`/`ReasoningPart`, `file_id` on `ImagePart`/`FilePart`
+    - Fixed `IRRequest.messages` type from `Required[Message]` to `Required[Iterable[Message]]`
+    - Used `cast()` to bridge `dict[str, Any]` intermediates to TypedDict return types
+    - Fixed dict literal type inference conflicts in converter response builders
+- Resolved all `ty` type checker diagnostics in `tests/` (1506 → 0):
+    - Added `cast()` wrappers on dict literals passed to functions expecting TypedDict parameters (`GenerationConfig`, `IRRequest`, `IRResponse`, `ToolDefinition`, `ToolChoice`, etc.)
+    - Narrowed `Message | ExtensionItem` union results with `cast(list[Any], ...)` or `cast(Message, ...)`
+    - Converted `Iterable` content fields to `list` for subscript and `len()` access
+    - Added `assert ... is not None` guards before subscripting optional return types
+    - Fixed `FinishReason` from bare string to TypedDict form `{"reason": "stop"}`
+    - Fixed `IRResponse.object` literal from `"chat.completion"` to `"response"`
+- Resolved all `ruff` lint violations in `src/` and `tests/` (UP035 deprecated imports, F401 unused imports)
 
 ---
 
@@ -31,8 +47,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
-- **Project renamed from LLMIR to LLM-Rosetta** across all code, docs, and configuration
-- Package renamed from `llmir` to `llm_rosetta`; `pyproject.toml` updated accordingly
+- **Project renamed from LLM-Rosetta to LLM-Rosetta** across all code, docs, and configuration
+- Package renamed from `llm-rosetta` to `llm_rosetta`; `pyproject.toml` updated accordingly
 - Documentation fully rewritten with Zensical for both English (`docs_en`) and Chinese (`docs_zh`)
 - README (EN/ZH) updated with new branding, badges, and `pyproject.toml` metadata
 
@@ -168,7 +184,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
-- **Package renamed** from `llm-provider-converter` to `llmir`
+- **Package renamed** from `llm-provider-converter` to `llm-rosetta`
 - IR format usage standardized across all providers
 - Message creation standardized using `Message` class in examples
 - Test suite migrated from unittest to pytest
