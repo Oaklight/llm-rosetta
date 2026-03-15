@@ -5,8 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from typing import Any
+import os
+import subprocess
+import sys
 from collections.abc import AsyncIterator
+from typing import Any
 
 import httpx
 import uvicorn
@@ -15,11 +18,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response, StreamingResponse
 from starlette.routing import Route
 
-from llm_rosetta import get_converter_for_provider
+from llm_rosetta import __version__, get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.stream_context import StreamContext
 
-from .config import GatewayConfig, load_config
+from .banner import print_banner
+from .config import PATHS_TO_TRY, GatewayConfig, discover_config, load_config, load_config_raw
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -605,16 +609,155 @@ def create_app(config: GatewayConfig) -> Starlette:
 
 
 # ---------------------------------------------------------------------------
+# CLI: editor, add-config helpers
+# ---------------------------------------------------------------------------
+
+
+def _open_in_editor(config_path: str | None = None) -> None:
+    """Open a config file in the user's preferred editor."""
+    paths = [config_path] if config_path else list(PATHS_TO_TRY)
+
+    editors: list[str] = []
+    env_editor = os.getenv("EDITOR")
+    if env_editor:
+        editors.append(env_editor)
+    editors += ["notepad"] if os.name == "nt" else ["nano", "vi", "vim"]
+
+    for path in paths:
+        if path and os.path.exists(path):
+            for editor in editors:
+                try:
+                    subprocess.run([editor, path], check=True)
+                    return
+                except FileNotFoundError:
+                    continue
+                except Exception as exc:
+                    print(f"Error: failed to open {editor} for {path}: {exc}", file=sys.stderr)
+                    sys.exit(1)
+
+    print("Error: no config file found to edit. Searched:", file=sys.stderr)
+    for p in paths:
+        print(f"  {p}", file=sys.stderr)
+    sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# CLI: ``add`` subcommand helpers
+# ---------------------------------------------------------------------------
+
+_KNOWN_PROVIDERS: list[str] = [
+    "openai_chat",
+    "openai_responses",
+    "anthropic",
+    "google",
+]
+
+_DEFAULT_BASE_URLS: dict[str, str] = {
+    "openai_chat": "https://api.openai.com/v1",
+    "openai_responses": "https://api.openai.com/v1",
+    "anthropic": "https://api.anthropic.com",
+    "google": "https://generativelanguage.googleapis.com",
+}
+
+_CONFIG_TEMPLATE: dict[str, Any] = {
+    "providers": {},
+    "models": {},
+    "server": {"host": "0.0.0.0", "port": 8765},
+}
+
+
+def _load_or_create_config(path: str) -> tuple[dict[str, Any], str]:
+    """Load existing config (raw, no env substitution) or create a scaffold."""
+    if os.path.isfile(path):
+        return load_config_raw(path), path
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    data: dict[str, Any] = json.loads(json.dumps(_CONFIG_TEMPLATE))
+    return data, path
+
+
+def _write_jsonc(path: str, data: dict[str, Any]) -> None:
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+def _cmd_add_provider(args: argparse.Namespace) -> None:
+    config_path = discover_config(args.config) or PATHS_TO_TRY[0]
+    data, path = _load_or_create_config(config_path)
+
+    name: str = args.name
+    api_key: str = args.api_key or input(f"API key env placeholder for '{name}' [${{{name.upper()}_API_KEY}}]: ").strip()
+    if not api_key:
+        api_key = f"${{{name.upper()}_API_KEY}}"
+    base_url: str = args.base_url or input(f"Base URL [{_DEFAULT_BASE_URLS.get(name, '')}]: ").strip()
+    if not base_url:
+        base_url = _DEFAULT_BASE_URLS.get(name, "")
+    if not base_url:
+        print("Error: --base-url is required for non-standard providers.", file=sys.stderr)
+        sys.exit(1)
+
+    data.setdefault("providers", {})[name] = {"api_key": api_key, "base_url": base_url}
+    _write_jsonc(path, data)
+    print(f"Added provider '{name}' to {path}")
+
+
+def _cmd_add_model(args: argparse.Namespace) -> None:
+    config_path = discover_config(args.config) or PATHS_TO_TRY[0]
+    data, path = _load_or_create_config(config_path)
+
+    model_name: str = args.name
+    providers = data.get("providers", {})
+    provider: str = args.provider or ""
+    if not provider:
+        if providers:
+            choices = list(providers.keys())
+            print(f"Available providers: {', '.join(choices)}")
+            provider = input(f"Provider for '{model_name}': ").strip()
+        else:
+            provider = input(f"Provider for '{model_name}': ").strip()
+    if not provider:
+        print("Error: provider is required.", file=sys.stderr)
+        sys.exit(1)
+    if provider not in providers:
+        print(f"Warning: provider '{provider}' not yet in config. Add it with: llm-rosetta-gateway add provider {provider}", file=sys.stderr)
+
+    data.setdefault("models", {})[model_name] = provider
+    _write_jsonc(path, data)
+    print(f"Added model '{model_name}' -> '{provider}' to {path}")
+
+
+# ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="llm-rosetta Gateway")
+    parser = argparse.ArgumentParser(
+        description="llm-rosetta Gateway — cross-provider LLM proxy",
+    )
     parser.add_argument(
         "--config",
-        default="config.jsonc",
-        help="Path to JSONC config file (default: config.jsonc)",
+        "-c",
+        default=None,
+        help="Path to JSONC config file (auto-discovered if omitted)",
+    )
+    parser.add_argument(
+        "--version",
+        "-V",
+        action="version",
+        version=f"%(prog)s {__version__}",
+    )
+    parser.add_argument(
+        "--no-banner",
+        action="store_true",
+        help="Suppress the startup banner",
+    )
+    parser.add_argument(
+        "--edit",
+        "-e",
+        action="store_true",
+        help="Open the config file in $EDITOR for editing",
     )
     parser.add_argument("--host", default=None, help="Override server host")
     parser.add_argument("--port", type=int, default=None, help="Override server port")
@@ -624,19 +767,65 @@ def main() -> None:
         choices=["debug", "info", "warning", "error"],
         help="Log level (default: info)",
     )
+
+    # ``add`` subcommands
+    sub = parser.add_subparsers(dest="command")
+
+    add_parser = sub.add_parser("add", help="Add a provider or model to the config")
+    add_sub = add_parser.add_subparsers(dest="add_type")
+
+    prov_parser = add_sub.add_parser("provider", help="Add a provider entry")
+    prov_parser.add_argument("name", help="Provider name (e.g. openai_chat, anthropic)")
+    prov_parser.add_argument("--api-key", default=None, help="API key or ${ENV_VAR} placeholder")
+    prov_parser.add_argument("--base-url", default=None, help="Provider base URL")
+
+    model_parser = add_sub.add_parser("model", help="Add a model routing entry")
+    model_parser.add_argument("name", help="Model name (e.g. gpt-4o)")
+    model_parser.add_argument("--provider", default=None, help="Target provider name")
+
     args = parser.parse_args()
 
+    # --- edit mode ---
+    if args.edit:
+        _open_in_editor(args.config)
+        return
+
+    # --- add subcommand ---
+    if args.command == "add":
+        if args.add_type == "provider":
+            _cmd_add_provider(args)
+        elif args.add_type == "model":
+            _cmd_add_model(args)
+        else:
+            sub.choices["add"].print_help()  # type: ignore[union-attr]
+        return
+
+    # --- normal server startup ---
     logging.basicConfig(
         level=getattr(logging, args.log_level.upper()),
         format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
     )
 
-    raw_config = load_config(args.config)
+    if not args.no_banner:
+        print_banner()
+
+    config_path = discover_config(args.config)
+    if config_path is None:
+        logger.error(
+            "No config file found. Searched:\n  %s\n"
+            "Provide one with --config or create a config at one of the above paths.\n"
+            "Tip: use 'llm-rosetta-gateway add provider <name>' to bootstrap a config.",
+            "\n  ".join(PATHS_TO_TRY),
+        )
+        sys.exit(1)
+
+    raw_config = load_config(config_path)
     config = GatewayConfig(raw_config)
 
     host = args.host or config.host
     port = args.port or config.port
 
+    logger.info("Config loaded from %s", config_path)
     logger.info("Starting llm-rosetta gateway on %s:%d", host, port)
     logger.info("Configured providers: %s", list(config.providers.keys()))
     logger.info("Configured models: %s", list(config.models.keys()))
