@@ -1,2 +1,8 @@
-mkdocs-material
-mkdocstrings[python]
+# Zensical (replaces mkdocs + mkdocs-material)
+zensical
+
+# Plugins
+mkdocstrings[python]>=0.24.0
+
+# Additional dependencies
+pymdown-extensions>=10.0.0

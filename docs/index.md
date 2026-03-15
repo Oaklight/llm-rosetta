@@ -1,9 +1,6 @@
 ---
 title: 首页
-summary: LLMIR - 大语言模型中间表示
-description: LLMIR 是一个 Python 库，提供统一的中间表示来处理不同 LLM 提供商的消息格式，支持 OpenAI、Anthropic、Google 等主流提供商。
-keywords: python, llm, 大语言模型, 中间表示, openai, anthropic, google
-author: LLMIR Team
+author: Oaklight
 hide:
   - navigation
 ---
@@ -11,64 +8,70 @@ hide:
 # LLMIR
 
 [![PyPI version](https://badge.fury.io/py/llmir.svg?icon=si%3Apython)](https://badge.fury.io/py/llmir)
-[![GitHub version](https://badge.fury.io/gh/Oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/Oaklight%2Fllmir)
+[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllmir.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllmir)
 
-**大语言模型中间表示 (Large Language Model Intermediate Representation)** - 为不同 LLM 提供商提供统一的消息格式转换。
+**大语言模型中间表示（Large Language Model Intermediate Representation）** — 用于 LLM 提供商 API 之间的统一消息格式转换库。
 
-## 🚀 快速开始
+## 概述
+
+不同的 LLM 提供商（OpenAI、Anthropic、Google）使用互不兼容的 API 格式。LLMIR 通过中枢辐射（Hub-and-Spoke）架构解决了这一问题：每个提供商只需与中央中间表示（IR）进行转换，仅需 N 个转换器，而非 N²。
+
+## 快速开始
 
 ```bash
 pip install llmir
 ```
 
 ```python
-from llmir import auto_detect, convert_to_openai
+from llmir import OpenAIChatConverter, AnthropicConverter
 
-# 自动检测并转换消息格式
-messages = [{"role": "user", "content": "Hello, world!"}]
-provider = auto_detect(messages)
-openai_format = convert_to_openai(messages, provider)
+openai_conv = OpenAIChatConverter()
+anthropic_conv = AnthropicConverter()
+
+# OpenAI 格式 → IR → Anthropic 格式
+ir_request = openai_conv.request_from_provider(openai_request)
+anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
 ```
 
-## 🎯 核心特性
+## 支持的提供商
 
-- **🔄 统一转换**: 支持 OpenAI、Anthropic、Google 等主流 LLM 提供商
-- **🤖 自动检测**: 智能识别消息格式来源
-- **⚡ 高性能**: 优化的转换算法，最小化性能开销
-- **🛡️ 类型安全**: 完整的 TypeScript 风格类型注解
-- **📚 易于使用**: 简洁的 API 设计，快速上手
-- **🔧 可扩展**: 支持自定义转换器和格式
+| 提供商 | API | 转换器 |
+|--------|-----|--------|
+| OpenAI | Chat Completions | `OpenAIChatConverter` |
+| OpenAI | Responses | `OpenAIResponsesConverter` |
+| Anthropic | Messages | `AnthropicConverter` |
+| Google | GenAI | `GoogleGenAIConverter` |
 
-## 🛠️ 支持的提供商
+## 核心特性
 
-LLMIR 目前支持以下 LLM 提供商的消息格式转换：
+- **中枢辐射架构** — 中央 IR 格式消除 N² 转换问题
+- **双向转换** — 请求、响应和消息均支持双向转换
+- **流式支持** — 通过有状态上下文管理转换流式数据块
+- **工具调用** — 跨提供商的统一工具定义和调用处理
+- **自动检测** — 从请求结构自动识别提供商格式
+- **类型安全** — 所有类型均有完整的 TypedDict 注解
+- **零运行时开销** — 纯字典转换，无验证成本
 
-- **OpenAI** - Chat Completions 和 Responses API
-- **Anthropic** - Claude 消息格式
-- **Google** - Gemini/PaLM 消息格式
-- **通用格式** - 标准化的中间表示
+## 架构
 
-## 📖 文档导航
+```text
+OpenAI Chat ──────┐
+                   │
+OpenAI Responses ──┤
+                   ├──── IR（中间表示）
+Anthropic ─────────┤
+                   │
+Google GenAI ──────┘
+```
 
-- **[快速开始](getting-started/)** - 安装和基本使用
-- **[用户指南](guide/)** - 详细的使用指南和最佳实践
-- **[API 参考](api/)** - 完整的 API 文档
-- **[示例](examples/)** - 实际使用案例和代码示例
+## 文档目录
 
-## 🌟 为什么选择 LLMIR？
+- **[快速上手](getting-started/installation.md)** — 安装和入门
+- **[指南](guide/concepts.md)** — 核心概念、转换器、IR 类型、流式处理
+- **[示例](examples/)** — 跨提供商对话、工具调用
+- **[API 参考](api/)** — 完整 API 文档
+- **[更新日志](changelog.md)** — 版本历史
 
-- **🎯 专注**: 专门为 LLM 消息格式转换而设计
-- **🔧 灵活**: 支持多种转换模式和自定义配置
-- **📈 可靠**: 经过充分测试，适用于生产环境
-- **🌐 开源**: MIT 许可证，社区驱动开发
-- **📚 文档完善**: 详细的文档和示例
+## 许可证
 
-## 🤝 参与贡献
-
-- **[GitHub 仓库](https://github.com/Oaklight/llmir)** - 源代码和问题反馈
-- **[English Documentation](../en/)** - 英文文档
-- **[开发指南](development/)** - 贡献代码和开发指南
-
----
-
-_LLMIR: 让 LLM 消息格式转换变得简单可靠。_
+MIT 许可证

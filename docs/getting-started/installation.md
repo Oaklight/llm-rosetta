@@ -1,86 +1,43 @@
+---
+title: 安装
+---
+
 # 安装
 
-本页面将指导您如何安装 LLMIR。
-
-## 系统要求
-
-- Python 3.8 或更高版本
-- pip 包管理器
-
-## 使用 pip 安装
-
-最简单的安装方式是使用 pip：
+## 基本安装
 
 ```bash
 pip install llmir
 ```
 
-## 从源码安装
+核心库仅有最少依赖（`typing_extensions>=4.0.0`）。
 
-如果您想要最新的开发版本，可以从 GitHub 仓库安装：
+## 提供商 SDK（可选）
+
+如需直接调用提供商 API，请安装相应的 SDK：
+
+```bash
+# OpenAI
+pip install openai
+
+# Anthropic
+pip install anthropic
+
+# Google GenAI
+pip install google-genai
+
+# 所有提供商
+pip install llmir[openai,anthropic,google]
+```
+
+!!! note
+
+    提供商 SDK 仅在直接调用 API 时需要。LLMIR 的转换函数使用纯字典，不依赖 SDK。
+
+## 开发安装
 
 ```bash
 git clone https://github.com/Oaklight/llmir.git
 cd llmir
-pip install -e .
+pip install -e ".[dev]"
 ```
-
-## 验证安装
-
-安装完成后，您可以通过以下方式验证安装是否成功：
-
-```python
-import llmir
-print(llmir.__version__)
-```
-
-## 可选依赖
-
-LLMIR 的核心功能不需要额外的依赖，但某些高级功能可能需要安装额外的包：
-
-```bash
-# 用于开发和测试
-pip install llmir[dev]
-
-# 用于文档构建
-pip install llmir[docs]
-
-# 安装所有可选依赖
-pip install llmir[all]
-```
-
-## 故障排除
-
-如果您在安装过程中遇到问题，请查看以下常见解决方案：
-
-### Python 版本问题
-
-确保您使用的是 Python 3.8 或更高版本：
-
-```bash
-python --version
-```
-
-### 权限问题
-
-如果遇到权限错误，可以使用用户安装模式：
-
-```bash
-pip install --user llmir
-```
-
-### 网络问题
-
-如果网络连接有问题，可以使用国内镜像源：
-
-```bash
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple llmir
-```
-
-## 下一步
-
-安装完成后，您可以：
-
-- [学习基本用法](basic-usage.md)
-- [查看示例代码](../examples/)
-- [阅读 API 文档](../api/)

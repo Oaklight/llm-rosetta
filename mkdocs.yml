@@ -1,36 +1,29 @@
 site_name: LLMIR
-site_description: 大语言模型中间表示 - 统一不同LLM提供商的消息格式
-repo_url: https://github.com/Oaklight/llmir
+site_description: 大语言模型中间表示 - LLM 提供商之间的统一消息格式转换库
+site_author: Peng Ding
+site_url: https://llmir.readthedocs.io/zh/
 repo_name: Oaklight/llmir
+repo_url: https://github.com/Oaklight/llmir
+copyright: Copyright &copy; 2024 Peng Ding
 
-# Documentation directory
-docs_dir: docs
-
-# Theme configuration
 theme:
   name: material
+  language: zh
   palette:
-    # 支持自动切换（跟随系统）
     - media: "(prefers-color-scheme)"
       toggle:
         icon: material/brightness-auto
-        name: Switch to light mode
-    # 明亮模式
+        name: 切换到浅色模式
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: indigo
-      accent: indigo
       toggle:
         icon: material/brightness-7
-        name: Switch to dark mode
-    # 暗黑模式
+        name: 切换到深色模式
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
       toggle:
         icon: material/brightness-4
-        name: Switch to system preference
+        name: 跟随系统偏好
   features:
     - navigation.tabs
     - navigation.sections
@@ -41,99 +34,70 @@ theme:
     - search.share
     - search.suggest
     - content.code.copy
-  language: zh
+    - content.action.edit
 
-# Extra configuration
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/Oaklight/llmir
-    - icon: fontawesome/brands/python
-      link: https://pypi.org/project/llmir/
-  alternate:
-    - name: English
-      link: /en/
-      lang: en
-    - name: 中文
-      link: /zh-cn/
-      lang: zh
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: false
+            merge_init_into_class: true
+            separate_signature: true
+            show_signature_annotations: true
 
-# Navigation structure
-nav:
-  - 首页: index.md
-  - 快速开始:
-      - getting-started/index.md
-      - 安装: getting-started/installation.md
-      - 基本用法: getting-started/basic-usage.md
-  - 用户指南:
-      - guide/index.md
-      - 转换器:
-          - 概述: guide/converters/index.md
-          - OpenAI Chat: guide/converters/openai-chat.md
-          - OpenAI Responses: guide/converters/openai-responses.md
-          - Anthropic: guide/converters/anthropic.md
-          - Google: guide/converters/google.md
-      - 中间表示: guide/intermediate-representation.md
-      - 自动检测: guide/auto-detection.md
-  - API 参考:
-      - api/index.md
-      - 转换器: api/converters.md
-      - 类型定义: api/types.md
-      - 工具函数: api/utils.md
-  - 开发指南:
-      - development/index.md
-      - 贡献指南: development/contributing.md
-      - 架构设计: development/architecture.md
-  - 示例:
-      - examples/index.md
-      - 基本转换: examples/basic-conversion.md
-      - 多轮对话: examples/multi-turn-chat.md
-      - 工具调用: examples/tool-calling.md
-  - 更新日志: changelog.md
-
-# Extensions
 markdown_extensions:
   - admonition
-  - codehilite:
-      guess_lang: true
-  - fenced_code
-  - footnotes
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.blocks.details
-  - pymdownx.blocks.tab
-  - pymdownx.progressbar
-  - pymdownx.arithmatex:
-      generic: true
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
-  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - attr_list
   - md_in_html
   - toc:
       permalink: true
 
-# Plugins
-plugins:
-  - search:
-      lang: zh
-      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
-  - mkdocstrings:
-      handlers:
-        python:
-          paths:
-            - ../src
-          options:
-            docstring_style: google
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/Oaklight/llmir
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/llmir/
 
-# Custom CSS and JS
-extra_javascript:
-  - https://polyfill.io/v3/polyfill.min.js?features=es6
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
-
-# Copyright
-copyright: Copyright &copy; 2024 LLMIR
+nav:
+  - 首页: index.md
+  - 快速上手:
+      - 安装: getting-started/installation.md
+      - 快速开始: getting-started/quickstart.md
+  - 指南:
+      - 核心概念: guide/concepts.md
+      - 使用转换器: guide/converters.md
+      - IR 类型: guide/ir-types.md
+      - 流式处理: guide/streaming.md
+      - 自动检测: guide/auto-detection.md
+  - 示例:
+      - examples/index.md
+      - 跨提供商对话: examples/cross-provider.md
+      - 工具调用: examples/tool-calling.md
+  - API 参考:
+      - api/index.md
+      - 转换器: api/converters.md
+      - IR 类型: api/types.md
+      - 工具函数: api/utils.md
+  - 更新日志: changelog.md
