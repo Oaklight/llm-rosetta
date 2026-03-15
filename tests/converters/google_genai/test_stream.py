@@ -3,9 +3,22 @@ Google GenAI stream converter unit tests.
 """
 
 import json
+from typing import Any, cast
 
 from llm_rosetta.converters.base.stream_context import StreamContext
 from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
+    FinishEvent,
+    ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 
 
 class TestStreamResponseFromProvider:
@@ -29,7 +42,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert len(events) == 1
         assert events[0]["type"] == "text_delta"
         assert events[0]["text"] == "Hello"
@@ -48,7 +61,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert len(events) == 1
         assert events[0]["type"] == "text_delta"
         assert events[0]["text"] == ""
@@ -66,7 +79,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert events[0]["choice_index"] == 1
 
     # --- Reasoning delta (thought) ---
@@ -84,7 +97,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert len(events) == 1
         assert events[0]["type"] == "reasoning_delta"
         assert events[0]["reasoning"] == "Let me think..."
@@ -103,7 +116,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert len(events) == 1
         assert events[0]["type"] == "text_delta"
 
@@ -129,7 +142,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         types = [e["type"] for e in events]
         assert "tool_call_start" in types
         assert "tool_call_delta" in types
@@ -162,7 +175,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         start_events = [e for e in events if e["type"] == "tool_call_start"]
         assert len(start_events) == 1
         assert start_events[0]["tool_name"] == "search"
@@ -188,7 +201,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         start = [e for e in events if e["type"] == "tool_call_start"][0]
         assert start["tool_call_id"] == "custom_id"
 
@@ -212,7 +225,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         delta = [e for e in events if e["type"] == "tool_call_delta"][0]
         assert json.loads(delta["arguments_delta"]) == {}
 
@@ -229,7 +242,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "stop"
@@ -245,7 +258,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert finish_events[0]["finish_reason"]["reason"] == "length"
 
@@ -260,7 +273,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert finish_events[0]["finish_reason"]["reason"] == "content_filter"
 
@@ -275,7 +288,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert finish_events[0]["finish_reason"]["reason"] == "content_filter"
 
@@ -290,7 +303,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert finish_events[0]["finish_reason"]["reason"] == "error"
 
@@ -305,7 +318,7 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert finish_events[0]["finish_reason"]["reason"] == "error"
 
@@ -321,7 +334,7 @@ class TestStreamResponseFromProvider:
                 "total_token_count": 15,
             },
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert len(events) == 1
         assert events[0]["type"] == "usage"
         assert events[0]["usage"]["prompt_tokens"] == 10
@@ -339,7 +352,7 @@ class TestStreamResponseFromProvider:
                 "thoughts_token_count": 8,
             },
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         assert events[0]["usage"]["reasoning_tokens"] == 8
 
     # --- Empty / irrelevant ---
@@ -398,7 +411,12 @@ class TestStreamResponseFromProvider:
                     ]
                 }
 
-        events = self.converter.stream_response_from_provider(MockChunk())
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                cast(dict[str, Any], MockChunk())
+            ),
+        )
         assert len(events) == 1
         assert events[0]["text"] == "sdk"
 
@@ -415,7 +433,12 @@ class TestStreamResponseFromProvider:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider((inner,))
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                cast(dict[str, Any], (inner,))
+            ),
+        )
         assert len(events) == 1
         assert events[0]["text"] == "tuple"
 
@@ -428,8 +451,11 @@ class TestStreamResponseToProvider:
 
     def test_text_delta(self):
         """TextDeltaEvent → Google chunk."""
-        event = {"type": "text_delta", "text": "Hello", "choice_index": 0}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            TextDeltaEvent,
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         candidate = result["candidates"][0]
         assert candidate["index"] == 0
         assert candidate["content"]["role"] == "model"
@@ -437,132 +463,162 @@ class TestStreamResponseToProvider:
 
     def test_reasoning_delta(self):
         """ReasoningDeltaEvent → Google chunk with thought: true."""
-        event = {
-            "type": "reasoning_delta",
-            "reasoning": "thinking...",
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "thinking...",
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         part = result["candidates"][0]["content"]["parts"][0]
         assert part["thought"] is True
         assert part["text"] == "thinking..."
 
     def test_tool_call_start(self):
         """ToolCallStartEvent → Google chunk with function_call."""
-        event = {
-            "type": "tool_call_start",
-            "tool_call_id": "call_1",
-            "tool_name": "search",
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "call_1",
+                "tool_name": "search",
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["name"] == "search"
         assert fc["args"] == {}
 
     def test_tool_call_delta(self):
         """ToolCallDeltaEvent → Google chunk with function_call args."""
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "call_1",
-            "arguments_delta": '{"q": "test"}',
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_1",
+                "arguments_delta": '{"q": "test"}',
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["args"] == {"q": "test"}
 
     def test_tool_call_delta_invalid_json(self):
         """ToolCallDeltaEvent with invalid JSON falls back to empty args."""
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "call_1",
-            "arguments_delta": "not json",
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_1",
+                "arguments_delta": "not json",
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["args"] == {}
 
     def test_finish_event_stop(self):
         """FinishEvent with 'stop' → STOP."""
-        event = {
-            "type": "finish",
-            "finish_reason": {"reason": "stop"},
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "stop"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"][0]["finish_reason"] == "STOP"
 
     def test_finish_event_length(self):
         """FinishEvent with 'length' → MAX_TOKENS."""
-        event = {
-            "type": "finish",
-            "finish_reason": {"reason": "length"},
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "length"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"][0]["finish_reason"] == "MAX_TOKENS"
 
     def test_finish_event_content_filter(self):
         """FinishEvent with 'content_filter' → SAFETY."""
-        event = {
-            "type": "finish",
-            "finish_reason": {"reason": "content_filter"},
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "content_filter"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"][0]["finish_reason"] == "SAFETY"
 
     def test_finish_event_error(self):
         """FinishEvent with 'error' → OTHER."""
-        event = {
-            "type": "finish",
-            "finish_reason": {"reason": "error"},
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "error"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"][0]["finish_reason"] == "OTHER"
 
     def test_usage_event(self):
         """UsageEvent → Google usage_metadata."""
-        event = {
-            "type": "usage",
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5,
-                "total_tokens": 15,
+        event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
             },
-        }
-        result = self.converter.stream_response_to_provider(event)
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["usage_metadata"]["prompt_token_count"] == 10
         assert result["usage_metadata"]["candidates_token_count"] == 5
         assert result["usage_metadata"]["total_token_count"] == 15
 
     def test_usage_event_with_reasoning_tokens(self):
         """UsageEvent with reasoning_tokens includes thoughts_token_count."""
-        event = {
-            "type": "usage",
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20,
-                "total_tokens": 30,
-                "reasoning_tokens": 8,
+        event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                    "reasoning_tokens": 8,
+                },
             },
-        }
-        result = self.converter.stream_response_to_provider(event)
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["usage_metadata"]["thoughts_token_count"] == 8
 
     def test_unknown_event_type(self):
         """Unknown event type returns empty dict."""
-        event = {"type": "unknown_event"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(TextDeltaEvent, {"type": "unknown_event"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
     def test_default_choice_index(self):
         """Default choice_index is 0 when not specified."""
-        event = {"type": "text_delta", "text": "Hi"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hi"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"][0]["index"] == 0
 
 
@@ -585,8 +641,10 @@ class TestStreamRoundTrip:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["candidates"][0]["content"]["parts"][0]["text"] == "Hello"
 
     def test_reasoning_delta_round_trip(self):
@@ -602,8 +660,10 @@ class TestStreamRoundTrip:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         part = restored["candidates"][0]["content"]["parts"][0]
         assert part["text"] == "step 1"
         assert part["thought"] is True
@@ -619,9 +679,11 @@ class TestStreamRoundTrip:
                 }
             ]
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         finish = [e for e in events if e["type"] == "finish"][0]
-        restored = self.converter.stream_response_to_provider(finish)
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(finish)
+        )
         assert restored["candidates"][0]["finish_reason"] == "STOP"
 
     def test_usage_round_trip(self):
@@ -634,8 +696,10 @@ class TestStreamRoundTrip:
                 "total_token_count": 30,
             },
         }
-        events = self.converter.stream_response_from_provider(chunk)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["usage_metadata"]["total_token_count"] == 30
 
 
@@ -660,7 +724,10 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=context),
+        )
         assert events[0]["type"] == "stream_start"
         assert events[0]["response_id"] == ""
         assert events[0]["model"] == "gemini-2.0-flash"
@@ -677,7 +744,10 @@ class TestStreamResponseFromProviderWithContext:
             "model_version": "gemini-2.0-flash",
             "candidates": [],
         }
-        events = self.converter.stream_response_from_provider(chunk, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=context),
+        )
         assert events[0]["type"] == "stream_start"
         assert events[0]["response_id"] == "resp_abc123"
         assert context.response_id == "resp_abc123"
@@ -709,8 +779,14 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events1 = self.converter.stream_response_from_provider(chunk1, context=context)
-        events2 = self.converter.stream_response_from_provider(chunk2, context=context)
+        events1 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk1, context=context),
+        )
+        events2 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk2, context=context),
+        )
         assert any(e["type"] == "stream_start" for e in events1)
         assert not any(e["type"] == "stream_start" for e in events2)
 
@@ -742,7 +818,10 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk2, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk2, context=context),
+        )
         types = [e["type"] for e in events]
         assert "finish" in types
         assert "stream_end" in types
@@ -765,7 +844,10 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=context),
+        )
         assert not any(e["type"] == "stream_end" for e in events)
         assert not context.is_ended
 
@@ -791,7 +873,10 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk, context=context)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=context),
+        )
         start = [e for e in events if e["type"] == "tool_call_start"][0]
         tool_call_id = start["tool_call_id"]
         assert context.get_tool_name(tool_call_id) == "get_weather"
@@ -811,7 +896,7 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         types = [e["type"] for e in events]
         assert "stream_start" not in types
         assert "stream_end" not in types
@@ -839,7 +924,7 @@ class TestStreamResponseFromProviderWithContext:
                 }
             ],
         }
-        events = self.converter.stream_response_from_provider(chunk)
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
         types = [e["type"] for e in events]
         assert "tool_call_start" in types
         assert "tool_call_delta" in types
@@ -853,23 +938,29 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_start_produces_initial_chunk(self):
         """StreamStartEvent produces initial chunk with model_version."""
-        event = {
-            "type": "stream_start",
-            "response_id": "resp_123",
-            "model": "gemini-2.0-flash",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_123",
+                "model": "gemini-2.0-flash",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"] == []
         assert result["model_version"] == "gemini-2.0-flash"
 
     def test_stream_start_stores_context(self):
         """StreamStartEvent stores metadata in context."""
         context = StreamContext()
-        event = {
-            "type": "stream_start",
-            "response_id": "resp_123",
-            "model": "gemini-2.0-flash",
-        }
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_123",
+                "model": "gemini-2.0-flash",
+            },
+        )
         self.converter.stream_response_to_provider(event, context=context)
         assert context.response_id == "resp_123"
         assert context.model == "gemini-2.0-flash"
@@ -877,35 +968,41 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_end_returns_empty_dict(self):
         """StreamEndEvent returns empty dict."""
-        event = {"type": "stream_end"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
     def test_stream_end_marks_context_ended(self):
         """StreamEndEvent marks context as ended."""
         context = StreamContext()
         context.mark_started()
-        event = {"type": "stream_end"}
+        event = cast(StreamEndEvent, {"type": "stream_end"})
         self.converter.stream_response_to_provider(event, context=context)
         assert context.is_ended
 
     def test_content_block_start_returns_empty_dict(self):
         """ContentBlockStartEvent returns empty dict."""
-        event = {
-            "type": "content_block_start",
-            "block_index": 0,
-            "block_type": "text",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "text",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
     def test_content_block_end_returns_empty_dict(self):
         """ContentBlockEndEvent returns empty dict."""
-        event = {
-            "type": "content_block_end",
-            "block_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockEndEvent,
+            {
+                "type": "content_block_end",
+                "block_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
     def test_tool_call_delta_with_context_recovers_name(self):
@@ -913,26 +1010,35 @@ class TestStreamResponseToProviderWithContext:
         context = StreamContext()
         context.register_tool_call("call_1", "get_weather")
 
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "call_1",
-            "arguments_delta": '{"city": "NYC"}',
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event, context=context)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_1",
+                "arguments_delta": '{"city": "NYC"}',
+                "choice_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=context),
+        )
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["name"] == "get_weather"
         assert fc["args"] == {"city": "NYC"}
 
     def test_tool_call_delta_without_context_name_empty(self):
         """tool_call_delta without context has empty name."""
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "call_1",
-            "arguments_delta": '{"city": "NYC"}',
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_1",
+                "arguments_delta": '{"city": "NYC"}',
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["name"] == ""
 
@@ -941,29 +1047,38 @@ class TestStreamResponseToProviderWithContext:
         context = StreamContext()
         context.register_tool_call("call_other", "other_func")
 
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "call_unknown",
-            "arguments_delta": "{}",
-            "choice_index": 0,
-        }
-        result = self.converter.stream_response_to_provider(event, context=context)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_unknown",
+                "arguments_delta": "{}",
+                "choice_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=context),
+        )
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
         assert fc["name"] == ""
 
     def test_stream_start_without_context(self):
         """StreamStartEvent without context still produces chunk."""
-        event = {
-            "type": "stream_start",
-            "response_id": "resp_123",
-            "model": "gemini-2.0-flash",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_123",
+                "model": "gemini-2.0-flash",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["candidates"] == []
         assert result["model_version"] == "gemini-2.0-flash"
 
     def test_stream_end_without_context(self):
         """StreamEndEvent without context returns empty dict."""
-        event = {"type": "stream_end"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}

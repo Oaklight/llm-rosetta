@@ -2,8 +2,22 @@
 Anthropic Messages API stream converter unit tests.
 """
 
+from typing import Any, cast
+
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.base.stream_context import StreamContext
+from llm_rosetta.types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
+    FinishEvent,
+    ReasoningDeltaEvent,
+    StreamEndEvent,
+    StreamStartEvent,
+    TextDeltaEvent,
+    ToolCallDeltaEvent,
+    ToolCallStartEvent,
+    UsageEvent,
+)
 
 
 class TestStreamResponseFromProvider:
@@ -21,7 +35,7 @@ class TestStreamResponseFromProvider:
             "index": 0,
             "delta": {"type": "text_delta", "text": "Hello"},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "text_delta"
         assert events[0]["text"] == "Hello"
@@ -33,7 +47,7 @@ class TestStreamResponseFromProvider:
             "index": 0,
             "delta": {"type": "text_delta", "text": ""},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "text_delta"
         assert events[0]["text"] == ""
@@ -47,7 +61,7 @@ class TestStreamResponseFromProvider:
             "index": 0,
             "delta": {"type": "thinking_delta", "thinking": "Let me analyze..."},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "reasoning_delta"
         assert events[0]["reasoning"] == "Let me analyze..."
@@ -59,7 +73,7 @@ class TestStreamResponseFromProvider:
             "index": 0,
             "delta": {"type": "signature_delta", "signature": "sig_abc123"},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "reasoning_delta"
         assert events[0]["reasoning"] == ""
@@ -79,7 +93,7 @@ class TestStreamResponseFromProvider:
                 "input": {},
             },
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "tool_call_start"
         assert events[0]["tool_call_id"] == "toolu_abc"
@@ -97,7 +111,7 @@ class TestStreamResponseFromProvider:
                 "input": {},
             },
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "tool_call_start"
         assert events[0]["tool_call_id"] == "toolu_srv"
@@ -122,7 +136,7 @@ class TestStreamResponseFromProvider:
             "index": 1,
             "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "tool_call_delta"
         assert events[0]["arguments_delta"] == '{"city":'
@@ -136,7 +150,7 @@ class TestStreamResponseFromProvider:
             "type": "message_delta",
             "delta": {"stop_reason": "end_turn", "stop_sequence": None},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "stop"
@@ -147,7 +161,7 @@ class TestStreamResponseFromProvider:
             "type": "message_delta",
             "delta": {"stop_reason": "max_tokens"},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "length"
@@ -158,7 +172,7 @@ class TestStreamResponseFromProvider:
             "type": "message_delta",
             "delta": {"stop_reason": "tool_use"},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "tool_calls"
@@ -169,7 +183,7 @@ class TestStreamResponseFromProvider:
             "type": "message_delta",
             "delta": {"stop_reason": "stop_sequence"},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         finish_events = [e for e in events if e["type"] == "finish"]
         assert len(finish_events) == 1
         assert finish_events[0]["finish_reason"]["reason"] == "stop"
@@ -189,7 +203,7 @@ class TestStreamResponseFromProvider:
                 "usage": {"input_tokens": 25, "output_tokens": 0},
             },
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert events[0]["type"] == "usage"
         assert events[0]["usage"]["prompt_tokens"] == 25
@@ -203,7 +217,7 @@ class TestStreamResponseFromProvider:
             "delta": {"stop_reason": "end_turn"},
             "usage": {"input_tokens": 0, "output_tokens": 42},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         types = [e["type"] for e in events]
         assert "finish" in types
         assert "usage" in types
@@ -243,7 +257,12 @@ class TestStreamResponseFromProvider:
                     "delta": {"type": "text_delta", "text": "sdk"},
                 }
 
-        events = self.converter.stream_response_from_provider(MockEvent())
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                cast(dict[str, Any], MockEvent())
+            ),
+        )
         assert len(events) == 1
         assert events[0]["text"] == "sdk"
 
@@ -256,40 +275,49 @@ class TestStreamResponseToProvider:
 
     def test_text_delta(self):
         """TextDeltaEvent → Anthropic content_block_delta."""
-        event = {"type": "text_delta", "text": "Hello"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "text_delta"
         assert result["delta"]["text"] == "Hello"
 
     def test_reasoning_delta_thinking(self):
         """ReasoningDeltaEvent without signature → thinking_delta."""
-        event = {"type": "reasoning_delta", "reasoning": "step 1"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "step 1"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "thinking_delta"
         assert result["delta"]["thinking"] == "step 1"
 
     def test_reasoning_delta_signature(self):
         """ReasoningDeltaEvent with signature → signature_delta."""
-        event = {
-            "type": "reasoning_delta",
-            "reasoning": "",
-            "signature": "sig_xyz",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ReasoningDeltaEvent,
+            {
+                "type": "reasoning_delta",
+                "reasoning": "",
+                "signature": "sig_xyz",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "signature_delta"
         assert result["delta"]["signature"] == "sig_xyz"
 
     def test_tool_call_start(self):
         """ToolCallStartEvent → Anthropic content_block_start."""
-        event = {
-            "type": "tool_call_start",
-            "tool_call_id": "toolu_abc",
-            "tool_name": "get_weather",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_start"
         assert result["content_block"]["type"] == "tool_use"
         assert result["content_block"]["id"] == "toolu_abc"
@@ -298,54 +326,69 @@ class TestStreamResponseToProvider:
 
     def test_tool_call_delta(self):
         """ToolCallDeltaEvent → Anthropic content_block_delta."""
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "",
-            "arguments_delta": '{"city": "NYC"}',
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"city": "NYC"}',
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "input_json_delta"
         assert result["delta"]["partial_json"] == '{"city": "NYC"}'
 
     def test_finish_event_stop(self):
         """FinishEvent with 'stop' → message_delta with 'end_turn'."""
-        event = {"type": "finish", "finish_reason": {"reason": "stop"}}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_delta"
         assert result["delta"]["stop_reason"] == "end_turn"
 
     def test_finish_event_length(self):
         """FinishEvent with 'length' → message_delta with 'max_tokens'."""
-        event = {"type": "finish", "finish_reason": {"reason": "length"}}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "length"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["delta"]["stop_reason"] == "max_tokens"
 
     def test_finish_event_tool_calls(self):
         """FinishEvent with 'tool_calls' → message_delta with 'tool_use'."""
-        event = {"type": "finish", "finish_reason": {"reason": "tool_calls"}}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["delta"]["stop_reason"] == "tool_use"
 
     def test_usage_event(self):
         """UsageEvent → Anthropic message_delta with usage."""
-        event = {
-            "type": "usage",
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5,
-                "total_tokens": 15,
+        event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
             },
-        }
-        result = self.converter.stream_response_to_provider(event)
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_delta"
         assert result["usage"]["input_tokens"] == 10
         assert result["usage"]["output_tokens"] == 5
 
     def test_unknown_event_type(self):
         """Unknown event type returns empty dict."""
-        event = {"type": "unknown_event"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(TextDeltaEvent, {"type": "unknown_event"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
 
@@ -362,8 +405,10 @@ class TestStreamRoundTrip:
             "index": 0,
             "delta": {"type": "text_delta", "text": "Hello"},
         }
-        events = self.converter.stream_response_from_provider(original)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["delta"]["text"] == "Hello"
         assert restored["delta"]["type"] == "text_delta"
 
@@ -374,8 +419,10 @@ class TestStreamRoundTrip:
             "index": 0,
             "delta": {"type": "thinking_delta", "thinking": "analyzing..."},
         }
-        events = self.converter.stream_response_from_provider(original)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["delta"]["thinking"] == "analyzing..."
 
     def test_signature_delta_round_trip(self):
@@ -385,8 +432,10 @@ class TestStreamRoundTrip:
             "index": 0,
             "delta": {"type": "signature_delta", "signature": "sig_test"},
         }
-        events = self.converter.stream_response_from_provider(original)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["delta"]["signature"] == "sig_test"
 
     def test_tool_call_start_round_trip(self):
@@ -401,8 +450,10 @@ class TestStreamRoundTrip:
                 "input": {},
             },
         }
-        events = self.converter.stream_response_from_provider(original)
-        restored = self.converter.stream_response_to_provider(events[0])
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
         assert restored["content_block"]["id"] == "toolu_abc"
         assert restored["content_block"]["name"] == "search"
 
@@ -412,9 +463,11 @@ class TestStreamRoundTrip:
             "type": "message_delta",
             "delta": {"stop_reason": "end_turn"},
         }
-        events = self.converter.stream_response_from_provider(original)
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
         finish = [e for e in events if e["type"] == "finish"][0]
-        restored = self.converter.stream_response_to_provider(finish)
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(finish)
+        )
         assert restored["delta"]["stop_reason"] == "end_turn"
 
 
@@ -440,7 +493,10 @@ class TestStreamResponseFromProviderWithContext:
                 "usage": {"input_tokens": 25, "output_tokens": 0},
             },
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         start_events = [e for e in events if e["type"] == "stream_start"]
         assert len(start_events) == 1
         assert start_events[0]["response_id"] == "msg_abc123"
@@ -479,7 +535,10 @@ class TestStreamResponseFromProviderWithContext:
                 "usage": {"input_tokens": 25, "output_tokens": 0},
             },
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         types = [e["type"] for e in events]
         assert "stream_start" in types
         assert "usage" in types
@@ -502,7 +561,10 @@ class TestStreamResponseFromProviderWithContext:
                 "usage": {"input_tokens": 10, "output_tokens": 0},
             },
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         assert events[0]["type"] == "stream_start"
         assert events[1]["type"] == "usage"
 
@@ -517,7 +579,10 @@ class TestStreamResponseFromProviderWithContext:
             "index": 0,
             "content_block": {"type": "text", "text": ""},
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         block_events = [e for e in events if e["type"] == "content_block_start"]
         assert len(block_events) == 1
         assert block_events[0]["block_index"] == 0
@@ -532,7 +597,10 @@ class TestStreamResponseFromProviderWithContext:
             "index": 0,
             "content_block": {"type": "thinking", "thinking": ""},
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         block_events = [e for e in events if e["type"] == "content_block_start"]
         assert len(block_events) == 1
         assert block_events[0]["block_index"] == 0
@@ -552,7 +620,10 @@ class TestStreamResponseFromProviderWithContext:
                 "input": {},
             },
         }
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         types = [e["type"] for e in events]
         assert "content_block_start" in types
         assert "tool_call_start" in types
@@ -584,7 +655,10 @@ class TestStreamResponseFromProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         event = {"type": "content_block_stop", "index": 0}
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         assert len(events) == 1
         assert events[0]["type"] == "content_block_end"
         assert events[0]["block_index"] == 0
@@ -594,7 +668,10 @@ class TestStreamResponseFromProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         event = {"type": "content_block_stop", "index": 2}
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         assert events[0]["block_index"] == 2
 
     # --- StreamEndEvent ---
@@ -604,7 +681,10 @@ class TestStreamResponseFromProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         event = {"type": "message_stop"}
-        events = self.converter.stream_response_from_provider(event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
         assert len(events) == 1
         assert events[0]["type"] == "stream_end"
         assert ctx.is_ended is True
@@ -650,7 +730,10 @@ class TestStreamResponseFromProviderWithContext:
             "index": 1,
             "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
         }
-        events = self.converter.stream_response_from_provider(delta_event, context=ctx)
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(delta_event, context=ctx),
+        )
         delta_events = [e for e in events if e["type"] == "tool_call_delta"]
         assert len(delta_events) == 1
         assert delta_events[0]["tool_call_id"] == "toolu_abc"
@@ -670,7 +753,7 @@ class TestStreamResponseFromProviderWithContext:
                 "usage": {"input_tokens": 25, "output_tokens": 0},
             },
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         types = [e["type"] for e in events]
         assert "stream_start" not in types
         # Usage should still be emitted
@@ -705,7 +788,7 @@ class TestStreamResponseFromProviderWithContext:
             "index": 1,
             "delta": {"type": "input_json_delta", "partial_json": '{"city":'},
         }
-        events = self.converter.stream_response_from_provider(event)
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
         delta_events = [e for e in events if e["type"] == "tool_call_delta"]
         assert len(delta_events) == 1
         assert delta_events[0]["tool_call_id"] == ""
@@ -721,12 +804,15 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_start_to_message_start(self):
         """StreamStartEvent produces message_start event."""
-        event = {
-            "type": "stream_start",
-            "response_id": "msg_abc123",
-            "model": "claude-sonnet-4-20250514",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "msg_abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_start"
         assert result["message"]["id"] == "msg_abc123"
         assert result["message"]["model"] == "claude-sonnet-4-20250514"
@@ -739,11 +825,14 @@ class TestStreamResponseToProviderWithContext:
     def test_stream_start_updates_context(self):
         """StreamStartEvent stores metadata in context."""
         ctx = StreamContext()
-        event = {
-            "type": "stream_start",
-            "response_id": "msg_abc123",
-            "model": "claude-sonnet-4-20250514",
-        }
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "msg_abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
         self.converter.stream_response_to_provider(event, context=ctx)
         assert ctx.response_id == "msg_abc123"
         assert ctx.model == "claude-sonnet-4-20250514"
@@ -751,12 +840,15 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_start_without_context(self):
         """StreamStartEvent works without context."""
-        event = {
-            "type": "stream_start",
-            "response_id": "msg_abc123",
-            "model": "claude-sonnet-4-20250514",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "msg_abc123",
+                "model": "claude-sonnet-4-20250514",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_start"
         assert result["message"]["id"] == "msg_abc123"
 
@@ -764,15 +856,15 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_end_to_message_stop(self):
         """StreamEndEvent produces message_stop event."""
-        event = {"type": "stream_end"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_stop"
 
     def test_stream_end_updates_context(self):
         """StreamEndEvent marks context as ended."""
         ctx = StreamContext()
         ctx.mark_started()
-        event = {"type": "stream_end"}
+        event = cast(StreamEndEvent, {"type": "stream_end"})
         self.converter.stream_response_to_provider(event, context=ctx)
         assert ctx.is_ended is True
 
@@ -780,12 +872,15 @@ class TestStreamResponseToProviderWithContext:
 
     def test_content_block_start_text(self):
         """ContentBlockStartEvent (text) produces content_block_start."""
-        event = {
-            "type": "content_block_start",
-            "block_index": 0,
-            "block_type": "text",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "text",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_start"
         assert result["index"] == 0
         assert result["content_block"]["type"] == "text"
@@ -793,12 +888,15 @@ class TestStreamResponseToProviderWithContext:
 
     def test_content_block_start_thinking(self):
         """ContentBlockStartEvent (thinking) produces content_block_start."""
-        event = {
-            "type": "content_block_start",
-            "block_index": 0,
-            "block_type": "thinking",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "thinking",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_start"
         assert result["index"] == 0
         assert result["content_block"]["type"] == "thinking"
@@ -806,23 +904,29 @@ class TestStreamResponseToProviderWithContext:
 
     def test_content_block_start_tool_use_returns_empty(self):
         """ContentBlockStartEvent (tool_use) returns empty dict (handled by ToolCallStartEvent)."""
-        event = {
-            "type": "content_block_start",
-            "block_index": 1,
-            "block_type": "tool_use",
-        }
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 1,
+                "block_type": "tool_use",
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
 
     def test_content_block_start_updates_context(self):
         """ContentBlockStartEvent increments context block index."""
         ctx = StreamContext()
         ctx.mark_started()
-        event = {
-            "type": "content_block_start",
-            "block_index": 0,
-            "block_type": "text",
-        }
+        event = cast(
+            ContentBlockStartEvent,
+            {
+                "type": "content_block_start",
+                "block_index": 0,
+                "block_type": "text",
+            },
+        )
         self.converter.stream_response_to_provider(event, context=ctx)
         assert ctx.current_block_index == 0
 
@@ -830,15 +934,21 @@ class TestStreamResponseToProviderWithContext:
 
     def test_content_block_end(self):
         """ContentBlockEndEvent produces content_block_stop."""
-        event = {"type": "content_block_end", "block_index": 0}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 0},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "content_block_stop"
         assert result["index"] == 0
 
     def test_content_block_end_different_index(self):
         """ContentBlockEndEvent with different index is preserved."""
-        event = {"type": "content_block_end", "block_index": 2}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 2},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["index"] == 2
 
     # --- Delta events with context index ---
@@ -848,16 +958,19 @@ class TestStreamResponseToProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         ctx.next_block_index()  # block_index = 0
-        event = {"type": "text_delta", "text": "Hello"}
-        result = self.converter.stream_response_to_provider(event, context=ctx)
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["type"] == "content_block_delta"
         assert result["index"] == 0
         assert result["delta"]["text"] == "Hello"
 
     def test_text_delta_without_context_no_index(self):
         """TextDeltaEvent without context does not include index."""
-        event = {"type": "text_delta", "text": "Hello"}
-        result = self.converter.stream_response_to_provider(event)
+        event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert "index" not in result
 
     def test_reasoning_delta_with_context_has_index(self):
@@ -865,8 +978,14 @@ class TestStreamResponseToProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         ctx.next_block_index()  # block_index = 0
-        event = {"type": "reasoning_delta", "reasoning": "thinking..."}
-        result = self.converter.stream_response_to_provider(event, context=ctx)
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "thinking..."},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["index"] == 0
 
     def test_signature_delta_with_context_has_index(self):
@@ -874,8 +993,14 @@ class TestStreamResponseToProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         ctx.next_block_index()  # block_index = 0
-        event = {"type": "reasoning_delta", "reasoning": "", "signature": "sig_abc"}
-        result = self.converter.stream_response_to_provider(event, context=ctx)
+        event = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "", "signature": "sig_abc"},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["index"] == 0
 
     def test_tool_call_start_with_context_has_index(self):
@@ -883,12 +1008,18 @@ class TestStreamResponseToProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         ctx.next_block_index()  # block_index = 0
-        event = {
-            "type": "tool_call_start",
-            "tool_call_id": "toolu_abc",
-            "tool_name": "get_weather",
-        }
-        result = self.converter.stream_response_to_provider(event, context=ctx)
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["index"] == 0
 
     def test_tool_call_delta_with_context_has_index(self):
@@ -896,10 +1027,16 @@ class TestStreamResponseToProviderWithContext:
         ctx = StreamContext()
         ctx.mark_started()
         ctx.next_block_index()  # block_index = 0
-        event = {
-            "type": "tool_call_delta",
-            "tool_call_id": "",
-            "arguments_delta": '{"city":',
-        }
-        result = self.converter.stream_response_to_provider(event, context=ctx)
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"city":',
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["index"] == 0
