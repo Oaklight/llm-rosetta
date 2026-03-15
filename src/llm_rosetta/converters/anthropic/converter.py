@@ -15,13 +15,12 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
     Message,
-    TextPart,
-    is_part_type,
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
@@ -87,7 +86,7 @@ class AnthropicConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to Anthropic Messages API request parameters.
 
         Orchestrates all Ops classes to build the complete provider request.
@@ -98,8 +97,8 @@ class AnthropicConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings: List[str] = []
-        result: Dict[str, Any] = {"model": ir_request["model"]}
+        warnings: list[str] = []
+        result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → top-level system parameter
         system_instruction = ir_request.get("system_instruction")
@@ -124,7 +123,7 @@ class AnthropicConverter(BaseConverter):
                 content = item.get("content", [])
                 text_parts = []
                 for part in content:
-                    if is_part_type(part, TextPart):
+                    if is_text_part(part):
                         text_parts.append(part["text"])
                 if text_parts and "system" not in result:
                     result["system"] = " ".join(text_parts)
@@ -196,7 +195,7 @@ class AnthropicConverter(BaseConverter):
 
     def request_from_provider(
         self,
-        provider_request: Dict[str, Any],
+        provider_request: dict[str, Any],
         **kwargs: Any,
     ) -> IRRequest:
         """Convert Anthropic Messages API request to IRRequest.
@@ -209,7 +208,7 @@ class AnthropicConverter(BaseConverter):
         """
         provider_request = self._normalize(provider_request)
 
-        ir_request: Dict[str, Any] = {
+        ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
         }
@@ -270,7 +269,7 @@ class AnthropicConverter(BaseConverter):
 
     def response_from_provider(
         self,
-        provider_response: Dict[str, Any],
+        provider_response: dict[str, Any],
         **kwargs: Any,
     ) -> IRResponse:
         """Convert Anthropic Messages API response to IRResponse.
@@ -291,7 +290,7 @@ class AnthropicConverter(BaseConverter):
 
         # Map stop_reason to IR finish_reason
         stop_reason_val = provider_response.get("stop_reason")
-        reason_map = {
+        reason_map: dict[str, str] = {
             "end_turn": "stop",
             "max_tokens": "length",
             "tool_use": "tool_calls",
@@ -299,10 +298,13 @@ class AnthropicConverter(BaseConverter):
             "refusal": "refusal",
         }
 
-        choice_info: Dict[str, Any] = {
+        finish_reason = (
+            reason_map.get(str(stop_reason_val), "stop") if stop_reason_val else "stop"
+        )
+        choice_info: dict[str, Any] = {
             "index": 0,
             "message": ir_message,
-            "finish_reason": {"reason": reason_map.get(stop_reason_val, "stop")},
+            "finish_reason": {"reason": finish_reason},
         }
 
         if provider_response.get("stop_sequence"):
@@ -310,7 +312,7 @@ class AnthropicConverter(BaseConverter):
                 "stop_sequence"
             ]
 
-        ir_response: Dict[str, Any] = {
+        ir_response: dict[str, Any] = {
             "id": provider_response.get("id", ""),
             "object": "response",
             "created": int(time.time()),  # Anthropic doesn't provide timestamp
@@ -323,7 +325,7 @@ class AnthropicConverter(BaseConverter):
         if p_usage:
             input_tokens = p_usage.get("input_tokens", 0)
             output_tokens = p_usage.get("output_tokens", 0)
-            usage_info: Dict[str, Any] = {
+            usage_info: dict[str, Any] = {
                 "prompt_tokens": input_tokens,
                 "completion_tokens": output_tokens,
                 "total_tokens": input_tokens + output_tokens,
@@ -340,7 +342,7 @@ class AnthropicConverter(BaseConverter):
         self,
         ir_response: IRResponse,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Convert IRResponse to Anthropic Messages API response.
 
         Args:
@@ -350,7 +352,7 @@ class AnthropicConverter(BaseConverter):
             Anthropic response dict.
         """
         # Anthropic response is a single message
-        provider_response: Dict[str, Any] = {
+        provider_response: dict[str, Any] = {
             "id": ir_response.get("id", ""),
             "type": "message",
             "model": ir_response.get("model", ""),
@@ -366,7 +368,7 @@ class AnthropicConverter(BaseConverter):
                 provider_response["role"] = message.get("role", "assistant")
 
                 content_parts = message.get("content", [])
-                anthropic_content: List[Dict[str, Any]] = []
+                anthropic_content: list[dict[str, Any]] = []
 
                 for part in content_parts:
                     if is_text_part(part):
@@ -398,7 +400,7 @@ class AnthropicConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: Dict[str, Any] = {
+            usage: dict[str, Any] = {
                 "input_tokens": ir_usage.get("prompt_tokens", 0),
                 "output_tokens": ir_usage.get("completion_tokens", 0),
             }
@@ -412,9 +414,9 @@ class AnthropicConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Union[Message, ExtensionItem]],
+        messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Anthropic message format.
 
         Delegates to message_ops.
@@ -429,9 +431,9 @@ class AnthropicConverter(BaseConverter):
 
     def messages_from_provider(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Convert Anthropic messages to IR message list.
 
         Delegates to message_ops.
@@ -448,9 +450,9 @@ class AnthropicConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         """Convert an Anthropic SSE event to IR stream events.
 
         Anthropic SSE event types:
@@ -469,7 +471,7 @@ class AnthropicConverter(BaseConverter):
             List of IR stream events extracted from the event.
         """
         chunk = self._normalize(chunk)
-        events: List[IRStreamEvent] = []
+        events: list[IRStreamEvent] = []
 
         event_type = chunk.get("type", "")
 
@@ -639,8 +641,8 @@ class AnthropicConverter(BaseConverter):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to an Anthropic SSE event.
 
         Args:
@@ -703,7 +705,7 @@ class AnthropicConverter(BaseConverter):
             }
 
         elif is_text_delta_event(event):
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "type": "content_block_delta",
                 "delta": {
                     "type": "text_delta",
@@ -716,8 +718,9 @@ class AnthropicConverter(BaseConverter):
 
         elif is_reasoning_delta_event(event):
             signature = event.get("signature")
+            rd_result: dict[str, Any]
             if signature is not None:
-                result = {
+                rd_result = {
                     "type": "content_block_delta",
                     "delta": {
                         "type": "signature_delta",
@@ -725,7 +728,7 @@ class AnthropicConverter(BaseConverter):
                     },
                 }
             else:
-                result = {
+                rd_result = {
                     "type": "content_block_delta",
                     "delta": {
                         "type": "thinking_delta",
@@ -733,11 +736,11 @@ class AnthropicConverter(BaseConverter):
                     },
                 }
             if context is not None and context.current_block_index >= 0:
-                result["index"] = context.current_block_index
-            return result
+                rd_result["index"] = context.current_block_index
+            return rd_result
 
         elif is_tool_call_start_event(event):
-            result = {
+            result2: dict[str, Any] = {
                 "type": "content_block_start",
                 "content_block": {
                     "type": "tool_use",
@@ -747,11 +750,11 @@ class AnthropicConverter(BaseConverter):
                 },
             }
             if context is not None and context.current_block_index >= 0:
-                result["index"] = context.current_block_index
-            return result
+                result2["index"] = context.current_block_index
+            return result2
 
         elif is_tool_call_delta_event(event):
-            result = {
+            result3: dict[str, Any] = {
                 "type": "content_block_delta",
                 "delta": {
                     "type": "input_json_delta",
@@ -759,8 +762,8 @@ class AnthropicConverter(BaseConverter):
                 },
             }
             if context is not None and context.current_block_index >= 0:
-                result["index"] = context.current_block_index
-            return result
+                result3["index"] = context.current_block_index
+            return result3
 
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]

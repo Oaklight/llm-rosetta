@@ -6,7 +6,8 @@ Defines the basic interface for converters (abstract base class, functional doma
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
@@ -35,10 +36,10 @@ class BaseConverter(ABC):
 
     # 子类需要指定使用的ops类（按功能域组织）
     # Subclasses should specify the ops classes to use (organized by functional domains)
-    content_ops_class: Optional[Type] = None
-    tool_ops_class: Optional[Type] = None
-    message_ops_class: Optional[Type] = None
-    config_ops_class: Optional[Type] = None
+    content_ops_class: type | None = None
+    tool_ops_class: type | None = None
+    message_ops_class: type | None = None
+    config_ops_class: type | None = None
 
     # ==================== 顶层转换接口 Top-level conversion interface ====================
 
@@ -47,7 +48,7 @@ class BaseConverter(ABC):
         self,
         ir_request: IRRequest,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """将IRRequest转换为provider请求参数
         Convert IRRequest to provider request parameters
 
@@ -73,7 +74,7 @@ class BaseConverter(ABC):
     @abstractmethod
     def request_from_provider(
         self,
-        provider_request: Dict[str, Any],
+        provider_request: dict[str, Any],
         **kwargs: Any,
     ) -> IRRequest:
         """将provider请求转换为IRRequest
@@ -91,7 +92,7 @@ class BaseConverter(ABC):
     @abstractmethod
     def response_from_provider(
         self,
-        provider_response: Dict[str, Any],
+        provider_response: dict[str, Any],
         **kwargs: Any,
     ) -> IRResponse:
         """将provider响应转换为IRResponse
@@ -111,7 +112,7 @@ class BaseConverter(ABC):
         self,
         ir_response: IRResponse,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """将IRResponse转换为provider响应
         Convert IRResponse to provider response
 
@@ -127,9 +128,9 @@ class BaseConverter(ABC):
     @abstractmethod
     def messages_to_provider(
         self,
-        messages: Iterable[Union[Message, ExtensionItem]],
+        messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """将消息列表转换为provider消息格式
         Convert message list to provider message format
 
@@ -148,9 +149,9 @@ class BaseConverter(ABC):
     @abstractmethod
     def messages_from_provider(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """将provider消息转换为IR消息列表
         Convert provider messages to IR message list
 
@@ -168,9 +169,9 @@ class BaseConverter(ABC):
     @abstractmethod
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         """Convert a provider-native stream chunk to a list of IR stream events.
 
         A single provider chunk may produce zero or more IR events depending on
@@ -194,8 +195,8 @@ class BaseConverter(ABC):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to provider-native stream chunk(s).
 
         Some IR events (e.g., lifecycle events) may need to produce multiple
@@ -244,9 +245,9 @@ class BaseConverter(ABC):
 
     def message_to_provider(
         self,
-        message: Union[Message, ExtensionItem],
+        message: Message | ExtensionItem,
         **kwargs: Any,
-    ) -> Tuple[Any, List[str]]:
+    ) -> tuple[Any, list[str]]:
         """将单个消息转换为provider格式（便利方法）
         Convert single message to provider format (convenience method)
 
@@ -264,7 +265,7 @@ class BaseConverter(ABC):
         self,
         provider_message: Any,
         **kwargs: Any,
-    ) -> Union[Message, ExtensionItem]:
+    ) -> Message | ExtensionItem:
         """将provider消息转换为IR格式（便利方法）
         Convert provider message to IR format (convenience method)
 
@@ -276,4 +277,4 @@ class BaseConverter(ABC):
             IR格式的消息
         """
         result = self.messages_from_provider([provider_message], **kwargs)
-        return result[0] if result else None
+        return result[0] if result else cast(Message, {})

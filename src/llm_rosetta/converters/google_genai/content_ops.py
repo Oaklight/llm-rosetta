@@ -9,7 +9,7 @@ Self-contained: does not depend on utils/FieldMapper or utils/ToolCallConverter.
 """
 
 import warnings
-from typing import Any, Dict, List, Optional
+from typing import Any, cast
 
 from ...types.ir import (
     AudioPart,
@@ -20,6 +20,7 @@ from ...types.ir import (
     RefusalPart,
     TextPart,
 )
+from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
 
 
@@ -46,12 +47,13 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             Google text Part dict: ``{"text": "..."}``
         """
-        part: Dict[str, Any] = {"text": ir_text["text"]}
+        part: dict[str, Any] = {"text": ir_text["text"]}
         # Preserve thought_signature in provider_metadata
-        if "provider_metadata" in ir_text:
-            metadata = ir_text["provider_metadata"]
-            if "google" in metadata and "thought_signature" in metadata["google"]:
-                part["thoughtSignature"] = metadata["google"]["thought_signature"]
+        provider_metadata = cast(dict, ir_text).get("provider_metadata")
+        if provider_metadata:
+            google_meta = provider_metadata.get("google", {})
+            if "thought_signature" in google_meta:
+                part["thoughtSignature"] = google_meta["thought_signature"]
         return part
 
     @staticmethod
@@ -69,7 +71,7 @@ class GoogleGenAIContentOps(BaseContentOps):
     # ==================== Image ====================
 
     @staticmethod
-    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> Optional[dict]:
+    def ir_image_to_p(ir_image: ImagePart, **kwargs: Any) -> dict | None:
         """IR ImagePart → Google GenAI inline_data Part.
 
         Google uses inline_data for base64-encoded images. URL-based images
@@ -130,7 +132,7 @@ class GoogleGenAIContentOps(BaseContentOps):
     # ==================== File ====================
 
     @staticmethod
-    def ir_file_to_p(ir_file: FilePart, **kwargs: Any) -> Optional[dict]:
+    def ir_file_to_p(ir_file: FilePart, **kwargs: Any) -> dict | None:
         """IR FilePart → Google GenAI inline_data Part.
 
         Args:
@@ -187,7 +189,7 @@ class GoogleGenAIContentOps(BaseContentOps):
     # ==================== Audio ====================
 
     @staticmethod
-    def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> Optional[dict]:
+    def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> dict | None:
         """IR AudioPart → Google GenAI inline_data Part.
 
         Args:
@@ -228,18 +230,18 @@ class GoogleGenAIContentOps(BaseContentOps):
         """
         if "inline_data" in provider_audio:
             inline_data = provider_audio["inline_data"]
-            return {
-                "type": "audio",
-                "url": None,
-                "media_type": inline_data["mime_type"],
-            }
+            return AudioPart(
+                type="audio",
+                data=inline_data.get("data", ""),
+                media_type=inline_data["mime_type"],
+            )
         elif "file_data" in provider_audio:
             file_data = provider_audio["file_data"]
-            return {
-                "type": "audio",
-                "url": file_data["file_uri"],
-                "media_type": file_data["mime_type"],
-            }
+            return AudioPart(
+                type="audio",
+                url=file_data["file_uri"],
+                media_type=file_data["mime_type"],
+            )
         raise ValueError("Audio part must have inline_data or file_data")
 
     # ==================== Reasoning (Thought) ====================
@@ -257,15 +259,16 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             Google thought Part dict.
         """
-        part: Dict[str, Any] = {
+        part: dict[str, Any] = {
             "thought": True,
             "text": ir_reasoning.get("reasoning", ""),
         }
         # Preserve thought_signature
-        if "provider_metadata" in ir_reasoning:
-            metadata = ir_reasoning["provider_metadata"]
-            if "google" in metadata and "thought_signature" in metadata["google"]:
-                part["thoughtSignature"] = metadata["google"]["thought_signature"]
+        provider_metadata = cast(dict, ir_reasoning).get("provider_metadata")
+        if provider_metadata:
+            google_meta = provider_metadata.get("google", {})
+            if "thought_signature" in google_meta:
+                part["thoughtSignature"] = google_meta["thought_signature"]
         return part
 
     @staticmethod
@@ -313,7 +316,7 @@ class GoogleGenAIContentOps(BaseContentOps):
     # ==================== Citation (not natively supported in parts) ====================
 
     @staticmethod
-    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> Optional[dict]:
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
         """IR CitationPart → Google GenAI format.
 
         Google handles citations at the response level (grounding_metadata),
@@ -346,7 +349,7 @@ class GoogleGenAIContentOps(BaseContentOps):
     # ==================== Composite Part Dispatch ====================
 
     @staticmethod
-    def p_part_to_ir(provider_part: Any) -> List[Dict[str, Any]]:
+    def p_part_to_ir(provider_part: Any) -> list[dict[str, Any]]:
         """Convert a single Google Part to IR content part(s).
 
         Handles all Part types: text, inline_data, file_data,
@@ -361,7 +364,7 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             List of IR content parts.
         """
-        ir_parts: List[Dict[str, Any]] = []
+        ir_parts: list[ContentPart] = []
 
         # Handle text
         if (
@@ -394,11 +397,11 @@ class GoogleGenAIContentOps(BaseContentOps):
                 )
             elif mime_type.startswith("audio/"):
                 ir_parts.append(
-                    {
-                        "type": "audio",
-                        "url": file_data["file_uri"],
-                        "media_type": mime_type,
-                    }
+                    AudioPart(
+                        type="audio",
+                        url=file_data["file_uri"],
+                        media_type=mime_type,
+                    )
                 )
             else:
                 ir_parts.append(FilePart(type="file", file_url=file_data["file_uri"]))
@@ -408,11 +411,11 @@ class GoogleGenAIContentOps(BaseContentOps):
             "thought_signature"
         )
         if thought_sig and ir_parts:
-            last_part = ir_parts[-1]
+            last_part = cast(dict, ir_parts[-1])
             if "provider_metadata" not in last_part:
                 last_part["provider_metadata"] = {}
             if "google" not in last_part["provider_metadata"]:
                 last_part["provider_metadata"]["google"] = {}
             last_part["provider_metadata"]["google"]["thought_signature"] = thought_sig
 
-        return ir_parts
+        return cast(list[dict[str, Any]], ir_parts)

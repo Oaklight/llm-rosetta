@@ -17,7 +17,8 @@ Also maintains backward compatibility with the old to_provider/from_provider API
 import json
 import time
 import uuid
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 
 from ...types.ir import (
@@ -32,7 +33,7 @@ from ...types.ir import (
     is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
-from ...types.ir.response import IRResponse
+from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
@@ -119,7 +120,7 @@ class GoogleGenAIConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to Google GenAI request parameters.
 
         Orchestrates all Ops classes to build the complete provider request.
@@ -130,8 +131,8 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings_list: List[str] = []
-        result: Dict[str, Any] = {"model": ir_request["model"]}
+        warnings_list: list[str] = []
+        result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. Handle system_instruction
         system_instruction = None
@@ -144,7 +145,7 @@ class GoogleGenAIConverter(BaseConverter):
             elif isinstance(ir_system, list):
                 parts = []
                 for part in ir_system:
-                    if is_text_part(part):
+                    if isinstance(part, dict) and part.get("type") == "text":
                         parts.append({"text": part["text"]})
                 system_instruction = {"role": "user", "parts": parts}
 
@@ -161,7 +162,7 @@ class GoogleGenAIConverter(BaseConverter):
                 if system_instruction is None:
                     system_instruction = {"role": "user", "parts": msg_parts}
                 else:
-                    system_instruction["parts"].extend(msg_parts)
+                    cast(list, system_instruction["parts"]).extend(msg_parts)
 
         # Convert non-system messages
         contents, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
@@ -172,7 +173,7 @@ class GoogleGenAIConverter(BaseConverter):
             result["system_instruction"] = system_instruction
 
         # 3. Build config dict
-        config: Dict[str, Any] = {}
+        config: dict[str, Any] = {}
 
         # Tools
         tools = ir_request.get("tools")
@@ -187,7 +188,7 @@ class GoogleGenAIConverter(BaseConverter):
                 config["tool_config"] = tc_p
 
         # Generation config
-        gen_config = ir_request.get("generation", {})
+        gen_config = ir_request.get("generation")
         if gen_config:
             gen_fields = self.config_ops.ir_generation_config_to_p(gen_config)
             config.update(gen_fields)
@@ -227,7 +228,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def request_from_provider(
         self,
-        provider_request: Dict[str, Any],
+        provider_request: dict[str, Any],
         **kwargs: Any,
     ) -> IRRequest:
         """Convert Google GenAI request to IRRequest.
@@ -240,7 +241,7 @@ class GoogleGenAIConverter(BaseConverter):
         """
         provider_request = self._normalize(provider_request)
 
-        ir_request: Dict[str, Any] = {
+        ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
         }
@@ -301,7 +302,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def response_from_provider(
         self,
-        provider_response: Dict[str, Any],
+        provider_response: dict[str, Any],
         **kwargs: Any,
     ) -> IRResponse:
         """Convert Google GenAI response to IRResponse.
@@ -337,14 +338,14 @@ class GoogleGenAIConverter(BaseConverter):
                 "OTHER": "error",
             }
 
-            choice_info: Dict[str, Any] = {
+            choice_info: dict[str, Any] = {
                 "index": p_candidate.get("index", 0),
                 "message": message,
                 "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
             }
             choices.append(choice_info)
 
-        ir_response: Dict[str, Any] = {
+        ir_response: dict[str, Any] = {
             "id": provider_response.get("response_id")
             or provider_response.get("responseId")
             or "",
@@ -361,7 +362,7 @@ class GoogleGenAIConverter(BaseConverter):
             "usageMetadata"
         )
         if p_usage:
-            usage_info: Dict[str, Any] = {
+            usage_info: dict[str, Any] = {
                 "prompt_tokens": p_usage.get(
                     "prompt_token_count", p_usage.get("promptTokenCount", 0)
                 ),
@@ -389,7 +390,7 @@ class GoogleGenAIConverter(BaseConverter):
         self,
         ir_response: IRResponse,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Convert IRResponse to Google GenAI response.
 
         Args:
@@ -398,7 +399,7 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Google response dict.
         """
-        provider_response: Dict[str, Any] = {
+        provider_response: dict[str, Any] = {
             "response_id": ir_response.get("id", ""),
             "model_version": ir_response.get("model", ""),
             "candidates": [],
@@ -419,7 +420,7 @@ class GoogleGenAIConverter(BaseConverter):
 
             # Convert message back to Google Content format
             google_role = "model" if message.get("role") == "assistant" else "user"
-            parts: List[Dict[str, Any]] = []
+            parts: list[dict[str, Any]] = []
 
             for part in message.get("content", []):
                 if is_text_part(part):
@@ -432,7 +433,7 @@ class GoogleGenAIConverter(BaseConverter):
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
 
-            candidate: Dict[str, Any] = {
+            candidate: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "content": {"role": google_role, "parts": parts},
                 "finish_reason": reason_map.get(reason, "STOP"),
@@ -442,7 +443,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage_metadata: Dict[str, Any] = {
+            usage_metadata: dict[str, Any] = {
                 "prompt_token_count": ir_usage.get("prompt_tokens", 0),
                 "candidates_token_count": ir_usage.get("completion_tokens", 0),
                 "total_token_count": ir_usage.get("total_tokens", 0),
@@ -457,9 +458,9 @@ class GoogleGenAIConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Union[Message, ExtensionItem]],
+        messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Google GenAI Content format.
 
         Delegates to message_ops.
@@ -474,9 +475,9 @@ class GoogleGenAIConverter(BaseConverter):
 
     def messages_from_provider(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Convert Google GenAI Content list to IR message list.
 
         Delegates to message_ops.
@@ -493,9 +494,9 @@ class GoogleGenAIConverter(BaseConverter):
 
     def build_config(
         self,
-        tools: Optional[Iterable[ToolDefinition]] = None,
-        tool_choice: Optional[ToolChoice] = None,
-    ) -> Optional[Dict[str, Any]]:
+        tools: Iterable[ToolDefinition] | None = None,
+        tool_choice: ToolChoice | None = None,
+    ) -> dict[str, Any] | None:
         """Build Google GenAI config parameters (backward compatibility).
 
         Args:
@@ -505,7 +506,7 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Google GenAI config dict, or None if no tool configuration.
         """
-        config: Dict[str, Any] = {}
+        config: dict[str, Any] = {}
 
         if tools:
             config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
@@ -519,11 +520,11 @@ class GoogleGenAIConverter(BaseConverter):
 
     def to_provider(
         self,
-        ir_input: Union[IRInput, IRRequest],
-        tools: Optional[Iterable[ToolDefinition]] = None,
-        tool_choice: Optional[ToolChoice] = None,
+        ir_input: IRInput | IRRequest,
+        tools: Iterable[ToolDefinition] | None = None,
+        tool_choice: ToolChoice | None = None,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR format to Google GenAI format (backward compatibility).
 
         Supports both IRInput (message list) and IRRequest (full request).
@@ -538,11 +539,11 @@ class GoogleGenAIConverter(BaseConverter):
         """
         if isinstance(ir_input, dict) and "messages" in ir_input:
             # Handle IRRequest
-            return self.request_to_provider(ir_input)
+            return self.request_to_provider(cast(IRRequest, ir_input))
 
         # Handle IRInput (message list)
         ir_input_list = list(ir_input)
-        warnings_list: List[str] = []
+        warnings_list: list[str] = []
 
         # Extract system messages
         system_instruction, remaining = self.message_ops.extract_system_instruction(
@@ -554,7 +555,7 @@ class GoogleGenAIConverter(BaseConverter):
         warnings_list.extend(msg_warnings)
 
         # Build result
-        result: Dict[str, Any] = {"contents": contents}
+        result: dict[str, Any] = {"contents": contents}
 
         if system_instruction:
             result["system_instruction"] = system_instruction
@@ -575,9 +576,9 @@ class GoogleGenAIConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         """Convert a Google GenAI stream chunk to IR stream events.
 
         Google GenAI stream chunks are complete ``GenerateContentResponse``
@@ -604,7 +605,7 @@ class GoogleGenAIConverter(BaseConverter):
             List of IR stream events extracted from the chunk.
         """
         chunk = self._normalize(chunk)
-        events: List[IRStreamEvent] = []
+        events: list[IRStreamEvent] = []
 
         # --- StreamStartEvent (only with context, on first chunk) ---
         if context is not None and not context.is_started:
@@ -712,7 +713,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage metadata (typically in the last chunk)
         usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
         if usage:
-            usage_info: Dict[str, Any] = {
+            usage_info: dict[str, Any] = {
                 "prompt_tokens": usage.get(
                     "prompt_token_count", usage.get("promptTokenCount", 0)
                 ),
@@ -735,7 +736,7 @@ class GoogleGenAIConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=usage_info,
+                    usage=cast(UsageInfo, usage_info),
                 )
             )
 
@@ -749,8 +750,8 @@ class GoogleGenAIConverter(BaseConverter):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to a Google GenAI stream chunk.
 
         Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR
@@ -893,7 +894,7 @@ class GoogleGenAIConverter(BaseConverter):
 
         elif is_usage_event(event):
             usage = event["usage"]
-            usage_metadata: Dict[str, Any] = {
+            usage_metadata: dict[str, Any] = {
                 "prompt_token_count": usage.get("prompt_tokens", 0),
                 "candidates_token_count": usage.get("completion_tokens", 0),
                 "total_token_count": usage.get("total_tokens", 0),

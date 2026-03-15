@@ -10,7 +10,7 @@ and input_file for files. Images and files are always input-only.
 
 import re
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 from ...types.ir import (
     AudioPart,
@@ -141,11 +141,11 @@ class OpenAIResponsesContentOps(BaseContentOps):
                 return ImagePart(type="image", image_url=url, detail=detail)
         elif "file_id" in provider_image:
             # File ID form, store as-is
-            return {
-                "type": "image",
-                "file_id": provider_image["file_id"],
-                "detail": detail,
-            }
+            return ImagePart(
+                type="image",
+                file_id=provider_image["file_id"],
+                detail=detail,
+            )
 
         return ImagePart(type="image", detail=detail)
 
@@ -206,11 +206,11 @@ class OpenAIResponsesContentOps(BaseContentOps):
                 type="file", file_name=file_name, file_url=provider_file["file_url"]
             )
         elif "file_id" in provider_file:
-            return {
-                "type": "file",
-                "file_name": file_name,
-                "file_id": provider_file["file_id"],
-            }
+            return FilePart(
+                type="file",
+                file_name=file_name,
+                file_id=provider_file["file_id"],
+            )
 
         return FilePart(type="file", file_name=file_name)
 
@@ -258,7 +258,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
     @staticmethod
     def p_reasoning_to_ir(
         provider_reasoning: Any, **kwargs: Any
-    ) -> Optional[ReasoningPart]:
+    ) -> ReasoningPart | None:
         """OpenAI Responses reasoning item → IR ReasoningPart.
 
         Handles cases where reasoning content may be None (e.g., o4-mini).
@@ -281,7 +281,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
     # ==================== Refusal ====================
 
     @staticmethod
-    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> Optional[dict]:
+    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict | None:
         """IR RefusalPart → OpenAI Responses refusal content.
 
         OpenAI Responses API does not have a dedicated refusal format.
@@ -313,7 +313,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
     # ==================== Citation ====================
 
     @staticmethod
-    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> Optional[dict]:
+    def ir_citation_to_p(ir_citation: CitationPart, **kwargs: Any) -> dict | None:
         """IR CitationPart → OpenAI Responses annotation.
 
         Maps URL citations to OpenAI annotation format.

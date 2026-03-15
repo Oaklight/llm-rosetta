@@ -9,7 +9,8 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, cast
+from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
@@ -81,7 +82,7 @@ class OpenAIResponsesConverter(BaseConverter):
         self,
         ir_request: IRRequest,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Any], List[str]]:
+    ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to OpenAI Responses API request parameters.
 
         Orchestrates all Ops classes to build the complete provider request.
@@ -92,8 +93,8 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings: List[str] = []
-        result: Dict[str, Any] = {"model": ir_request["model"]}
+        warnings: list[str] = []
+        result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → instructions field
         system_instruction = ir_request.get("system_instruction")
@@ -103,7 +104,7 @@ class OpenAIResponsesConverter(BaseConverter):
             elif isinstance(system_instruction, list):
                 text_parts = []
                 for part in system_instruction:
-                    if isinstance(part, dict) and is_text_part(part):
+                    if isinstance(part, dict) and part.get("type") == "text":
                         text_parts.append(part["text"])
                     elif isinstance(part, str):
                         text_parts.append(part)
@@ -170,7 +171,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def request_from_provider(
         self,
-        provider_request: Dict[str, Any],
+        provider_request: dict[str, Any],
         **kwargs: Any,
     ) -> IRRequest:
         """Convert OpenAI Responses API request to IRRequest.
@@ -183,7 +184,7 @@ class OpenAIResponsesConverter(BaseConverter):
         """
         provider_request = self._normalize(provider_request)
 
-        ir_request: Dict[str, Any] = {
+        ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
         }
@@ -266,7 +267,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def response_from_provider(
         self,
-        provider_response: Dict[str, Any],
+        provider_response: dict[str, Any],
         **kwargs: Any,
     ) -> IRResponse:
         """Convert OpenAI Responses API response to IRResponse.
@@ -304,12 +305,12 @@ class OpenAIResponsesConverter(BaseConverter):
         ir_items = self.message_ops.p_messages_to_ir(output_items)
 
         # Collect all content parts into a single assistant message
-        message_content: List[Dict[str, Any]] = []
+        message_content: list[dict[str, Any]] = []
         for ir_item in ir_items:
             if isinstance(ir_item, dict) and "role" in ir_item:
                 # It's a message - extract content
                 content = ir_item.get("content", [])
-                message_content.extend(content)
+                message_content.extend(cast(list, content))
             elif isinstance(ir_item, dict) and "type" in ir_item:
                 # It's an extension item (system_event etc.) - skip for choices
                 pass
@@ -323,7 +324,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 }
             )
 
-        ir_response: Dict[str, Any] = {
+        ir_response: dict[str, Any] = {
             "id": provider_response.get("id", ""),
             "object": "response",
             "created": int(provider_response.get("created_at", 0)),
@@ -334,7 +335,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Handle usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            usage_info: Dict[str, Any] = {
+            usage_info: dict[str, Any] = {
                 "prompt_tokens": p_usage.get("input_tokens", 0),
                 "completion_tokens": p_usage.get("output_tokens", 0),
                 "total_tokens": p_usage.get("total_tokens", 0),
@@ -364,7 +365,7 @@ class OpenAIResponsesConverter(BaseConverter):
         self,
         ir_response: IRResponse,
         **kwargs: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Convert IRResponse to OpenAI Responses API response.
 
         Args:
@@ -373,7 +374,7 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             OpenAI Responses response dict.
         """
-        provider_response: Dict[str, Any] = {
+        provider_response: dict[str, Any] = {
             "id": ir_response.get("id", ""),
             "object": "response",
             "created_at": ir_response.get("created", 0),
@@ -420,7 +421,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: Dict[str, Any] = {
+            usage: dict[str, Any] = {
                 "input_tokens": ir_usage.get("prompt_tokens", 0),
                 "output_tokens": ir_usage.get("completion_tokens", 0),
                 "total_tokens": ir_usage.get("total_tokens", 0),
@@ -445,9 +446,9 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Union[Message, ExtensionItem]],
+        messages: Iterable[Message | ExtensionItem],
         **kwargs: Any,
-    ) -> Tuple[List[Any], List[str]]:
+    ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to OpenAI Responses input items.
 
         Delegates to message_ops.
@@ -462,9 +463,9 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def messages_from_provider(
         self,
-        provider_messages: List[Any],
+        provider_messages: list[Any],
         **kwargs: Any,
-    ) -> List[Union[Message, ExtensionItem]]:
+    ) -> list[Message | ExtensionItem]:
         """Convert OpenAI Responses items to IR message list.
 
         Delegates to message_ops.
@@ -499,7 +500,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # It's a plain message list - wrap in a minimal request
         items, warnings = self.message_ops.ir_messages_to_p(ir_input)
-        result: Dict[str, Any] = {"input": items}
+        result: dict[str, Any] = {"input": items}
 
         if tools:
             result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
@@ -531,9 +532,9 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def stream_response_from_provider(
         self,
-        chunk: Dict[str, Any],
-        context: Optional[StreamContext] = None,
-    ) -> List[IRStreamEvent]:
+        chunk: dict[str, Any],
+        context: StreamContext | None = None,
+    ) -> list[IRStreamEvent]:
         """Convert an OpenAI Responses SSE event to IR stream events.
 
         OpenAI Responses API uses fine-grained SSE events with a ``type`` field
@@ -558,7 +559,7 @@ class OpenAIResponsesConverter(BaseConverter):
             List of IR stream events extracted from the event.
         """
         chunk = self._normalize(chunk)
-        events: List[IRStreamEvent] = []
+        events: list[IRStreamEvent] = []
         event_type = chunk.get("type", "")
 
         # --- Response created (session start) ---
@@ -767,8 +768,8 @@ class OpenAIResponsesConverter(BaseConverter):
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
-        context: Optional[StreamContext] = None,
-    ) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to an OpenAI Responses SSE event.
 
         When a ``context`` is provided, ``UsageEvent`` stores usage info in
@@ -840,7 +841,7 @@ class OpenAIResponsesConverter(BaseConverter):
             }
 
         elif is_tool_call_start_event(event):
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "type": "response.output_item.added",
                 "item": {
                     "type": "function_call",
@@ -854,7 +855,7 @@ class OpenAIResponsesConverter(BaseConverter):
             return result
 
         elif is_tool_call_delta_event(event):
-            result: Dict[str, Any] = {
+            result: dict[str, Any] = {
                 "type": "response.function_call_arguments.delta",
                 "call_id": event["tool_call_id"],
                 "delta": event["arguments_delta"],
@@ -867,7 +868,7 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]
             status = "completed"
-            response: Dict[str, Any] = {"status": status}
+            response: dict[str, Any] = {"status": status}
 
             if reason == "length":
                 response["status"] = "incomplete"
