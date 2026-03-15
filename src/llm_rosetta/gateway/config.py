@@ -13,6 +13,16 @@ from llm_rosetta.auto_detect import ProviderType
 logger = logging.getLogger("llm-rosetta-gateway")
 
 # ---------------------------------------------------------------------------
+# Config file search paths (checked in order)
+# ---------------------------------------------------------------------------
+
+PATHS_TO_TRY = [
+    "./config.jsonc",
+    os.path.expanduser("~/.config/llm-rosetta-gateway/config.jsonc"),
+    os.path.expanduser("~/.llm-rosetta-gateway/config.jsonc"),
+]
+
+# ---------------------------------------------------------------------------
 # JSONC loader
 # ---------------------------------------------------------------------------
 
@@ -54,6 +64,32 @@ def load_config(path: str) -> dict[str, Any]:
     stripped = _strip_jsonc_comments(raw)
     substituted = _substitute_env_vars(stripped)
     return json.loads(substituted)
+
+
+def load_config_raw(path: str) -> dict[str, Any]:
+    """Load and parse a JSONC config file *without* env-var substitution.
+
+    Useful for reading config that will be written back (e.g. ``add`` CLI).
+    """
+    with open(path) as f:
+        raw = f.read()
+    stripped = _strip_jsonc_comments(raw)
+    return json.loads(stripped)
+
+
+def discover_config(explicit_path: str | None = None) -> str | None:
+    """Find the first existing config file.
+
+    If *explicit_path* is given, return it unconditionally (caller is
+    responsible for handling missing files).  Otherwise search
+    ``PATHS_TO_TRY`` in order and return the first hit, or ``None``.
+    """
+    if explicit_path is not None:
+        return explicit_path
+    for path in PATHS_TO_TRY:
+        if os.path.isfile(path):
+            return path
+    return None
 
 
 # ---------------------------------------------------------------------------

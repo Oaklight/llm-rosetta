@@ -35,6 +35,6 @@ if _missing:
     raise ImportError(f"{_INSTALL_MSG}\nMissing packages: {', '.join(_missing)}")
 
 from .app import create_app, main  # noqa: E402
-from .config import GatewayConfig, load_config  # noqa: E402
+from .config import GatewayConfig, discover_config, load_config  # noqa: E402
 
-__all__ = ["create_app", "main", "GatewayConfig", "load_config"]
+__all__ = ["create_app", "main", "GatewayConfig", "discover_config", "load_config"]
