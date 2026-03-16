@@ -17,12 +17,15 @@ class TestAnthropicConfigOps:
 
     def test_ir_generation_config_basic(self):
         """Test basic generation config conversion."""
-        ir_config = cast(GenerationConfig, {
-            "temperature": 0.7,
-            "max_tokens": 1024,
-            "top_p": 0.9,
-            "top_k": 50,
-        })
+        ir_config = cast(
+            GenerationConfig,
+            {
+                "temperature": 0.7,
+                "max_tokens": 1024,
+                "top_p": 0.9,
+                "top_k": 50,
+            },
+        )
         result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["max_tokens"] == 1024
@@ -48,11 +51,14 @@ class TestAnthropicConfigOps:
 
     def test_ir_generation_config_unsupported_fields(self):
         """Test unsupported fields produce warnings."""
-        ir_config = cast(GenerationConfig, {
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
-            "seed": 42,
-        })
+        ir_config = cast(
+            GenerationConfig,
+            {
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.3,
+                "seed": 42,
+            },
+        )
         with pytest.warns(UserWarning):
             result = AnthropicConfigOps.ir_generation_config_to_p(ir_config)
         # Unsupported fields should not be in result

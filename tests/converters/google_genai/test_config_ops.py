@@ -23,12 +23,15 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_generation_config_basic(self):
         """Test basic generation config conversion."""
-        ir_config = cast(GenerationConfig, {
-            "temperature": 0.7,
-            "max_tokens": 1024,
-            "top_p": 0.9,
-            "top_k": 50,
-        })
+        ir_config = cast(
+            GenerationConfig,
+            {
+                "temperature": 0.7,
+                "max_tokens": 1024,
+                "top_p": 0.9,
+                "top_k": 50,
+            },
+        )
         result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["max_output_tokens"] == 1024
@@ -43,10 +46,13 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_generation_config_penalties(self):
         """Test frequency_penalty and presence_penalty conversion."""
-        ir_config = cast(GenerationConfig, {
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
-        })
+        ir_config = cast(
+            GenerationConfig,
+            {
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.3,
+            },
+        )
         result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
         assert result["frequency_penalty"] == 0.5
         assert result["presence_penalty"] == 0.3
@@ -77,18 +83,24 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_generation_config_empty(self):
         """Test empty generation config."""
-        result = GoogleGenAIConfigOps.ir_generation_config_to_p(cast(GenerationConfig, {}))
+        result = GoogleGenAIConfigOps.ir_generation_config_to_p(
+            cast(GenerationConfig, {})
+        )
         assert result == {}
 
     def test_ir_generation_config_logit_bias_warning(self):
         """Test logit_bias produces warning."""
         with pytest.warns(UserWarning, match="logit_bias"):
-            GoogleGenAIConfigOps.ir_generation_config_to_p(cast(GenerationConfig, {"logit_bias": {1: 0.5}}))
+            GoogleGenAIConfigOps.ir_generation_config_to_p(
+                cast(GenerationConfig, {"logit_bias": {1: 0.5}})
+            )
 
     def test_ir_generation_config_logprobs_warning(self):
         """Test logprobs produces warning."""
         with pytest.warns(UserWarning, match="logprobs"):
-            GoogleGenAIConfigOps.ir_generation_config_to_p(cast(GenerationConfig, {"logprobs": True}))
+            GoogleGenAIConfigOps.ir_generation_config_to_p(
+                cast(GenerationConfig, {"logprobs": True})
+            )
 
     def test_p_generation_config_to_ir(self):
         """Test Google generation params → IR GenerationConfig."""
@@ -132,7 +144,9 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_response_format_json_object(self):
         """Test json_object → response_mime_type."""
-        result = GoogleGenAIConfigOps.ir_response_format_to_p(cast(ResponseFormatConfig, {"type": "json_object"}))
+        result = GoogleGenAIConfigOps.ir_response_format_to_p(
+            cast(ResponseFormatConfig, {"type": "json_object"})
+        )
         assert result["response_mime_type"] == "application/json"
         assert "response_schema" not in result
 
@@ -147,12 +161,16 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_response_format_text(self):
         """Test text format → empty result."""
-        result = GoogleGenAIConfigOps.ir_response_format_to_p(cast(ResponseFormatConfig, {"type": "text"}))
+        result = GoogleGenAIConfigOps.ir_response_format_to_p(
+            cast(ResponseFormatConfig, {"type": "text"})
+        )
         assert result == {}
 
     def test_ir_response_format_default(self):
         """Test default (no type) → empty result."""
-        result = GoogleGenAIConfigOps.ir_response_format_to_p(cast(ResponseFormatConfig, {}))
+        result = GoogleGenAIConfigOps.ir_response_format_to_p(
+            cast(ResponseFormatConfig, {})
+        )
         assert result == {}
 
     def test_p_response_format_json_object(self):
@@ -191,7 +209,9 @@ class TestGoogleGenAIConfigOps:
     def test_response_format_round_trip_json_schema(self):
         """Test json_schema round-trip."""
         schema = {"type": "object", "properties": {"x": {"type": "integer"}}}
-        original = cast(ResponseFormatConfig, {"type": "json_schema", "json_schema": schema})
+        original = cast(
+            ResponseFormatConfig, {"type": "json_schema", "json_schema": schema}
+        )
         provider = GoogleGenAIConfigOps.ir_response_format_to_p(original)
         restored = GoogleGenAIConfigOps.p_response_format_to_ir(provider)
         assert restored["type"] == "json_schema"
@@ -201,12 +221,16 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_stream_config_enabled(self):
         """Test stream enabled → Google stream param."""
-        result = GoogleGenAIConfigOps.ir_stream_config_to_p(cast(StreamConfig, {"enabled": True}))
+        result = GoogleGenAIConfigOps.ir_stream_config_to_p(
+            cast(StreamConfig, {"enabled": True})
+        )
         assert result["stream"] is True
 
     def test_ir_stream_config_disabled(self):
         """Test stream disabled → Google stream param."""
-        result = GoogleGenAIConfigOps.ir_stream_config_to_p(cast(StreamConfig, {"enabled": False}))
+        result = GoogleGenAIConfigOps.ir_stream_config_to_p(
+            cast(StreamConfig, {"enabled": False})
+        )
         assert result["stream"] is False
 
     def test_ir_stream_config_empty(self):
@@ -233,18 +257,24 @@ class TestGoogleGenAIConfigOps:
 
     def test_ir_reasoning_config_budget_tokens(self):
         """Test reasoning budget_tokens → thinking_config."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(cast(ReasoningConfig, {"budget_tokens": 4096}))
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"budget_tokens": 4096})
+        )
         assert result["thinking_config"]["thinking_budget"] == 4096
 
     def test_ir_reasoning_config_effort_warning(self):
         """Test effort field produces warning."""
         with pytest.warns(UserWarning, match="reasoning effort"):
-            result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(cast(ReasoningConfig, {"effort": "high"}))
+            result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "high"})
+            )
         assert result == {}
 
     def test_ir_reasoning_config_empty(self):
         """Test empty reasoning config → empty result."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(cast(ReasoningConfig, {}))
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {})
+        )
         assert result == {}
 
     def test_p_reasoning_config_to_ir(self):

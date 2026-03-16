@@ -45,7 +45,9 @@ class TestOpenAIResponsesConverter:
             IRRequest,
             {
                 "model": "gpt-4o",
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hi"}]}
+                ],
                 "system_instruction": "You are helpful.",
             },
         )
@@ -58,7 +60,9 @@ class TestOpenAIResponsesConverter:
             IRRequest,
             {
                 "model": "gpt-4o",
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hi"}]}
+                ],
                 "system_instruction": [
                     {"type": "text", "text": "Be helpful."},
                     {"type": "text", "text": "Be concise."},
@@ -122,7 +126,9 @@ class TestOpenAIResponsesConverter:
             IRRequest,
             {
                 "model": "gpt-4o",
-                "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hi"}]}
+                ],
                 "provider_extensions": {"user": "test-user", "store": True},
             },
         )

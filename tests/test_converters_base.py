@@ -509,9 +509,14 @@ class TestBaseConverter:
         ir_request: IRRequest = {
             "model": "test-model",
             "messages": [
-                cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
+                cast(
+                    UserMessage,
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+                )
             ],
-            "generation": cast(GenerationConfig, {"temperature": 0.7, "max_tokens": 100}),
+            "generation": cast(
+                GenerationConfig, {"temperature": 0.7, "max_tokens": 100}
+            ),
         }
 
         provider_request, warnings = self.converter.request_to_provider(ir_request)
@@ -541,19 +546,25 @@ class TestBaseConverter:
     def test_messages_to_provider(self):
         """测试消息转换到provider"""
         messages: list[Message] = [
-            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
-            cast(AssistantMessage, {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Hi there!"},
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": "call_1",
-                        "tool_name": "search",
-                        "tool_input": {"query": "test"},
-                    },
-                ],
-            }),
+            cast(
+                UserMessage,
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ),
+            cast(
+                AssistantMessage,
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Hi there!"},
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_1",
+                            "tool_name": "search",
+                            "tool_input": {"query": "test"},
+                        },
+                    ],
+                },
+            ),
         ]
 
         provider_messages, warnings = self.converter.messages_to_provider(messages)
@@ -579,7 +590,10 @@ class TestBaseConverter:
 
     def test_message_to_provider_convenience(self):
         """测试单个消息转换便利方法"""
-        message = cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
+        message = cast(
+            UserMessage,
+            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+        )
 
         provider_message, warnings = self.converter.message_to_provider(message)
 
@@ -716,19 +730,25 @@ class TestBaseMessageOps:
     def test_messages_conversion(self):
         """测试消息批量转换"""
         ir_messages: list[Message] = [
-            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
-            cast(AssistantMessage, {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Hi!"},
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": "call_1",
-                        "tool_name": "search",
-                        "tool_input": {"query": "test"},
-                    },
-                ],
-            }),
+            cast(
+                UserMessage,
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ),
+            cast(
+                AssistantMessage,
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Hi!"},
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_1",
+                            "tool_name": "search",
+                            "tool_input": {"query": "test"},
+                        },
+                    ],
+                },
+            ),
         ]
 
         # IR → Provider
@@ -747,12 +767,18 @@ class TestBaseMessageOps:
     def test_extension_item_handling(self):
         """测试扩展项处理"""
         items: list[Message | ExtensionItem] = [
-            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]}),
-            cast(ExtensionItem, {
-                "type": "system_event",
-                "event_type": "session_start",
-                "timestamp": "2024-01-01T00:00:00Z",
-            }),
+            cast(
+                UserMessage,
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ),
+            cast(
+                ExtensionItem,
+                {
+                    "type": "system_event",
+                    "event_type": "session_start",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                },
+            ),
         ]
 
         provider_messages, warnings = self.message_ops.ir_messages_to_p(items)
@@ -766,7 +792,10 @@ class TestBaseMessageOps:
         """测试消息验证"""
         # 有效消息
         valid_messages: list[Message | ExtensionItem] = [
-            cast(UserMessage, {"role": "user", "content": [{"type": "text", "text": "Hello"}]})
+            cast(
+                UserMessage,
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            )
         ]
         errors = self.message_ops.validate_messages(valid_messages)
         assert len(errors) == 0

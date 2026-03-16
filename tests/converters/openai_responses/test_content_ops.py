@@ -2,7 +2,6 @@
 OpenAI Responses ContentOps unit tests.
 """
 
-
 import pytest
 
 from llm_rosetta.converters.openai_responses.content_ops import (
@@ -10,7 +9,13 @@ from llm_rosetta.converters.openai_responses.content_ops import (
 )
 from typing import cast
 
-from llm_rosetta.types.ir import CitationPart, FilePart, ImagePart, ReasoningPart, TextPart
+from llm_rosetta.types.ir import (
+    CitationPart,
+    FilePart,
+    ImagePart,
+    ReasoningPart,
+    TextPart,
+)
 
 
 class TestOpenAIResponsesContentOps:
@@ -167,11 +172,14 @@ class TestOpenAIResponsesContentOps:
 
     def test_ir_file_to_p_with_data(self):
         """Test IR FilePart with file_data → OpenAI Responses input_file."""
-        ir_file = cast(FilePart, {
-            "type": "file",
-            "file_name": "doc.pdf",
-            "file_data": {"data": "filedata123", "media_type": "application/pdf"},
-        })
+        ir_file = cast(
+            FilePart,
+            {
+                "type": "file",
+                "file_name": "doc.pdf",
+                "file_data": {"data": "filedata123", "media_type": "application/pdf"},
+            },
+        )
         result = OpenAIResponsesContentOps.ir_file_to_p(ir_file)
         assert result["type"] == "input_file"
         assert result["filename"] == "doc.pdf"
@@ -179,11 +187,14 @@ class TestOpenAIResponsesContentOps:
 
     def test_ir_file_to_p_with_url(self):
         """Test IR FilePart with file_url → OpenAI Responses input_file."""
-        ir_file = cast(FilePart, {
-            "type": "file",
-            "file_name": "doc.pdf",
-            "file_url": "https://example.com/doc.pdf",
-        })
+        ir_file = cast(
+            FilePart,
+            {
+                "type": "file",
+                "file_name": "doc.pdf",
+                "file_url": "https://example.com/doc.pdf",
+            },
+        )
         result = OpenAIResponsesContentOps.ir_file_to_p(ir_file)
         assert result["type"] == "input_file"
         assert result["file_url"] == "https://example.com/doc.pdf"

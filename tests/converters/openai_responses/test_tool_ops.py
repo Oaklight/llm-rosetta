@@ -6,7 +6,13 @@ import json
 from typing import Any, cast
 
 from llm_rosetta.converters.openai_responses.tool_ops import OpenAIResponsesToolOps
-from llm_rosetta.types.ir import ToolCallConfig, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
+from llm_rosetta.types.ir import (
+    ToolCallConfig,
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
 
 
 class TestOpenAIResponsesToolOps:

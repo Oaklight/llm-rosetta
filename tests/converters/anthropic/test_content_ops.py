@@ -5,6 +5,7 @@ Anthropic ContentOps unit tests.
 import pytest
 
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
+
 # Note: ir_refusal_to_p returns dict | None; tests assert result is not None before subscript
 from llm_rosetta.types.ir import FilePart, ImagePart, ReasoningPart, TextPart
 

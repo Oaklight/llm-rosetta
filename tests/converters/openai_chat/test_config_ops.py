@@ -2,7 +2,6 @@
 OpenAI Chat ConfigOps unit tests.
 """
 
-
 import pytest
 
 from typing import cast
@@ -18,16 +17,19 @@ class TestOpenAIChatConfigOps:
 
     def test_ir_generation_config_to_p_direct_fields(self):
         """Test direct mapping fields."""
-        ir_config = cast(GenerationConfig, {
-            "temperature": 0.7,
-            "top_p": 0.9,
-            "frequency_penalty": 0.5,
-            "presence_penalty": 0.3,
-            "seed": 42,
-            "logprobs": True,
-            "top_logprobs": 5,
-            "n": 2,
-        })
+        ir_config = cast(
+            GenerationConfig,
+            {
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "frequency_penalty": 0.5,
+                "presence_penalty": 0.3,
+                "seed": 42,
+                "logprobs": True,
+                "top_logprobs": 5,
+                "n": 2,
+            },
+        )
         result = OpenAIChatConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["top_p"] == 0.9
@@ -89,7 +91,10 @@ class TestOpenAIChatConfigOps:
 
     def test_generation_config_round_trip(self):
         """Test generation config round-trip."""
-        original = cast(GenerationConfig, {"temperature": 0.8, "max_tokens": 150, "stop_sequences": ["X"]})
+        original = cast(
+            GenerationConfig,
+            {"temperature": 0.8, "max_tokens": 150, "stop_sequences": ["X"]},
+        )
         provider = OpenAIChatConfigOps.ir_generation_config_to_p(original)
         # Build a provider-like dict for reverse conversion
         restored = OpenAIChatConfigOps.p_generation_config_to_ir(provider)

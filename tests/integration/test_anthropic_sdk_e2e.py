@@ -247,7 +247,9 @@ def test_stream_text():
 
     with client.messages.stream(**provider_req) as stream:
         for event in stream:
-            ir_events = converter.stream_response_from_provider(cast(dict[str, Any], event))
+            ir_events = converter.stream_response_from_provider(
+                cast(dict[str, Any], event)
+            )
             for ir_event in ir_events:
                 event_types_seen.add(ir_event["type"])
 
@@ -306,7 +308,9 @@ def test_stream_tool_calls():
 
     with client.messages.stream(**provider_req) as stream:
         for event in stream:
-            ir_events = converter.stream_response_from_provider(cast(dict[str, Any], event))
+            ir_events = converter.stream_response_from_provider(
+                cast(dict[str, Any], event)
+            )
             for ir_event in ir_events:
                 event_types_seen.add(ir_event["type"])
 

@@ -2,13 +2,17 @@
 Google GenAI ToolOps unit tests.
 """
 
-
 import pytest
 
 from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
 from typing import cast
 
-from llm_rosetta.types.ir import ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
+from llm_rosetta.types.ir import (
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
 
 
 class TestGoogleGenAIToolOps:
@@ -74,19 +78,25 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_choice_auto(self):
         """Test IR auto tool choice → Google AUTO."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(cast(ToolChoice, {"mode": "auto"}))
+        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+            cast(ToolChoice, {"mode": "auto"})
+        )
         assert result is not None
         assert result["function_calling_config"]["mode"] == "AUTO"
 
     def test_ir_tool_choice_none(self):
         """Test IR none tool choice → Google NONE."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(cast(ToolChoice, {"mode": "none"}))
+        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+            cast(ToolChoice, {"mode": "none"})
+        )
         assert result is not None
         assert result["function_calling_config"]["mode"] == "NONE"
 
     def test_ir_tool_choice_any(self):
         """Test IR any tool choice → Google ANY."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(cast(ToolChoice, {"mode": "any"}))
+        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+            cast(ToolChoice, {"mode": "any"})
+        )
         assert result is not None
         assert result["function_calling_config"]["mode"] == "ANY"
 
@@ -152,13 +162,16 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_call_to_p_with_thought_signature(self):
         """Test IR ToolCallPart with thought_signature → Google Part."""
-        ir_tc = cast(ToolCallPart, {
-            "type": "tool_call",
-            "tool_call_id": "call_123",
-            "tool_name": "get_weather",
-            "tool_input": {},
-            "provider_metadata": {"google": {"thought_signature": "sig123"}},
-        })
+        ir_tc = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_123",
+                "tool_name": "get_weather",
+                "tool_input": {},
+                "provider_metadata": {"google": {"thought_signature": "sig123"}},
+            },
+        )
         result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tc)
         assert result["thoughtSignature"] == "sig123"
 

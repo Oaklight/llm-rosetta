@@ -524,7 +524,9 @@ class TestAnthropicConverter:
     def test_stream_to_provider_text_delta(self):
         """Test IR text delta -> Anthropic SSE event."""
         ir_event = cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"})
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
+        result = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+        )
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "text_delta"
         assert result["delta"]["text"] == "Hello"
@@ -539,7 +541,9 @@ class TestAnthropicConverter:
                 "tool_name": "search",
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
+        result = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+        )
         assert result["type"] == "content_block_start"
         assert result["content_block"]["type"] == "tool_use"
         assert result["content_block"]["id"] == "tc_123"
@@ -554,7 +558,9 @@ class TestAnthropicConverter:
                 "arguments_delta": '{"q":',
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
+        result = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+        )
         assert result["type"] == "content_block_delta"
         assert result["delta"]["type"] == "input_json_delta"
 
@@ -567,7 +573,9 @@ class TestAnthropicConverter:
                 "finish_reason": {"reason": "stop"},
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
+        result = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+        )
         assert result["type"] == "message_delta"
         assert result["delta"]["stop_reason"] == "end_turn"
 
@@ -584,7 +592,9 @@ class TestAnthropicConverter:
                 },
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(ir_event))
+        result = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(ir_event)
+        )
         assert result["type"] == "message_delta"
         assert result["usage"]["input_tokens"] == 10
         assert result["usage"]["output_tokens"] == 20

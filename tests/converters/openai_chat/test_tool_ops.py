@@ -7,7 +7,13 @@ import json
 from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
 from typing import cast
 
-from llm_rosetta.types.ir import ToolCallConfig, ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
+from llm_rosetta.types.ir import (
+    ToolCallConfig,
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
 
 
 class TestOpenAIChatToolOps:
@@ -17,18 +23,21 @@ class TestOpenAIChatToolOps:
 
     def test_ir_tool_definition_to_p(self):
         """Test IR ToolDefinition → OpenAI tool definition."""
-        ir_tool = cast(ToolDefinition, {
-            "type": "function",
-            "name": "get_weather",
-            "description": "Get current weather",
-            "parameters": {
-                "type": "object",
-                "properties": {"location": {"type": "string"}},
-                "required": ["location"],
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "get_weather",
+                "description": "Get current weather",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                    "required": ["location"],
+                },
+                "required_parameters": ["location"],
+                "metadata": {},
             },
-            "required_parameters": ["location"],
-            "metadata": {},
-        })
+        )
         result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["function"]["name"] == "get_weather"
@@ -58,14 +67,17 @@ class TestOpenAIChatToolOps:
 
     def test_tool_definition_round_trip(self):
         """Test tool definition round-trip."""
-        ir_tool = cast(ToolDefinition, {
-            "type": "function",
-            "name": "search",
-            "description": "Search the web",
-            "parameters": {"type": "object", "properties": {}},
-            "required_parameters": [],
-            "metadata": {},
-        })
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "search",
+                "description": "Search the web",
+                "parameters": {"type": "object", "properties": {}},
+                "required_parameters": [],
+                "metadata": {},
+            },
+        )
         provider = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
         restored = OpenAIChatToolOps.p_tool_definition_to_ir(provider)
         assert restored["name"] == ir_tool["name"]
@@ -193,11 +205,14 @@ class TestOpenAIChatToolOps:
 
     def test_ir_tool_result_to_p(self):
         """Test IR ToolResultPart → OpenAI tool message."""
-        ir_tr = cast(ToolResultPart, {
-            "type": "tool_result",
-            "tool_call_id": "call_123",
-            "result": "Sunny, 25°C",
-        })
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_123",
+                "result": "Sunny, 25°C",
+            },
+        )
         result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
         assert result["role"] == "tool"
         assert result["tool_call_id"] == "call_123"
@@ -217,11 +232,14 @@ class TestOpenAIChatToolOps:
 
     def test_tool_result_round_trip(self):
         """Test tool result round-trip."""
-        original = cast(ToolResultPart, {
-            "type": "tool_result",
-            "tool_call_id": "call_rt",
-            "result": "42",
-        })
+        original = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_rt",
+                "result": "42",
+            },
+        )
         provider = OpenAIChatToolOps.ir_tool_result_to_p(original)
         restored = OpenAIChatToolOps.p_tool_result_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]

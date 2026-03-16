@@ -2,11 +2,15 @@
 Anthropic ToolOps unit tests.
 """
 
-
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
 from typing import cast
 
-from llm_rosetta.types.ir import ToolCallPart, ToolChoice, ToolDefinition, ToolResultPart
+from llm_rosetta.types.ir import (
+    ToolCallPart,
+    ToolChoice,
+    ToolDefinition,
+    ToolResultPart,
+)
 
 
 class TestAnthropicToolOps:

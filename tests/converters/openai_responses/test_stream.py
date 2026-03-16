@@ -1045,7 +1045,11 @@ class TestStreamResponseToProviderWithContext:
             self.converter.stream_response_to_provider(
                 cast(
                     ContentBlockStartEvent,
-                    {"type": "content_block_start", "block_index": 0, "block_type": "text"},
+                    {
+                        "type": "content_block_start",
+                        "block_index": 0,
+                        "block_type": "text",
+                    },
                 ),
                 context=ctx,
             ),

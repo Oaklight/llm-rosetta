@@ -210,28 +210,31 @@ def test_non_stream_tool_calls():
     # Round 2: Send tool result
     ir_request_r2: IRRequest = {
         "model": openai_model,
-        "messages": cast(list[Message], [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": "What's the weather in San Francisco?",
-                    }
-                ],
-            },
-            assistant_msg,
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_call_id": tc["tool_call_id"],
-                        "result": result,
-                    }
-                ],
-            },
-        ]),
+        "messages": cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "What's the weather in San Francisco?",
+                        }
+                    ],
+                },
+                assistant_msg,
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": tc["tool_call_id"],
+                            "result": result,
+                        }
+                    ],
+                },
+            ],
+        ),
         "tools": cast(list[ToolDefinition], tools_spec),
     }
 

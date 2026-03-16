@@ -23,11 +23,14 @@ class TestGoogleGenAIContentOps:
 
     def test_ir_text_to_p_with_thought_signature(self):
         """Test IR TextPart with thought_signature → Google text Part."""
-        ir_text = cast(TextPart, {
-            "type": "text",
-            "text": "Hello",
-            "provider_metadata": {"google": {"thought_signature": "sig123"}},
-        })
+        ir_text = cast(
+            TextPart,
+            {
+                "type": "text",
+                "text": "Hello",
+                "provider_metadata": {"google": {"thought_signature": "sig123"}},
+            },
+        )
         result = GoogleGenAIContentOps.ir_text_to_p(ir_text)
         assert result["text"] == "Hello"
         assert result["thoughtSignature"] == "sig123"
@@ -49,7 +52,10 @@ class TestGoogleGenAIContentOps:
 
     def test_ir_image_to_p_with_direct_data(self):
         """Test IR ImagePart with direct data → Google inline_data Part."""
-        ir_image = cast(ImagePart, {"type": "image", "data": "base64data", "media_type": "image/jpeg"})
+        ir_image = cast(
+            ImagePart,
+            {"type": "image", "data": "base64data", "media_type": "image/jpeg"},
+        )
         result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
         assert result is not None
         assert result["inline_data"]["mime_type"] == "image/jpeg"
@@ -83,7 +89,9 @@ class TestGoogleGenAIContentOps:
 
     def test_image_round_trip(self):
         """Test image round-trip with direct data."""
-        original = cast(ImagePart, {"type": "image", "data": "imgdata", "media_type": "image/gif"})
+        original = cast(
+            ImagePart, {"type": "image", "data": "imgdata", "media_type": "image/gif"}
+        )
         provider = GoogleGenAIContentOps.ir_image_to_p(original)
         assert provider is not None
         restored = GoogleGenAIContentOps.p_image_to_ir(provider)
@@ -94,7 +102,9 @@ class TestGoogleGenAIContentOps:
 
     def test_ir_file_to_p_with_direct_data(self):
         """Test IR FilePart with direct data → Google inline_data Part."""
-        ir_file = cast(FilePart, {"type": "file", "data": "filedata", "media_type": "text/csv"})
+        ir_file = cast(
+            FilePart, {"type": "file", "data": "filedata", "media_type": "text/csv"}
+        )
         result = GoogleGenAIContentOps.ir_file_to_p(ir_file)
         assert result is not None
         assert result["inline_data"]["data"] == "filedata"
@@ -102,17 +112,22 @@ class TestGoogleGenAIContentOps:
 
     def test_ir_file_to_p_with_file_data(self):
         """Test IR FilePart with file_data → Google inline_data Part."""
-        ir_file = cast(FilePart, {
-            "type": "file",
-            "file_data": {"data": "pdfdata", "media_type": "application/pdf"},
-        })
+        ir_file = cast(
+            FilePart,
+            {
+                "type": "file",
+                "file_data": {"data": "pdfdata", "media_type": "application/pdf"},
+            },
+        )
         result = GoogleGenAIContentOps.ir_file_to_p(ir_file)
         assert result is not None
         assert result["inline_data"]["data"] == "pdfdata"
 
     def test_ir_file_to_p_with_url_warns(self):
         """Test IR FilePart with URL emits warning and returns None."""
-        ir_file = cast(FilePart, {"type": "file", "file_url": "https://example.com/doc.pdf"})
+        ir_file = cast(
+            FilePart, {"type": "file", "file_url": "https://example.com/doc.pdf"}
+        )
         with pytest.warns(UserWarning, match="不直接支持文件URL"):
             result = GoogleGenAIContentOps.ir_file_to_p(ir_file)
         assert result is None
@@ -129,7 +144,9 @@ class TestGoogleGenAIContentOps:
 
     def test_ir_audio_to_p_with_direct_data(self):
         """Test IR AudioPart with direct data → Google inline_data Part."""
-        ir_audio = cast(AudioPart, {"type": "audio", "data": "audiodata", "media_type": "audio/wav"})
+        ir_audio = cast(
+            AudioPart, {"type": "audio", "data": "audiodata", "media_type": "audio/wav"}
+        )
         result = GoogleGenAIContentOps.ir_audio_to_p(ir_audio)
         assert result is not None
         assert result["inline_data"]["data"] == "audiodata"

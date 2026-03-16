@@ -26,7 +26,10 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_user_message_to_p(self):
         """Test IR user message → Google Content."""
-        ir_messages = cast(list[Message], [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}])
+        ir_messages = cast(
+            list[Message],
+            [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
@@ -35,9 +38,10 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_assistant_message_to_p(self):
         """Test IR assistant message → Google Content with model role."""
-        ir_messages = cast(list[Message], [
-            {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]}
-        ])
+        ir_messages = cast(
+            list[Message],
+            [{"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]}],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "model"
@@ -45,34 +49,40 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_system_message_skipped(self):
         """Test IR system message is skipped (handled at converter level)."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are helpful."}],
-            },
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "You are helpful."}],
+                },
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         assert result[0]["role"] == "user"
 
     def test_ir_assistant_with_tool_call(self):
         """Test IR assistant message with tool call → Google Content."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "text", "text": "Let me search"},
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": "call_123",
-                        "tool_name": "search",
-                        "tool_input": {"q": "test"},
-                        "tool_type": "function",
-                    },
-                ],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Let me search"},
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_123",
+                            "tool_name": "search",
+                            "tool_input": {"q": "test"},
+                            "tool_type": "function",
+                        },
+                    ],
+                }
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -84,18 +94,21 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_user_with_tool_result(self):
         """Test IR user message with tool result → Google Content."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_call_id": "call_123",
-                        "result": "Search results...",
-                    }
-                ],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_123",
+                            "result": "Search results...",
+                        }
+                    ],
+                }
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -104,18 +117,21 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_user_with_image(self):
         """Test IR user message with image → Google Content."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "data": "base64data",
-                        "media_type": "image/jpeg",
-                    }
-                ],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "data": "base64data",
+                            "media_type": "image/jpeg",
+                        }
+                    ],
+                }
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -124,15 +140,18 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_assistant_with_reasoning(self):
         """Test IR assistant message with reasoning → Google Content."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "assistant",
-                "content": [
-                    {"type": "reasoning", "reasoning": "I need to think."},
-                    {"type": "text", "text": "Here is my answer."},
-                ],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "reasoning", "reasoning": "I need to think."},
+                        {"type": "text", "text": "Here is my answer."},
+                    ],
+                }
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -142,20 +161,23 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_multi_part_message(self):
         """Test IR message with multiple content parts."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "What is this?"},
-                    {
-                        "type": "image",
-                        "data": "imgdata",
-                        "media_type": "image/png",
-                    },
-                    {"type": "text", "text": "Please describe it."},
-                ],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is this?"},
+                        {
+                            "type": "image",
+                            "data": "imgdata",
+                            "media_type": "image/png",
+                        },
+                        {"type": "text", "text": "Please describe it."},
+                    ],
+                }
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
@@ -166,12 +188,15 @@ class TestGoogleGenAIMessageOps:
 
     def test_ir_unsupported_content_type_warns(self):
         """Test unsupported content type emits warning."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "user",
-                "content": [{"type": "unknown_type", "data": "something"}],
-            }
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "unknown_type", "data": "something"}],
+                }
+            ],
+        )
         with pytest.warns(UserWarning, match="不支持的内容类型"):
             result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
@@ -180,43 +205,49 @@ class TestGoogleGenAIMessageOps:
 
     def test_extension_item_produces_warning(self):
         """Test extension item produces warning."""
-        ir_messages = cast(list[Union[Message, ExtensionItem]], [
-            {
-                "type": "system_event",
-                "event_type": "session_start",
-                "timestamp": "2024-01-01T00:00:00Z",
-            },
-        ])
+        ir_messages = cast(
+            list[Union[Message, ExtensionItem]],
+            [
+                {
+                    "type": "system_event",
+                    "event_type": "session_start",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                },
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 0
         assert any("不支持扩展项类型" in w for w in warnings)
 
     def test_ir_tool_result_with_context(self):
         """Test IR tool result with context lookup for function name."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": "call_123",
-                        "tool_name": "get_weather",
-                        "tool_input": {"city": "NYC"},
-                        "tool_type": "function",
-                    }
-                ],
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_call_id": "call_123",
-                        "result": "Sunny, 25°C",
-                    }
-                ],
-            },
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_123",
+                            "tool_name": "get_weather",
+                            "tool_input": {"city": "NYC"},
+                            "tool_type": "function",
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_123",
+                            "result": "Sunny, 25°C",
+                        }
+                    ],
+                },
+            ],
+        )
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 2
         # The tool result should use the function name from context
@@ -390,13 +421,16 @@ class TestGoogleGenAIMessageOps:
 
     def test_extract_system_instruction_single(self):
         """Test extracting a single system message."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "You are helpful."}],
-            },
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "You are helpful."}],
+                },
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         system_instruction, remaining = self.message_ops.extract_system_instruction(
             ir_messages
         )
@@ -410,17 +444,20 @@ class TestGoogleGenAIMessageOps:
 
     def test_extract_system_instruction_multiple(self):
         """Test extracting multiple system messages (merged)."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "Be helpful."}],
-            },
-            {
-                "role": "system",
-                "content": [{"type": "text", "text": "Be concise."}],
-            },
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Be helpful."}],
+                },
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Be concise."}],
+                },
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         system_instruction, remaining = self.message_ops.extract_system_instruction(
             ir_messages
         )
@@ -432,9 +469,12 @@ class TestGoogleGenAIMessageOps:
 
     def test_extract_system_instruction_none(self):
         """Test no system messages returns None."""
-        ir_messages = cast(list[Message], [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
         system_instruction, remaining = self.message_ops.extract_system_instruction(
             ir_messages
         )
@@ -443,15 +483,18 @@ class TestGoogleGenAIMessageOps:
 
     def test_extract_system_instruction_non_text_parts_ignored(self):
         """Test non-text parts in system messages are ignored."""
-        ir_messages = cast(list[Message], [
-            {
-                "role": "system",
-                "content": [
-                    {"type": "text", "text": "Be helpful."},
-                    {"type": "image", "data": "imgdata", "media_type": "image/png"},
-                ],
-            },
-        ])
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": "Be helpful."},
+                        {"type": "image", "data": "imgdata", "media_type": "image/png"},
+                    ],
+                },
+            ],
+        )
         system_instruction, remaining = self.message_ops.extract_system_instruction(
             ir_messages
         )
@@ -463,10 +506,13 @@ class TestGoogleGenAIMessageOps:
 
     def test_round_trip_messages(self):
         """Test message round-trip: IR → Provider → IR."""
-        original = cast(list[Message], [
-            {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
-        ])
+        original = cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "Hi!"}]},
+            ],
+        )
         provider, _ = self.message_ops.ir_messages_to_p(original)
         restored = cast(list[Any], self.message_ops.p_messages_to_ir(provider))
         assert len(restored) == 2
@@ -477,20 +523,23 @@ class TestGoogleGenAIMessageOps:
 
     def test_round_trip_with_tool_call(self):
         """Test tool call round-trip: IR → Provider → IR."""
-        original = cast(list[Message], [
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "type": "tool_call",
-                        "tool_call_id": "call_123",
-                        "tool_name": "get_weather",
-                        "tool_input": {"city": "NYC"},
-                        "tool_type": "function",
-                    }
-                ],
-            }
-        ])
+        original = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_123",
+                            "tool_name": "get_weather",
+                            "tool_input": {"city": "NYC"},
+                            "tool_type": "function",
+                        }
+                    ],
+                }
+            ],
+        )
         provider, _ = self.message_ops.ir_messages_to_p(original)
         restored = cast(list[Any], self.message_ops.p_messages_to_ir(provider))
         assert len(restored) == 1
