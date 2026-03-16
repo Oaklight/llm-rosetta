@@ -27,7 +27,7 @@ dependencies = ['typing_extensions>=4.0.0; python_version < "3.11"']
 openai = ["openai"]
 anthropic = ["anthropic"]
 google = ["google-genai"]
-gateway = ["starlette>=0.27.0", "uvicorn>=0.24.0", "httpx>=0.25.0"]
+gateway = ["starlette>=0.27.0", "uvicorn>=0.24.0", "httpx[socks]>=0.25.0"]
 dev = [
     "python-dotenv",
     "pytest",
