@@ -54,6 +54,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
     - Fixed `FinishReason` from bare string to TypedDict form `{"reason": "stop"}`
     - Fixed `IRResponse.object` literal from `"chat.completion"` to `"response"`
 - Resolved all `ruff` lint violations in `src/` and `tests/` (UP035 deprecated imports, F401 unused imports)
+- Google `thought_signature` preservation through gateway round-trips — newer Google models require `thoughtSignature` echoed back in function call parts; the gateway now caches `provider_metadata` (including `thought_signature`) keyed by `tool_call_id` and re-injects it on subsequent requests for both streaming and non-streaming modes (#51)
 
 ---
 
