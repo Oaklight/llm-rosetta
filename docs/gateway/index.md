@@ -70,10 +70,13 @@ The gateway auto-discovers config files at these locations (first match wins):
 2. `~/.config/llm-rosetta-gateway/config.jsonc`
 3. `~/.llm-rosetta-gateway/config.jsonc`
 
-You can also bootstrap a config file using the `add` subcommands:
+You can also bootstrap a config file using the `init` or `add` subcommands:
 
 ```bash
-# Add providers with sensible defaults
+# Create a template config at ~/.config/llm-rosetta-gateway/config.jsonc
+llm-rosetta-gateway init
+
+# Or build up a config incrementally with add subcommands
 llm-rosetta-gateway add provider openai_chat
 llm-rosetta-gateway add provider anthropic
 llm-rosetta-gateway add provider google
@@ -215,6 +218,8 @@ Options:
   --log-level LEVEL    Log level: debug, info, warning, error (default: info)
 
 Commands:
+  init                 Create a template config.jsonc at ~/.config/llm-rosetta-gateway/
+
   add provider <name>  Add a provider entry to config
     --api-key KEY        API key or ${ENV_VAR} placeholder
     --base-url URL       Provider base URL (auto-filled for known providers)
