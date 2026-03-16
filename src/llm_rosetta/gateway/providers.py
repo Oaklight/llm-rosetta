@@ -63,6 +63,11 @@ class ProviderInfo:
         stream_url_template: str | None = None,
         proxy_url: str | None = None,
     ) -> None:
+        if not base_url.startswith(("http://", "https://")):
+            raise ValueError(
+                f"Provider '{name}': base_url must start with http:// or https://, "
+                f"got '{base_url}'"
+            )
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.key_ring = KeyRing(api_key)

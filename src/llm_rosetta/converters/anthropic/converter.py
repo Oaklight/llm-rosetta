@@ -323,8 +323,8 @@ class AnthropicConverter(BaseConverter):
         # Usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            input_tokens = p_usage.get("input_tokens", 0)
-            output_tokens = p_usage.get("output_tokens", 0)
+            input_tokens = p_usage.get("input_tokens") or 0
+            output_tokens = p_usage.get("output_tokens") or 0
             usage_info: dict[str, Any] = {
                 "prompt_tokens": input_tokens,
                 "completion_tokens": output_tokens,
@@ -401,8 +401,8 @@ class AnthropicConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             usage: dict[str, Any] = {
-                "input_tokens": ir_usage.get("prompt_tokens", 0),
-                "output_tokens": ir_usage.get("completion_tokens", 0),
+                "input_tokens": ir_usage.get("prompt_tokens") or 0,
+                "output_tokens": ir_usage.get("completion_tokens") or 0,
             }
 
             if "cache_read_tokens" in ir_usage:
@@ -500,9 +500,9 @@ class AnthropicConverter(BaseConverter):
                     UsageEvent(
                         type="usage",
                         usage={
-                            "prompt_tokens": usage.get("input_tokens", 0),
+                            "prompt_tokens": usage.get("input_tokens") or 0,
                             "completion_tokens": 0,
-                            "total_tokens": usage.get("input_tokens", 0),
+                            "total_tokens": usage.get("input_tokens") or 0,
                         },
                     )
                 )
@@ -614,16 +614,15 @@ class AnthropicConverter(BaseConverter):
             # Final usage
             usage = chunk.get("usage")
             if usage:
+                input_tokens = usage.get("input_tokens") or 0
+                output_tokens = usage.get("output_tokens") or 0
                 events.append(
                     UsageEvent(
                         type="usage",
                         usage={
-                            "prompt_tokens": usage.get("input_tokens", 0),
-                            "completion_tokens": usage.get("output_tokens", 0),
-                            "total_tokens": (
-                                usage.get("input_tokens", 0)
-                                + usage.get("output_tokens", 0)
-                            ),
+                            "prompt_tokens": input_tokens,
+                            "completion_tokens": output_tokens,
+                            "total_tokens": input_tokens + output_tokens,
                         },
                     )
                 )
@@ -785,8 +784,8 @@ class AnthropicConverter(BaseConverter):
             return {
                 "type": "message_delta",
                 "usage": {
-                    "input_tokens": usage.get("prompt_tokens", 0),
-                    "output_tokens": usage.get("completion_tokens", 0),
+                    "input_tokens": usage.get("prompt_tokens") or 0,
+                    "output_tokens": usage.get("completion_tokens") or 0,
                 },
             }
 

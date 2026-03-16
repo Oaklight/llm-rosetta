@@ -336,9 +336,9 @@ class OpenAIResponsesConverter(BaseConverter):
         p_usage = provider_response.get("usage")
         if p_usage:
             usage_info: dict[str, Any] = {
-                "prompt_tokens": p_usage.get("input_tokens", 0),
-                "completion_tokens": p_usage.get("output_tokens", 0),
-                "total_tokens": p_usage.get("total_tokens", 0),
+                "prompt_tokens": p_usage.get("input_tokens") or 0,
+                "completion_tokens": p_usage.get("output_tokens") or 0,
+                "total_tokens": p_usage.get("total_tokens") or 0,
             }
 
             # Handle detailed statistics
@@ -422,9 +422,9 @@ class OpenAIResponsesConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             usage: dict[str, Any] = {
-                "input_tokens": ir_usage.get("prompt_tokens", 0),
-                "output_tokens": ir_usage.get("completion_tokens", 0),
-                "total_tokens": ir_usage.get("total_tokens", 0),
+                "input_tokens": ir_usage.get("prompt_tokens") or 0,
+                "output_tokens": ir_usage.get("completion_tokens") or 0,
+                "total_tokens": ir_usage.get("total_tokens") or 0,
             }
 
             if "cache_read_tokens" in ir_usage:
@@ -733,9 +733,9 @@ class OpenAIResponsesConverter(BaseConverter):
                     UsageEvent(
                         type="usage",
                         usage={
-                            "prompt_tokens": usage.get("input_tokens", 0),
-                            "completion_tokens": usage.get("output_tokens", 0),
-                            "total_tokens": usage.get("total_tokens", 0),
+                            "prompt_tokens": usage.get("input_tokens") or 0,
+                            "completion_tokens": usage.get("output_tokens") or 0,
+                            "total_tokens": usage.get("total_tokens") or 0,
                         },
                     )
                 )
@@ -879,9 +879,10 @@ class OpenAIResponsesConverter(BaseConverter):
             # Merge pending usage from context if available
             if context is not None and context.pending_usage is not None:
                 response["usage"] = {
-                    "input_tokens": context.pending_usage.get("prompt_tokens", 0),
-                    "output_tokens": context.pending_usage.get("completion_tokens", 0),
-                    "total_tokens": context.pending_usage.get("total_tokens", 0),
+                    "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
+                    "output_tokens": context.pending_usage.get("completion_tokens")
+                    or 0,
+                    "total_tokens": context.pending_usage.get("total_tokens") or 0,
                 }
 
             return {
@@ -904,9 +905,9 @@ class OpenAIResponsesConverter(BaseConverter):
                 "response": {
                     "status": "completed",
                     "usage": {
-                        "input_tokens": usage.get("prompt_tokens", 0),
-                        "output_tokens": usage.get("completion_tokens", 0),
-                        "total_tokens": usage.get("total_tokens", 0),
+                        "input_tokens": usage.get("prompt_tokens") or 0,
+                        "output_tokens": usage.get("completion_tokens") or 0,
+                        "total_tokens": usage.get("total_tokens") or 0,
                     },
                 },
             }

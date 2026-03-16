@@ -444,9 +444,9 @@ class GoogleGenAIConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             usage_metadata: dict[str, Any] = {
-                "prompt_token_count": ir_usage.get("prompt_tokens", 0),
-                "candidates_token_count": ir_usage.get("completion_tokens", 0),
-                "total_token_count": ir_usage.get("total_tokens", 0),
+                "prompt_token_count": ir_usage.get("prompt_tokens") or 0,
+                "candidates_token_count": ir_usage.get("completion_tokens") or 0,
+                "total_token_count": ir_usage.get("total_tokens") or 0,
             }
 
             if "reasoning_tokens" in ir_usage:
@@ -895,9 +895,9 @@ class GoogleGenAIConverter(BaseConverter):
         elif is_usage_event(event):
             usage = event["usage"]
             usage_metadata: dict[str, Any] = {
-                "prompt_token_count": usage.get("prompt_tokens", 0),
-                "candidates_token_count": usage.get("completion_tokens", 0),
-                "total_token_count": usage.get("total_tokens", 0),
+                "prompt_token_count": usage.get("prompt_tokens") or 0,
+                "candidates_token_count": usage.get("completion_tokens") or 0,
+                "total_token_count": usage.get("total_tokens") or 0,
             }
 
             if "reasoning_tokens" in usage:
