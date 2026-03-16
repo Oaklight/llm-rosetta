@@ -70,10 +70,13 @@ python -m llm_rosetta.gateway
 2. `~/.config/llm-rosetta-gateway/config.jsonc`
 3. `~/.llm-rosetta-gateway/config.jsonc`
 
-也可以使用 `add` 子命令快速创建配置文件：
+也可以使用 `init` 或 `add` 子命令快速创建配置文件：
 
 ```bash
-# 添加提供商（自动填充默认值）
+# 在 ~/.config/llm-rosetta-gateway/config.jsonc 创建模板配置
+llm-rosetta-gateway init
+
+# 或通过 add 子命令逐步构建配置
 llm-rosetta-gateway add provider openai_chat
 llm-rosetta-gateway add provider anthropic
 llm-rosetta-gateway add provider google
@@ -215,6 +218,8 @@ llm-rosetta-gateway [选项] [命令]
   --log-level LEVEL    日志级别：debug, info, warning, error（默认：info）
 
 命令:
+  init                 在 ~/.config/llm-rosetta-gateway/ 创建模板 config.jsonc
+
   add provider <name>  添加提供商条目到配置
     --api-key KEY        API 密钥或 ${ENV_VAR} 占位符
     --base-url URL       提供商基础 URL（已知提供商自动填充）
