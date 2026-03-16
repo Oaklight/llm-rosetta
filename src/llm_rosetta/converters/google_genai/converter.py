@@ -665,15 +665,24 @@ class GoogleGenAIConverter(BaseConverter):
                     if context is not None:
                         context.register_tool_call(tool_call_id, tool_name)
 
-                    # Emit ToolCallStartEvent
-                    events.append(
-                        ToolCallStartEvent(
-                            type="tool_call_start",
-                            tool_call_id=tool_call_id,
-                            tool_name=tool_name,
-                            choice_index=choice_index,
-                        )
-                    )
+                    # Build ToolCallStartEvent
+                    start_event: dict[str, Any] = {
+                        "type": "tool_call_start",
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "choice_index": choice_index,
+                    }
+
+                    # Preserve thought_signature in provider_metadata
+                    thought_sig = part.get(
+                        "thoughtSignature"
+                    ) or part.get("thought_signature")
+                    if thought_sig:
+                        start_event["provider_metadata"] = {
+                            "google": {"thought_signature": thought_sig}
+                        }
+
+                    events.append(cast(ToolCallStartEvent, start_event))
 
                     # Emit ToolCallDeltaEvent with complete arguments JSON
                     args_json = (

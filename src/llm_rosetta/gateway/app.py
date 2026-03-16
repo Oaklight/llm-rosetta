@@ -257,6 +257,42 @@ def _extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str |
 # Shared httpx clients keyed by proxy URL (None = direct connection)
 _http_clients: dict[str | None, httpx.AsyncClient] = {}
 
+# ---------------------------------------------------------------------------
+# Provider metadata cache (e.g. Google thought_signature)
+# ---------------------------------------------------------------------------
+# Maps tool_call_id → provider_metadata dict.  Populated when we receive
+# tool-call responses from upstream; consumed when the follow-up request
+# contains the corresponding tool results.  Short-lived: entries are
+# deleted once consumed.
+_provider_metadata_cache: dict[str, dict[str, Any]] = {}
+
+
+def _cache_provider_metadata(ir_response: dict[str, Any]) -> None:
+    """Extract provider_metadata from tool calls in an IR response and cache it."""
+    for msg in ir_response.get("messages", []):
+        for part in msg.get("content", []):
+            if part.get("type") == "tool_call" and "provider_metadata" in part:
+                tool_call_id = part.get("tool_call_id")
+                if tool_call_id:
+                    _provider_metadata_cache[tool_call_id] = part["provider_metadata"]
+
+
+def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
+    """Inject cached provider_metadata into tool call parts in an IR request.
+
+    When a tool result references a tool_call_id we have cached metadata
+    for, find the corresponding tool_call part in the message history and
+    restore its provider_metadata so the target converter can use it.
+    """
+    for msg in ir_request.get("messages", []):
+        for part in msg.get("content", []):
+            if part.get("type") == "tool_call":
+                tool_call_id = part.get("tool_call_id")
+                if tool_call_id and tool_call_id in _provider_metadata_cache:
+                    part["provider_metadata"] = _provider_metadata_cache.pop(
+                        tool_call_id
+                    )
+
 
 def _get_client(proxy_url: str | None = None) -> httpx.AsyncClient:
     if proxy_url not in _http_clients:
@@ -285,6 +321,9 @@ async def _handle_non_streaming(
         return _error_response_for_source(
             source_provider, 400, f"Failed to parse request: {exc}"
         )
+
+    # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
+    _inject_provider_metadata(ir_request)
 
     # 2. IR -> Target
     try:
@@ -327,6 +366,9 @@ async def _handle_non_streaming(
             source_provider, 502, f"Failed to parse upstream response: {exc}"
         )
 
+    # 6b. Cache provider_metadata from tool calls for follow-up requests
+    _cache_provider_metadata(ir_response)
+
     # 7. IR -> Source response
     try:
         source_response = source_converter.response_to_provider(ir_response)
@@ -356,6 +398,9 @@ async def _handle_streaming(
         return _error_response_for_source(
             source_provider, 400, f"Failed to parse request: {exc}"
         )
+
+    # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
+    _inject_provider_metadata(ir_request)
 
     # 2. IR -> Target
     try:
@@ -425,6 +470,10 @@ async def _handle_streaming(
 
                 # IR events -> source-format chunks
                 for ir_event in ir_events:
+                    # Cache provider_metadata from tool_call_start events
+                    if ir_event.get("type") == "tool_call_start" and "provider_metadata" in ir_event:
+                        _provider_metadata_cache[ir_event["tool_call_id"]] = ir_event["provider_metadata"]
+
                     source_chunks = source_converter.stream_response_to_provider(
                         ir_event, context=to_ctx
                     )

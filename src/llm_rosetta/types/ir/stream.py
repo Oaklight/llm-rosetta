@@ -30,7 +30,7 @@ Contains the following event types:
 """
 
 import sys
-from typing import Literal, TypedDict, Union
+from typing import Any, Literal, TypedDict, Union
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -130,6 +130,7 @@ class ToolCallStartEvent(TypedDict):
     tool_name: Required[str]
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class ToolCallDeltaEvent(TypedDict):
