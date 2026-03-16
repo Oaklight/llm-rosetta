@@ -18,6 +18,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - ASCII art startup banner with `--no-banner` to suppress
 - `add provider <name>` subcommand for adding provider entries to config (with `--api-key`, `--base-url` flags or interactive prompts; known providers auto-fill defaults)
 - `add model <name>` subcommand for adding model routing entries (with `--provider` flag or interactive prompt)
+- **Gateway providers module** (`providers.py`): centralized provider definitions with auth-header builders, URL templates, default base URLs, and API key env-var names
+- **API key rotation**: round-robin `KeyRing` for comma-separated API keys per provider
+- **Proxy support**: global `server.proxy` and per-provider `proxy` config for HTTP/SOCKS proxies; CLI `--proxy` flag overrides config
+- Makefile `test-integration` target using `proxychains` (if available) for integration tests
 
 ### Changed
 

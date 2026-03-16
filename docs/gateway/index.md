@@ -153,6 +153,38 @@ Each provider entry needs an `api_key` and `base_url`:
 
 Provider keys must be one of: `openai_chat`, `openai_responses`, `anthropic`, `google`.
 
+#### API Key Rotation
+
+Each provider supports multiple API keys via comma-separated values. The gateway rotates through them in round-robin order:
+
+```jsonc
+"openai_chat": { "api_key": "sk-key1,sk-key2,sk-key3", "base_url": "https://api.openai.com/v1" }
+```
+
+#### Per-Provider Proxy
+
+Individual providers can use a specific proxy:
+
+```jsonc
+"anthropic": { "api_key": "sk-ant-...", "base_url": "https://api.anthropic.com", "proxy": "http://proxy:8080" }
+```
+
+### Proxy Configuration
+
+A global proxy can be set in the `server` section and applies to all providers unless overridden per-provider:
+
+```jsonc
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "proxy": "http://proxy.example.com:8080"
+  }
+}
+```
+
+The CLI `--proxy` flag overrides the config-level proxy for all providers.
+
 ### Model Routing
 
 The `models` section maps model names to providers:
@@ -179,6 +211,7 @@ Options:
   --edit, -e           Open config file in $EDITOR for editing
   --host HOST          Override server host
   --port PORT          Override server port
+  --proxy URL          HTTP/SOCKS proxy URL for all upstream requests
   --log-level LEVEL    Log level: debug, info, warning, error (default: info)
 
 Commands:
