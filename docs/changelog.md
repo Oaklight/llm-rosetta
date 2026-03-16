@@ -18,6 +18,10 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - ASCII 艺术启动横幅，支持 `--no-banner` 选项抑制显示
 - `add provider <name>` 子命令：添加提供商条目到配置（支持 `--api-key`、`--base-url` 参数或交互式提示；已知提供商自动填充默认值）
 - `add model <name>` 子命令：添加模型路由条目（支持 `--provider` 参数或交互式提示）
+- **网关提供商模块** (`providers.py`)：集中管理提供商定义，包括认证头构建器、URL 模板、默认基础 URL 和 API 密钥环境变量名
+- **API 密钥轮转**：每个提供商支持逗号分隔的多 API 密钥，通过 `KeyRing` 轮询使用
+- **代理支持**：全局 `server.proxy` 和逐提供商 `proxy` 配置，支持 HTTP/SOCKS 代理；CLI `--proxy` 参数覆盖配置
+- Makefile 新增 `test-integration` 目标，使用 `proxychains`（如已安装）运行集成测试
 
 ### 变更
 

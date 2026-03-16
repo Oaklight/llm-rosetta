@@ -153,6 +153,38 @@ curl http://localhost:8765/v1/chat/completions \
 
 提供商名称必须是以下之一：`openai_chat`、`openai_responses`、`anthropic`、`google`。
 
+#### API 密钥轮转
+
+每个提供商支持通过逗号分隔配置多个 API 密钥，网关以轮询方式依次使用：
+
+```jsonc
+"openai_chat": { "api_key": "sk-key1,sk-key2,sk-key3", "base_url": "https://api.openai.com/v1" }
+```
+
+#### 逐提供商代理
+
+可为单个提供商指定代理：
+
+```jsonc
+"anthropic": { "api_key": "sk-ant-...", "base_url": "https://api.anthropic.com", "proxy": "http://proxy:8080" }
+```
+
+### 代理配置
+
+可在 `server` 部分设置全局代理，适用于所有提供商（除非逐提供商覆盖）：
+
+```jsonc
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "proxy": "http://proxy.example.com:8080"
+  }
+}
+```
+
+CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
+
 ### 模型路由
 
 `models` 部分将模型名称映射到提供商：
@@ -179,6 +211,7 @@ llm-rosetta-gateway [选项] [命令]
   --edit, -e           在 $EDITOR 中打开配置文件进行编辑
   --host HOST          覆盖服务器主机
   --port PORT          覆盖服务器端口
+  --proxy URL          所有上游请求的 HTTP/SOCKS 代理 URL
   --log-level LEVEL    日志级别：debug, info, warning, error（默认：info）
 
 命令:
