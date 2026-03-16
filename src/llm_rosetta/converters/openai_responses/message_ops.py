@@ -278,6 +278,24 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         current_message: dict[str, Any] | None = None
 
         for item in provider_messages:
+            # Normalize shorthand items: {"role": "user", "content": "..."}
+            # → {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "..."}]}
+            if isinstance(item, dict) and "type" not in item and "role" in item:
+                content = item.get("content", "")
+                if isinstance(content, str):
+                    content = [{"type": "input_text", "text": content}]
+                elif isinstance(content, list):
+                    normalized = []
+                    for part in content:
+                        if isinstance(part, str):
+                            normalized.append({"type": "input_text", "text": part})
+                        elif isinstance(part, dict) and "type" not in part:
+                            normalized.append({"type": "input_text", **part})
+                        else:
+                            normalized.append(part)
+                    content = normalized
+                item = {"type": "message", "role": item["role"], "content": content}
+
             item_type = item.get("type") if isinstance(item, dict) else None
 
             if item_type == "message":

@@ -196,6 +196,14 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # 2. Input items → messages
         input_items = provider_request.get("input", [])
+        if isinstance(input_items, str):
+            input_items = [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": input_items}],
+                }
+            ]
         if isinstance(input_items, list):
             ir_messages = self.message_ops.p_messages_to_ir(input_items)
             ir_request["messages"] = ir_messages
