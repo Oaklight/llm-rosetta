@@ -10,6 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
+- **Standalone API test scripts** (`llm_api_simple_tests/`): 20 test scripts (5 per provider) using official SDKs directly, covering simple query, multi-round chat, image, function calling, and comprehensive scenarios — added as a git submodule from [Oaklight/llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests)
 - **LLM-Rosetta Gateway**: REST gateway application for cross-provider HTTP proxying
 - CLI entry point (`llm-rosetta-gateway`) and package structure for the gateway
 - Gateway config auto-discovery at `./config.jsonc`, `~/.config/llm-rosetta-gateway/config.jsonc`, `~/.llm-rosetta-gateway/config.jsonc`
