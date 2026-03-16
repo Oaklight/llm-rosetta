@@ -10,6 +10,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 新增
 
+- **独立 API 测试脚本** (`llm_api_simple_tests/`)：20 个测试脚本（每个提供商 5 个），直接使用官方 SDK，覆盖简单查询、多轮对话、图片、函数调用和综合场景 — 作为 git 子模块从 [Oaklight/llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) 引入
 - **LLM-Rosetta Gateway**：跨提供商 HTTP 代理的 REST 网关应用
 - CLI 入口 (`llm-rosetta-gateway`) 及网关包结构
 - 网关配置文件自动发现：依次搜索 `./config.jsonc`、`~/.config/llm-rosetta-gateway/config.jsonc`、`~/.llm-rosetta-gateway/config.jsonc`
