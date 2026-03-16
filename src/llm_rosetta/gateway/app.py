@@ -269,12 +269,14 @@ _provider_metadata_cache: dict[str, dict[str, Any]] = {}
 
 def _cache_provider_metadata(ir_response: dict[str, Any]) -> None:
     """Extract provider_metadata from tool calls in an IR response and cache it."""
-    for msg in ir_response.get("messages", []):
+    for choice in ir_response.get("choices", []):
+        msg = choice.get("message", {})
         for part in msg.get("content", []):
             if part.get("type") == "tool_call" and "provider_metadata" in part:
                 tool_call_id = part.get("tool_call_id")
                 if tool_call_id:
                     _provider_metadata_cache[tool_call_id] = part["provider_metadata"]
+                    logger.debug("Cached provider_metadata for tool_call %s", tool_call_id)
 
 
 def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
