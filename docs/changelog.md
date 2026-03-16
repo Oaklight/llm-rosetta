@@ -35,6 +35,9 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 修复
 
+- 修复 Anthropic 提供商流式传输中 usage tokens 为 `null` 时的崩溃 — 所有转换器中 `TypeError: NoneType + int`（将 `.get("*_tokens", 0)` 替换为 `.get("*_tokens") or 0`）
+- 网关提供商 `base_url` 验证 — 配置错误（如 `https:example.com` 缺少 `//`）时提前报错并给出清晰提示
+- 网关依赖新增 `socksio` 以支持 SOCKS 代理（`httpx[socks]`）
 - 补充 `types` 包缺失的 `__init__.py`
 - 更新文档中 `git clone` URL，从 `llm-rosetta` 改为 `llm-rosetta`
 - 解决 `src/` 中所有 `ty` 类型检查器诊断（31 → 0）：
