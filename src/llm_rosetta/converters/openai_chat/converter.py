@@ -319,9 +319,9 @@ class OpenAIChatConverter(BaseConverter):
         p_usage = provider_response.get("usage")
         if p_usage:
             usage_info: dict[str, Any] = {
-                "prompt_tokens": p_usage.get("prompt_tokens", 0),
-                "completion_tokens": p_usage.get("completion_tokens", 0),
-                "total_tokens": p_usage.get("total_tokens", 0),
+                "prompt_tokens": p_usage.get("prompt_tokens") or 0,
+                "completion_tokens": p_usage.get("completion_tokens") or 0,
+                "total_tokens": p_usage.get("total_tokens") or 0,
             }
 
             p_prompt_details = p_usage.get("prompt_tokens_details")
@@ -411,9 +411,9 @@ class OpenAIChatConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             usage: dict[str, Any] = {
-                "prompt_tokens": ir_usage.get("prompt_tokens", 0),
-                "completion_tokens": ir_usage.get("completion_tokens", 0),
-                "total_tokens": ir_usage.get("total_tokens", 0),
+                "prompt_tokens": ir_usage.get("prompt_tokens") or 0,
+                "completion_tokens": ir_usage.get("completion_tokens") or 0,
+                "total_tokens": ir_usage.get("total_tokens") or 0,
             }
 
             if "prompt_tokens_details" in ir_usage:
@@ -617,9 +617,9 @@ class OpenAIChatConverter(BaseConverter):
                 UsageEvent(
                     type="usage",
                     usage={
-                        "prompt_tokens": usage.get("prompt_tokens", 0),
-                        "completion_tokens": usage.get("completion_tokens", 0),
-                        "total_tokens": usage.get("total_tokens", 0),
+                        "prompt_tokens": usage.get("prompt_tokens") or 0,
+                        "completion_tokens": usage.get("completion_tokens") or 0,
+                        "total_tokens": usage.get("total_tokens") or 0,
                     },
                 )
             )
@@ -770,9 +770,9 @@ class OpenAIChatConverter(BaseConverter):
             usage = event["usage"]
             result = {
                 "usage": {
-                    "prompt_tokens": usage.get("prompt_tokens", 0),
-                    "completion_tokens": usage.get("completion_tokens", 0),
-                    "total_tokens": usage.get("total_tokens", 0),
+                    "prompt_tokens": usage.get("prompt_tokens") or 0,
+                    "completion_tokens": usage.get("completion_tokens") or 0,
+                    "total_tokens": usage.get("total_tokens") or 0,
                 }
             }
 
