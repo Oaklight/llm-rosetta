@@ -54,6 +54,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
     - 修复 `FinishReason`，从裸字符串改为 TypedDict 形式 `{"reason": "stop"}`
     - 修复 `IRResponse.object` 字面量，从 `"chat.completion"` 改为 `"response"`
 - 解决 `src/` 和 `tests/` 中所有 `ruff` lint 违规（UP035 弃用导入、F401 未使用导入）
+- Google `thought_signature` 在网关往返中的保留 — 新版 Google 模型要求在函数调用部分中回传 `thoughtSignature`；网关现在按 `tool_call_id` 缓存 `provider_metadata`（含 `thought_signature`），并在后续请求中重新注入，支持流式和非流式模式（#51）
 
 ---
 
