@@ -35,6 +35,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Fixed
 
+- Streaming crash with Anthropic provider when usage tokens are `null` — `TypeError: NoneType + int` in all converters (replaced `.get("*_tokens", 0)` with `.get("*_tokens") or 0`)
+- Gateway provider `base_url` validation — fail early with clear error on config typos like `https:example.com` (missing `//`)
+- Added `socksio` to gateway dependencies for SOCKS proxy support (`httpx[socks]`)
 - Added missing `__init__.py` for `types` package
 - Updated `git clone` URL from `llm-rosetta` to `llm-rosetta` in documentation
 - Resolved all `ty` type checker diagnostics in `src/` (31 → 0):
