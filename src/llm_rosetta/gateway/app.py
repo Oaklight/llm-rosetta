@@ -282,18 +282,17 @@ def _cache_provider_metadata(ir_response: dict[str, Any]) -> None:
 def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
     """Inject cached provider_metadata into tool call parts in an IR request.
 
-    When a tool result references a tool_call_id we have cached metadata
-    for, find the corresponding tool_call part in the message history and
-    restore its provider_metadata so the target converter can use it.
+    Clients send the full conversation history on every request, so the same
+    tool_call_id may appear in multiple requests.  We use ``get()`` instead of
+    ``pop()`` to keep entries alive for subsequent turns.
     """
+    logger.debug("_inject: cache has %d entries: %s", len(_provider_metadata_cache), list(_provider_metadata_cache.keys()))
     for msg in ir_request.get("messages", []):
         for part in msg.get("content", []):
             if part.get("type") == "tool_call":
                 tool_call_id = part.get("tool_call_id")
                 if tool_call_id and tool_call_id in _provider_metadata_cache:
-                    part["provider_metadata"] = _provider_metadata_cache.pop(
-                        tool_call_id
-                    )
+                    part["provider_metadata"] = _provider_metadata_cache[tool_call_id]
 
 
 def _get_client(proxy_url: str | None = None) -> httpx.AsyncClient:
