@@ -648,6 +648,42 @@ def _write_jsonc(path: str, data: dict[str, Any]) -> None:
         f.write("\n")
 
 
+def _cmd_init(args: argparse.Namespace) -> None:
+    """Create a template config.jsonc at the XDG default location."""
+    config_path = args.config or PATHS_TO_TRY[1]  # XDG: ~/.config/llm-rosetta-gateway/
+    if os.path.isfile(config_path):
+        print(f"Config already exists at {config_path}", file=sys.stderr)
+        print("Use --edit / -e to modify it, or remove it first.", file=sys.stderr)
+        sys.exit(1)
+
+    template = {
+        "providers": {
+            "openai_chat": {
+                "api_key": "${OPENAI_API_KEY}",
+                "base_url": "https://api.openai.com/v1",
+            },
+            "anthropic": {
+                "api_key": "${ANTHROPIC_API_KEY}",
+                "base_url": "https://api.anthropic.com",
+            },
+            "google": {
+                "api_key": "${GOOGLE_API_KEY}",
+                "base_url": "https://generativelanguage.googleapis.com",
+            },
+        },
+        "models": {
+            "gpt-4o": "openai_chat",
+            "claude-sonnet-4-20250514": "anthropic",
+            "gemini-2.0-flash": "google",
+        },
+        "server": {"host": "0.0.0.0", "port": 8765},
+    }
+
+    _write_jsonc(config_path, template)
+    print(f"Created config at {config_path}")
+    print("Edit it to add your API keys, then run: llm-rosetta-gateway")
+
+
 def _cmd_add_provider(args: argparse.Namespace) -> None:
     config_path = discover_config(args.config) or PATHS_TO_TRY[0]
     data, path = _load_or_create_config(config_path)
@@ -758,14 +794,22 @@ def main() -> None:
         help="Log level (default: info)",
     )
 
-    # ``add`` subcommands
+    # ``init`` subcommand
     sub = parser.add_subparsers(dest="command")
+    sub.add_parser(
+        "init", help="Create a template config.jsonc at ~/.config/llm-rosetta-gateway/"
+    )
 
+    # ``add`` subcommands
     add_parser = sub.add_parser("add", help="Add a provider or model to the config")
     add_sub = add_parser.add_subparsers(dest="add_type")
 
+    _provider_list = ", ".join(_KNOWN_PROVIDERS)
     prov_parser = add_sub.add_parser("provider", help="Add a provider entry")
-    prov_parser.add_argument("name", help="Provider name (e.g. openai_chat, anthropic)")
+    prov_parser.add_argument(
+        "name",
+        help=f"Provider type. Built-in types: {_provider_list}",
+    )
     prov_parser.add_argument(
         "--api-key", default=None, help="API key or ${ENV_VAR} placeholder"
     )
@@ -780,6 +824,11 @@ def main() -> None:
     # --- edit mode ---
     if args.edit:
         _open_in_editor(args.config)
+        return
+
+    # --- init subcommand ---
+    if args.command == "init":
+        _cmd_init(args)
         return
 
     # --- add subcommand ---
