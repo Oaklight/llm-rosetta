@@ -247,6 +247,30 @@ class TestAnthropicToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
+    def test_ir_tool_result_to_p_dict_content_serialized_to_json(self):
+        """Test that dict result content is serialized to JSON string for Anthropic."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_dict",
+            result={"temperature": 72, "unit": "F"},
+        )
+        result = AnthropicToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["type"] == "tool_result"
+        assert result["tool_use_id"] == "call_dict"
+        assert isinstance(result["content"], str)
+        assert result["content"] == '{"temperature": 72, "unit": "F"}'
+
+    def test_ir_tool_result_to_p_list_content_passed_through(self):
+        """Test that list result content is passed through as-is."""
+        content_blocks = [{"type": "text", "text": "hello"}]
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_list",
+            result=content_blocks,
+        )
+        result = AnthropicToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == content_blocks
+
     # ==================== Tool Config ====================
 
     def test_ir_tool_config_to_p(self):

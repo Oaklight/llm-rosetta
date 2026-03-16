@@ -8,6 +8,7 @@ choice strategies, and call configurations.
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
+import json
 from typing import Any, cast
 
 from ...types.ir import (
@@ -224,8 +225,15 @@ class AnthropicToolOps(BaseToolOps):
         result: dict[str, Any] = {
             "type": "tool_result",
             "tool_use_id": ir_tool_result["tool_call_id"],
-            "content": ir_tool_result.get("result", ""),
         }
+
+        content = ir_tool_result.get("result", "")
+        if isinstance(content, (str, list)):
+            result["content"] = content
+        elif content is not None:
+            result["content"] = json.dumps(content)
+        else:
+            result["content"] = ""
 
         is_error = ir_tool_result.get("is_error")
         if is_error is not None:
