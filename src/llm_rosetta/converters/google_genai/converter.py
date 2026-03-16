@@ -674,9 +674,9 @@ class GoogleGenAIConverter(BaseConverter):
                     }
 
                     # Preserve thought_signature in provider_metadata
-                    thought_sig = part.get(
-                        "thoughtSignature"
-                    ) or part.get("thought_signature")
+                    thought_sig = part.get("thoughtSignature") or part.get(
+                        "thought_signature"
+                    )
                     if thought_sig:
                         start_event["provider_metadata"] = {
                             "google": {"thought_signature": thought_sig}

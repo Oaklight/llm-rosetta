@@ -276,7 +276,9 @@ def _cache_provider_metadata(ir_response: dict[str, Any]) -> None:
                 tool_call_id = part.get("tool_call_id")
                 if tool_call_id:
                     _provider_metadata_cache[tool_call_id] = part["provider_metadata"]
-                    logger.debug("Cached provider_metadata for tool_call %s", tool_call_id)
+                    logger.debug(
+                        "Cached provider_metadata for tool_call %s", tool_call_id
+                    )
 
 
 def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
@@ -286,7 +288,11 @@ def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
     tool_call_id may appear in multiple requests.  We use ``get()`` instead of
     ``pop()`` to keep entries alive for subsequent turns.
     """
-    logger.debug("_inject: cache has %d entries: %s", len(_provider_metadata_cache), list(_provider_metadata_cache.keys()))
+    logger.debug(
+        "_inject: cache has %d entries: %s",
+        len(_provider_metadata_cache),
+        list(_provider_metadata_cache.keys()),
+    )
     for msg in ir_request.get("messages", []):
         for part in msg.get("content", []):
             if part.get("type") == "tool_call":
@@ -472,8 +478,13 @@ async def _handle_streaming(
                 # IR events -> source-format chunks
                 for ir_event in ir_events:
                     # Cache provider_metadata from tool_call_start events
-                    if ir_event.get("type") == "tool_call_start" and "provider_metadata" in ir_event:
-                        _provider_metadata_cache[ir_event["tool_call_id"]] = ir_event["provider_metadata"]
+                    if (
+                        ir_event.get("type") == "tool_call_start"
+                        and "provider_metadata" in ir_event
+                    ):
+                        _provider_metadata_cache[ir_event["tool_call_id"]] = ir_event[
+                            "provider_metadata"
+                        ]
 
                     source_chunks = source_converter.stream_response_to_provider(
                         ir_event, context=to_ctx
