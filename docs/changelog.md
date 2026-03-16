@@ -56,6 +56,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
     - 修复 `IRResponse.object` 字面量，从 `"chat.completion"` 改为 `"response"`
 - 解决 `src/` 和 `tests/` 中所有 `ruff` lint 违规（UP035 弃用导入、F401 未使用导入）
 - Google `thought_signature` 在网关往返中的保留 — 新版 Google 模型要求在函数调用部分中回传 `thoughtSignature`；网关现在按 `tool_call_id` 缓存 `provider_metadata`（含 `thought_signature`），并在后续请求中重新注入，支持流式和非流式模式（#51）
+- OpenAI Responses 转换器现在支持全部 3 种 `input` 格式：裸字符串（`"input": "hello"`）、简写列表（`[{"role": "user", "content": "hi"}]`）和结构化列表 — 此前仅支持结构化格式，导致 OpenAI Python SDK 发送的简写项被静默丢弃，跨提供商转换到 Anthropic 或 Google 时生成空 IR 消息
 
 ---
 
