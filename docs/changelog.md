@@ -6,7 +6,7 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
-## 未发布
+## v0.2.0 — 2026-03-18
 
 ### 新增
 
