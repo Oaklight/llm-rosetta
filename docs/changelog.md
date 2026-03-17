@@ -24,6 +24,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **代理支持**：全局 `server.proxy` 和逐提供商 `proxy` 配置，支持 HTTP/SOCKS 代理；CLI `--proxy` 参数覆盖配置
 - Makefile 新增 `test-integration` 目标，使用 `proxychains`（如已安装）运行集成测试
 - `init` 子命令：在 XDG 默认位置 (`~/.config/llm-rosetta-gateway/`) 创建模板 `config.jsonc` 文件
+- **模型列表端点**：`GET /v1/models`（兼容 OpenAI 和 Anthropic SDK）和 `GET /v1beta/models`（Google GenAI SDK 格式）— 使三种 SDK 的 `client.models.list()` 均可正常使用（#54）
 
 ### 变更
 
