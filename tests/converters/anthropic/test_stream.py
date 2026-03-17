@@ -382,7 +382,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "message_delta"
-        assert result["usage"]["input_tokens"] == 10
+        assert result["delta"] == {}
         assert result["usage"]["output_tokens"] == 5
 
     def test_unknown_event_type(self):

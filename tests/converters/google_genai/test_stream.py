@@ -937,7 +937,7 @@ class TestStreamResponseToProviderWithContext:
         self.converter = GoogleGenAIConverter()
 
     def test_stream_start_produces_initial_chunk(self):
-        """StreamStartEvent produces initial chunk with model_version."""
+        """StreamStartEvent returns empty dict (no SDK-visible chunk)."""
         event = cast(
             StreamStartEvent,
             {
@@ -947,8 +947,7 @@ class TestStreamResponseToProviderWithContext:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["candidates"] == []
-        assert result["model_version"] == "gemini-2.0-flash"
+        assert result == {}
 
     def test_stream_start_stores_context(self):
         """StreamStartEvent stores metadata in context."""
@@ -1064,7 +1063,7 @@ class TestStreamResponseToProviderWithContext:
         assert fc["name"] == ""
 
     def test_stream_start_without_context(self):
-        """StreamStartEvent without context still produces chunk."""
+        """StreamStartEvent without context returns empty dict."""
         event = cast(
             StreamStartEvent,
             {
@@ -1074,8 +1073,7 @@ class TestStreamResponseToProviderWithContext:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["candidates"] == []
-        assert result["model_version"] == "gemini-2.0-flash"
+        assert result == {}
 
     def test_stream_end_without_context(self):
         """StreamEndEvent without context returns empty dict."""

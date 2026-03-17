@@ -596,7 +596,7 @@ class TestAnthropicConverter:
             dict[str, Any], self.converter.stream_response_to_provider(ir_event)
         )
         assert result["type"] == "message_delta"
-        assert result["usage"]["input_tokens"] == 10
+        assert result["delta"] == {}
         assert result["usage"]["output_tokens"] == 20
 
 

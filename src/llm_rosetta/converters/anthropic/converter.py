@@ -670,9 +670,21 @@ class AnthropicConverter(BaseConverter):
             }
 
         elif is_stream_end_event(event):
+            results: list[dict[str, Any]] = []
             if context is not None:
+                # Flush any buffered finish that never got a UsageEvent
+                if context.pending_finish is not None:
+                    results.append(
+                        {
+                            "type": "message_delta",
+                            "delta": context.pending_finish,
+                            "usage": {"output_tokens": 0},
+                        }
+                    )
+                    context.pending_finish = None
                 context.mark_ended()
-            return {"type": "message_stop"}
+            results.append({"type": "message_stop"})
+            return results if len(results) > 1 else results[0]
 
         elif is_content_block_start_event(event):
             block_index = event["block_index"]
@@ -711,7 +723,19 @@ class AnthropicConverter(BaseConverter):
                     "text": event["text"],
                 },
             }
-            if context is not None and context.current_block_index >= 0:
+            if context is not None:
+                if context.current_block_index < 0:
+                    context.next_block_index()  # auto-advance to 0
+                    # Emit synthetic content_block_start before first delta
+                    result["index"] = context.current_block_index
+                    return [
+                        {
+                            "type": "content_block_start",
+                            "index": context.current_block_index,
+                            "content_block": {"type": "text", "text": ""},
+                        },
+                        result,
+                    ]
                 result["index"] = context.current_block_index
             return result
 
@@ -734,7 +758,19 @@ class AnthropicConverter(BaseConverter):
                         "thinking": event["reasoning"],
                     },
                 }
-            if context is not None and context.current_block_index >= 0:
+            if context is not None:
+                if context.current_block_index < 0:
+                    context.next_block_index()  # auto-advance to 0
+                    # Emit synthetic content_block_start before first delta
+                    rd_result["index"] = context.current_block_index
+                    return [
+                        {
+                            "type": "content_block_start",
+                            "index": context.current_block_index,
+                            "content_block": {"type": "thinking", "thinking": ""},
+                        },
+                        rd_result,
+                    ]
                 rd_result["index"] = context.current_block_index
             return rd_result
 
@@ -748,7 +784,9 @@ class AnthropicConverter(BaseConverter):
                     "input": {},
                 },
             }
-            if context is not None and context.current_block_index >= 0:
+            if context is not None:
+                if context.current_block_index < 0:
+                    context.next_block_index()  # auto-advance to 0
                 result2["index"] = context.current_block_index
             return result2
 
@@ -760,7 +798,9 @@ class AnthropicConverter(BaseConverter):
                     "partial_json": event["arguments_delta"],
                 },
             }
-            if context is not None and context.current_block_index >= 0:
+            if context is not None:
+                if context.current_block_index < 0:
+                    context.next_block_index()  # auto-advance to 0
                 result3["index"] = context.current_block_index
             return result3
 
@@ -772,21 +812,30 @@ class AnthropicConverter(BaseConverter):
                 "tool_calls": "tool_use",
                 "content_filter": "end_turn",
             }
+            stop_reason = reason_map.get(reason, "end_turn")
+            if context is not None:
+                # Buffer finish; merge with upcoming UsageEvent
+                context.pending_finish = {"stop_reason": stop_reason}
+                return {}
+            # Without context: emit with safe defaults
             return {
                 "type": "message_delta",
-                "delta": {
-                    "stop_reason": reason_map.get(reason, "end_turn"),
-                },
+                "delta": {"stop_reason": stop_reason},
+                "usage": {"output_tokens": 0},
             }
 
         elif is_usage_event(event):
             usage = event["usage"]
+            output_tokens = usage.get("completion_tokens") or 0
+            # Merge with buffered FinishEvent if available
+            delta: dict[str, Any] = {}
+            if context is not None and context.pending_finish is not None:
+                delta = context.pending_finish
+                context.pending_finish = None
             return {
                 "type": "message_delta",
-                "usage": {
-                    "input_tokens": usage.get("prompt_tokens") or 0,
-                    "output_tokens": usage.get("completion_tokens") or 0,
-                },
+                "delta": delta,
+                "usage": {"output_tokens": output_tokens},
             }
 
         return {}

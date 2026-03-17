@@ -783,10 +783,7 @@ class GoogleGenAIConverter(BaseConverter):
                 context.response_id = event["response_id"]
                 context.model = event["model"]
                 context.mark_started()
-            return {
-                "candidates": [],
-                "model_version": event["model"],
-            }
+            return {}
 
         elif is_stream_end_event(event):
             if context is not None:
@@ -896,6 +893,7 @@ class GoogleGenAIConverter(BaseConverter):
                 "candidates": [
                     {
                         "index": choice_index,
+                        "content": {"role": "model", "parts": []},
                         "finish_reason": reason_map.get(reason, "STOP"),
                     }
                 ]

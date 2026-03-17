@@ -876,7 +876,7 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]
             status = "completed"
-            response: dict[str, Any] = {"status": status}
+            response: dict[str, Any] = {"status": status, "output": []}
 
             if reason == "length":
                 response["status"] = "incomplete"
@@ -912,6 +912,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 "type": "response.completed",
                 "response": {
                     "status": "completed",
+                    "output": [],
                     "usage": {
                         "input_tokens": usage.get("prompt_tokens") or 0,
                         "output_tokens": usage.get("completion_tokens") or 0,

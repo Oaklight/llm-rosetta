@@ -29,6 +29,7 @@ class StreamContext:
         self.current_block_index: int = -1
         self.tool_call_id_map: dict[str, str] = {}  # tool_call_id -> tool_name
         self.pending_usage: dict | None = None
+        self.pending_finish: dict | None = None
         self._started: bool = False
         self._ended: bool = False
 
