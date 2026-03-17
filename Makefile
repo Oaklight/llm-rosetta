@@ -48,6 +48,12 @@ test-integration:
 	fi
 	@echo "Integration tests completed."
 
+# Run gateway integration tests (all SDKs × all models via llm_api_simple_tests)
+test-gateway:
+	@echo "Running gateway integration tests..."
+	@./scripts/run_gateway_integration.sh
+	@echo "Gateway integration tests completed."
+
 # ──────────────────────────────────────────────
 # Package targets
 # ──────────────────────────────────────────────
@@ -87,8 +93,8 @@ help:
 	@echo "  lint-fix       - Auto-fix lint and formatting issues"
 	@echo "  test               - Run unit tests with pytest"
 	@echo "  test-integration   - Run integration tests via proxychains"
+	@echo "  test-gateway       - Run gateway integration tests (all SDKs × all models)"
 	@echo ""
-	@echo "Package targets:"
 	@echo "  build-package  - Build the Python package"
 	@echo "  push-package   - Push the package to PyPI"
 	@echo "  clean-package  - Clean up build and distribution files"
@@ -103,4 +109,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test test-integration build-package push-package clean-package build push clean help
+.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean help
