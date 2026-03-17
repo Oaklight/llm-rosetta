@@ -606,6 +606,50 @@ async def handle_google_genai(request: Request) -> Response:
         )
 
 
+async def handle_list_models(request: Request) -> Response:
+    """List configured models in a format compatible with OpenAI and Anthropic SDKs."""
+    assert _config is not None
+    models = sorted(_config.models.keys())
+    data = [
+        {
+            "id": name,
+            "object": "model",
+            "created": 0,
+            "owned_by": _config.models[name],
+            "type": "model",
+            "display_name": name,
+            "created_at": "1970-01-01T00:00:00Z",
+        }
+        for name in models
+    ]
+    return JSONResponse(
+        {
+            "object": "list",
+            "data": data,
+            "has_more": False,
+            "first_id": models[0] if models else None,
+            "last_id": models[-1] if models else None,
+        }
+    )
+
+
+async def handle_list_models_google(request: Request) -> Response:
+    """List configured models in Google GenAI SDK format."""
+    assert _config is not None
+    models_list = [
+        {
+            "name": f"models/{name}",
+            "displayName": name,
+            "supportedGenerationMethods": [
+                "generateContent",
+                "streamGenerateContent",
+            ],
+        }
+        for name in sorted(_config.models.keys())
+    ]
+    return JSONResponse({"models": models_list})
+
+
 async def handle_health(request: Request) -> Response:
     assert _config is not None
     return JSONResponse(
@@ -631,6 +675,8 @@ def create_app(config: GatewayConfig) -> Starlette:
         Route("/v1/chat/completions", handle_openai_chat, methods=["POST"]),
         Route("/v1/messages", handle_anthropic, methods=["POST"]),
         Route("/v1/responses", handle_openai_responses, methods=["POST"]),
+        Route("/v1/models", handle_list_models, methods=["GET"]),
+        Route("/v1beta/models", handle_list_models_google, methods=["GET"]),
         Route(
             "/v1beta/models/{model_path:path}",
             handle_google_genai,
