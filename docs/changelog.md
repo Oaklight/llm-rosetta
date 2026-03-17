@@ -24,6 +24,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Proxy support**: global `server.proxy` and per-provider `proxy` config for HTTP/SOCKS proxies; CLI `--proxy` flag overrides config
 - Makefile `test-integration` target using `proxychains` (if available) for integration tests
 - `init` subcommand to create a template `config.jsonc` at the XDG default location (`~/.config/llm-rosetta-gateway/`)
+- **Model listing endpoints**: `GET /v1/models` (compatible with both OpenAI and Anthropic SDKs) and `GET /v1beta/models` (Google GenAI SDK format) — enables `client.models.list()` across all three SDKs (#54)
 
 ### Changed
 
