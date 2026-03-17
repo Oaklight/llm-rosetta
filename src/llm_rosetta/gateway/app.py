@@ -583,19 +583,27 @@ async def handle_openai_responses(request: Request) -> Response:
     return await _proxy_handler(request, source_provider="openai_responses")
 
 
-async def handle_google(request: Request) -> Response:
-    model = request.path_params["model"]
-    return await _proxy_handler(request, source_provider="google", model_override=model)
-
-
-async def handle_google_stream(request: Request) -> Response:
-    model = request.path_params["model"]
-    return await _proxy_handler(
-        request,
-        source_provider="google",
-        model_override=model,
-        force_stream=True,
-    )
+async def handle_google_genai(request: Request) -> Response:
+    model_path = request.path_params["model_path"]
+    if model_path.endswith(":streamGenerateContent"):
+        model = model_path.removesuffix(":streamGenerateContent")
+        return await _proxy_handler(
+            request,
+            source_provider="google",
+            model_override=model,
+            force_stream=True,
+        )
+    elif model_path.endswith(":generateContent"):
+        model = model_path.removesuffix(":generateContent")
+        return await _proxy_handler(
+            request, source_provider="google", model_override=model
+        )
+    else:
+        return Response(
+            status_code=404,
+            content='{"error": "Unknown Google GenAI method"}',
+            media_type="application/json",
+        )
 
 
 async def handle_health(request: Request) -> Response:
@@ -624,13 +632,8 @@ def create_app(config: GatewayConfig) -> Starlette:
         Route("/v1/messages", handle_anthropic, methods=["POST"]),
         Route("/v1/responses", handle_openai_responses, methods=["POST"]),
         Route(
-            "/v1beta/models/{model}:generateContent",
-            handle_google,
-            methods=["POST"],
-        ),
-        Route(
-            "/v1beta/models/{model}:streamGenerateContent",
-            handle_google_stream,
+            "/v1beta/models/{model_path:path}",
+            handle_google_genai,
             methods=["POST"],
         ),
         Route("/health", handle_health, methods=["GET"]),
