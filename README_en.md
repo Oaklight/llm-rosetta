@@ -1,8 +1,8 @@
 # LLM-Rosetta
 
-[![PyPI version](https://badge.fury.io/py/llm-rosetta.svg)](https://badge.fury.io/py/llm-rosetta)
-[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllm-rosetta.svg)](https://badge.fury.io/gh/oaklight%2Fllm-rosetta)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://img.shields.io/pypi/v/llm-rosetta?color=green)](https://pypi.org/project/llm-rosetta/)
+[![CI](https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml/badge.svg)](https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llm-rosetta)
 
 [English Version](README_en.md) | [中文版](README_zh.md)
