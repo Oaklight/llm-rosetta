@@ -7,8 +7,7 @@ hide:
 
 # LLM-Rosetta
 
-[![PyPI version](https://badge.fury.io/py/llm-rosetta.svg?icon=si%3Apython)](https://badge.fury.io/py/llm-rosetta)
-[![GitHub version](https://badge.fury.io/gh/oaklight%2Fllm-rosetta.svg?icon=si%3Agithub)](https://badge.fury.io/gh/oaklight%2Fllm-rosetta)
+[![PyPI version](https://img.shields.io/pypi/v/llm-rosetta?color=green)](https://pypi.org/project/llm-rosetta/)
 
 **Large Language Model Rosetta Stone** — a unified message format conversion library for LLM provider APIs.
 
