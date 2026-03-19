@@ -11,6 +11,12 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 ### 新增
 
 - **网关请求/响应体日志**：可配置的调试日志，支持彩色输出、请求体脱敏和截断 — 通过配置（`"debug": {"verbose": true, "log_bodies": true}`）、环境变量（`LLM_ROSETTA_VERBOSE`、`LLM_ROSETTA_LOG_BODIES`）或 `--verbose` CLI 参数启用
+- **Google `request_to_provider()` 支持 `output_format="rest"`**：传入 `output_format="rest"` 可直接获得 REST API 格式的请求体，`tools`/`tool_config` 提升至顶层，生成参数包装在 `generationConfig` 中 — 无需再手动进行 SDK→REST 格式转换
+
+### 变更
+
+- **网关模块化重构**：将 `app.py`（1057 行）拆分为 `proxy.py`（代理引擎、SSE 处理、上游请求）、`cli.py`（CLI 入口、argparse、子命令）和精简后的 `app.py`（路由处理、应用工厂，约 210 行）
+- **Google REST 请求体转换迁移至核心包**：`_fixup_google_body()` 逻辑从 `gateway/proxy.py` 迁移至 `GoogleGenAIConverter._to_rest_body()`，消除了网关和全部 6 个 REST 示例中的重复 SDK→REST 转换代码
 
 ### 修复
 
