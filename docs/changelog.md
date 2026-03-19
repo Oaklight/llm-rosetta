@@ -6,6 +6,12 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## Unreleased
+
+### Fixed
+
+- OpenAI Chat streaming: usage-only chunk now includes `"choices": []` to satisfy clients that validate every `chat.completion.chunk` must contain a `choices` array (#55)
+
 ## v0.2.0 — 2026-03-18
 
 ### Added
