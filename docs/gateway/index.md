@@ -255,6 +255,118 @@ import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
 
+## CLI 工具集成
+
+网关可以作为主流 AI 编程 CLI 工具的后端。每个工具使用不同的 API 格式——网关会自动处理格式转换。
+
+### Claude Code
+
+Claude Code 使用 Anthropic Messages API (`/v1/messages`)。
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8765
+export ANTHROPIC_API_KEY=your-key  # 或任意占位符
+export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
+claude --model claude-sonnet-4-20250514
+```
+
+或在 `~/.claude/settings.json` 中配置：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
+    "ANTHROPIC_BASE_URL": "http://localhost:8765",
+    "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
+  }
+}
+```
+
+**支持功能**：对话、多轮对话、图片、工具调用、流式传输 ✅
+
+### Kilo Code
+
+Kilo Code 使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
+
+在 `~/.config/kilo/kilo.jsonc` 中添加自定义提供商：
+
+```jsonc
+{
+  "provider": {
+    "rosetta": {
+      "api": "openai",
+      "name": "Rosetta Gateway",
+      "models": {
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+          "attachment": true,
+          "tool_call": true,
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 200000, "output": 8192 }
+        }
+        // 根据需要添加更多模型
+      },
+      "options": {
+        "apiKey": "your-key",
+        "baseURL": "http://localhost:8765/v1"
+      }
+    }
+  }
+}
+```
+
+然后使用：`kilo --model rosetta/claude-sonnet-4-20250514`
+
+**支持功能**：对话、多轮对话、工具调用、流式传输 ✅
+
+### OpenAI Codex CLI
+
+Codex CLI 使用 OpenAI Responses API (`/v1/responses`)。
+
+创建 `~/.codex/config.toml`：
+
+```toml
+model = "gpt-4o"
+model_provider = "rosetta"
+
+[model_providers.rosetta]
+name = "Rosetta Gateway"
+base_url = "http://localhost:8765/v1"
+env_key = "ROSETTA_API_KEY"
+wire_api = "responses"
+```
+
+然后：
+
+```bash
+export ROSETTA_API_KEY=your-key
+codex "your prompt here"
+```
+
+**支持功能**：对话、流式传输 ✅ | 工具调用 ⚠️（基本支持）
+
+### Gemini CLI
+
+Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
+
+```bash
+export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+export GEMINI_API_KEY=your-key
+gemini -m gemini-2.5-pro -p "your prompt here"
+```
+
+!!! note "TTY 要求"
+    Gemini CLI 即使在无头模式（`-p`）下也需要 TTY。在脚本或非交互式 shell 中运行时，请使用 `script` 包装：
+
+    ```bash
+    script -qec 'gemini -m gemini-2.5-pro -p "your prompt"' /dev/null
+    ```
+
+!!! note "网络依赖"
+    Gemini CLI 在启动时会连接 `github.com` 和 `play.googleapis.com`。这些地址必须可达（直连或通过代理）。
+
+**支持功能**：对话、流式传输 ✅
+
 ## 工作原理
 
 网关使用 LLM-Rosetta 的转换器管道：
