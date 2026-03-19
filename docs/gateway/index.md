@@ -255,6 +255,118 @@ import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
 
+## CLI Integration
+
+The gateway is a drop-in backend for popular AI coding CLI tools. Each tool speaks a different API format — the gateway handles the translation automatically.
+
+### Claude Code
+
+Claude Code uses the Anthropic Messages API (`/v1/messages`).
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:8765
+export ANTHROPIC_API_KEY=your-key  # or any placeholder
+export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
+claude --model claude-sonnet-4-20250514
+```
+
+Or in `~/.claude/settings.json`:
+
+```json
+{
+  "env": {
+    "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
+    "ANTHROPIC_BASE_URL": "http://localhost:8765",
+    "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
+  }
+}
+```
+
+**Supported**: chat, multi-turn, images, tool calls, streaming ✅
+
+### Kilo Code
+
+Kilo Code uses the OpenAI Chat Completions API (`/v1/chat/completions`).
+
+In `~/.config/kilo/kilo.jsonc`, add a custom provider:
+
+```jsonc
+{
+  "provider": {
+    "rosetta": {
+      "api": "openai",
+      "name": "Rosetta Gateway",
+      "models": {
+        "claude-sonnet-4-20250514": {
+          "name": "Claude Sonnet 4",
+          "attachment": true,
+          "tool_call": true,
+          "cost": { "input": 0, "output": 0 },
+          "limit": { "context": 200000, "output": 8192 }
+        }
+        // Add more models as needed
+      },
+      "options": {
+        "apiKey": "your-key",
+        "baseURL": "http://localhost:8765/v1"
+      }
+    }
+  }
+}
+```
+
+Then use: `kilo --model rosetta/claude-sonnet-4-20250514`
+
+**Supported**: chat, multi-turn, tool calls, streaming ✅
+
+### OpenAI Codex CLI
+
+Codex CLI uses the OpenAI Responses API (`/v1/responses`).
+
+Create `~/.codex/config.toml`:
+
+```toml
+model = "gpt-4o"
+model_provider = "rosetta"
+
+[model_providers.rosetta]
+name = "Rosetta Gateway"
+base_url = "http://localhost:8765/v1"
+env_key = "ROSETTA_API_KEY"
+wire_api = "responses"
+```
+
+Then:
+
+```bash
+export ROSETTA_API_KEY=your-key
+codex "your prompt here"
+```
+
+**Supported**: chat, streaming ✅ | tool calls ⚠️ (basic support)
+
+### Gemini CLI
+
+Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
+
+```bash
+export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+export GEMINI_API_KEY=your-key
+gemini -m gemini-2.5-pro -p "your prompt here"
+```
+
+!!! note "TTY requirement"
+    Gemini CLI requires a TTY even in headless mode (`-p`). When running from scripts or non-interactive shells, wrap with `script`:
+
+    ```bash
+    script -qec 'gemini -m gemini-2.5-pro -p "your prompt"' /dev/null
+    ```
+
+!!! note "Network dependencies"
+    Gemini CLI makes outbound connections to `github.com` and `play.googleapis.com` during startup. These must be reachable (directly or via proxy) for the CLI to function.
+
+**Supported**: chat, streaming ✅
+
 ## How It Works
 
 The gateway uses LLM-Rosetta's converter pipeline:
