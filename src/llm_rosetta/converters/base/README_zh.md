@@ -109,7 +109,7 @@ config_ops_class: Optional[Type] = None    # → BaseConfigOps 子类
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `request_to_provider` | `(ir_request: IRRequest) → Tuple[Dict, List[str]]` | IR 请求 → provider 请求 |
+| `request_to_provider` | `(ir_request: IRRequest, **kwargs) → Tuple[Dict, List[str]]` | IR 请求 → provider 请求。Google 支持 `output_format="rest"` 参数，可直接生成 REST API 格式的请求体。 |
 | `request_from_provider` | `(provider_request: Dict) → IRRequest` | Provider 请求 → IR 请求 |
 | `response_from_provider` | `(provider_response: Dict) → IRResponse` | Provider 响应 → IR 响应 |
 | `response_to_provider` | `(ir_response: IRResponse) → Dict` | IR 响应 → provider 响应 |

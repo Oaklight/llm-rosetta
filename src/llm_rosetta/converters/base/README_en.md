@@ -109,7 +109,7 @@ config_ops_class: Optional[Type] = None    # → BaseConfigOps subclass
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `request_to_provider` | `(ir_request: IRRequest) → Tuple[Dict, List[str]]` | IR request → provider request |
+| `request_to_provider` | `(ir_request: IRRequest, **kwargs) → Tuple[Dict, List[str]]` | IR request → provider request. Google supports `output_format="rest"` kwarg for REST API–ready output. |
 | `request_from_provider` | `(provider_request: Dict) → IRRequest` | Provider request → IR request |
 | `response_from_provider` | `(provider_response: Dict) → IRResponse` | Provider response → IR response |
 | `response_to_provider` | `(ir_response: IRResponse) → Dict` | IR response → provider response |

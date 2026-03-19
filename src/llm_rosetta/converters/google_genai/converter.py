@@ -116,6 +116,60 @@ class GoogleGenAIConverter(BaseConverter):
 
     # ==================== Top-level Interfaces ====================
 
+    @staticmethod
+    def _to_rest_body(sdk_request: dict[str, Any]) -> dict[str, Any]:
+        """Convert SDK-style request dict to Google REST API format.
+
+        The SDK format nests tools, tool_config, and generation parameters
+        inside a ``config`` dict.  The REST API expects tools and tool_config
+        at the top level, and generation parameters wrapped in a
+        ``generationConfig`` object.
+
+        This is a pure dict→dict transform; it does **not** call any
+        conversion ops.
+
+        Args:
+            sdk_request: SDK-style request dict (as produced by
+                ``request_to_provider()`` with the default output format).
+
+        Returns:
+            REST API–ready request body.
+        """
+        body: dict[str, Any] = {"contents": sdk_request["contents"]}
+        config = sdk_request.get("config", {})
+
+        # Lift specific keys from config to top level
+        for key in ("tools", "tool_config", "response_mime_type", "response_schema"):
+            if config.get(key):
+                body[key] = config[key]
+
+        # Lift generation config fields into generationConfig
+        _GENERATION_KEYS = (
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_output_tokens",
+            "stop_sequences",
+            "candidate_count",
+            "seed",
+            "presence_penalty",
+            "frequency_penalty",
+            "logprobs",
+            "response_logprobs",
+        )
+        generation_config: dict[str, Any] = {}
+        for key in _GENERATION_KEYS:
+            if key in config:
+                generation_config[key] = config[key]
+        if generation_config:
+            body["generationConfig"] = generation_config
+
+        # system_instruction is already at top level from the converter
+        if "system_instruction" in sdk_request:
+            body["system_instruction"] = sdk_request["system_instruction"]
+
+        return body
+
     def request_to_provider(
         self,
         ir_request: IRRequest,
@@ -127,10 +181,17 @@ class GoogleGenAIConverter(BaseConverter):
 
         Args:
             ir_request: IR request.
+            **kwargs: Optional keyword arguments.
+
+                - ``output_format``: ``"sdk"`` (default) produces a dict with
+                  a nested ``config`` suitable for the Google GenAI Python SDK.
+                  ``"rest"`` flattens the config so the result can be sent
+                  directly to the Google REST API via ``httpx`` / ``requests``.
 
         Returns:
             Tuple of (provider request dict, warnings list).
         """
+        output_format: str = kwargs.pop("output_format", "sdk")
         warnings_list: list[str] = []
         result: dict[str, Any] = {"model": ir_request["model"]}
 
@@ -223,6 +284,9 @@ class GoogleGenAIConverter(BaseConverter):
             config.update(extensions)
 
         result["config"] = config
+
+        if output_format == "rest":
+            return self._to_rest_body(result), warnings_list
 
         return result, warnings_list
 

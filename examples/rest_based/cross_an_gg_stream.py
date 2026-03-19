@@ -131,23 +131,11 @@ def send_google_rest_stream(ir_messages: list, model: str, config: dict) -> dict
         "tools": TOOLS_SPEC,
         "tool_choice": {"mode": "auto"},
     }
-    provider_request, warnings = gg_converter.request_to_provider(ir_request)
+    request_body, warnings = gg_converter.request_to_provider(
+        ir_request, output_format="rest"
+    )
     if warnings:
         print(f"  Warnings: {warnings}")
-
-    # Build REST API request body from converter output.
-    # request_to_provider puts tools/tool_config inside "config", but the
-    # REST API expects them at the top level.
-    request_body: dict = {"contents": provider_request["contents"]}
-
-    provider_config = provider_request.get("config", {})
-    if provider_config.get("tools"):
-        request_body["tools"] = provider_config["tools"]
-    if provider_config.get("tool_config"):
-        request_body["tool_config"] = provider_config["tool_config"]
-
-    if "system_instruction" in provider_request:
-        request_body["system_instruction"] = provider_request["system_instruction"]
 
     headers = {
         "x-goog-api-key": config["api_key"],
