@@ -769,11 +769,12 @@ class OpenAIChatConverter(BaseConverter):
         elif is_usage_event(event):
             usage = event["usage"]
             result = {
+                "choices": [],
                 "usage": {
                     "prompt_tokens": usage.get("prompt_tokens") or 0,
                     "completion_tokens": usage.get("completion_tokens") or 0,
                     "total_tokens": usage.get("total_tokens") or 0,
-                }
+                },
             }
 
         # Populate top-level fields when context is available and started
