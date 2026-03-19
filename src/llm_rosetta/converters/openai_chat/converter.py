@@ -715,7 +715,9 @@ class OpenAIChatConverter(BaseConverter):
 
         elif is_tool_call_start_event(event):
             choice_index = event.get("choice_index", 0)
+            tc_index = event.get("tool_call_index", 0)
             tc_entry: dict[str, Any] = {
+                "index": tc_index,
                 "id": event["tool_call_id"],
                 "type": "function",
                 "function": {
@@ -723,9 +725,6 @@ class OpenAIChatConverter(BaseConverter):
                     "arguments": "",
                 },
             }
-            tc_index = event.get("tool_call_index")
-            if tc_index is not None:
-                tc_entry["index"] = tc_index
             result = {
                 "choices": [
                     {
@@ -737,14 +736,13 @@ class OpenAIChatConverter(BaseConverter):
 
         elif is_tool_call_delta_event(event):
             choice_index = event.get("choice_index", 0)
+            tc_index = event.get("tool_call_index", 0)
             tc_delta_entry: dict[str, Any] = {
+                "index": tc_index,
                 "function": {
                     "arguments": event["arguments_delta"],
                 },
             }
-            tc_index = event.get("tool_call_index")
-            if tc_index is not None:
-                tc_delta_entry["index"] = tc_index
             result = {
                 "choices": [
                     {
