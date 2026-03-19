@@ -931,9 +931,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             "id": item_id,
                             "type": "message",
                             "role": "assistant",
-                            "content": [
-                                {"type": "output_text", "text": accumulated}
-                            ],
+                            "content": [{"type": "output_text", "text": accumulated}],
                         }
                     )
 
@@ -963,9 +961,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
             # Emit content_part.done + output_item.done before response.completed
             results: list[dict[str, Any]] = []
-            if context is not None and getattr(
-                context, "_output_item_emitted", False
-            ):
+            if context is not None and getattr(context, "_output_item_emitted", False):
                 accumulated = getattr(context, "_accumulated_text", "")
                 item_id = getattr(context, "_item_id", "")
                 results.append(
@@ -984,9 +980,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             "id": item_id,
                             "type": "message",
                             "role": "assistant",
-                            "content": [
-                                {"type": "output_text", "text": accumulated}
-                            ],
+                            "content": [{"type": "output_text", "text": accumulated}],
                         },
                     }
                 )

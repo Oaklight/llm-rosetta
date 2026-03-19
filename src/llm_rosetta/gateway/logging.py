@@ -283,9 +283,7 @@ def sanitize_request_data(
                         and isinstance(part.get("text"), str)
                         and len(part["text"]) > max_content_length
                     ):
-                        part["text"] = truncate_string(
-                            part["text"], max_content_length
-                        )
+                        part["text"] = truncate_string(part["text"], max_content_length)
 
     # --- tools ---
     if truncate_tools and "tools" in sanitized and isinstance(sanitized["tools"], list):

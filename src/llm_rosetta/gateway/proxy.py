@@ -185,9 +185,7 @@ def error_response_for_source(
 # ---------------------------------------------------------------------------
 
 
-def detect_stream_request(
-    source_provider: ProviderType, body: dict[str, Any]
-) -> bool:
+def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -> bool:
     """Detect if the incoming request asks for streaming."""
     if source_provider in ("openai_chat", "openai_responses", "anthropic"):
         return bool(body.get("stream", False))
@@ -195,9 +193,7 @@ def detect_stream_request(
     return False
 
 
-def extract_model(
-    source_provider: ProviderType, body: dict[str, Any]
-) -> str | None:
+def extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str | None:
     """Extract the model name from a source-format request body."""
     return body.get("model")
 
