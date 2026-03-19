@@ -8,6 +8,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -30,6 +31,15 @@ from .config import (
     load_config,
     load_config_raw,
 )
+from .logging import (
+    get_logger,
+    log_converted_request,
+    log_original_request,
+    log_response,
+    log_stream_summary,
+    log_upstream_error,
+    setup_logging,
+)
 from .providers import (
     ProviderInfo,
     get_default_base_url,
@@ -37,7 +47,7 @@ from .providers import (
     known_provider_types,
 )
 
-logger = logging.getLogger("llm-rosetta-gateway")
+logger = get_logger()
 
 # ---------------------------------------------------------------------------
 # Upstream request building
@@ -332,6 +342,9 @@ async def _handle_non_streaming(
     # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
     _inject_provider_metadata(ir_request)
 
+    # -- body log: IR request (after source -> IR) --
+    log_original_request(ir_request)
+
     # 2. IR -> Target
     try:
         target_body, warnings = target_converter.request_to_provider(ir_request)
@@ -347,6 +360,9 @@ async def _handle_non_streaming(
         target_provider, provider_info, target_body, model, stream=False
     )
 
+    # -- body log: target request body --
+    log_converted_request(upstream_body)
+
     # 4. Forward to upstream
     client = _get_client(provider_info.proxy_url)
     try:
@@ -358,6 +374,11 @@ async def _handle_non_streaming(
 
     # 5. Pass through upstream errors
     if upstream_resp.status_code >= 400:
+        log_upstream_error(
+            upstream_resp.status_code,
+            upstream_resp.text,
+            endpoint=str(target_provider),
+        )
         return Response(
             content=upstream_resp.content,
             status_code=upstream_resp.status_code,
@@ -372,6 +393,9 @@ async def _handle_non_streaming(
         return _error_response_for_source(
             source_provider, 502, f"Failed to parse upstream response: {exc}"
         )
+
+    # -- body log: upstream response --
+    log_response(upstream_json, label="UPSTREAM RESPONSE")
 
     # 6b. Cache provider_metadata from tool calls for follow-up requests
     _cache_provider_metadata(ir_response)
@@ -409,6 +433,9 @@ async def _handle_streaming(
     # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
     _inject_provider_metadata(ir_request)
 
+    # -- body log: IR request (after source -> IR) --
+    log_original_request(ir_request)
+
     # 2. IR -> Target
     try:
         target_body, warnings = target_converter.request_to_provider(ir_request)
@@ -424,12 +451,17 @@ async def _handle_streaming(
         target_provider, provider_info, target_body, model, stream=True
     )
 
+    # -- body log: target request body --
+    log_converted_request(upstream_body)
+
     format_sse = _SSE_FORMATTERS[source_provider]
 
     async def event_generator() -> AsyncIterator[str]:
         """Stream SSE events from upstream, converting each chunk."""
         from_ctx = StreamContext()  # upstream -> IR
         to_ctx = StreamContext()  # IR -> source
+        chunk_count = 0
+        t0 = time.monotonic()
 
         client = _get_client(provider_info.proxy_url)
         async with client.stream(
@@ -439,6 +471,12 @@ async def _handle_streaming(
                 # Read error body and yield as error
                 await upstream_resp.aread()
                 error_text = upstream_resp.text
+                log_upstream_error(
+                    upstream_resp.status_code,
+                    error_text,
+                    endpoint=str(target_provider),
+                    is_streaming=True,
+                )
                 try:
                     error_body = json.loads(error_text)
                     error_msg = json.dumps(error_body)
@@ -470,6 +508,8 @@ async def _handle_streaming(
                     logger.warning("Skipping malformed SSE data: %s", value[:200])
                     continue
 
+                chunk_count += 1
+
                 # Upstream chunk -> IR events
                 ir_events = target_converter.stream_response_from_provider(
                     chunk, context=from_ctx
@@ -499,6 +539,13 @@ async def _handle_streaming(
         # Emit end-of-stream marker for OpenAI Chat format
         if source_provider == "openai_chat":
             yield _format_sse_openai_chat_done()
+
+        # -- stream summary (no per-chunk spam) --
+        log_stream_summary(
+            model=model,
+            duration_s=time.monotonic() - t0,
+            chunk_count=chunk_count,
+        )
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -898,6 +945,12 @@ def main() -> None:
         help="HTTP/SOCKS proxy URL for upstream requests (overrides config)",
     )
     parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Enable verbose (DEBUG) logging; overrides config and --log-level",
+    )
+    parser.add_argument(
         "--log-level",
         default="info",
         choices=["debug", "info", "warning", "error"],
@@ -952,16 +1005,13 @@ def main() -> None:
         return
 
     # --- normal server startup ---
-    logging.basicConfig(
-        level=getattr(logging, args.log_level.upper()),
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-    )
-
     if not args.no_banner:
         print_banner()
 
     config_path = discover_config(args.config)
     if config_path is None:
+        # Minimal fallback logging so the error is visible before setup_logging
+        logging.basicConfig(level=logging.ERROR)
         logger.error(
             "No config file found. Searched:\n  %s\n"
             "Provide one with --config or create a config at one of the above paths.\n"
@@ -978,6 +1028,14 @@ def main() -> None:
 
     config = GatewayConfig(raw_config)
 
+    # Resolve verbosity: CLI --verbose wins, then config/env, then --log-level
+    verbose = args.verbose or config.verbose
+
+    setup_logging(
+        verbose=verbose,
+        log_bodies=config.log_bodies,
+    )
+
     host = args.host or config.host
     port = args.port or config.port
 
@@ -985,6 +1043,15 @@ def main() -> None:
     logger.info("Starting llm-rosetta gateway on %s:%d", host, port)
     logger.info("Configured providers: %s", list(config.providers.keys()))
     logger.info("Configured models: %s", list(config.models.keys()))
+    if verbose:
+        logger.info("Verbose logging enabled (DEBUG level)")
+    if config.log_bodies:
+        logger.info("Request/response body logging enabled")
 
     app = create_app(config)
-    uvicorn.run(app, host=host, port=port, log_level=args.log_level)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="debug" if verbose else args.log_level,
+    )

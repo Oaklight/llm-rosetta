@@ -108,6 +108,16 @@ class GatewayConfig:
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
         self.proxy: str | None = raw.get("server", {}).get("proxy")
+
+        # Debug / logging options (config + env-var overrides)
+        _debug = raw.get("debug", {})
+        self.verbose: bool = _debug.get("verbose", False) or os.environ.get(
+            "LLM_ROSETTA_VERBOSE", ""
+        ).lower() in ("1", "true", "yes")
+        self.log_bodies: bool = _debug.get("log_bodies", False) or os.environ.get(
+            "LLM_ROSETTA_LOG_BODIES", ""
+        ).lower() in ("1", "true", "yes")
+
         self._validate()
 
         # Build ProviderInfo objects (with key rotation support)
