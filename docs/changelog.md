@@ -8,8 +8,14 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
+### 新增
+
+- **网关请求/响应体日志**：可配置的调试日志，支持彩色输出、请求体脱敏和截断 — 通过配置（`"debug": {"verbose": true, "log_bodies": true}`）、环境变量（`LLM_ROSETTA_VERBOSE`、`LLM_ROSETTA_LOG_BODIES`）或 `--verbose` CLI 参数启用
+
 ### 修复
 
+- OpenAI Responses 流式传输：为 `response.completed` 添加缺失的 `id`/`object`/`model` 字段，为文本增量事件添加 `output_index`/`content_index`，并补充完整的生命周期事件（`output_item.added`、`content_part.added`、`content_part.done`、`output_item.done`）（#56）
+- OpenAI Chat 流式传输：`tool_calls` 条目现在始终包含必需的 `index` 字段，当上游 IR 事件未明确提供时默认为 `0`（#57）
 - OpenAI Chat 流式传输：usage-only 数据块现在包含 `"choices": []`，以满足要求每个 `chat.completion.chunk` 必须包含 `choices` 数组的客户端验证（#55）
 
 ## v0.2.0 — 2026-03-18
