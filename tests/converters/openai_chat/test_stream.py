@@ -346,7 +346,7 @@ class TestStreamResponseToProvider:
         assert tc["index"] == 0
 
     def test_tool_call_start_no_index(self):
-        """ToolCallStartEvent without tool_call_index omits index field."""
+        """ToolCallStartEvent without tool_call_index defaults index to 0."""
         event = cast(
             ToolCallStartEvent,
             {
@@ -358,7 +358,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         tc = result["choices"][0]["delta"]["tool_calls"][0]
-        assert "index" not in tc
+        assert tc["index"] == 0
 
     def test_tool_call_delta(self):
         """ToolCallDeltaEvent → OpenAI chunk."""
@@ -378,7 +378,7 @@ class TestStreamResponseToProvider:
         assert tc["index"] == 0
 
     def test_tool_call_delta_no_index(self):
-        """ToolCallDeltaEvent without tool_call_index omits index field."""
+        """ToolCallDeltaEvent without tool_call_index defaults index to 0."""
         event = cast(
             ToolCallDeltaEvent,
             {
@@ -390,7 +390,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         tc = result["choices"][0]["delta"]["tool_calls"][0]
-        assert "index" not in tc
+        assert tc["index"] == 0
 
     def test_finish_event(self):
         """FinishEvent → OpenAI chunk."""

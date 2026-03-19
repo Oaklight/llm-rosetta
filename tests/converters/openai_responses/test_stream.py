@@ -409,9 +409,11 @@ class TestStreamResponseToProvider:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "completed"
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
 
     def test_finish_event_length(self):
         """FinishEvent with 'length' → response.completed with status 'incomplete'."""
@@ -419,10 +421,14 @@ class TestStreamResponseToProvider:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "length"}},
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "incomplete"
-        assert result["response"]["incomplete_details"]["reason"] == "max_output_tokens"
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "incomplete"
+        assert (
+            completed["response"]["incomplete_details"]["reason"] == "max_output_tokens"
+        )
 
     def test_finish_event_error(self):
         """FinishEvent with 'error' → response.completed with status 'failed'."""
@@ -430,9 +436,11 @@ class TestStreamResponseToProvider:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "error"}},
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "failed"
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "failed"
 
     def test_usage_event(self):
         """UsageEvent → response.completed with usage."""
@@ -946,15 +954,15 @@ class TestStreamResponseToProviderWithContext:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
         )
-        result = cast(
-            dict[str, Any],
+        results = cast(
+            list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "completed"
-        assert result["response"]["usage"]["input_tokens"] == 10
-        assert result["response"]["usage"]["output_tokens"] == 5
-        assert result["response"]["usage"]["total_tokens"] == 15
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
+        assert completed["response"]["usage"]["input_tokens"] == 10
+        assert completed["response"]["usage"]["output_tokens"] == 5
+        assert completed["response"]["usage"]["total_tokens"] == 15
 
     def test_finish_with_context_no_pending_usage(self):
         """FinishEvent with context but no pending usage omits usage field."""
@@ -964,13 +972,13 @@ class TestStreamResponseToProviderWithContext:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
         )
-        result = cast(
-            dict[str, Any],
+        results = cast(
+            list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "completed"
-        assert "usage" not in result["response"]
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
+        assert "usage" not in completed["response"]
 
     def test_finish_without_context_backward_compat(self):
         """FinishEvent without context produces response.completed (backward compat)."""
@@ -978,9 +986,11 @@ class TestStreamResponseToProviderWithContext:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.completed"
-        assert result["response"]["status"] == "completed"
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
 
     def test_no_duplicate_response_completed_with_context(self):
         """With context, UsageEvent + FinishEvent produce only one response.completed."""
@@ -1010,13 +1020,15 @@ class TestStreamResponseToProviderWithContext:
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
         )
-        finish_result = cast(
-            dict[str, Any],
+        finish_results = cast(
+            list[dict[str, Any]],
             self.converter.stream_response_to_provider(finish_event, context=ctx),
         )
-        assert finish_result["type"] == "response.completed"
-        assert finish_result["response"]["usage"]["input_tokens"] == 20
-        assert finish_result["response"]["usage"]["output_tokens"] == 10
+        finish_completed = next(
+            r for r in finish_results if r["type"] == "response.completed"
+        )
+        assert finish_completed["response"]["usage"]["input_tokens"] == 20
+        assert finish_completed["response"]["usage"]["output_tokens"] == 10
 
     def test_full_stream_sequence_with_context(self):
         """Full stream sequence produces correct events with no duplicates."""
@@ -1056,15 +1068,20 @@ class TestStreamResponseToProviderWithContext:
         )
         assert block_start_result["type"] == "response.content_part.added"
 
-        # 3. TextDeltaEvent
-        text_result = cast(
-            dict[str, Any],
-            self.converter.stream_response_to_provider(
-                cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"}),
-                context=ctx,
-            ),
+        # 3. TextDeltaEvent (first delta with context returns a list:
+        #    output_item.added, content_part.added, then the delta itself)
+        text_results = self.converter.stream_response_to_provider(
+            cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"}),
+            context=ctx,
         )
-        assert text_result["type"] == "response.output_text.delta"
+        # May be a list (first delta with context) or a single dict
+        if isinstance(text_results, list):
+            text_delta = next(
+                r for r in text_results if r["type"] == "response.output_text.delta"
+            )
+        else:
+            text_delta = text_results
+        assert text_delta["type"] == "response.output_text.delta"
 
         # 4. ContentBlockEndEvent
         block_end_result = cast(
@@ -1100,8 +1117,8 @@ class TestStreamResponseToProviderWithContext:
         assert usage_result == {}
 
         # 6. FinishEvent → response.completed with merged usage
-        finish_result = cast(
-            dict[str, Any],
+        finish_results = cast(
+            list[dict[str, Any]],
             self.converter.stream_response_to_provider(
                 cast(
                     FinishEvent,
@@ -1110,8 +1127,10 @@ class TestStreamResponseToProviderWithContext:
                 context=ctx,
             ),
         )
-        assert finish_result["type"] == "response.completed"
-        assert finish_result["response"]["usage"]["input_tokens"] == 10
+        finish_completed = next(
+            r for r in finish_results if r["type"] == "response.completed"
+        )
+        assert finish_completed["response"]["usage"]["input_tokens"] == 10
 
         # 7. StreamEndEvent → empty
         end_result = cast(
@@ -1124,15 +1143,19 @@ class TestStreamResponseToProviderWithContext:
         assert end_result == {}
 
         # Verify: only ONE response.completed was produced in the entire sequence
-        all_results = [
+        all_results: list[Any] = [
             start_result,
             block_start_result,
-            text_result,
             block_end_result,
             usage_result,
-            finish_result,
             end_result,
         ]
+        # Flatten list results (text_results and finish_results may be lists)
+        if isinstance(text_results, list):
+            all_results.extend(text_results)
+        else:
+            all_results.append(text_results)
+        all_results.extend(finish_results)
         completed_count = sum(
             1
             for r in all_results
