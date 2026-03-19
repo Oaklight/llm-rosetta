@@ -837,10 +837,53 @@ class OpenAIResponsesConverter(BaseConverter):
             }
 
         elif is_text_delta_event(event):
-            return {
+            choice_index = event.get("choice_index", 0)
+            text = event["text"]
+            delta_event: dict[str, Any] = {
                 "type": "response.output_text.delta",
-                "delta": event["text"],
+                "delta": text,
+                "output_index": choice_index,
+                "content_index": 0,
             }
+
+            # Accumulate text in context for response.completed output
+            if context is not None:
+                if not hasattr(context, "_accumulated_text"):
+                    context._accumulated_text = ""  # type: ignore[attr-defined]
+                context._accumulated_text += text  # type: ignore[attr-defined]
+
+            # Emit output_item.added + content_part.added before the first
+            # text delta so clients (e.g. Codex CLI) can register the item.
+            if context is not None and not getattr(
+                context, "_output_item_emitted", False
+            ):
+                context._output_item_emitted = True  # type: ignore[attr-defined]
+                item_id = f"msg_{context.response_id or ''}"
+                context._item_id = item_id  # type: ignore[attr-defined]
+                return [
+                    {
+                        "type": "response.output_item.added",
+                        "output_index": choice_index,
+                        "item": {
+                            "id": item_id,
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [],
+                        },
+                    },
+                    {
+                        "type": "response.content_part.added",
+                        "output_index": choice_index,
+                        "content_index": 0,
+                        "part": {
+                            "type": "output_text",
+                            "text": "",
+                        },
+                    },
+                    delta_event,
+                ]
+
+            return delta_event
 
         elif is_reasoning_delta_event(event):
             return {
@@ -876,7 +919,32 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]
             status = "completed"
-            response: dict[str, Any] = {"status": status, "output": []}
+
+            # Build the output array with accumulated text
+            output: list[dict[str, Any]] = []
+            if context is not None:
+                accumulated = getattr(context, "_accumulated_text", "")
+                item_id = getattr(context, "_item_id", "")
+                if accumulated:
+                    output.append(
+                        {
+                            "id": item_id,
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [
+                                {"type": "output_text", "text": accumulated}
+                            ],
+                        }
+                    )
+
+            response: dict[str, Any] = {"status": status, "output": output}
+
+            # Populate id, object, model from context so clients can parse
+            # the completed response envelope.
+            if context is not None:
+                response["id"] = context.response_id
+                response["object"] = "response"
+                response["model"] = context.model
 
             if reason == "length":
                 response["status"] = "incomplete"
@@ -893,10 +961,43 @@ class OpenAIResponsesConverter(BaseConverter):
                     "total_tokens": context.pending_usage.get("total_tokens") or 0,
                 }
 
-            return {
-                "type": "response.completed",
-                "response": response,
-            }
+            # Emit content_part.done + output_item.done before response.completed
+            results: list[dict[str, Any]] = []
+            if context is not None and getattr(
+                context, "_output_item_emitted", False
+            ):
+                accumulated = getattr(context, "_accumulated_text", "")
+                item_id = getattr(context, "_item_id", "")
+                results.append(
+                    {
+                        "type": "response.content_part.done",
+                        "output_index": 0,
+                        "content_index": 0,
+                        "part": {"type": "output_text", "text": accumulated},
+                    }
+                )
+                results.append(
+                    {
+                        "type": "response.output_item.done",
+                        "output_index": 0,
+                        "item": {
+                            "id": item_id,
+                            "type": "message",
+                            "role": "assistant",
+                            "content": [
+                                {"type": "output_text", "text": accumulated}
+                            ],
+                        },
+                    }
+                )
+
+            results.append(
+                {
+                    "type": "response.completed",
+                    "response": response,
+                }
+            )
+            return results
 
         elif is_usage_event(event):
             usage = event["usage"]
@@ -908,17 +1009,18 @@ class OpenAIResponsesConverter(BaseConverter):
                 return {}
 
             # Without context: preserve backward-compatible behavior
+            resp: dict[str, Any] = {
+                "status": "completed",
+                "output": [],
+                "usage": {
+                    "input_tokens": usage.get("prompt_tokens") or 0,
+                    "output_tokens": usage.get("completion_tokens") or 0,
+                    "total_tokens": usage.get("total_tokens") or 0,
+                },
+            }
             return {
                 "type": "response.completed",
-                "response": {
-                    "status": "completed",
-                    "output": [],
-                    "usage": {
-                        "input_tokens": usage.get("prompt_tokens") or 0,
-                        "output_tokens": usage.get("completion_tokens") or 0,
-                        "total_tokens": usage.get("total_tokens") or 0,
-                    },
-                },
+                "response": resp,
             }
 
         return {}
