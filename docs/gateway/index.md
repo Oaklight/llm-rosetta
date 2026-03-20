@@ -343,7 +343,7 @@ export ROSETTA_API_KEY=your-key
 codex "your prompt here"
 ```
 
-**Supported**: chat, multi-turn, tool calls, streaming :white_check_mark:
+**Supported**: chat, multi-turn, tool calls, streaming ✓
 
 ### Gemini CLI
 

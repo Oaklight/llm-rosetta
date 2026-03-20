@@ -12,10 +12,10 @@ LLM-Rosetta v0.2.0 supports bidirectional conversion between 4 provider APIs:
 
 | Provider | Format | Streaming | Tool Calls |
 |----------|--------|:---------:|:----------:|
-| OpenAI Chat Completions | `openai_chat` | :white_check_mark: | :white_check_mark: |
-| OpenAI Responses | `openai_responses` | :white_check_mark: | :white_check_mark: |
-| Anthropic Messages | `anthropic` | :white_check_mark: | :white_check_mark: |
-| Google GenAI | `google` | :white_check_mark: | :white_check_mark: |
+| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
+| OpenAI Responses | `openai_responses` | ✓ | ✓ |
+| Anthropic Messages | `anthropic` | ✓ | ✓ |
+| Google GenAI | `google` | ✓ | ✓ |
 
 The [Gateway](gateway/index.md) provides real-time HTTP proxying between any combination of these formats, verified with [5 CLI tools and SDK test suites](gateway/validation.md).
 

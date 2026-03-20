@@ -15,11 +15,11 @@ Five popular AI coding CLI tools were tested through the gateway. Each tool spea
 
 | CLI Tool | API Format | Source → Target | Chat | Stream | Tool Calls | Multi-Round |
 |----------|-----------|-----------------|:----:|:------:|:----------:|:-----------:|
-| [Codex CLI](https://github.com/openai/codex) | OpenAI Responses | `openai_responses` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | :white_check_mark: | :warning: | — | — |
+| [Codex CLI](https://github.com/openai/codex) | OpenAI Responses | `openai_responses` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | ✓ | ✓ | ✓ | ✓ |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | ✓ | ⚠ | — | — |
 
 ### Test Details
 
@@ -73,11 +73,11 @@ The [llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) sui
 
 | Test | Description | Status |
 |------|-------------|:------:|
-| `simple_query.py` | Single-turn streaming query | :white_check_mark: PASS |
-| `multi_round_chat.py` | 3-round conversation (Fibonacci explanation → code → optimization) | :white_check_mark: PASS |
-| `multi_round_function_calling.py` | 3-round tool calling (weather → temperature conversion → comparison) | :white_check_mark: PASS |
-| `multi_round_comprehensive.py` | 3-round with image + tool calls (landmark → weather → recommendation) | :white_check_mark: PASS |
-| `multi_round_image.py` | 3-round vision conversation (describe → locate → facts) | :white_check_mark: PASS |
+| `simple_query.py` | Single-turn streaming query | ✓ PASS |
+| `multi_round_chat.py` | 3-round conversation (Fibonacci explanation → code → optimization) | ✓ PASS |
+| `multi_round_function_calling.py` | 3-round tool calling (weather → temperature conversion → comparison) | ✓ PASS |
+| `multi_round_comprehensive.py` | 3-round with image + tool calls (landmark → weather → recommendation) | ✓ PASS |
+| `multi_round_image.py` | 3-round vision conversation (describe → locate → facts) | ✓ PASS |
 
 ### Google GenAI via Gateway (curl)
 
@@ -85,9 +85,9 @@ Multi-round tool calling was tested directly via `curl` against the gateway's Go
 
 | Round | Request | Model Response | Status |
 |:-----:|---------|---------------|:------:|
-| 1 | "What is 127 * 389?" with `calculator` tool, `mode=ANY` | `functionCall: calculator({expression: "127 * 389"})` | :white_check_mark: |
-| 2 | Tool result `49403`, "add 100 to that" | `functionCall: calculator({expression: "49403 + 100"})` | :white_check_mark: |
-| 3 | Tool result `49503`, `mode=AUTO` | Text: "The result is 49503." | :white_check_mark: |
+| 1 | "What is 127 * 389?" with `calculator` tool, `mode=ANY` | `functionCall: calculator({expression: "127 * 389"})` | ✓ |
+| 2 | Tool result `49403`, "add 100 to that" | `functionCall: calculator({expression: "49403 + 100"})` | ✓ |
+| 3 | Tool result `49503`, `mode=AUTO` | Text: "The result is 49503." | ✓ |
 
 Tested with both `gemini-2.5-flash-lite` and `gemini-3.1-flash-lite-preview`. Both models correctly returned function calls with `thoughtSignature` preserved.
 
@@ -97,10 +97,10 @@ Tested with both `gemini-2.5-flash-lite` and `gemini-3.1-flash-lite-preview`. Bo
 
 | Source Format | Target Provider | Verified |
 |--------------|----------------|:--------:|
-| OpenAI Chat → | OpenAI Responses | :white_check_mark: |
-| OpenAI Responses → | OpenAI Responses | :white_check_mark: |
-| Anthropic → | Anthropic (OpenRouter) | :white_check_mark: |
-| Google GenAI → | Google GenAI | :white_check_mark: |
+| OpenAI Chat → | OpenAI Responses | ✓ |
+| OpenAI Responses → | OpenAI Responses | ✓ |
+| Anthropic → | Anthropic (OpenRouter) | ✓ |
+| Google GenAI → | Google GenAI | ✓ |
 
 ---
 
