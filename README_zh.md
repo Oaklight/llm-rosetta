@@ -1,13 +1,14 @@
 # LLM-Rosetta
 
 [![PyPI version](https://img.shields.io/pypi/v/llm-rosetta?color=green)](https://pypi.org/project/llm-rosetta/)
+[![GitHub release](https://img.shields.io/github/v/release/Oaklight/llm-rosetta)](https://github.com/Oaklight/llm-rosetta/releases/latest)
 [![CI](https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml/badge.svg)](https://github.com/Oaklight/llm-rosetta/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Oaklight/llm-rosetta)
 
 [English Version](README_en.md) | [中文版](README_zh.md)
 
-**Large Language Model Rosetta Stone** — 一个通过中心化中间表示（IR）的轴辐式架构，在不同 LLM 提供商 API 格式之间进行转换的 Python 库。
+**LLM-Rosetta** — 一个通过中心化中间表示（IR）的轴辐式架构，在不同 LLM 提供商 API 格式之间进行转换的 Python 库。
 
 ## 完整文档
 
