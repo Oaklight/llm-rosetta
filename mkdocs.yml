@@ -1,5 +1,5 @@
 site_name: LLM-Rosetta
-site_description: 大语言模型罗塞塔石 - LLM 提供商之间的统一消息格式转换库
+site_description: LLM-Rosetta - LLM 提供商之间的统一消息格式转换库
 site_author: Peng Ding
 site_url: https://llm-rosetta.readthedocs.io/zh-cn/
 repo_name: Oaklight/llm-rosetta
