@@ -8,7 +8,7 @@ hide:
 # LLM-Rosetta
 
 [![PyPI version](https://img.shields.io/pypi/v/llm-rosetta?color=green)](https://pypi.org/project/llm-rosetta/)
-[![GitHub release](https://img.shields.io/github/v/release/Oaklight/llm-rosetta)](https://github.com/Oaklight/llm-rosetta/releases/latest)
+[![GitHub release](https://img.shields.io/github/v/release/Oaklight/llm-rosetta?color=green)](https://github.com/Oaklight/llm-rosetta/releases/latest)
 
 **LLM-Rosetta** — 用于 LLM 提供商 API 之间的统一消息格式转换库。
 
