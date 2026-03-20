@@ -330,32 +330,42 @@ class GoogleGenAIConverter(BaseConverter):
         ir_request["messages"] = ir_messages
 
         # 3. Config fields
+        # Support both SDK format (tools/tool_config inside "config" dict)
+        # and REST format (tools/tool_config at top level, generation params
+        # inside "generationConfig").
         config = provider_request.get("config", {})
         if not isinstance(config, dict):
             config = {}
 
-        # Tools
-        tools = config.get("tools")
+        # Tools — check SDK config first, then REST top-level
+        tools = config.get("tools") or provider_request.get("tools")
         if tools:
             ir_tools = []
             for t in tools:
                 ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
             ir_request["tools"] = ir_tools
 
-        # Tool choice
-        tool_config = config.get("tool_config")
+        # Tool choice — check SDK config first, then REST top-level
+        tool_config = config.get("tool_config") or provider_request.get("tool_config")
         if tool_config:
             ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_config)
 
-        # Generation config
-        gen_config = self.config_ops.p_generation_config_to_ir(config)
+        # Generation config — check SDK config first, then REST generationConfig
+        gen_source = config
+        rest_gen_config = provider_request.get("generationConfig")
+        if rest_gen_config and isinstance(rest_gen_config, dict) and not config:
+            gen_source = rest_gen_config
+        gen_config = self.config_ops.p_generation_config_to_ir(gen_source)
         if gen_config:
             ir_request["generation"] = gen_config
 
-        # Response format
-        if "response_mime_type" in config:
+        # Response format — check both SDK config and REST top-level
+        response_mime_source = config if "response_mime_type" in config else (
+            provider_request if "response_mime_type" in provider_request else None
+        )
+        if response_mime_source:
             ir_request["response_format"] = self.config_ops.p_response_format_to_ir(
-                config
+                response_mime_source
             )
 
         # Reasoning config
