@@ -61,25 +61,51 @@ class GoogleGenAIToolOps(BaseToolOps):
         return {"function_declarations": [func_decl]}
 
     @staticmethod
-    def p_tool_definition_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
-        """Google GenAI FunctionDeclaration → IR ToolDefinition.
+    def p_tool_definition_to_ir(
+        provider_tool: Any, **kwargs: Any
+    ) -> ToolDefinition | list[ToolDefinition]:
+        """Google GenAI FunctionDeclaration → IR ToolDefinition(s).
+
+        A single Google Tool dict may contain multiple function declarations.
+        Returns a list when multiple declarations are present, or a single
+        ToolDefinition for backward compatibility when there is exactly one.
+
+        Supports both snake_case (``function_declarations``) and camelCase
+        (``functionDeclarations``) keys for REST API compatibility.
 
         Args:
             provider_tool: Google Tool dict with function_declarations.
 
         Returns:
-            IR ToolDefinition.
+            IR ToolDefinition or list of ToolDefinitions.
         """
-        # Handle both wrapped and unwrapped formats
-        if "function_declarations" in provider_tool:
-            func_decls = provider_tool["function_declarations"]
-            if func_decls:
-                func = func_decls[0]
-            else:
-                func = {}
-        else:
-            func = provider_tool
+        # Handle both snake_case and camelCase, wrapped and unwrapped formats
+        func_decls = provider_tool.get(
+            "function_declarations"
+        ) or provider_tool.get("functionDeclarations")
 
+        if func_decls:
+            results: list[ToolDefinition] = []
+            for func in func_decls:
+                parameters = func.get("parameters", {})
+                td: dict[str, Any] = {
+                    "type": "function",
+                    "name": func.get("name", ""),
+                    "description": func.get("description", ""),
+                    "parameters": parameters,
+                }
+                if isinstance(parameters, dict) and "required" in parameters:
+                    td["required_parameters"] = parameters["required"]
+                else:
+                    td["required_parameters"] = []
+                td["metadata"] = {}
+                results.append(cast(ToolDefinition, td))
+            if len(results) == 1:
+                return results[0]
+            return results
+
+        # Bare function declaration (no wrapper)
+        func = provider_tool
         parameters = func.get("parameters", {})
         result: dict[str, Any] = {
             "type": "function",
@@ -147,7 +173,9 @@ class GoogleGenAIToolOps(BaseToolOps):
         if not isinstance(provider_tool_choice, dict):
             return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
-        fcc = provider_tool_choice.get("function_calling_config", {})
+        fcc = provider_tool_choice.get(
+            "function_calling_config"
+        ) or provider_tool_choice.get("functionCallingConfig", {})
         mode = fcc.get("mode", "AUTO")
 
         mode_map = {
@@ -159,7 +187,9 @@ class GoogleGenAIToolOps(BaseToolOps):
         ir_mode = mode_map.get(mode, "auto")
 
         # Check for specific tool names
-        allowed_names = fcc.get("allowed_function_names", [])
+        allowed_names = fcc.get("allowed_function_names") or fcc.get(
+            "allowedFunctionNames", []
+        )
         if allowed_names and ir_mode == "any":
             return cast(ToolChoice, {"mode": "tool", "tool_name": allowed_names[0]})
 

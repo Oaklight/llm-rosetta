@@ -57,7 +57,9 @@ class BaseToolOps(ABC):
 
     @staticmethod
     @abstractmethod
-    def p_tool_definition_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
+    def p_tool_definition_to_ir(
+        provider_tool: Any, **kwargs: Any
+    ) -> ToolDefinition | list[ToolDefinition]:
         """Provider Tool Definition → IR ToolDefinition
         将Provider工具定义转换为IR工具定义
 

@@ -8,6 +8,7 @@
 - **OpenAI Chat streaming tool calls**: Fixed missing `index` field in streamed `tool_calls` delta chunks (#57)
 - **`stream_options` leak into Responses API**: Removed `stream_options` emission from `ir_stream_config_to_p()` in the Responses converter — the Responses API does not accept this Chat Completions-only field. This caused upstream rejection when Chat-format clients (Kilo, OpenCode) were proxied to the Responses API (#58)
 - **Google REST-format tool definitions ignored**: `request_from_provider()` now checks both SDK format (`config.tools`) and REST top-level (`tools`, `tool_config`, `generationConfig`) — previously only SDK format was handled, silently stripping tools from gateway-proxied requests (#59)
+- **Google camelCase tool definitions not parsed**: `p_tool_definition_to_ir()` now handles both `functionDeclarations` (camelCase/REST) and `function_declarations` (snake_case/SDK), and extracts all declarations from a single tool entry instead of only the first. Also added camelCase support for `functionCallingConfig`/`allowedFunctionNames` and `toolConfig` in request parsing. This fixes Gemini CLI tool calling through the gateway (#60)
 
 ## v0.2.0 (2026-03-17)
 

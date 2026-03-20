@@ -56,6 +56,7 @@ class TestGoogleGenAIToolOps:
             ]
         }
         result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert not isinstance(result, list)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
         assert result["description"] == "Get weather info"
@@ -71,8 +72,39 @@ class TestGoogleGenAIToolOps:
         }
         provider = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
         restored = GoogleGenAIToolOps.p_tool_definition_to_ir(provider)
+        assert not isinstance(restored, list)
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
+
+    def test_p_tool_definition_camelcase(self):
+        """Test camelCase functionDeclarations (REST/Gemini CLI format)."""
+        provider_tool = {
+            "functionDeclarations": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                }
+            ]
+        }
+        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert not isinstance(result, list)
+        assert result["name"] == "get_weather"
+
+    def test_p_tool_definition_multiple_declarations(self):
+        """Test multiple function declarations in a single tool entry."""
+        provider_tool = {
+            "functionDeclarations": [
+                {"name": "tool_a", "description": "A"},
+                {"name": "tool_b", "description": "B"},
+                {"name": "tool_c", "description": "C"},
+            ]
+        }
+        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert result[0]["name"] == "tool_a"
+        assert result[1]["name"] == "tool_b"
+        assert result[2]["name"] == "tool_c"
 
     # ==================== Tool Choice ====================
 
@@ -143,6 +175,13 @@ class TestGoogleGenAIToolOps:
         provider = GoogleGenAIToolOps.ir_tool_choice_to_p(original)
         restored = GoogleGenAIToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == original["mode"]
+
+    def test_p_tool_choice_camelcase(self):
+        """Test camelCase functionCallingConfig (REST format)."""
+        result = GoogleGenAIToolOps.p_tool_choice_to_ir(
+            {"functionCallingConfig": {"mode": "ANY"}}
+        )
+        assert result["mode"] == "any"
 
     # ==================== Tool Call ====================
 

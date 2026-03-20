@@ -340,13 +340,21 @@ class GoogleGenAIConverter(BaseConverter):
         # Tools — check SDK config first, then REST top-level
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
-            ir_tools = []
+            ir_tools: list = []
             for t in tools:
-                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+                result = self.tool_ops.p_tool_definition_to_ir(t)
+                if isinstance(result, list):
+                    ir_tools.extend(result)
+                else:
+                    ir_tools.append(result)
             ir_request["tools"] = ir_tools
 
-        # Tool choice — check SDK config first, then REST top-level
-        tool_config = config.get("tool_config") or provider_request.get("tool_config")
+        # Tool choice — check SDK/REST snake_case/camelCase
+        tool_config = (
+            config.get("tool_config")
+            or provider_request.get("tool_config")
+            or provider_request.get("toolConfig")
+        )
         if tool_config:
             ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_config)
 
