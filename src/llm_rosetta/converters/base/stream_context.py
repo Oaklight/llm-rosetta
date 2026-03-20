@@ -32,6 +32,11 @@ class StreamContext:
         self.pending_finish: dict | None = None
         self._started: bool = False
         self._ended: bool = False
+        # Tool call accumulation for streaming
+        self._tool_call_args: dict[str, str] = {}  # call_id -> accumulated args
+        self._tool_call_order: list[str] = []  # call_ids in order received
+        # item_id -> call_id mapping (OpenAI uses item_id in delta events)
+        self._item_id_to_call_id: dict[str, str] = {}
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.
@@ -50,6 +55,31 @@ class StreamContext:
             tool_name: The name of the tool being called.
         """
         self.tool_call_id_map[tool_call_id] = tool_name
+        self._tool_call_args[tool_call_id] = ""
+        if tool_call_id not in self._tool_call_order:
+            self._tool_call_order.append(tool_call_id)
+
+    def append_tool_call_args(self, tool_call_id: str, delta: str) -> None:
+        """Append argument delta to accumulated tool call arguments.
+
+        Args:
+            tool_call_id: The tool call identifier.
+            delta: The argument text delta to append.
+        """
+        if tool_call_id not in self._tool_call_args:
+            self._tool_call_args[tool_call_id] = ""
+            if tool_call_id not in self._tool_call_order:
+                self._tool_call_order.append(tool_call_id)
+        self._tool_call_args[tool_call_id] += delta
+
+    def set_tool_call_args(self, tool_call_id: str, arguments: str) -> None:
+        """Set the final arguments for a tool call.
+
+        Args:
+            tool_call_id: The tool call identifier.
+            arguments: The complete arguments string.
+        """
+        self._tool_call_args[tool_call_id] = arguments
 
     def get_tool_name(self, tool_call_id: str) -> str:
         """Get tool name by tool call ID.

@@ -1084,18 +1084,18 @@ class TestStreamResponseToProviderWithContext:
             text_delta = text_results
         assert text_delta["type"] == "response.output_text.delta"
 
-        # 4. ContentBlockEndEvent
-        block_end_result = cast(
-            dict[str, Any],
-            self.converter.stream_response_to_provider(
-                cast(
-                    ContentBlockEndEvent,
-                    {"type": "content_block_end", "block_index": 0},
-                ),
-                context=ctx,
+        # 4. ContentBlockEndEvent — returns output_text.done + content_part.done
+        block_end_results = self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockEndEvent,
+                {"type": "content_block_end", "block_index": 0},
             ),
+            context=ctx,
         )
-        assert block_end_result["type"] == "response.content_part.done"
+        assert isinstance(block_end_results, list)
+        assert len(block_end_results) == 2
+        assert block_end_results[0]["type"] == "response.output_text.done"
+        assert block_end_results[1]["type"] == "response.content_part.done"
 
         # 5. UsageEvent → stored, no output
         usage_result = cast(
@@ -1154,7 +1154,10 @@ class TestStreamResponseToProviderWithContext:
             all_results.extend(block_start_results)
         else:
             all_results.append(block_start_results)
-        all_results.append(block_end_result)
+        if isinstance(block_end_results, list):
+            all_results.extend(block_end_results)
+        else:
+            all_results.append(block_end_results)
         if isinstance(text_results, list):
             all_results.extend(text_results)
         else:

@@ -620,15 +620,20 @@ class OpenAIResponsesConverter(BaseConverter):
                 item_type = item.get("type", "")
 
                 if item_type == "function_call":
+                    call_id = item.get("call_id", "")
+                    item_id = item.get("id", "")
+
                     # Register tool call in context
                     if context is not None:
-                        context.register_tool_call(
-                            item.get("call_id", ""), item.get("name", "")
-                        )
+                        context.register_tool_call(call_id, item.get("name", ""))
+                        # Map item_id -> call_id (upstream uses item_id in
+                        # delta/done events, not call_id)
+                        if item_id:
+                            context._item_id_to_call_id[item_id] = call_id
 
                     start_event_tc = ToolCallStartEvent(
                         type="tool_call_start",
-                        tool_call_id=item.get("call_id", ""),
+                        tool_call_id=call_id,
                         tool_name=item.get("name", ""),
                     )
                     output_index = chunk.get("output_index")
@@ -676,24 +681,54 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # --- Output item done ---
         elif event_type == "response.output_item.done":
-            # Message-level done — no IR event needed.  The actual content
-            # block end is signaled by ``response.content_part.done`` which
-            # produces its own ``ContentBlockEndEvent``.  Emitting one here
-            # would cause duplicate ``response.content_part.done`` events
-            # on round-trip.
-            pass
+            # For function_call items, store the completed item in context
+            # so it can be included in the response.completed output array.
+            # Message-level done is a no-op (content_part.done handles it).
+            item = chunk.get("item", {})
+            if isinstance(item, dict) and item.get("type") == "function_call":
+                if context is not None:
+                    call_id = item.get("call_id", "")
+                    if call_id:
+                        context.set_tool_call_args(
+                            call_id, item.get("arguments", "")
+                        )
 
         # --- Tool call arguments delta ---
         elif event_type == "response.function_call_arguments.delta":
+            delta_text = chunk.get("delta", "")
+            # Upstream may send call_id or item_id — resolve to call_id
+            call_id = chunk.get("call_id", "")
+            if not call_id and context is not None:
+                item_id = chunk.get("item_id", "")
+                if item_id:
+                    call_id = context._item_id_to_call_id.get(item_id, "")
             delta_event = ToolCallDeltaEvent(
                 type="tool_call_delta",
-                tool_call_id=chunk.get("call_id", ""),
-                arguments_delta=chunk.get("delta", ""),
+                tool_call_id=call_id,
+                arguments_delta=delta_text,
             )
             output_index = chunk.get("output_index")
             if output_index is not None:
                 delta_event["tool_call_index"] = output_index
+
+            # Accumulate arguments in context
+            if context is not None and call_id:
+                context.append_tool_call_args(call_id, delta_text)
+
             events.append(delta_event)
+
+        # --- Tool call arguments done ---
+        elif event_type == "response.function_call_arguments.done":
+            # Resolve call_id from item_id if needed
+            call_id = chunk.get("call_id", "")
+            if not call_id and context is not None:
+                item_id = chunk.get("item_id", "")
+                if item_id:
+                    call_id = context._item_id_to_call_id.get(item_id, "")
+            arguments = chunk.get("arguments", "")
+            # Store final arguments in context
+            if context is not None and call_id:
+                context.set_tool_call_args(call_id, arguments)
 
         # --- Response completed ---
         elif event_type == "response.completed":
@@ -768,8 +803,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 events.append(StreamEndEvent(type="stream_end"))
 
         # All other event types (response.in_progress,
-        # response.output_text.done,
-        # response.function_call_arguments.done, etc.) are ignored.
+        # response.output_text.done, etc.) are ignored.
 
         return events
 
@@ -863,6 +897,23 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_content_block_end_event(event):
             if context is not None:
                 context._content_part_done_emitted = True  # type: ignore[attr-defined]
+                accumulated = getattr(context, "_accumulated_text", "")
+                # Emit output_text.done before content_part.done (matches
+                # OpenAI's event ordering)
+                return [
+                    {
+                        "type": "response.output_text.done",
+                        "output_index": 0,
+                        "content_index": 0,
+                        "text": accumulated,
+                    },
+                    {
+                        "type": "response.content_part.done",
+                        "output_index": 0,
+                        "content_index": 0,
+                        "part": {"type": "output_text", "text": accumulated},
+                    },
+                ]
             return {
                 "type": "response.content_part.done",
                 "part": {
@@ -926,12 +977,19 @@ class OpenAIResponsesConverter(BaseConverter):
             }
 
         elif is_tool_call_start_event(event):
+            call_id = event["tool_call_id"]
+            tool_name = event["tool_name"]
+
+            # Register in context for later done events
+            if context is not None and call_id:
+                context.register_tool_call(call_id, tool_name)
+
             result: dict[str, Any] = {
                 "type": "response.output_item.added",
                 "item": {
                     "type": "function_call",
-                    "call_id": event["tool_call_id"],
-                    "name": event["tool_name"],
+                    "call_id": call_id,
+                    "name": tool_name,
                 },
             }
             tc_index = event.get("tool_call_index")
@@ -940,10 +998,17 @@ class OpenAIResponsesConverter(BaseConverter):
             return result
 
         elif is_tool_call_delta_event(event):
+            call_id = event["tool_call_id"]
+            delta = event["arguments_delta"]
+
+            # Accumulate arguments in context for done events
+            if context is not None and call_id:
+                context.append_tool_call_args(call_id, delta)
+
             result: dict[str, Any] = {
                 "type": "response.function_call_arguments.delta",
-                "call_id": event["tool_call_id"],
-                "delta": event["arguments_delta"],
+                "call_id": call_id,
+                "delta": delta,
             }
             tc_index = event.get("tool_call_index")
             if tc_index is not None:
@@ -954,7 +1019,7 @@ class OpenAIResponsesConverter(BaseConverter):
             reason = event["finish_reason"]["reason"]
             status = "completed"
 
-            # Build the output array with accumulated text
+            # Build the output array with accumulated content
             output: list[dict[str, Any]] = []
             if context is not None:
                 accumulated = getattr(context, "_accumulated_text", "")
@@ -966,6 +1031,21 @@ class OpenAIResponsesConverter(BaseConverter):
                             "type": "message",
                             "role": "assistant",
                             "content": [{"type": "output_text", "text": accumulated}],
+                        }
+                    )
+
+                # Add accumulated function calls to output
+                for call_id in context._tool_call_order:
+                    tool_name = context.get_tool_name(call_id)
+                    arguments = context._tool_call_args.get(call_id, "")
+                    output.append(
+                        {
+                            "id": f"fc_{call_id}",
+                            "type": "function_call",
+                            "call_id": call_id,
+                            "name": tool_name,
+                            "arguments": arguments,
+                            "status": "completed",
                         }
                     )
 
@@ -993,34 +1073,82 @@ class OpenAIResponsesConverter(BaseConverter):
                     "total_tokens": context.pending_usage.get("total_tokens") or 0,
                 }
 
-            # Emit content_part.done + output_item.done before response.completed
+            # Emit done events before response.completed
             results: list[dict[str, Any]] = []
-            if context is not None and getattr(context, "_output_item_emitted", False):
-                accumulated = getattr(context, "_accumulated_text", "")
-                item_id = getattr(context, "_item_id", "")
-                # Only emit content_part.done if not already emitted by
-                # a prior ContentBlockEndEvent
-                if not getattr(context, "_content_part_done_emitted", False):
+
+            if context is not None:
+                # Emit text done events if we had text output
+                if getattr(context, "_output_item_emitted", False):
+                    accumulated = getattr(context, "_accumulated_text", "")
+                    item_id = getattr(context, "_item_id", "")
+
+                    # Only emit output_text.done + content_part.done if not
+                    # already emitted by a prior ContentBlockEndEvent
+                    if not getattr(context, "_content_part_done_emitted", False):
+                        results.append(
+                            {
+                                "type": "response.output_text.done",
+                                "output_index": 0,
+                                "content_index": 0,
+                                "text": accumulated,
+                            }
+                        )
+                        results.append(
+                            {
+                                "type": "response.content_part.done",
+                                "output_index": 0,
+                                "content_index": 0,
+                                "part": {"type": "output_text", "text": accumulated},
+                            }
+                        )
                     results.append(
                         {
-                            "type": "response.content_part.done",
+                            "type": "response.output_item.done",
                             "output_index": 0,
-                            "content_index": 0,
-                            "part": {"type": "output_text", "text": accumulated},
+                            "item": {
+                                "id": item_id,
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [
+                                    {"type": "output_text", "text": accumulated}
+                                ],
+                            },
                         }
                     )
-                results.append(
-                    {
-                        "type": "response.output_item.done",
-                        "output_index": 0,
-                        "item": {
-                            "id": item_id,
-                            "type": "message",
-                            "role": "assistant",
-                            "content": [{"type": "output_text", "text": accumulated}],
-                        },
-                    }
-                )
+
+                # Emit done events for each tool call
+                for tc_idx, call_id in enumerate(context._tool_call_order):
+                    tool_name = context.get_tool_name(call_id)
+                    arguments = context._tool_call_args.get(call_id, "")
+                    output_index = tc_idx + (
+                        1 if getattr(context, "_output_item_emitted", False) else 0
+                    )
+
+                    # response.function_call_arguments.done
+                    results.append(
+                        {
+                            "type": "response.function_call_arguments.done",
+                            "call_id": call_id,
+                            "output_index": output_index,
+                            "arguments": arguments,
+                        }
+                    )
+
+                    # response.output_item.done for the function_call
+                    results.append(
+                        {
+                            "type": "response.output_item.done",
+                            "output_index": output_index,
+                            "item": {
+                                "id": f"fc_{call_id}",
+                                "type": "function_call",
+                                "call_id": call_id,
+                                "name": tool_name,
+                                "arguments": arguments,
+                                "status": "completed",
+                            },
+                        }
+                    )
 
             results.append(
                 {
