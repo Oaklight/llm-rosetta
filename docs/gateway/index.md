@@ -345,6 +345,38 @@ codex "your prompt here"
 
 **支持功能**：对话、多轮对话、工具调用、流式传输 ✓
 
+### Ollama
+
+[Ollama](https://ollama.com/)（v0.13+）在本地提供 OpenAI 兼容接口，非常适合作为网关的上游提供商或客户端。
+
+#### 将 Ollama 作为上游提供商
+
+将网关提供商指向本地 Ollama 实例：
+
+```jsonc
+"providers": {
+  "openai_chat": { "api_key": "ollama", "base_url": "http://localhost:11434/v1" }
+},
+"models": {
+  "llama3.2": "openai_chat",
+  "qwen3:8b": "openai_chat"
+}
+```
+
+这样任何客户端（Anthropic SDK、Google SDK 等）都可以通过网关查询本地 Ollama 模型，格式自动转换。
+
+#### 将 Ollama 作为客户端
+
+Ollama v0.13+ 支持网关可以提供的三种 API 格式：
+
+| Ollama 端点 | 网关路由 | 转换器 |
+|---|---|---|
+| `/v1/chat/completions` | 相同 | `openai_chat` |
+| `/v1/responses` | 相同 | `openai_responses`（v0.13.3+） |
+| `/v1/messages` | 相同 | `anthropic`（v0.14.0+） |
+
+这意味着基于 Ollama OpenAI 兼容层构建的工具可以通过网关访问云提供商（Anthropic、Google 等），无需更改代码——只需将 base URL 指向网关即可。
+
 ### Gemini CLI
 
 Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
