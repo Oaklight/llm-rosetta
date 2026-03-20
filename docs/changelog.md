@@ -6,7 +6,7 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
-## 未发布
+## v0.2.1 — 2026-03-20
 
 ### 新增
 
@@ -25,6 +25,8 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - OpenAI Chat 流式传输：usage-only 数据块现在包含 `"choices": []`，以满足要求每个 `chat.completion.chunk` 必须包含 `choices` 数组的客户端验证（#55）
 - `stream_options`（Chat Completions 专用字段）不再泄漏到 OpenAI Responses API 请求中 — Responses 转换器的 `ir_stream_config_to_p()` 之前错误地输出了 `stream_options`，导致 Chat 格式客户端（Kilo、OpenCode）通过网关代理到 Responses API 时被上游拒绝（#58）
 - Google GenAI 转换器现在可以处理 REST 格式请求中顶层的 tools 和 tool_config（除了 SDK 格式的 `config.tools`）— 之前只识别 SDK 格式，导致网关代理请求中的工具定义被静默丢弃（#59）
+- Google camelCase `functionDeclarations` 未解析：`p_tool_definition_to_ir()` 现在同时处理 `functionDeclarations`（camelCase/REST）和 `function_declarations`（snake_case/SDK），并提取所有声明而非仅第一个。同时为 `functionCallingConfig`/`allowedFunctionNames` 和 `toolConfig` 添加 camelCase 支持 — 修复 Gemini CLI 通过网关的工具调用（#61）
+- Google 流式工具调用被拆分为两个 chunk：`stream_response_to_provider()` 现在延迟 `tool_call_start`，在 `tool_call_delta` 时发送完整的 `function_call`（name + args），匹配 Google API 的原生格式（#62）
 
 ## v0.2.0 — 2026-03-18
 
