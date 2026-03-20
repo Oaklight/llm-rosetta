@@ -145,17 +145,19 @@ The core request shape (`POST /v1/responses` with `model`, `input`, `instruction
 
 ### Overview
 
-Ollama is a local LLM runner (Go-based). It exposes **two API surfaces**:
+Ollama is a local LLM runner (Go-based). It exposes **three API surfaces**:
 
 1. **Native Ollama API** — custom endpoints under `/api/`
-2. **OpenAI-compatible API** — at `/v1/` prefix, supporting OpenAI Chat Completions format
+2. **OpenAI-compatible API** — at `/v1/` prefix (Chat Completions, Completions, Embeddings, Models)
+3. **Anthropic-compatible API** — at `/v1/messages` (since v0.14.0)
 
 ### OpenAPI Spec
 
-- **Official**: Yes, at `docs/openapi.yaml` in the repo
+- **Official**: Yes, OpenAPI 3.1.0 at `docs/openapi.yaml` in the repo
 - **Repo**: https://github.com/ollama/ollama
 - **Raw URL**: `https://raw.githubusercontent.com/ollama/ollama/main/docs/openapi.yaml`
-- **Notes**: Covers both native and OpenAI-compatible endpoints. Community issue requesting kept-up-to-date spec: https://github.com/ollama/ollama/issues/3383
+- **Coverage**: Native Ollama API endpoints (`/api/*`); the OpenAI-compatible `/v1/*` endpoints follow the OpenAI spec
+- **Notes**: Community issue requesting kept-up-to-date spec: https://github.com/ollama/ollama/issues/3383
 
 ### Native API Endpoints (`/api/`)
 
@@ -165,6 +167,7 @@ Ollama is a local LLM runner (Go-based). It exposes **two API surfaces**:
 | `/api/chat` | POST | Chat completion (Ollama-native format) |
 | `/api/embed` | POST | Generate embeddings |
 | `/api/tags` | GET | List local models |
+| `/api/ps` | GET | List running/loaded models |
 | `/api/show` | POST | Show model info |
 | `/api/pull` | POST | Pull a model |
 | `/api/push` | POST | Push a model |
@@ -172,29 +175,41 @@ Ollama is a local LLM runner (Go-based). It exposes **two API surfaces**:
 | `/api/copy` | POST | Copy a model |
 | `/api/delete` | DELETE | Delete a model |
 | `/api/blobs/:digest` | HEAD/POST | Check/create blobs |
+| `/api/version` | GET | Get Ollama version |
 
 ### OpenAI-Compatible Endpoints (`/v1/`)
 
-| Endpoint | Method | Supported |
+| Endpoint | Method | Since |
 |---|---|---|
-| `/v1/chat/completions` | POST | Yes (streaming + non-streaming) |
-| `/v1/completions` | POST | Yes |
-| `/v1/models` | GET | Yes |
-| `/v1/models/:model` | GET | Yes |
-| `/v1/embeddings` | POST | Yes |
+| `/v1/chat/completions` | POST | Early versions |
+| `/v1/completions` | POST | Early versions |
+| `/v1/models` | GET | Early versions |
+| `/v1/models/:model` | GET | Early versions |
+| `/v1/embeddings` | POST | Early versions |
+| `/v1/responses` | POST | **v0.13.3** |
+| `/v1/messages` | POST | **v0.14.0** (Anthropic format) |
+
+### Responses API Support
+
+**Yes, since Ollama v0.13.3.** Ollama implements the non-stateful flavor of the OpenAI Responses API at `/v1/responses`.
+
+Supported: streaming, tools/function calling, reasoning summaries.
+Not supported: `previous_response_id`, `conversation`, `truncation`.
+
+Ollama is also listed as an **Open Responses early adopter** — the `/v1/responses` endpoint is compatible with the Open Responses standard.
 
 ### Key Differences from Standard OpenAI Chat API
 
-- Tool calling supported via OpenAI-compatible format
-- Vision/image input supported (base64)
-- Structured output / JSON mode supported
-- No support for `logprobs`, `logit_bias`, `n > 1`
-- No Responses API (`/v1/responses`) support currently
-- Open Responses support: listed as early adopter but not yet shipping
+- `api_key` required in SDK clients but ignored (no auth by default)
+- No support for `logprobs`, `logit_bias`, `n > 1`, image URLs (base64 only)
+- Uses Ollama model names (e.g., `llama3.2`, `qwen3:8b`)
+- Native API durations in nanoseconds
+- Defaults `stream: true` in native API
+- Supports `think` parameter and `reasoning_effort` for reasoning models
 
 ### Relevance to llm-rosetta
 
-Ollama's OpenAI-compatible endpoints already work with llm-rosetta's `openai_chat` converter out of the box. The native `/api/chat` format is close to OpenAI Chat but has differences (e.g., `options` instead of top-level params, different streaming format). A dedicated Ollama native converter would only be needed if users want to target the `/api/` endpoints directly.
+Ollama's OpenAI-compatible endpoints work with llm-rosetta's `openai_chat` converter, and its `/v1/responses` works with the `openai_responses` converter. The `/v1/messages` endpoint works with the `anthropic` converter. **All three of llm-rosetta's major converters are already compatible with Ollama out of the box.** A dedicated Ollama native converter would only be needed for the `/api/` endpoints.
 
 ---
 
@@ -205,50 +220,72 @@ Ollama's OpenAI-compatible endpoints already work with llm-rosetta's `openai_cha
 TGI is HF's open-source inference server (Rust + Python). It exposes:
 
 1. **Native TGI API** — custom endpoints (`/generate`, `/generate_stream`, `/info`, `/health`)
-2. **OpenAI-compatible Messages API** — at `/v1/chat/completions`
+2. **OpenAI-compatible Messages API** — at `/v1/chat/completions` (since TGI v1.4.0)
+
+HF also operates **Inference Providers**, a cloud routing layer at `https://router.huggingface.co/v1` that supports additional API formats.
 
 ### OpenAPI Spec
 
 - **Official**: Yes, at `docs/openapi.json` in the repo
 - **Repo**: https://github.com/huggingface/text-generation-inference
 - **Raw URL**: `https://raw.githubusercontent.com/huggingface/text-generation-inference/main/docs/openapi.json`
+- **Published**: https://huggingface.github.io/text-generation-inference/openapi.json
 - **Interactive docs**: Any running TGI instance serves Swagger UI at `/docs`
 - **Notes**: Auto-generated from Rust code, covers both native and OpenAI-compatible endpoints
 
-### Native TGI Endpoints
+### TGI Endpoints
 
 | Endpoint | Method | Description |
 |---|---|---|
-| `/` | POST | Generate (legacy, same as `/generate`) |
-| `/generate` | POST | Generate text |
+| `/` | POST | Generate (legacy) |
+| `/generate` | POST | Generate text (non-streaming) |
 | `/generate_stream` | POST | Stream text generation (SSE) |
-| `/info` | GET | Model info |
+| `/v1/chat/completions` | POST | OpenAI Chat Completions compatible |
+| `/v1/completions` | POST | OpenAI Completions compatible |
+| `/v1/models` | GET | List model(s) |
+| `/chat_tokenize` | POST | Tokenize a chat request |
+| `/tokenize` | POST | Tokenize raw input |
 | `/health` | GET | Health check |
+| `/info` | GET | Model and server info |
 | `/metrics` | GET | Prometheus metrics |
+| `/invocations` | POST | AWS SageMaker compatibility |
 
-### OpenAI-Compatible Endpoints
+### HF Inference Providers Router
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/v1/chat/completions` | POST | Chat completions (streaming + non-streaming) |
-| `/v1/completions` | POST | Text completions |
-| `/v1/models` | GET | List models |
+| Endpoint | Base URL |
+|---|---|
+| Chat Completions | `https://router.huggingface.co/v1/chat/completions` |
+| Completions | `https://router.huggingface.co/v1/completions` |
+| **Responses API** | `https://router.huggingface.co/v1/responses` |
+| Models | `https://router.huggingface.co/v1/models` |
+
+The router aggregates 15+ backend providers (Groq, Nebius, Together AI, etc.) with routing policies: `:fastest`, `:cheapest`, `:preferred`, or specific provider selection.
+
+### Responses API / Open Responses Support
+
+**Yes, both supported via HF Inference Providers.**
+
+The Responses API is available (beta) at `https://router.huggingface.co/v1/responses`. Features:
+- Plain text and multimodal inputs, multi-turn conversations
+- Event-based streaming (`response.created`, `output_text.delta`, `response.completed`)
+- Tool calling, structured outputs, remote MCP execution
+- Reasoning effort controls (`low`, `medium`, `high`)
+
+HF is a **primary backer** of the Open Responses specification. Blog: https://huggingface.co/blog/open-responses
+
+Note: TGI itself does NOT implement Responses API — only the cloud Inference Providers router does.
 
 ### Key Differences from Standard OpenAI Chat API
 
-- Tool calling supported (model-dependent)
-- Structured output / JSON grammar supported
-- Additional TGI-specific params: `repetition_penalty`, `best_of`, `do_sample`, `watermark`, `decoder_input_details`
-- No Responses API support currently
-- HF is an Open Responses launch partner but TGI doesn't implement it yet
-
-### HF Inference Providers
-
-HF also offers a cloud "Inference Providers" service that routes to multiple backends (Nebius, AWS, Azure, etc.). These expose the same OpenAI-compatible `/v1/chat/completions` endpoint. The `huggingface_hub.InferenceClient` can be used interchangeably with OpenAI's client.
+- TGI serves a single model per instance; model param often ignored
+- Additional params: `best_of`, `decoder_input_details`, `top_n_tokens`, `typical_p`, `watermark`, `repetition_penalty`, `grammar`
+- No embeddings endpoint in TGI (separate Text Embeddings Inference server)
+- HF auth via `hf_XXX` Bearer token
+- Inference Providers uses HF Hub model IDs (e.g., `Qwen/Qwen2.5-VL-7B-Instruct`)
 
 ### Relevance to llm-rosetta
 
-Like Ollama, TGI's OpenAI-compatible endpoints already work with llm-rosetta's `openai_chat` converter. The native TGI format (`/generate`) is simpler (no messages array, just a `inputs` string + `parameters` dict) and would need a separate converter only if targeting the native API.
+TGI's OpenAI-compatible endpoints work with llm-rosetta's `openai_chat` converter. The Inference Providers router's Responses API endpoint works with the `openai_responses` converter. Native TGI format (`/generate`) is simpler (just `inputs` string + `parameters` dict) and would only need a converter if targeting the native API directly.
 
 ---
 
@@ -257,26 +294,42 @@ Like Ollama, TGI's OpenAI-compatible endpoints already work with llm-rosetta's `
 ### mathisxy/llmir
 
 - **URL**: https://github.com/mathisxy/llmir
-- **What it does**: LLM Intermediate Representation — a TypeScript/JavaScript library for normalizing LLM API calls across providers
-- **Language**: TypeScript
-- **Status**: Very early stage, minimal activity
-- **Overlap**: Same concept as Oaklight/llm-rosetta (the original name was "llmir" before rebranding). Both aim to provide a universal IR for LLM provider message formats. However, mathisxy/llmir appears much less mature and comprehensive.
-- **Notes**: This repo took the "llmir" name after Oaklight rebranded to llm-rosetta
+- **What it does**: LLM Intermediate Representation — defines canonical Pydantic IR types (`AIMessage`, `AIChunkText`, `AIChunkFile`, `AITool`, etc.) with per-provider adapters (serializers)
+- **Language**: Python (Pydantic v2, Rich)
+- **Direction**: **Unidirectional** — IR → provider format only. No parser from provider format back to IR
+- **Adapters**: OpenAI, Ollama (extensible via `BaseAdapter`)
+- **Stars**: 0, **Forks**: 0
+- **Created**: 2026-01-09, **Last commit**: 2026-03-18 (actively maintained)
+- **CI/CD**: Yes (type checking, docs deployment, PyPI publishing as `llmir`)
+- **Tests**: None visible
+- **License**: MIT
+- **Key difference**: Users must construct messages in the llmir IR type system, then serialize out. Unlike llm-rosetta which converts between native provider formats bidirectionally
 
 ### bitlab-tech/llm-rosetta
 
 - **URL**: https://github.com/bitlab-tech/llm-rosetta
-- **What it does**: LLM Rosetta Stone — appears to be another LLM format conversion library
-- **Language**: Python
-- **Status**: Early stage
-- **Overlap**: Same name, same concept. Independent implementation.
-- **Notes**: Coincidental naming — "Rosetta Stone" is an obvious metaphor for translation/conversion between formats. Oaklight/llm-rosetta has significantly more features, maturity, and documentation.
+- **What it does**: Strategy-pattern based translation from OpenAI format to other providers
+- **Language**: TypeScript (uses `@huggingface/transformers` for chat templates)
+- **Direction**: **Unidirectional** — OpenAI → provider format only
+- **Providers**: Anthropic/Bedrock, Hugging Face custom models, Lingshu (medical), Gemma (WIP)
+- **Stars**: 0, **Forks**: 0
+- **Created**: 2025-10-08, **Last commit**: 2025-10-20 (**dormant — 5 months inactive**)
+- **Tests**: None (`"test": "echo \"Error: no test specified\" && exit 1"`)
+- **Published on npm**: `llm-rosetta` (name collision in the npm ecosystem)
+- **License**: MIT
+- **Key difference**: TypeScript (different ecosystem entirely), unidirectional, appears abandoned
 
-### Implications
+### Comparison Summary
 
-Neither competing repo poses a significant threat. Oaklight/llm-rosetta is substantially more mature with:
-- 4 complete bidirectional converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI)
-- Streaming support with StreamContext
-- A full gateway application
-- Comprehensive test suites
-- Published documentation (ReadTheDocs)
+| Dimension | Oaklight/llm-rosetta | mathisxy/llmir | bitlab-tech/llm-rosetta |
+|---|---|---|---|
+| **Language** | Python | Python | TypeScript |
+| **Direction** | Bidirectional (any ↔ any via IR) | IR → provider only | OpenAI → provider only |
+| **Providers** | 4 (OpenAI Chat, Responses, Anthropic, Google) | 2 (OpenAI, Ollama) | 4 (Bedrock, HF, Lingshu, Gemma) |
+| **Streaming** | Full support | No | Partial |
+| **Tests** | Comprehensive | None | None |
+| **Gateway** | Yes | No | No |
+| **Activity** | Very active | Active | Dormant |
+| **Package** | `llm-rosetta` on PyPI | `llmir` on PyPI | `llm-rosetta` on **npm** |
+
+Neither poses a competitive threat. Oaklight/llm-rosetta is the only project with bidirectional conversion, streaming, a gateway, and comprehensive tests.
