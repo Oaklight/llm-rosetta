@@ -41,12 +41,20 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Responses API uses a flat format:
         ``{"type": "function", "name": "...", "description": "...", "parameters": {...}}``
 
+        Non-function passthrough tools (e.g. ``web_search``) stored in
+        ``_passthrough`` are returned as-is.
+
         Args:
             ir_tool: IR tool definition.
 
         Returns:
             OpenAI Responses tool definition dict.
         """
+        # Return passthrough tools as-is (web_search, etc.)
+        passthrough = ir_tool.get("_passthrough")
+        if passthrough is not None:
+            return dict(passthrough)
+
         if ir_tool.get("type", "function") == "function":
             result: dict[str, Any] = {
                 "type": "function",
@@ -62,7 +70,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             "type": "custom",
             "name": f"{ir_tool['type']}_{ir_tool['name']}",
             "description": ir_tool.get("description", ""),
-            "parameters": ir_tool.get("parameters", {}),
+            "schema": ir_tool.get("parameters", {}),
         }
 
     @staticmethod
@@ -70,7 +78,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
         """OpenAI Responses tool definition → IR ToolDefinition.
 
         Handles both flat format (Responses API native) and nested format
-        (with ``function`` key).
+        (with ``function`` key).  Non-function tool types without a ``name``
+        field (e.g. ``web_search``) are stored as passthrough so they can be
+        round-tripped without modification.
 
         Args:
             provider_tool: OpenAI Responses tool definition dict.
@@ -88,12 +98,31 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "parameters": func.get("parameters", {}),
             }
         else:
+            tool_type = provider_tool.get("type", "function")
+            # Non-function tools without a name (e.g. web_search) should be
+            # stored as passthrough to avoid lossy conversion.
+            if tool_type != "function" and "name" not in provider_tool:
+                result = {
+                    "type": tool_type,
+                    "name": tool_type,
+                    "description": "",
+                    "parameters": {},
+                    "_passthrough": dict(provider_tool),
+                }
+                result["metadata"] = {}
+                result["required_parameters"] = []
+                return cast(ToolDefinition, result)
+
             # Flat format (Responses API native)
+            # Custom tools use "schema" instead of "parameters"
+            params = provider_tool.get("parameters", {})
+            if tool_type != "function" and not params:
+                params = provider_tool.get("schema", {})
             result = {
-                "type": provider_tool.get("type", "function"),
+                "type": tool_type,
                 "name": provider_tool.get("name", ""),
                 "description": provider_tool.get("description", ""),
-                "parameters": provider_tool.get("parameters", {}),
+                "parameters": params,
             }
 
         # Extract required_parameters from JSON Schema if available

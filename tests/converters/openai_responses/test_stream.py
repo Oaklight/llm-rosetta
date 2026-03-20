@@ -648,8 +648,11 @@ class TestStreamResponseFromProviderWithContext:
         assert events[0]["type"] == "tool_call_start"
         assert ctx.get_tool_name("call_abc") == "get_weather"
 
-    def test_output_item_added_message_emits_content_block_start(self):
-        """response.output_item.added (message) with context emits ContentBlockStartEvent."""
+    def test_output_item_added_message_emits_no_events(self):
+        """response.output_item.added (message) with context produces no IR events.
+
+        The actual content block is signaled by response.content_part.added.
+        """
         ctx = StreamContext()
         event = {
             "type": "response.output_item.added",
@@ -664,10 +667,7 @@ class TestStreamResponseFromProviderWithContext:
             list[Any],
             self.converter.stream_response_from_provider(event, context=ctx),
         )
-        assert len(events) == 1
-        assert events[0]["type"] == "content_block_start"
-        assert events[0]["block_type"] == "text"
-        assert events[0]["block_index"] == 0
+        assert len(events) == 0
 
     def test_output_item_added_message_without_context_no_events(self):
         """response.output_item.added (message) without context produces no events."""
@@ -747,8 +747,11 @@ class TestStreamResponseFromProviderWithContext:
         events = self.converter.stream_response_from_provider(event)
         assert events == []
 
-    def test_output_item_done_message_emits_content_block_end(self):
-        """response.output_item.done (message) with context emits ContentBlockEndEvent."""
+    def test_output_item_done_message_no_events(self):
+        """response.output_item.done (message) with context produces no IR events.
+
+        The actual content block end is signaled by response.content_part.done.
+        """
         ctx = StreamContext()
         ctx.next_block_index()  # set to 0
         event = {
@@ -763,9 +766,7 @@ class TestStreamResponseFromProviderWithContext:
             list[Any],
             self.converter.stream_response_from_provider(event, context=ctx),
         )
-        assert len(events) == 1
-        assert events[0]["type"] == "content_block_end"
-        assert events[0]["block_index"] == 0
+        assert len(events) == 0
 
     def test_text_delta_unchanged_with_context(self):
         """Text delta behavior is unchanged when context is provided."""
@@ -1051,30 +1052,30 @@ class TestStreamResponseToProviderWithContext:
         )
         assert start_result["type"] == "response.created"
 
-        # 2. ContentBlockStartEvent
-        block_start_result = cast(
-            dict[str, Any],
-            self.converter.stream_response_to_provider(
-                cast(
-                    ContentBlockStartEvent,
-                    {
-                        "type": "content_block_start",
-                        "block_index": 0,
-                        "block_type": "text",
-                    },
-                ),
-                context=ctx,
+        # 2. ContentBlockStartEvent — with context, first text block emits
+        # both output_item.added and content_part.added as a list.
+        block_start_results = self.converter.stream_response_to_provider(
+            cast(
+                ContentBlockStartEvent,
+                {
+                    "type": "content_block_start",
+                    "block_index": 0,
+                    "block_type": "text",
+                },
             ),
+            context=ctx,
         )
-        assert block_start_result["type"] == "response.content_part.added"
+        assert isinstance(block_start_results, list)
+        assert len(block_start_results) == 2
+        assert block_start_results[0]["type"] == "response.output_item.added"
+        assert block_start_results[1]["type"] == "response.content_part.added"
 
-        # 3. TextDeltaEvent (first delta with context returns a list:
-        #    output_item.added, content_part.added, then the delta itself)
+        # 3. TextDeltaEvent — output_item already emitted by ContentBlockStart,
+        #    so this should return a single delta (not a list).
         text_results = self.converter.stream_response_to_provider(
             cast(TextDeltaEvent, {"type": "text_delta", "text": "Hello"}),
             context=ctx,
         )
-        # May be a list (first delta with context) or a single dict
         if isinstance(text_results, list):
             text_delta = next(
                 r for r in text_results if r["type"] == "response.output_text.delta"
@@ -1145,12 +1146,15 @@ class TestStreamResponseToProviderWithContext:
         # Verify: only ONE response.completed was produced in the entire sequence
         all_results: list[Any] = [
             start_result,
-            block_start_result,
-            block_end_result,
             usage_result,
             end_result,
         ]
-        # Flatten list results (text_results and finish_results may be lists)
+        # Flatten list results
+        if isinstance(block_start_results, list):
+            all_results.extend(block_start_results)
+        else:
+            all_results.append(block_start_results)
+        all_results.append(block_end_result)
         if isinstance(text_results, list):
             all_results.extend(text_results)
         else:

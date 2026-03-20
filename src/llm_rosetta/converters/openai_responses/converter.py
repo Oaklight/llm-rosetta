@@ -211,9 +211,14 @@ class OpenAIResponsesConverter(BaseConverter):
         # 3. Tools
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = [
-                self.tool_ops.p_tool_definition_to_ir(t) for t in tools
-            ]
+            ir_tools = []
+            for t in tools:
+                # Skip disabled tools (e.g. web_search with external_web_access=false)
+                if isinstance(t, dict) and t.get("external_web_access") is False:
+                    continue
+                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+            if ir_tools:
+                ir_request["tools"] = ir_tools
 
         # 4. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -631,16 +636,14 @@ class OpenAIResponsesConverter(BaseConverter):
                         start_event_tc["tool_call_index"] = output_index
                     events.append(start_event_tc)
 
-                elif item_type == "message" and context is not None:
-                    # Message item added → ContentBlockStartEvent
-                    block_index = context.next_block_index()
-                    events.append(
-                        ContentBlockStartEvent(
-                            type="content_block_start",
-                            block_index=block_index,
-                            block_type="text",
-                        )
-                    )
+                elif item_type == "message":
+                    # Message-level output item — no IR event needed.
+                    # The actual content block is signaled by the subsequent
+                    # ``response.content_part.added`` event which produces its
+                    # own ``ContentBlockStartEvent``.  Emitting a
+                    # ``ContentBlockStartEvent`` here would cause duplicate
+                    # ``response.content_part.added`` events on round-trip.
+                    pass
 
         # --- Content part added ---
         elif event_type == "response.content_part.added":
@@ -673,15 +676,12 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # --- Output item done ---
         elif event_type == "response.output_item.done":
-            if context is not None:
-                item = chunk.get("item", {})
-                if isinstance(item, dict) and item.get("type") == "message":
-                    events.append(
-                        ContentBlockEndEvent(
-                            type="content_block_end",
-                            block_index=context.current_block_index,
-                        )
-                    )
+            # Message-level done — no IR event needed.  The actual content
+            # block end is signaled by ``response.content_part.done`` which
+            # produces its own ``ContentBlockEndEvent``.  Emitting one here
+            # would cause duplicate ``response.content_part.done`` events
+            # on round-trip.
+            pass
 
         # --- Tool call arguments delta ---
         elif event_type == "response.function_call_arguments.delta":
@@ -818,6 +818,38 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_content_block_start_event(event):
             block_type = event["block_type"]
             if block_type == "text":
+                # With context: emit output_item.added + content_part.added
+                # and mark the item as emitted so the first TextDelta doesn't
+                # re-emit them.
+                if context is not None and not getattr(
+                    context, "_output_item_emitted", False
+                ):
+                    context._output_item_emitted = True  # type: ignore[attr-defined]
+                    item_id = f"msg_{context.response_id or ''}"
+                    context._item_id = item_id  # type: ignore[attr-defined]
+                    return [
+                        {
+                            "type": "response.output_item.added",
+                            "output_index": 0,
+                            "item": {
+                                "id": item_id,
+                                "type": "message",
+                                "role": "assistant",
+                                "content": [],
+                            },
+                        },
+                        {
+                            "type": "response.content_part.added",
+                            "output_index": 0,
+                            "content_index": 0,
+                            "part": {
+                                "type": "output_text",
+                                "text": "",
+                            },
+                        },
+                    ]
+                # Fallback: just emit content_part.added (e.g. no context, or
+                # output item already emitted by a prior ContentBlockStartEvent)
                 return {
                     "type": "response.content_part.added",
                     "part": {
@@ -829,6 +861,8 @@ class OpenAIResponsesConverter(BaseConverter):
             return {}
 
         elif is_content_block_end_event(event):
+            if context is not None:
+                context._content_part_done_emitted = True  # type: ignore[attr-defined]
             return {
                 "type": "response.content_part.done",
                 "part": {
@@ -964,14 +998,17 @@ class OpenAIResponsesConverter(BaseConverter):
             if context is not None and getattr(context, "_output_item_emitted", False):
                 accumulated = getattr(context, "_accumulated_text", "")
                 item_id = getattr(context, "_item_id", "")
-                results.append(
-                    {
-                        "type": "response.content_part.done",
-                        "output_index": 0,
-                        "content_index": 0,
-                        "part": {"type": "output_text", "text": accumulated},
-                    }
-                )
+                # Only emit content_part.done if not already emitted by
+                # a prior ContentBlockEndEvent
+                if not getattr(context, "_content_part_done_emitted", False):
+                    results.append(
+                        {
+                            "type": "response.content_part.done",
+                            "output_index": 0,
+                            "content_index": 0,
+                            "part": {"type": "output_text", "text": accumulated},
+                        }
+                    )
                 results.append(
                     {
                         "type": "response.output_item.done",
