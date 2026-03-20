@@ -35,6 +35,18 @@ Provider C ──→ IR ──→ Provider D
 | Anthropic | Messages API | ✅ | ✅ | ✅ |
 | Google | GenAI API | ✅ | ✅ | ✅ |
 
+### Ollama 及其他 OpenAI 兼容服务
+
+LLM-Rosetta 可直接与任何提供 OpenAI 兼容接口的服务配合使用。[Ollama](https://ollama.com/)（v0.13+）是一个典型示例——它支持 LLM-Rosetta 所转换的四种 API 格式中的三种：
+
+| Ollama 端点 | LLM-Rosetta 转换器 | 起始版本 |
+|---|---|---|
+| `/v1/chat/completions` | `openai_chat` | 早期版本 |
+| `/v1/responses` | `openai_responses` | v0.13.3 |
+| `/v1/messages` | `anthropic` | v0.14.0 |
+
+其他兼容服务包括 [HuggingFace TGI](https://github.com/huggingface/text-generation-inference)、[vLLM](https://github.com/vllm-project/vllm) 和 [LM Studio](https://lmstudio.ai/)。
+
 ## 功能特性
 
 - 统一的 IR 格式，支持消息、工具调用和内容块

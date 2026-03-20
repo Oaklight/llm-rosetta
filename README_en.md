@@ -35,6 +35,18 @@ Provider C ──→ IR ──→ Provider D
 | Anthropic | Messages API | ✅ | ✅ | ✅ |
 | Google | GenAI API | ✅ | ✅ | ✅ |
 
+### Ollama & Other OpenAI-Compatible Servers
+
+LLM-Rosetta works out of the box with any server that exposes OpenAI-compatible endpoints. [Ollama](https://ollama.com/) (v0.13+) is a great example — it supports three of the four API formats that LLM-Rosetta converts between:
+
+| Ollama Endpoint | LLM-Rosetta Converter | Since |
+|---|---|---|
+| `/v1/chat/completions` | `openai_chat` | Early versions |
+| `/v1/responses` | `openai_responses` | v0.13.3 |
+| `/v1/messages` | `anthropic` | v0.14.0 |
+
+Other compatible servers include [HuggingFace TGI](https://github.com/huggingface/text-generation-inference), [vLLM](https://github.com/vllm-project/vllm), and [LM Studio](https://lmstudio.ai/).
+
 ## Features
 
 - Unified IR format for messages, tool calls, and content parts
