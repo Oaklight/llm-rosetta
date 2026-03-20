@@ -15,11 +15,11 @@ title: 网关验证报告
 
 | CLI 工具 | API 格式 | 源 → 目标 | 对话 | 流式 | 工具调用 | 多轮 |
 |---------|---------|----------|:----:|:----:|:------:|:----:|
-| [Codex CLI](https://github.com/openai/codex) | OpenAI Responses | `openai_responses` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | :white_check_mark: | :warning: | — | — |
+| [Codex CLI](https://github.com/openai/codex) | OpenAI Responses | `openai_responses` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | ✓ | ✓ | ✓ | ✓ |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | ✓ | ⚠ | — | — |
 
 ### 测试详情
 
@@ -73,11 +73,11 @@ Gemini CLI 使用 Google GenAI SDK。基本对话可以通过网关工作，但 
 
 | 测试 | 描述 | 状态 |
 |-----|------|:----:|
-| `simple_query.py` | 单轮流式查询 | :white_check_mark: 通过 |
-| `multi_round_chat.py` | 3 轮对话（斐波那契解释 → 代码 → 优化） | :white_check_mark: 通过 |
-| `multi_round_function_calling.py` | 3 轮工具调用（天气 → 温度转换 → 对比） | :white_check_mark: 通过 |
-| `multi_round_comprehensive.py` | 3 轮图像+工具调用（地标 → 天气 → 推荐） | :white_check_mark: 通过 |
-| `multi_round_image.py` | 3 轮视觉对话（描述 → 定位 → 知识） | :white_check_mark: 通过 |
+| `simple_query.py` | 单轮流式查询 | ✓ 通过 |
+| `multi_round_chat.py` | 3 轮对话（斐波那契解释 → 代码 → 优化） | ✓ 通过 |
+| `multi_round_function_calling.py` | 3 轮工具调用（天气 → 温度转换 → 对比） | ✓ 通过 |
+| `multi_round_comprehensive.py` | 3 轮图像+工具调用（地标 → 天气 → 推荐） | ✓ 通过 |
+| `multi_round_image.py` | 3 轮视觉对话（描述 → 定位 → 知识） | ✓ 通过 |
 
 ### 通过网关的 Google GenAI（curl）
 
@@ -85,9 +85,9 @@ Gemini CLI 使用 Google GenAI SDK。基本对话可以通过网关工作，但 
 
 | 轮次 | 请求 | 模型响应 | 状态 |
 |:---:|------|--------|:----:|
-| 1 | "What is 127 * 389?"，`calculator` 工具，`mode=ANY` | `functionCall: calculator({expression: "127 * 389"})` | :white_check_mark: |
-| 2 | 工具结果 `49403`，"add 100 to that" | `functionCall: calculator({expression: "49403 + 100"})` | :white_check_mark: |
-| 3 | 工具结果 `49503`，`mode=AUTO` | 文本："The result is 49503." | :white_check_mark: |
+| 1 | "What is 127 * 389?"，`calculator` 工具，`mode=ANY` | `functionCall: calculator({expression: "127 * 389"})` | ✓ |
+| 2 | 工具结果 `49403`，"add 100 to that" | `functionCall: calculator({expression: "49403 + 100"})` | ✓ |
+| 3 | 工具结果 `49503`，`mode=AUTO` | 文本："The result is 49503." | ✓ |
 
 使用 `gemini-2.5-flash-lite` 和 `gemini-3.1-flash-lite-preview` 均测试通过。两个模型都正确返回了带有 `thoughtSignature` 的函数调用。
 
@@ -97,10 +97,10 @@ Gemini CLI 使用 Google GenAI SDK。基本对话可以通过网关工作，但 
 
 | 源格式 | 目标提供商 | 已验证 |
 |-------|----------|:-----:|
-| OpenAI Chat → | OpenAI Responses | :white_check_mark: |
-| OpenAI Responses → | OpenAI Responses | :white_check_mark: |
-| Anthropic → | Anthropic (OpenRouter) | :white_check_mark: |
-| Google GenAI → | Google GenAI | :white_check_mark: |
+| OpenAI Chat → | OpenAI Responses | ✓ |
+| OpenAI Responses → | OpenAI Responses | ✓ |
+| Anthropic → | Anthropic (OpenRouter) | ✓ |
+| Google GenAI → | Google GenAI | ✓ |
 
 ---
 

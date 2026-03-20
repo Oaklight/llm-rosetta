@@ -12,10 +12,10 @@ LLM-Rosetta v0.2.0 支持 4 种提供商 API 之间的双向转换：
 
 | 提供商 | 格式 | 流式 | 工具调用 |
 |-------|------|:----:|:------:|
-| OpenAI Chat Completions | `openai_chat` | :white_check_mark: | :white_check_mark: |
-| OpenAI Responses | `openai_responses` | :white_check_mark: | :white_check_mark: |
-| Anthropic Messages | `anthropic` | :white_check_mark: | :white_check_mark: |
-| Google GenAI | `google` | :white_check_mark: | :white_check_mark: |
+| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
+| OpenAI Responses | `openai_responses` | ✓ | ✓ |
+| Anthropic Messages | `anthropic` | ✓ | ✓ |
+| Google GenAI | `google` | ✓ | ✓ |
 
 [网关](gateway/index.md)提供这些格式之间任意组合的实时 HTTP 代理，已通过 [5 种 CLI 工具和 SDK 测试套件验证](gateway/validation.md)。
 
