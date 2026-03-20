@@ -345,6 +345,38 @@ codex "your prompt here"
 
 **Supported**: chat, multi-turn, tool calls, streaming ✓
 
+### Ollama
+
+[Ollama](https://ollama.com/) (v0.13+) exposes OpenAI-compatible endpoints locally, making it a natural fit as both an upstream provider and a client target for the gateway.
+
+#### Using Ollama as an upstream provider
+
+Point a gateway provider at your local Ollama instance:
+
+```jsonc
+"providers": {
+  "openai_chat": { "api_key": "ollama", "base_url": "http://localhost:11434/v1" }
+},
+"models": {
+  "llama3.2": "openai_chat",
+  "qwen3:8b": "openai_chat"
+}
+```
+
+Then any client (Anthropic SDK, Google SDK, etc.) can query local Ollama models through the gateway with automatic format conversion.
+
+#### Using Ollama as a client
+
+Ollama v0.13+ supports three API formats that the gateway can serve:
+
+| Ollama Endpoint | Gateway Route | Converter |
+|---|---|---|
+| `/v1/chat/completions` | Same | `openai_chat` |
+| `/v1/responses` | Same | `openai_responses` (v0.13.3+) |
+| `/v1/messages` | Same | `anthropic` (v0.14.0+) |
+
+This means tools built on Ollama's OpenAI-compatible layer can use the gateway to reach cloud providers (Anthropic, Google, etc.) without code changes — just point the base URL at the gateway.
+
 ### Gemini CLI
 
 Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
