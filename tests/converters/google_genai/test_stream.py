@@ -477,7 +477,8 @@ class TestStreamResponseToProvider:
         assert part["text"] == "thinking..."
 
     def test_tool_call_start(self):
-        """ToolCallStartEvent → Google chunk with function_call."""
+        """ToolCallStartEvent → empty dict (deferred to delta)."""
+        ctx = StreamContext()
         event = cast(
             ToolCallStartEvent,
             {
@@ -487,13 +488,18 @@ class TestStreamResponseToProvider:
                 "choice_index": 0,
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
-        assert fc["name"] == "search"
-        assert fc["args"] == {}
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        # tool_call_start stores name in context, emits nothing
+        assert result == {}
+        assert ctx.get_tool_name("call_1") == "search"
 
     def test_tool_call_delta(self):
-        """ToolCallDeltaEvent → Google chunk with function_call args."""
+        """ToolCallDeltaEvent → Google chunk with complete function_call."""
+        ctx = StreamContext()
+        ctx.register_tool_call("call_1", "search")
         event = cast(
             ToolCallDeltaEvent,
             {
@@ -503,8 +509,12 @@ class TestStreamResponseToProvider:
                 "choice_index": 0,
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         fc = result["candidates"][0]["content"]["parts"][0]["function_call"]
+        assert fc["name"] == "search"
         assert fc["args"] == {"q": "test"}
 
     def test_tool_call_delta_invalid_json(self):

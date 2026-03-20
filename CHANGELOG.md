@@ -9,6 +9,7 @@
 - **`stream_options` leak into Responses API**: Removed `stream_options` emission from `ir_stream_config_to_p()` in the Responses converter — the Responses API does not accept this Chat Completions-only field. This caused upstream rejection when Chat-format clients (Kilo, OpenCode) were proxied to the Responses API (#58)
 - **Google REST-format tool definitions ignored**: `request_from_provider()` now checks both SDK format (`config.tools`) and REST top-level (`tools`, `tool_config`, `generationConfig`) — previously only SDK format was handled, silently stripping tools from gateway-proxied requests (#59)
 - **Google camelCase tool definitions not parsed**: `p_tool_definition_to_ir()` now handles both `functionDeclarations` (camelCase/REST) and `function_declarations` (snake_case/SDK), and extracts all declarations from a single tool entry instead of only the first. Also added camelCase support for `functionCallingConfig`/`allowedFunctionNames` and `toolConfig` in request parsing. This fixes Gemini CLI tool calling through the gateway (#60)
+- **Google streaming tool calls split into two chunks**: `stream_response_to_provider()` now defers `tool_call_start` and emits the complete `function_call` (name + args) in a single chunk on `tool_call_delta`, matching the Google API's native format. Previously, two separate chunks were emitted — one with name-only and one with args-only — which the `@google/genai` SDK could not parse correctly (#61)
 
 ## v0.2.0 (2026-03-17)
 

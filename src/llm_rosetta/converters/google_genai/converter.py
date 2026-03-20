@@ -911,37 +911,23 @@ class GoogleGenAIConverter(BaseConverter):
             }
 
         elif is_tool_call_start_event(event):
-            # Google sends complete function calls, so tool_call_start
-            # creates a function_call part with empty args (args come in delta)
-            choice_index = event.get("choice_index", 0)
-            return {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {
-                            "role": "model",
-                            "parts": [
-                                {
-                                    "function_call": {
-                                        "name": event["tool_name"],
-                                        "args": {},
-                                    }
-                                }
-                            ],
-                        },
-                    }
-                ]
-            }
+            # Google sends complete function calls in a single chunk.
+            # Store the tool name in context; the actual chunk is emitted
+            # on tool_call_delta when we have both name and args.
+            if context is not None:
+                context.register_tool_call(event["tool_call_id"], event["tool_name"])
+            return {}
 
         elif is_tool_call_delta_event(event):
-            # Google sends complete function calls; reconstruct from delta args
+            # Emit the complete function_call with name + args in one chunk,
+            # matching the Google API's native format.
             choice_index = event.get("choice_index", 0)
             try:
                 args = json.loads(event["arguments_delta"])
             except (json.JSONDecodeError, TypeError):
                 args = {}
 
-            # Recover tool name from context (P0 fix)
+            # Recover tool name from context
             tool_name = ""
             if context is not None:
                 tool_name = context.get_tool_name(event["tool_call_id"])
