@@ -1,5 +1,5 @@
 site_name: LLM-Rosetta
-site_description: Large Language Model Rosetta Stone - Unified message format conversion for LLM providers
+site_description: LLM-Rosetta - Unified message format conversion for LLM providers
 site_author: Peng Ding
 site_url: https://llm-rosetta.readthedocs.io/en/
 repo_name: Oaklight/llm-rosetta
