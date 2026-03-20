@@ -343,7 +343,7 @@ export ROSETTA_API_KEY=your-key
 codex "your prompt here"
 ```
 
-**支持功能**：对话、流式传输 ✅ | 工具调用 ⚠️（基本支持）
+**支持功能**：对话、多轮对话、工具调用、流式传输 :white_check_mark:
 
 ### Gemini CLI
 

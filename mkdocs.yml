@@ -100,6 +100,7 @@ nav:
       - 自动检测: guide/auto-detection.md
   - 网关:
       - gateway/index.md
+      - 验证报告: gateway/validation.md
   - 示例:
       - examples/index.md
       - 跨提供商对话: examples/cross-provider.md
@@ -109,4 +110,5 @@ nav:
       - 转换器: api/converters.md
       - IR 类型: api/types.md
       - 工具函数: api/utils.md
+  - 路线图: roadmap.md
   - 更新日志: changelog.md
