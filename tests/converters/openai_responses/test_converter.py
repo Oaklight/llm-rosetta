@@ -113,7 +113,8 @@ class TestOpenAIResponsesConverter:
         assert result["text"] == {"type": "json_object"}
         assert result["reasoning"] == {"effort": "medium"}
         assert result["stream"] is True
-        assert result["stream_options"] == {"include_usage": True}
+        # Responses API does NOT support stream_options (Chat-only field)
+        assert "stream_options" not in result
         assert result["prompt_cache_key"] == "test-cache"
         assert result["prompt_cache_retention"] == "24h"
         assert len(result["tools"]) == 1

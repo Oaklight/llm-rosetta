@@ -208,12 +208,16 @@ class TestOpenAIResponsesConfigOps:
     # ==================== Stream Config ====================
 
     def test_ir_stream_config_to_p(self):
-        """Test IR StreamConfig → OpenAI Responses stream params."""
+        """Test IR StreamConfig → OpenAI Responses stream params.
+
+        Responses API does NOT support stream_options (Chat-only field).
+        Usage is always included in Responses streaming events.
+        """
         result = OpenAIResponsesConfigOps.ir_stream_config_to_p(
             cast(StreamConfig, {"enabled": True, "include_usage": True})
         )
         assert result["stream"] is True
-        assert result["stream_options"] == {"include_usage": True}
+        assert "stream_options" not in result
 
     def test_ir_stream_config_disabled(self):
         """Test disabled stream."""
@@ -245,12 +249,18 @@ class TestOpenAIResponsesConfigOps:
         assert result == {}
 
     def test_stream_config_round_trip(self):
-        """Test stream config round-trip."""
+        """Test stream config round-trip.
+
+        Note: ``include_usage`` is NOT round-trippable for Responses API
+        because Responses doesn't support ``stream_options``.  Usage is
+        always included automatically in Responses streaming events.
+        """
         original = cast(StreamConfig, {"enabled": True, "include_usage": True})
         provider = OpenAIResponsesConfigOps.ir_stream_config_to_p(original)
         restored = OpenAIResponsesConfigOps.p_stream_config_to_ir(provider)
         assert restored["enabled"] is True
-        assert restored["include_usage"] is True
+        # include_usage is NOT preserved — Responses API always includes usage
+        assert "include_usage" not in restored
 
     # ==================== Reasoning Config ====================
 

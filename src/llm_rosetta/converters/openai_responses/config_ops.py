@@ -188,7 +188,10 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
 
         Mapping:
         - ``enabled`` → ``stream``
-        - ``include_usage`` → ``stream_options.include_usage``
+
+        Note: The Responses API does NOT support ``stream_options``
+        (that is a Chat Completions-only field).  Usage is always
+        included in Responses streaming events automatically.
 
         Args:
             ir_stream: IR stream config.
@@ -200,9 +203,6 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
 
         if "enabled" in ir_stream:
             result["stream"] = ir_stream["enabled"]
-
-        if ir_stream.get("include_usage") and ir_stream.get("enabled", False):
-            result["stream_options"] = {"include_usage": True}
 
         return result
 
