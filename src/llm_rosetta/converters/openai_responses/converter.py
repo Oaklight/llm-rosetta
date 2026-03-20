@@ -689,9 +689,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 if context is not None:
                     call_id = item.get("call_id", "")
                     if call_id:
-                        context.set_tool_call_args(
-                            call_id, item.get("arguments", "")
-                        )
+                        context.set_tool_call_args(call_id, item.get("arguments", ""))
 
         # --- Tool call arguments delta ---
         elif event_type == "response.function_call_arguments.delta":

@@ -368,8 +368,12 @@ class GoogleGenAIConverter(BaseConverter):
             ir_request["generation"] = gen_config
 
         # Response format — check both SDK config and REST top-level
-        response_mime_source = config if "response_mime_type" in config else (
-            provider_request if "response_mime_type" in provider_request else None
+        response_mime_source = (
+            config
+            if "response_mime_type" in config
+            else (
+                provider_request if "response_mime_type" in provider_request else None
+            )
         )
         if response_mime_source:
             ir_request["response_format"] = self.config_ops.p_response_format_to_ir(

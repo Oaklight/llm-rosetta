@@ -80,9 +80,9 @@ class GoogleGenAIToolOps(BaseToolOps):
             IR ToolDefinition or list of ToolDefinitions.
         """
         # Handle both snake_case and camelCase, wrapped and unwrapped formats
-        func_decls = provider_tool.get(
-            "function_declarations"
-        ) or provider_tool.get("functionDeclarations")
+        func_decls = provider_tool.get("function_declarations") or provider_tool.get(
+            "functionDeclarations"
+        )
 
         if func_decls:
             results: list[ToolDefinition] = []
