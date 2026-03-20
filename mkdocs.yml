@@ -100,6 +100,7 @@ nav:
       - Auto Detection: guide/auto-detection.md
   - Gateway:
       - gateway/index.md
+      - Validation: gateway/validation.md
   - Examples:
       - examples/index.md
       - Cross-Provider Conversation: examples/cross-provider.md
@@ -109,4 +110,5 @@ nav:
       - Converters: api/converters.md
       - IR Types: api/types.md
       - Utilities: api/utils.md
+  - Roadmap: roadmap.md
   - Changelog: changelog.md
