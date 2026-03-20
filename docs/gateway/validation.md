@@ -7,7 +7,7 @@ title: Gateway Validation
 This page documents end-to-end validation of the LLM-Rosetta Gateway with real-world CLI tools and SDK test suites, serving as proof of cross-provider compatibility.
 
 !!! info "Last updated: 2026-03-20"
-    Tested with llm-rosetta v0.2.0 (+ unreleased fixes for [#56](https://github.com/Oaklight/llm-rosetta/issues/56)–[#59](https://github.com/Oaklight/llm-rosetta/issues/59))
+    Tested with llm-rosetta v0.2.0 (+ unreleased fixes for [#56](https://github.com/Oaklight/llm-rosetta/issues/56)–[#62](https://github.com/Oaklight/llm-rosetta/issues/62))
 
 ## CLI Tool Compatibility
 
@@ -19,7 +19,7 @@ Five popular AI coding CLI tools were tested through the gateway. Each tool spea
 | [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
 | [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
 | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | ✓ | ✓ | ✓ | ✓ |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | ✓ | ⚠ | — | — |
+| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | ✓ | ✓ | ✓ | ✓ |
 
 ### Test Details
 
@@ -56,10 +56,46 @@ Claude Code uses the Anthropic Messages API. Tested with OpenRouter as the upstr
 
 #### Gemini CLI (Google GenAI API)
 
-Gemini CLI uses the Google GenAI SDK. Basic chat works through the gateway, but the CLI's streaming protocol has compatibility nuances (returns empty responses in some cases).
+Gemini CLI uses the `@google/genai` JS SDK (v1.30.0). Full compatibility achieved after fixing camelCase tool definition parsing (#61) and streaming tool call chunk format (#62).
 
 - **Model**: `gemini-2.5-flash-lite`
-- **Result**: Chat works. Streaming returns empty responses in CLI mode (likely JS SDK streaming protocol difference). Tool calling works via direct REST API calls (see below).
+- **Configuration**: `GOOGLE_GEMINI_BASE_URL=http://localhost:8765 GEMINI_API_KEY=dummy`
+- **Result**: Chat, streaming, and tool calling all work. Headless mode (`-p`) with tool calls exits cleanly; interactive mode displays full tool call round-trips.
+
+---
+
+## Integration Test Suite (`tests/integration/`)
+
+The integration test suite validates all four converter pipelines with real API calls using both official SDKs and direct REST. Each test covers non-streaming, streaming, tool calls, round-trip conversions, and multi-turn conversations.
+
+### Results Summary
+
+| Test Suite | Tests | Result |
+|-----------|:-----:|:------:|
+| Google GenAI SDK | 5 | **5/5** ✓ |
+| Google GenAI REST | 5 | **5/5** ✓ |
+| OpenAI Chat SDK | 7 | **7/7** ✓ |
+| OpenAI Chat REST | 7 | **7/7** ✓ |
+| OpenAI Responses SDK | 4 | **4/4** ✓ |
+| OpenAI Responses REST | 4 | **4/4** ✓ |
+| Anthropic SDK | 6 | **6/6** ✓ |
+| Anthropic REST | 6 | **6/6** ✓ |
+| **Total** | **44** | **44/44** ✓ |
+
+### Test Coverage Per Suite
+
+Each SDK/REST test suite covers:
+
+| Test | OpenAI Chat | OpenAI Responses | Anthropic | Google GenAI |
+|------|:-----------:|:----------------:|:---------:|:------------:|
+| Non-stream basic text | ✓ | ✓ | ✓ | ✓ |
+| Non-stream with image | ✓ | — | — | — |
+| Non-stream with tool calls | ✓ | ✓ | ✓ | ✓ |
+| Streaming text | ✓ | — | ✓ | — |
+| Streaming with tool calls | ✓ | — | ✓ | — |
+| Request round-trip | ✓ | ✓ | ✓ | ✓ |
+| Response round-trip | ✓ | ✓ | ✓ | ✓ |
+| Multi-turn conversation | — | — | — | ✓ |
 
 ---
 
@@ -112,11 +148,13 @@ Tested with both `gemini-2.5-flash-lite` and `gemini-3.1-flash-lite-preview`. Bo
 | [#57](https://github.com/Oaklight/llm-rosetta/issues/57) | OpenAI Chat streaming: `tool_calls` missing `index` field | Fixed in converter |
 | [#58](https://github.com/Oaklight/llm-rosetta/issues/58) | `stream_options` (Chat-only) leaked into Responses API requests | Removed from Responses `ir_stream_config_to_p()` |
 | [#59](https://github.com/Oaklight/llm-rosetta/issues/59) | Google converter ignored tools in REST-format requests | Added fallback to top-level fields |
+| [#61](https://github.com/Oaklight/llm-rosetta/issues/61) | Google camelCase `functionDeclarations` not parsed; only first declaration extracted | Handle both casings; extract all declarations |
+| [#62](https://github.com/Oaklight/llm-rosetta/issues/62) | Google streaming tool calls split into two chunks (name-only + args-only) | Defer `tool_call_start`, emit complete `function_call` on `tool_call_delta` |
 
 ---
 
 ## Known Limitations
 
-- **Gemini CLI**: Returns empty responses when streaming through the gateway — likely due to the Google GenAI JS SDK expecting a different streaming protocol than the gateway provides. Direct REST API calls work correctly.
 - **Claude Code**: Requires a valid upstream API key for the configured Anthropic provider. The gateway itself is transparent — auth errors are passed through from upstream.
 - **Image passthrough**: Not tested for cross-provider image routing (e.g., OpenAI Chat → Google GenAI with images). Same-provider image support works (Anthropic SDK test confirms vision through the gateway).
+- **Gemini CLI headless mode**: In non-interactive (`-p`) mode, tool call results may not be displayed by the CLI, though the round-trip completes successfully. This is a Gemini CLI display behavior, not a gateway issue.
