@@ -38,7 +38,7 @@ from llm_rosetta.types.ir import (
     extract_tool_calls,
 )
 
-dotenv.load_dotenv()
+dotenv.load_dotenv(override=True)
 
 # ============================================================================
 # Setup
