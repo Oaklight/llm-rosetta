@@ -54,14 +54,13 @@ anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
 
 ## Architecture
 
-```text
-OpenAI Chat ──────┐
-                   │
-OpenAI Responses ──┤
-                   ├──── IR (Intermediate Representation)
-Anthropic ─────────┤
-                   │
-Google GenAI ──────┘
+```mermaid
+flowchart LR
+    OC[OpenAI Chat] <--> IR
+    OR[OpenAI Responses] <--> IR
+    AN[Anthropic] <--> IR
+    GG[Google GenAI] <--> IR
+    IR[IR - Intermediate Representation]
 ```
 
 ## Documentation
