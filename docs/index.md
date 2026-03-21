@@ -54,14 +54,13 @@ anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
 
 ## 架构
 
-```text
-OpenAI Chat ──────┐
-                   │
-OpenAI Responses ──┤
-                   ├──── IR（中间表示）
-Anthropic ─────────┤
-                   │
-Google GenAI ──────┘
+```mermaid
+flowchart LR
+    OC[OpenAI Chat] <--> IR
+    OR[OpenAI Responses] <--> IR
+    AN[Anthropic] <--> IR
+    GG[Google GenAI] <--> IR
+    IR[IR - 中间表示]
 ```
 
 ## 文档目录
