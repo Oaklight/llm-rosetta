@@ -6,7 +6,7 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
-## v0.2.2 — 2026-03-22
+## v0.2.3 — 2026-03-22
 
 ### 修复
 
@@ -15,6 +15,15 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **通过内联解析 `$ref`/`$defs` 引用**：JSON Schema `$ref` 引用现在通过从 `$defs`/`definitions` 内联被引用的定义来解析，两个关键字均从输出中移除。支持嵌套和链式引用（#80）
 - **流式传输中工具调用参数未累积**：OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册了工具调用，但在流式传输期间从未调用 `append_tool_call_args()` 累积参数增量。这导致工具调用参数到达上游时为空（如 MCP 工具返回 `'query' is a required property`）。此前仅 OpenAI Responses 转换器正确处理（#81）
 - **OpenAI Chat 流式工具调用 ID 解析**：仅携带 `index` 而无 `id` 的增量 chunk 产生了空字符串 `tool_call_id`。现在通过 chunk 索引从 `StreamContext._tool_call_order` 解析有效 ID（#81）
+
+### 变更
+
+- **`sanitize_schema` 提取至 `converters/base/tools.py`**：Schema 清洗工具函数（此前为 `openai_chat/tool_ops.py` 中的私有函数 `_sanitize_schema`）现已提升为 `converters/base/tools.py` 中的公开共享函数，通过 `converters.base` 导出。所有 4 个转换器的 `tool_ops.py` 均从共享位置导入，消除了跨转换器的交叉导入依赖（#66）
+
+## v0.2.2 — 2026-03-22
+
+### 修复
+
 - **Anthropic SSE 输出缺少 `content_block_stop`**：将 OpenAI Chat 流式响应转换为 Anthropic SSE 格式时，`content_block_stop` 事件未在 `message_delta` 之前发送，导致 Claude Code 静默丢弃响应内容。Anthropic 转换器现在在处理 `FinishEvent` 时为任何打开的内容块发送 `content_block_stop`（#77）
 - **上游预检 chunk 被误判为流结束**：Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空的预检 chunk。OpenAI Chat 转换器现在仅在流已实际启动后才将空 choices chunk 视为流结束（`context.is_started` 守卫）（#77）
 
