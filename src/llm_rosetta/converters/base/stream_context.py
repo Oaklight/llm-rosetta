@@ -28,6 +28,7 @@ class StreamContext:
         self.created: int = 0
         self.current_block_index: int = -1
         self.tool_call_id_map: dict[str, str] = {}  # tool_call_id -> tool_name
+        self.tool_call_item_id_map: dict[str, str] = {}  # tool_call_id -> item_id
         self.pending_usage: dict | None = None
         self.pending_finish: dict | None = None
         self._started: bool = False
@@ -58,6 +59,28 @@ class StreamContext:
         self._tool_call_args[tool_call_id] = ""
         if tool_call_id not in self._tool_call_order:
             self._tool_call_order.append(tool_call_id)
+
+    def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
+        """Register the Responses output item ID for a tool call.
+
+        Args:
+            tool_call_id: The stable tool correlation identifier.
+            item_id: The Responses output item identifier for the function call.
+        """
+        if tool_call_id and item_id:
+            self.tool_call_item_id_map[tool_call_id] = item_id
+            self._item_id_to_call_id[item_id] = tool_call_id
+
+    def get_tool_call_item_id(self, tool_call_id: str) -> str:
+        """Get the Responses output item ID for a tool call.
+
+        Args:
+            tool_call_id: The stable tool correlation identifier.
+
+        Returns:
+            The output item ID, or empty string if not found.
+        """
+        return self.tool_call_item_id_map.get(tool_call_id, "")
 
     def append_tool_call_args(self, tool_call_id: str, delta: str) -> None:
         """Append argument delta to accumulated tool call arguments.

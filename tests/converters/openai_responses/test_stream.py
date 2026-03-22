@@ -73,6 +73,7 @@ class TestStreamResponseFromProvider:
             "type": "response.output_item.added",
             "output_index": 1,
             "item": {
+                "id": "fc_123",
                 "type": "function_call",
                 "call_id": "call_abc",
                 "name": "get_weather",
@@ -105,6 +106,7 @@ class TestStreamResponseFromProvider:
         event = {
             "type": "response.output_item.added",
             "item": {
+                "id": "fc_xyz",
                 "type": "function_call",
                 "call_id": "call_xyz",
                 "name": "search",
@@ -141,6 +143,39 @@ class TestStreamResponseFromProvider:
         events = cast(list[Any], self.converter.stream_response_from_provider(event))
         assert len(events) == 1
         assert "tool_call_index" not in events[0]
+
+    def test_tool_call_arguments_delta_resolves_call_id_from_item_id(self):
+        """Argument delta resolves tool_call_id from item_id via context."""
+        ctx = StreamContext()
+        self.converter.stream_response_from_provider(
+            {
+                "type": "response.output_item.added",
+                "output_index": 1,
+                "item": {
+                    "id": "fc_123",
+                    "type": "function_call",
+                    "call_id": "call_abc",
+                    "name": "get_weather",
+                    "arguments": "",
+                },
+            },
+            context=ctx,
+        )
+
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "item_id": "fc_123",
+                    "delta": '{"city":',
+                    "output_index": 1,
+                },
+                context=ctx,
+            ),
+        )
+        assert len(events) == 1
+        assert events[0]["tool_call_id"] == "call_abc"
 
     # --- Response completed ---
 
@@ -355,6 +390,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "response.output_item.added"
+        assert result["item"]["id"] == "fc_call_abc"
         assert result["item"]["type"] == "function_call"
         assert result["item"]["call_id"] == "call_abc"
         assert result["item"]["name"] == "search"
@@ -371,6 +407,7 @@ class TestStreamResponseToProvider:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["item"]["id"] == "fc_call_abc"
         assert "output_index" not in result
 
     def test_tool_call_delta(self):
@@ -386,7 +423,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "response.function_call_arguments.delta"
-        assert result["call_id"] == "call_abc"
+        assert result["item_id"] == "fc_call_abc"
         assert result["delta"] == '{"city":'
         assert result["output_index"] == 1
 
@@ -401,6 +438,7 @@ class TestStreamResponseToProvider:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["item_id"] == "fc_call_abc"
         assert "output_index" not in result
 
     def test_finish_event_stop(self):
@@ -506,6 +544,7 @@ class TestStreamRoundTrip:
             "type": "response.output_item.added",
             "output_index": 1,
             "item": {
+                "id": "fc_123",
                 "type": "function_call",
                 "call_id": "call_abc",
                 "name": "search",
@@ -515,23 +554,40 @@ class TestStreamRoundTrip:
         restored = cast(
             dict[str, Any], self.converter.stream_response_to_provider(events[0])
         )
+        assert restored["item"]["id"] == "fc_call_abc"
         assert restored["item"]["call_id"] == "call_abc"
         assert restored["item"]["name"] == "search"
         assert restored["output_index"] == 1
 
     def test_tool_call_delta_round_trip(self):
         """Tool call delta round-trip preserves arguments."""
+        ctx = StreamContext()
+        self.converter.stream_response_from_provider(
+            {
+                "type": "response.output_item.added",
+                "output_index": 1,
+                "item": {
+                    "id": "fc_123",
+                    "type": "function_call",
+                    "call_id": "call_abc",
+                    "name": "search",
+                },
+            },
+            context=ctx,
+        )
         original = {
             "type": "response.function_call_arguments.delta",
-            "call_id": "call_abc",
+            "item_id": "fc_123",
             "delta": '{"q": "test"}',
             "output_index": 1,
         }
-        events = cast(list[Any], self.converter.stream_response_from_provider(original))
-        restored = cast(
-            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        events = cast(
+            list[Any], self.converter.stream_response_from_provider(original, context=ctx)
         )
-        assert restored["call_id"] == "call_abc"
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0], context=ctx)
+        )
+        assert restored["item_id"] == "fc_123"
         assert restored["delta"] == '{"q": "test"}'
 
 
@@ -634,6 +690,7 @@ class TestStreamResponseFromProviderWithContext:
             "type": "response.output_item.added",
             "output_index": 1,
             "item": {
+                "id": "fc_123",
                 "type": "function_call",
                 "call_id": "call_abc",
                 "name": "get_weather",
@@ -647,6 +704,7 @@ class TestStreamResponseFromProviderWithContext:
         assert len(events) == 1
         assert events[0]["type"] == "tool_call_start"
         assert ctx.get_tool_name("call_abc") == "get_weather"
+        assert ctx.get_tool_call_item_id("call_abc") == "fc_123"
 
     def test_output_item_added_message_emits_no_events(self):
         """response.output_item.added (message) with context produces no IR events.

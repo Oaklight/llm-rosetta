@@ -86,7 +86,86 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 )
                 warnings.extend(ext_warnings)
 
+        messages = self._reorder_tool_messages(messages, warnings)
         return messages, warnings
+
+    @staticmethod
+    def _reorder_tool_messages(
+        messages: list[dict[str, Any]], warnings: list[str]
+    ) -> list[dict[str, Any]]:
+        """Reorder tool messages so each sits right after the assistant that called it.
+
+        The Chat Completions API requires ``role: "tool"`` messages to appear
+        immediately after the ``role: "assistant"`` message whose ``tool_calls``
+        they answer.  Codex CLI interleaves ``function_call_output`` items
+        with other items during multi-turn conversations, which after
+        Responses→IR→Chat conversion produces tool messages that are
+        separated from their assistant message.  Upstream providers
+        (e.g. DeepSeek) reject this with a 400.
+
+        Workaround for upstream bug: https://github.com/openai/codex/pull/7038
+        Remove when Codex CLI fixes its item ordering.
+        """
+        # Separate tool messages from everything else
+        tool_msgs: list[dict[str, Any]] = []
+        non_tool: list[dict[str, Any]] = []
+        for m in messages:
+            if m.get("role") == "tool":
+                tool_msgs.append(m)
+            else:
+                non_tool.append(m)
+
+        if not tool_msgs:
+            return messages
+
+        # Preserve all tool messages per tool_call_id instead of overwriting
+        # duplicates. Some clients may emit multiple tool results with the
+        # same tool_call_id, and we should keep them all rather than silently
+        # dropping earlier entries.
+        tool_by_id: dict[str, list[dict[str, Any]]] = {}
+        for tm in tool_msgs:
+            tcid = tm.get("tool_call_id")
+            if tcid:
+                tool_by_id.setdefault(tcid, []).append(tm)
+
+        # Rebuild: after each assistant message with tool_calls, insert
+        # matching tool messages in tool_calls order.
+        result: list[dict[str, Any]] = []
+        matched_msg_ids: set[int] = set()
+        for m in non_tool:
+            result.append(m)
+            if m.get("role") == "assistant" and "tool_calls" in m:
+                for tc in m["tool_calls"]:
+                    tcid = tc.get("id")
+                    if tcid and tcid in tool_by_id:
+                        for tool_msg in tool_by_id[tcid]:
+                            result.append(tool_msg)
+                            matched_msg_ids.add(id(tool_msg))
+
+        # Warn about unmatched tool messages (don't silently drop them)
+        for tm in tool_msgs:
+            tcid = tm.get("tool_call_id")
+            if id(tm) not in matched_msg_ids:
+                if tcid:
+                    warnings.append(
+                        f"Tool message with tool_call_id='{tcid}' has no matching "
+                        "assistant tool_calls entry"
+                    )
+                else:
+                    warnings.append(
+                        "Tool message with no tool_call_id cannot be reordered"
+                    )
+                # Append at end so the request isn't silently truncated
+                result.append(tm)
+
+        # Only warn if the order actually changed
+        if result != messages:
+            warnings.append(
+                "Reordered tool messages to follow assistant tool_calls "
+                "(workaround for Codex CLI item ordering, see openai/codex#7038)"
+            )
+
+        return result
 
     def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.

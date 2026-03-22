@@ -230,6 +230,55 @@ class TestOpenAIChatMessageOps:
         assert result[0]["tool_call_id"] == "call_1"
         assert result[0]["content"] == "Result data"
 
+    def test_duplicate_tool_call_id_reorder_preserves_all_messages(self):
+        """Multiple tool messages with the same tool_call_id are preserved."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_dup",
+                            tool_name="search",
+                            tool_input={"q": "test"},
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "later user turn"}],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_dup",
+                            result="first result",
+                        )
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_dup",
+                            result="second result",
+                        )
+                    ],
+                },
+            ],
+        )
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assert [msg["role"] for msg in result] == ["assistant", "tool", "tool", "user"]
+        assert result[1]["content"] == "first result"
+        assert result[2]["content"] == "second result"
+        assert any("Reordered tool messages" in warning for warning in warnings)
+
     def test_extension_items_handling(self):
         """Test extension items produce warnings."""
         items = cast(
