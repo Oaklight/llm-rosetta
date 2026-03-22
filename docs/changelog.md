@@ -15,6 +15,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 ### 修复
 
 - **Anthropic→IR `tool_result` 消息的 role 规范化**：Anthropic 将 `tool_result` 块放在 `role: "user"` 消息中，但 IR 使用 `role: "tool"`（与 OpenAI 一致）。Anthropic 转换器现在将纯 `tool_result` 的 user 消息规范化为 `role: "tool"`，并将混合 `tool_result` + text 的消息拆分为独立的 `role: "tool"` 和 `role: "user"` IR 消息。修复了跨格式转换（如 Anthropic → OpenAI Chat）中 `fix_orphaned_tool_calls_ir()` 无法检测已回答工具调用的问题（#84）
+- **OpenAI Responses→IR `function_call_output` 的 role 规范化**：`function_call_output` 和 `mcp_call_output` 项此前被归入 `role: "user"` 的 IR 消息，但 IR 对工具结果使用 `role: "tool"`。Responses 转换器现在将这些项归入 `role: "tool"` 消息，修复了跨格式转换（如 Responses → OpenAI Chat）中 `fix_orphaned_tool_calls_ir()` 无法检测已回答工具调用的问题（#84）
 
 ### 新增（文档）
 
