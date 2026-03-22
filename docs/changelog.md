@@ -10,6 +10,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 修复
 
+- **Anthropic `input_schema` 无参数工具缺少 `type` 字段**：无参数的 MCP 工具生成 `input_schema: {}`，但 Anthropic 要求必须包含 `"type"` 字段。现在当 schema 字典缺少 `type` 字段时默认为 `{"type": "object"}`——修复了 Google GenAI 或 OpenAI Responses 工具调用路由到 Anthropic 上游时出现的 `tools.0.custom.input_schema.type: Field required` 错误
 - **Google GenAI 全栈 camelCase 字段处理**：Gemini CLI 和 Google REST API 使用 camelCase（`inlineData`、`fileData`、`mimeType`、`fileUri`、`functionCall`、`functionResponse`、`finishReason`、`usageMetadata`、`responseMimeType`、`responseSchema`、`thinkingConfig`、`maxOutputTokens`、`stopSequences` 等），但转换器此前仅接受 snake_case。content_ops、config_ops、tool_ops、message_ops 和 converter 中所有 P→IR 方法现在同时接受两种命名；所有 IR→P 方法统一输出 camelCase 以兼容 REST API
 - **Google→IR 转换丢失图片/音频/文件数据**：`p_part_to_ir` 只检查 `inline_data`（snake_case），但 Gemini CLI 发送 `inlineData`（camelCase）——二进制内容被静默丢弃并输出 `不支持的Part类型` 警告。修复方式：在分发入口处规范化 camelCase 键名
 - **跨格式图片转换失败（Google → OpenAI/Anthropic）**：Google 的 `p_image_to_ir` 生成的 `ImagePart` 使用顶层 `data` + `media_type` 字段，但 OpenAI Chat、Anthropic 和 OpenAI Responses 的 `ir_image_to_p` 仅检查 `image_url` 和嵌套的 `image_data`——导致 `ValueError`。三个目标转换器现在都增加了对顶层字段的兜底处理（#68）
