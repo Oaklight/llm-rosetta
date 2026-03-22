@@ -343,6 +343,8 @@ class GoogleGenAIConverter(BaseConverter):
             ir_tools: list = []
             for t in tools:
                 result = self.tool_ops.p_tool_definition_to_ir(t)
+                if result is None:
+                    continue
                 if isinstance(result, list):
                     ir_tools.extend(result)
                 else:
@@ -486,8 +488,8 @@ class GoogleGenAIConverter(BaseConverter):
             Google response dict.
         """
         provider_response: dict[str, Any] = {
-            "response_id": ir_response.get("id", ""),
-            "model_version": ir_response.get("model", ""),
+            "responseId": ir_response.get("id", ""),
+            "modelVersion": ir_response.get("model", ""),
             "candidates": [],
         }
 
@@ -522,7 +524,7 @@ class GoogleGenAIConverter(BaseConverter):
             candidate: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "content": {"role": google_role, "parts": parts},
-                "finish_reason": reason_map.get(reason, "STOP"),
+                "finishReason": reason_map.get(reason, "STOP"),
             }
             provider_response["candidates"].append(candidate)
 
@@ -530,15 +532,15 @@ class GoogleGenAIConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             usage_metadata: dict[str, Any] = {
-                "prompt_token_count": ir_usage.get("prompt_tokens") or 0,
-                "candidates_token_count": ir_usage.get("completion_tokens") or 0,
-                "total_token_count": ir_usage.get("total_tokens") or 0,
+                "promptTokenCount": ir_usage.get("prompt_tokens") or 0,
+                "candidatesTokenCount": ir_usage.get("completion_tokens") or 0,
+                "totalTokenCount": ir_usage.get("total_tokens") or 0,
             }
 
             if "reasoning_tokens" in ir_usage:
-                usage_metadata["thoughts_token_count"] = ir_usage["reasoning_tokens"]
+                usage_metadata["thoughtsTokenCount"] = ir_usage["reasoning_tokens"]
 
-            provider_response["usage_metadata"] = usage_metadata
+            provider_response["usageMetadata"] = usage_metadata
 
         return provider_response
 
@@ -923,37 +925,14 @@ class GoogleGenAIConverter(BaseConverter):
             return {}
 
         elif is_tool_call_delta_event(event):
-            # Emit the complete function_call with name + args in one chunk,
-            # matching the Google API's native format.
-            choice_index = event.get("choice_index", 0)
-            try:
-                args = json.loads(event["arguments_delta"])
-            except (json.JSONDecodeError, TypeError):
-                args = {}
-
-            # Recover tool name from context
-            tool_name = ""
+            # Google sends complete function calls, not incremental deltas.
+            # Accumulate argument fragments in context; the complete
+            # function_call chunk is emitted on FinishEvent.
             if context is not None:
-                tool_name = context.get_tool_name(event["tool_call_id"])
-
-            return {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {
-                            "role": "model",
-                            "parts": [
-                                {
-                                    "function_call": {
-                                        "name": tool_name,
-                                        "args": args,
-                                    }
-                                }
-                            ],
-                        },
-                    }
-                ]
-            }
+                context.append_tool_call_args(
+                    event["tool_call_id"], event["arguments_delta"]
+                )
+            return {}
 
         elif is_finish_event(event):
             choice_index = event.get("choice_index", 0)
@@ -965,28 +944,66 @@ class GoogleGenAIConverter(BaseConverter):
                 "tool_calls": "STOP",
                 "error": "OTHER",
             }
-            return {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {"role": "model", "parts": []},
-                        "finish_reason": reason_map.get(reason, "STOP"),
-                    }
-                ]
-            }
+
+            chunks: list[dict[str, Any]] = []
+
+            # Flush accumulated tool calls as complete function_call chunks.
+            # Google sends each function_call with full name + args in one
+            # chunk, so we emit them here after all deltas have been received.
+            if context is not None:
+                for call_id, tool_name, args_str in context.get_pending_tool_calls():
+                    try:
+                        args = json.loads(args_str) if args_str else {}
+                    except (json.JSONDecodeError, TypeError):
+                        args = {}
+                    chunks.append(
+                        {
+                            "candidates": [
+                                {
+                                    "index": choice_index,
+                                    "content": {
+                                        "role": "model",
+                                        "parts": [
+                                            {
+                                                "functionCall": {
+                                                    "name": tool_name,
+                                                    "args": args,
+                                                }
+                                            }
+                                        ],
+                                    },
+                                }
+                            ]
+                        }
+                    )
+
+            # Finish chunk
+            chunks.append(
+                {
+                    "candidates": [
+                        {
+                            "index": choice_index,
+                            "content": {"role": "model", "parts": []},
+                            "finishReason": reason_map.get(reason, "STOP"),
+                        }
+                    ]
+                }
+            )
+
+            return chunks
 
         elif is_usage_event(event):
             usage = event["usage"]
             usage_metadata: dict[str, Any] = {
-                "prompt_token_count": usage.get("prompt_tokens") or 0,
-                "candidates_token_count": usage.get("completion_tokens") or 0,
-                "total_token_count": usage.get("total_tokens") or 0,
+                "promptTokenCount": usage.get("prompt_tokens") or 0,
+                "candidatesTokenCount": usage.get("completion_tokens") or 0,
+                "totalTokenCount": usage.get("total_tokens") or 0,
             }
 
             if "reasoning_tokens" in usage:
-                usage_metadata["thoughts_token_count"] = usage["reasoning_tokens"]
+                usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
 
-            return {"usage_metadata": usage_metadata}
+            return {"usageMetadata": usage_metadata}
 
         return {}
 

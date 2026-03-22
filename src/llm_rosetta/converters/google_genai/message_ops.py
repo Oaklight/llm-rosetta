@@ -41,6 +41,7 @@ from .tool_ops import GoogleGenAIToolOps
 _IR_TO_GOOGLE_ROLE = {
     "user": "user",
     "assistant": "model",
+    "tool": "user",  # Tool results go in user-role Content with functionResponse parts
     "system": "user",  # Fallback; system should be handled separately
 }
 
@@ -195,6 +196,11 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         """Google GenAI Content list → IR Messages.
 
         Converts each Google Content to the appropriate IR message type.
+        After conversion, reconciles tool_call_ids between tool_call parts
+        and tool_result parts by matching on function name, since Google's
+        ``functionCall`` has no ID field and the converter generates UUIDs
+        that won't match the IDs assigned by the client SDK (e.g. Gemini
+        CLI) in ``functionResponse``.
 
         Args:
             provider_messages: List of Google Content dicts.
@@ -206,19 +212,105 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
-            if converted is not None:
+            if converted is None:
+                continue
+            if isinstance(converted, list):
+                ir_messages.extend(converted)
+            else:
                 ir_messages.append(converted)
+
+        # Reconcile tool_call_ids: map tool_result IDs to the matching
+        # tool_call IDs by function name.
+        self._reconcile_tool_call_ids(ir_messages)
 
         return ir_messages
 
-    def _p_message_to_ir(self, provider_message: Any) -> Any:
+    @staticmethod
+    def _reconcile_tool_call_ids(
+        ir_messages: list[Message | ExtensionItem],
+    ) -> None:
+        """Match tool_result tool_call_ids to tool_call tool_call_ids by name.
+
+        Google ``functionCall`` parts do not carry an ID.  During P→IR
+        conversion, unique IDs are generated for tool_call parts.  When the
+        client sends ``functionResponse`` parts back, it uses its *own* IDs
+        (or the function name).  This method patches tool_result
+        ``tool_call_id`` values in-place so that they reference the IDs
+        generated for the corresponding tool_call parts.
+
+        Matching strategy: for each tool_result, find the *first*
+        unmatched tool_call with the same ``tool_name`` and adopt its
+        ``tool_call_id``.  This handles parallel calls to the same
+        function correctly (FIFO pairing).
+
+        Args:
+            ir_messages: IR messages list (modified in-place).
+        """
+        # Build ordered list of (tool_call_id, tool_name) from tool_call parts.
+        call_queue: dict[str, list[str]] = {}  # tool_name → [tool_call_ids]
+        for msg in ir_messages:
+            if not is_message(msg) or msg.get("role") != "assistant":
+                continue
+            for part in msg.get("content", []):
+                if is_tool_call_part(part):
+                    name = part.get("tool_name", "")
+                    call_queue.setdefault(name, []).append(
+                        part.get("tool_call_id", "")
+                    )
+
+        if not call_queue:
+            return
+
+        # Track which tool_call_ids have already been consumed.
+        consumed: dict[str, int] = {}  # tool_name → next index in call_queue
+
+        for msg in ir_messages:
+            if not is_message(msg) or msg.get("role") != "tool":
+                continue
+            for part in msg.get("content", []):
+                if not is_tool_result_part(part):
+                    continue
+                # Determine the function name for this result.
+                # The tool_call_id in the result may actually be the
+                # function name (Google convention) or a client-generated
+                # ID.  We need to find the matching tool_call by name.
+                result_id = part.get("tool_call_id", "")
+                # Try to identify the function name: check if result_id
+                # matches any known tool_name directly.
+                tool_name = result_id  # default guess
+                for name in call_queue:
+                    # Match if the result_id starts with the tool name
+                    # (Gemini CLI format: "<name>_<timestamp>_<index>")
+                    # or equals the tool name exactly.
+                    if result_id == name or result_id.startswith(name + "_"):
+                        tool_name = name
+                        break
+
+                ids = call_queue.get(tool_name)
+                if not ids:
+                    continue
+                idx = consumed.get(tool_name, 0)
+                if idx < len(ids):
+                    part["tool_call_id"] = ids[idx]
+                    consumed[tool_name] = idx + 1
+
+    def _p_message_to_ir(
+        self, provider_message: Any
+    ) -> Any | list[Any]:
         """Convert a single Google Content to IR format.
+
+        A Google Content dict with ``role: "user"`` may contain a mix of
+        regular content parts and ``functionResponse`` parts.  In the IR,
+        tool results must live in ``role: "tool"`` messages whereas regular
+        user content must remain in ``role: "user"`` messages.  When both
+        kinds coexist in one Content, this method returns **a list** of IR
+        messages (one ``"user"`` + one ``"tool"``).
 
         Args:
             provider_message: Google Content dict with role and parts.
 
         Returns:
-            IR message dict, or None.
+            A single IR message dict, a list of IR messages, or None.
         """
         if not isinstance(provider_message, dict):
             return None
@@ -232,6 +324,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             parts = [parts]
 
         content_parts: list[ContentPart] = []
+        tool_result_parts: list[ContentPart] = []
+
         for part in parts:
             # Handle reasoning (thoughts)
             if part.get("thought") is True:
@@ -250,7 +344,10 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                 "functionResponse"
             )
             if func_response is not None:
-                content_parts.append(self.tool_ops.p_tool_result_to_ir(part))
+                # Tool results must go into role:"tool" messages so that
+                # fix_orphaned_tool_calls_ir can detect and fix ID
+                # mismatches correctly.
+                tool_result_parts.append(self.tool_ops.p_tool_result_to_ir(part))
                 continue
 
             # Handle content parts (text, image, file, audio)
@@ -264,10 +361,23 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                 if unknown_keys:
                     warnings.warn(f"不支持的Part类型: {list(unknown_keys)}")
 
-        if not content_parts:
+        if not content_parts and not tool_result_parts:
             return None
 
-        return {"role": ir_role, "content": content_parts}
+        # If there are only tool results and no other content, return a
+        # single role:"tool" message.
+        if tool_result_parts and not content_parts:
+            return {"role": "tool", "content": tool_result_parts}
+
+        # If there are only regular content parts, return a single message.
+        if content_parts and not tool_result_parts:
+            return {"role": ir_role, "content": content_parts}
+
+        # Mixed: return both messages (regular content first, then tool results).
+        return [
+            {"role": ir_role, "content": content_parts},
+            {"role": "tool", "content": tool_result_parts},
+        ]
 
     # ==================== System Instruction Helpers ====================
 

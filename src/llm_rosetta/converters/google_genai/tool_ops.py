@@ -68,12 +68,18 @@ class GoogleGenAIToolOps(BaseToolOps):
     @staticmethod
     def p_tool_definition_to_ir(
         provider_tool: Any, **kwargs: Any
-    ) -> ToolDefinition | list[ToolDefinition]:
+    ) -> ToolDefinition | list[ToolDefinition] | None:
         """Google GenAI FunctionDeclaration → IR ToolDefinition(s).
 
         A single Google Tool dict may contain multiple function declarations.
         Returns a list when multiple declarations are present, or a single
         ToolDefinition for backward compatibility when there is exactly one.
+
+        Returns ``None`` for tool entries that contain neither
+        ``function_declarations`` / ``functionDeclarations`` nor a bare
+        ``name`` field — typically Google built-in tool types such as
+        ``googleSearch`` or ``codeExecution`` whose capabilities cannot be
+        mapped to a generic function-call IR.
 
         Supports both snake_case (``function_declarations``) and camelCase
         (``functionDeclarations``) keys for REST API compatibility.
@@ -82,7 +88,8 @@ class GoogleGenAIToolOps(BaseToolOps):
             provider_tool: Google Tool dict with function_declarations.
 
         Returns:
-            IR ToolDefinition or list of ToolDefinitions.
+            IR ToolDefinition, list of ToolDefinitions, or None for
+            entries that cannot be converted.
         """
         # Handle both snake_case and camelCase, wrapped and unwrapped formats
         func_decls = provider_tool.get("function_declarations") or provider_tool.get(
@@ -111,10 +118,12 @@ class GoogleGenAIToolOps(BaseToolOps):
 
         # Bare function declaration (no wrapper)
         func = provider_tool
+        if not func.get("name"):
+            return None
         parameters = func.get("parameters", {})
         result: dict[str, Any] = {
             "type": "function",
-            "name": func.get("name", ""),
+            "name": func["name"],
             "description": func.get("description", ""),
             "parameters": parameters,
         }
@@ -218,7 +227,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         tool_input = ir_tool_call.get("tool_input", ir_tool_call.get("arguments", {}))
 
         part: dict[str, Any] = {
-            "function_call": {
+            "functionCall": {
                 "name": tool_name,
                 "args": tool_input,
             }
@@ -309,7 +318,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             response_data = {"error": result_content}
 
         return {
-            "function_response": {
+            "functionResponse": {
                 "name": tool_name,
                 "response": response_data,
             }
@@ -368,7 +377,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             response_data = {"error": result_content}
 
         return {
-            "function_response": {
+            "functionResponse": {
                 "name": tool_name,
                 "response": response_data,
             }
