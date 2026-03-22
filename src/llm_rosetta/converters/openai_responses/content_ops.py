@@ -105,6 +105,10 @@ class OpenAIResponsesContentOps(BaseContentOps):
         elif image_data:
             data_url = f"data:{image_data['media_type']};base64,{image_data['data']}"
             result["image_url"] = data_url
+        elif ir_image.get("data") and ir_image.get("media_type"):
+            # Top-level data + media_type (e.g. from Google GenAI converter)
+            data_url = f"data:{ir_image['media_type']};base64,{ir_image['data']}"
+            result["image_url"] = data_url
         else:
             raise ValueError("Image part must have either image_url/url or image_data")
 

@@ -369,21 +369,22 @@ class GoogleGenAIConverter(BaseConverter):
         if gen_config:
             ir_request["generation"] = gen_config
 
-        # Response format — check both SDK config and REST top-level
-        response_mime_source = (
-            config
-            if "response_mime_type" in config
-            else (
-                provider_request if "response_mime_type" in provider_request else None
-            )
-        )
+        # Response format — check both SDK config and REST top-level (snake + camel)
+        response_mime_source = None
+        if "response_mime_type" in config or "responseMimeType" in config:
+            response_mime_source = config
+        elif (
+            "response_mime_type" in provider_request
+            or "responseMimeType" in provider_request
+        ):
+            response_mime_source = provider_request
         if response_mime_source:
             ir_request["response_format"] = self.config_ops.p_response_format_to_ir(
                 response_mime_source
             )
 
-        # Reasoning config
-        if "thinking_config" in config:
+        # Reasoning config (snake + camel)
+        if "thinking_config" in config or "thinkingConfig" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
         return cast(IRRequest, ir_request)

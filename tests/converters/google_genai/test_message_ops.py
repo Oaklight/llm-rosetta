@@ -135,8 +135,8 @@ class TestGoogleGenAIMessageOps:
         result, warnings = self.message_ops.ir_messages_to_p(ir_messages)
         assert len(result) == 1
         msg = result[0]
-        assert "inline_data" in msg["parts"][0]
-        assert msg["parts"][0]["inline_data"]["mime_type"] == "image/jpeg"
+        assert "inlineData" in msg["parts"][0]
+        assert msg["parts"][0]["inlineData"]["mimeType"] == "image/jpeg"
 
     def test_ir_assistant_with_reasoning(self):
         """Test IR assistant message with reasoning → Google Content."""
@@ -183,7 +183,7 @@ class TestGoogleGenAIMessageOps:
         msg = result[0]
         assert len(msg["parts"]) == 3
         assert msg["parts"][0]["text"] == "What is this?"
-        assert "inline_data" in msg["parts"][1]
+        assert "inlineData" in msg["parts"][1]
         assert msg["parts"][2]["text"] == "Please describe it."
 
     def test_ir_unsupported_content_type_warns(self):

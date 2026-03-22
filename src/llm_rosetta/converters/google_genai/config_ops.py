@@ -114,27 +114,41 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if not isinstance(provider_config, dict):
             return cast(GenerationConfig, result)
 
-        # Direct mapping fields
+        # Direct mapping fields (same name in both snake_case and camelCase)
         _DIRECT_FIELDS = [
             "temperature",
             "top_p",
             "top_k",
-            "stop_sequences",
-            "frequency_penalty",
-            "presence_penalty",
             "seed",
         ]
         for field in _DIRECT_FIELDS:
             if field in provider_config:
                 result[field] = provider_config[field]
 
+        # Fields with camelCase variants
+        _CAMEL_FIELDS = [
+            ("stop_sequences", "stopSequences", "stop_sequences"),
+            ("frequency_penalty", "frequencyPenalty", "frequency_penalty"),
+            ("presence_penalty", "presencePenalty", "presence_penalty"),
+        ]
+        for snake, camel, ir_name in _CAMEL_FIELDS:
+            val = provider_config.get(snake, provider_config.get(camel))
+            if val is not None:
+                result[ir_name] = val
+
         # Renamed fields
-        if "max_output_tokens" in provider_config:
-            result["max_tokens"] = provider_config["max_output_tokens"]
+        max_tokens = provider_config.get(
+            "max_output_tokens", provider_config.get("maxOutputTokens")
+        )
+        if max_tokens is not None:
+            result["max_tokens"] = max_tokens
 
         # candidate_count → n (if present)
-        if "candidate_count" in provider_config:
-            result["candidate_count"] = provider_config["candidate_count"]
+        candidate_count = provider_config.get(
+            "candidate_count", provider_config.get("candidateCount")
+        )
+        if candidate_count is not None:
+            result["candidate_count"] = candidate_count
 
         return cast(GenerationConfig, result)
 
@@ -183,10 +197,14 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             return cast(ResponseFormatConfig, {})
 
         result: dict[str, Any] = {}
-        mime_type = provider_format.get("response_mime_type")
+        mime_type = provider_format.get("response_mime_type") or provider_format.get(
+            "responseMimeType"
+        )
 
         if mime_type == "application/json":
-            schema = provider_format.get("response_schema")
+            schema = provider_format.get("response_schema") or provider_format.get(
+                "responseSchema"
+            )
             if schema:
                 result["type"] = "json_schema"
                 result["json_schema"] = schema
@@ -289,9 +307,13 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if not isinstance(provider_reasoning, dict):
             return cast(ReasoningConfig, result)
 
-        thinking_config = provider_reasoning.get("thinking_config")
+        thinking_config = provider_reasoning.get(
+            "thinking_config"
+        ) or provider_reasoning.get("thinkingConfig")
         if thinking_config:
-            budget = thinking_config.get("thinking_budget")
+            budget = thinking_config.get("thinking_budget") or thinking_config.get(
+                "thinkingBudget"
+            )
             if budget is not None:
                 result["budget_tokens"] = budget
 

@@ -86,8 +86,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         # Direct data and media_type fields
         if "data" in ir_image and "media_type" in ir_image:
             return {
-                "inline_data": {
-                    "mime_type": ir_image["media_type"],
+                "inlineData": {
+                    "mimeType": ir_image["media_type"],
                     "data": ir_image["data"],
                 }
             }
@@ -96,8 +96,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         if "image_data" in ir_image:
             image_data = ir_image["image_data"]
             return {
-                "inline_data": {
-                    "mime_type": image_data["media_type"],
+                "inlineData": {
+                    "mimeType": image_data["media_type"],
                     "data": image_data["data"],
                 }
             }
@@ -122,11 +122,13 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             IR ImagePart.
         """
-        inline_data = provider_image["inline_data"]
+        inline_data = provider_image.get("inline_data") or provider_image.get(
+            "inlineData", {}
+        )
         return {
             "type": "image",
-            "data": inline_data["data"],
-            "media_type": inline_data["mime_type"],
+            "data": inline_data.get("data", ""),
+            "media_type": inline_data.get("mime_type", inline_data.get("mimeType", "")),
         }
 
     # ==================== File ====================
@@ -144,8 +146,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         # Direct data and media_type fields
         if "data" in ir_file and "media_type" in ir_file:
             return {
-                "inline_data": {
-                    "mime_type": ir_file["media_type"],
+                "inlineData": {
+                    "mimeType": ir_file["media_type"],
                     "data": ir_file["data"],
                 }
             }
@@ -154,8 +156,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         if "file_data" in ir_file:
             file_data = ir_file["file_data"]
             return {
-                "inline_data": {
-                    "mime_type": file_data["media_type"],
+                "inlineData": {
+                    "mimeType": file_data["media_type"],
                     "data": file_data["data"],
                 }
             }
@@ -177,12 +179,16 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             IR FilePart.
         """
-        inline_data = provider_file["inline_data"]
+        inline_data = provider_file.get("inline_data") or provider_file.get(
+            "inlineData", {}
+        )
         return {
             "type": "file",
             "file_data": {
-                "data": inline_data["data"],
-                "media_type": inline_data["mime_type"],
+                "data": inline_data.get("data", ""),
+                "media_type": inline_data.get(
+                    "mime_type", inline_data.get("mimeType", "")
+                ),
             },
         }
 
@@ -200,8 +206,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         """
         if "data" in ir_audio and "media_type" in ir_audio:
             return {
-                "inline_data": {
-                    "mime_type": ir_audio["media_type"],
+                "inlineData": {
+                    "mimeType": ir_audio["media_type"],
                     "data": ir_audio["data"],
                 }
             }
@@ -209,8 +215,8 @@ class GoogleGenAIContentOps(BaseContentOps):
         if "audio_data" in ir_audio:
             audio_data = ir_audio["audio_data"]
             return {
-                "inline_data": {
-                    "mime_type": audio_data["media_type"],
+                "inlineData": {
+                    "mimeType": audio_data["media_type"],
                     "data": audio_data["data"],
                 }
             }
@@ -228,19 +234,21 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             IR AudioPart.
         """
-        if "inline_data" in provider_audio:
-            inline_data = provider_audio["inline_data"]
+        raw_inline = provider_audio.get("inline_data") or provider_audio.get(
+            "inlineData"
+        )
+        if raw_inline:
             return AudioPart(
                 type="audio",
-                data=inline_data.get("data", ""),
-                media_type=inline_data["mime_type"],
+                data=raw_inline.get("data", ""),
+                media_type=raw_inline.get("mime_type", raw_inline.get("mimeType", "")),
             )
-        elif "file_data" in provider_audio:
-            file_data = provider_audio["file_data"]
+        raw_file = provider_audio.get("file_data") or provider_audio.get("fileData")
+        if raw_file:
             return AudioPart(
                 type="audio",
-                url=file_data["file_uri"],
-                media_type=file_data["mime_type"],
+                url=raw_file.get("file_uri", raw_file.get("fileUri", "")),
+                media_type=raw_file.get("mime_type", raw_file.get("mimeType", "")),
             )
         raise ValueError("Audio part must have inline_data or file_data")
 
@@ -374,9 +382,18 @@ class GoogleGenAIContentOps(BaseContentOps):
         ):
             ir_parts.append(GoogleGenAIContentOps.p_text_to_ir(provider_part))
 
-        # Handle inline_data (image, audio, or file based on mime_type)
-        if "inline_data" in provider_part and provider_part["inline_data"] is not None:
-            inline_data = provider_part["inline_data"]
+        # Handle inline_data / inlineData (image, audio, or file based on mime_type)
+        raw_inline = provider_part.get("inline_data") or provider_part.get("inlineData")
+        if raw_inline is not None:
+            # Normalize camelCase keys inside inline_data
+            inline_data = {
+                "data": raw_inline.get("data", raw_inline.get("data", "")),
+                "mime_type": raw_inline.get(
+                    "mime_type", raw_inline.get("mimeType", "")
+                ),
+            }
+            # Attach normalized inline_data so downstream p_image_to_ir etc. can read it
+            provider_part = {**provider_part, "inline_data": inline_data}
             mime_type = inline_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
@@ -386,9 +403,13 @@ class GoogleGenAIContentOps(BaseContentOps):
             else:
                 ir_parts.append(GoogleGenAIContentOps.p_file_to_ir(provider_part))
 
-        # Handle file_data (URI-based)
-        if "file_data" in provider_part and provider_part["file_data"] is not None:
-            file_data = provider_part["file_data"]
+        # Handle file_data / fileData (URI-based)
+        raw_file = provider_part.get("file_data") or provider_part.get("fileData")
+        if raw_file is not None:
+            file_data = {
+                "mime_type": raw_file.get("mime_type", raw_file.get("mimeType", "")),
+                "file_uri": raw_file.get("file_uri", raw_file.get("fileUri", "")),
+            }
             mime_type = file_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):

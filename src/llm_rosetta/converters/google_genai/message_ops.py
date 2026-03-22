@@ -254,9 +254,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             for part in msg.get("content", []):
                 if is_tool_call_part(part):
                     name = part.get("tool_name", "")
-                    call_queue.setdefault(name, []).append(
-                        part.get("tool_call_id", "")
-                    )
+                    call_queue.setdefault(name, []).append(part.get("tool_call_id", ""))
 
         if not call_queue:
             return
@@ -294,9 +292,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                     part["tool_call_id"] = ids[idx]
                     consumed[tool_name] = idx + 1
 
-    def _p_message_to_ir(
-        self, provider_message: Any
-    ) -> Any | list[Any]:
+    def _p_message_to_ir(self, provider_message: Any) -> Any | list[Any]:
         """Convert a single Google Content to IR format.
 
         A Google Content dict with ``role: "user"`` may contain a mix of
@@ -373,10 +369,11 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         if content_parts and not tool_result_parts:
             return {"role": ir_role, "content": content_parts}
 
-        # Mixed: return both messages (regular content first, then tool results).
+        # Mixed: tool results first (to keep them adjacent to the preceding
+        # assistant tool_calls), then regular content.
         return [
-            {"role": ir_role, "content": content_parts},
             {"role": "tool", "content": tool_result_parts},
+            {"role": ir_role, "content": content_parts},
         ]
 
     # ==================== System Instruction Helpers ====================
