@@ -102,24 +102,31 @@ Upstream endpoints (especially Vertex AI's OpenAI-compatible layer) reject JSON 
 
 LLM-Rosetta's `sanitize_schema()` (in `converters.base.tools`) strips these recursively from all tool parameter schemas across all 4 converters.
 
-### Orphaned Tool Calls (OpenAI Chat Strict Pairing)
+### Orphaned Tool Calls (OpenAI Strict Pairing)
 
-The OpenAI Chat Completions API **strictly requires** every `tool_call_id` in an assistant message to have a corresponding `role: "tool"` response. If a tool call is interrupted (e.g. the user cancels mid-execution in an agentic coding tool), the `tool_calls` entry remains in the conversation history without a matching result, and OpenAI returns a **400 error**.
+Both the OpenAI Chat Completions API and the Responses API **strictly require** every tool call to have a corresponding tool result. If a tool call is interrupted (e.g. the user cancels mid-execution in an agentic coding tool), the tool call entry remains in the conversation history without a matching result, and OpenAI returns a **400 error**:
+
+- **Chat Completions**: `"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."`
+- **Responses API**: `"No tool output found for function call <call_id>."`
 
 Other providers (Anthropic, Google) are lenient about this — they simply ignore orphaned tool calls.
 
-LLM-Rosetta handles this automatically:
+LLM-Rosetta handles this automatically during conversion and emits a `WARNING`-level log when orphaned tool calls are detected, so you can trace the fix without it being silent:
 
-- **Cross-format conversion**: `OpenAIChatConverter.request_to_provider()` calls `fix_orphaned_tool_calls()` on the output messages, injecting synthetic `role: "tool"` placeholders for any unmatched `tool_call_id`.
-- **Passthrough / direct use**: Import and call the function explicitly:
+- **Cross-format conversion**: Both `OpenAIChatConverter.request_to_provider()` and `OpenAIResponsesConverter.request_to_provider()` fix orphaned tool calls at the IR level before format conversion, injecting synthetic tool result messages for any unmatched `tool_call_id`.
+- **Passthrough / direct use**: Import the format-specific function:
 
 ```python
+# For OpenAI Chat Completions format
 from llm_rosetta.converters.openai_chat.tool_ops import fix_orphaned_tool_calls
 
-# Patch messages before sending to OpenAI
 messages = fix_orphaned_tool_calls(messages)
-# You can customize the placeholder text:
-messages = fix_orphaned_tool_calls(messages, placeholder="[Cancelled]")
+messages = fix_orphaned_tool_calls(messages, placeholder="[Skipped by user]")
+
+# For OpenAI Responses format
+from llm_rosetta.converters.openai_responses.tool_ops import fix_orphaned_tool_calls
+
+items = fix_orphaned_tool_calls(items)
 ```
 
 ### Google camelCase vs snake_case

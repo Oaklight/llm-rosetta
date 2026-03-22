@@ -10,7 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
-- **`fix_orphaned_tool_calls()` utility**: New public function in `converters/openai_chat/tool_ops.py` that detects assistant messages with `tool_calls` lacking matching `role: "tool"` responses and injects synthetic placeholder results. OpenAI Chat API strictly requires this pairing (returns 400 otherwise), while Anthropic and Google are lenient. Automatically applied during `OpenAIChatConverter.request_to_provider()` for cross-format conversions (#82)
+- **`fix_orphaned_tool_calls()` utilities**: Public functions in both `converters/openai_chat/tool_ops.py` and `converters/openai_responses/tool_ops.py` that detect tool calls lacking matching tool results and inject synthetic placeholder responses. Both OpenAI Chat and Responses APIs strictly require this pairing (return 400 otherwise), while Anthropic and Google are lenient. Automatically applied at the IR level during `OpenAIChatConverter.request_to_provider()` and `OpenAIResponsesConverter.request_to_provider()` for cross-format conversions; emits `WARNING`-level log when orphaned tool calls are detected (#82)
 
 ### Added (Documentation)
 
