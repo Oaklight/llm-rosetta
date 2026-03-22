@@ -557,16 +557,16 @@ class TestGoogleGenAIConverter:
             },
         )
         result = self.converter.response_to_provider(ir_response)
-        assert result["response_id"] == "resp_123"
-        assert result["model_version"] == "gemini-2.0-flash"
+        assert result["responseId"] == "resp_123"
+        assert result["modelVersion"] == "gemini-2.0-flash"
         assert len(result["candidates"]) == 1
         candidate = result["candidates"][0]
         assert candidate["content"]["role"] == "model"
         assert candidate["content"]["parts"][0]["text"] == "Hello!"
-        assert candidate["finish_reason"] == "STOP"
-        assert result["usage_metadata"]["prompt_token_count"] == 10
-        assert result["usage_metadata"]["candidates_token_count"] == 20
-        assert result["usage_metadata"]["total_token_count"] == 30
+        assert candidate["finishReason"] == "STOP"
+        assert result["usageMetadata"]["promptTokenCount"] == 10
+        assert result["usageMetadata"]["candidatesTokenCount"] == 20
+        assert result["usageMetadata"]["totalTokenCount"] == 30
 
     def test_response_to_provider_with_tool_calls(self):
         """Test response to provider with tool calls."""
@@ -599,9 +599,9 @@ class TestGoogleGenAIConverter:
         )
         result = self.converter.response_to_provider(ir_response)
         candidate = result["candidates"][0]
-        assert candidate["finish_reason"] == "STOP"
-        assert "function_call" in candidate["content"]["parts"][0]
-        assert candidate["content"]["parts"][0]["function_call"]["name"] == "search"
+        assert candidate["finishReason"] == "STOP"
+        assert "functionCall" in candidate["content"]["parts"][0]
+        assert candidate["content"]["parts"][0]["functionCall"]["name"] == "search"
 
     def test_response_to_provider_with_reasoning(self):
         """Test response to provider with reasoning parts."""
@@ -661,7 +661,7 @@ class TestGoogleGenAIConverter:
             },
         )
         result = self.converter.response_to_provider(ir_response)
-        assert result["usage_metadata"]["thoughts_token_count"] == 50
+        assert result["usageMetadata"]["thoughtsTokenCount"] == 50
 
     def test_response_to_provider_finish_reasons(self):
         """Test finish reason mapping to provider."""
@@ -693,7 +693,7 @@ class TestGoogleGenAIConverter:
                 },
             )
             result = self.converter.response_to_provider(ir_response)
-            assert result["candidates"][0]["finish_reason"] == google_reason, (
+            assert result["candidates"][0]["finishReason"] == google_reason, (
                 f"Failed for {ir_reason}"
             )
 
@@ -924,11 +924,11 @@ class TestGoogleGenAIConverterFullRoundTrip:
         ir_response = self.converter.response_from_provider(provider_response)
         restored = self.converter.response_to_provider(ir_response)
 
-        assert restored["response_id"] == "resp-rt"
-        assert restored["model_version"] == "gemini-2.0-flash"
+        assert restored["responseId"] == "resp-rt"
+        assert restored["modelVersion"] == "gemini-2.0-flash"
         assert restored["candidates"][0]["content"]["parts"][0]["text"] == "Hello!"
-        assert restored["candidates"][0]["finish_reason"] == "STOP"
-        assert restored["usage_metadata"]["total_token_count"] == 15
+        assert restored["candidates"][0]["finishReason"] == "STOP"
+        assert restored["usageMetadata"]["totalTokenCount"] == 15
 
     def test_message_round_trip(self):
         """Test message round-trip: IR -> Google -> IR."""

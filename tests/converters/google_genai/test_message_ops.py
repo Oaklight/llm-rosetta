@@ -89,8 +89,8 @@ class TestGoogleGenAIMessageOps:
         assert msg["role"] == "model"
         assert len(msg["parts"]) == 2
         assert msg["parts"][0]["text"] == "Let me search"
-        assert "function_call" in msg["parts"][1]
-        assert msg["parts"][1]["function_call"]["name"] == "search"
+        assert "functionCall" in msg["parts"][1]
+        assert msg["parts"][1]["functionCall"]["name"] == "search"
 
     def test_ir_user_with_tool_result(self):
         """Test IR user message with tool result → Google Content."""
@@ -113,7 +113,7 @@ class TestGoogleGenAIMessageOps:
         assert len(result) == 1
         msg = result[0]
         assert msg["role"] == "user"
-        assert "function_response" in msg["parts"][0]
+        assert "functionResponse" in msg["parts"][0]
 
     def test_ir_user_with_image(self):
         """Test IR user message with image → Google Content."""
@@ -252,7 +252,7 @@ class TestGoogleGenAIMessageOps:
         assert len(result) == 2
         # The tool result should use the function name from context
         tool_result_part = result[1]["parts"][0]
-        assert tool_result_part["function_response"]["name"] == "get_weather"
+        assert tool_result_part["functionResponse"]["name"] == "get_weather"
 
     # ==================== Provider → IR ====================
 

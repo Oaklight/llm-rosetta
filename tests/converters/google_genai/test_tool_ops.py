@@ -195,9 +195,9 @@ class TestGoogleGenAIToolOps:
             tool_type="function",
         )
         result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tc)
-        assert "function_call" in result
-        assert result["function_call"]["name"] == "get_weather"
-        assert result["function_call"]["args"] == {"location": "NYC"}
+        assert "functionCall" in result
+        assert result["functionCall"]["name"] == "get_weather"
+        assert result["functionCall"]["args"] == {"location": "NYC"}
 
     def test_ir_tool_call_to_p_with_thought_signature(self):
         """Test IR ToolCallPart with thought_signature → Google Part."""
@@ -272,9 +272,9 @@ class TestGoogleGenAIToolOps:
             result="Sunny, 25°C",
         )
         result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
-        assert "function_response" in result
-        assert result["function_response"]["name"] == "call_123"
-        assert result["function_response"]["response"]["output"] == "Sunny, 25°C"
+        assert "functionResponse" in result
+        assert result["functionResponse"]["name"] == "call_123"
+        assert result["functionResponse"]["response"]["output"] == "Sunny, 25°C"
 
     def test_ir_tool_result_to_p_error(self):
         """Test IR ToolResultPart with error → Google function_response Part."""
@@ -285,7 +285,7 @@ class TestGoogleGenAIToolOps:
             is_error=True,
         )
         result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
-        assert result["function_response"]["response"]["error"] == "API Error"
+        assert result["functionResponse"]["response"]["error"] == "API Error"
 
     def test_ir_tool_result_to_p_with_context(self):
         """Test IR ToolResultPart with context lookup."""
@@ -308,7 +308,7 @@ class TestGoogleGenAIToolOps:
             result="Sunny",
         )
         result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
-        assert result["function_response"]["name"] == "get_weather"
+        assert result["functionResponse"]["name"] == "get_weather"
 
     def test_ir_tool_result_to_p_with_context_no_match(self):
         """Test IR ToolResultPart with context but no matching call."""
@@ -322,7 +322,7 @@ class TestGoogleGenAIToolOps:
             result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(
                 ir_tr, ir_input
             )
-        assert result["function_response"]["name"] == "nonexistent"
+        assert result["functionResponse"]["name"] == "nonexistent"
 
     def test_p_tool_result_to_ir(self):
         """Test Google function_response Part → IR ToolResultPart."""
