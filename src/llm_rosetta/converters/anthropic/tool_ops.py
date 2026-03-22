@@ -189,9 +189,13 @@ class AnthropicToolOps(BaseToolOps):
             "description": ir_tool.get("description", ""),
         }
         raw_schema = ir_tool.get("parameters", {})
-        result["input_schema"] = (
+        schema = (
             sanitize_schema(raw_schema) if isinstance(raw_schema, dict) else raw_schema
         )
+        # Anthropic requires input_schema to have "type"; default to object
+        if isinstance(schema, dict) and "type" not in schema:
+            schema = {"type": "object", **schema}
+        result["input_schema"] = schema
         return result
 
     @staticmethod
