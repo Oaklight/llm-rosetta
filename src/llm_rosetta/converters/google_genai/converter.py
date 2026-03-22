@@ -744,7 +744,7 @@ class GoogleGenAIConverter(BaseConverter):
                 if func_call:
                     # Generate a unique tool_call_id since Google doesn't provide one
                     tool_call_id = func_call.get("id") or (
-                        f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
+                        f"call_{uuid.uuid4().hex[:24]}"
                     )
                     tool_name = func_call.get("name", "")
                     args = func_call.get("args", {})

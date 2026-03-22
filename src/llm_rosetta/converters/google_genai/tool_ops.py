@@ -264,7 +264,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         # Google function_call may not have id field, generate a unique ID
         tool_call_id = func_call.get("id")
         if not tool_call_id:
-            tool_call_id = f"call_{func_call['name']}_{uuid.uuid4().hex[:8]}"
+            tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
 
         tool_call_kwargs: dict[str, Any] = {
             "type": "tool_call",

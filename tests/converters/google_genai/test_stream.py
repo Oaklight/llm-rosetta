@@ -149,7 +149,7 @@ class TestStreamResponseFromProvider:
 
         start = [e for e in events if e["type"] == "tool_call_start"][0]
         assert start["tool_name"] == "get_weather"
-        assert start["tool_call_id"].startswith("call_get_weather_")
+        assert start["tool_call_id"].startswith("call_")
 
         delta = [e for e in events if e["type"] == "tool_call_delta"][0]
         args = json.loads(delta["arguments_delta"])

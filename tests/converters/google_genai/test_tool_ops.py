@@ -226,7 +226,7 @@ class TestGoogleGenAIToolOps:
         assert result["type"] == "tool_call"
         assert result["tool_name"] == "get_weather"
         assert result["tool_input"] == {"location": "NYC"}
-        assert result["tool_call_id"].startswith("call_get_weather_")
+        assert result["tool_call_id"].startswith("call_")
 
     def test_p_tool_call_to_ir_rest_api_format(self):
         """Test Google functionCall (REST API) → IR ToolCallPart."""
