@@ -6,6 +6,16 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.2.4 — 2026-03-22
+
+### 新增
+
+- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py` 中的新公开函数，检测 assistant 消息中缺少匹配 `role: "tool"` 响应的 `tool_calls`，并注入合成占位结果。OpenAI Chat API 严格要求此配对关系（否则返回 400 错误），而 Anthropic 和 Google 对此较为宽松。在 `OpenAIChatConverter.request_to_provider()` 中自动应用于跨格式转换（#82）
+
+### 新增（文档）
+
+- **提供商方言差异指南**：在转换器指南中新增章节（中英文），记录工具 schema 清理、孤立工具调用处理、Google camelCase/snake_case 差异
+
 ## v0.2.3 — 2026-03-22
 
 ### 修复
