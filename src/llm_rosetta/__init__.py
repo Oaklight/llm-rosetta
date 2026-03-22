@@ -31,7 +31,7 @@ from .types.ir import (
     is_message,
 )
 
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 
 __all__ = [
     # 核心类型 Core types
