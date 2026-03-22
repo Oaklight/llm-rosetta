@@ -27,11 +27,13 @@ from ..base import BaseToolOps
 _UNSUPPORTED_SCHEMA_KEYS: set[str] = {
     "propertyNames",
     "const",
+    "$schema",
     "$comment",
     "$id",
     "$anchor",
     "$dynamicAnchor",
     "$dynamicRef",
+    "ref",
     "contentEncoding",
     "contentMediaType",
     "contentSchema",
