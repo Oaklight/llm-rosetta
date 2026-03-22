@@ -10,7 +10,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
-- **`fix_orphaned_tool_calls()` utilities**: Public functions in both `converters/openai_chat/tool_ops.py` and `converters/openai_responses/tool_ops.py` that detect tool calls lacking matching tool results and inject synthetic placeholder responses. Both OpenAI Chat and Responses APIs strictly require this pairing (return 400 otherwise), while Anthropic and Google are lenient. Automatically applied at the IR level during `OpenAIChatConverter.request_to_provider()` and `OpenAIResponsesConverter.request_to_provider()` for cross-format conversions; emits `WARNING`-level log when orphaned tool calls are detected (#82)
+- **`fix_orphaned_tool_calls()` utilities**: Public functions in `converters/openai_chat/tool_ops.py`, `converters/openai_responses/tool_ops.py`, and `converters/anthropic/tool_ops.py` that detect mismatched tool calls/results and fix them bidirectionally — injecting synthetic placeholder results for orphaned calls **and** removing orphaned results without matching calls. OpenAI (Chat & Responses) and Anthropic strictly require this pairing (return 400 otherwise); only Google Gemini is lenient. Automatically applied at the IR level during `request_to_provider()` for all strict-pairing converters; emits `WARNING`-level log when orphaned tool calls or results are detected (#82, #84)
+
+### Fixed
+
+- **Anthropic→IR role normalization for `tool_result` messages**: Anthropic places `tool_result` blocks in `role: "user"` messages, but IR uses `role: "tool"` (like OpenAI). The Anthropic converter now normalizes pure `tool_result` user messages to `role: "tool"`, and splits mixed `tool_result` + text messages into separate `role: "tool"` and `role: "user"` IR messages. This fixes `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls in cross-format conversions (e.g. Anthropic → OpenAI Chat) (#84)
 
 ### Added (Documentation)
 
