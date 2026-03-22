@@ -102,6 +102,8 @@ nav:
   - Gateway:
       - gateway/index.md
       - Validation: gateway/validation.md
+      - CLI Cross-Format Testing: gateway/validation-cli.md
+      - SDK & Integration Tests: gateway/validation-sdk.md
   - Examples:
       - examples/index.md
       - Cross-Provider Conversation: examples/cross-provider.md

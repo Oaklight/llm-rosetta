@@ -4,139 +4,49 @@ title: Gateway Validation
 
 # Gateway Validation Report
 
-This page documents end-to-end validation of the LLM-Rosetta Gateway with real-world CLI tools and SDK test suites, serving as proof of cross-provider compatibility.
+This page summarizes end-to-end validation of the LLM-Rosetta Gateway (via [argo-proxy](https://github.com/Oaklight/argo-proxy)) with real-world CLI tools, SDK test suites, and cross-format routing.
 
-!!! info "Last updated: 2026-03-20"
-    Tested with llm-rosetta v0.2.0 (+ unreleased fixes for [#56](https://github.com/Oaklight/llm-rosetta/issues/56)–[#62](https://github.com/Oaklight/llm-rosetta/issues/62))
+!!! info "Last updated: 2026-03-23"
+    Tested with llm-rosetta v0.2.5 and argo-proxy v3.0.0b7
 
-## CLI Tool Compatibility
+## Cross-Format Routing Matrix
 
-Five popular AI coding CLI tools were tested through the gateway. Each tool speaks a different API format — the gateway translates automatically based on the endpoint path.
+Argo-proxy routes Claude models to the native Anthropic upstream and all other models (GPT, Gemini) to the OpenAI Chat upstream. The gateway automatically translates between auth credential formats (`Authorization: Bearer`, `x-api-key`, `x-goog-api-key`).
 
-| CLI Tool | API Format | Source → Target | Chat | Stream | Tool Calls | Multi-Round |
-|----------|-----------|-----------------|:----:|:------:|:----------:|:-----------:|
-| [Codex CLI](https://github.com/openai/codex) | OpenAI Responses | `openai_responses` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
-| [Kilo Code](https://kilocode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
-| [OpenCode](https://opencode.ai/) | OpenAI Chat | `openai_chat` → `openai_responses` | ✓ | ✓ | ✓ | ✓ |
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Anthropic Messages | `anthropic` → `anthropic` | ✓ | ✓ | ✓ | ✓ |
-| [Gemini CLI](https://github.com/google-gemini/gemini-cli) | Google GenAI | `google` → `google` | ✓ | ✓ | ✓ | ✓ |
+### Text Generation (9/9 ✓)
 
-### Test Details
+| Client (API Format) | Claude Model | GPT Model | Gemini Model |
+|---------------------|:------------:|:---------:|:------------:|
+| **Claude Code** (Anthropic) | ✓ passthrough | ✓ anthropic→openai_chat | ✓ anthropic→openai_chat |
+| **Codex CLI** (OpenAI Responses) | ✓ responses→anthropic | ✓ passthrough | ✓ passthrough |
+| **Gemini CLI** (Google GenAI) | ✓ google→anthropic | ✓ google→openai_chat | ✓ google→openai_chat |
 
-#### Codex CLI (OpenAI Responses API)
+### Image Understanding (9/9 ✓)
 
-Codex uses the OpenAI Responses API with `wire_api = "responses"`. Multi-round tool calling was verified with the gateway routing to upstream OpenAI.
+| Client (Image Method) | Claude Model | GPT Model | Gemini Model |
+|-----------------------|:------------:|:---------:|:------------:|
+| **Codex CLI** (`-i` flag) | ✓ | ✓ | ✓ |
+| **Claude Code** (Read tool) | ✓ | ✓¹ | ✓ |
+| **Gemini CLI** (read_file tool) | ✓ | ✓ | ✓ |
 
-- **Model**: `gpt-4.1-nano`
-- **Test**: Prompted to list directory contents → model issued `shell` tool call → tool result sent back → model summarized output
-- **Result**: 2 rounds completed successfully, streaming SSE events correctly formatted
+¹ Requires GPT-5.4+; GPT-4.1-nano may fail to interpret Read tool image results.
 
-#### Kilo Code (OpenAI Chat Completions)
-
-Kilo uses the OpenAI Chat Completions API. The gateway translates `openai_chat` → `openai_responses` format for upstream.
-
-- **Model**: `gpt-4.1-nano` (via `rosetta/gpt-4.1-nano`)
-- **Test**: `kilo run --auto -m rosetta/gpt-4.1-nano "List the files in the current directory"`
-- **Result**: Round 1 (26 chunks, 3.80s) → tool call `ls -la` → Round 2 (23 chunks, 6.48s) → text summary
-
-#### OpenCode (OpenAI Chat Completions)
-
-OpenCode also uses the OpenAI Chat Completions API with the Vercel AI SDK.
-
-- **Model**: `gpt-4.1-nano` (via `rosetta/gpt-4.1-nano`)
-- **Test**: `opencode run --model rosetta/gpt-4.1-nano "List the files in the current directory"`
-- **Result**: Round 1 (21 chunks, 3.04s) → `bash` tool call → Round 2 (103 chunks, 6.12s) → file listing
-
-#### Claude Code (Anthropic Messages API)
-
-Claude Code uses the Anthropic Messages API. Tested with OpenRouter as the upstream Anthropic provider.
-
-- **Model**: `anthropic/claude-haiku-4.5`
-- **Result**: Chat, streaming, tool calls, and multi-round all work. Requires a valid upstream API key.
-
-#### Gemini CLI (Google GenAI API)
-
-Gemini CLI uses the `@google/genai` JS SDK (v1.30.0). Full compatibility achieved after fixing camelCase tool definition parsing (#61) and streaming tool call chunk format (#62).
-
-- **Model**: `gemini-2.5-flash-lite`
-- **Configuration**: `GOOGLE_GEMINI_BASE_URL=http://localhost:8765 GEMINI_API_KEY=dummy`
-- **Result**: Chat, streaming, and tool calling all work. Headless mode (`-p`) with tool calls exits cleanly; interactive mode displays full tool call round-trips.
+For reproducible commands and detailed test procedures, see [CLI Cross-Format Testing](validation-cli.md).
 
 ---
 
-## Integration Test Suite (`tests/integration/`)
-
-The integration test suite validates all four converter pipelines with real API calls using both official SDKs and direct REST. Each test covers non-streaming, streaming, tool calls, round-trip conversions, and multi-turn conversations.
-
-### Results Summary
+## Integration Test Summary (22/22 ✓)
 
 | Test Suite | Tests | Result |
 |-----------|:-----:|:------:|
 | Google GenAI SDK | 5 | **5/5** ✓ |
-| Google GenAI REST | 5 | **5/5** ✓ |
-| OpenAI Chat SDK | 7 | **7/7** ✓ |
-| OpenAI Chat REST | 7 | **7/7** ✓ |
-| OpenAI Responses SDK | 4 | **4/4** ✓ |
-| OpenAI Responses REST | 4 | **4/4** ✓ |
-| Anthropic SDK | 6 | **6/6** ✓ |
-| Anthropic REST | 6 | **6/6** ✓ |
-| **Total** | **44** | **44/44** ✓ |
+| Google GenAI REST | 6 | **6/6** ✓ |
+| OpenAI Chat SDK | 5 | **5/5** ✓ |
+| OpenAI Responses SDK | 3 | **3/3** ✓ |
+| Anthropic REST | 3 | **3/3** ✓ |
+| **Total** | **22** | **22/22** ✓ |
 
-### Test Coverage Per Suite
-
-Each SDK/REST test suite covers:
-
-| Test | OpenAI Chat | OpenAI Responses | Anthropic | Google GenAI |
-|------|:-----------:|:----------------:|:---------:|:------------:|
-| Non-stream basic text | ✓ | ✓ | ✓ | ✓ |
-| Non-stream with image | ✓ | — | — | — |
-| Non-stream with tool calls | ✓ | ✓ | ✓ | ✓ |
-| Streaming text | ✓ | — | ✓ | — |
-| Streaming with tool calls | ✓ | — | ✓ | — |
-| Request round-trip | ✓ | ✓ | ✓ | ✓ |
-| Response round-trip | ✓ | ✓ | ✓ | ✓ |
-| Multi-turn conversation | — | — | — | ✓ |
-
----
-
-## SDK Test Suite (`llm_api_simple_tests`)
-
-The [llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) suite runs 5 standardized tests per provider using official SDKs. All Anthropic tests were run through the gateway with cross-provider routing.
-
-### Anthropic SDK via Gateway
-
-**Configuration**: `ANTHROPIC_BASE_URL=http://localhost:8765`, model `anthropic/claude-3-haiku`
-
-| Test | Description | Status |
-|------|-------------|:------:|
-| `simple_query.py` | Single-turn streaming query | ✓ PASS |
-| `multi_round_chat.py` | 3-round conversation (Fibonacci explanation → code → optimization) | ✓ PASS |
-| `multi_round_function_calling.py` | 3-round tool calling (weather → temperature conversion → comparison) | ✓ PASS |
-| `multi_round_comprehensive.py` | 3-round with image + tool calls (landmark → weather → recommendation) | ✓ PASS |
-| `multi_round_image.py` | 3-round vision conversation (describe → locate → facts) | ✓ PASS |
-
-### Google GenAI via Gateway (curl)
-
-Multi-round tool calling was tested directly via `curl` against the gateway's Google endpoint.
-
-| Round | Request | Model Response | Status |
-|:-----:|---------|---------------|:------:|
-| 1 | "What is 127 * 389?" with `calculator` tool, `mode=ANY` | `functionCall: calculator({expression: "127 * 389"})` | ✓ |
-| 2 | Tool result `49403`, "add 100 to that" | `functionCall: calculator({expression: "49403 + 100"})` | ✓ |
-| 3 | Tool result `49503`, `mode=AUTO` | Text: "The result is 49503." | ✓ |
-
-Tested with both `gemini-2.5-flash-lite` and `gemini-3.1-flash-lite-preview`. Both models correctly returned function calls with `thoughtSignature` preserved.
-
----
-
-## Cross-Provider Routing Combinations Tested
-
-| Source Format | Target Provider | Verified |
-|--------------|----------------|:--------:|
-| OpenAI Chat → | OpenAI Responses | ✓ |
-| OpenAI Responses → | OpenAI Responses | ✓ |
-| Anthropic → | Anthropic (OpenRouter) | ✓ |
-| Google GenAI → | Google GenAI | ✓ |
+For SDK test details and curl-based validation, see [SDK & Integration Tests](validation-sdk.md).
 
 ---
 
@@ -144,17 +54,18 @@ Tested with both `gemini-2.5-flash-lite` and `gemini-3.1-flash-lite-preview`. Bo
 
 | Issue | Description | Fix |
 |-------|-------------|-----|
-| [#56](https://github.com/Oaklight/llm-rosetta/issues/56) | OpenAI Responses streaming: missing `id`/`object`/`model` fields, incorrect event ordering | Fixed in converter |
+| [#56](https://github.com/Oaklight/llm-rosetta/issues/56) | OpenAI Responses streaming: missing `id`/`object`/`model` fields | Fixed in converter |
 | [#57](https://github.com/Oaklight/llm-rosetta/issues/57) | OpenAI Chat streaming: `tool_calls` missing `index` field | Fixed in converter |
-| [#58](https://github.com/Oaklight/llm-rosetta/issues/58) | `stream_options` (Chat-only) leaked into Responses API requests | Removed from Responses `ir_stream_config_to_p()` |
+| [#58](https://github.com/Oaklight/llm-rosetta/issues/58) | `stream_options` leaked into Responses API requests | Removed from `ir_stream_config_to_p()` |
 | [#59](https://github.com/Oaklight/llm-rosetta/issues/59) | Google converter ignored tools in REST-format requests | Added fallback to top-level fields |
-| [#61](https://github.com/Oaklight/llm-rosetta/issues/61) | Google camelCase `functionDeclarations` not parsed; only first declaration extracted | Handle both casings; extract all declarations |
-| [#62](https://github.com/Oaklight/llm-rosetta/issues/62) | Google streaming tool calls split into two chunks (name-only + args-only) | Defer `tool_call_start`, emit complete `function_call` on `tool_call_delta` |
+| [#61](https://github.com/Oaklight/llm-rosetta/issues/61) | Google camelCase `functionDeclarations` not parsed | Handle both casings; extract all |
+| [#62](https://github.com/Oaklight/llm-rosetta/issues/62) | Google streaming tool calls split into two chunks | Defer `tool_call_start`, emit on delta |
+| — | Anthropic `input_schema` missing `type` for no-param tools | Default to `{"type": "object"}` |
 
 ---
 
 ## Known Limitations
 
-- **Claude Code**: Requires a valid upstream API key for the configured Anthropic provider. The gateway itself is transparent — auth errors are passed through from upstream.
-- **Image passthrough**: Not tested for cross-provider image routing (e.g., OpenAI Chat → Google GenAI with images). Same-provider image support works (Anthropic SDK test confirms vision through the gateway).
-- **Gemini CLI headless mode**: In non-interactive (`-p`) mode, tool call results may not be displayed by the CLI, though the round-trip completes successfully. This is a Gemini CLI display behavior, not a gateway issue.
+- **Claude Code + non-Claude models**: Claude Code passes image data via its Read tool result. Some models (e.g., GPT-4.1-nano) may not interpret base64 image content from tool results correctly. Use GPT-5.4+ for reliable image understanding.
+- **Gemini CLI headless mode**: In non-interactive (`-p`) mode, Gemini CLI has no `--image` flag. Images can be read via the built-in `read_file` tool by referencing a file path within the workspace.
+- **Auth transparency**: The gateway passes upstream auth errors through. A 401 from upstream means the API key is invalid for the target provider, not a gateway issue.
