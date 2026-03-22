@@ -6,6 +6,31 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.2.5 — 2026-03-23
+
+### 修复
+
+- **Google GenAI 全栈 camelCase 字段处理**：Gemini CLI 和 Google REST API 使用 camelCase（`inlineData`、`fileData`、`mimeType`、`fileUri`、`functionCall`、`functionResponse`、`finishReason`、`usageMetadata`、`responseMimeType`、`responseSchema`、`thinkingConfig`、`maxOutputTokens`、`stopSequences` 等），但转换器此前仅接受 snake_case。content_ops、config_ops、tool_ops、message_ops 和 converter 中所有 P→IR 方法现在同时接受两种命名；所有 IR→P 方法统一输出 camelCase 以兼容 REST API
+- **Google→IR 转换丢失图片/音频/文件数据**：`p_part_to_ir` 只检查 `inline_data`（snake_case），但 Gemini CLI 发送 `inlineData`（camelCase）——二进制内容被静默丢弃并输出 `不支持的Part类型` 警告。修复方式：在分发入口处规范化 camelCase 键名
+- **跨格式图片转换失败（Google → OpenAI/Anthropic）**：Google 的 `p_image_to_ir` 生成的 `ImagePart` 使用顶层 `data` + `media_type` 字段，但 OpenAI Chat、Anthropic 和 OpenAI Responses 的 `ir_image_to_p` 仅检查 `image_url` 和嵌套的 `image_data`——导致 `ValueError`。三个目标转换器现在都增加了对顶层字段的兜底处理（#68）
+- **Google GenAI tool_call_id 对账**：Google `functionCall` 没有 ID 字段，P→IR 时生成 UUID。但 Gemini CLI 为 `functionResponse` 分配自有 ID（格式：`name_timestamp_index`），造成不匹配。新增 `_reconcile_tool_call_ids` 方法，按函数名称匹配工具结果与工具调用，修复孤立 tool_call 错误
+- **tool_call_id 超出 OpenAI 40 字符限制**：生成的 ID 使用 `call_{name}_{8hex}` 格式——MCP 工具名如 `mcp_toolregistry-hub-server_datetime-now` 产生 54 字符 ID。缩短为 `call_{24hex}`（固定 29 字符）
+- **Google→IR 工具结果的 role 映射**：`functionResponse` 部分生成 `role: "user"` 的 IR 消息，导致 `fix_orphaned_tool_calls_ir`（检查 `role: "tool"`）无法检测。现在将 `functionResponse` 分离为 `role: "tool"` 消息，并在 `_IR_TO_GOOGLE_ROLE` 中添加显式 `"tool": "user"` 映射
+- **混合内容消息排序**：当 Google 消息同时包含 `functionResponse` 和 `inlineData` 时，内容部分排在工具结果之前，打断了 OpenAI 要求的 `assistant(tool_calls) → tool(response)` 顺序。修复后工具结果排在内容部分之前
+- **Google 内建工具（googleSearch、codeExecution）**：`p_tool_definition_to_ir` 对没有 `name` 字段的工具条目返回 `None`；converter 跳过这些条目，不再产生空 `function.name` 错误
+
+### 新增
+
+- **StreamContext**：`get_tool_call_args()` 和 `get_pending_tool_calls()` 方法，用于在流式处理期间查询已积累的工具调用状态
+
+### 变更
+
+- **`BaseToolOps.p_tool_definition_to_ir` 返回类型**：改为 `ToolDefinition | list[ToolDefinition] | None`，支持不可转换的工具条目
+
+### 新增（文档）
+
+- **提供商与 CLI 兼容性矩阵**：新增指南页面，记录通过格式转换代理实际集成测试 Gemini CLI、Claude Code 和 OpenCode 时发现的真实问题
+
 ## v0.2.4 — 2026-03-22
 
 ### 新增

@@ -102,19 +102,34 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 LLM-Rosetta 的 `sanitize_schema()`（位于 `converters.base.tools`）会在所有 4 个转换器中递归地清除这些关键字。
 
-### 孤立工具调用（OpenAI 严格配对要求）
+### 工具调用/结果配对（严格校验）
 
-OpenAI Chat Completions API 和 Responses API 都**严格要求**每个工具调用都必须有对应的工具结果。如果工具调用被中断（例如用户在 Agent 编码工具中取消了执行），工具调用条目会保留在对话历史中但缺少匹配的结果，OpenAI 会返回 **400 错误**：
+大多数 LLM 提供商**严格要求**工具调用和工具结果必须双向配对。任何方向的不匹配都会导致 **400 错误**：
 
-- **Chat Completions**：`"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."`
-- **Responses API**：`"No tool output found for function call <call_id>."`
+| 方向 | OpenAI | Anthropic | Google |
+|---|---|---|---|
+| 有工具调用无结果 | **400** | **400** | OK |
+| 有工具结果无调用 | **400** | **400** | OK |
 
-其他提供商（Anthropic、Google）对此比较宽松——它们会直接忽略孤立的工具调用。
+代表性错误信息：
 
-LLM-Rosetta 在转换过程中自动处理此问题，并在检测到孤立工具调用时输出 `WARNING` 级别日志，确保修复过程可追踪而非完全静默：
+- **OpenAI**：`"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."` / `"Invalid parameter: messages with role 'tool' must be a response to a preceding message with 'tool_calls'."`
+- **Anthropic**：`"tool_use ids were found without tool_result blocks immediately after: <id>"` / `"unexpected tool_use_id found in tool_result blocks: <id>"`
+- **OpenAI Responses API**：`"No tool output found for function call <call_id>."`
 
-- **跨格式转换**：`OpenAIChatConverter.request_to_provider()` 和 `OpenAIResponsesConverter.request_to_provider()` 都会在 IR 层级修复孤立工具调用，为未匹配的 `tool_call_id` 注入合成的工具结果消息。
-- **直通 / 直接使用**：可以导入对应格式的函数：
+只有 Google Gemini 对这两种情况都比较宽松。这些不匹配通常在以下场景中出现：
+
+- 工具调用被中断（用户取消执行）——留下了没有结果的调用。
+- 上下文压缩或内容过滤删除了包含 `tool_calls` 的 assistant 消息——留下了没有前置调用的工具结果。
+
+LLM-Rosetta 自动修复两个方向的不匹配，并输出 `WARNING` 级别日志以便追踪每次修复：
+
+- **孤立工具调用** → 注入包含占位内容 `"[No output available yet]"` 的合成工具结果。
+- **孤立工具结果** → 移除悬空的结果消息。
+
+**跨格式转换**：所有转换器都会在 IR 层级修复不匹配。
+
+**直通 / 直接使用**：可以导入对应格式的函数：
 
 ```python
 # OpenAI Chat Completions 格式
@@ -131,4 +146,6 @@ items = fix_orphaned_tool_calls(items)
 
 ### Google camelCase 与 snake_case
 
-Google 的 REST API 使用 camelCase（`functionDeclarations`、`toolConfig`、`functionCallingConfig`），而 Python SDK 使用 snake_case（`function_declarations`、`tool_config`）。LLM-Rosetta 的 Google 转换器透明地接受两种命名约定。
+Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inlineData`、`mimeType`、`functionCall`、`functionResponse`、`functionDeclarations`、`responseMimeType`、`thinkingConfig` 等），而 Python SDK 使用 snake_case。LLM-Rosetta 的 Google 转换器在所有层级（内容、工具、配置和响应字段）透明地接受两种命名约定。所有 IR→Provider 输出使用 camelCase 以兼容 REST API。
+
+有关所有 camelCase/snake_case 字段对及其他在实际测试中发现的真实兼容性问题的完整列表，请参阅[提供商与 CLI 兼容性矩阵](compatibility.md)。
