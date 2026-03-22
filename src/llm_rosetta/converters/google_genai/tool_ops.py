@@ -26,7 +26,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..openai_chat.tool_ops import _sanitize_schema
+from ..base.tools import sanitize_schema
 
 
 class GoogleGenAIToolOps(BaseToolOps):
@@ -58,7 +58,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         parameters = ir_tool.get("parameters")
         if parameters:
             func_decl["parameters"] = (
-                _sanitize_schema(parameters)
+                sanitize_schema(parameters)
                 if isinstance(parameters, dict)
                 else parameters
             )

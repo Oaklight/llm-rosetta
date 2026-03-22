@@ -23,7 +23,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..openai_chat.tool_ops import _sanitize_schema
+from ..base.tools import sanitize_schema
 
 
 class OpenAIResponsesToolOps(BaseToolOps):
@@ -59,7 +59,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         if ir_tool.get("type", "function") == "function":
             parameters = ir_tool.get("parameters", {})
             if isinstance(parameters, dict):
-                parameters = _sanitize_schema(parameters)
+                parameters = sanitize_schema(parameters)
             result: dict[str, Any] = {
                 "type": "function",
                 "name": ir_tool["name"],
@@ -75,7 +75,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             "type": "custom",
             "name": f"{ir_tool['type']}_{ir_tool['name']}",
             "description": ir_tool.get("description", ""),
-            "schema": _sanitize_schema(raw_schema)
+            "schema": sanitize_schema(raw_schema)
             if isinstance(raw_schema, dict)
             else raw_schema,
         }

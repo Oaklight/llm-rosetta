@@ -19,7 +19,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..openai_chat.tool_ops import _sanitize_schema
+from ..base.tools import sanitize_schema
 
 
 class AnthropicToolOps(BaseToolOps):
@@ -55,7 +55,7 @@ class AnthropicToolOps(BaseToolOps):
         }
         raw_schema = ir_tool.get("parameters", {})
         result["input_schema"] = (
-            _sanitize_schema(raw_schema) if isinstance(raw_schema, dict) else raw_schema
+            sanitize_schema(raw_schema) if isinstance(raw_schema, dict) else raw_schema
         )
         return result
 

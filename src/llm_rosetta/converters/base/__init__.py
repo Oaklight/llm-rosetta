@@ -23,7 +23,7 @@ from .content import BaseContentOps
 from .converter import BaseConverter
 from .messages import BaseMessageOps
 from .stream_context import StreamContext
-from .tools import BaseToolOps
+from .tools import BaseToolOps, sanitize_schema
 
 __all__ = [
     # 主转换器 Main converter
@@ -35,4 +35,6 @@ __all__ = [
     "BaseToolOps",
     "BaseMessageOps",
     "BaseConfigOps",
+    # Schema utilities
+    "sanitize_schema",
 ]

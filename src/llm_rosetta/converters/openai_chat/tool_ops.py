@@ -19,171 +19,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-
-# JSON Schema keywords not supported by OpenAI / Vertex AI compatible
-# endpoints.  These are valid per the JSON Schema spec but upstream servers
-# (e.g. Vertex AI's OpenAI-compatible layer) reject them with Pydantic
-# ``extra='forbid'`` validation errors.
-_UNSUPPORTED_SCHEMA_KEYS: set[str] = {
-    "propertyNames",
-    "const",
-    "$schema",
-    "$comment",
-    "$id",
-    "$anchor",
-    "$dynamicAnchor",
-    "$dynamicRef",
-    "ref",
-    "contentEncoding",
-    "contentMediaType",
-    "contentSchema",
-    "deprecated",
-    "readOnly",
-    "writeOnly",
-    "examples",
-}
-
-# Keys that hold definition maps (consumed for $ref resolution, then removed).
-_DEFS_KEYS: set[str] = {"$defs", "definitions"}
-
-
-def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
-    """Flatten ``anyOf``/``oneOf`` nullable patterns into a simple typed schema.
-
-    Vertex AI's OpenAI-compatible layer does not support ``anyOf``/``oneOf``
-    at all.  The most common pattern is a nullable union like
-    ``{"anyOf": [{"type": "string"}, {"type": "null"}]}``, which we convert to
-    ``{"type": "string", "nullable": true}``.
-
-    For single-variant unions we unwrap directly.  For multi-type (non-null)
-    unions we keep only the first non-null variant (lossy but safe).
-
-    ``allOf`` with a single element is simply unwrapped.
-
-    Args:
-        schema: A schema dict that may contain ``anyOf``/``oneOf``/``allOf``.
-
-    Returns:
-        A new dict with combination keywords resolved.
-    """
-    for keyword in ("anyOf", "oneOf"):
-        variants = schema.get(keyword)
-        if not isinstance(variants, list):
-            continue
-
-        non_null = [v for v in variants if v.get("type") != "null"]
-        has_null = len(non_null) < len(variants)
-
-        # Preserve sibling metadata (description, title, etc.)
-        base: dict[str, Any] = {
-            k: v for k, v in schema.items() if k not in ("anyOf", "oneOf", "allOf")
-        }
-
-        if len(non_null) == 1:
-            # Common nullable pattern: merge the single real type
-            base.update(non_null[0])
-        elif len(non_null) > 1:
-            # Multiple non-null types: pick the first (lossy but avoids rejection)
-            base.update(non_null[0])
-        # else: all variants are null → just mark nullable
-
-        if has_null:
-            base["nullable"] = True
-
-        return base
-
-    # allOf with a single element: unwrap
-    all_of = schema.get("allOf")
-    if isinstance(all_of, list) and len(all_of) == 1 and isinstance(all_of[0], dict):
-        base = {k: v for k, v in schema.items() if k != "allOf"}
-        base.update(all_of[0])
-        return base
-
-    return schema
-
-
-def _resolve_ref(ref: str, defs: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    """Resolve a JSON Schema ``$ref`` pointer against collected definitions.
-
-    Only local definition references (``#/$defs/Name`` or
-    ``#/definitions/Name``) are supported.  Unresolvable refs return an
-    empty dict so the caller can proceed without crashing.
-
-    Args:
-        ref: The ``$ref`` string value.
-        defs: Merged definitions from ``$defs`` and ``definitions``.
-
-    Returns:
-        The referenced schema dict, or ``{}`` if unresolvable.
-    """
-    for prefix in ("#/$defs/", "#/definitions/"):
-        if ref.startswith(prefix):
-            name = ref[len(prefix) :]
-            return defs.get(name, {})
-    return {}
-
-
-def _sanitize_schema(
-    schema: dict[str, Any],
-    defs: dict[str, dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """Recursively remove unsupported JSON Schema keywords.
-
-    Also resolves ``$ref`` references by inlining the referenced definition,
-    and flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
-    simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
-    which does not support these constructs at all.
-
-    Args:
-        schema: A JSON Schema dict (or sub-schema).
-        defs: Collected ``$defs``/``definitions`` from the top-level schema.
-            Populated automatically on the first call if the schema contains
-            definition maps.
-
-    Returns:
-        A new dict with unsupported keys removed at every level.
-    """
-    # On first call, collect $defs/definitions for $ref resolution.
-    if defs is None:
-        defs = {}
-        for key in _DEFS_KEYS:
-            d = schema.get(key)
-            if isinstance(d, dict):
-                defs.update(d)
-
-    # Resolve $ref: inline the referenced definition (merge siblings).
-    ref = schema.get("$ref")
-    if isinstance(ref, str) and defs:
-        resolved = _resolve_ref(ref, defs)
-        if resolved:
-            # Siblings of $ref (e.g. description) are kept; $ref itself is
-            # replaced by the resolved definition's content.
-            merged = {k: v for k, v in schema.items() if k != "$ref"}
-            merged.update(resolved)
-            return _sanitize_schema(merged, defs)
-
-    result: dict[str, Any] = {}
-    for key, value in schema.items():
-        if key in _UNSUPPORTED_SCHEMA_KEYS or key in _DEFS_KEYS:
-            continue
-        if key == "$ref":
-            # Unresolvable $ref — drop it to avoid upstream rejection.
-            continue
-        if isinstance(value, dict):
-            result[key] = _sanitize_schema(value, defs)
-        elif isinstance(value, list):
-            result[key] = [
-                _sanitize_schema(item, defs) if isinstance(item, dict) else item
-                for item in value
-            ]
-        else:
-            result[key] = value
-
-    # Flatten combination keywords (anyOf/oneOf/allOf) into simple types.
-    if result.keys() & {"anyOf", "oneOf", "allOf"}:
-        result = _flatten_combination(result)
-
-    return result
+from ..base.tools import sanitize_schema
 
 
 class OpenAIChatToolOps(BaseToolOps):
@@ -216,7 +52,7 @@ class OpenAIChatToolOps(BaseToolOps):
             }
             parameters = ir_tool.get("parameters")
             if parameters and isinstance(parameters, dict):
-                func_def["parameters"] = _sanitize_schema(parameters)
+                func_def["parameters"] = sanitize_schema(parameters)
             elif parameters:
                 func_def["parameters"] = parameters
             return {"type": "function", "function": func_def}
@@ -224,7 +60,7 @@ class OpenAIChatToolOps(BaseToolOps):
         # Non-function tool types: wrap as custom
         raw_params = ir_tool.get("parameters", {})
         params = (
-            _sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
+            sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
         )
         return {
             "type": "function",
