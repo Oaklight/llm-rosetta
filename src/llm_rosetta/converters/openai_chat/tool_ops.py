@@ -20,6 +20,117 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 
+# JSON Schema keywords not supported by OpenAI / Vertex AI compatible
+# endpoints.  These are valid per the JSON Schema spec but upstream servers
+# (e.g. Vertex AI's OpenAI-compatible layer) reject them with Pydantic
+# ``extra='forbid'`` validation errors.
+_UNSUPPORTED_SCHEMA_KEYS: set[str] = {
+    "propertyNames",
+    "const",
+    "$comment",
+    "$id",
+    "$anchor",
+    "$defs",
+    "$dynamicAnchor",
+    "$dynamicRef",
+    "contentEncoding",
+    "contentMediaType",
+    "contentSchema",
+    "deprecated",
+    "readOnly",
+    "writeOnly",
+    "examples",
+}
+
+
+def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
+    """Flatten ``anyOf``/``oneOf`` nullable patterns into a simple typed schema.
+
+    Vertex AI's OpenAI-compatible layer does not support ``anyOf``/``oneOf``
+    at all.  The most common pattern is a nullable union like
+    ``{"anyOf": [{"type": "string"}, {"type": "null"}]}``, which we convert to
+    ``{"type": "string", "nullable": true}``.
+
+    For single-variant unions we unwrap directly.  For multi-type (non-null)
+    unions we keep only the first non-null variant (lossy but safe).
+
+    ``allOf`` with a single element is simply unwrapped.
+
+    Args:
+        schema: A schema dict that may contain ``anyOf``/``oneOf``/``allOf``.
+
+    Returns:
+        A new dict with combination keywords resolved.
+    """
+    for keyword in ("anyOf", "oneOf"):
+        variants = schema.get(keyword)
+        if not isinstance(variants, list):
+            continue
+
+        non_null = [v for v in variants if v.get("type") != "null"]
+        has_null = len(non_null) < len(variants)
+
+        # Preserve sibling metadata (description, title, etc.)
+        base: dict[str, Any] = {
+            k: v for k, v in schema.items() if k not in ("anyOf", "oneOf", "allOf")
+        }
+
+        if len(non_null) == 1:
+            # Common nullable pattern: merge the single real type
+            base.update(non_null[0])
+        elif len(non_null) > 1:
+            # Multiple non-null types: pick the first (lossy but avoids rejection)
+            base.update(non_null[0])
+        # else: all variants are null → just mark nullable
+
+        if has_null:
+            base["nullable"] = True
+
+        return base
+
+    # allOf with a single element: unwrap
+    all_of = schema.get("allOf")
+    if isinstance(all_of, list) and len(all_of) == 1 and isinstance(all_of[0], dict):
+        base = {k: v for k, v in schema.items() if k != "allOf"}
+        base.update(all_of[0])
+        return base
+
+    return schema
+
+
+def _sanitize_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Recursively remove unsupported JSON Schema keywords.
+
+    Also flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
+    simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
+    which does not support these constructs at all.
+
+    Args:
+        schema: A JSON Schema dict (or sub-schema).
+
+    Returns:
+        A new dict with unsupported keys removed at every level.
+    """
+    result: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key in _UNSUPPORTED_SCHEMA_KEYS:
+            continue
+        if isinstance(value, dict):
+            result[key] = _sanitize_schema(value)
+        elif isinstance(value, list):
+            result[key] = [
+                _sanitize_schema(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+
+    # Flatten combination keywords (anyOf/oneOf/allOf) into simple types.
+    if result.keys() & {"anyOf", "oneOf", "allOf"}:
+        result = _flatten_combination(result)
+
+    return result
+
 
 class OpenAIChatToolOps(BaseToolOps):
     """OpenAI Chat Completions tool conversion operations.
@@ -35,7 +146,8 @@ class OpenAIChatToolOps(BaseToolOps):
         """IR ToolDefinition → OpenAI Chat tool definition.
 
         Converts flat IR format to nested OpenAI ``{"type":"function","function":{...}}``
-        format.
+        format.  Unsupported JSON Schema keywords (e.g. ``propertyNames``) are
+        recursively stripped from ``parameters``.
 
         Args:
             ir_tool: IR tool definition.
@@ -49,17 +161,23 @@ class OpenAIChatToolOps(BaseToolOps):
                 "description": ir_tool.get("description", ""),
             }
             parameters = ir_tool.get("parameters")
-            if parameters:
+            if parameters and isinstance(parameters, dict):
+                func_def["parameters"] = _sanitize_schema(parameters)
+            elif parameters:
                 func_def["parameters"] = parameters
             return {"type": "function", "function": func_def}
 
         # Non-function tool types: wrap as custom
+        raw_params = ir_tool.get("parameters", {})
+        params = (
+            _sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
+        )
         return {
             "type": "function",
             "function": {
                 "name": f"{ir_tool['type']}_{ir_tool['name']}",
                 "description": ir_tool.get("description", ""),
-                "parameters": ir_tool.get("parameters", {}),
+                "parameters": params,
             },
         }
 

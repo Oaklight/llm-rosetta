@@ -18,6 +18,7 @@ from ...types.ir import (
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
 from ...types.ir.stream import (
+    ContentBlockEndEvent,
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
@@ -595,6 +596,17 @@ class OpenAIChatConverter(BaseConverter):
             # Finish reason
             finish_reason = p_choice.get("finish_reason")
             if finish_reason:
+                # Close any open content block before emitting FinishEvent.
+                # OpenAI doesn't have an explicit content-block-end concept,
+                # but downstream formats (e.g. Anthropic) require it.
+                if context is not None and context.current_block_index >= 0:
+                    events.append(
+                        ContentBlockEndEvent(
+                            type="content_block_end",
+                            block_index=context.current_block_index,
+                        )
+                    )
+
                 reason_map = {
                     "stop": "stop",
                     "length": "length",
@@ -625,7 +637,29 @@ class OpenAIChatConverter(BaseConverter):
             )
 
         # --- StreamEndEvent (only with context, when choices is empty list) ---
-        if context is not None and isinstance(choices, list) and len(choices) == 0:
+        # Guard: only treat empty choices as stream-end AFTER the stream has
+        # actually started.  Some upstreams (e.g. Azure / Argo) send a
+        # preflight chunk with ``choices: []`` and empty ``id``/``model``
+        # before the real content begins.
+        if (
+            context is not None
+            and context.is_started
+            and isinstance(choices, list)
+            and len(choices) == 0
+        ):
+            if not context.is_ended:
+                context.mark_ended()
+                events.append(StreamEndEvent(type="stream_end"))
+
+        # Also emit StreamEndEvent when we got a finish_reason but upstream
+        # may not send a subsequent empty-choices chunk (e.g. when the
+        # upstream ignores stream_options.include_usage).
+        if (
+            context is not None
+            and not context.is_ended
+            and usage
+            and any(e.get("type") == "finish" for e in events if isinstance(e, dict))
+        ):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 

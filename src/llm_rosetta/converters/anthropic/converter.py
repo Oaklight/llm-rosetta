@@ -814,9 +814,18 @@ class AnthropicConverter(BaseConverter):
             }
             stop_reason = reason_map.get(reason, "end_turn")
             if context is not None:
+                results: list[dict[str, Any]] = []
+                # Close any open content block before finishing
+                if context.current_block_index >= 0:
+                    results.append(
+                        {
+                            "type": "content_block_stop",
+                            "index": context.current_block_index,
+                        }
+                    )
                 # Buffer finish; merge with upcoming UsageEvent
                 context.pending_finish = {"stop_reason": stop_reason}
-                return {}
+                return results if results else {}
             # Without context: emit with safe defaults
             return {
                 "type": "message_delta",
