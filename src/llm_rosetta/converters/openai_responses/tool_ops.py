@@ -37,22 +37,25 @@ def fix_orphaned_tool_calls(
     *,
     placeholder: str = "[No output available yet]",
 ) -> list[dict[str, Any]]:
-    """Inject synthetic function_call_output for orphaned function_calls.
+    """Fix mismatched function_calls and outputs in OpenAI Responses format.
 
-    The OpenAI Responses API **strictly requires** every ``function_call``
-    item (identified by ``call_id``) to have a matching
-    ``function_call_output`` item.  If a tool call is interrupted, the
-    ``function_call`` entry stays in the conversation history without a
-    matching output, and OpenAI returns a 400 error.
+    The OpenAI Responses API **strictly requires** bidirectional pairing
+    between function_call and function_call_output items:
 
-    Other providers (Anthropic, Google) are lenient about this.
+    1. Every ``function_call`` item (identified by ``call_id``) must have a
+       matching ``function_call_output`` (**orphaned function_call**).
+    2. Every ``function_call_output`` must have a preceding ``function_call``
+       with the same ``call_id`` (**orphaned function_call_output**).
 
-    This function:
+    Violations of either rule cause a 400 error.  Anthropic enforces the same
+    strict pairing.  Only Google Gemini is lenient about both cases.
 
-    1. Collects all ``call_id`` values from ``function_call_output`` items.
-    2. Walks the items list and, after each ``function_call`` item whose
-       ``call_id`` is **not** in the answered set, injects a synthetic
-       ``function_call_output`` placeholder.
+    This function handles both directions:
+
+    - **Orphaned function_calls**: injects a synthetic
+      ``function_call_output`` with *placeholder* content.
+    - **Orphaned function_call_outputs**: removes output items whose
+      ``call_id`` does not appear in any ``function_call`` item.
 
     The original list is **not** modified; a new list is returned.
 
@@ -61,31 +64,46 @@ def fix_orphaned_tool_calls(
         placeholder: Output string for injected synthetic results.
 
     Returns:
-        A new items list with orphaned function_calls patched.
+        A new items list with orphaned function_calls/outputs fixed.
     """
-    # Collect all call_ids that already have a matching output
+    # --- Pass 1: collect known call_ids and answered ids ---
+    known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for item in items:
-        if item.get("type") == "function_call_output":
+        if item.get("type") == "function_call":
+            call_id = item.get("call_id")
+            if call_id:
+                known_call_ids.add(call_id)
+        elif item.get("type") == "function_call_output":
             call_id = item.get("call_id")
             if call_id:
                 answered_ids.add(call_id)
 
-    # Fast path: if there are no function_calls at all, return as-is
-    has_function_calls = any(item.get("type") == "function_call" for item in items)
-    if not has_function_calls:
+    # Fast path: nothing to fix
+    if not known_call_ids and not answered_ids:
         return items
 
-    # Walk items and inject synthetic outputs for orphaned function_calls
+    # --- Pass 2: walk items, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
-    orphaned_ids: list[str] = []
+    orphaned_call_ids: list[str] = []
+    orphaned_output_ids: list[str] = []
+
     for item in items:
+        # Remove orphaned outputs (output without preceding function_call)
+        if item.get("type") == "function_call_output":
+            call_id = item.get("call_id")
+            if call_id and call_id not in known_call_ids:
+                orphaned_output_ids.append(call_id)
+                continue  # skip this item
+
         patched.append(item)
+
+        # Inject synthetic outputs for orphaned function_calls
         if item.get("type") != "function_call":
             continue
         call_id = item.get("call_id")
         if call_id and call_id not in answered_ids:
-            orphaned_ids.append(call_id)
+            orphaned_call_ids.append(call_id)
             patched.append(
                 {
                     "type": "function_call_output",
@@ -94,11 +112,17 @@ def fix_orphaned_tool_calls(
                 }
             )
 
-    if orphaned_ids:
+    if orphaned_call_ids:
         logger.warning(
             "Fixed %d orphaned function_call(s) by injecting synthetic outputs: %s",
-            len(orphaned_ids),
-            ", ".join(orphaned_ids),
+            len(orphaned_call_ids),
+            ", ".join(orphaned_call_ids),
+        )
+    if orphaned_output_ids:
+        logger.warning(
+            "Removed %d orphaned function_call_output(s) with no matching call: %s",
+            len(orphaned_output_ids),
+            ", ".join(orphaned_output_ids),
         )
 
     return patched

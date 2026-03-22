@@ -54,6 +54,7 @@ from ...types.ir.type_guards import (
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
+from ..base.tools import fix_orphaned_tool_calls_ir
 from .config_ops import AnthropicConfigOps
 from .content_ops import AnthropicContentOps
 from .message_ops import AnthropicMessageOps
@@ -114,8 +115,9 @@ class AnthropicConverter(BaseConverter):
                         text_parts.append(part)
                 result["system"] = " ".join(text_parts)
 
-        # 2. Messages (system messages in IR are extracted to system param)
-        ir_messages = ir_request.get("messages", [])
+        # 2. Messages — fix orphaned tool_calls/results at IR level before
+        #    conversion.  Anthropic strictly requires bidirectional pairing.
+        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
 
         # Extract system messages from message list
         for item in ir_messages:

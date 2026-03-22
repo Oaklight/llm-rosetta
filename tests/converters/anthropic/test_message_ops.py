@@ -330,7 +330,11 @@ class TestAnthropicMessageOps:
         assert tc["tool_type"] == "web_search"
 
     def test_p_tool_result_to_ir(self):
-        """Test Anthropic tool_result block → IR ToolResultPart."""
+        """Test Anthropic tool_result block → IR ToolResultPart.
+
+        Anthropic places tool_result in user messages, but IR normalizes
+        the role to "tool".
+        """
         provider_messages = [
             {
                 "role": "user",
@@ -345,10 +349,40 @@ class TestAnthropicMessageOps:
             }
         ]
         result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
+        assert len(result) == 1
+        assert result[0]["role"] == "tool"
         tr = result[0]["content"][0]
         assert tr["type"] == "tool_result"
         assert tr["tool_call_id"] == "tool_789"
         assert tr["is_error"] is True
+
+    def test_p_mixed_tool_result_and_text_to_ir(self):
+        """Test Anthropic user message with tool_result + text splits into two IR messages."""
+        provider_messages = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "tool_abc",
+                        "content": "Result data",
+                    },
+                    {"type": "text", "text": "Now do something else"},
+                ],
+            }
+        ]
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(provider_messages))
+        assert len(result) == 2
+        # First: tool message with tool_result
+        assert result[0]["role"] == "tool"
+        assert len(result[0]["content"]) == 1
+        assert result[0]["content"][0]["type"] == "tool_result"
+        assert result[0]["content"][0]["tool_call_id"] == "tool_abc"
+        # Second: user message with text
+        assert result[1]["role"] == "user"
+        assert len(result[1]["content"]) == 1
+        assert result[1]["content"][0]["type"] == "text"
+        assert result[1]["content"][0]["text"] == "Now do something else"
 
     def test_p_thinking_to_ir(self):
         """Test Anthropic thinking block → IR ReasoningPart."""

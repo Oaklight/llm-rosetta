@@ -6,8 +6,8 @@ Handles bidirectional conversion of tool definitions, calls, results,
 choice strategies, and call configurations.
 
 Also provides ``fix_orphaned_tool_calls`` — a module-level utility that
-patches messages arrays where assistant ``tool_calls`` lack matching
-``role: tool`` responses (OpenAI Chat API rejects these with 400).
+fixes bidirectional mismatches between tool_calls and tool results
+(OpenAI Chat API rejects both orphaned calls and orphaned results with 400).
 
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
@@ -37,25 +37,26 @@ def fix_orphaned_tool_calls(
     *,
     placeholder: str = "[No output available yet]",
 ) -> list[dict[str, Any]]:
-    """Inject synthetic tool results for orphaned tool_calls.
+    """Fix mismatched tool_calls and tool results in OpenAI Chat format.
 
-    When a tool call is interrupted (e.g. the user cancels mid-execution in an
-    agentic coding tool), the assistant message containing ``tool_calls`` stays
-    in the conversation history but the matching ``role: "tool"`` response is
-    never appended.  The OpenAI Chat Completions API **strictly** requires
-    every ``tool_call_id`` to have a corresponding tool result and returns a
-    400 error otherwise.
+    The OpenAI Chat Completions API **strictly requires** bidirectional
+    pairing between tool calls and tool results:
 
-    Other providers (Anthropic, Google) are lenient about this, so the problem
-    only surfaces when forwarding to an OpenAI-compatible endpoint.
+    1. Every ``tool_call_id`` in an assistant message must have a matching
+       ``role: "tool"`` result message (**orphaned tool_call**).
+    2. Every ``role: "tool"`` result message must have a preceding assistant
+       message containing the matching ``tool_call_id`` (**orphaned tool_result**).
 
-    This function:
+    Violations of either rule cause a 400 error.  Anthropic enforces the same
+    strict pairing.  Only Google Gemini is lenient about both cases.
 
-    1. Collects all ``tool_call_id`` values that already have a matching
-       ``role: "tool"`` message.
-    2. Walks through the messages array and, for each assistant message with
-       ``tool_calls``, injects a synthetic tool result immediately after it
-       for any ID that is **not** in the answered set.
+    This function handles both directions:
+
+    - **Orphaned tool_calls**: injects a synthetic ``role: "tool"`` message
+      with *placeholder* content immediately after the assistant message.
+    - **Orphaned tool_results**: removes ``role: "tool"`` messages whose
+      ``tool_call_id`` does not appear in any preceding assistant
+      ``tool_calls``.
 
     The original list is **not** modified; a new list is returned.
 
@@ -64,28 +65,43 @@ def fix_orphaned_tool_calls(
         placeholder: Content string for injected synthetic tool results.
 
     Returns:
-        A new messages list with orphaned tool_calls patched.
+        A new messages list with orphaned tool_calls/results fixed.
     """
-    # Collect all tool_call_ids that already have a matching tool result
+    # --- Pass 1: collect known tool_call_ids and answered ids ---
+    known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for msg in messages:
-        if msg.get("role") == "tool":
+        if msg.get("role") == "assistant":
+            tool_calls = msg.get("tool_calls")
+            if tool_calls and isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    tc_id = tc.get("id")
+                    if tc_id:
+                        known_call_ids.add(tc_id)
+        elif msg.get("role") == "tool":
             tc_id = msg.get("tool_call_id")
             if tc_id:
                 answered_ids.add(tc_id)
 
-    # Fast path: if there are no tool_calls at all, return as-is
-    has_tool_calls = any(
-        msg.get("role") == "assistant" and msg.get("tool_calls") for msg in messages
-    )
-    if not has_tool_calls:
+    # Fast path: nothing to fix
+    if not known_call_ids and not answered_ids:
         return messages
 
-    # Walk messages and inject synthetic results for orphaned tool_calls
+    # --- Pass 2: walk messages, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
-    orphaned_ids: list[str] = []
+    orphaned_call_ids: list[str] = []
+    orphaned_result_ids: list[str] = []
+
     for msg in messages:
+        # Remove orphaned tool results (result without preceding tool_call)
+        if msg.get("role") == "tool":
+            tc_id = msg.get("tool_call_id")
+            if tc_id and tc_id not in known_call_ids:
+                orphaned_result_ids.append(tc_id)
+                continue  # skip this message
         patched.append(msg)
+
+        # Inject synthetic results for orphaned tool_calls
         if msg.get("role") != "assistant":
             continue
         tool_calls = msg.get("tool_calls")
@@ -94,7 +110,7 @@ def fix_orphaned_tool_calls(
         for tc in tool_calls:
             tc_id = tc.get("id")
             if tc_id and tc_id not in answered_ids:
-                orphaned_ids.append(tc_id)
+                orphaned_call_ids.append(tc_id)
                 patched.append(
                     {
                         "role": "tool",
@@ -103,11 +119,17 @@ def fix_orphaned_tool_calls(
                     }
                 )
 
-    if orphaned_ids:
+    if orphaned_call_ids:
         logger.warning(
             "Fixed %d orphaned tool_call(s) by injecting synthetic results: %s",
-            len(orphaned_ids),
-            ", ".join(orphaned_ids),
+            len(orphaned_call_ids),
+            ", ".join(orphaned_call_ids),
+        )
+    if orphaned_result_ids:
+        logger.warning(
+            "Removed %d orphaned tool_result(s) with no matching tool_call: %s",
+            len(orphaned_result_ids),
+            ", ".join(orphaned_result_ids),
         )
 
     return patched

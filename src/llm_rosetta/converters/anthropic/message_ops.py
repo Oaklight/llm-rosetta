@@ -261,19 +261,31 @@ class AnthropicMessageOps(BaseMessageOps):
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
-            if converted is not None:
+            if converted is None:
+                continue
+            if isinstance(converted, list):
+                ir_messages.extend(converted)
+            else:
                 ir_messages.append(converted)
 
         return ir_messages
 
-    def _p_message_to_ir(self, provider_message: Any) -> Any:
+    def _p_message_to_ir(self, provider_message: Any) -> Message | list[Message] | None:
         """Convert a single Anthropic message to IR format.
+
+        Anthropic places ``tool_result`` blocks inside ``role: "user"``
+        messages, but IR normalizes them to ``role: "tool"`` (like OpenAI).
+        When a user message contains **only** ``tool_result`` parts, its role
+        is changed to ``"tool"``.  When it mixes ``tool_result`` with other
+        parts (e.g. text), the message is **split** into a ``"tool"`` message
+        followed by a ``"user"`` message.
 
         Args:
             provider_message: Anthropic message dict.
 
         Returns:
-            IR message dict, or None.
+            A single IR message, a list of IR messages (when splitting is
+            needed), or ``None``.
         """
         if not isinstance(provider_message, dict):
             return None
@@ -289,6 +301,21 @@ class AnthropicMessageOps(BaseMessageOps):
             for part in content:
                 converted_parts = self._p_content_part_to_ir(part)
                 ir_content.extend(converted_parts)
+
+        # Normalize: Anthropic user messages with tool_result parts
+        # should use role="tool" in IR for consistent cross-format handling.
+        if role == "user" and ir_content:
+            tool_result_parts = [p for p in ir_content if is_tool_result_part(p)]
+            if tool_result_parts:
+                other_parts = [p for p in ir_content if not is_tool_result_part(p)]
+                if not other_parts:
+                    # Pure tool_result → normalize to role="tool"
+                    return {"role": "tool", "content": ir_content}
+                # Mixed content → split into tool + user messages
+                return [
+                    {"role": "tool", "content": tool_result_parts},
+                    {"role": "user", "content": other_parts},
+                ]
 
         return {"role": role, "content": ir_content}
 
