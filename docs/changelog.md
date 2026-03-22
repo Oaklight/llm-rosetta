@@ -18,6 +18,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **Google→IR 工具结果的 role 映射**：`functionResponse` 部分生成 `role: "user"` 的 IR 消息，导致 `fix_orphaned_tool_calls_ir`（检查 `role: "tool"`）无法检测。现在将 `functionResponse` 分离为 `role: "tool"` 消息，并在 `_IR_TO_GOOGLE_ROLE` 中添加显式 `"tool": "user"` 映射
 - **混合内容消息排序**：当 Google 消息同时包含 `functionResponse` 和 `inlineData` 时，内容部分排在工具结果之前，打断了 OpenAI 要求的 `assistant(tool_calls) → tool(response)` 顺序。修复后工具结果排在内容部分之前
 - **Google 内建工具（googleSearch、codeExecution）**：`p_tool_definition_to_ir` 对没有 `name` 字段的工具条目返回 `None`；converter 跳过这些条目，不再产生空 `function.name` 错误
+- **网关：Starlette `on_shutdown` 弃用兼容**：将已弃用的 `on_shutdown` 参数替换为 `lifespan` 异步上下文管理器——修复与 Starlette 0.38+（移除了 `on_shutdown`/`on_startup`）的兼容性
 
 ### 新增
 
