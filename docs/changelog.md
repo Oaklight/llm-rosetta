@@ -10,7 +10,11 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 新增
 
-- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py` 和 `converters/openai_responses/tool_ops.py` 中的公开函数，检测缺少匹配工具结果的工具调用并注入合成占位响应。OpenAI Chat 和 Responses API 都严格要求此配对关系（否则返回 400 错误），而 Anthropic 和 Google 对此较为宽松。在 `OpenAIChatConverter.request_to_provider()` 和 `OpenAIResponsesConverter.request_to_provider()` 中通过 IR 层级自动修复跨格式转换中的孤立工具调用；检测到时输出 `WARNING` 级别日志（#82）
+- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py`、`converters/openai_responses/tool_ops.py` 和 `converters/anthropic/tool_ops.py` 中的公开函数，**双向**检测和修复工具调用/结果的配对问题 — 为孤立的工具调用注入合成占位结果，**同时**移除没有匹配调用的孤立工具结果。OpenAI（Chat 和 Responses）及 Anthropic 严格要求此配对关系（否则返回 400 错误），仅 Google Gemini 对此宽松。在所有严格配对转换器的 `request_to_provider()` 中通过 IR 层级自动修复；检测到孤立工具调用或结果时输出 `WARNING` 级别日志（#82, #84）
+
+### 修复
+
+- **Anthropic→IR `tool_result` 消息的 role 规范化**：Anthropic 将 `tool_result` 块放在 `role: "user"` 消息中，但 IR 使用 `role: "tool"`（与 OpenAI 一致）。Anthropic 转换器现在将纯 `tool_result` 的 user 消息规范化为 `role: "tool"`，并将混合 `tool_result` + text 的消息拆分为独立的 `role: "tool"` 和 `role: "user"` IR 消息。修复了跨格式转换（如 Anthropic → OpenAI Chat）中 `fix_orphaned_tool_calls_ir()` 无法检测已回答工具调用的问题（#84）
 
 ### 新增（文档）
 
