@@ -48,6 +48,7 @@ from ...types.ir.type_guards import (
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
+from ..base.tools import fix_orphaned_tool_calls_ir
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
 from .message_ops import OpenAIResponsesMessageOps
@@ -110,8 +111,10 @@ class OpenAIResponsesConverter(BaseConverter):
                         text_parts.append(part)
                 result["instructions"] = " ".join(text_parts)
 
-        # 2. Messages → input items
-        ir_messages = ir_request.get("messages", [])
+        # 2. Messages → input items — fix orphaned tool_calls at IR level
+        # before conversion.  OpenAI Responses API strictly requires every
+        # function_call to have a matching function_call_output.
+        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         items, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
         warnings.extend(msg_warnings)
         result["input"] = items

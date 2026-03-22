@@ -13,6 +13,7 @@ Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverte
 """
 
 import json
+import logging
 from typing import Any, cast
 
 from ...types.ir import (
@@ -25,6 +26,8 @@ from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema
 
+logger = logging.getLogger(__name__)
+
 
 # ==================== Orphaned Tool Call Fix ====================
 
@@ -32,7 +35,7 @@ from ..base.tools import sanitize_schema
 def fix_orphaned_tool_calls(
     messages: list[dict[str, Any]],
     *,
-    placeholder: str = "[Tool call was interrupted]",
+    placeholder: str = "[No output available yet]",
 ) -> list[dict[str, Any]]:
     """Inject synthetic tool results for orphaned tool_calls.
 
@@ -80,6 +83,7 @@ def fix_orphaned_tool_calls(
 
     # Walk messages and inject synthetic results for orphaned tool_calls
     patched: list[dict[str, Any]] = []
+    orphaned_ids: list[str] = []
     for msg in messages:
         patched.append(msg)
         if msg.get("role") != "assistant":
@@ -90,6 +94,7 @@ def fix_orphaned_tool_calls(
         for tc in tool_calls:
             tc_id = tc.get("id")
             if tc_id and tc_id not in answered_ids:
+                orphaned_ids.append(tc_id)
                 patched.append(
                     {
                         "role": "tool",
@@ -97,6 +102,13 @@ def fix_orphaned_tool_calls(
                         "content": placeholder,
                     }
                 )
+
+    if orphaned_ids:
+        logger.warning(
+            "Fixed %d orphaned tool_call(s) by injecting synthetic results: %s",
+            len(orphaned_ids),
+            ", ".join(orphaned_ids),
+        )
 
     return patched
 

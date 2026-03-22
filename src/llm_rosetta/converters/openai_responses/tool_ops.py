@@ -13,6 +13,7 @@ format with type/name/description/parameters at the top level.
 """
 
 import json
+import logging
 from typing import Any, cast
 
 from ...types.ir import (
@@ -24,6 +25,83 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema
+
+logger = logging.getLogger(__name__)
+
+
+# ==================== Orphaned Tool Call Fix ====================
+
+
+def fix_orphaned_tool_calls(
+    items: list[dict[str, Any]],
+    *,
+    placeholder: str = "[No output available yet]",
+) -> list[dict[str, Any]]:
+    """Inject synthetic function_call_output for orphaned function_calls.
+
+    The OpenAI Responses API **strictly requires** every ``function_call``
+    item (identified by ``call_id``) to have a matching
+    ``function_call_output`` item.  If a tool call is interrupted, the
+    ``function_call`` entry stays in the conversation history without a
+    matching output, and OpenAI returns a 400 error.
+
+    Other providers (Anthropic, Google) are lenient about this.
+
+    This function:
+
+    1. Collects all ``call_id`` values from ``function_call_output`` items.
+    2. Walks the items list and, after each ``function_call`` item whose
+       ``call_id`` is **not** in the answered set, injects a synthetic
+       ``function_call_output`` placeholder.
+
+    The original list is **not** modified; a new list is returned.
+
+    Args:
+        items: OpenAI Responses format input items list.
+        placeholder: Output string for injected synthetic results.
+
+    Returns:
+        A new items list with orphaned function_calls patched.
+    """
+    # Collect all call_ids that already have a matching output
+    answered_ids: set[str] = set()
+    for item in items:
+        if item.get("type") == "function_call_output":
+            call_id = item.get("call_id")
+            if call_id:
+                answered_ids.add(call_id)
+
+    # Fast path: if there are no function_calls at all, return as-is
+    has_function_calls = any(item.get("type") == "function_call" for item in items)
+    if not has_function_calls:
+        return items
+
+    # Walk items and inject synthetic outputs for orphaned function_calls
+    patched: list[dict[str, Any]] = []
+    orphaned_ids: list[str] = []
+    for item in items:
+        patched.append(item)
+        if item.get("type") != "function_call":
+            continue
+        call_id = item.get("call_id")
+        if call_id and call_id not in answered_ids:
+            orphaned_ids.append(call_id)
+            patched.append(
+                {
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": placeholder,
+                }
+            )
+
+    if orphaned_ids:
+        logger.warning(
+            "Fixed %d orphaned function_call(s) by injecting synthetic outputs: %s",
+            len(orphaned_ids),
+            ", ".join(orphaned_ids),
+        )
+
+    return patched
 
 
 class OpenAIResponsesToolOps(BaseToolOps):
