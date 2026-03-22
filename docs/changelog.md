@@ -10,8 +10,11 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 修复
 
-- **上游 Gemini 端点拒绝 `anyOf`/`oneOf`/`allOf` 等 JSON Schema 组合关键字**：上游 OpenAI 兼容层不支持 JSON Schema 组合关键字。`_sanitize_schema()` 现在将 `anyOf`/`oneOf` nullable 模式（如 `{"anyOf": [{"type": "string"}, {"type": "null"}]}`）展平为 `{"type": "string", "nullable": true}`，展开单元素 `allOf`，并为多类型联合选取第一个非 null 变体（#76）
-- **移除不支持的 JSON Schema 关键字**：在发送到上游端点前，递归移除工具参数 schema 中的 `propertyNames`、`const`、`$comment`、`$id`、`$anchor`、`$defs` 等非标准关键字（#76）
+- **所有转换器均执行工具 schema 清洗**：此前 `_sanitize_schema()` 仅在 OpenAI Chat 转换器中调用。Google GenAI、OpenAI Responses 和 Anthropic 转换器现在也在发送到上游前清洗工具参数 schema，防止 Vertex AI 等严格端点拒绝请求（#80）
+- **移除非标准 `ref` 和 `$schema` 关键字**：OpenCode 内置工具使用不带 `$` 前缀的裸 `ref` 字段和顶层 `$schema`，均被 Vertex AI 拒绝。已添加到不支持关键字黑名单（#80）
+- **通过内联解析 `$ref`/`$defs` 引用**：JSON Schema `$ref` 引用现在通过从 `$defs`/`definitions` 内联被引用的定义来解析，两个关键字均从输出中移除。支持嵌套和链式引用（#80）
+- **流式传输中工具调用参数未累积**：OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册了工具调用，但在流式传输期间从未调用 `append_tool_call_args()` 累积参数增量。这导致工具调用参数到达上游时为空（如 MCP 工具返回 `'query' is a required property`）。此前仅 OpenAI Responses 转换器正确处理（#81）
+- **OpenAI Chat 流式工具调用 ID 解析**：仅携带 `index` 而无 `id` 的增量 chunk 产生了空字符串 `tool_call_id`。现在通过 chunk 索引从 `StreamContext._tool_call_order` 解析有效 ID（#81）
 - **Anthropic SSE 输出缺少 `content_block_stop`**：将 OpenAI Chat 流式响应转换为 Anthropic SSE 格式时，`content_block_stop` 事件未在 `message_delta` 之前发送，导致 Claude Code 静默丢弃响应内容。Anthropic 转换器现在在处理 `FinishEvent` 时为任何打开的内容块发送 `content_block_stop`（#77）
 - **上游预检 chunk 被误判为流结束**：Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空的预检 chunk。OpenAI Chat 转换器现在仅在流已实际启动后才将空 choices chunk 视为流结束（`context.is_started` 守卫）（#77）
 
