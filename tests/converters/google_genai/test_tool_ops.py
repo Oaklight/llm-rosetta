@@ -56,6 +56,7 @@ class TestGoogleGenAIToolOps:
             ]
         }
         result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert result is not None
         assert not isinstance(result, list)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
@@ -72,6 +73,7 @@ class TestGoogleGenAIToolOps:
         }
         provider = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
         restored = GoogleGenAIToolOps.p_tool_definition_to_ir(provider)
+        assert restored is not None
         assert not isinstance(restored, list)
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
@@ -87,6 +89,7 @@ class TestGoogleGenAIToolOps:
             ]
         }
         result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert result is not None
         assert not isinstance(result, list)
         assert result["name"] == "get_weather"
 
