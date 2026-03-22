@@ -6,6 +6,15 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.2.2 — 2026-03-22
+
+### 修复
+
+- **上游 Gemini 端点拒绝 `anyOf`/`oneOf`/`allOf` 等 JSON Schema 组合关键字**：上游 OpenAI 兼容层不支持 JSON Schema 组合关键字。`_sanitize_schema()` 现在将 `anyOf`/`oneOf` nullable 模式（如 `{"anyOf": [{"type": "string"}, {"type": "null"}]}`）展平为 `{"type": "string", "nullable": true}`，展开单元素 `allOf`，并为多类型联合选取第一个非 null 变体（#76）
+- **移除不支持的 JSON Schema 关键字**：在发送到上游端点前，递归移除工具参数 schema 中的 `propertyNames`、`const`、`$comment`、`$id`、`$anchor`、`$defs` 等非标准关键字（#76）
+- **Anthropic SSE 输出缺少 `content_block_stop`**：将 OpenAI Chat 流式响应转换为 Anthropic SSE 格式时，`content_block_stop` 事件未在 `message_delta` 之前发送，导致 Claude Code 静默丢弃响应内容。Anthropic 转换器现在在处理 `FinishEvent` 时为任何打开的内容块发送 `content_block_stop`（#77）
+- **上游预检 chunk 被误判为流结束**：Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空的预检 chunk。OpenAI Chat 转换器现在仅在流已实际启动后才将空 choices chunk 视为流结束（`context.is_started` 守卫）（#77）
+
 ## v0.2.1 — 2026-03-20
 
 ### 新增
