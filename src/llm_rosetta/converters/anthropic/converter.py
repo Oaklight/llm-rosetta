@@ -557,13 +557,18 @@ class AnthropicConverter(BaseConverter):
                     # Use the last registered tool_call_id (current block)
                     tool_call_id = list(context.tool_call_id_map.keys())[-1]
 
+                partial_json = delta.get("partial_json", "")
                 events.append(
                     ToolCallDeltaEvent(
                         type="tool_call_delta",
                         tool_call_id=tool_call_id,
-                        arguments_delta=delta.get("partial_json", ""),
+                        arguments_delta=partial_json,
                     )
                 )
+
+                # Accumulate arguments in context
+                if context is not None and tool_call_id:
+                    context.append_tool_call_args(tool_call_id, partial_json)
             elif delta_type == "thinking_delta":
                 # Thinking deltas map to ReasoningDeltaEvent
                 events.append(

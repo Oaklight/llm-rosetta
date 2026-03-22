@@ -783,6 +783,10 @@ class GoogleGenAIConverter(BaseConverter):
                         )
                     )
 
+                    # Accumulate arguments in context
+                    if context is not None:
+                        context.append_tool_call_args(tool_call_id, args_json)
+
             # Finish reason
             finish_reason = candidate.get("finish_reason") or candidate.get(
                 "finishReason"

@@ -581,17 +581,33 @@ class OpenAIChatConverter(BaseConverter):
                         if context is not None:
                             context.register_tool_call(tc_id, tc_func.get("name", ""))
 
+                    # Resolve the effective call ID for delta-only chunks
+                    # (they carry index but no id).
+                    effective_tc_id = tc_id
+                    if (
+                        not effective_tc_id
+                        and tc_index is not None
+                        and context is not None
+                    ):
+                        order = context._tool_call_order
+                        if 0 <= tc_index < len(order):
+                            effective_tc_id = order[tc_index]
+
                     arguments = tc_func.get("arguments")
                     if arguments:
                         delta_event = ToolCallDeltaEvent(
                             type="tool_call_delta",
-                            tool_call_id=tc_id or "",
+                            tool_call_id=effective_tc_id or "",
                             arguments_delta=arguments,
                             choice_index=choice_index,
                         )
                         if tc_index is not None:
                             delta_event["tool_call_index"] = tc_index
                         events.append(delta_event)
+
+                        # Accumulate arguments in context
+                        if context is not None and effective_tc_id:
+                            context.append_tool_call_args(effective_tc_id, arguments)
 
             # Finish reason
             finish_reason = p_choice.get("finish_reason")
