@@ -30,7 +30,6 @@ _UNSUPPORTED_SCHEMA_KEYS: set[str] = {
     "$comment",
     "$id",
     "$anchor",
-    "$defs",
     "$dynamicAnchor",
     "$dynamicRef",
     "contentEncoding",
@@ -41,6 +40,9 @@ _UNSUPPORTED_SCHEMA_KEYS: set[str] = {
     "writeOnly",
     "examples",
 }
+
+# Keys that hold definition maps (consumed for $ref resolution, then removed).
+_DEFS_KEYS: set[str] = {"$defs", "definitions"}
 
 
 def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
@@ -98,28 +100,78 @@ def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
-def _sanitize_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def _resolve_ref(ref: str, defs: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Resolve a JSON Schema ``$ref`` pointer against collected definitions.
+
+    Only local definition references (``#/$defs/Name`` or
+    ``#/definitions/Name``) are supported.  Unresolvable refs return an
+    empty dict so the caller can proceed without crashing.
+
+    Args:
+        ref: The ``$ref`` string value.
+        defs: Merged definitions from ``$defs`` and ``definitions``.
+
+    Returns:
+        The referenced schema dict, or ``{}`` if unresolvable.
+    """
+    for prefix in ("#/$defs/", "#/definitions/"):
+        if ref.startswith(prefix):
+            name = ref[len(prefix) :]
+            return defs.get(name, {})
+    return {}
+
+
+def _sanitize_schema(
+    schema: dict[str, Any],
+    defs: dict[str, dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """Recursively remove unsupported JSON Schema keywords.
 
-    Also flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
+    Also resolves ``$ref`` references by inlining the referenced definition,
+    and flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
     simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
     which does not support these constructs at all.
 
     Args:
         schema: A JSON Schema dict (or sub-schema).
+        defs: Collected ``$defs``/``definitions`` from the top-level schema.
+            Populated automatically on the first call if the schema contains
+            definition maps.
 
     Returns:
         A new dict with unsupported keys removed at every level.
     """
+    # On first call, collect $defs/definitions for $ref resolution.
+    if defs is None:
+        defs = {}
+        for key in _DEFS_KEYS:
+            d = schema.get(key)
+            if isinstance(d, dict):
+                defs.update(d)
+
+    # Resolve $ref: inline the referenced definition (merge siblings).
+    ref = schema.get("$ref")
+    if isinstance(ref, str) and defs:
+        resolved = _resolve_ref(ref, defs)
+        if resolved:
+            # Siblings of $ref (e.g. description) are kept; $ref itself is
+            # replaced by the resolved definition's content.
+            merged = {k: v for k, v in schema.items() if k != "$ref"}
+            merged.update(resolved)
+            return _sanitize_schema(merged, defs)
+
     result: dict[str, Any] = {}
     for key, value in schema.items():
-        if key in _UNSUPPORTED_SCHEMA_KEYS:
+        if key in _UNSUPPORTED_SCHEMA_KEYS or key in _DEFS_KEYS:
+            continue
+        if key == "$ref":
+            # Unresolvable $ref — drop it to avoid upstream rejection.
             continue
         if isinstance(value, dict):
-            result[key] = _sanitize_schema(value)
+            result[key] = _sanitize_schema(value, defs)
         elif isinstance(value, list):
             result[key] = [
-                _sanitize_schema(item) if isinstance(item, dict) else item
+                _sanitize_schema(item, defs) if isinstance(item, dict) else item
                 for item in value
             ]
         else:
