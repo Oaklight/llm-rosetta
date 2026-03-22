@@ -6,6 +6,15 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## v0.2.2 — 2026-03-22
+
+### Fixed
+
+- **Upstream Gemini endpoint rejects `anyOf`/`oneOf`/`allOf`**: The upstream OpenAI-compatible layer for Gemini models rejects JSON Schema combination keywords entirely. `_sanitize_schema()` now flattens `anyOf`/`oneOf` nullable patterns (e.g. `{"anyOf": [{"type": "string"}, {"type": "null"}]}`) into `{"type": "string", "nullable": true}`, unwraps single-element `allOf`, and picks the first non-null variant for multi-type unions (#76)
+- **Unsupported JSON Schema keywords stripped**: Added recursive removal of `propertyNames`, `const`, `$comment`, `$id`, `$anchor`, `$defs`, and other non-standard keywords from tool parameter schemas before sending to upstream endpoints (#76)
+- **Missing `content_block_stop` in Anthropic SSE output**: When converting OpenAI Chat streaming responses to Anthropic SSE format, `content_block_stop` events were not emitted before `message_delta`, causing Claude Code to silently discard response content. The Anthropic converter now emits `content_block_stop` for any open content block when processing a `FinishEvent` (#77)
+- **Upstream preflight chunk misinterpreted as stream end**: Argo API sends a preflight chunk with `choices: []` and empty `id`/`model` before actual content. The OpenAI Chat converter now only treats empty-choices chunks as stream-end after the stream has actually started (`context.is_started` guard) (#77)
+
 ## v0.2.1 — 2026-03-20
 
 ### Added
