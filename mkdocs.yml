@@ -98,6 +98,7 @@ nav:
       - IR Types: guide/ir-types.md
       - Streaming: guide/streaming.md
       - Auto Detection: guide/auto-detection.md
+      - Provider Compatibility: guide/compatibility.md
   - Gateway:
       - gateway/index.md
       - Validation: gateway/validation.md

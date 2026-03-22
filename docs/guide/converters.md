@@ -102,19 +102,34 @@ Upstream endpoints (especially Vertex AI's OpenAI-compatible layer) reject JSON 
 
 LLM-Rosetta's `sanitize_schema()` (in `converters.base.tools`) strips these recursively from all tool parameter schemas across all 4 converters.
 
-### Orphaned Tool Calls (OpenAI Strict Pairing)
+### Tool Call / Result Pairing (Strict Validation)
 
-Both the OpenAI Chat Completions API and the Responses API **strictly require** every tool call to have a corresponding tool result. If a tool call is interrupted (e.g. the user cancels mid-execution in an agentic coding tool), the tool call entry remains in the conversation history without a matching result, and OpenAI returns a **400 error**:
+Most LLM providers **strictly require** bidirectional pairing between tool calls and tool results. Violations in either direction cause a **400 error**:
 
-- **Chat Completions**: `"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."`
-- **Responses API**: `"No tool output found for function call <call_id>."`
+| Direction | OpenAI | Anthropic | Google |
+|---|---|---|---|
+| Tool call without result | **400** | **400** | OK |
+| Tool result without call | **400** | **400** | OK |
 
-Other providers (Anthropic, Google) are lenient about this — they simply ignore orphaned tool calls.
+Representative error messages:
 
-LLM-Rosetta handles this automatically during conversion and emits a `WARNING`-level log when orphaned tool calls are detected, so you can trace the fix without it being silent:
+- **OpenAI**: `"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."` / `"Invalid parameter: messages with role 'tool' must be a response to a preceding message with 'tool_calls'."`
+- **Anthropic**: `"tool_use ids were found without tool_result blocks immediately after: <id>"` / `"unexpected tool_use_id found in tool_result blocks: <id>"`
+- **OpenAI Responses API**: `"No tool output found for function call <call_id>."`
 
-- **Cross-format conversion**: Both `OpenAIChatConverter.request_to_provider()` and `OpenAIResponsesConverter.request_to_provider()` fix orphaned tool calls at the IR level before format conversion, injecting synthetic tool result messages for any unmatched `tool_call_id`.
-- **Passthrough / direct use**: Import the format-specific function:
+Only Google Gemini is lenient about both cases. These mismatches commonly occur when:
+
+- A tool call is interrupted (user cancels mid-execution) — leaves a call without a result.
+- Context compaction or content filtering removes an assistant message containing `tool_calls` — leaves tool results without a preceding call.
+
+LLM-Rosetta fixes both directions automatically and emits `WARNING`-level logs so you can trace each fix:
+
+- **Orphaned tool_calls** → a synthetic tool result with placeholder content `"[No output available yet]"` is injected.
+- **Orphaned tool_results** → the dangling result messages are removed.
+
+**Cross-format conversion**: All converters fix mismatches at the IR level before format conversion.
+
+**Passthrough / direct use**: Import the format-specific function:
 
 ```python
 # For OpenAI Chat Completions format
@@ -131,4 +146,6 @@ items = fix_orphaned_tool_calls(items)
 
 ### Google camelCase vs snake_case
 
-Google's REST API uses camelCase (`functionDeclarations`, `toolConfig`, `functionCallingConfig`) while the Python SDK uses snake_case (`function_declarations`, `tool_config`). LLM-Rosetta's Google converter accepts both conventions transparently.
+Google's REST API and CLI tools (e.g. Gemini CLI) use camelCase (`inlineData`, `mimeType`, `functionCall`, `functionResponse`, `functionDeclarations`, `responseMimeType`, `thinkingConfig`, etc.) while the Python SDK uses snake_case. LLM-Rosetta's Google converter accepts both conventions transparently in all layers — content, tools, config, and response fields. All IR→Provider output uses camelCase for REST API compatibility.
+
+For a comprehensive list of all camelCase/snake_case field pairs and other real-world compatibility issues discovered during live testing, see the [Provider & CLI Compatibility Matrix](compatibility.md).
