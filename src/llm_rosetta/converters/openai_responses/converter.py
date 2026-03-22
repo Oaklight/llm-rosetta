@@ -219,7 +219,14 @@ class OpenAIResponsesConverter(BaseConverter):
                 # Skip disabled tools (e.g. web_search with external_web_access=false)
                 if isinstance(t, dict) and t.get("external_web_access") is False:
                     continue
-                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+                try:
+                    ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+                except Exception as exc:
+                    tool_type = t.get("type", "unknown") if isinstance(t, dict) else "unknown"
+                    tool_name = t.get("name", "unnamed") if isinstance(t, dict) else "unnamed"
+                    raise ValueError(
+                        f"Unsupported tool type='{tool_type}' name='{tool_name}': {exc}"
+                    )
             if ir_tools:
                 ir_request["tools"] = ir_tools
 

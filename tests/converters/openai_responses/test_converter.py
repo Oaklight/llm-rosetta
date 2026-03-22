@@ -209,6 +209,42 @@ class TestOpenAIResponsesConverter:
         result = self.converter.request_from_provider(provider_request)
         assert result["response_format"]["type"] == "json_object"
 
+    def test_request_from_provider_ignores_disabled_hosted_tool(self):
+        """Disabled hosted tools are skipped without failing the request."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [],
+            "tools": [
+                {
+                    "type": "web_search_preview",
+                    "name": "web_search",
+                    "external_web_access": False,
+                }
+            ],
+        }
+        result = self.converter.request_from_provider(provider_request)
+        assert "tools" not in result
+
+    def test_request_from_provider_non_function_named_tool_is_preserved(self):
+        """Named non-function tools are preserved instead of being dropped."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [],
+            "tools": [
+                {
+                    "type": "custom",
+                    "name": "bad_tool",
+                    "description": "Custom hosted tool",
+                    "schema": {"type": "object"},
+                }
+            ],
+        }
+        result = self.converter.request_from_provider(provider_request)
+        tools = list(result["tools"])
+        assert len(tools) == 1
+        assert tools[0]["type"] == "custom"
+        assert tools[0]["name"] == "bad_tool"
+
     # ==================== response_from_provider ====================
 
     def test_response_from_provider_basic(self):
