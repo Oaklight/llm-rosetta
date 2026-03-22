@@ -46,7 +46,7 @@ from ..base.stream_context import StreamContext
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
 from .message_ops import OpenAIChatMessageOps
-from .tool_ops import OpenAIChatToolOps
+from .tool_ops import OpenAIChatToolOps, fix_orphaned_tool_calls
 
 
 class OpenAIChatConverter(BaseConverter):
@@ -163,6 +163,12 @@ class OpenAIChatConverter(BaseConverter):
         extensions = ir_request.get("provider_extensions")
         if extensions:
             result.update(extensions)
+
+        # 12. Fix orphaned tool_calls — OpenAI Chat API strictly requires
+        # every tool_call_id to have a matching role:tool response.
+        # Other providers (Anthropic, Google) are lenient, so cross-format
+        # conversions may carry orphaned tool_calls from interrupted sessions.
+        result["messages"] = fix_orphaned_tool_calls(result["messages"])
 
         return result, warnings
 

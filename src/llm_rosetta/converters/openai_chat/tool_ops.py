@@ -5,6 +5,10 @@ OpenAI Chat Completions API tool conversion operations.
 Handles bidirectional conversion of tool definitions, calls, results,
 choice strategies, and call configurations.
 
+Also provides ``fix_orphaned_tool_calls`` — a module-level utility that
+patches messages arrays where assistant ``tool_calls`` lack matching
+``role: tool`` responses (OpenAI Chat API rejects these with 400).
+
 Self-contained: does not depend on utils/ToolCallConverter or utils/ToolConverter.
 """
 
@@ -20,6 +24,81 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema
+
+
+# ==================== Orphaned Tool Call Fix ====================
+
+
+def fix_orphaned_tool_calls(
+    messages: list[dict[str, Any]],
+    *,
+    placeholder: str = "[Tool call was interrupted]",
+) -> list[dict[str, Any]]:
+    """Inject synthetic tool results for orphaned tool_calls.
+
+    When a tool call is interrupted (e.g. the user cancels mid-execution in an
+    agentic coding tool), the assistant message containing ``tool_calls`` stays
+    in the conversation history but the matching ``role: "tool"`` response is
+    never appended.  The OpenAI Chat Completions API **strictly** requires
+    every ``tool_call_id`` to have a corresponding tool result and returns a
+    400 error otherwise.
+
+    Other providers (Anthropic, Google) are lenient about this, so the problem
+    only surfaces when forwarding to an OpenAI-compatible endpoint.
+
+    This function:
+
+    1. Collects all ``tool_call_id`` values that already have a matching
+       ``role: "tool"`` message.
+    2. Walks through the messages array and, for each assistant message with
+       ``tool_calls``, injects a synthetic tool result immediately after it
+       for any ID that is **not** in the answered set.
+
+    The original list is **not** modified; a new list is returned.
+
+    Args:
+        messages: OpenAI Chat format messages list.
+        placeholder: Content string for injected synthetic tool results.
+
+    Returns:
+        A new messages list with orphaned tool_calls patched.
+    """
+    # Collect all tool_call_ids that already have a matching tool result
+    answered_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "tool":
+            tc_id = msg.get("tool_call_id")
+            if tc_id:
+                answered_ids.add(tc_id)
+
+    # Fast path: if there are no tool_calls at all, return as-is
+    has_tool_calls = any(
+        msg.get("role") == "assistant" and msg.get("tool_calls") for msg in messages
+    )
+    if not has_tool_calls:
+        return messages
+
+    # Walk messages and inject synthetic results for orphaned tool_calls
+    patched: list[dict[str, Any]] = []
+    for msg in messages:
+        patched.append(msg)
+        if msg.get("role") != "assistant":
+            continue
+        tool_calls = msg.get("tool_calls")
+        if not tool_calls or not isinstance(tool_calls, list):
+            continue
+        for tc in tool_calls:
+            tc_id = tc.get("id")
+            if tc_id and tc_id not in answered_ids:
+                patched.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tc_id,
+                        "content": placeholder,
+                    }
+                )
+
+    return patched
 
 
 class OpenAIChatToolOps(BaseToolOps):
