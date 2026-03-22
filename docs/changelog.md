@@ -10,7 +10,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 新增
 
-- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py` 中的新公开函数，检测 assistant 消息中缺少匹配 `role: "tool"` 响应的 `tool_calls`，并注入合成占位结果。OpenAI Chat API 严格要求此配对关系（否则返回 400 错误），而 Anthropic 和 Google 对此较为宽松。在 `OpenAIChatConverter.request_to_provider()` 中自动应用于跨格式转换（#82）
+- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py` 和 `converters/openai_responses/tool_ops.py` 中的公开函数，检测缺少匹配工具结果的工具调用并注入合成占位响应。OpenAI Chat 和 Responses API 都严格要求此配对关系（否则返回 400 错误），而 Anthropic 和 Google 对此较为宽松。在 `OpenAIChatConverter.request_to_provider()` 和 `OpenAIResponsesConverter.request_to_provider()` 中通过 IR 层级自动修复跨格式转换中的孤立工具调用；检测到时输出 `WARNING` 级别日志（#82）
 
 ### 新增（文档）
 

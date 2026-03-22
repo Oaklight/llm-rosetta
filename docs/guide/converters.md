@@ -102,24 +102,31 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 LLM-Rosetta 的 `sanitize_schema()`（位于 `converters.base.tools`）会在所有 4 个转换器中递归地清除这些关键字。
 
-### 孤立工具调用（OpenAI Chat 严格配对要求）
+### 孤立工具调用（OpenAI 严格配对要求）
 
-OpenAI Chat Completions API **严格要求**每个 assistant 消息中的 `tool_call_id` 都必须有对应的 `role: "tool"` 响应。如果工具调用被中断（例如用户在 Agent 编码工具中取消了执行），`tool_calls` 条目会保留在对话历史中但缺少匹配的结果，OpenAI 会返回 **400 错误**。
+OpenAI Chat Completions API 和 Responses API 都**严格要求**每个工具调用都必须有对应的工具结果。如果工具调用被中断（例如用户在 Agent 编码工具中取消了执行），工具调用条目会保留在对话历史中但缺少匹配的结果，OpenAI 会返回 **400 错误**：
+
+- **Chat Completions**：`"An assistant message with 'tool_calls' must be followed by tool messages responding to each 'tool_call_id'."`
+- **Responses API**：`"No tool output found for function call <call_id>."`
 
 其他提供商（Anthropic、Google）对此比较宽松——它们会直接忽略孤立的工具调用。
 
-LLM-Rosetta 自动处理此问题：
+LLM-Rosetta 在转换过程中自动处理此问题，并在检测到孤立工具调用时输出 `WARNING` 级别日志，确保修复过程可追踪而非完全静默：
 
-- **跨格式转换**：`OpenAIChatConverter.request_to_provider()` 会在输出消息上调用 `fix_orphaned_tool_calls()`，为未匹配的 `tool_call_id` 注入合成的 `role: "tool"` 占位消息。
-- **直通 / 直接使用**：可以显式导入并调用该函数：
+- **跨格式转换**：`OpenAIChatConverter.request_to_provider()` 和 `OpenAIResponsesConverter.request_to_provider()` 都会在 IR 层级修复孤立工具调用，为未匹配的 `tool_call_id` 注入合成的工具结果消息。
+- **直通 / 直接使用**：可以导入对应格式的函数：
 
 ```python
+# OpenAI Chat Completions 格式
 from llm_rosetta.converters.openai_chat.tool_ops import fix_orphaned_tool_calls
 
-# 在发送到 OpenAI 之前修补消息
 messages = fix_orphaned_tool_calls(messages)
-# 可以自定义占位文本：
-messages = fix_orphaned_tool_calls(messages, placeholder="[已取消]")
+messages = fix_orphaned_tool_calls(messages, placeholder="[已跳过]")
+
+# OpenAI Responses 格式
+from llm_rosetta.converters.openai_responses.tool_ops import fix_orphaned_tool_calls
+
+items = fix_orphaned_tool_calls(items)
 ```
 
 ### Google camelCase 与 snake_case
