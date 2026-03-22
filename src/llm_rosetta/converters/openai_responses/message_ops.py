@@ -324,13 +324,15 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
             elif item_type in ("function_call_output", "mcp_call_output"):
                 # Tool result: convert to ToolResultPart
+                # Use role="tool" (not "user") so fix_orphaned_tool_calls_ir
+                # can correctly detect answered tool calls across formats.
                 tool_result = self.tool_ops.p_tool_result_to_ir(item)
-                if current_message and current_message.get("role") == "user":
+                if current_message and current_message.get("role") == "tool":
                     cast(list, current_message["content"]).append(tool_result)
                 else:
                     if current_message:
                         ir_input.append(current_message)
-                    current_message = {"role": "user", "content": [tool_result]}
+                    current_message = {"role": "tool", "content": [tool_result]}
 
             elif item_type == "reasoning":
                 # Reasoning content

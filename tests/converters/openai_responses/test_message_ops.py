@@ -401,7 +401,7 @@ class TestOpenAIResponsesMessageOps:
         assert tc["tool_input"] == {"city": "NYC"}
 
     def test_p_function_call_output_to_ir(self):
-        """Test OpenAI Responses function_call_output → IR user with ToolResultPart."""
+        """Test OpenAI Responses function_call_output → IR tool with ToolResultPart."""
         result = cast(
             list[Any],
             self.message_ops.p_messages_to_ir(
@@ -415,7 +415,7 @@ class TestOpenAIResponsesMessageOps:
             ),
         )
         assert len(result) == 1
-        assert result[0]["role"] == "user"
+        assert result[0]["role"] == "tool"
         tr = result[0]["content"][0]
         assert tr["type"] == "tool_result"
         assert tr["tool_call_id"] == "call_1"
@@ -546,7 +546,7 @@ class TestOpenAIResponsesMessageOps:
         assert result[0]["role"] == "user"
         assert result[1]["role"] == "assistant"  # function_call
         assert result[1]["content"][0]["type"] == "tool_call"
-        assert result[2]["role"] == "user"  # function_call_output
+        assert result[2]["role"] == "tool"  # function_call_output
         assert result[2]["content"][0]["type"] == "tool_result"
         assert result[3]["role"] == "assistant"  # final message
 

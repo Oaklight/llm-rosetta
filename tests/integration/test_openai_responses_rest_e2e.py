@@ -224,7 +224,7 @@ def test_non_stream_tool_calls():
                 },
                 assistant_msg,
                 {
-                    "role": "user",
+                    "role": "tool",
                     "content": [
                         {
                             "type": "tool_result",
