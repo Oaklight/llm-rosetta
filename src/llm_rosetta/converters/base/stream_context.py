@@ -92,6 +92,31 @@ class StreamContext:
         """
         return self.tool_call_id_map.get(tool_call_id, "")
 
+    def get_tool_call_args(self, tool_call_id: str) -> str:
+        """Get accumulated arguments for a tool call.
+
+        Args:
+            tool_call_id: The tool call identifier.
+
+        Returns:
+            The accumulated arguments string, or empty string if not found.
+        """
+        return self._tool_call_args.get(tool_call_id, "")
+
+    def get_pending_tool_calls(self) -> list[tuple[str, str, str]]:
+        """Get all registered tool calls with their accumulated arguments.
+
+        Returns:
+            List of (tool_call_id, tool_name, accumulated_args) tuples
+            in the order they were registered.
+        """
+        result = []
+        for call_id in self._tool_call_order:
+            name = self.tool_call_id_map.get(call_id, "")
+            args = self._tool_call_args.get(call_id, "")
+            result.append((call_id, name, args))
+        return result
+
     def mark_started(self) -> None:
         """Mark the stream as started."""
         self._started = True
