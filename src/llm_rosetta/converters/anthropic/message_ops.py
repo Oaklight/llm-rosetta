@@ -310,14 +310,14 @@ class AnthropicMessageOps(BaseMessageOps):
                 other_parts = [p for p in ir_content if not is_tool_result_part(p)]
                 if not other_parts:
                     # Pure tool_result → normalize to role="tool"
-                    return {"role": "tool", "content": ir_content}
+                    return cast(Message, {"role": "tool", "content": ir_content})
                 # Mixed content → split into tool + user messages
                 return [
-                    {"role": "tool", "content": tool_result_parts},
-                    {"role": "user", "content": other_parts},
+                    cast(Message, {"role": "tool", "content": tool_result_parts}),
+                    cast(Message, {"role": "user", "content": other_parts}),
                 ]
 
-        return {"role": role, "content": ir_content}
+        return cast(Message, {"role": role, "content": ir_content})
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Anthropic content block to IR content part(s).
