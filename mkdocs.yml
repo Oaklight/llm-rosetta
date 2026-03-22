@@ -102,6 +102,8 @@ nav:
   - 网关:
       - gateway/index.md
       - 验证报告: gateway/validation.md
+      - CLI 跨格式测试: gateway/validation-cli.md
+      - SDK 与集成测试: gateway/validation-sdk.md
   - 示例:
       - examples/index.md
       - 跨提供商对话: examples/cross-provider.md
