@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from collections.abc import AsyncGenerator
 from typing import Any
 
 from starlette.applications import Starlette
@@ -206,7 +208,9 @@ def create_app(config: GatewayConfig) -> Starlette:
         Route("/health", handle_health, methods=["GET"]),
     ]
 
-    async def on_shutdown() -> None:
+    @asynccontextmanager
+    async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
+        yield
         await close_clients()
 
-    return Starlette(routes=routes, on_shutdown=[on_shutdown])
+    return Starlette(routes=routes, lifespan=lifespan)
