@@ -360,16 +360,16 @@ class BaseToolOps(ABC):
     @abstractmethod
     def p_tool_definition_to_ir(
         provider_tool: Any, **kwargs: Any
-    ) -> ToolDefinition | list[ToolDefinition]:
+    ) -> ToolDefinition | list[ToolDefinition] | None:
         """Provider Tool Definition → IR ToolDefinition
-        将Provider工具定义转换为IR工具定义
 
         Args:
-            provider_tool: Provider格式的工具定义
-            **kwargs: 额外参数
+            provider_tool: Provider tool definition.
+            **kwargs: Extra arguments.
 
         Returns:
-            IR格式的工具定义
+            IR tool definition(s), or None if the entry cannot be converted
+            (e.g. provider-specific built-in tools with no function schema).
         """
         pass
 
