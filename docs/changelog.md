@@ -6,6 +6,16 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## v0.2.4 — 2026-03-22
+
+### Added
+
+- **`fix_orphaned_tool_calls()` utility**: New public function in `converters/openai_chat/tool_ops.py` that detects assistant messages with `tool_calls` lacking matching `role: "tool"` responses and injects synthetic placeholder results. OpenAI Chat API strictly requires this pairing (returns 400 otherwise), while Anthropic and Google are lenient. Automatically applied during `OpenAIChatConverter.request_to_provider()` for cross-format conversions (#82)
+
+### Added (Documentation)
+
+- **Provider Dialect Differences guide**: New section in the Converters guide (EN + ZH) documenting tool schema sanitization, orphaned tool call handling, and Google camelCase/snake_case differences
+
 ## v0.2.3 — 2026-03-22
 
 ### Fixed

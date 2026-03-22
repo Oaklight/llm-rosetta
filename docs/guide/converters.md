@@ -87,3 +87,41 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 ```
 
 The `"rest"` format lifts `tools`, `tool_config`, `response_mime_type`, and `response_schema` to the top level, and wraps generation parameters (temperature, top_p, etc.) into a `generationConfig` object — matching the [Google Gemini REST API](https://ai.google.dev/api/generate-content) schema.
+
+## Provider Dialect Differences
+
+Different LLM providers have subtly different requirements for the same conceptual operations. LLM-Rosetta handles these **dialect differences** automatically during conversion, so you don't have to worry about them.
+
+### Tool Schema Sanitization
+
+Upstream endpoints (especially Vertex AI's OpenAI-compatible layer) reject JSON Schema keywords that are valid per the spec but unsupported by their validation:
+
+- Keywords like `propertyNames`, `$schema`, `const`, `deprecated`, `readOnly`, etc.
+- `$ref` / `$defs` — resolved by inlining referenced definitions
+- `anyOf` / `oneOf` / `allOf` — flattened into simple typed schemas (e.g. nullable unions)
+
+LLM-Rosetta's `sanitize_schema()` (in `converters.base.tools`) strips these recursively from all tool parameter schemas across all 4 converters.
+
+### Orphaned Tool Calls (OpenAI Chat Strict Pairing)
+
+The OpenAI Chat Completions API **strictly requires** every `tool_call_id` in an assistant message to have a corresponding `role: "tool"` response. If a tool call is interrupted (e.g. the user cancels mid-execution in an agentic coding tool), the `tool_calls` entry remains in the conversation history without a matching result, and OpenAI returns a **400 error**.
+
+Other providers (Anthropic, Google) are lenient about this — they simply ignore orphaned tool calls.
+
+LLM-Rosetta handles this automatically:
+
+- **Cross-format conversion**: `OpenAIChatConverter.request_to_provider()` calls `fix_orphaned_tool_calls()` on the output messages, injecting synthetic `role: "tool"` placeholders for any unmatched `tool_call_id`.
+- **Passthrough / direct use**: Import and call the function explicitly:
+
+```python
+from llm_rosetta.converters.openai_chat.tool_ops import fix_orphaned_tool_calls
+
+# Patch messages before sending to OpenAI
+messages = fix_orphaned_tool_calls(messages)
+# You can customize the placeholder text:
+messages = fix_orphaned_tool_calls(messages, placeholder="[Cancelled]")
+```
+
+### Google camelCase vs snake_case
+
+Google's REST API uses camelCase (`functionDeclarations`, `toolConfig`, `functionCallingConfig`) while the Python SDK uses snake_case (`function_declarations`, `tool_config`). LLM-Rosetta's Google converter accepts both conventions transparently.
