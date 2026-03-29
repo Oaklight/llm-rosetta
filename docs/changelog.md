@@ -6,6 +6,13 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## 未发布
+
+### 修复
+
+- **Responses API 转换后 Chat Completions tool 消息顺序错乱**：Codex CLI 在 Responses API 格式中会在 `function_call_output` 与其他项目（如用户警告消息）之间交错排列——在 Responses API 中通过 `call_id` 匹配是合法的。但经 IR → Chat Completions 转换后，交错的消息打破了 OpenAI Chat API 约束（`role: "tool"` 消息必须紧跟其 `assistant` `tool_calls`），导致上游返回 400 错误。在 `OpenAIChatMessageOps.ir_messages_to_p()` 中新增 `_reorder_tool_messages()` 后处理步骤，将 tool 响应重新归组到对应的 assistant 消息之后
+- **流式事件顺序修正**：四个提供商转换器（OpenAI Chat、OpenAI Responses、Anthropic、Google GenAI）中 `UsageEvent` 现在在 `FinishEvent` 之前发出。此前 `FinishEvent` 先处理，导致 `response.completed` 携带 `output_tokens=0`——下游消费者（如 Codex token 追踪）看到的是过时的用量数据。对于跨 chunk 场景（OpenAI Chat 在不同 chunk 中发送 `finish_reason` 和 `usage`），`FinishEvent` 现在将 `response.completed` 延迟到 `StreamEndEvent` 中发出，后者会合并待处理的 usage 数据
+
 ## v0.2.5 — 2026-03-23
 
 ### 修复
