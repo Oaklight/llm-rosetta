@@ -355,6 +355,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "response.output_item.added"
+        assert result["item"]["id"] == "fc_call_abc"
         assert result["item"]["type"] == "function_call"
         assert result["item"]["call_id"] == "call_abc"
         assert result["item"]["name"] == "search"
@@ -371,6 +372,7 @@ class TestStreamResponseToProvider:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["item"]["id"] == "fc_call_abc"
         assert "output_index" not in result
 
     def test_tool_call_delta(self):
@@ -386,7 +388,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["type"] == "response.function_call_arguments.delta"
-        assert result["call_id"] == "call_abc"
+        assert result["item_id"] == "fc_call_abc"
         assert result["delta"] == '{"city":'
         assert result["output_index"] == 1
 
@@ -401,7 +403,34 @@ class TestStreamResponseToProvider:
             },
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["item_id"] == "fc_call_abc"
         assert "output_index" not in result
+
+    def test_tool_call_delta_empty_id_resolved_by_index(self):
+        """ToolCallDeltaEvent with empty tool_call_id resolved via context index."""
+        ctx = StreamContext()
+        # Simulate a prior tool_call_start that registered the call
+        ctx.register_tool_call("call_abc", "get_weather")
+        ctx.register_tool_call_item("call_abc", "fc_call_abc")
+
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "",
+                "arguments_delta": '{"city":"Beijing"}',
+                "tool_call_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "response.function_call_arguments.delta"
+        assert result["item_id"] == "fc_call_abc"
+        assert result["delta"] == '{"city":"Beijing"}'
+        # Verify args were accumulated under the resolved call_id
+        assert ctx.get_tool_call_args("call_abc") == '{"city":"Beijing"}'
 
     def test_finish_event_stop(self):
         """FinishEvent with 'stop' → response.completed with status 'completed'."""
@@ -515,6 +544,7 @@ class TestStreamRoundTrip:
         restored = cast(
             dict[str, Any], self.converter.stream_response_to_provider(events[0])
         )
+        assert restored["item"]["id"] == "fc_call_abc"
         assert restored["item"]["call_id"] == "call_abc"
         assert restored["item"]["name"] == "search"
         assert restored["output_index"] == 1
@@ -531,7 +561,7 @@ class TestStreamRoundTrip:
         restored = cast(
             dict[str, Any], self.converter.stream_response_to_provider(events[0])
         )
-        assert restored["call_id"] == "call_abc"
+        assert restored["item_id"] == "fc_call_abc"
         assert restored["delta"] == '{"q": "test"}'
 
 

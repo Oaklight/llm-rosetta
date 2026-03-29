@@ -630,10 +630,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     # Register tool call in context
                     if context is not None:
                         context.register_tool_call(call_id, item.get("name", ""))
-                        # Map item_id -> call_id (upstream uses item_id in
-                        # delta/done events, not call_id)
-                        if item_id:
-                            context._item_id_to_call_id[item_id] = call_id
+                        context.register_tool_call_item(call_id, item_id)
 
                     start_event_tc = ToolCallStartEvent(
                         type="tool_call_start",
@@ -1004,14 +1001,17 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_tool_call_start_event(event):
             call_id = event["tool_call_id"]
             tool_name = event["tool_name"]
+            item_id = f"fc_{call_id}"
 
             # Register in context for later done events
             if context is not None and call_id:
                 context.register_tool_call(call_id, tool_name)
+                context.register_tool_call_item(call_id, item_id)
 
             result: dict[str, Any] = {
                 "type": "response.output_item.added",
                 "item": {
+                    "id": item_id,
                     "type": "function_call",
                     "call_id": call_id,
                     "name": tool_name,
@@ -1025,17 +1025,31 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_tool_call_delta_event(event):
             call_id = event["tool_call_id"]
             delta = event["arguments_delta"]
+            tc_index = event.get("tool_call_index")
+
+            # Defense-in-depth: resolve empty tool_call_id by index.
+            # Some upstream providers (e.g. certain Chat Completions
+            # implementations) only send tool_call_id on the first chunk.
+            if not call_id and context is not None and tc_index is not None:
+                if tc_index < len(context._tool_call_order):
+                    call_id = context._tool_call_order[tc_index]
 
             # Accumulate arguments in context for done events
             if context is not None and call_id:
                 context.append_tool_call_args(call_id, delta)
 
+            # Use item_id per Responses API spec
+            item_id = ""
+            if context is not None and call_id:
+                item_id = context.get_tool_call_item_id(call_id)
+            if not item_id and call_id:
+                item_id = f"fc_{call_id}"
+
             result: dict[str, Any] = {
                 "type": "response.function_call_arguments.delta",
-                "call_id": call_id,
+                "item_id": item_id,
                 "delta": delta,
             }
-            tc_index = event.get("tool_call_index")
             if tc_index is not None:
                 result["output_index"] = tc_index
             return result
@@ -1063,9 +1077,12 @@ class OpenAIResponsesConverter(BaseConverter):
                 for call_id in context._tool_call_order:
                     tool_name = context.get_tool_name(call_id)
                     arguments = context._tool_call_args.get(call_id, "")
+                    item_id = (
+                        context.get_tool_call_item_id(call_id) or f"fc_{call_id}"
+                    )
                     output.append(
                         {
-                            "id": f"fc_{call_id}",
+                            "id": item_id,
                             "type": "function_call",
                             "call_id": call_id,
                             "name": tool_name,
@@ -1145,6 +1162,9 @@ class OpenAIResponsesConverter(BaseConverter):
                 for tc_idx, call_id in enumerate(context._tool_call_order):
                     tool_name = context.get_tool_name(call_id)
                     arguments = context._tool_call_args.get(call_id, "")
+                    item_id = (
+                        context.get_tool_call_item_id(call_id) or f"fc_{call_id}"
+                    )
                     output_index = tc_idx + (
                         1 if getattr(context, "_output_item_emitted", False) else 0
                     )
@@ -1153,7 +1173,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     results.append(
                         {
                             "type": "response.function_call_arguments.done",
-                            "call_id": call_id,
+                            "item_id": item_id,
                             "output_index": output_index,
                             "arguments": arguments,
                         }
@@ -1165,7 +1185,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             "type": "response.output_item.done",
                             "output_index": output_index,
                             "item": {
-                                "id": f"fc_{call_id}",
+                                "id": item_id,
                                 "type": "function_call",
                                 "call_id": call_id,
                                 "name": tool_name,
