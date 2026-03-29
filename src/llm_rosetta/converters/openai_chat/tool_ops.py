@@ -170,7 +170,9 @@ class OpenAIChatToolOps(BaseToolOps):
                 func_def["parameters"] = parameters
             return {"type": "function", "function": func_def}
 
-        # Non-function tool types: wrap as custom
+        # Non-function tool types (e.g. Codex apply_patch with type="custom"):
+        # wrap as Chat Completions function, preserving the original name so
+        # the client can match tool_call responses back to the tool.
         raw_params = ir_tool.get("parameters", {})
         params = (
             sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
@@ -178,7 +180,7 @@ class OpenAIChatToolOps(BaseToolOps):
         return {
             "type": "function",
             "function": {
-                "name": f"{ir_tool['type']}_{ir_tool['name']}",
+                "name": ir_tool["name"],
                 "description": ir_tool.get("description", ""),
                 "parameters": params,
             },

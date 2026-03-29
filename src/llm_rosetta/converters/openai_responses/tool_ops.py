@@ -171,11 +171,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
             }
             return result
 
-        # Non-function tool types: wrap as custom
+        # Non-function tool types (e.g. Codex apply_patch with type="custom"):
+        # preserve the original name so the client can match tool_call
+        # responses back to the tool definition.
         raw_schema = ir_tool.get("parameters", {})
         return {
             "type": "custom",
-            "name": f"{ir_tool['type']}_{ir_tool['name']}",
+            "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
             "schema": sanitize_schema(raw_schema)
             if isinstance(raw_schema, dict)

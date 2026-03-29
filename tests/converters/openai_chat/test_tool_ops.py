@@ -44,6 +44,27 @@ class TestOpenAIChatToolOps:
         assert result["function"]["description"] == "Get current weather"
         assert "parameters" in result["function"]
 
+    def test_ir_tool_definition_to_p_non_function_preserves_name(self):
+        """Non-function tool type preserves original name (no type prefix)."""
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "custom",
+                "name": "apply_patch",
+                "description": "Apply a patch",
+                "parameters": {
+                    "type": "object",
+                    "properties": {"patch": {"type": "string"}},
+                },
+                "required_parameters": [],
+                "metadata": {},
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        assert result["type"] == "function"
+        assert result["function"]["name"] == "apply_patch"
+        assert result["function"]["description"] == "Apply a patch"
+
     def test_p_tool_definition_to_ir(self):
         """Test OpenAI tool definition → IR ToolDefinition."""
         provider_tool = {

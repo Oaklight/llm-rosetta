@@ -59,7 +59,7 @@ class TestOpenAIResponsesToolOps:
         )
         result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "custom"
-        assert result["name"] == "web_search_search"
+        assert result["name"] == "search"
 
     def test_p_tool_definition_to_ir_flat(self):
         """Test OpenAI Responses flat tool definition → IR ToolDefinition."""
