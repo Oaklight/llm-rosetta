@@ -59,6 +59,7 @@ from ...types.ir.type_guards import (
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
+from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from .config_ops import GoogleGenAIConfigOps
 from .content_ops import GoogleGenAIContentOps
 from .message_ops import GoogleGenAIMessageOps
@@ -210,8 +211,10 @@ class GoogleGenAIConverter(BaseConverter):
                         parts.append({"text": part["text"]})
                 system_instruction = {"role": "user", "parts": parts}
 
-        # 2. Handle messages (extract system messages)
-        ir_messages = list(ir_request.get("messages", []))
+        # 2. Handle messages — fix orphaned tool_calls/results and strip
+        #    orphaned tool_choice/tool_config at IR level before conversion.
+        ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        warnings_list.extend(strip_orphaned_tool_config(ir_request))
 
         # Extract system messages from message list
         for item in ir_messages:

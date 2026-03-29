@@ -141,6 +141,14 @@ class TestGoogleGenAIConverter:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Weather?"}]}
             ],
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {"type": "object", "properties": {}},
+                }
+            ],
             "tool_choice": {"mode": "tool", "tool_name": "get_weather"},
         }
         result, warnings = self.converter.request_to_provider(ir_request)

@@ -17,7 +17,7 @@ Handles all tool-related conversions:
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 from collections.abc import Iterable
 
 from ...types.ir import (
@@ -27,6 +27,7 @@ from ...types.ir import (
     ToolDefinition,
     ToolResultPart,
 )
+from ...types.ir.request import IRRequest
 from ...types.ir.tools import ToolCallConfig
 
 logger = logging.getLogger(__name__)
@@ -326,6 +327,57 @@ def fix_orphaned_tool_calls_ir(
         )
 
     return patched
+
+
+# ==================== Orphaned Tool Config Fix (IR level) ====================
+
+
+def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
+    """Strip ``tool_choice`` and ``tool_config`` when no tools are defined.
+
+    Codex CLI context compaction can remove all tool definitions from a
+    request while keeping ``tool_choice`` (e.g. ``"auto"``).  This produces
+    an invalid request that upstream APIs reject with *"tool_choice is set
+    but no tools are provided"*.
+
+    This is part of the same problem family as
+    :func:`fix_orphaned_tool_calls_ir` (orphaned tool_call/result pairing)
+    and ``_reorder_tool_messages`` (tool message ordering) — all stem from
+    Codex context compaction breaking request structural integrity.
+
+    The request dict is modified **in-place**.
+
+    Args:
+        ir_request: IR request dict (mutated in-place).
+
+    Returns:
+        List of warning strings for each stripped field.
+    """
+    tools = ir_request.get("tools")
+    has_tools = bool(tools and any(True for _ in tools))
+
+    if has_tools:
+        return []
+
+    # Cast to plain dict for mutation — IRRequest is a TypedDict at
+    # type-check time but a regular dict at runtime.
+    request_dict = cast(dict[str, Any], ir_request)
+
+    warnings: list[str] = []
+    for field in ("tool_choice", "tool_config"):
+        if field in request_dict:
+            value = request_dict.pop(field)
+            warnings.append(
+                f"Stripped orphaned '{field}' (value: {value!r}) — "
+                "no tool definitions present in request"
+            )
+            logger.warning(
+                "Stripped orphaned '%s' from IR request — "
+                "no tool definitions present (Codex context compaction workaround)",
+                field,
+            )
+
+    return warnings
 
 
 class BaseToolOps(ABC):

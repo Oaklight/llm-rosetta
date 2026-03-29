@@ -43,7 +43,7 @@ from ...types.ir.type_guards import (
 )
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
-from ..base.tools import fix_orphaned_tool_calls_ir
+from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
 from .message_ops import OpenAIChatMessageOps
@@ -111,6 +111,7 @@ class OpenAIChatConverter(BaseConverter):
         # are lenient, so cross-format conversions may carry orphaned
         # tool_calls from interrupted sessions.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
+        warnings.extend(strip_orphaned_tool_config(ir_request))
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
         messages.extend(converted_msgs)
         warnings.extend(msg_warnings)
