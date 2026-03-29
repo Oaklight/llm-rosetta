@@ -40,6 +40,11 @@ class StreamContext:
         self._tool_call_order: list[str] = []  # call_ids in order received
         # item_id -> call_id mapping (OpenAI uses item_id in delta events)
         self._item_id_to_call_id: dict[str, str] = {}
+        # Responses API streaming state
+        self._output_item_emitted: bool = False
+        self._item_id: str = ""
+        self._accumulated_text: str = ""
+        self._content_part_done_emitted: bool = False
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.

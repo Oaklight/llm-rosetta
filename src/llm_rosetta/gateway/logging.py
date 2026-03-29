@@ -192,13 +192,16 @@ def setup_logging(
     )
 
     # Override formatTime to include milliseconds
-    def _format_time(record: logging.LogRecord, datefmt: str | None = None) -> str:
-        import datetime
+    import datetime
+    import types
 
+    def _format_time(
+        self: logging.Formatter, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
         ct = datetime.datetime.fromtimestamp(record.created)
         return ct.strftime("%Y-%m-%d %H:%M:%S.") + f"{int(record.msecs):03d}"
 
-    formatter.formatTime = _format_time  # type: ignore[assignment]
+    formatter.formatTime = types.MethodType(_format_time, formatter)  # type: ignore[assignment]
 
     _handler.setFormatter(formatter)
     logger.addHandler(_handler)

@@ -883,9 +883,9 @@ class OpenAIResponsesConverter(BaseConverter):
                 if context is not None and not getattr(
                     context, "_output_item_emitted", False
                 ):
-                    context._output_item_emitted = True  # type: ignore[attr-defined]
+                    context._output_item_emitted = True
                     item_id = f"msg_{context.response_id or ''}"
-                    context._item_id = item_id  # type: ignore[attr-defined]
+                    context._item_id = item_id
                     return [
                         {
                             "type": "response.output_item.added",
@@ -921,7 +921,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         elif is_content_block_end_event(event):
             if context is not None:
-                context._content_part_done_emitted = True  # type: ignore[attr-defined]
+                context._content_part_done_emitted = True
                 accumulated = getattr(context, "_accumulated_text", "")
                 # Emit output_text.done before content_part.done (matches
                 # OpenAI's event ordering)
@@ -959,17 +959,17 @@ class OpenAIResponsesConverter(BaseConverter):
             # Accumulate text in context for response.completed output
             if context is not None:
                 if not hasattr(context, "_accumulated_text"):
-                    context._accumulated_text = ""  # type: ignore[attr-defined]
-                context._accumulated_text += text  # type: ignore[attr-defined]
+                    context._accumulated_text = ""
+                context._accumulated_text += text
 
             # Emit output_item.added + content_part.added before the first
             # text delta so clients (e.g. Codex CLI) can register the item.
             if context is not None and not getattr(
                 context, "_output_item_emitted", False
             ):
-                context._output_item_emitted = True  # type: ignore[attr-defined]
+                context._output_item_emitted = True
                 item_id = f"msg_{context.response_id or ''}"
-                context._item_id = item_id  # type: ignore[attr-defined]
+                context._item_id = item_id
                 return [
                     {
                         "type": "response.output_item.added",
