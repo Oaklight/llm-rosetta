@@ -604,21 +604,10 @@ class AnthropicConverter(BaseConverter):
             delta = chunk.get("delta", {})
             stop_reason = delta.get("stop_reason")
 
-            if stop_reason:
-                reason_map = {
-                    "end_turn": "stop",
-                    "max_tokens": "length",
-                    "tool_use": "tool_calls",
-                    "stop_sequence": "stop",
-                }
-                events.append(
-                    FinishEvent(
-                        type="finish",
-                        finish_reason={"reason": reason_map.get(stop_reason, "stop")},
-                    )
-                )
-
-            # Final usage
+            # Emit UsageEvent before FinishEvent so that downstream
+            # converters (e.g. OpenAI Responses) can store usage in
+            # context.pending_usage before FinishEvent builds the
+            # terminal response.completed event.
             usage = chunk.get("usage")
             if usage:
                 input_tokens = usage.get("input_tokens") or 0
@@ -631,6 +620,20 @@ class AnthropicConverter(BaseConverter):
                             "completion_tokens": output_tokens,
                             "total_tokens": input_tokens + output_tokens,
                         },
+                    )
+                )
+
+            if stop_reason:
+                reason_map = {
+                    "end_turn": "stop",
+                    "max_tokens": "length",
+                    "tool_use": "tool_calls",
+                    "stop_sequence": "stop",
+                }
+                events.append(
+                    FinishEvent(
+                        type="finish",
+                        finish_reason={"reason": reason_map.get(stop_reason, "stop")},
                     )
                 )
 

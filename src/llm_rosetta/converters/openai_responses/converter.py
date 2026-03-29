@@ -763,14 +763,9 @@ class OpenAIResponsesConverter(BaseConverter):
                         reason = "tool_calls"
                         break
 
-            events.append(
-                FinishEvent(
-                    type="finish",
-                    finish_reason={"reason": reason},
-                )
-            )
-
-            # Extract usage if present
+            # Emit UsageEvent before FinishEvent so that downstream
+            # converters can store usage in context.pending_usage before
+            # FinishEvent builds the terminal response.completed event.
             usage = response.get("usage")
             if isinstance(usage, dict):
                 events.append(
@@ -783,6 +778,13 @@ class OpenAIResponsesConverter(BaseConverter):
                         },
                     )
                 )
+
+            events.append(
+                FinishEvent(
+                    type="finish",
+                    finish_reason={"reason": reason},
+                )
+            )
 
             # Emit StreamEndEvent after other events
             if context is not None:
@@ -848,6 +850,27 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_stream_end_event(event):
             if context is not None:
                 context.mark_ended()
+                # Emit the deferred response.completed if FinishEvent
+                # stored one.  This ensures UsageEvents that arrive
+                # between FinishEvent and StreamEndEvent (e.g. OpenAI
+                # Chat sends usage in a separate chunk after
+                # finish_reason) are merged into the response.
+                if context.pending_response is not None:
+                    resp = context.pending_response
+                    context.pending_response = None
+                    # Merge any usage that arrived after FinishEvent
+                    if context.pending_usage is not None and "usage" not in resp:
+                        resp["usage"] = {
+                            "input_tokens": context.pending_usage.get("prompt_tokens")
+                            or 0,
+                            "output_tokens": context.pending_usage.get(
+                                "completion_tokens"
+                            )
+                            or 0,
+                            "total_tokens": context.pending_usage.get("total_tokens")
+                            or 0,
+                        }
+                    return {"type": "response.completed", "response": resp}
             return {}
 
         elif is_content_block_start_event(event):
@@ -1151,6 +1174,15 @@ class OpenAIResponsesConverter(BaseConverter):
                         }
                     )
 
+            # With context: defer response.completed to StreamEndEvent
+            # so that any UsageEvent arriving after FinishEvent (e.g.
+            # OpenAI Chat sends usage in a separate chunk) can still be
+            # merged into the response.
+            if context is not None:
+                context.pending_response = response
+                return results
+
+            # Without context: emit immediately (backward compatible)
             results.append(
                 {
                     "type": "response.completed",

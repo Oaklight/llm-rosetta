@@ -712,6 +712,7 @@ class GoogleGenAIConverter(BaseConverter):
             )
 
         has_finish_reason = False
+        deferred_finish: FinishEvent | None = None
 
         for candidate in chunk.get("candidates", []):
             choice_index = candidate.get("index", 0)
@@ -790,7 +791,8 @@ class GoogleGenAIConverter(BaseConverter):
                     if context is not None:
                         context.append_tool_call_args(tool_call_id, args_json)
 
-            # Finish reason
+            # Finish reason — collect but defer appending until after
+            # UsageEvent so downstream converters see usage first.
             finish_reason = candidate.get("finish_reason") or candidate.get(
                 "finishReason"
             )
@@ -804,15 +806,15 @@ class GoogleGenAIConverter(BaseConverter):
                     "MALFORMED_FUNCTION_CALL": "error",
                     "OTHER": "error",
                 }
-                events.append(
-                    FinishEvent(
-                        type="finish",
-                        finish_reason={"reason": reason_map.get(finish_reason, "stop")},
-                        choice_index=choice_index,
-                    )
+                deferred_finish = FinishEvent(
+                    type="finish",
+                    finish_reason={"reason": reason_map.get(finish_reason, "stop")},
+                    choice_index=choice_index,
                 )
 
-        # Usage metadata (typically in the last chunk)
+        # Emit UsageEvent before FinishEvent so that downstream
+        # converters can store usage in context.pending_usage before
+        # FinishEvent builds the terminal response.completed event.
         usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
         if usage:
             usage_info: dict[str, Any] = {
@@ -841,6 +843,10 @@ class GoogleGenAIConverter(BaseConverter):
                     usage=cast(UsageInfo, usage_info),
                 )
             )
+
+        # Now append the deferred FinishEvent (after UsageEvent)
+        if deferred_finish is not None:
+            events.append(deferred_finish)
 
         # --- StreamEndEvent (only with context, when finish_reason present) ---
         if context is not None and has_finish_reason:

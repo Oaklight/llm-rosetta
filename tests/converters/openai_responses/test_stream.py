@@ -942,8 +942,8 @@ class TestStreamResponseToProviderWithContext:
         assert result["type"] == "response.completed"
         assert result["response"]["usage"]["input_tokens"] == 10
 
-    def test_finish_with_context_merges_usage(self):
-        """FinishEvent with context merges pending usage into response.completed."""
+    def test_finish_with_context_defers_response_completed(self):
+        """FinishEvent with context defers response.completed to StreamEndEvent."""
         ctx = StreamContext()
         ctx.mark_started()
         ctx.pending_usage = {
@@ -959,11 +959,25 @@ class TestStreamResponseToProviderWithContext:
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        completed = next(r for r in results if r["type"] == "response.completed")
-        assert completed["response"]["status"] == "completed"
-        assert completed["response"]["usage"]["input_tokens"] == 10
-        assert completed["response"]["usage"]["output_tokens"] == 5
-        assert completed["response"]["usage"]["total_tokens"] == 15
+        # FinishEvent should NOT emit response.completed with context
+        assert not any(r.get("type") == "response.completed" for r in results)
+        # But it should store the response in context for later
+        assert ctx.pending_response is not None
+        assert ctx.pending_response["usage"]["input_tokens"] == 10
+
+        # StreamEndEvent emits the deferred response.completed
+        end_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=ctx,
+            ),
+        )
+        assert end_result["type"] == "response.completed"
+        assert end_result["response"]["status"] == "completed"
+        assert end_result["response"]["usage"]["input_tokens"] == 10
+        assert end_result["response"]["usage"]["output_tokens"] == 5
+        assert end_result["response"]["usage"]["total_tokens"] == 15
 
     def test_finish_with_context_no_pending_usage(self):
         """FinishEvent with context but no pending usage omits usage field."""
@@ -977,9 +991,22 @@ class TestStreamResponseToProviderWithContext:
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        completed = next(r for r in results if r["type"] == "response.completed")
-        assert completed["response"]["status"] == "completed"
-        assert "usage" not in completed["response"]
+        # FinishEvent defers response.completed
+        assert not any(r.get("type") == "response.completed" for r in results)
+        assert ctx.pending_response is not None
+        assert "usage" not in ctx.pending_response
+
+        # StreamEndEvent emits without usage
+        end_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=ctx,
+            ),
+        )
+        assert end_result["type"] == "response.completed"
+        assert end_result["response"]["status"] == "completed"
+        assert "usage" not in end_result["response"]
 
     def test_finish_without_context_backward_compat(self):
         """FinishEvent without context produces response.completed (backward compat)."""
@@ -994,7 +1021,7 @@ class TestStreamResponseToProviderWithContext:
         assert completed["response"]["status"] == "completed"
 
     def test_no_duplicate_response_completed_with_context(self):
-        """With context, UsageEvent + FinishEvent produce only one response.completed."""
+        """With context, UsageEvent + FinishEvent + StreamEndEvent produce one response.completed."""
         ctx = StreamContext()
         ctx.mark_started()
 
@@ -1016,7 +1043,7 @@ class TestStreamResponseToProviderWithContext:
         )
         assert usage_result == {}
 
-        # Second: FinishEvent → response.completed with merged usage
+        # Second: FinishEvent → deferred, no response.completed yet
         finish_event = cast(
             FinishEvent,
             {"type": "finish", "finish_reason": {"reason": "stop"}},
@@ -1025,11 +1052,21 @@ class TestStreamResponseToProviderWithContext:
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(finish_event, context=ctx),
         )
-        finish_completed = next(
-            r for r in finish_results if r["type"] == "response.completed"
+        assert not any(r.get("type") == "response.completed" for r in finish_results)
+        assert ctx.pending_response is not None
+        assert ctx.pending_response["usage"]["input_tokens"] == 20
+
+        # Third: StreamEndEvent → emits deferred response.completed
+        end_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=ctx,
+            ),
         )
-        assert finish_completed["response"]["usage"]["input_tokens"] == 20
-        assert finish_completed["response"]["usage"]["output_tokens"] == 10
+        assert end_result["type"] == "response.completed"
+        assert end_result["response"]["usage"]["input_tokens"] == 20
+        assert end_result["response"]["usage"]["output_tokens"] == 10
 
     def test_full_stream_sequence_with_context(self):
         """Full stream sequence produces correct events with no duplicates."""
@@ -1117,7 +1154,7 @@ class TestStreamResponseToProviderWithContext:
         )
         assert usage_result == {}
 
-        # 6. FinishEvent → response.completed with merged usage
+        # 6. FinishEvent → deferred, no response.completed yet
         finish_results = cast(
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(
@@ -1128,12 +1165,10 @@ class TestStreamResponseToProviderWithContext:
                 context=ctx,
             ),
         )
-        finish_completed = next(
-            r for r in finish_results if r["type"] == "response.completed"
-        )
-        assert finish_completed["response"]["usage"]["input_tokens"] == 10
+        assert not any(r.get("type") == "response.completed" for r in finish_results)
+        assert ctx.pending_response is not None
 
-        # 7. StreamEndEvent → empty
+        # 7. StreamEndEvent → emits deferred response.completed
         end_result = cast(
             dict[str, Any],
             self.converter.stream_response_to_provider(
@@ -1141,7 +1176,8 @@ class TestStreamResponseToProviderWithContext:
                 context=ctx,
             ),
         )
-        assert end_result == {}
+        assert end_result["type"] == "response.completed"
+        assert end_result["response"]["usage"]["input_tokens"] == 10
 
         # Verify: only ONE response.completed was produced in the entire sequence
         all_results: list[Any] = [
@@ -1169,3 +1205,52 @@ class TestStreamResponseToProviderWithContext:
             if isinstance(r, dict) and r.get("type") == "response.completed"
         )
         assert completed_count == 1
+
+    def test_cross_chunk_usage_after_finish(self):
+        """UsageEvent arriving after FinishEvent (OpenAI Chat pattern) is merged."""
+        ctx = StreamContext()
+        ctx.mark_started()
+
+        # 1. FinishEvent arrives first (no pending_usage yet)
+        finish_event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+        )
+        finish_results = cast(
+            list[dict[str, Any]],
+            self.converter.stream_response_to_provider(finish_event, context=ctx),
+        )
+        assert not any(r.get("type") == "response.completed" for r in finish_results)
+        assert ctx.pending_response is not None
+        assert "usage" not in ctx.pending_response
+
+        # 2. UsageEvent arrives in a separate chunk
+        usage_event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 25,
+                    "total_tokens": 75,
+                },
+            },
+        )
+        usage_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(usage_event, context=ctx),
+        )
+        assert usage_result == {}
+
+        # 3. StreamEndEvent merges the late usage into deferred response
+        end_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=ctx,
+            ),
+        )
+        assert end_result["type"] == "response.completed"
+        assert end_result["response"]["usage"]["input_tokens"] == 50
+        assert end_result["response"]["usage"]["output_tokens"] == 25
+        assert end_result["response"]["usage"]["total_tokens"] == 75

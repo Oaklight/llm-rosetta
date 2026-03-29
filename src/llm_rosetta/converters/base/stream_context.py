@@ -20,6 +20,8 @@ class StreamContext:
         tool_call_id_map: Mapping from tool_call_id to tool_name.
         pending_usage: Usage info stored by UsageEvent for later merging
             into a FinishEvent (prevents duplicate terminal events).
+        pending_response: Deferred response.completed payload stored by
+            FinishEvent, emitted by StreamEndEvent after usage is merged.
     """
 
     def __init__(self) -> None:
@@ -30,6 +32,7 @@ class StreamContext:
         self.tool_call_id_map: dict[str, str] = {}  # tool_call_id -> tool_name
         self.pending_usage: dict | None = None
         self.pending_finish: dict | None = None
+        self.pending_response: dict | None = None
         self._started: bool = False
         self._ended: bool = False
         # Tool call accumulation for streaming
