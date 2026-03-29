@@ -108,6 +108,15 @@ class ColoredFormatter(logging.Formatter):
         super().__init__(fmt, datefmt)
         self.use_colors = use_colors and _supports_color()
 
+    def formatTime(  # noqa: N802
+        self, record: logging.LogRecord, datefmt: str | None = None
+    ) -> str:
+        """Format timestamp with millisecond precision."""
+        import datetime
+
+        ct = datetime.datetime.fromtimestamp(record.created)
+        return ct.strftime("%Y-%m-%d %H:%M:%S.") + f"{int(record.msecs):03d}"
+
     def format(self, record: logging.LogRecord) -> str:
         record = logging.makeLogRecord(record.__dict__)
         timestamp = self.formatTime(record, self.datefmt)
@@ -190,18 +199,6 @@ def setup_logging(
         datefmt="%Y-%m-%d %H:%M:%S.%f",
         use_colors=use_colors,
     )
-
-    # Override formatTime to include milliseconds
-    import datetime
-    import types
-
-    def _format_time(
-        self: logging.Formatter, record: logging.LogRecord, datefmt: str | None = None
-    ) -> str:
-        ct = datetime.datetime.fromtimestamp(record.created)
-        return ct.strftime("%Y-%m-%d %H:%M:%S.") + f"{int(record.msecs):03d}"
-
-    formatter.formatTime = types.MethodType(_format_time, formatter)  # type: ignore[assignment]
 
     _handler.setFormatter(formatter)
     logger.addHandler(_handler)
