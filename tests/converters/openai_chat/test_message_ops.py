@@ -288,6 +288,83 @@ class TestOpenAIChatMessageOps:
         assert len(warnings) == 1
         assert "Reasoning content not supported" in warnings[0]
 
+    # ==================== Tool message reordering ====================
+
+    def test_reorder_tool_messages_after_interleaved_user(self):
+        """Tool messages are moved next to their assistant tool_calls."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_1",
+                            tool_name="exec_command",
+                            tool_input={"cmd": "ls"},
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Warning: use apply_patch"}],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_1",
+                            result="file.txt",
+                        )
+                    ],
+                },
+            ],
+        )
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assert [m["role"] for m in result] == ["assistant", "tool", "user"]
+        assert result[1]["tool_call_id"] == "call_1"
+        assert any("Reordered tool messages" in w for w in warnings)
+
+    def test_reorder_preserves_correct_order(self):
+        """No reorder warning when tool messages already follow assistant."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        ToolCallPart(
+                            type="tool_call",
+                            tool_call_id="call_1",
+                            tool_name="search",
+                            tool_input={"q": "test"},
+                        )
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        ToolResultPart(
+                            type="tool_result",
+                            tool_call_id="call_1",
+                            result="found it",
+                        )
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "thanks"}],
+                },
+            ],
+        )
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+
+        assert [m["role"] for m in result] == ["assistant", "tool", "user"]
+        assert not any("Reordered" in w for w in warnings)
+
     # ==================== Provider → IR ====================
 
     def test_p_system_to_ir(self):

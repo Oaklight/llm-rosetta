@@ -86,7 +86,79 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 )
                 warnings.extend(ext_warnings)
 
+        messages = self._reorder_tool_messages(messages, warnings)
         return messages, warnings
+
+    @staticmethod
+    def _reorder_tool_messages(
+        messages: list[dict[str, Any]], warnings: list[str]
+    ) -> list[dict[str, Any]]:
+        """Reorder tool messages so each sits right after the assistant that called it.
+
+        The Chat Completions API requires ``role: "tool"`` messages to appear
+        immediately after the ``role: "assistant"`` message whose ``tool_calls``
+        they answer.  Codex CLI interleaves ``function_call_output`` items
+        with other items in Responses API format (see
+        https://github.com/openai/codex/pull/7038); after conversion the tool
+        messages can end up separated from their assistant message, causing
+        upstream 400 errors.
+
+        Args:
+            messages: Flat list of converted OpenAI Chat messages.
+            warnings: Warning list to append reorder notices to.
+
+        Returns:
+            Reordered message list.
+        """
+        tool_msgs: list[dict[str, Any]] = []
+        non_tool: list[dict[str, Any]] = []
+        for m in messages:
+            if m.get("role") == "tool":
+                tool_msgs.append(m)
+            else:
+                non_tool.append(m)
+
+        if not tool_msgs:
+            return messages
+
+        # Group tool messages by tool_call_id
+        tool_by_id: dict[str, list[dict[str, Any]]] = {}
+        for tm in tool_msgs:
+            tcid = tm.get("tool_call_id")
+            if tcid:
+                tool_by_id.setdefault(tcid, []).append(tm)
+
+        # Rebuild: after each assistant message with tool_calls, insert
+        # matching tool messages in tool_calls order.
+        result: list[dict[str, Any]] = []
+        matched_ids: set[int] = set()
+        for m in non_tool:
+            result.append(m)
+            if m.get("role") == "assistant" and "tool_calls" in m:
+                for tc in m["tool_calls"]:
+                    tcid = tc.get("id")
+                    if tcid and tcid in tool_by_id:
+                        for tool_msg in tool_by_id[tcid]:
+                            result.append(tool_msg)
+                            matched_ids.add(id(tool_msg))
+
+        # Append unmatched tool messages at end (don't silently drop them)
+        for tm in tool_msgs:
+            if id(tm) not in matched_ids:
+                tcid = tm.get("tool_call_id")
+                warnings.append(
+                    f"Tool message with tool_call_id='{tcid}' has no matching "
+                    "assistant tool_calls entry"
+                )
+                result.append(tm)
+
+        if result != messages:
+            warnings.append(
+                "Reordered tool messages to follow assistant tool_calls "
+                "(workaround for Codex CLI item ordering)"
+            )
+
+        return result
 
     def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.
