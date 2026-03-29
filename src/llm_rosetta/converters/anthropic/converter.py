@@ -534,13 +534,14 @@ class AnthropicConverter(BaseConverter):
                 if context is not None:
                     context.register_tool_call(tool_call_id, tool_name)
 
-                events.append(
-                    ToolCallStartEvent(
-                        type="tool_call_start",
-                        tool_call_id=tool_call_id,
-                        tool_name=tool_name,
-                    )
+                start_evt = ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
                 )
+                if context is not None:
+                    start_evt["tool_call_index"] = len(context._tool_call_order) - 1
+                events.append(start_evt)
 
         elif event_type == "content_block_delta":
             delta = chunk.get("delta", {})
@@ -561,13 +562,20 @@ class AnthropicConverter(BaseConverter):
                     tool_call_id = list(context.tool_call_id_map.keys())[-1]
 
                 partial_json = delta.get("partial_json", "")
-                events.append(
-                    ToolCallDeltaEvent(
-                        type="tool_call_delta",
-                        tool_call_id=tool_call_id,
-                        arguments_delta=partial_json,
-                    )
+                delta_evt = ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id=tool_call_id,
+                    arguments_delta=partial_json,
                 )
+                if (
+                    context is not None
+                    and tool_call_id
+                    and tool_call_id in context._tool_call_order
+                ):
+                    delta_evt["tool_call_index"] = context._tool_call_order.index(
+                        tool_call_id
+                    )
+                events.append(delta_evt)
 
                 # Accumulate arguments in context
                 if context is not None and tool_call_id:

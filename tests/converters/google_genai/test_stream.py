@@ -925,6 +925,47 @@ class TestStreamResponseFromProviderWithContext:
         tool_call_id = start["tool_call_id"]
         assert context.get_tool_name(tool_call_id) == "get_weather"
 
+    def test_parallel_tool_calls_get_distinct_tool_call_index(self):
+        """Multiple function calls in one chunk get distinct tool_call_index."""
+        context = StreamContext()
+        chunk = {
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {
+                        "role": "model",
+                        "parts": [
+                            {
+                                "functionCall": {
+                                    "name": "get_weather",
+                                    "args": {"city": "NYC"},
+                                }
+                            },
+                            {
+                                "functionCall": {
+                                    "name": "get_time",
+                                    "args": {"tz": "EST"},
+                                }
+                            },
+                        ],
+                    },
+                }
+            ],
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(chunk, context=context),
+        )
+        starts = [e for e in events if e["type"] == "tool_call_start"]
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(starts) == 2
+        assert starts[0]["tool_call_index"] == 0
+        assert starts[1]["tool_call_index"] == 1
+        assert len(deltas) == 2
+        assert deltas[0]["tool_call_index"] == 0
+        assert deltas[1]["tool_call_index"] == 1
+
     def test_without_context_no_lifecycle_events(self):
         """Without context, no StreamStartEvent or StreamEndEvent."""
         chunk = {

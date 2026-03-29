@@ -636,6 +636,79 @@ class TestStreamResponseFromProviderWithContext:
         assert block_event["block_index"] == 1
         assert block_event["block_type"] == "tool_use"
 
+    def test_parallel_tool_calls_get_distinct_tool_call_index(self):
+        """Parallel tool calls get distinct tool_call_index values."""
+        ctx = StreamContext()
+        ctx.mark_started()
+
+        # First: a text block
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            context=ctx,
+        )
+
+        # Second: tool_use block (block_index=1, tool_call_index=0)
+        events1 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_start",
+                    "index": 1,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "get_weather",
+                        "input": {},
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        tc1 = [e for e in events1 if e["type"] == "tool_call_start"][0]
+        assert tc1["tool_call_index"] == 0
+
+        # Delta for first tool call (sequential: deltas come before next start)
+        delta_events1 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_delta",
+                    "index": 1,
+                    "delta": {
+                        "type": "input_json_delta",
+                        "partial_json": '{"city":',
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        td1 = [e for e in delta_events1 if e["type"] == "tool_call_delta"][0]
+        assert td1["tool_call_index"] == 0
+
+        # Third: another tool_use block (block_index=2, tool_call_index=1)
+        events2 = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "content_block_start",
+                    "index": 2,
+                    "content_block": {
+                        "type": "tool_use",
+                        "id": "toolu_2",
+                        "name": "get_time",
+                        "input": {},
+                    },
+                },
+                context=ctx,
+            ),
+        )
+        tc2 = [e for e in events2 if e["type"] == "tool_call_start"][0]
+        assert tc2["tool_call_index"] == 1
+
     def test_content_block_start_updates_context_block_index(self):
         """content_block_start increments context block index."""
         ctx = StreamContext()

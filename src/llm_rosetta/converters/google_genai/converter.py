@@ -759,11 +759,15 @@ class GoogleGenAIConverter(BaseConverter):
                         context.register_tool_call(tool_call_id, tool_name)
 
                     # Build ToolCallStartEvent
+                    tc_index = (
+                        len(context._tool_call_order) - 1 if context is not None else 0
+                    )
                     start_event: dict[str, Any] = {
                         "type": "tool_call_start",
                         "tool_call_id": tool_call_id,
                         "tool_name": tool_name,
                         "choice_index": choice_index,
+                        "tool_call_index": tc_index,
                     }
 
                     # Preserve thought_signature in provider_metadata
@@ -781,14 +785,14 @@ class GoogleGenAIConverter(BaseConverter):
                     args_json = (
                         json.dumps(args) if isinstance(args, dict) else str(args)
                     )
-                    events.append(
-                        ToolCallDeltaEvent(
-                            type="tool_call_delta",
-                            tool_call_id=tool_call_id,
-                            arguments_delta=args_json,
-                            choice_index=choice_index,
-                        )
+                    delta_evt = ToolCallDeltaEvent(
+                        type="tool_call_delta",
+                        tool_call_id=tool_call_id,
+                        arguments_delta=args_json,
+                        choice_index=choice_index,
                     )
+                    delta_evt["tool_call_index"] = tc_index
+                    events.append(delta_evt)
 
                     # Accumulate arguments in context
                     if context is not None:
