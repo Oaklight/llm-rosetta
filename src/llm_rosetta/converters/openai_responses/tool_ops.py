@@ -366,6 +366,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         elif tool_type == "function":
             return {
                 "type": "function_call",
+                "id": tool_call_id,
                 "call_id": tool_call_id,
                 "name": tool_name,
                 "arguments": arguments,

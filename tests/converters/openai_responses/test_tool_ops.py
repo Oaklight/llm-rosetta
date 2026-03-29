@@ -218,6 +218,7 @@ class TestOpenAIResponsesToolOps:
         )
         result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "function_call"
+        assert result["id"] == "call_123"
         assert result["call_id"] == "call_123"
         assert result["name"] == "get_weather"
         assert json.loads(result["arguments"]) == {"city": "Beijing"}

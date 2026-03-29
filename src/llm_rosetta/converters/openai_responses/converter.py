@@ -1001,7 +1001,7 @@ class OpenAIResponsesConverter(BaseConverter):
         elif is_tool_call_start_event(event):
             call_id = event["tool_call_id"]
             tool_name = event["tool_name"]
-            item_id = f"fc_{call_id}"
+            item_id = call_id
 
             # Register in context for later done events
             if context is not None and call_id:
@@ -1043,7 +1043,7 @@ class OpenAIResponsesConverter(BaseConverter):
             if context is not None and call_id:
                 item_id = context.get_tool_call_item_id(call_id)
             if not item_id and call_id:
-                item_id = f"fc_{call_id}"
+                item_id = call_id
 
             result: dict[str, Any] = {
                 "type": "response.function_call_arguments.delta",
@@ -1077,9 +1077,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 for call_id in context._tool_call_order:
                     tool_name = context.get_tool_name(call_id)
                     arguments = context._tool_call_args.get(call_id, "")
-                    item_id = (
-                        context.get_tool_call_item_id(call_id) or f"fc_{call_id}"
-                    )
+                    item_id = context.get_tool_call_item_id(call_id) or call_id
                     output.append(
                         {
                             "id": item_id,
@@ -1162,9 +1160,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 for tc_idx, call_id in enumerate(context._tool_call_order):
                     tool_name = context.get_tool_name(call_id)
                     arguments = context._tool_call_args.get(call_id, "")
-                    item_id = (
-                        context.get_tool_call_item_id(call_id) or f"fc_{call_id}"
-                    )
+                    item_id = context.get_tool_call_item_id(call_id) or call_id
                     output_index = tc_idx + (
                         1 if getattr(context, "_output_item_emitted", False) else 0
                     )
