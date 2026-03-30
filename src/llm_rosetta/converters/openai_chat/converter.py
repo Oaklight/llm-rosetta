@@ -44,6 +44,7 @@ from ...types.ir.type_guards import (
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
 from .message_ops import OpenAIChatMessageOps
@@ -295,18 +296,15 @@ class OpenAIChatConverter(BaseConverter):
             )
 
             finish_reason_val = p_choice.get("finish_reason")
-            reason_map = {
-                "stop": "stop",
-                "length": "length",
-                "tool_calls": "tool_calls",
-                "content_filter": "content_filter",
-                "function_call": "tool_calls",
-            }
 
             choice_info: dict[str, Any] = {
                 "index": p_choice.get("index", 0),
                 "message": message,
-                "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
+                "finish_reason": {
+                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
+                        finish_reason_val, "stop"
+                    )
+                },
             }
 
             if "logprobs" in p_choice:
@@ -403,10 +401,11 @@ class OpenAIChatConverter(BaseConverter):
                 if not text_parts:
                     openai_message["content"] = None
 
+            reason = choice.get("finish_reason", {}).get("reason", "stop")
             openai_choice: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "message": openai_message,
-                "finish_reason": choice.get("finish_reason", {}).get("reason", "stop"),
+                "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
             }
 
             if "logprobs" in choice:
@@ -629,17 +628,14 @@ class OpenAIChatConverter(BaseConverter):
                         )
                     )
 
-                reason_map = {
-                    "stop": "stop",
-                    "length": "length",
-                    "tool_calls": "tool_calls",
-                    "content_filter": "content_filter",
-                    "function_call": "tool_calls",
-                }
                 events.append(
                     FinishEvent(
                         type="finish",
-                        finish_reason={"reason": reason_map.get(finish_reason, "stop")},
+                        finish_reason={
+                            "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
+                                finish_reason, "stop"
+                            )
+                        },
                         choice_index=choice_index,
                     )
                 )
@@ -810,12 +806,15 @@ class OpenAIChatConverter(BaseConverter):
 
         elif is_finish_event(event):
             choice_index = event.get("choice_index", 0)
+            reason = event["finish_reason"]["reason"]
             result = {
                 "choices": [
                     {
                         "index": choice_index,
                         "delta": {},
-                        "finish_reason": event["finish_reason"]["reason"],
+                        "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(
+                            reason, "stop"
+                        ),
                     }
                 ]
             }

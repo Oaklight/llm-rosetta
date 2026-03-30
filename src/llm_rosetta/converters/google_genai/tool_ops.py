@@ -14,7 +14,6 @@ Google-specific:
 - Tool choice uses ToolConfig → FunctionCallingConfig (mode: NONE/AUTO/ANY)
 """
 
-import uuid
 import warnings
 from typing import Any, cast
 
@@ -27,6 +26,7 @@ from ...types.ir import (
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
 from ..base.tools import sanitize_schema
+from ._constants import generate_tool_call_id
 
 
 class GoogleGenAIToolOps(BaseToolOps):
@@ -264,7 +264,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         # Google function_call may not have id field, generate a unique ID
         tool_call_id = func_call.get("id")
         if not tool_call_id:
-            tool_call_id = f"call_{uuid.uuid4().hex[:24]}"
+            tool_call_id = generate_tool_call_id()
 
         tool_call_kwargs: dict[str, Any] = {
             "type": "tool_call",

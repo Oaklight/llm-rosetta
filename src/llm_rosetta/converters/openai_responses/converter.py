@@ -49,6 +49,13 @@ from ...types.ir.type_guards import (
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ._constants import (
+    RESPONSES_INCOMPLETE_REASON_TO_IR,
+    RESPONSES_REASON_TO_STATUS,
+    RESPONSES_STATUS_TO_REASON,
+    ResponsesEventType,
+    generate_message_id,
+)
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
 from .message_ops import OpenAIResponsesMessageOps
@@ -302,21 +309,18 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Determine finish reason from status
         status = provider_response.get("status")
-        finish_reason_val = "stop"
-        if status == "completed":
-            finish_reason_val = "stop"
-        elif status == "incomplete":
+        if status == "incomplete":
             incomplete_details = provider_response.get("incomplete_details", {})
-            if isinstance(incomplete_details, dict):
-                reason = incomplete_details.get("reason")
-                if reason == "max_output_tokens":
-                    finish_reason_val = "length"
-                elif reason == "content_filter":
-                    finish_reason_val = "content_filter"
-        elif status == "failed":
-            finish_reason_val = "error"
-        elif status == "cancelled":
-            finish_reason_val = "cancelled"
+            inc_reason = (
+                incomplete_details.get("reason", "")
+                if isinstance(incomplete_details, dict)
+                else ""
+            )
+            finish_reason_val = RESPONSES_INCOMPLETE_REASON_TO_IR.get(
+                inc_reason, "stop"
+            )
+        else:
+            finish_reason_val = RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
 
         # Convert output items to IR message content
         ir_items = self.message_ops.p_messages_to_ir(output_items)
@@ -427,13 +431,12 @@ class OpenAIResponsesConverter(BaseConverter):
 
             # Set finish reason
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
-            if finish_reason == "length":
-                provider_response["status"] = "incomplete"
+            status = RESPONSES_REASON_TO_STATUS.get(finish_reason, "completed")
+            provider_response["status"] = status
+            if status == "incomplete":
                 provider_response["incomplete_details"] = {
                     "reason": "max_output_tokens"
                 }
-            elif finish_reason == "error":
-                provider_response["status"] = "failed"
 
         # Usage
         ir_usage = ir_response.get("usage")
@@ -580,7 +583,7 @@ class OpenAIResponsesConverter(BaseConverter):
         event_type = chunk.get("type", "")
 
         # --- Response created (session start) ---
-        if event_type == "response.created":
+        if event_type == ResponsesEventType.RESPONSE_CREATED:
             if context is not None:
                 response = chunk.get("response", {})
                 response_id = response.get("id", "")
@@ -600,7 +603,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 events.append(start_event)
 
         # --- Text delta ---
-        elif event_type == "response.output_text.delta":
+        elif event_type == ResponsesEventType.OUTPUT_TEXT_DELTA:
             events.append(
                 TextDeltaEvent(
                     type="text_delta",
@@ -609,7 +612,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         # --- Reasoning summary delta ---
-        elif event_type == "response.reasoning_summary_text.delta":
+        elif event_type == ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA:
             events.append(
                 ReasoningDeltaEvent(
                     type="reasoning_delta",
@@ -618,7 +621,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         # --- Output item added ---
-        elif event_type == "response.output_item.added":
+        elif event_type == ResponsesEventType.OUTPUT_ITEM_ADDED:
             item = chunk.get("item", {})
             if isinstance(item, dict):
                 item_type = item.get("type", "")
@@ -652,7 +655,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     pass
 
         # --- Content part added ---
-        elif event_type == "response.content_part.added":
+        elif event_type == ResponsesEventType.CONTENT_PART_ADDED:
             if context is not None:
                 part = chunk.get("part", {})
                 part_type = part.get("type", "") if isinstance(part, dict) else ""
@@ -671,7 +674,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
 
         # --- Content part done ---
-        elif event_type == "response.content_part.done":
+        elif event_type == ResponsesEventType.CONTENT_PART_DONE:
             if context is not None:
                 events.append(
                     ContentBlockEndEvent(
@@ -681,7 +684,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
 
         # --- Output item done ---
-        elif event_type == "response.output_item.done":
+        elif event_type == ResponsesEventType.OUTPUT_ITEM_DONE:
             # For function_call items, store the completed item in context
             # so it can be included in the response.completed output array.
             # Message-level done is a no-op (content_part.done handles it).
@@ -693,7 +696,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         context.set_tool_call_args(call_id, item.get("arguments", ""))
 
         # --- Tool call arguments delta ---
-        elif event_type == "response.function_call_arguments.delta":
+        elif event_type == ResponsesEventType.FUNCTION_CALL_ARGS_DELTA:
             delta_text = chunk.get("delta", "")
             # Upstream may send call_id or item_id — resolve to call_id
             call_id = chunk.get("call_id", "")
@@ -717,7 +720,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(delta_event)
 
         # --- Tool call arguments done ---
-        elif event_type == "response.function_call_arguments.done":
+        elif event_type == ResponsesEventType.FUNCTION_CALL_ARGS_DONE:
             # Resolve call_id from item_id if needed
             call_id = chunk.get("call_id", "")
             if not call_id and context is not None:
@@ -730,28 +733,21 @@ class OpenAIResponsesConverter(BaseConverter):
                 context.set_tool_call_args(call_id, arguments)
 
         # --- Response completed ---
-        elif event_type == "response.completed":
+        elif event_type == ResponsesEventType.RESPONSE_COMPLETED:
             response = chunk.get("response", chunk)
 
             # Determine finish reason from status
             status = response.get("status", "completed")
-            if status == "completed":
-                reason = "stop"
-            elif status == "incomplete":
+            if status == "incomplete":
                 incomplete_details = response.get("incomplete_details", {})
                 inc_reason = (
                     incomplete_details.get("reason", "")
                     if isinstance(incomplete_details, dict)
                     else ""
                 )
-                if inc_reason == "max_output_tokens":
-                    reason = "length"
-                elif inc_reason == "content_filter":
-                    reason = "content_filter"
-                else:
-                    reason = "stop"
+                reason = RESPONSES_INCOMPLETE_REASON_TO_IR.get(inc_reason, "stop")
             else:
-                reason = "stop"
+                reason = RESPONSES_STATUS_TO_REASON.get(status, "stop")
 
             # Check if any output item is a function_call to set tool_calls reason
             output_items = response.get("output", [])
@@ -790,7 +786,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 events.append(StreamEndEvent(type="stream_end"))
 
         # --- Response failed ---
-        elif event_type == "response.failed":
+        elif event_type == ResponsesEventType.RESPONSE_FAILED:
             events.append(
                 FinishEvent(
                     type="finish",
@@ -835,7 +831,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 context.created = event.get("created", 0)
                 context.mark_started()
             return {
-                "type": "response.created",
+                "type": ResponsesEventType.RESPONSE_CREATED,
                 "response": {
                     "id": event["response_id"],
                     "object": "response",
@@ -868,7 +864,10 @@ class OpenAIResponsesConverter(BaseConverter):
                             "total_tokens": context.pending_usage.get("total_tokens")
                             or 0,
                         }
-                    return {"type": "response.completed", "response": resp}
+                    return {
+                        "type": ResponsesEventType.RESPONSE_COMPLETED,
+                        "response": resp,
+                    }
             return {}
 
         elif is_content_block_start_event(event):
@@ -881,11 +880,11 @@ class OpenAIResponsesConverter(BaseConverter):
                     context, "_output_item_emitted", False
                 ):
                     context._output_item_emitted = True
-                    item_id = f"msg_{context.response_id or ''}"
+                    item_id = generate_message_id(context.response_id)
                     context._item_id = item_id
                     return [
                         {
-                            "type": "response.output_item.added",
+                            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
                             "output_index": 0,
                             "item": {
                                 "id": item_id,
@@ -895,7 +894,7 @@ class OpenAIResponsesConverter(BaseConverter):
                             },
                         },
                         {
-                            "type": "response.content_part.added",
+                            "type": ResponsesEventType.CONTENT_PART_ADDED,
                             "output_index": 0,
                             "content_index": 0,
                             "part": {
@@ -907,7 +906,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 # Fallback: just emit content_part.added (e.g. no context, or
                 # output item already emitted by a prior ContentBlockStartEvent)
                 return {
-                    "type": "response.content_part.added",
+                    "type": ResponsesEventType.CONTENT_PART_ADDED,
                     "part": {
                         "type": "output_text",
                         "text": "",
@@ -924,20 +923,20 @@ class OpenAIResponsesConverter(BaseConverter):
                 # OpenAI's event ordering)
                 return [
                     {
-                        "type": "response.output_text.done",
+                        "type": ResponsesEventType.OUTPUT_TEXT_DONE,
                         "output_index": 0,
                         "content_index": 0,
                         "text": accumulated,
                     },
                     {
-                        "type": "response.content_part.done",
+                        "type": ResponsesEventType.CONTENT_PART_DONE,
                         "output_index": 0,
                         "content_index": 0,
                         "part": {"type": "output_text", "text": accumulated},
                     },
                 ]
             return {
-                "type": "response.content_part.done",
+                "type": ResponsesEventType.CONTENT_PART_DONE,
                 "part": {
                     "type": "output_text",
                 },
@@ -947,7 +946,7 @@ class OpenAIResponsesConverter(BaseConverter):
             choice_index = event.get("choice_index", 0)
             text = event["text"]
             delta_event: dict[str, Any] = {
-                "type": "response.output_text.delta",
+                "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
                 "delta": text,
                 "output_index": choice_index,
                 "content_index": 0,
@@ -965,11 +964,11 @@ class OpenAIResponsesConverter(BaseConverter):
                 context, "_output_item_emitted", False
             ):
                 context._output_item_emitted = True
-                item_id = f"msg_{context.response_id or ''}"
+                item_id = generate_message_id(context.response_id)
                 context._item_id = item_id
                 return [
                     {
-                        "type": "response.output_item.added",
+                        "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
                         "output_index": choice_index,
                         "item": {
                             "id": item_id,
@@ -979,7 +978,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         },
                     },
                     {
-                        "type": "response.content_part.added",
+                        "type": ResponsesEventType.CONTENT_PART_ADDED,
                         "output_index": choice_index,
                         "content_index": 0,
                         "part": {
@@ -994,7 +993,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         elif is_reasoning_delta_event(event):
             return {
-                "type": "response.reasoning_summary_text.delta",
+                "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
                 "delta": event["reasoning"],
             }
 
@@ -1009,7 +1008,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 context.register_tool_call_item(call_id, item_id)
 
             result: dict[str, Any] = {
-                "type": "response.output_item.added",
+                "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
                 "item": {
                     "id": item_id,
                     "type": "function_call",
@@ -1046,7 +1045,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 item_id = call_id
 
             result: dict[str, Any] = {
-                "type": "response.function_call_arguments.delta",
+                "type": ResponsesEventType.FUNCTION_CALL_ARGS_DELTA,
                 "item_id": item_id,
                 "delta": delta,
             }
@@ -1056,7 +1055,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]
-            status = "completed"
+            status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
 
             # Build the output array with accumulated content
             output: list[dict[str, Any]] = []
@@ -1098,11 +1097,8 @@ class OpenAIResponsesConverter(BaseConverter):
                 response["object"] = "response"
                 response["model"] = context.model
 
-            if reason == "length":
-                response["status"] = "incomplete"
+            if status == "incomplete":
                 response["incomplete_details"] = {"reason": "max_output_tokens"}
-            elif reason == "error":
-                response["status"] = "failed"
 
             # Merge pending usage from context if available
             if context is not None and context.pending_usage is not None:
@@ -1127,7 +1123,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     if not getattr(context, "_content_part_done_emitted", False):
                         results.append(
                             {
-                                "type": "response.output_text.done",
+                                "type": ResponsesEventType.OUTPUT_TEXT_DONE,
                                 "output_index": 0,
                                 "content_index": 0,
                                 "text": accumulated,
@@ -1135,7 +1131,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         )
                         results.append(
                             {
-                                "type": "response.content_part.done",
+                                "type": ResponsesEventType.CONTENT_PART_DONE,
                                 "output_index": 0,
                                 "content_index": 0,
                                 "part": {"type": "output_text", "text": accumulated},
@@ -1143,7 +1139,7 @@ class OpenAIResponsesConverter(BaseConverter):
                         )
                     results.append(
                         {
-                            "type": "response.output_item.done",
+                            "type": ResponsesEventType.OUTPUT_ITEM_DONE,
                             "output_index": 0,
                             "item": {
                                 "id": item_id,
@@ -1168,7 +1164,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     # response.function_call_arguments.done
                     results.append(
                         {
-                            "type": "response.function_call_arguments.done",
+                            "type": ResponsesEventType.FUNCTION_CALL_ARGS_DONE,
                             "item_id": item_id,
                             "output_index": output_index,
                             "arguments": arguments,
@@ -1178,7 +1174,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     # response.output_item.done for the function_call
                     results.append(
                         {
-                            "type": "response.output_item.done",
+                            "type": ResponsesEventType.OUTPUT_ITEM_DONE,
                             "output_index": output_index,
                             "item": {
                                 "id": item_id,
@@ -1202,7 +1198,7 @@ class OpenAIResponsesConverter(BaseConverter):
             # Without context: emit immediately (backward compatible)
             results.append(
                 {
-                    "type": "response.completed",
+                    "type": ResponsesEventType.RESPONSE_COMPLETED,
                     "response": response,
                 }
             )
@@ -1228,7 +1224,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 },
             }
             return {
-                "type": "response.completed",
+                "type": ResponsesEventType.RESPONSE_COMPLETED,
                 "response": resp,
             }
 

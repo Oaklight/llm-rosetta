@@ -55,6 +55,11 @@ from ...types.ir.type_guards import (
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ._constants import (
+    ANTHROPIC_REASON_FROM_PROVIDER,
+    ANTHROPIC_REASON_TO_PROVIDER,
+    AnthropicEventType,
+)
 from .config_ops import AnthropicConfigOps
 from .content_ops import AnthropicContentOps
 from .message_ops import AnthropicMessageOps
@@ -293,16 +298,11 @@ class AnthropicConverter(BaseConverter):
 
         # Map stop_reason to IR finish_reason
         stop_reason_val = provider_response.get("stop_reason")
-        reason_map: dict[str, str] = {
-            "end_turn": "stop",
-            "max_tokens": "length",
-            "tool_use": "tool_calls",
-            "stop_sequence": "stop",
-            "refusal": "refusal",
-        }
 
         finish_reason = (
-            reason_map.get(str(stop_reason_val), "stop") if stop_reason_val else "stop"
+            ANTHROPIC_REASON_FROM_PROVIDER.get(str(stop_reason_val), "stop")
+            if stop_reason_val
+            else "stop"
         )
         choice_info: dict[str, Any] = {
             "index": 0,
@@ -388,14 +388,9 @@ class AnthropicConverter(BaseConverter):
             # Map finish_reason back to stop_reason
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
-            reason_map = {
-                "stop": "end_turn",
-                "length": "max_tokens",
-                "tool_calls": "tool_use",
-                "content_filter": "end_turn",
-                "refusal": "refusal",
-            }
-            provider_response["stop_reason"] = reason_map.get(reason, "end_turn")
+            provider_response["stop_reason"] = ANTHROPIC_REASON_TO_PROVIDER.get(
+                reason, "end_turn"
+            )
 
             if "stop_sequence" in finish_reason:
                 provider_response["stop_sequence"] = finish_reason["stop_sequence"]
@@ -478,7 +473,7 @@ class AnthropicConverter(BaseConverter):
 
         event_type = chunk.get("type", "")
 
-        if event_type == "message_start":
+        if event_type == AnthropicEventType.MESSAGE_START:
             message = chunk.get("message", {})
 
             # Emit StreamStartEvent when context is provided
@@ -510,7 +505,7 @@ class AnthropicConverter(BaseConverter):
                     )
                 )
 
-        elif event_type == "content_block_start":
+        elif event_type == AnthropicEventType.CONTENT_BLOCK_START:
             content_block = chunk.get("content_block", {})
             block_type = content_block.get("type", "")
             block_index = chunk.get("index", 0)
@@ -543,7 +538,7 @@ class AnthropicConverter(BaseConverter):
                     start_evt["tool_call_index"] = len(context._tool_call_order) - 1
                 events.append(start_evt)
 
-        elif event_type == "content_block_delta":
+        elif event_type == AnthropicEventType.CONTENT_BLOCK_DELTA:
             delta = chunk.get("delta", {})
             delta_type = delta.get("type", "")
 
@@ -598,7 +593,7 @@ class AnthropicConverter(BaseConverter):
                     )
                 )
 
-        elif event_type == "content_block_stop":
+        elif event_type == AnthropicEventType.CONTENT_BLOCK_STOP:
             # Emit ContentBlockEndEvent when context is provided
             if context is not None:
                 block_index = chunk.get("index", 0)
@@ -609,7 +604,7 @@ class AnthropicConverter(BaseConverter):
                     )
                 )
 
-        elif event_type == "message_delta":
+        elif event_type == AnthropicEventType.MESSAGE_DELTA:
             delta = chunk.get("delta", {})
             stop_reason = delta.get("stop_reason")
 
@@ -633,20 +628,18 @@ class AnthropicConverter(BaseConverter):
                 )
 
             if stop_reason:
-                reason_map = {
-                    "end_turn": "stop",
-                    "max_tokens": "length",
-                    "tool_use": "tool_calls",
-                    "stop_sequence": "stop",
-                }
                 events.append(
                     FinishEvent(
                         type="finish",
-                        finish_reason={"reason": reason_map.get(stop_reason, "stop")},
+                        finish_reason={
+                            "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(
+                                stop_reason, "stop"
+                            )
+                        },
                     )
                 )
 
-        elif event_type == "message_stop":
+        elif event_type == AnthropicEventType.MESSAGE_STOP:
             # Emit StreamEndEvent when context is provided
             if context is not None:
                 context.mark_ended()
@@ -676,7 +669,7 @@ class AnthropicConverter(BaseConverter):
                 context.model = event["model"]
                 context.mark_started()
             return {
-                "type": "message_start",
+                "type": AnthropicEventType.MESSAGE_START,
                 "message": {
                     "id": event["response_id"],
                     "type": "message",
@@ -695,14 +688,14 @@ class AnthropicConverter(BaseConverter):
                 if context.pending_finish is not None:
                     results.append(
                         {
-                            "type": "message_delta",
+                            "type": AnthropicEventType.MESSAGE_DELTA,
                             "delta": context.pending_finish,
                             "usage": {"output_tokens": 0},
                         }
                     )
                     context.pending_finish = None
                 context.mark_ended()
-            results.append({"type": "message_stop"})
+            results.append({"type": AnthropicEventType.MESSAGE_STOP})
             return results if len(results) > 1 else results[0]
 
         elif is_content_block_start_event(event):
@@ -714,13 +707,13 @@ class AnthropicConverter(BaseConverter):
 
             if block_type == "text":
                 return {
-                    "type": "content_block_start",
+                    "type": AnthropicEventType.CONTENT_BLOCK_START,
                     "index": block_index,
                     "content_block": {"type": "text", "text": ""},
                 }
             elif block_type == "thinking":
                 return {
-                    "type": "content_block_start",
+                    "type": AnthropicEventType.CONTENT_BLOCK_START,
                     "index": block_index,
                     "content_block": {"type": "thinking", "thinking": ""},
                 }
@@ -730,13 +723,13 @@ class AnthropicConverter(BaseConverter):
 
         elif is_content_block_end_event(event):
             return {
-                "type": "content_block_stop",
+                "type": AnthropicEventType.CONTENT_BLOCK_STOP,
                 "index": event["block_index"],
             }
 
         elif is_text_delta_event(event):
             result: dict[str, Any] = {
-                "type": "content_block_delta",
+                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
                 "delta": {
                     "type": "text_delta",
                     "text": event["text"],
@@ -749,7 +742,7 @@ class AnthropicConverter(BaseConverter):
                     result["index"] = context.current_block_index
                     return [
                         {
-                            "type": "content_block_start",
+                            "type": AnthropicEventType.CONTENT_BLOCK_START,
                             "index": context.current_block_index,
                             "content_block": {"type": "text", "text": ""},
                         },
@@ -763,7 +756,7 @@ class AnthropicConverter(BaseConverter):
             rd_result: dict[str, Any]
             if signature is not None:
                 rd_result = {
-                    "type": "content_block_delta",
+                    "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
                     "delta": {
                         "type": "signature_delta",
                         "signature": signature,
@@ -771,7 +764,7 @@ class AnthropicConverter(BaseConverter):
                 }
             else:
                 rd_result = {
-                    "type": "content_block_delta",
+                    "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
                     "delta": {
                         "type": "thinking_delta",
                         "thinking": event["reasoning"],
@@ -784,7 +777,7 @@ class AnthropicConverter(BaseConverter):
                     rd_result["index"] = context.current_block_index
                     return [
                         {
-                            "type": "content_block_start",
+                            "type": AnthropicEventType.CONTENT_BLOCK_START,
                             "index": context.current_block_index,
                             "content_block": {"type": "thinking", "thinking": ""},
                         },
@@ -795,7 +788,7 @@ class AnthropicConverter(BaseConverter):
 
         elif is_tool_call_start_event(event):
             result2: dict[str, Any] = {
-                "type": "content_block_start",
+                "type": AnthropicEventType.CONTENT_BLOCK_START,
                 "content_block": {
                     "type": "tool_use",
                     "id": event["tool_call_id"],
@@ -811,7 +804,7 @@ class AnthropicConverter(BaseConverter):
 
         elif is_tool_call_delta_event(event):
             result3: dict[str, Any] = {
-                "type": "content_block_delta",
+                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
                 "delta": {
                     "type": "input_json_delta",
                     "partial_json": event["arguments_delta"],
@@ -825,20 +818,14 @@ class AnthropicConverter(BaseConverter):
 
         elif is_finish_event(event):
             reason = event["finish_reason"]["reason"]
-            reason_map = {
-                "stop": "end_turn",
-                "length": "max_tokens",
-                "tool_calls": "tool_use",
-                "content_filter": "end_turn",
-            }
-            stop_reason = reason_map.get(reason, "end_turn")
+            stop_reason = ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
             if context is not None:
                 results: list[dict[str, Any]] = []
                 # Close any open content block before finishing
                 if context.current_block_index >= 0:
                     results.append(
                         {
-                            "type": "content_block_stop",
+                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
                             "index": context.current_block_index,
                         }
                     )
@@ -847,7 +834,7 @@ class AnthropicConverter(BaseConverter):
                 return results if results else {}
             # Without context: emit with safe defaults
             return {
-                "type": "message_delta",
+                "type": AnthropicEventType.MESSAGE_DELTA,
                 "delta": {"stop_reason": stop_reason},
                 "usage": {"output_tokens": 0},
             }
@@ -861,7 +848,7 @@ class AnthropicConverter(BaseConverter):
                 delta = context.pending_finish
                 context.pending_finish = None
             return {
-                "type": "message_delta",
+                "type": AnthropicEventType.MESSAGE_DELTA,
                 "delta": delta,
                 "usage": {"output_tokens": output_tokens},
             }

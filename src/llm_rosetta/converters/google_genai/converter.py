@@ -16,7 +16,6 @@ Also maintains backward compatibility with the old to_provider/from_provider API
 
 import json
 import time
-import uuid
 from typing import Any, cast
 from collections.abc import Iterable
 
@@ -60,6 +59,11 @@ from ...types.ir.type_guards import (
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ._constants import (
+    GOOGLE_REASON_FROM_PROVIDER,
+    GOOGLE_REASON_TO_PROVIDER,
+    generate_tool_call_id,
+)
 from .config_ops import GoogleGenAIConfigOps
 from .content_ops import GoogleGenAIContentOps
 from .message_ops import GoogleGenAIMessageOps
@@ -421,19 +425,12 @@ class GoogleGenAIConverter(BaseConverter):
             finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
                 "finishReason"
             )
-            reason_map = {
-                "STOP": "stop",
-                "MAX_TOKENS": "length",
-                "SAFETY": "content_filter",
-                "RECITATION": "content_filter",
-                "MALFORMED_FUNCTION_CALL": "error",
-                "OTHER": "error",
-            }
-
             choice_info: dict[str, Any] = {
                 "index": p_candidate.get("index", 0),
                 "message": message,
-                "finish_reason": {"reason": reason_map.get(finish_reason_val, "stop")},
+                "finish_reason": {
+                    "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason_val, "stop")
+                },
             }
             choices.append(choice_info)
 
@@ -497,14 +494,6 @@ class GoogleGenAIConverter(BaseConverter):
             "candidates": [],
         }
 
-        reason_map = {
-            "stop": "STOP",
-            "length": "MAX_TOKENS",
-            "content_filter": "SAFETY",
-            "tool_calls": "STOP",
-            "error": "OTHER",
-        }
-
         for choice in ir_response.get("choices", []):
             message = choice.get("message")
             if not message:
@@ -528,7 +517,7 @@ class GoogleGenAIConverter(BaseConverter):
             candidate: dict[str, Any] = {
                 "index": choice.get("index", 0),
                 "content": {"role": google_role, "parts": parts},
-                "finishReason": reason_map.get(reason, "STOP"),
+                "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
             }
             provider_response["candidates"].append(candidate)
 
@@ -748,9 +737,7 @@ class GoogleGenAIConverter(BaseConverter):
                 func_call = part.get("function_call") or part.get("functionCall")
                 if func_call:
                     # Generate a unique tool_call_id since Google doesn't provide one
-                    tool_call_id = func_call.get("id") or (
-                        f"call_{uuid.uuid4().hex[:24]}"
-                    )
+                    tool_call_id = func_call.get("id") or generate_tool_call_id()
                     tool_name = func_call.get("name", "")
                     args = func_call.get("args", {})
 
@@ -805,17 +792,11 @@ class GoogleGenAIConverter(BaseConverter):
             )
             if finish_reason:
                 has_finish_reason = True
-                reason_map = {
-                    "STOP": "stop",
-                    "MAX_TOKENS": "length",
-                    "SAFETY": "content_filter",
-                    "RECITATION": "content_filter",
-                    "MALFORMED_FUNCTION_CALL": "error",
-                    "OTHER": "error",
-                }
                 deferred_finish = FinishEvent(
                     type="finish",
-                    finish_reason={"reason": reason_map.get(finish_reason, "stop")},
+                    finish_reason={
+                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")
+                    },
                     choice_index=choice_index,
                 )
 
@@ -951,13 +932,6 @@ class GoogleGenAIConverter(BaseConverter):
         elif is_finish_event(event):
             choice_index = event.get("choice_index", 0)
             reason = event["finish_reason"]["reason"]
-            reason_map = {
-                "stop": "STOP",
-                "length": "MAX_TOKENS",
-                "content_filter": "SAFETY",
-                "tool_calls": "STOP",
-                "error": "OTHER",
-            }
 
             chunks: list[dict[str, Any]] = []
 
@@ -998,7 +972,9 @@ class GoogleGenAIConverter(BaseConverter):
                         {
                             "index": choice_index,
                             "content": {"role": "model", "parts": []},
-                            "finishReason": reason_map.get(reason, "STOP"),
+                            "finishReason": GOOGLE_REASON_TO_PROVIDER.get(
+                                reason, "STOP"
+                            ),
                         }
                     ]
                 }
