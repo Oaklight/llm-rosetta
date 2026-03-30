@@ -6,6 +6,21 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## Unreleased
+
+### Refactored
+
+- **Extracted per-provider constants for reason mappings and magic values** (#64): Inline reason mapping dicts, SSE event type string literals, status-to-reason conditional logic, and ID generation patterns across all 4 converters (Anthropic, Google GenAI, OpenAI Chat, OpenAI Responses) are now centralized in per-provider `_constants.py` modules. Includes `AnthropicEventType` and `ResponsesEventType` classes for namespaced event type constants, `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` dicts for each provider, and `generate_tool_call_id()` / `generate_message_id()` helper functions
+
+### Fixed
+
+- **Anthropic streaming missing `refusal` reason mapping**: The streaming `reason_map` was missing the `refusal` entry present in the non-streaming path, causing Anthropic refusal stop reasons to be silently dropped during streaming. Fixed as a side effect of the constants extraction (#64) — both paths now share the same `ANTHROPIC_REASON_FROM_PROVIDER` dict
+
+### Added
+
+- **Constants validation tests**: 39 new tests across 4 `test_constants.py` files verifying that all reason mapping values are valid IR finish reasons, mapping coverage is complete, event type constants are well-formed, and ID generation produces correct formats
+- **Finish reason mapping test coverage**: 38 tests validating reason mapping correctness as a safety net for the constants refactoring
+
 ## v0.2.6 — 2026-03-29
 
 ### Fixed
