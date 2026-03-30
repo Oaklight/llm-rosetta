@@ -406,6 +406,45 @@ class TestStreamResponseToProvider:
         assert result["choices"][0]["finish_reason"] == "stop"
         assert result["choices"][0]["delta"] == {}
 
+    def test_finish_event_length(self):
+        """FinishEvent with 'length' → OpenAI chunk with finish_reason 'length'."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "length"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["choices"][0]["finish_reason"] == "length"
+
+    def test_finish_event_tool_calls(self):
+        """FinishEvent with 'tool_calls' → OpenAI chunk with finish_reason 'tool_calls'."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "tool_calls"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["choices"][0]["finish_reason"] == "tool_calls"
+
+    def test_finish_event_content_filter(self):
+        """FinishEvent with 'content_filter' → OpenAI chunk with finish_reason 'content_filter'."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "content_filter"},
+                "choice_index": 0,
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["choices"][0]["finish_reason"] == "content_filter"
+
     def test_usage_event(self):
         """UsageEvent → OpenAI chunk."""
         event = cast(

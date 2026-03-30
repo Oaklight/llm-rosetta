@@ -315,6 +315,30 @@ class TestAnthropicConverter:
         assert tc["type"] == "tool_call"
         assert tc["tool_name"] == "get_weather"
 
+    def test_response_from_provider_finish_reasons(self):
+        """Test all finish reason mappings from provider."""
+        reason_map = {
+            "end_turn": "stop",
+            "max_tokens": "length",
+            "tool_use": "tool_calls",
+            "stop_sequence": "stop",
+            "refusal": "refusal",
+        }
+        for anthropic_reason, ir_reason in reason_map.items():
+            provider_response = {
+                "id": f"msg_{anthropic_reason}",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-3-5-sonnet-20241022",
+                "content": [{"type": "text", "text": "Hi"}],
+                "stop_reason": anthropic_reason,
+                "usage": {"input_tokens": 10, "output_tokens": 5},
+            }
+            result = self.converter.response_from_provider(provider_response)
+            assert result["choices"][0]["finish_reason"]["reason"] == ir_reason, (
+                f"Failed for {anthropic_reason}"
+            )
+
     def test_response_from_provider_with_cache(self):
         """Test response with cache usage."""
         provider_response = {
@@ -424,6 +448,43 @@ class TestAnthropicConverter:
         assert result["stop_reason"] == "tool_use"
         assert result["content"][0]["type"] == "tool_use"
         assert result["content"][0]["name"] == "search"
+
+    def test_response_to_provider_finish_reasons(self):
+        """Test all finish reason mappings to provider."""
+        reason_map = {
+            "stop": "end_turn",
+            "length": "max_tokens",
+            "tool_calls": "tool_use",
+            "content_filter": "end_turn",
+            "refusal": "refusal",
+        }
+        for ir_reason, anthropic_reason in reason_map.items():
+            ir_response = cast(
+                IRResponse,
+                {
+                    "id": f"resp_{ir_reason}",
+                    "object": "response",
+                    "created": 1700000000,
+                    "model": "claude-3-5-sonnet-20241022",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "Hi"}],
+                            },
+                            "finish_reason": {"reason": ir_reason},
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15,
+                    },
+                },
+            )
+            result = self.converter.response_to_provider(ir_response)
+            assert result["stop_reason"] == anthropic_reason, f"Failed for {ir_reason}"
 
     # ==================== messages_to_provider / messages_from_provider ====================
 

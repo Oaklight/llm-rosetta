@@ -471,6 +471,35 @@ class TestStreamResponseToProvider:
         completed = next(r for r in results if r["type"] == "response.completed")
         assert completed["response"]["status"] == "failed"
 
+    def test_finish_event_content_filter(self):
+        """FinishEvent with 'content_filter' → response.completed with status 'completed'.
+
+        Note: content_filter is not specially handled in to_provider direction,
+        so it defaults to 'completed' status. The from_provider direction correctly
+        maps incomplete/content_filter to 'content_filter' IR reason.
+        """
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "content_filter"}},
+        )
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
+
+    def test_finish_event_tool_calls(self):
+        """FinishEvent with 'tool_calls' → response.completed with status 'completed'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+        )
+        results = cast(
+            list[dict[str, Any]], self.converter.stream_response_to_provider(event)
+        )
+        completed = next(r for r in results if r["type"] == "response.completed")
+        assert completed["response"]["status"] == "completed"
+
     def test_usage_event(self):
         """UsageEvent → response.completed with usage."""
         event = cast(

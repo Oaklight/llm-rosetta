@@ -248,6 +248,39 @@ class TestOpenAIChatConverter:
         assert tc["type"] == "tool_call"
         assert tc["tool_name"] == "get_weather"
 
+    def test_response_from_provider_finish_reasons(self):
+        """Test all finish reason mappings from provider."""
+        reason_map = {
+            "stop": "stop",
+            "length": "length",
+            "tool_calls": "tool_calls",
+            "content_filter": "content_filter",
+            "function_call": "tool_calls",
+        }
+        for openai_reason, ir_reason in reason_map.items():
+            provider_response = {
+                "id": f"chatcmpl-{openai_reason}",
+                "object": "chat.completion",
+                "created": 1677652288,
+                "model": "gpt-4o",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "Hi"},
+                        "finish_reason": openai_reason,
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            }
+            result = self.converter.response_from_provider(provider_response)
+            assert result["choices"][0]["finish_reason"]["reason"] == ir_reason, (
+                f"Failed for {openai_reason}"
+            )
+
     def test_response_from_provider_with_usage_details(self):
         """Test response with detailed usage statistics."""
         provider_response = {
@@ -306,6 +339,39 @@ class TestOpenAIChatConverter:
         assert result["object"] == "chat.completion"
         assert result["choices"][0]["message"]["content"] == "Hello!"
         assert result["choices"][0]["finish_reason"] == "stop"
+
+    def test_response_to_provider_finish_reasons(self):
+        """Test finish reason pass-through to provider."""
+        reasons = ["stop", "length", "tool_calls", "content_filter"]
+        for reason in reasons:
+            ir_response = cast(
+                IRResponse,
+                {
+                    "id": f"resp-{reason}",
+                    "object": "response",
+                    "created": 1000,
+                    "model": "gpt-4o",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": "Hi"}],
+                            },
+                            "finish_reason": {"reason": reason},
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 5,
+                        "completion_tokens": 3,
+                        "total_tokens": 8,
+                    },
+                },
+            )
+            result = self.converter.response_to_provider(ir_response)
+            assert result["choices"][0]["finish_reason"] == reason, (
+                f"Failed for {reason}"
+            )
 
     # ==================== messages_to_provider / messages_from_provider ====================
 

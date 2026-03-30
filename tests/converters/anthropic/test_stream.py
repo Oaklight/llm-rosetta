@@ -367,6 +367,15 @@ class TestStreamResponseToProvider:
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["delta"]["stop_reason"] == "tool_use"
 
+    def test_finish_event_content_filter(self):
+        """FinishEvent with 'content_filter' → message_delta with 'end_turn'."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "content_filter"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["stop_reason"] == "end_turn"
+
     def test_usage_event(self):
         """UsageEvent → Anthropic message_delta with usage."""
         event = cast(
