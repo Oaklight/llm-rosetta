@@ -6,6 +6,21 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## 未发布
+
+### 重构
+
+- **提取各提供商常量用于 reason 映射及魔法值** (#64)：4 个转换器（Anthropic、Google GenAI、OpenAI Chat、OpenAI Responses）中散布的内联 reason 映射字典、SSE 事件类型字符串字面量、status-to-reason 条件逻辑和 ID 生成模式，现已集中到各提供商的 `_constants.py` 模块中。包含 `AnthropicEventType` 和 `ResponsesEventType` 命名空间事件类型常量类、每个提供商的 `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` 字典，以及 `generate_tool_call_id()` / `generate_message_id()` 辅助函数
+
+### 修复
+
+- **Anthropic 流式传输缺少 `refusal` reason 映射**：流式传输的 `reason_map` 缺少非流式路径中存在的 `refusal` 条目，导致 Anthropic refusal 停止原因在流式传输期间被静默丢弃。作为常量提取的副作用修复（#64）——两条路径现在共享同一个 `ANTHROPIC_REASON_FROM_PROVIDER` 字典
+
+### 新增
+
+- **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
+- **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
+
 ## v0.2.6 — 2026-03-29
 
 ### 修复
