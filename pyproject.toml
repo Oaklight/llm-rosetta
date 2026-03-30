@@ -6,10 +6,23 @@ build-backend = "setuptools.build_meta"
 name = "llm-rosetta"
 dynamic = ["version"]
 authors = [{ name = "Oaklight", email = "oaklight@gmx.com" }]
-description = "LLM-Rosetta: A library to convert between different LLM provider API standards using intermediate representation (IR)."
+description = "LLM-Rosetta: Unified LLM API adapter — bidirectional conversion between OpenAI, Anthropic, and Google formats via intermediate representation (IR)."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+keywords = [
+    "llm",
+    "openai",
+    "anthropic",
+    "gemini",
+    "api-adapter",
+    "llm-gateway",
+    "ai",
+    "streaming",
+    "generative-ai",
+    "type-safe",
+    "llmir",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
