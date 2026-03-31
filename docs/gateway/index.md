@@ -381,11 +381,48 @@ This means tools built on Ollama's OpenAI-compatible layer can use the gateway t
 
 Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
 
-```bash
-export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-export GEMINI_API_KEY=your-key
-gemini -m gemini-2.5-pro -p "your prompt here"
-```
+=== "Config Files (Recommended)"
+
+    **`~/.gemini/.env`** — Gemini CLI auto-reads this file on startup:
+
+    ```bash
+    GEMINI_API_KEY=your-key
+    GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+    ```
+
+    **`~/.gemini/settings.json`** — set auth mode and default model:
+
+    ```json
+    {
+        "model": {
+            "name": "gemini-2.5-pro"
+        },
+        "security": {
+            "auth": {
+                "selectedType": "gemini-api-key"
+            }
+        }
+    }
+    ```
+
+    With both files configured, just run `gemini` — no extra flags needed.
+
+=== "Environment Variables"
+
+    ```bash
+    export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+    export GEMINI_API_KEY=your-key
+    gemini -m gemini-2.5-pro -p "your prompt here"
+    ```
+
+!!! tip "Bearer token authentication"
+    If your upstream proxy expects Bearer token auth (e.g., OneAPI), add to `~/.gemini/.env`:
+
+    ```bash
+    GEMINI_API_KEY_AUTH_MECHANISM=bearer
+    ```
+
+    This sends the API key as a `Bearer` token in the `Authorization` header instead of as a query parameter.
 
 !!! note "TTY requirement"
     Gemini CLI requires a TTY even in headless mode (`-p`). When running from scripts or non-interactive shells, wrap with `script`:
