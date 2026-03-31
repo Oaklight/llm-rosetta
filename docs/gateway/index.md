@@ -381,11 +381,48 @@ Ollama v0.13+ 支持网关可以提供的三种 API 格式：
 
 Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
 
-```bash
-export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-export GEMINI_API_KEY=your-key
-gemini -m gemini-2.5-pro -p "your prompt here"
-```
+=== "配置文件（推荐）"
+
+    **`~/.gemini/.env`** — Gemini CLI 启动时自动读取此文件：
+
+    ```bash
+    GEMINI_API_KEY=your-key
+    GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+    ```
+
+    **`~/.gemini/settings.json`** — 设置认证模式和默认模型：
+
+    ```json
+    {
+        "model": {
+            "name": "gemini-2.5-pro"
+        },
+        "security": {
+            "auth": {
+                "selectedType": "gemini-api-key"
+            }
+        }
+    }
+    ```
+
+    两个文件配置好后，直接运行 `gemini` 即可，无需额外参数。
+
+=== "环境变量"
+
+    ```bash
+    export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+    export GEMINI_API_KEY=your-key
+    gemini -m gemini-2.5-pro -p "your prompt here"
+    ```
+
+!!! tip "Bearer token 认证"
+    如果上游代理要求 Bearer token 认证（如 OneAPI），在 `~/.gemini/.env` 中添加：
+
+    ```bash
+    GEMINI_API_KEY_AUTH_MECHANISM=bearer
+    ```
+
+    这会将 API key 作为 `Bearer` token 放在 `Authorization` 请求头中发送，而非作为查询参数。
 
 !!! note "TTY 要求"
     Gemini CLI 即使在无头模式（`-p`）下也需要 TTY。在脚本或非交互式 shell 中运行时，请使用 `script` 包装：
