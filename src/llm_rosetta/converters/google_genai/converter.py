@@ -34,6 +34,8 @@ from ...types.ir import (
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
+    ContentBlockEndEvent,
+    ContentBlockStartEvent,
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
@@ -865,7 +867,7 @@ class GoogleGenAIConverter(BaseConverter):
         return getattr(self, handler_name)(event, context)
 
     def _handle_stream_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → store metadata, no output."""
         if context is not None:
@@ -875,7 +877,7 @@ class GoogleGenAIConverter(BaseConverter):
         return {}
 
     def _handle_stream_end_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamEndEvent → mark ended, no output."""
         if context is not None:
@@ -883,19 +885,19 @@ class GoogleGenAIConverter(BaseConverter):
         return {}
 
     def _handle_content_block_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockStartEvent → no-op for Google GenAI."""
         return {}
 
     def _handle_content_block_end_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → no-op for Google GenAI."""
         return {}
 
     def _handle_text_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle TextDeltaEvent → text part chunk."""
         choice_index = event.get("choice_index", 0)
@@ -912,7 +914,7 @@ class GoogleGenAIConverter(BaseConverter):
         }
 
     def _handle_reasoning_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ReasoningDeltaEvent → thought text part chunk."""
         choice_index = event.get("choice_index", 0)
@@ -929,7 +931,7 @@ class GoogleGenAIConverter(BaseConverter):
         }
 
     def _handle_tool_call_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallStartEvent → register in context, no output."""
         if context is not None:
@@ -937,7 +939,7 @@ class GoogleGenAIConverter(BaseConverter):
         return {}
 
     def _handle_tool_call_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → accumulate args, no output."""
         if context is not None:
@@ -947,7 +949,7 @@ class GoogleGenAIConverter(BaseConverter):
         return {}
 
     def _handle_finish_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: FinishEvent, context: StreamContext | None
     ) -> list[dict[str, Any]]:
         """Handle FinishEvent → flush tool calls + finish chunk."""
         choice_index = event.get("choice_index", 0)
@@ -998,7 +1000,7 @@ class GoogleGenAIConverter(BaseConverter):
         return chunks
 
     def _handle_usage_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle UsageEvent → usageMetadata chunk."""
         usage = event["usage"]

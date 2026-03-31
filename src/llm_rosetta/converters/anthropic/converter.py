@@ -683,7 +683,7 @@ class AnthropicConverter(BaseConverter):
         return getattr(self, handler_name)(event, context)
 
     def _handle_stream_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → message_start."""
         if context is not None:
@@ -704,7 +704,7 @@ class AnthropicConverter(BaseConverter):
         }
 
     def _handle_stream_end_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle StreamEndEvent → message_stop (with optional pending finish flush)."""
         results: list[dict[str, Any]] = []
@@ -724,7 +724,7 @@ class AnthropicConverter(BaseConverter):
         return results if len(results) > 1 else results[0]
 
     def _handle_content_block_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockStartEvent → content_block_start."""
         block_index = event["block_index"]
@@ -749,7 +749,7 @@ class AnthropicConverter(BaseConverter):
             return {}
 
     def _handle_content_block_end_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → content_block_stop."""
         return {
@@ -758,7 +758,7 @@ class AnthropicConverter(BaseConverter):
         }
 
     def _handle_text_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle TextDeltaEvent → content_block_delta (with synthetic start if needed)."""
         result: dict[str, Any] = {
@@ -784,7 +784,7 @@ class AnthropicConverter(BaseConverter):
         return result
 
     def _handle_reasoning_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle ReasoningDeltaEvent → content_block_delta (thinking or signature)."""
         signature = event.get("signature")
@@ -821,7 +821,7 @@ class AnthropicConverter(BaseConverter):
         return rd_result
 
     def _handle_tool_call_start_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallStartEvent → content_block_start for tool_use."""
         result: dict[str, Any] = {
@@ -840,7 +840,7 @@ class AnthropicConverter(BaseConverter):
         return result
 
     def _handle_tool_call_delta_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → content_block_delta with input_json_delta."""
         result: dict[str, Any] = {
@@ -857,7 +857,7 @@ class AnthropicConverter(BaseConverter):
         return result
 
     def _handle_finish_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: FinishEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle FinishEvent → buffered message_delta + optional content_block_stop."""
         reason = event["finish_reason"]["reason"]
@@ -880,7 +880,7 @@ class AnthropicConverter(BaseConverter):
         }
 
     def _handle_usage_to_p(
-        self, event: IRStreamEvent, context: StreamContext | None
+        self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle UsageEvent → message_delta (merged with pending finish)."""
         usage = event["usage"]

@@ -884,7 +884,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_stream_start_to_p(
         self,
-        event: IRStreamEvent,
+        event: StreamStartEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         # Store metadata in context if provided
@@ -906,7 +906,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_stream_end_to_p(
         self,
-        event: IRStreamEvent,
+        event: StreamEndEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         if context is not None:
@@ -935,7 +935,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_content_block_start_to_p(
         self,
-        event: IRStreamEvent,
+        event: ContentBlockStartEvent,
         context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         block_type = event["block_type"]
@@ -984,7 +984,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_content_block_end_to_p(
         self,
-        event: IRStreamEvent,
+        event: ContentBlockEndEvent,
         context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if context is not None:
@@ -1015,7 +1015,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_text_delta_to_p(
         self,
-        event: IRStreamEvent,
+        event: TextDeltaEvent,
         context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         choice_index = event.get("choice_index", 0)
@@ -1066,7 +1066,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_reasoning_delta_to_p(
         self,
-        event: IRStreamEvent,
+        event: ReasoningDeltaEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         return {
@@ -1076,7 +1076,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_tool_call_start_to_p(
         self,
-        event: IRStreamEvent,
+        event: ToolCallStartEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         call_id = event["tool_call_id"]
@@ -1104,7 +1104,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_tool_call_delta_to_p(
         self,
-        event: IRStreamEvent,
+        event: ToolCallDeltaEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         call_id = event["tool_call_id"]
@@ -1140,7 +1140,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_finish_to_p(
         self,
-        event: IRStreamEvent,
+        event: FinishEvent,
         context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         reason = event["finish_reason"]["reason"]
@@ -1316,7 +1316,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _handle_usage_to_p(
         self,
-        event: IRStreamEvent,
+        event: UsageEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
         usage = event["usage"]
