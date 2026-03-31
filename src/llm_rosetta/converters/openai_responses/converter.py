@@ -34,18 +34,6 @@ from ...types.ir.stream import (
     ToolCallStartEvent,
     UsageEvent,
 )
-from ...types.ir.type_guards import (
-    is_content_block_end_event,
-    is_content_block_start_event,
-    is_finish_event,
-    is_reasoning_delta_event,
-    is_stream_end_event,
-    is_stream_start_event,
-    is_text_delta_event,
-    is_tool_call_delta_event,
-    is_tool_call_start_event,
-    is_usage_event,
-)
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
@@ -582,227 +570,291 @@ class OpenAIResponsesConverter(BaseConverter):
         events: list[IRStreamEvent] = []
         event_type = chunk.get("type", "")
 
-        # --- Response created (session start) ---
-        if event_type == ResponsesEventType.RESPONSE_CREATED:
-            if context is not None:
-                response = chunk.get("response", {})
-                response_id = response.get("id", "")
-                model = response.get("model", "")
-                created = int(response.get("created_at", 0))
-                context.response_id = response_id
-                context.model = model
-                context.created = created
-                context.mark_started()
-                start_event: StreamStartEvent = {
-                    "type": "stream_start",
-                    "response_id": response_id,
-                    "model": model,
-                }
-                if created:
-                    start_event["created"] = created
-                events.append(start_event)
-
-        # --- Text delta ---
-        elif event_type == ResponsesEventType.OUTPUT_TEXT_DELTA:
-            events.append(
-                TextDeltaEvent(
-                    type="text_delta",
-                    text=chunk.get("delta", ""),
-                )
-            )
-
-        # --- Reasoning summary delta ---
-        elif event_type == ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA:
-            events.append(
-                ReasoningDeltaEvent(
-                    type="reasoning_delta",
-                    reasoning=chunk.get("delta", ""),
-                )
-            )
-
-        # --- Output item added ---
-        elif event_type == ResponsesEventType.OUTPUT_ITEM_ADDED:
-            item = chunk.get("item", {})
-            if isinstance(item, dict):
-                item_type = item.get("type", "")
-
-                if item_type == "function_call":
-                    call_id = item.get("call_id", "")
-                    item_id = item.get("id", "")
-
-                    # Register tool call in context
-                    if context is not None:
-                        context.register_tool_call(call_id, item.get("name", ""))
-                        context.register_tool_call_item(call_id, item_id)
-
-                    start_event_tc = ToolCallStartEvent(
-                        type="tool_call_start",
-                        tool_call_id=call_id,
-                        tool_name=item.get("name", ""),
-                    )
-                    output_index = chunk.get("output_index")
-                    if output_index is not None:
-                        start_event_tc["tool_call_index"] = output_index
-                    events.append(start_event_tc)
-
-                elif item_type == "message":
-                    # Message-level output item — no IR event needed.
-                    # The actual content block is signaled by the subsequent
-                    # ``response.content_part.added`` event which produces its
-                    # own ``ContentBlockStartEvent``.  Emitting a
-                    # ``ContentBlockStartEvent`` here would cause duplicate
-                    # ``response.content_part.added`` events on round-trip.
-                    pass
-
-        # --- Content part added ---
-        elif event_type == ResponsesEventType.CONTENT_PART_ADDED:
-            if context is not None:
-                part = chunk.get("part", {})
-                part_type = part.get("type", "") if isinstance(part, dict) else ""
-                block_type = "text"
-                if part_type == "output_text":
-                    block_type = "text"
-                elif part_type == "summary_text":
-                    block_type = "thinking"
-                block_index = context.next_block_index()
-                events.append(
-                    ContentBlockStartEvent(
-                        type="content_block_start",
-                        block_index=block_index,
-                        block_type=block_type,
-                    )
-                )
-
-        # --- Content part done ---
-        elif event_type == ResponsesEventType.CONTENT_PART_DONE:
-            if context is not None:
-                events.append(
-                    ContentBlockEndEvent(
-                        type="content_block_end",
-                        block_index=context.current_block_index,
-                    )
-                )
-
-        # --- Output item done ---
-        elif event_type == ResponsesEventType.OUTPUT_ITEM_DONE:
-            # For function_call items, store the completed item in context
-            # so it can be included in the response.completed output array.
-            # Message-level done is a no-op (content_part.done handles it).
-            item = chunk.get("item", {})
-            if isinstance(item, dict) and item.get("type") == "function_call":
-                if context is not None:
-                    call_id = item.get("call_id", "")
-                    if call_id:
-                        context.set_tool_call_args(call_id, item.get("arguments", ""))
-
-        # --- Tool call arguments delta ---
-        elif event_type == ResponsesEventType.FUNCTION_CALL_ARGS_DELTA:
-            delta_text = chunk.get("delta", "")
-            # Upstream may send call_id or item_id — resolve to call_id
-            call_id = chunk.get("call_id", "")
-            if not call_id and context is not None:
-                item_id = chunk.get("item_id", "")
-                if item_id:
-                    call_id = context._item_id_to_call_id.get(item_id, "")
-            delta_event = ToolCallDeltaEvent(
-                type="tool_call_delta",
-                tool_call_id=call_id,
-                arguments_delta=delta_text,
-            )
-            output_index = chunk.get("output_index")
-            if output_index is not None:
-                delta_event["tool_call_index"] = output_index
-
-            # Accumulate arguments in context
-            if context is not None and call_id:
-                context.append_tool_call_args(call_id, delta_text)
-
-            events.append(delta_event)
-
-        # --- Tool call arguments done ---
-        elif event_type == ResponsesEventType.FUNCTION_CALL_ARGS_DONE:
-            # Resolve call_id from item_id if needed
-            call_id = chunk.get("call_id", "")
-            if not call_id and context is not None:
-                item_id = chunk.get("item_id", "")
-                if item_id:
-                    call_id = context._item_id_to_call_id.get(item_id, "")
-            arguments = chunk.get("arguments", "")
-            # Store final arguments in context
-            if context is not None and call_id:
-                context.set_tool_call_args(call_id, arguments)
-
-        # --- Response completed ---
-        elif event_type == ResponsesEventType.RESPONSE_COMPLETED:
-            response = chunk.get("response", chunk)
-
-            # Determine finish reason from status
-            status = response.get("status", "completed")
-            if status == "incomplete":
-                incomplete_details = response.get("incomplete_details", {})
-                inc_reason = (
-                    incomplete_details.get("reason", "")
-                    if isinstance(incomplete_details, dict)
-                    else ""
-                )
-                reason = RESPONSES_INCOMPLETE_REASON_TO_IR.get(inc_reason, "stop")
-            else:
-                reason = RESPONSES_STATUS_TO_REASON.get(status, "stop")
-
-            # Check if any output item is a function_call to set tool_calls reason
-            output_items = response.get("output", [])
-            if isinstance(output_items, list):
-                for item in output_items:
-                    if isinstance(item, dict) and item.get("type") == "function_call":
-                        reason = "tool_calls"
-                        break
-
-            # Emit UsageEvent before FinishEvent so that downstream
-            # converters can store usage in context.pending_usage before
-            # FinishEvent builds the terminal response.completed event.
-            usage = response.get("usage")
-            if isinstance(usage, dict):
-                events.append(
-                    UsageEvent(
-                        type="usage",
-                        usage={
-                            "prompt_tokens": usage.get("input_tokens") or 0,
-                            "completion_tokens": usage.get("output_tokens") or 0,
-                            "total_tokens": usage.get("total_tokens") or 0,
-                        },
-                    )
-                )
-
-            events.append(
-                FinishEvent(
-                    type="finish",
-                    finish_reason={"reason": reason},
-                )
-            )
-
-            # Emit StreamEndEvent after other events
-            if context is not None:
-                context.mark_ended()
-                events.append(StreamEndEvent(type="stream_end"))
-
-        # --- Response failed ---
-        elif event_type == ResponsesEventType.RESPONSE_FAILED:
-            events.append(
-                FinishEvent(
-                    type="finish",
-                    finish_reason={"reason": "error"},
-                )
-            )
-
-            # Emit StreamEndEvent after FinishEvent
-            if context is not None:
-                context.mark_ended()
-                events.append(StreamEndEvent(type="stream_end"))
+        handler_name = self._FROM_P_DISPATCH.get(event_type)
+        if handler_name is not None:
+            getattr(self, handler_name)(chunk, context, events)
 
         # All other event types (response.in_progress,
         # response.output_text.done, etc.) are ignored.
 
         return events
+
+    # --- from_provider handlers ---
+
+    def _handle_response_created_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        if context is not None:
+            response = chunk.get("response", {})
+            response_id = response.get("id", "")
+            model = response.get("model", "")
+            created = int(response.get("created_at", 0))
+            context.response_id = response_id
+            context.model = model
+            context.created = created
+            context.mark_started()
+            start_event: StreamStartEvent = {
+                "type": "stream_start",
+                "response_id": response_id,
+                "model": model,
+            }
+            if created:
+                start_event["created"] = created
+            events.append(start_event)
+
+    def _handle_output_text_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        events.append(
+            TextDeltaEvent(
+                type="text_delta",
+                text=chunk.get("delta", ""),
+            )
+        )
+
+    def _handle_reasoning_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        events.append(
+            ReasoningDeltaEvent(
+                type="reasoning_delta",
+                reasoning=chunk.get("delta", ""),
+            )
+        )
+
+    def _handle_output_item_added_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        item = chunk.get("item", {})
+        if isinstance(item, dict):
+            item_type = item.get("type", "")
+
+            if item_type == "function_call":
+                call_id = item.get("call_id", "")
+                item_id = item.get("id", "")
+
+                # Register tool call in context
+                if context is not None:
+                    context.register_tool_call(call_id, item.get("name", ""))
+                    context.register_tool_call_item(call_id, item_id)
+
+                start_event_tc = ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id=call_id,
+                    tool_name=item.get("name", ""),
+                )
+                output_index = chunk.get("output_index")
+                if output_index is not None:
+                    start_event_tc["tool_call_index"] = output_index
+                events.append(start_event_tc)
+
+            elif item_type == "message":
+                # Message-level output item — no IR event needed.
+                # The actual content block is signaled by the subsequent
+                # ``response.content_part.added`` event which produces its
+                # own ``ContentBlockStartEvent``.  Emitting a
+                # ``ContentBlockStartEvent`` here would cause duplicate
+                # ``response.content_part.added`` events on round-trip.
+                pass
+
+    def _handle_content_part_added_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        if context is not None:
+            part = chunk.get("part", {})
+            part_type = part.get("type", "") if isinstance(part, dict) else ""
+            block_type = "text"
+            if part_type == "output_text":
+                block_type = "text"
+            elif part_type == "summary_text":
+                block_type = "thinking"
+            block_index = context.next_block_index()
+            events.append(
+                ContentBlockStartEvent(
+                    type="content_block_start",
+                    block_index=block_index,
+                    block_type=block_type,
+                )
+            )
+
+    def _handle_content_part_done_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        if context is not None:
+            events.append(
+                ContentBlockEndEvent(
+                    type="content_block_end",
+                    block_index=context.current_block_index,
+                )
+            )
+
+    def _handle_output_item_done_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        # For function_call items, store the completed item in context
+        # so it can be included in the response.completed output array.
+        # Message-level done is a no-op (content_part.done handles it).
+        item = chunk.get("item", {})
+        if isinstance(item, dict) and item.get("type") == "function_call":
+            if context is not None:
+                call_id = item.get("call_id", "")
+                if call_id:
+                    context.set_tool_call_args(call_id, item.get("arguments", ""))
+
+    def _handle_function_call_args_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        delta_text = chunk.get("delta", "")
+        # Upstream may send call_id or item_id — resolve to call_id
+        call_id = chunk.get("call_id", "")
+        if not call_id and context is not None:
+            item_id = chunk.get("item_id", "")
+            if item_id:
+                call_id = context._item_id_to_call_id.get(item_id, "")
+        delta_event = ToolCallDeltaEvent(
+            type="tool_call_delta",
+            tool_call_id=call_id,
+            arguments_delta=delta_text,
+        )
+        output_index = chunk.get("output_index")
+        if output_index is not None:
+            delta_event["tool_call_index"] = output_index
+
+        # Accumulate arguments in context
+        if context is not None and call_id:
+            context.append_tool_call_args(call_id, delta_text)
+
+        events.append(delta_event)
+
+    def _handle_function_call_args_done_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        # Resolve call_id from item_id if needed
+        call_id = chunk.get("call_id", "")
+        if not call_id and context is not None:
+            item_id = chunk.get("item_id", "")
+            if item_id:
+                call_id = context._item_id_to_call_id.get(item_id, "")
+        arguments = chunk.get("arguments", "")
+        # Store final arguments in context
+        if context is not None and call_id:
+            context.set_tool_call_args(call_id, arguments)
+
+    def _handle_response_completed_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        response = chunk.get("response", chunk)
+
+        # Determine finish reason from status
+        status = response.get("status", "completed")
+        if status == "incomplete":
+            incomplete_details = response.get("incomplete_details", {})
+            inc_reason = (
+                incomplete_details.get("reason", "")
+                if isinstance(incomplete_details, dict)
+                else ""
+            )
+            reason = RESPONSES_INCOMPLETE_REASON_TO_IR.get(inc_reason, "stop")
+        else:
+            reason = RESPONSES_STATUS_TO_REASON.get(status, "stop")
+
+        # Check if any output item is a function_call to set tool_calls reason
+        output_items = response.get("output", [])
+        if isinstance(output_items, list):
+            for item in output_items:
+                if isinstance(item, dict) and item.get("type") == "function_call":
+                    reason = "tool_calls"
+                    break
+
+        # Emit UsageEvent before FinishEvent so that downstream
+        # converters can store usage in context.pending_usage before
+        # FinishEvent builds the terminal response.completed event.
+        usage = response.get("usage")
+        if isinstance(usage, dict):
+            events.append(
+                UsageEvent(
+                    type="usage",
+                    usage={
+                        "prompt_tokens": usage.get("input_tokens") or 0,
+                        "completion_tokens": usage.get("output_tokens") or 0,
+                        "total_tokens": usage.get("total_tokens") or 0,
+                    },
+                )
+            )
+
+        events.append(
+            FinishEvent(
+                type="finish",
+                finish_reason={"reason": reason},
+            )
+        )
+
+        # Emit StreamEndEvent after other events
+        if context is not None:
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+
+    def _handle_response_failed_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        events.append(
+            FinishEvent(
+                type="finish",
+                finish_reason={"reason": "error"},
+            )
+        )
+
+        # Emit StreamEndEvent after FinishEvent
+        if context is not None:
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+
+    _FROM_P_DISPATCH: dict[str, str] = {
+        ResponsesEventType.RESPONSE_CREATED: "_handle_response_created_from_p",
+        ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_output_text_delta_from_p",
+        ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_reasoning_delta_from_p",
+        ResponsesEventType.OUTPUT_ITEM_ADDED: "_handle_output_item_added_from_p",
+        ResponsesEventType.CONTENT_PART_ADDED: "_handle_content_part_added_from_p",
+        ResponsesEventType.CONTENT_PART_DONE: "_handle_content_part_done_from_p",
+        ResponsesEventType.OUTPUT_ITEM_DONE: "_handle_output_item_done_from_p",
+        ResponsesEventType.FUNCTION_CALL_ARGS_DELTA: "_handle_function_call_args_delta_from_p",
+        ResponsesEventType.FUNCTION_CALL_ARGS_DONE: "_handle_function_call_args_done_from_p",
+        ResponsesEventType.RESPONSE_COMPLETED: "_handle_response_completed_from_p",
+        ResponsesEventType.RESPONSE_FAILED: "_handle_response_failed_from_p",
+    }
 
     def stream_response_to_provider(
         self,
@@ -823,143 +875,74 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             OpenAI Responses SSE event dict, or a list of dicts.
         """
-        if is_stream_start_event(event):
-            # Store metadata in context if provided
-            if context is not None:
-                context.response_id = event["response_id"]
-                context.model = event["model"]
-                context.created = event.get("created", 0)
-                context.mark_started()
-            return {
-                "type": ResponsesEventType.RESPONSE_CREATED,
-                "response": {
-                    "id": event["response_id"],
-                    "object": "response",
-                    "model": event["model"],
-                    "status": "in_progress",
-                    "output": [],
-                },
-            }
+        handler_name = self._TO_P_DISPATCH.get(event["type"])
+        if handler_name is not None:
+            return getattr(self, handler_name)(event, context)
+        return {}
 
-        elif is_stream_end_event(event):
-            if context is not None:
-                context.mark_ended()
-                # Emit the deferred response.completed if FinishEvent
-                # stored one.  This ensures UsageEvents that arrive
-                # between FinishEvent and StreamEndEvent (e.g. OpenAI
-                # Chat sends usage in a separate chunk after
-                # finish_reason) are merged into the response.
-                if context.pending_response is not None:
-                    resp = context.pending_response
-                    context.pending_response = None
-                    # Merge any usage that arrived after FinishEvent
-                    if context.pending_usage is not None and "usage" not in resp:
-                        resp["usage"] = {
-                            "input_tokens": context.pending_usage.get("prompt_tokens")
-                            or 0,
-                            "output_tokens": context.pending_usage.get(
-                                "completion_tokens"
-                            )
-                            or 0,
-                            "total_tokens": context.pending_usage.get("total_tokens")
-                            or 0,
-                        }
-                    return {
-                        "type": ResponsesEventType.RESPONSE_COMPLETED,
-                        "response": resp,
+    # --- to_provider handlers ---
+
+    def _handle_stream_start_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        # Store metadata in context if provided
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.created = event.get("created", 0)
+            context.mark_started()
+        return {
+            "type": ResponsesEventType.RESPONSE_CREATED,
+            "response": {
+                "id": event["response_id"],
+                "object": "response",
+                "model": event["model"],
+                "status": "in_progress",
+                "output": [],
+            },
+        }
+
+    def _handle_stream_end_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        if context is not None:
+            context.mark_ended()
+            # Emit the deferred response.completed if FinishEvent
+            # stored one.  This ensures UsageEvents that arrive
+            # between FinishEvent and StreamEndEvent (e.g. OpenAI
+            # Chat sends usage in a separate chunk after
+            # finish_reason) are merged into the response.
+            if context.pending_response is not None:
+                resp = context.pending_response
+                context.pending_response = None
+                # Merge any usage that arrived after FinishEvent
+                if context.pending_usage is not None and "usage" not in resp:
+                    resp["usage"] = {
+                        "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
+                        "output_tokens": context.pending_usage.get("completion_tokens")
+                        or 0,
+                        "total_tokens": context.pending_usage.get("total_tokens") or 0,
                     }
-            return {}
-
-        elif is_content_block_start_event(event):
-            block_type = event["block_type"]
-            if block_type == "text":
-                # With context: emit output_item.added + content_part.added
-                # and mark the item as emitted so the first TextDelta doesn't
-                # re-emit them.
-                if context is not None and not getattr(
-                    context, "_output_item_emitted", False
-                ):
-                    context._output_item_emitted = True
-                    item_id = generate_message_id(context.response_id)
-                    context._item_id = item_id
-                    return [
-                        {
-                            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                            "output_index": 0,
-                            "item": {
-                                "id": item_id,
-                                "type": "message",
-                                "role": "assistant",
-                                "content": [],
-                            },
-                        },
-                        {
-                            "type": ResponsesEventType.CONTENT_PART_ADDED,
-                            "output_index": 0,
-                            "content_index": 0,
-                            "part": {
-                                "type": "output_text",
-                                "text": "",
-                            },
-                        },
-                    ]
-                # Fallback: just emit content_part.added (e.g. no context, or
-                # output item already emitted by a prior ContentBlockStartEvent)
                 return {
-                    "type": ResponsesEventType.CONTENT_PART_ADDED,
-                    "part": {
-                        "type": "output_text",
-                        "text": "",
-                    },
+                    "type": ResponsesEventType.RESPONSE_COMPLETED,
+                    "response": resp,
                 }
-            # Other block types are no-ops for now
-            return {}
+        return {}
 
-        elif is_content_block_end_event(event):
-            if context is not None:
-                context._content_part_done_emitted = True
-                accumulated = getattr(context, "_accumulated_text", "")
-                # Emit output_text.done before content_part.done (matches
-                # OpenAI's event ordering)
-                return [
-                    {
-                        "type": ResponsesEventType.OUTPUT_TEXT_DONE,
-                        "output_index": 0,
-                        "content_index": 0,
-                        "text": accumulated,
-                    },
-                    {
-                        "type": ResponsesEventType.CONTENT_PART_DONE,
-                        "output_index": 0,
-                        "content_index": 0,
-                        "part": {"type": "output_text", "text": accumulated},
-                    },
-                ]
-            return {
-                "type": ResponsesEventType.CONTENT_PART_DONE,
-                "part": {
-                    "type": "output_text",
-                },
-            }
-
-        elif is_text_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            text = event["text"]
-            delta_event: dict[str, Any] = {
-                "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
-                "delta": text,
-                "output_index": choice_index,
-                "content_index": 0,
-            }
-
-            # Accumulate text in context for response.completed output
-            if context is not None:
-                if not hasattr(context, "_accumulated_text"):
-                    context._accumulated_text = ""
-                context._accumulated_text += text
-
-            # Emit output_item.added + content_part.added before the first
-            # text delta so clients (e.g. Codex CLI) can register the item.
+    def _handle_content_block_start_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        block_type = event["block_type"]
+        if block_type == "text":
+            # With context: emit output_item.added + content_part.added
+            # and mark the item as emitted so the first TextDelta doesn't
+            # re-emit them.
             if context is not None and not getattr(
                 context, "_output_item_emitted", False
             ):
@@ -969,7 +952,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 return [
                     {
                         "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                        "output_index": choice_index,
+                        "output_index": 0,
                         "item": {
                             "id": item_id,
                             "type": "message",
@@ -979,256 +962,398 @@ class OpenAIResponsesConverter(BaseConverter):
                     },
                     {
                         "type": ResponsesEventType.CONTENT_PART_ADDED,
-                        "output_index": choice_index,
+                        "output_index": 0,
                         "content_index": 0,
                         "part": {
                             "type": "output_text",
                             "text": "",
                         },
                     },
-                    delta_event,
                 ]
-
-            return delta_event
-
-        elif is_reasoning_delta_event(event):
+            # Fallback: just emit content_part.added (e.g. no context, or
+            # output item already emitted by a prior ContentBlockStartEvent)
             return {
-                "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
-                "delta": event["reasoning"],
+                "type": ResponsesEventType.CONTENT_PART_ADDED,
+                "part": {
+                    "type": "output_text",
+                    "text": "",
+                },
             }
+        # Other block types are no-ops for now
+        return {}
 
-        elif is_tool_call_start_event(event):
-            call_id = event["tool_call_id"]
-            tool_name = event["tool_name"]
+    def _handle_content_block_end_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        if context is not None:
+            context._content_part_done_emitted = True
+            accumulated = getattr(context, "_accumulated_text", "")
+            # Emit output_text.done before content_part.done (matches
+            # OpenAI's event ordering)
+            return [
+                {
+                    "type": ResponsesEventType.OUTPUT_TEXT_DONE,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "text": accumulated,
+                },
+                {
+                    "type": ResponsesEventType.CONTENT_PART_DONE,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "part": {"type": "output_text", "text": accumulated},
+                },
+            ]
+        return {
+            "type": ResponsesEventType.CONTENT_PART_DONE,
+            "part": {
+                "type": "output_text",
+            },
+        }
+
+    def _handle_text_delta_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        choice_index = event.get("choice_index", 0)
+        text = event["text"]
+        delta_event: dict[str, Any] = {
+            "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
+            "delta": text,
+            "output_index": choice_index,
+            "content_index": 0,
+        }
+
+        # Accumulate text in context for response.completed output
+        if context is not None:
+            if not hasattr(context, "_accumulated_text"):
+                context._accumulated_text = ""
+            context._accumulated_text += text
+
+        # Emit output_item.added + content_part.added before the first
+        # text delta so clients (e.g. Codex CLI) can register the item.
+        if context is not None and not getattr(context, "_output_item_emitted", False):
+            context._output_item_emitted = True
+            item_id = generate_message_id(context.response_id)
+            context._item_id = item_id
+            return [
+                {
+                    "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+                    "output_index": choice_index,
+                    "item": {
+                        "id": item_id,
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [],
+                    },
+                },
+                {
+                    "type": ResponsesEventType.CONTENT_PART_ADDED,
+                    "output_index": choice_index,
+                    "content_index": 0,
+                    "part": {
+                        "type": "output_text",
+                        "text": "",
+                    },
+                },
+                delta_event,
+            ]
+
+        return delta_event
+
+    def _handle_reasoning_delta_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        return {
+            "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
+            "delta": event["reasoning"],
+        }
+
+    def _handle_tool_call_start_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        call_id = event["tool_call_id"]
+        tool_name = event["tool_name"]
+        item_id = call_id
+
+        # Register in context for later done events
+        if context is not None and call_id:
+            context.register_tool_call(call_id, tool_name)
+            context.register_tool_call_item(call_id, item_id)
+
+        result: dict[str, Any] = {
+            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+            "item": {
+                "id": item_id,
+                "type": "function_call",
+                "call_id": call_id,
+                "name": tool_name,
+            },
+        }
+        tc_index = event.get("tool_call_index")
+        if tc_index is not None:
+            result["output_index"] = tc_index
+        return result
+
+    def _handle_tool_call_delta_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        call_id = event["tool_call_id"]
+        delta = event["arguments_delta"]
+        tc_index = event.get("tool_call_index")
+
+        # Defense-in-depth: resolve empty tool_call_id by index.
+        # Some upstream providers (e.g. certain Chat Completions
+        # implementations) only send tool_call_id on the first chunk.
+        if not call_id and context is not None and tc_index is not None:
+            if tc_index < len(context._tool_call_order):
+                call_id = context._tool_call_order[tc_index]
+
+        # Accumulate arguments in context for done events
+        if context is not None and call_id:
+            context.append_tool_call_args(call_id, delta)
+
+        # Use item_id per Responses API spec
+        item_id = ""
+        if context is not None and call_id:
+            item_id = context.get_tool_call_item_id(call_id)
+        if not item_id and call_id:
             item_id = call_id
 
-            # Register in context for later done events
-            if context is not None and call_id:
-                context.register_tool_call(call_id, tool_name)
-                context.register_tool_call_item(call_id, item_id)
+        result: dict[str, Any] = {
+            "type": ResponsesEventType.FUNCTION_CALL_ARGS_DELTA,
+            "item_id": item_id,
+            "delta": delta,
+        }
+        if tc_index is not None:
+            result["output_index"] = tc_index
+        return result
 
-            result: dict[str, Any] = {
-                "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                "item": {
-                    "id": item_id,
-                    "type": "function_call",
-                    "call_id": call_id,
-                    "name": tool_name,
-                },
-            }
-            tc_index = event.get("tool_call_index")
-            if tc_index is not None:
-                result["output_index"] = tc_index
-            return result
+    def _handle_finish_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        reason = event["finish_reason"]["reason"]
+        status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
 
-        elif is_tool_call_delta_event(event):
-            call_id = event["tool_call_id"]
-            delta = event["arguments_delta"]
-            tc_index = event.get("tool_call_index")
+        response = self._build_finish_response(status, context)
 
-            # Defense-in-depth: resolve empty tool_call_id by index.
-            # Some upstream providers (e.g. certain Chat Completions
-            # implementations) only send tool_call_id on the first chunk.
-            if not call_id and context is not None and tc_index is not None:
-                if tc_index < len(context._tool_call_order):
-                    call_id = context._tool_call_order[tc_index]
+        # Emit done events before response.completed
+        results: list[dict[str, Any]] = []
 
-            # Accumulate arguments in context for done events
-            if context is not None and call_id:
-                context.append_tool_call_args(call_id, delta)
+        if context is not None:
+            self._emit_text_done_events(context, results)
+            self._emit_tool_call_done_events(context, results)
 
-            # Use item_id per Responses API spec
-            item_id = ""
-            if context is not None and call_id:
-                item_id = context.get_tool_call_item_id(call_id)
-            if not item_id and call_id:
-                item_id = call_id
-
-            result: dict[str, Any] = {
-                "type": ResponsesEventType.FUNCTION_CALL_ARGS_DELTA,
-                "item_id": item_id,
-                "delta": delta,
-            }
-            if tc_index is not None:
-                result["output_index"] = tc_index
-            return result
-
-        elif is_finish_event(event):
-            reason = event["finish_reason"]["reason"]
-            status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
-
-            # Build the output array with accumulated content
-            output: list[dict[str, Any]] = []
-            if context is not None:
-                accumulated = getattr(context, "_accumulated_text", "")
-                item_id = getattr(context, "_item_id", "")
-                if accumulated:
-                    output.append(
-                        {
-                            "id": item_id,
-                            "type": "message",
-                            "role": "assistant",
-                            "content": [{"type": "output_text", "text": accumulated}],
-                        }
-                    )
-
-                # Add accumulated function calls to output
-                for call_id in context._tool_call_order:
-                    tool_name = context.get_tool_name(call_id)
-                    arguments = context._tool_call_args.get(call_id, "")
-                    item_id = context.get_tool_call_item_id(call_id) or call_id
-                    output.append(
-                        {
-                            "id": item_id,
-                            "type": "function_call",
-                            "call_id": call_id,
-                            "name": tool_name,
-                            "arguments": arguments,
-                            "status": "completed",
-                        }
-                    )
-
-            response: dict[str, Any] = {"status": status, "output": output}
-
-            # Populate id, object, model from context so clients can parse
-            # the completed response envelope.
-            if context is not None:
-                response["id"] = context.response_id
-                response["object"] = "response"
-                response["model"] = context.model
-
-            if status == "incomplete":
-                response["incomplete_details"] = {"reason": "max_output_tokens"}
-
-            # Merge pending usage from context if available
-            if context is not None and context.pending_usage is not None:
-                response["usage"] = {
-                    "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
-                    "output_tokens": context.pending_usage.get("completion_tokens")
-                    or 0,
-                    "total_tokens": context.pending_usage.get("total_tokens") or 0,
-                }
-
-            # Emit done events before response.completed
-            results: list[dict[str, Any]] = []
-
-            if context is not None:
-                # Emit text done events if we had text output
-                if getattr(context, "_output_item_emitted", False):
-                    accumulated = getattr(context, "_accumulated_text", "")
-                    item_id = getattr(context, "_item_id", "")
-
-                    # Only emit output_text.done + content_part.done if not
-                    # already emitted by a prior ContentBlockEndEvent
-                    if not getattr(context, "_content_part_done_emitted", False):
-                        results.append(
-                            {
-                                "type": ResponsesEventType.OUTPUT_TEXT_DONE,
-                                "output_index": 0,
-                                "content_index": 0,
-                                "text": accumulated,
-                            }
-                        )
-                        results.append(
-                            {
-                                "type": ResponsesEventType.CONTENT_PART_DONE,
-                                "output_index": 0,
-                                "content_index": 0,
-                                "part": {"type": "output_text", "text": accumulated},
-                            }
-                        )
-                    results.append(
-                        {
-                            "type": ResponsesEventType.OUTPUT_ITEM_DONE,
-                            "output_index": 0,
-                            "item": {
-                                "id": item_id,
-                                "type": "message",
-                                "role": "assistant",
-                                "content": [
-                                    {"type": "output_text", "text": accumulated}
-                                ],
-                            },
-                        }
-                    )
-
-                # Emit done events for each tool call
-                for tc_idx, call_id in enumerate(context._tool_call_order):
-                    tool_name = context.get_tool_name(call_id)
-                    arguments = context._tool_call_args.get(call_id, "")
-                    item_id = context.get_tool_call_item_id(call_id) or call_id
-                    output_index = tc_idx + (
-                        1 if getattr(context, "_output_item_emitted", False) else 0
-                    )
-
-                    # response.function_call_arguments.done
-                    results.append(
-                        {
-                            "type": ResponsesEventType.FUNCTION_CALL_ARGS_DONE,
-                            "item_id": item_id,
-                            "output_index": output_index,
-                            "arguments": arguments,
-                        }
-                    )
-
-                    # response.output_item.done for the function_call
-                    results.append(
-                        {
-                            "type": ResponsesEventType.OUTPUT_ITEM_DONE,
-                            "output_index": output_index,
-                            "item": {
-                                "id": item_id,
-                                "type": "function_call",
-                                "call_id": call_id,
-                                "name": tool_name,
-                                "arguments": arguments,
-                                "status": "completed",
-                            },
-                        }
-                    )
-
-            # With context: defer response.completed to StreamEndEvent
-            # so that any UsageEvent arriving after FinishEvent (e.g.
-            # OpenAI Chat sends usage in a separate chunk) can still be
-            # merged into the response.
-            if context is not None:
-                context.pending_response = response
-                return results
-
-            # Without context: emit immediately (backward compatible)
-            results.append(
-                {
-                    "type": ResponsesEventType.RESPONSE_COMPLETED,
-                    "response": response,
-                }
-            )
+        # With context: defer response.completed to StreamEndEvent
+        # so that any UsageEvent arriving after FinishEvent (e.g.
+        # OpenAI Chat sends usage in a separate chunk) can still be
+        # merged into the response.
+        if context is not None:
+            context.pending_response = response
             return results
 
-        elif is_usage_event(event):
-            usage = event["usage"]
+        # Without context: emit immediately (backward compatible)
+        results.append(
+            {
+                "type": ResponsesEventType.RESPONSE_COMPLETED,
+                "response": response,
+            }
+        )
+        return results
 
-            # With context: store usage for later merging, avoid duplicate
-            # response.completed
-            if context is not None:
-                context.pending_usage = dict(usage)
-                return {}
+    def _build_finish_response(
+        self,
+        status: str,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        """Build the response dict for a FinishEvent."""
+        output: list[dict[str, Any]] = []
+        if context is not None:
+            accumulated = getattr(context, "_accumulated_text", "")
+            item_id = getattr(context, "_item_id", "")
+            if accumulated:
+                output.append(
+                    {
+                        "id": item_id,
+                        "type": "message",
+                        "role": "assistant",
+                        "content": [{"type": "output_text", "text": accumulated}],
+                    }
+                )
 
-            # Without context: preserve backward-compatible behavior
-            resp: dict[str, Any] = {
-                "status": "completed",
-                "output": [],
-                "usage": {
-                    "input_tokens": usage.get("prompt_tokens") or 0,
-                    "output_tokens": usage.get("completion_tokens") or 0,
-                    "total_tokens": usage.get("total_tokens") or 0,
+            # Add accumulated function calls to output
+            for call_id in context._tool_call_order:
+                tool_name = context.get_tool_name(call_id)
+                arguments = context._tool_call_args.get(call_id, "")
+                tc_item_id = context.get_tool_call_item_id(call_id) or call_id
+                output.append(
+                    {
+                        "id": tc_item_id,
+                        "type": "function_call",
+                        "call_id": call_id,
+                        "name": tool_name,
+                        "arguments": arguments,
+                        "status": "completed",
+                    }
+                )
+
+        response: dict[str, Any] = {"status": status, "output": output}
+
+        # Populate id, object, model from context so clients can parse
+        # the completed response envelope.
+        if context is not None:
+            response["id"] = context.response_id
+            response["object"] = "response"
+            response["model"] = context.model
+
+        if status == "incomplete":
+            response["incomplete_details"] = {"reason": "max_output_tokens"}
+
+        # Merge pending usage from context if available
+        if context is not None and context.pending_usage is not None:
+            response["usage"] = {
+                "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
+                "output_tokens": context.pending_usage.get("completion_tokens") or 0,
+                "total_tokens": context.pending_usage.get("total_tokens") or 0,
+            }
+
+        return response
+
+    def _emit_text_done_events(
+        self,
+        context: StreamContext,
+        results: list[dict[str, Any]],
+    ) -> None:
+        """Emit text done events if we had text output."""
+        if not getattr(context, "_output_item_emitted", False):
+            return
+
+        accumulated = getattr(context, "_accumulated_text", "")
+        item_id = getattr(context, "_item_id", "")
+
+        # Only emit output_text.done + content_part.done if not
+        # already emitted by a prior ContentBlockEndEvent
+        if not getattr(context, "_content_part_done_emitted", False):
+            results.append(
+                {
+                    "type": ResponsesEventType.OUTPUT_TEXT_DONE,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "text": accumulated,
+                }
+            )
+            results.append(
+                {
+                    "type": ResponsesEventType.CONTENT_PART_DONE,
+                    "output_index": 0,
+                    "content_index": 0,
+                    "part": {"type": "output_text", "text": accumulated},
+                }
+            )
+        results.append(
+            {
+                "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                "output_index": 0,
+                "item": {
+                    "id": item_id,
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": accumulated}],
                 },
             }
-            return {
-                "type": ResponsesEventType.RESPONSE_COMPLETED,
-                "response": resp,
-            }
+        )
 
-        return {}
+    def _emit_tool_call_done_events(
+        self,
+        context: StreamContext,
+        results: list[dict[str, Any]],
+    ) -> None:
+        """Emit done events for each tool call."""
+        for tc_idx, call_id in enumerate(context._tool_call_order):
+            tool_name = context.get_tool_name(call_id)
+            arguments = context._tool_call_args.get(call_id, "")
+            item_id = context.get_tool_call_item_id(call_id) or call_id
+            output_index = tc_idx + (
+                1 if getattr(context, "_output_item_emitted", False) else 0
+            )
+
+            # response.function_call_arguments.done
+            results.append(
+                {
+                    "type": ResponsesEventType.FUNCTION_CALL_ARGS_DONE,
+                    "item_id": item_id,
+                    "output_index": output_index,
+                    "arguments": arguments,
+                }
+            )
+
+            # response.output_item.done for the function_call
+            results.append(
+                {
+                    "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                    "output_index": output_index,
+                    "item": {
+                        "id": item_id,
+                        "type": "function_call",
+                        "call_id": call_id,
+                        "name": tool_name,
+                        "arguments": arguments,
+                        "status": "completed",
+                    },
+                }
+            )
+
+    def _handle_usage_to_p(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        usage = event["usage"]
+
+        # With context: store usage for later merging, avoid duplicate
+        # response.completed
+        if context is not None:
+            context.pending_usage = dict(usage)
+            return {}
+
+        # Without context: preserve backward-compatible behavior
+        resp: dict[str, Any] = {
+            "status": "completed",
+            "output": [],
+            "usage": {
+                "input_tokens": usage.get("prompt_tokens") or 0,
+                "output_tokens": usage.get("completion_tokens") or 0,
+                "total_tokens": usage.get("total_tokens") or 0,
+            },
+        }
+        return {
+            "type": ResponsesEventType.RESPONSE_COMPLETED,
+            "response": resp,
+        }
+
+    _TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_stream_start_to_p",
+        "stream_end": "_handle_stream_end_to_p",
+        "content_block_start": "_handle_content_block_start_to_p",
+        "content_block_end": "_handle_content_block_end_to_p",
+        "text_delta": "_handle_text_delta_to_p",
+        "reasoning_delta": "_handle_reasoning_delta_to_p",
+        "tool_call_start": "_handle_tool_call_start_to_p",
+        "tool_call_delta": "_handle_tool_call_delta_to_p",
+        "finish": "_handle_finish_to_p",
+        "usage": "_handle_usage_to_p",
+    }
 
     # ==================== Backward Compatibility ====================
 

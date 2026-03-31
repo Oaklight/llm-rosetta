@@ -44,18 +44,6 @@ from ...types.ir.stream import (
     ToolCallStartEvent,
     UsageEvent,
 )
-from ...types.ir.type_guards import (
-    is_content_block_end_event,
-    is_content_block_start_event,
-    is_finish_event,
-    is_reasoning_delta_event,
-    is_stream_end_event,
-    is_stream_start_event,
-    is_text_delta_event,
-    is_tool_call_delta_event,
-    is_tool_call_start_event,
-    is_usage_event,
-)
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
@@ -655,6 +643,8 @@ class GoogleGenAIConverter(BaseConverter):
 
     # ==================== Stream Support ====================
 
+    # --- from_provider ---
+
     def stream_response_from_provider(
         self,
         chunk: dict[str, Any],
@@ -666,17 +656,8 @@ class GoogleGenAIConverter(BaseConverter):
         objects. Each chunk contains incremental content in
         ``candidates[].content.parts[]``.
 
-        For text parts → ``TextDeltaEvent``
-        For thought parts (``thought: true``) → ``ReasoningDeltaEvent``
-        For function_call parts → ``ToolCallStartEvent`` + ``ToolCallDeltaEvent``
-            (Google sends complete function calls, not incremental deltas)
-        For finish_reason → ``FinishEvent``
-        For usage_metadata → ``UsageEvent``
-
         When a ``context`` is provided, lifecycle events (``StreamStartEvent``,
         ``StreamEndEvent``) are emitted and cross-chunk state is tracked.
-        Without a context the behaviour is identical to the previous
-        implementation (backward compatible).
 
         Args:
             chunk: Google GenAI stream chunk dict (or SDK object).
@@ -688,20 +669,8 @@ class GoogleGenAIConverter(BaseConverter):
         chunk = self._normalize(chunk)
         events: list[IRStreamEvent] = []
 
-        # --- StreamStartEvent (only with context, on first chunk) ---
         if context is not None and not context.is_started:
-            response_id = chunk.get("response_id") or chunk.get("responseId") or ""
-            model = chunk.get("model_version") or chunk.get("modelVersion") or ""
-            context.response_id = response_id
-            context.model = model
-            context.mark_started()
-            events.append(
-                StreamStartEvent(
-                    type="stream_start",
-                    response_id=response_id,
-                    model=model,
-                )
-            )
+            self._handle_stream_start_from_p(chunk, context, events)
 
         has_finish_reason = False
         deferred_finish: FinishEvent | None = None
@@ -709,84 +678,10 @@ class GoogleGenAIConverter(BaseConverter):
         for candidate in chunk.get("candidates", []):
             choice_index = candidate.get("index", 0)
             content = candidate.get("content", {})
-            parts = content.get("parts", [])
 
-            for part in parts:
-                # Check for thought/reasoning content
-                is_thought = part.get("thought", False)
+            for part in content.get("parts", []):
+                self._handle_part_from_p(part, choice_index, context, events)
 
-                if "text" in part and part["text"] is not None:
-                    if is_thought:
-                        events.append(
-                            ReasoningDeltaEvent(
-                                type="reasoning_delta",
-                                reasoning=part["text"],
-                                choice_index=choice_index,
-                            )
-                        )
-                    else:
-                        events.append(
-                            TextDeltaEvent(
-                                type="text_delta",
-                                text=part["text"],
-                                choice_index=choice_index,
-                            )
-                        )
-
-                # Handle function_call (Google sends complete calls, not deltas)
-                func_call = part.get("function_call") or part.get("functionCall")
-                if func_call:
-                    # Generate a unique tool_call_id since Google doesn't provide one
-                    tool_call_id = func_call.get("id") or generate_tool_call_id()
-                    tool_name = func_call.get("name", "")
-                    args = func_call.get("args", {})
-
-                    # Register tool call in context
-                    if context is not None:
-                        context.register_tool_call(tool_call_id, tool_name)
-
-                    # Build ToolCallStartEvent
-                    tc_index = (
-                        len(context._tool_call_order) - 1 if context is not None else 0
-                    )
-                    start_event: dict[str, Any] = {
-                        "type": "tool_call_start",
-                        "tool_call_id": tool_call_id,
-                        "tool_name": tool_name,
-                        "choice_index": choice_index,
-                        "tool_call_index": tc_index,
-                    }
-
-                    # Preserve thought_signature in provider_metadata
-                    thought_sig = part.get("thoughtSignature") or part.get(
-                        "thought_signature"
-                    )
-                    if thought_sig:
-                        start_event["provider_metadata"] = {
-                            "google": {"thought_signature": thought_sig}
-                        }
-
-                    events.append(cast(ToolCallStartEvent, start_event))
-
-                    # Emit ToolCallDeltaEvent with complete arguments JSON
-                    args_json = (
-                        json.dumps(args) if isinstance(args, dict) else str(args)
-                    )
-                    delta_evt = ToolCallDeltaEvent(
-                        type="tool_call_delta",
-                        tool_call_id=tool_call_id,
-                        arguments_delta=args_json,
-                        choice_index=choice_index,
-                    )
-                    delta_evt["tool_call_index"] = tc_index
-                    events.append(delta_evt)
-
-                    # Accumulate arguments in context
-                    if context is not None:
-                        context.append_tool_call_args(tool_call_id, args_json)
-
-            # Finish reason — collect but defer appending until after
-            # UsageEvent so downstream converters see usage first.
             finish_reason = candidate.get("finish_reason") or candidate.get(
                 "finishReason"
             )
@@ -800,48 +695,152 @@ class GoogleGenAIConverter(BaseConverter):
                     choice_index=choice_index,
                 )
 
-        # Emit UsageEvent before FinishEvent so that downstream
-        # converters can store usage in context.pending_usage before
-        # FinishEvent builds the terminal response.completed event.
-        usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
-        if usage:
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": usage.get(
-                    "prompt_token_count", usage.get("promptTokenCount", 0)
-                ),
-                "completion_tokens": usage.get(
-                    "candidates_token_count",
-                    usage.get("candidatesTokenCount", 0),
-                ),
-                "total_tokens": usage.get(
-                    "total_token_count", usage.get("totalTokenCount", 0)
-                ),
-            }
+        self._handle_usage_from_p(chunk, events)
 
-            # Reasoning tokens
-            thoughts = usage.get("thoughts_token_count") or usage.get(
-                "thoughtsTokenCount"
-            )
-            if thoughts is not None:
-                usage_info["reasoning_tokens"] = thoughts
-
-            events.append(
-                UsageEvent(
-                    type="usage",
-                    usage=cast(UsageInfo, usage_info),
-                )
-            )
-
-        # Now append the deferred FinishEvent (after UsageEvent)
         if deferred_finish is not None:
             events.append(deferred_finish)
 
-        # --- StreamEndEvent (only with context, when finish_reason present) ---
         if context is not None and has_finish_reason:
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
         return events
+
+    def _handle_stream_start_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit StreamStartEvent on the first chunk."""
+        response_id = chunk.get("response_id") or chunk.get("responseId") or ""
+        model = chunk.get("model_version") or chunk.get("modelVersion") or ""
+        context.response_id = response_id
+        context.model = model
+        context.mark_started()
+        events.append(
+            StreamStartEvent(
+                type="stream_start",
+                response_id=response_id,
+                model=model,
+            )
+        )
+
+    def _handle_part_from_p(
+        self,
+        part: dict[str, Any],
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Process a single part from a candidate's content."""
+        is_thought = part.get("thought", False)
+
+        if "text" in part and part["text"] is not None:
+            if is_thought:
+                events.append(
+                    ReasoningDeltaEvent(
+                        type="reasoning_delta",
+                        reasoning=part["text"],
+                        choice_index=choice_index,
+                    )
+                )
+            else:
+                events.append(
+                    TextDeltaEvent(
+                        type="text_delta",
+                        text=part["text"],
+                        choice_index=choice_index,
+                    )
+                )
+
+        func_call = part.get("function_call") or part.get("functionCall")
+        if func_call:
+            self._handle_function_call_from_p(
+                func_call, part, choice_index, context, events
+            )
+
+    def _handle_function_call_from_p(
+        self,
+        func_call: dict[str, Any],
+        part: dict[str, Any],
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Process a function_call part into ToolCallStart + ToolCallDelta events."""
+        tool_call_id = func_call.get("id") or generate_tool_call_id()
+        tool_name = func_call.get("name", "")
+        args = func_call.get("args", {})
+
+        if context is not None:
+            context.register_tool_call(tool_call_id, tool_name)
+
+        tc_index = len(context._tool_call_order) - 1 if context is not None else 0
+        start_event: dict[str, Any] = {
+            "type": "tool_call_start",
+            "tool_call_id": tool_call_id,
+            "tool_name": tool_name,
+            "choice_index": choice_index,
+            "tool_call_index": tc_index,
+        }
+
+        thought_sig = part.get("thoughtSignature") or part.get("thought_signature")
+        if thought_sig:
+            start_event["provider_metadata"] = {
+                "google": {"thought_signature": thought_sig}
+            }
+
+        events.append(cast(ToolCallStartEvent, start_event))
+
+        args_json = json.dumps(args) if isinstance(args, dict) else str(args)
+        delta_evt = ToolCallDeltaEvent(
+            type="tool_call_delta",
+            tool_call_id=tool_call_id,
+            arguments_delta=args_json,
+            choice_index=choice_index,
+        )
+        delta_evt["tool_call_index"] = tc_index
+        events.append(delta_evt)
+
+        if context is not None:
+            context.append_tool_call_args(tool_call_id, args_json)
+
+    def _handle_usage_from_p(
+        self,
+        chunk: dict[str, Any],
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit UsageEvent from chunk usage metadata."""
+        usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
+        if not usage:
+            return
+
+        usage_info: dict[str, Any] = {
+            "prompt_tokens": usage.get(
+                "prompt_token_count", usage.get("promptTokenCount", 0)
+            ),
+            "completion_tokens": usage.get(
+                "candidates_token_count",
+                usage.get("candidatesTokenCount", 0),
+            ),
+            "total_tokens": usage.get(
+                "total_token_count", usage.get("totalTokenCount", 0)
+            ),
+        }
+
+        thoughts = usage.get("thoughts_token_count") or usage.get("thoughtsTokenCount")
+        if thoughts is not None:
+            usage_info["reasoning_tokens"] = thoughts
+
+        events.append(
+            UsageEvent(
+                type="usage",
+                usage=cast(UsageInfo, usage_info),
+            )
+        )
+
+    # --- to_provider ---
 
     def stream_response_to_provider(
         self,
@@ -853,10 +852,6 @@ class GoogleGenAIConverter(BaseConverter):
         Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR
         stream event.
 
-        When a ``context`` is provided, tool call names can be recovered from
-        the context for ``tool_call_delta`` events (fixing the P0 issue of
-        lost tool names).
-
         Args:
             event: IR stream event.
             context: Optional stream context for stateful conversions.
@@ -864,138 +859,172 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Google GenAI stream chunk dict.
         """
-        if is_stream_start_event(event):
-            # Store metadata in context if provided
-            if context is not None:
-                context.response_id = event["response_id"]
-                context.model = event["model"]
-                context.mark_started()
+        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
+        if handler_name is None:
             return {}
+        return getattr(self, handler_name)(event, context)
 
-        elif is_stream_end_event(event):
-            if context is not None:
-                context.mark_ended()
-            return {}
-
-        elif is_content_block_start_event(event):
-            return {}
-
-        elif is_content_block_end_event(event):
-            return {}
-
-        elif is_text_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            return {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {
-                            "role": "model",
-                            "parts": [{"text": event["text"]}],
-                        },
-                    }
-                ]
-            }
-
-        elif is_reasoning_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            return {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {
-                            "role": "model",
-                            "parts": [{"thought": True, "text": event["reasoning"]}],
-                        },
-                    }
-                ]
-            }
-
-        elif is_tool_call_start_event(event):
-            # Google sends complete function calls in a single chunk.
-            # Store the tool name in context; the actual chunk is emitted
-            # on tool_call_delta when we have both name and args.
-            if context is not None:
-                context.register_tool_call(event["tool_call_id"], event["tool_name"])
-            return {}
-
-        elif is_tool_call_delta_event(event):
-            # Google sends complete function calls, not incremental deltas.
-            # Accumulate argument fragments in context; the complete
-            # function_call chunk is emitted on FinishEvent.
-            if context is not None:
-                context.append_tool_call_args(
-                    event["tool_call_id"], event["arguments_delta"]
-                )
-            return {}
-
-        elif is_finish_event(event):
-            choice_index = event.get("choice_index", 0)
-            reason = event["finish_reason"]["reason"]
-
-            chunks: list[dict[str, Any]] = []
-
-            # Flush accumulated tool calls as complete function_call chunks.
-            # Google sends each function_call with full name + args in one
-            # chunk, so we emit them here after all deltas have been received.
-            if context is not None:
-                for call_id, tool_name, args_str in context.get_pending_tool_calls():
-                    try:
-                        args = json.loads(args_str) if args_str else {}
-                    except (json.JSONDecodeError, TypeError):
-                        args = {}
-                    chunks.append(
-                        {
-                            "candidates": [
-                                {
-                                    "index": choice_index,
-                                    "content": {
-                                        "role": "model",
-                                        "parts": [
-                                            {
-                                                "functionCall": {
-                                                    "name": tool_name,
-                                                    "args": args,
-                                                }
-                                            }
-                                        ],
-                                    },
-                                }
-                            ]
-                        }
-                    )
-
-            # Finish chunk
-            chunks.append(
-                {
-                    "candidates": [
-                        {
-                            "index": choice_index,
-                            "content": {"role": "model", "parts": []},
-                            "finishReason": GOOGLE_REASON_TO_PROVIDER.get(
-                                reason, "STOP"
-                            ),
-                        }
-                    ]
-                }
-            )
-
-            return chunks
-
-        elif is_usage_event(event):
-            usage = event["usage"]
-            usage_metadata: dict[str, Any] = {
-                "promptTokenCount": usage.get("prompt_tokens") or 0,
-                "candidatesTokenCount": usage.get("completion_tokens") or 0,
-                "totalTokenCount": usage.get("total_tokens") or 0,
-            }
-
-            if "reasoning_tokens" in usage:
-                usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
-
-            return {"usageMetadata": usage_metadata}
-
+    def _handle_stream_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle StreamStartEvent → store metadata, no output."""
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.mark_started()
         return {}
+
+    def _handle_stream_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle StreamEndEvent → mark ended, no output."""
+        if context is not None:
+            context.mark_ended()
+        return {}
+
+    def _handle_content_block_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockStartEvent → no-op for Google GenAI."""
+        return {}
+
+    def _handle_content_block_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockEndEvent → no-op for Google GenAI."""
+        return {}
+
+    def _handle_text_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle TextDeltaEvent → text part chunk."""
+        choice_index = event.get("choice_index", 0)
+        return {
+            "candidates": [
+                {
+                    "index": choice_index,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"text": event["text"]}],
+                    },
+                }
+            ]
+        }
+
+    def _handle_reasoning_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ReasoningDeltaEvent → thought text part chunk."""
+        choice_index = event.get("choice_index", 0)
+        return {
+            "candidates": [
+                {
+                    "index": choice_index,
+                    "content": {
+                        "role": "model",
+                        "parts": [{"thought": True, "text": event["reasoning"]}],
+                    },
+                }
+            ]
+        }
+
+    def _handle_tool_call_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallStartEvent → register in context, no output."""
+        if context is not None:
+            context.register_tool_call(event["tool_call_id"], event["tool_name"])
+        return {}
+
+    def _handle_tool_call_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallDeltaEvent → accumulate args, no output."""
+        if context is not None:
+            context.append_tool_call_args(
+                event["tool_call_id"], event["arguments_delta"]
+            )
+        return {}
+
+    def _handle_finish_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> list[dict[str, Any]]:
+        """Handle FinishEvent → flush tool calls + finish chunk."""
+        choice_index = event.get("choice_index", 0)
+        reason = event["finish_reason"]["reason"]
+
+        chunks: list[dict[str, Any]] = []
+
+        # Flush accumulated tool calls as complete function_call chunks.
+        if context is not None:
+            for call_id, tool_name, args_str in context.get_pending_tool_calls():
+                try:
+                    args = json.loads(args_str) if args_str else {}
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                chunks.append(
+                    {
+                        "candidates": [
+                            {
+                                "index": choice_index,
+                                "content": {
+                                    "role": "model",
+                                    "parts": [
+                                        {
+                                            "functionCall": {
+                                                "name": tool_name,
+                                                "args": args,
+                                            }
+                                        }
+                                    ],
+                                },
+                            }
+                        ]
+                    }
+                )
+
+        chunks.append(
+            {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {"role": "model", "parts": []},
+                        "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
+                    }
+                ]
+            }
+        )
+
+        return chunks
+
+    def _handle_usage_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle UsageEvent → usageMetadata chunk."""
+        usage = event["usage"]
+        usage_metadata: dict[str, Any] = {
+            "promptTokenCount": usage.get("prompt_tokens") or 0,
+            "candidatesTokenCount": usage.get("completion_tokens") or 0,
+            "totalTokenCount": usage.get("total_tokens") or 0,
+        }
+
+        if "reasoning_tokens" in usage:
+            usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+
+        return {"usageMetadata": usage_metadata}
+
+    _TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_stream_start_to_p",
+        "stream_end": "_handle_stream_end_to_p",
+        "content_block_start": "_handle_content_block_start_to_p",
+        "content_block_end": "_handle_content_block_end_to_p",
+        "text_delta": "_handle_text_delta_to_p",
+        "reasoning_delta": "_handle_reasoning_delta_to_p",
+        "tool_call_start": "_handle_tool_call_start_to_p",
+        "tool_call_delta": "_handle_tool_call_delta_to_p",
+        "finish": "_handle_finish_to_p",
+        "usage": "_handle_usage_to_p",
+    }
 
 
 # Backward compatibility alias

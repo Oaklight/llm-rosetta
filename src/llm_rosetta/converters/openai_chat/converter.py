@@ -29,18 +29,6 @@ from ...types.ir.stream import (
     ToolCallStartEvent,
     UsageEvent,
 )
-from ...types.ir.type_guards import (
-    is_content_block_end_event,
-    is_content_block_start_event,
-    is_finish_event,
-    is_reasoning_delta_event,
-    is_stream_end_event,
-    is_stream_start_event,
-    is_text_delta_event,
-    is_tool_call_delta_event,
-    is_tool_call_start_event,
-    is_usage_event,
-)
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
@@ -490,6 +478,8 @@ class OpenAIChatConverter(BaseConverter):
 
     # ==================== Stream Support ====================
 
+    # --- from_provider ---
+
     def stream_response_from_provider(
         self,
         chunk: dict[str, Any],
@@ -514,174 +504,224 @@ class OpenAIChatConverter(BaseConverter):
         chunk = self._normalize(chunk)
         events: list[IRStreamEvent] = []
 
-        # --- StreamStartEvent (only with context, on first chunk) ---
         if context is not None and not context.is_started:
-            response_id = chunk.get("id")
-            model = chunk.get("model")
-            created = chunk.get("created")
-            if response_id and model:
-                context.response_id = response_id
-                context.model = model
-                if created is not None:
-                    context.created = created
-                context.mark_started()
-                start_event: StreamStartEvent = {
-                    "type": "stream_start",
-                    "response_id": response_id,
-                    "model": model,
-                }
-                if created is not None:
-                    start_event["created"] = created
-                events.append(start_event)
+            self._handle_stream_start_from_p(chunk, context, events)
 
         choices = chunk.get("choices", [])
-
         for p_choice in choices:
-            choice_index = p_choice.get("index", 0)
-            delta = p_choice.get("delta", {})
+            self._handle_choice_from_p(p_choice, context, events)
 
-            # Text delta
-            content = delta.get("content")
-            if content is not None:
-                events.append(
-                    TextDeltaEvent(
-                        type="text_delta",
-                        text=content,
-                        choice_index=choice_index,
-                    )
-                )
-
-            # Reasoning content delta (OpenAI o1/o3 models)
-            reasoning_content = delta.get("reasoning_content")
-            if reasoning_content is not None:
-                events.append(
-                    ReasoningDeltaEvent(
-                        type="reasoning_delta",
-                        reasoning=reasoning_content,
-                        choice_index=choice_index,
-                    )
-                )
-
-            # Tool call deltas
-            tool_calls = delta.get("tool_calls")
-            if tool_calls:
-                for tc in tool_calls:
-                    tc_func = tc.get("function", {})
-                    tc_id = tc.get("id")
-                    tc_index = tc.get("index")
-
-                    if tc_id:
-                        # New tool call starting
-                        start_event_tc = ToolCallStartEvent(
-                            type="tool_call_start",
-                            tool_call_id=tc_id,
-                            tool_name=tc_func.get("name", ""),
-                            choice_index=choice_index,
-                        )
-                        if tc_index is not None:
-                            start_event_tc["tool_call_index"] = tc_index
-                        events.append(start_event_tc)
-
-                        # Register tool call in context
-                        if context is not None:
-                            context.register_tool_call(tc_id, tc_func.get("name", ""))
-
-                    # Resolve the effective call ID for delta-only chunks
-                    # (they carry index but no id).
-                    effective_tc_id = tc_id
-                    if (
-                        not effective_tc_id
-                        and tc_index is not None
-                        and context is not None
-                    ):
-                        order = context._tool_call_order
-                        if 0 <= tc_index < len(order):
-                            effective_tc_id = order[tc_index]
-
-                    arguments = tc_func.get("arguments")
-                    if arguments:
-                        delta_event = ToolCallDeltaEvent(
-                            type="tool_call_delta",
-                            tool_call_id=effective_tc_id or "",
-                            arguments_delta=arguments,
-                            choice_index=choice_index,
-                        )
-                        if tc_index is not None:
-                            delta_event["tool_call_index"] = tc_index
-                        events.append(delta_event)
-
-                        # Accumulate arguments in context
-                        if context is not None and effective_tc_id:
-                            context.append_tool_call_args(effective_tc_id, arguments)
-
-            # Finish reason
-            finish_reason = p_choice.get("finish_reason")
-            if finish_reason:
-                # Close any open content block before emitting FinishEvent.
-                # OpenAI doesn't have an explicit content-block-end concept,
-                # but downstream formats (e.g. Anthropic) require it.
-                if context is not None and context.current_block_index >= 0:
-                    events.append(
-                        ContentBlockEndEvent(
-                            type="content_block_end",
-                            block_index=context.current_block_index,
-                        )
-                    )
-
-                events.append(
-                    FinishEvent(
-                        type="finish",
-                        finish_reason={
-                            "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
-                                finish_reason, "stop"
-                            )
-                        },
-                        choice_index=choice_index,
-                    )
-                )
-
-        # Usage (typically in the last chunk)
         usage = chunk.get("usage")
         if usage:
+            self._handle_usage_from_p(usage, events)
+
+        self._handle_stream_end_from_p(choices, events, usage, context)
+
+        return events
+
+    def _handle_stream_start_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit StreamStartEvent on the first chunk."""
+        response_id = chunk.get("id")
+        model = chunk.get("model")
+        created = chunk.get("created")
+        if response_id and model:
+            context.response_id = response_id
+            context.model = model
+            if created is not None:
+                context.created = created
+            context.mark_started()
+            start_event: StreamStartEvent = {
+                "type": "stream_start",
+                "response_id": response_id,
+                "model": model,
+            }
+            if created is not None:
+                start_event["created"] = created
+            events.append(start_event)
+
+    def _handle_choice_from_p(
+        self,
+        p_choice: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Process a single choice from an OpenAI SSE chunk."""
+        choice_index = p_choice.get("index", 0)
+        delta = p_choice.get("delta", {})
+
+        # Text delta
+        content = delta.get("content")
+        if content is not None:
             events.append(
-                UsageEvent(
-                    type="usage",
-                    usage={
-                        "prompt_tokens": usage.get("prompt_tokens") or 0,
-                        "completion_tokens": usage.get("completion_tokens") or 0,
-                        "total_tokens": usage.get("total_tokens") or 0,
-                    },
+                TextDeltaEvent(
+                    type="text_delta",
+                    text=content,
+                    choice_index=choice_index,
                 )
             )
 
-        # --- StreamEndEvent (only with context, when choices is empty list) ---
+        # Reasoning content delta (OpenAI o1/o3 models)
+        reasoning_content = delta.get("reasoning_content")
+        if reasoning_content is not None:
+            events.append(
+                ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning=reasoning_content,
+                    choice_index=choice_index,
+                )
+            )
+
+        # Tool call deltas
+        tool_calls = delta.get("tool_calls")
+        if tool_calls:
+            self._handle_tool_calls_from_p(tool_calls, choice_index, context, events)
+
+        # Finish reason
+        finish_reason = p_choice.get("finish_reason")
+        if finish_reason:
+            self._handle_finish_reason_from_p(
+                finish_reason, choice_index, context, events
+            )
+
+    def _handle_tool_calls_from_p(
+        self,
+        tool_calls: list[dict[str, Any]],
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Process tool call deltas from a choice."""
+        for tc in tool_calls:
+            tc_func = tc.get("function", {})
+            tc_id = tc.get("id")
+            tc_index = tc.get("index")
+
+            if tc_id:
+                start_event_tc = ToolCallStartEvent(
+                    type="tool_call_start",
+                    tool_call_id=tc_id,
+                    tool_name=tc_func.get("name", ""),
+                    choice_index=choice_index,
+                )
+                if tc_index is not None:
+                    start_event_tc["tool_call_index"] = tc_index
+                events.append(start_event_tc)
+
+                if context is not None:
+                    context.register_tool_call(tc_id, tc_func.get("name", ""))
+
+            # Resolve the effective call ID for delta-only chunks
+            # (they carry index but no id).
+            effective_tc_id = tc_id
+            if not effective_tc_id and tc_index is not None and context is not None:
+                order = context._tool_call_order
+                if 0 <= tc_index < len(order):
+                    effective_tc_id = order[tc_index]
+
+            arguments = tc_func.get("arguments")
+            if arguments:
+                delta_event = ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id=effective_tc_id or "",
+                    arguments_delta=arguments,
+                    choice_index=choice_index,
+                )
+                if tc_index is not None:
+                    delta_event["tool_call_index"] = tc_index
+                events.append(delta_event)
+
+                if context is not None and effective_tc_id:
+                    context.append_tool_call_args(effective_tc_id, arguments)
+
+    def _handle_finish_reason_from_p(
+        self,
+        finish_reason: str,
+        choice_index: int,
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit ContentBlockEndEvent (if needed) and FinishEvent."""
+        # Close any open content block before emitting FinishEvent.
+        # OpenAI doesn't have an explicit content-block-end concept,
+        # but downstream formats (e.g. Anthropic) require it.
+        if context is not None and context.current_block_index >= 0:
+            events.append(
+                ContentBlockEndEvent(
+                    type="content_block_end",
+                    block_index=context.current_block_index,
+                )
+            )
+
+        events.append(
+            FinishEvent(
+                type="finish",
+                finish_reason={
+                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
+                        finish_reason, "stop"
+                    )
+                },
+                choice_index=choice_index,
+            )
+        )
+
+    def _handle_usage_from_p(
+        self,
+        usage: dict[str, Any],
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit UsageEvent from chunk usage data."""
+        events.append(
+            UsageEvent(
+                type="usage",
+                usage={
+                    "prompt_tokens": usage.get("prompt_tokens") or 0,
+                    "completion_tokens": usage.get("completion_tokens") or 0,
+                    "total_tokens": usage.get("total_tokens") or 0,
+                },
+            )
+        )
+
+    def _handle_stream_end_from_p(
+        self,
+        choices: list[dict[str, Any]],
+        events: list[IRStreamEvent],
+        usage: dict[str, Any] | None,
+        context: StreamContext | None,
+    ) -> None:
+        """Emit StreamEndEvent when the stream is complete."""
+        if context is None:
+            return
+
         # Guard: only treat empty choices as stream-end AFTER the stream has
         # actually started.  Some upstreams (e.g. Azure / Argo) send a
         # preflight chunk with ``choices: []`` and empty ``id``/``model``
         # before the real content begins.
         if (
-            context is not None
-            and context.is_started
+            context.is_started
             and isinstance(choices, list)
             and len(choices) == 0
+            and not context.is_ended
         ):
-            if not context.is_ended:
-                context.mark_ended()
-                events.append(StreamEndEvent(type="stream_end"))
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
 
         # Also emit StreamEndEvent when we got a finish_reason but upstream
         # may not send a subsequent empty-choices chunk (e.g. when the
         # upstream ignores stream_options.include_usage).
         if (
-            context is not None
-            and not context.is_ended
+            not context.is_ended
             and usage
             and any(e.get("type") == "finish" for e in events if isinstance(e, dict))
         ):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-        return events
+    # --- to_provider ---
 
     def stream_response_to_provider(
         self,
@@ -701,134 +741,10 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             OpenAI SSE chunk dict, or a list of chunk dicts.
         """
-        result: dict[str, Any] | list[dict[str, Any]] = {}
-
-        if is_stream_start_event(event):
-            # Store metadata in context if provided
-            if context is not None:
-                context.response_id = event["response_id"]
-                context.model = event["model"]
-                context.created = event.get("created", 0)
-                context.mark_started()
-            result = {
-                "id": event["response_id"],
-                "object": "chat.completion.chunk",
-                "model": event["model"],
-                "created": event.get("created", 0),
-                "choices": [
-                    {
-                        "index": 0,
-                        "delta": {"role": "assistant"},
-                        "finish_reason": None,
-                    }
-                ],
-            }
-            return result
-
-        elif is_stream_end_event(event):
-            if context is not None:
-                context.mark_ended()
-            result = {
-                "id": context.response_id if context else "",
-                "object": "chat.completion.chunk",
-                "model": context.model if context else "",
-                "created": context.created if context else 0,
-                "choices": [],
-            }
-            return result
-
-        elif is_content_block_start_event(event):
+        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
+        if handler_name is None:
             return {}
-
-        elif is_content_block_end_event(event):
-            return {}
-
-        elif is_text_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            result = {
-                "choices": [
-                    {
-                        "index": choice_index,
-                        "delta": {"content": event["text"]},
-                    }
-                ]
-            }
-
-        elif is_reasoning_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            result = {
-                "choices": [
-                    {
-                        "index": choice_index,
-                        "delta": {"reasoning_content": event["reasoning"]},
-                    }
-                ]
-            }
-
-        elif is_tool_call_start_event(event):
-            choice_index = event.get("choice_index", 0)
-            tc_index = event.get("tool_call_index", 0)
-            tc_entry: dict[str, Any] = {
-                "index": tc_index,
-                "id": event["tool_call_id"],
-                "type": "function",
-                "function": {
-                    "name": event["tool_name"],
-                    "arguments": "",
-                },
-            }
-            result = {
-                "choices": [
-                    {
-                        "index": choice_index,
-                        "delta": {"tool_calls": [tc_entry]},
-                    }
-                ]
-            }
-
-        elif is_tool_call_delta_event(event):
-            choice_index = event.get("choice_index", 0)
-            tc_index = event.get("tool_call_index", 0)
-            tc_delta_entry: dict[str, Any] = {
-                "index": tc_index,
-                "function": {
-                    "arguments": event["arguments_delta"],
-                },
-            }
-            result = {
-                "choices": [
-                    {
-                        "index": choice_index,
-                        "delta": {"tool_calls": [tc_delta_entry]},
-                    }
-                ]
-            }
-
-        elif is_finish_event(event):
-            choice_index = event.get("choice_index", 0)
-            reason = event["finish_reason"]["reason"]
-            result = {
-                "choices": [
-                    {
-                        "index": choice_index,
-                        "delta": {},
-                        "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(
-                            reason, "stop"
-                        ),
-                    }
-                ]
-            }
-
-        elif is_usage_event(event):
-            usage = event["usage"]
-            result = {
-                "choices": [],
-                "usage": {
-                    "prompt_tokens": usage.get("prompt_tokens") or 0,
-                    "completion_tokens": usage.get("completion_tokens") or 0,
-                    "total_tokens": usage.get("total_tokens") or 0,
-                },
-            }
+        result = getattr(self, handler_name)(event, context)
 
         # Populate top-level fields when context is available and started
         if (
@@ -847,3 +763,168 @@ class OpenAIChatConverter(BaseConverter):
                 result["created"] = context.created
 
         return result
+
+    def _handle_stream_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle StreamStartEvent → initial chunk with role delta."""
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.created = event.get("created", 0)
+            context.mark_started()
+        return {
+            "id": event["response_id"],
+            "object": "chat.completion.chunk",
+            "model": event["model"],
+            "created": event.get("created", 0),
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant"},
+                    "finish_reason": None,
+                }
+            ],
+        }
+
+    def _handle_stream_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle StreamEndEvent → empty choices chunk."""
+        if context is not None:
+            context.mark_ended()
+        return {
+            "id": context.response_id if context else "",
+            "object": "chat.completion.chunk",
+            "model": context.model if context else "",
+            "created": context.created if context else 0,
+            "choices": [],
+        }
+
+    def _handle_content_block_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockStartEvent → no-op for OpenAI Chat."""
+        return {}
+
+    def _handle_content_block_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockEndEvent → no-op for OpenAI Chat."""
+        return {}
+
+    def _handle_text_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle TextDeltaEvent → content delta chunk."""
+        choice_index = event.get("choice_index", 0)
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {"content": event["text"]},
+                }
+            ]
+        }
+
+    def _handle_reasoning_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ReasoningDeltaEvent → reasoning_content delta chunk."""
+        choice_index = event.get("choice_index", 0)
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {"reasoning_content": event["reasoning"]},
+                }
+            ]
+        }
+
+    def _handle_tool_call_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallStartEvent → tool_calls delta with id and name."""
+        choice_index = event.get("choice_index", 0)
+        tc_index = event.get("tool_call_index", 0)
+        tc_entry: dict[str, Any] = {
+            "index": tc_index,
+            "id": event["tool_call_id"],
+            "type": "function",
+            "function": {
+                "name": event["tool_name"],
+                "arguments": "",
+            },
+        }
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {"tool_calls": [tc_entry]},
+                }
+            ]
+        }
+
+    def _handle_tool_call_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallDeltaEvent → tool_calls delta with arguments."""
+        choice_index = event.get("choice_index", 0)
+        tc_index = event.get("tool_call_index", 0)
+        tc_delta_entry: dict[str, Any] = {
+            "index": tc_index,
+            "function": {
+                "arguments": event["arguments_delta"],
+            },
+        }
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {"tool_calls": [tc_delta_entry]},
+                }
+            ]
+        }
+
+    def _handle_finish_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle FinishEvent → finish_reason chunk."""
+        choice_index = event.get("choice_index", 0)
+        reason = event["finish_reason"]["reason"]
+        return {
+            "choices": [
+                {
+                    "index": choice_index,
+                    "delta": {},
+                    "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+                }
+            ]
+        }
+
+    def _handle_usage_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle UsageEvent → usage chunk with empty choices."""
+        usage = event["usage"]
+        return {
+            "choices": [],
+            "usage": {
+                "prompt_tokens": usage.get("prompt_tokens") or 0,
+                "completion_tokens": usage.get("completion_tokens") or 0,
+                "total_tokens": usage.get("total_tokens") or 0,
+            },
+        }
+
+    _TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_stream_start_to_p",
+        "stream_end": "_handle_stream_end_to_p",
+        "content_block_start": "_handle_content_block_start_to_p",
+        "content_block_end": "_handle_content_block_end_to_p",
+        "text_delta": "_handle_text_delta_to_p",
+        "reasoning_delta": "_handle_reasoning_delta_to_p",
+        "tool_call_start": "_handle_tool_call_start_to_p",
+        "tool_call_delta": "_handle_tool_call_delta_to_p",
+        "finish": "_handle_finish_to_p",
+        "usage": "_handle_usage_to_p",
+    }

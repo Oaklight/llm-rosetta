@@ -40,18 +40,6 @@ from ...types.ir.stream import (
     ToolCallStartEvent,
     UsageEvent,
 )
-from ...types.ir.type_guards import (
-    is_content_block_end_event,
-    is_content_block_start_event,
-    is_finish_event,
-    is_reasoning_delta_event,
-    is_stream_end_event,
-    is_stream_start_event,
-    is_text_delta_event,
-    is_tool_call_delta_event,
-    is_tool_call_start_event,
-    is_usage_event,
-)
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
@@ -446,21 +434,14 @@ class AnthropicConverter(BaseConverter):
 
     # ==================== Stream Support ====================
 
+    # --- from_provider ---
+
     def stream_response_from_provider(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None = None,
     ) -> list[IRStreamEvent]:
         """Convert an Anthropic SSE event to IR stream events.
-
-        Anthropic SSE event types:
-        - ``message_start`` → extract usage (optional)
-        - ``content_block_start`` → ToolCallStartEvent (if tool_use)
-        - ``content_block_delta`` → TextDeltaEvent or ToolCallDeltaEvent
-        - ``content_block_stop`` → ignored
-        - ``message_delta`` → FinishEvent (contains stop_reason)
-        - ``message_stop`` → ignored
-        - ``ping`` → ignored
 
         Args:
             chunk: Anthropic SSE event dict (or SDK object).
@@ -472,182 +453,216 @@ class AnthropicConverter(BaseConverter):
         events: list[IRStreamEvent] = []
 
         event_type = chunk.get("type", "")
-
-        if event_type == AnthropicEventType.MESSAGE_START:
-            message = chunk.get("message", {})
-
-            # Emit StreamStartEvent when context is provided
-            if context is not None:
-                response_id = message.get("id", "")
-                model = message.get("model", "")
-                context.response_id = response_id
-                context.model = model
-                context.mark_started()
-                events.append(
-                    StreamStartEvent(
-                        type="stream_start",
-                        response_id=response_id,
-                        model=model,
-                    )
-                )
-
-            # Extract initial usage if available
-            usage = message.get("usage")
-            if usage:
-                events.append(
-                    UsageEvent(
-                        type="usage",
-                        usage={
-                            "prompt_tokens": usage.get("input_tokens") or 0,
-                            "completion_tokens": 0,
-                            "total_tokens": usage.get("input_tokens") or 0,
-                        },
-                    )
-                )
-
-        elif event_type == AnthropicEventType.CONTENT_BLOCK_START:
-            content_block = chunk.get("content_block", {})
-            block_type = content_block.get("type", "")
-            block_index = chunk.get("index", 0)
-
-            # Emit ContentBlockStartEvent when context is provided
-            if context is not None:
-                context.next_block_index()
-                events.append(
-                    ContentBlockStartEvent(
-                        type="content_block_start",
-                        block_index=block_index,
-                        block_type=block_type,
-                    )
-                )
-
-            if block_type in ("tool_use", "server_tool_use"):
-                tool_call_id = content_block.get("id", "")
-                tool_name = content_block.get("name", "")
-
-                # Register tool call in context
-                if context is not None:
-                    context.register_tool_call(tool_call_id, tool_name)
-
-                start_evt = ToolCallStartEvent(
-                    type="tool_call_start",
-                    tool_call_id=tool_call_id,
-                    tool_name=tool_name,
-                )
-                if context is not None:
-                    start_evt["tool_call_index"] = len(context._tool_call_order) - 1
-                events.append(start_evt)
-
-        elif event_type == AnthropicEventType.CONTENT_BLOCK_DELTA:
-            delta = chunk.get("delta", {})
-            delta_type = delta.get("type", "")
-
-            if delta_type == "text_delta":
-                events.append(
-                    TextDeltaEvent(
-                        type="text_delta",
-                        text=delta.get("text", ""),
-                    )
-                )
-            elif delta_type == "input_json_delta":
-                # Try to get tool_call_id from context if available
-                tool_call_id = ""
-                if context is not None and context.tool_call_id_map:
-                    # Use the last registered tool_call_id (current block)
-                    tool_call_id = list(context.tool_call_id_map.keys())[-1]
-
-                partial_json = delta.get("partial_json", "")
-                delta_evt = ToolCallDeltaEvent(
-                    type="tool_call_delta",
-                    tool_call_id=tool_call_id,
-                    arguments_delta=partial_json,
-                )
-                if (
-                    context is not None
-                    and tool_call_id
-                    and tool_call_id in context._tool_call_order
-                ):
-                    delta_evt["tool_call_index"] = context._tool_call_order.index(
-                        tool_call_id
-                    )
-                events.append(delta_evt)
-
-                # Accumulate arguments in context
-                if context is not None and tool_call_id:
-                    context.append_tool_call_args(tool_call_id, partial_json)
-            elif delta_type == "thinking_delta":
-                # Thinking deltas map to ReasoningDeltaEvent
-                events.append(
-                    ReasoningDeltaEvent(
-                        type="reasoning_delta",
-                        reasoning=delta.get("thinking", ""),
-                    )
-                )
-            elif delta_type == "signature_delta":
-                # Signature deltas for thinking block verification
-                events.append(
-                    ReasoningDeltaEvent(
-                        type="reasoning_delta",
-                        reasoning="",
-                        signature=delta.get("signature", ""),
-                    )
-                )
-
-        elif event_type == AnthropicEventType.CONTENT_BLOCK_STOP:
-            # Emit ContentBlockEndEvent when context is provided
-            if context is not None:
-                block_index = chunk.get("index", 0)
-                events.append(
-                    ContentBlockEndEvent(
-                        type="content_block_end",
-                        block_index=block_index,
-                    )
-                )
-
-        elif event_type == AnthropicEventType.MESSAGE_DELTA:
-            delta = chunk.get("delta", {})
-            stop_reason = delta.get("stop_reason")
-
-            # Emit UsageEvent before FinishEvent so that downstream
-            # converters (e.g. OpenAI Responses) can store usage in
-            # context.pending_usage before FinishEvent builds the
-            # terminal response.completed event.
-            usage = chunk.get("usage")
-            if usage:
-                input_tokens = usage.get("input_tokens") or 0
-                output_tokens = usage.get("output_tokens") or 0
-                events.append(
-                    UsageEvent(
-                        type="usage",
-                        usage={
-                            "prompt_tokens": input_tokens,
-                            "completion_tokens": output_tokens,
-                            "total_tokens": input_tokens + output_tokens,
-                        },
-                    )
-                )
-
-            if stop_reason:
-                events.append(
-                    FinishEvent(
-                        type="finish",
-                        finish_reason={
-                            "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(
-                                stop_reason, "stop"
-                            )
-                        },
-                    )
-                )
-
-        elif event_type == AnthropicEventType.MESSAGE_STOP:
-            # Emit StreamEndEvent when context is provided
-            if context is not None:
-                context.mark_ended()
-                events.append(StreamEndEvent(type="stream_end"))
-
-        # ping → ignored
+        handler_name = self._FROM_P_DISPATCH.get(event_type)
+        if handler_name is not None:
+            getattr(self, handler_name)(chunk, context, events)
 
         return events
+
+    def _handle_message_start_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle message_start → StreamStartEvent + optional UsageEvent."""
+        message = chunk.get("message", {})
+
+        if context is not None:
+            response_id = message.get("id", "")
+            model = message.get("model", "")
+            context.response_id = response_id
+            context.model = model
+            context.mark_started()
+            events.append(
+                StreamStartEvent(
+                    type="stream_start",
+                    response_id=response_id,
+                    model=model,
+                )
+            )
+
+        usage = message.get("usage")
+        if usage:
+            events.append(
+                UsageEvent(
+                    type="usage",
+                    usage={
+                        "prompt_tokens": usage.get("input_tokens") or 0,
+                        "completion_tokens": 0,
+                        "total_tokens": usage.get("input_tokens") or 0,
+                    },
+                )
+            )
+
+    def _handle_content_block_start_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle content_block_start → ContentBlockStartEvent + optional ToolCallStartEvent."""
+        content_block = chunk.get("content_block", {})
+        block_type = content_block.get("type", "")
+        block_index = chunk.get("index", 0)
+
+        if context is not None:
+            context.next_block_index()
+            events.append(
+                ContentBlockStartEvent(
+                    type="content_block_start",
+                    block_index=block_index,
+                    block_type=block_type,
+                )
+            )
+
+        if block_type in ("tool_use", "server_tool_use"):
+            tool_call_id = content_block.get("id", "")
+            tool_name = content_block.get("name", "")
+
+            if context is not None:
+                context.register_tool_call(tool_call_id, tool_name)
+
+            start_evt = ToolCallStartEvent(
+                type="tool_call_start",
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+            )
+            if context is not None:
+                start_evt["tool_call_index"] = len(context._tool_call_order) - 1
+            events.append(start_evt)
+
+    def _handle_content_block_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle content_block_delta → TextDeltaEvent, ToolCallDeltaEvent, or ReasoningDeltaEvent."""
+        delta = chunk.get("delta", {})
+        delta_type = delta.get("type", "")
+
+        if delta_type == "text_delta":
+            events.append(
+                TextDeltaEvent(
+                    type="text_delta",
+                    text=delta.get("text", ""),
+                )
+            )
+        elif delta_type == "input_json_delta":
+            tool_call_id = ""
+            if context is not None and context.tool_call_id_map:
+                tool_call_id = list(context.tool_call_id_map.keys())[-1]
+
+            partial_json = delta.get("partial_json", "")
+            delta_evt = ToolCallDeltaEvent(
+                type="tool_call_delta",
+                tool_call_id=tool_call_id,
+                arguments_delta=partial_json,
+            )
+            if (
+                context is not None
+                and tool_call_id
+                and tool_call_id in context._tool_call_order
+            ):
+                delta_evt["tool_call_index"] = context._tool_call_order.index(
+                    tool_call_id
+                )
+            events.append(delta_evt)
+
+            if context is not None and tool_call_id:
+                context.append_tool_call_args(tool_call_id, partial_json)
+        elif delta_type == "thinking_delta":
+            events.append(
+                ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning=delta.get("thinking", ""),
+                )
+            )
+        elif delta_type == "signature_delta":
+            events.append(
+                ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning="",
+                    signature=delta.get("signature", ""),
+                )
+            )
+
+    def _handle_content_block_stop_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle content_block_stop → ContentBlockEndEvent."""
+        if context is not None:
+            block_index = chunk.get("index", 0)
+            events.append(
+                ContentBlockEndEvent(
+                    type="content_block_end",
+                    block_index=block_index,
+                )
+            )
+
+    def _handle_message_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle message_delta → UsageEvent + FinishEvent."""
+        delta = chunk.get("delta", {})
+        stop_reason = delta.get("stop_reason")
+
+        # Emit UsageEvent before FinishEvent
+        usage = chunk.get("usage")
+        if usage:
+            input_tokens = usage.get("input_tokens") or 0
+            output_tokens = usage.get("output_tokens") or 0
+            events.append(
+                UsageEvent(
+                    type="usage",
+                    usage={
+                        "prompt_tokens": input_tokens,
+                        "completion_tokens": output_tokens,
+                        "total_tokens": input_tokens + output_tokens,
+                    },
+                )
+            )
+
+        if stop_reason:
+            events.append(
+                FinishEvent(
+                    type="finish",
+                    finish_reason={
+                        "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(
+                            stop_reason, "stop"
+                        )
+                    },
+                )
+            )
+
+    def _handle_message_stop_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle message_stop → StreamEndEvent."""
+        if context is not None:
+            context.mark_ended()
+            events.append(StreamEndEvent(type="stream_end"))
+
+    _FROM_P_DISPATCH: dict[str, str] = {
+        AnthropicEventType.MESSAGE_START: "_handle_message_start_from_p",
+        AnthropicEventType.CONTENT_BLOCK_START: "_handle_content_block_start_from_p",
+        AnthropicEventType.CONTENT_BLOCK_DELTA: "_handle_content_block_delta_from_p",
+        AnthropicEventType.CONTENT_BLOCK_STOP: "_handle_content_block_stop_from_p",
+        AnthropicEventType.MESSAGE_DELTA: "_handle_message_delta_from_p",
+        AnthropicEventType.MESSAGE_STOP: "_handle_message_stop_from_p",
+    }
+
+    # --- to_provider ---
 
     def stream_response_to_provider(
         self,
@@ -662,195 +677,233 @@ class AnthropicConverter(BaseConverter):
         Returns:
             Anthropic SSE event dict.
         """
-        if is_stream_start_event(event):
-            # Store metadata in context if provided
-            if context is not None:
-                context.response_id = event["response_id"]
-                context.model = event["model"]
-                context.mark_started()
-            return {
-                "type": AnthropicEventType.MESSAGE_START,
-                "message": {
-                    "id": event["response_id"],
-                    "type": "message",
-                    "role": "assistant",
-                    "model": event["model"],
-                    "content": [],
-                    "stop_reason": None,
-                    "usage": {"input_tokens": 0, "output_tokens": 0},
-                },
-            }
+        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
+        if handler_name is None:
+            return {}
+        return getattr(self, handler_name)(event, context)
 
-        elif is_stream_end_event(event):
-            results: list[dict[str, Any]] = []
-            if context is not None:
-                # Flush any buffered finish that never got a UsageEvent
-                if context.pending_finish is not None:
-                    results.append(
-                        {
-                            "type": AnthropicEventType.MESSAGE_DELTA,
-                            "delta": context.pending_finish,
-                            "usage": {"output_tokens": 0},
-                        }
-                    )
-                    context.pending_finish = None
-                context.mark_ended()
-            results.append({"type": AnthropicEventType.MESSAGE_STOP})
-            return results if len(results) > 1 else results[0]
+    def _handle_stream_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle StreamStartEvent → message_start."""
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.mark_started()
+        return {
+            "type": AnthropicEventType.MESSAGE_START,
+            "message": {
+                "id": event["response_id"],
+                "type": "message",
+                "role": "assistant",
+                "model": event["model"],
+                "content": [],
+                "stop_reason": None,
+                "usage": {"input_tokens": 0, "output_tokens": 0},
+            },
+        }
 
-        elif is_content_block_start_event(event):
-            block_index = event["block_index"]
-            block_type = event["block_type"]
-
-            if context is not None:
-                context.next_block_index()
-
-            if block_type == "text":
-                return {
-                    "type": AnthropicEventType.CONTENT_BLOCK_START,
-                    "index": block_index,
-                    "content_block": {"type": "text", "text": ""},
-                }
-            elif block_type == "thinking":
-                return {
-                    "type": AnthropicEventType.CONTENT_BLOCK_START,
-                    "index": block_index,
-                    "content_block": {"type": "thinking", "thinking": ""},
-                }
-            else:
-                # tool_use content_block_start is handled by ToolCallStartEvent
-                return {}
-
-        elif is_content_block_end_event(event):
-            return {
-                "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                "index": event["block_index"],
-            }
-
-        elif is_text_delta_event(event):
-            result: dict[str, Any] = {
-                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                "delta": {
-                    "type": "text_delta",
-                    "text": event["text"],
-                },
-            }
-            if context is not None:
-                if context.current_block_index < 0:
-                    context.next_block_index()  # auto-advance to 0
-                    # Emit synthetic content_block_start before first delta
-                    result["index"] = context.current_block_index
-                    return [
-                        {
-                            "type": AnthropicEventType.CONTENT_BLOCK_START,
-                            "index": context.current_block_index,
-                            "content_block": {"type": "text", "text": ""},
-                        },
-                        result,
-                    ]
-                result["index"] = context.current_block_index
-            return result
-
-        elif is_reasoning_delta_event(event):
-            signature = event.get("signature")
-            rd_result: dict[str, Any]
-            if signature is not None:
-                rd_result = {
-                    "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                    "delta": {
-                        "type": "signature_delta",
-                        "signature": signature,
-                    },
-                }
-            else:
-                rd_result = {
-                    "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                    "delta": {
-                        "type": "thinking_delta",
-                        "thinking": event["reasoning"],
-                    },
-                }
-            if context is not None:
-                if context.current_block_index < 0:
-                    context.next_block_index()  # auto-advance to 0
-                    # Emit synthetic content_block_start before first delta
-                    rd_result["index"] = context.current_block_index
-                    return [
-                        {
-                            "type": AnthropicEventType.CONTENT_BLOCK_START,
-                            "index": context.current_block_index,
-                            "content_block": {"type": "thinking", "thinking": ""},
-                        },
-                        rd_result,
-                    ]
-                rd_result["index"] = context.current_block_index
-            return rd_result
-
-        elif is_tool_call_start_event(event):
-            result2: dict[str, Any] = {
-                "type": AnthropicEventType.CONTENT_BLOCK_START,
-                "content_block": {
-                    "type": "tool_use",
-                    "id": event["tool_call_id"],
-                    "name": event["tool_name"],
-                    "input": {},
-                },
-            }
-            if context is not None:
-                if context.current_block_index < 0:
-                    context.next_block_index()  # auto-advance to 0
-                result2["index"] = context.current_block_index
-            return result2
-
-        elif is_tool_call_delta_event(event):
-            result3: dict[str, Any] = {
-                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
-                "delta": {
-                    "type": "input_json_delta",
-                    "partial_json": event["arguments_delta"],
-                },
-            }
-            if context is not None:
-                if context.current_block_index < 0:
-                    context.next_block_index()  # auto-advance to 0
-                result3["index"] = context.current_block_index
-            return result3
-
-        elif is_finish_event(event):
-            reason = event["finish_reason"]["reason"]
-            stop_reason = ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
-            if context is not None:
-                results: list[dict[str, Any]] = []
-                # Close any open content block before finishing
-                if context.current_block_index >= 0:
-                    results.append(
-                        {
-                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                            "index": context.current_block_index,
-                        }
-                    )
-                # Buffer finish; merge with upcoming UsageEvent
-                context.pending_finish = {"stop_reason": stop_reason}
-                return results if results else {}
-            # Without context: emit with safe defaults
-            return {
-                "type": AnthropicEventType.MESSAGE_DELTA,
-                "delta": {"stop_reason": stop_reason},
-                "usage": {"output_tokens": 0},
-            }
-
-        elif is_usage_event(event):
-            usage = event["usage"]
-            output_tokens = usage.get("completion_tokens") or 0
-            # Merge with buffered FinishEvent if available
-            delta: dict[str, Any] = {}
-            if context is not None and context.pending_finish is not None:
-                delta = context.pending_finish
+    def _handle_stream_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle StreamEndEvent → message_stop (with optional pending finish flush)."""
+        results: list[dict[str, Any]] = []
+        if context is not None:
+            # Flush any buffered finish that never got a UsageEvent
+            if context.pending_finish is not None:
+                results.append(
+                    {
+                        "type": AnthropicEventType.MESSAGE_DELTA,
+                        "delta": context.pending_finish,
+                        "usage": {"output_tokens": 0},
+                    }
+                )
                 context.pending_finish = None
-            return {
-                "type": AnthropicEventType.MESSAGE_DELTA,
-                "delta": delta,
-                "usage": {"output_tokens": output_tokens},
-            }
+            context.mark_ended()
+        results.append({"type": AnthropicEventType.MESSAGE_STOP})
+        return results if len(results) > 1 else results[0]
 
-        return {}
+    def _handle_content_block_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockStartEvent → content_block_start."""
+        block_index = event["block_index"]
+        block_type = event["block_type"]
+
+        if context is not None:
+            context.next_block_index()
+
+        if block_type == "text":
+            return {
+                "type": AnthropicEventType.CONTENT_BLOCK_START,
+                "index": block_index,
+                "content_block": {"type": "text", "text": ""},
+            }
+        elif block_type == "thinking":
+            return {
+                "type": AnthropicEventType.CONTENT_BLOCK_START,
+                "index": block_index,
+                "content_block": {"type": "thinking", "thinking": ""},
+            }
+        else:
+            return {}
+
+    def _handle_content_block_end_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ContentBlockEndEvent → content_block_stop."""
+        return {
+            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
+            "index": event["block_index"],
+        }
+
+    def _handle_text_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle TextDeltaEvent → content_block_delta (with synthetic start if needed)."""
+        result: dict[str, Any] = {
+            "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+            "delta": {
+                "type": "text_delta",
+                "text": event["text"],
+            },
+        }
+        if context is not None:
+            if context.current_block_index < 0:
+                context.next_block_index()
+                result["index"] = context.current_block_index
+                return [
+                    {
+                        "type": AnthropicEventType.CONTENT_BLOCK_START,
+                        "index": context.current_block_index,
+                        "content_block": {"type": "text", "text": ""},
+                    },
+                    result,
+                ]
+            result["index"] = context.current_block_index
+        return result
+
+    def _handle_reasoning_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle ReasoningDeltaEvent → content_block_delta (thinking or signature)."""
+        signature = event.get("signature")
+        rd_result: dict[str, Any]
+        if signature is not None:
+            rd_result = {
+                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+                "delta": {
+                    "type": "signature_delta",
+                    "signature": signature,
+                },
+            }
+        else:
+            rd_result = {
+                "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+                "delta": {
+                    "type": "thinking_delta",
+                    "thinking": event["reasoning"],
+                },
+            }
+        if context is not None:
+            if context.current_block_index < 0:
+                context.next_block_index()
+                rd_result["index"] = context.current_block_index
+                return [
+                    {
+                        "type": AnthropicEventType.CONTENT_BLOCK_START,
+                        "index": context.current_block_index,
+                        "content_block": {"type": "thinking", "thinking": ""},
+                    },
+                    rd_result,
+                ]
+            rd_result["index"] = context.current_block_index
+        return rd_result
+
+    def _handle_tool_call_start_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallStartEvent → content_block_start for tool_use."""
+        result: dict[str, Any] = {
+            "type": AnthropicEventType.CONTENT_BLOCK_START,
+            "content_block": {
+                "type": "tool_use",
+                "id": event["tool_call_id"],
+                "name": event["tool_name"],
+                "input": {},
+            },
+        }
+        if context is not None:
+            if context.current_block_index < 0:
+                context.next_block_index()
+            result["index"] = context.current_block_index
+        return result
+
+    def _handle_tool_call_delta_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle ToolCallDeltaEvent → content_block_delta with input_json_delta."""
+        result: dict[str, Any] = {
+            "type": AnthropicEventType.CONTENT_BLOCK_DELTA,
+            "delta": {
+                "type": "input_json_delta",
+                "partial_json": event["arguments_delta"],
+            },
+        }
+        if context is not None:
+            if context.current_block_index < 0:
+                context.next_block_index()
+            result["index"] = context.current_block_index
+        return result
+
+    def _handle_finish_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Handle FinishEvent → buffered message_delta + optional content_block_stop."""
+        reason = event["finish_reason"]["reason"]
+        stop_reason = ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
+        if context is not None:
+            results: list[dict[str, Any]] = []
+            if context.current_block_index >= 0:
+                results.append(
+                    {
+                        "type": AnthropicEventType.CONTENT_BLOCK_STOP,
+                        "index": context.current_block_index,
+                    }
+                )
+            context.pending_finish = {"stop_reason": stop_reason}
+            return results if results else {}
+        return {
+            "type": AnthropicEventType.MESSAGE_DELTA,
+            "delta": {"stop_reason": stop_reason},
+            "usage": {"output_tokens": 0},
+        }
+
+    def _handle_usage_to_p(
+        self, event: IRStreamEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Handle UsageEvent → message_delta (merged with pending finish)."""
+        usage = event["usage"]
+        output_tokens = usage.get("completion_tokens") or 0
+        delta: dict[str, Any] = {}
+        if context is not None and context.pending_finish is not None:
+            delta = context.pending_finish
+            context.pending_finish = None
+        return {
+            "type": AnthropicEventType.MESSAGE_DELTA,
+            "delta": delta,
+            "usage": {"output_tokens": output_tokens},
+        }
+
+    _TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_stream_start_to_p",
+        "stream_end": "_handle_stream_end_to_p",
+        "content_block_start": "_handle_content_block_start_to_p",
+        "content_block_end": "_handle_content_block_end_to_p",
+        "text_delta": "_handle_text_delta_to_p",
+        "reasoning_delta": "_handle_reasoning_delta_to_p",
+        "tool_call_start": "_handle_tool_call_start_to_p",
+        "tool_call_delta": "_handle_tool_call_delta_to_p",
+        "finish": "_handle_finish_to_p",
+        "usage": "_handle_usage_to_p",
+    }
