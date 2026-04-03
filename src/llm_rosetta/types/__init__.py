@@ -20,6 +20,7 @@ from .ir import (
     RefusalPart,
     CitationPart,
     AudioPart,
+    AudioData,
     # Role-specific content types
     SystemContentPart,
     UserContentPart,
@@ -103,6 +104,7 @@ __all__ = [
     "RefusalPart",
     "CitationPart",
     "AudioPart",
+    "AudioData",
     # Role-specific content types
     "SystemContentPart",
     "UserContentPart",

@@ -133,7 +133,7 @@ class TestOpenAIChatContentOps:
     def test_ir_audio_to_p_raises(self):
         """Test ir_audio_to_p raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="does not support audio"):
-            OpenAIChatContentOps.ir_audio_to_p({"type": "audio", "audio_id": "a1"})
+            OpenAIChatContentOps.ir_audio_to_p({"type": "audio"})
 
     def test_p_audio_to_ir_raises(self):
         """Test p_audio_to_ir raises NotImplementedError."""

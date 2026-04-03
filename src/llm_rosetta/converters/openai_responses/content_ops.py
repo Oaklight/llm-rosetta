@@ -105,10 +105,8 @@ class OpenAIResponsesContentOps(BaseContentOps):
         elif image_data:
             data_url = f"data:{image_data['media_type']};base64,{image_data['data']}"
             result["image_url"] = data_url
-        elif ir_image.get("data") and ir_image.get("media_type"):
-            # Top-level data + media_type (e.g. from Google GenAI converter)
-            data_url = f"data:{ir_image['media_type']};base64,{ir_image['data']}"
-            result["image_url"] = data_url
+        elif "provider_ref" in ir_image and "file_id" in ir_image["provider_ref"]:
+            result["file_id"] = ir_image["provider_ref"]["file_id"]
         else:
             raise ValueError("Image part must have either image_url/url or image_data")
 
@@ -144,10 +142,9 @@ class OpenAIResponsesContentOps(BaseContentOps):
             else:
                 return ImagePart(type="image", image_url=url, detail=detail)
         elif "file_id" in provider_image:
-            # File ID form, store as-is
             return ImagePart(
                 type="image",
-                file_id=provider_image["file_id"],
+                provider_ref={"file_id": provider_image["file_id"]},
                 detail=detail,
             )
 
@@ -179,6 +176,8 @@ class OpenAIResponsesContentOps(BaseContentOps):
             result["file_data"] = ir_file["file_data"]["data"]
         elif "file_url" in ir_file:
             result["file_url"] = ir_file["file_url"]
+        elif "provider_ref" in ir_file and "file_id" in ir_file["provider_ref"]:
+            result["file_id"] = ir_file["provider_ref"]["file_id"]
         else:
             raise ValueError("File part must have either file_data or file_url")
 
@@ -213,7 +212,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
             return FilePart(
                 type="file",
                 file_name=file_name,
-                file_id=provider_file["file_id"],
+                provider_ref={"file_id": provider_file["file_id"]},
             )
 
         return FilePart(type="file", file_name=file_name)

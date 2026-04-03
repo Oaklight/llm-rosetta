@@ -137,7 +137,7 @@ class TestOpenAIResponsesContentOps:
         assert result["detail"] == "high"
 
     def test_p_image_to_ir_with_file_id(self):
-        """Test OpenAI Responses file_id image → IR dict with file_id."""
+        """Test OpenAI Responses file_id image → IR dict with provider_ref."""
         provider = {
             "type": "input_image",
             "file_id": "file-abc123",
@@ -145,7 +145,7 @@ class TestOpenAIResponsesContentOps:
         }
         result = OpenAIResponsesContentOps.p_image_to_ir(provider)
         assert result["type"] == "image"
-        assert result["file_id"] == "file-abc123"
+        assert result["provider_ref"]["file_id"] == "file-abc123"
 
     def test_image_url_round_trip(self):
         """Test image URL round-trip."""
@@ -228,7 +228,7 @@ class TestOpenAIResponsesContentOps:
         assert result["file_url"] == "https://example.com/test.txt"
 
     def test_p_file_to_ir_with_file_id(self):
-        """Test OpenAI Responses input_file with file_id → IR dict."""
+        """Test OpenAI Responses input_file with file_id → IR dict with provider_ref."""
         provider = {
             "type": "input_file",
             "filename": "test.txt",
@@ -236,14 +236,14 @@ class TestOpenAIResponsesContentOps:
         }
         result = OpenAIResponsesContentOps.p_file_to_ir(provider)
         assert result["type"] == "file"
-        assert result["file_id"] == "file-xyz"
+        assert result["provider_ref"]["file_id"] == "file-xyz"
 
     # ==================== Audio (not supported) ====================
 
     def test_ir_audio_to_p_raises(self):
         """Test ir_audio_to_p raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="does not support audio"):
-            OpenAIResponsesContentOps.ir_audio_to_p({"type": "audio", "audio_id": "a1"})
+            OpenAIResponsesContentOps.ir_audio_to_p({"type": "audio"})
 
     def test_p_audio_to_ir_raises(self):
         """Test p_audio_to_ir raises NotImplementedError."""

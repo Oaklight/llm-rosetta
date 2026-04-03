@@ -50,11 +50,11 @@ class TestGoogleGenAIContentOps:
 
     # ==================== Image ====================
 
-    def test_ir_image_to_p_with_direct_data(self):
-        """Test IR ImagePart with direct data → Google inline_data Part."""
-        ir_image = cast(
-            ImagePart,
-            {"type": "image", "data": "base64data", "media_type": "image/jpeg"},
+    def test_ir_image_to_p_with_image_data_structured(self):
+        """Test IR ImagePart with image_data → Google inline_data Part."""
+        ir_image = ImagePart(
+            type="image",
+            image_data={"data": "base64data", "media_type": "image/jpeg"},
         )
         result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
         assert result is not None
@@ -84,26 +84,28 @@ class TestGoogleGenAIContentOps:
         provider = {"inline_data": {"mime_type": "image/jpeg", "data": "base64data"}}
         result = GoogleGenAIContentOps.p_image_to_ir(provider)
         assert result["type"] == "image"
-        assert result["data"] == "base64data"
-        assert result["media_type"] == "image/jpeg"
+        assert result["image_data"]["data"] == "base64data"
+        assert result["image_data"]["media_type"] == "image/jpeg"
 
     def test_image_round_trip(self):
-        """Test image round-trip with direct data."""
-        original = cast(
-            ImagePart, {"type": "image", "data": "imgdata", "media_type": "image/gif"}
+        """Test image round-trip with image_data."""
+        original = ImagePart(
+            type="image",
+            image_data={"data": "imgdata", "media_type": "image/gif"},
         )
         provider = GoogleGenAIContentOps.ir_image_to_p(original)
         assert provider is not None
         restored = GoogleGenAIContentOps.p_image_to_ir(provider)
-        assert restored["data"] == "imgdata"
-        assert restored["media_type"] == "image/gif"
+        assert restored["image_data"]["data"] == "imgdata"
+        assert restored["image_data"]["media_type"] == "image/gif"
 
     # ==================== File ====================
 
-    def test_ir_file_to_p_with_direct_data(self):
-        """Test IR FilePart with direct data → Google inline_data Part."""
-        ir_file = cast(
-            FilePart, {"type": "file", "data": "filedata", "media_type": "text/csv"}
+    def test_ir_file_to_p_with_file_data_structured(self):
+        """Test IR FilePart with file_data → Google inline_data Part."""
+        ir_file = FilePart(
+            type="file",
+            file_data={"data": "filedata", "media_type": "text/csv"},
         )
         result = GoogleGenAIContentOps.ir_file_to_p(ir_file)
         assert result is not None
@@ -142,10 +144,11 @@ class TestGoogleGenAIContentOps:
 
     # ==================== Audio ====================
 
-    def test_ir_audio_to_p_with_direct_data(self):
-        """Test IR AudioPart with direct data → Google inline_data Part."""
-        ir_audio = cast(
-            AudioPart, {"type": "audio", "data": "audiodata", "media_type": "audio/wav"}
+    def test_ir_audio_to_p_with_audio_data_structured(self):
+        """Test IR AudioPart with audio_data → Google inline_data Part."""
+        ir_audio = AudioPart(
+            type="audio",
+            audio_data={"data": "audiodata", "media_type": "audio/wav"},
         )
         result = GoogleGenAIContentOps.ir_audio_to_p(ir_audio)
         assert result is not None
@@ -164,7 +167,8 @@ class TestGoogleGenAIContentOps:
         provider = {"inline_data": {"mime_type": "audio/wav", "data": "audiodata"}}
         result = GoogleGenAIContentOps.p_audio_to_ir(provider)
         assert result["type"] == "audio"
-        assert result["media_type"] == "audio/wav"
+        assert result["audio_data"]["data"] == "audiodata"
+        assert result["audio_data"]["media_type"] == "audio/wav"
 
     def test_p_audio_to_ir_file_data(self):
         """Test Google file_data audio Part → IR AudioPart."""
@@ -273,8 +277,8 @@ class TestGoogleGenAIContentOps:
         )
         assert len(parts) == 1
         assert parts[0]["type"] == "image"
-        assert parts[0]["data"] == "imgdata"
-        assert parts[0]["media_type"] == "image/png"
+        assert parts[0]["image_data"]["data"] == "imgdata"
+        assert parts[0]["image_data"]["media_type"] == "image/png"
 
     def test_p_part_to_ir_camelcase_file_data(self):
         """Test p_part_to_ir handles camelCase fileData."""
@@ -290,7 +294,8 @@ class TestGoogleGenAIContentOps:
         provider = {"inlineData": {"mimeType": "audio/wav", "data": "audiodata"}}
         result = GoogleGenAIContentOps.p_audio_to_ir(provider)
         assert result["type"] == "audio"
-        assert result["media_type"] == "audio/wav"
+        assert result["audio_data"]["data"] == "audiodata"
+        assert result["audio_data"]["media_type"] == "audio/wav"
 
     def test_p_part_to_ir_empty_text_ignored(self):
         """Test p_part_to_ir ignores empty text."""
