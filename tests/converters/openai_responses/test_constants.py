@@ -4,6 +4,7 @@ import pytest
 
 from llm_rosetta.converters.openai_responses._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
+    RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_STATUS_TO_REASON,
     ResponsesEventType,
@@ -49,6 +50,19 @@ class TestResponsesStatusMaps:
             assert back == status, (
                 f"status '{status}' -> IR '{ir_reason}' -> status '{back}' "
                 f"(expected '{status}')"
+            )
+
+    def test_round_trip_incomplete_reason(self):
+        """Incomplete reasons round-trip: incomplete_details.reason -> IR -> status + incomplete_details.reason."""
+        for inc_reason, ir_reason in RESPONSES_INCOMPLETE_REASON_TO_IR.items():
+            status = RESPONSES_REASON_TO_STATUS.get(ir_reason)
+            assert status == "incomplete", (
+                f"IR reason '{ir_reason}' should map to 'incomplete' status, got '{status}'"
+            )
+            back = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(ir_reason)
+            assert back == inc_reason, (
+                f"IR reason '{ir_reason}' -> incomplete_reason '{back}' "
+                f"(expected '{inc_reason}')"
             )
 
 

@@ -39,6 +39,7 @@ from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
+    RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_STATUS_TO_REASON,
     ResponsesEventType,
@@ -421,10 +422,9 @@ class OpenAIResponsesConverter(BaseConverter):
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
             status = RESPONSES_REASON_TO_STATUS.get(finish_reason, "completed")
             provider_response["status"] = status
-            if status == "incomplete":
-                provider_response["incomplete_details"] = {
-                    "reason": "max_output_tokens"
-                }
+            incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(finish_reason)
+            if incomplete_reason:
+                provider_response["incomplete_details"] = {"reason": incomplete_reason}
 
         # Usage
         ir_usage = ir_response.get("usage")
@@ -1146,7 +1146,7 @@ class OpenAIResponsesConverter(BaseConverter):
         reason = event["finish_reason"]["reason"]
         status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
 
-        response = self._build_finish_response(status, context)
+        response = self._build_finish_response(status, context, reason)
 
         # Emit done events before response.completed
         results: list[dict[str, Any]] = []
@@ -1176,6 +1176,7 @@ class OpenAIResponsesConverter(BaseConverter):
         self,
         status: str,
         context: StreamContext | None,
+        finish_reason: str = "length",
     ) -> dict[str, Any]:
         """Build the response dict for a FinishEvent."""
         output: list[dict[str, Any]] = []
@@ -1218,7 +1219,10 @@ class OpenAIResponsesConverter(BaseConverter):
             response["model"] = context.model
 
         if status == "incomplete":
-            response["incomplete_details"] = {"reason": "max_output_tokens"}
+            incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(
+                finish_reason, "max_output_tokens"
+            )
+            response["incomplete_details"] = {"reason": incomplete_reason}
 
         # Merge pending usage from context if available
         if context is not None and context.pending_usage is not None:

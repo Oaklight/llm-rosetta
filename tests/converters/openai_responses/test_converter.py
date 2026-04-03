@@ -525,6 +525,31 @@ class TestOpenAIResponsesConverter:
         assert result["status"] == "incomplete"
         assert result["incomplete_details"]["reason"] == "max_output_tokens"
 
+    def test_response_to_provider_content_filter_finish_reason(self):
+        """Test IRResponse with content_filter finish reason -> incomplete status."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp-cf",
+                "object": "response",
+                "created": 1000,
+                "model": "gpt-4o",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Filtered"}],
+                        },
+                        "finish_reason": {"reason": "content_filter"},
+                    }
+                ],
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        assert result["status"] == "incomplete"
+        assert result["incomplete_details"]["reason"] == "content_filter"
+
     def test_response_to_provider_error_finish_reason(self):
         """Test IRResponse with error finish reason -> failed status."""
         ir_response = cast(

@@ -38,15 +38,20 @@ RESPONSES_INCOMPLETE_REASON_TO_IR: dict[str, str] = {
 }
 
 # to_provider: IR finish reason -> response status
-# NOTE: content_filter -> "completed" is a known gap, tracked in #90
 RESPONSES_REASON_TO_STATUS: dict[str, str] = {
     "stop": "completed",
     "length": "incomplete",
     "error": "failed",
     "tool_calls": "completed",
-    "content_filter": "completed",  # TODO: should be "incomplete", see #90
+    "content_filter": "incomplete",
     "cancelled": "cancelled",
     "refusal": "completed",
+}
+
+# to_provider: IR finish reason -> incomplete_details.reason
+RESPONSES_REASON_TO_INCOMPLETE_REASON: dict[str, str] = {
+    "length": "max_output_tokens",
+    "content_filter": "content_filter",
 }
 
 
