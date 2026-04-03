@@ -196,14 +196,7 @@ class GoogleGenAIConverter(BaseConverter):
         # From IRRequest.system_instruction field
         ir_system = ir_request.get("system_instruction")
         if ir_system:
-            if isinstance(ir_system, str):
-                system_instruction = {"role": "user", "parts": [{"text": ir_system}]}
-            elif isinstance(ir_system, list):
-                parts = []
-                for part in ir_system:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        parts.append({"text": part["text"]})
-                system_instruction = {"role": "user", "parts": parts}
+            system_instruction = {"role": "user", "parts": [{"text": ir_system}]}
 
         # 2. Handle messages — fix orphaned tool_calls/results and strip
         #    orphaned tool_choice/tool_config at IR level before conversion.
@@ -317,9 +310,9 @@ class GoogleGenAIConverter(BaseConverter):
                 text_parts = []
                 for part in parts:
                     if isinstance(part, dict) and "text" in part:
-                        text_parts.append({"type": "text", "text": part["text"]})
+                        text_parts.append(part["text"])
                 if text_parts:
-                    ir_request["system_instruction"] = text_parts
+                    ir_request["system_instruction"] = " ".join(text_parts)
 
         # 2. Messages
         contents = provider_request.get("contents", [])

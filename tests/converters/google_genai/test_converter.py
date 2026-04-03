@@ -55,21 +55,6 @@ class TestGoogleGenAIConverter:
             "You are a helpful assistant."
         )
 
-    def test_request_with_system_instruction_parts(self):
-        """Test request with parts-based system instruction."""
-        ir_request: IRRequest = {
-            "model": "gemini-2.0-flash",
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
-            ],
-            "system_instruction": [
-                {"type": "text", "text": "Be helpful."},
-                {"type": "text", "text": "Be concise."},
-            ],
-        }
-        result, warnings = self.converter.request_to_provider(ir_request)
-        assert len(result["system_instruction"]["parts"]) == 2
-
     def test_request_with_system_message_in_messages(self):
         """Test system message in messages list is extracted."""
         ir_request: IRRequest = {
@@ -261,9 +246,7 @@ class TestGoogleGenAIConverter:
             "config": {},
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert ir_request["system_instruction"] == [
-            {"type": "text", "text": "Be helpful."}
-        ]
+        assert ir_request["system_instruction"] == "Be helpful."
 
     def test_request_from_provider_with_tools(self):
         """Test request from provider with tools."""

@@ -88,11 +88,10 @@ class GenerationConfig(TypedDict, total=False):
     logprobs: bool
     top_logprobs: int
 
-    # 生成选择数量 Number of choices to generate (OpenAI)
+    # 生成选择数量 Number of response candidates to generate
+    # OpenAI Chat: n
+    # Google: candidate_count / candidateCount
     n: int
-
-    # 候选数量 Number of candidates (Google, 少见)
-    candidate_count: int
 
 
 # ============================================================================

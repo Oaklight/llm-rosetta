@@ -97,16 +97,7 @@ class AnthropicConverter(BaseConverter):
         # 1. System instruction → top-level system parameter
         system_instruction = ir_request.get("system_instruction")
         if system_instruction:
-            if isinstance(system_instruction, str):
-                result["system"] = system_instruction
-            elif isinstance(system_instruction, list):
-                text_parts = []
-                for part in system_instruction:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append(part["text"])
-                    elif isinstance(part, str):
-                        text_parts.append(part)
-                result["system"] = " ".join(text_parts)
+            result["system"] = system_instruction
 
         # 2. Messages — fix orphaned tool_calls/results at IR level before
         #    conversion.  Anthropic strictly requires bidirectional pairing.
@@ -218,8 +209,9 @@ class AnthropicConverter(BaseConverter):
                 text_parts = []
                 for part in system_content:
                     if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append({"type": "text", "text": part["text"]})
-                ir_request["system_instruction"] = text_parts
+                        text_parts.append(part["text"])
+                if text_parts:
+                    ir_request["system_instruction"] = " ".join(text_parts)
 
         # 2. Messages
         messages = provider_request.get("messages", [])
