@@ -262,8 +262,23 @@ class OpenAIChatConfigOps(BaseConfigOps):
         """
         result: dict[str, Any] = {}
 
-        if "effort" in ir_reasoning:
-            result["reasoning_effort"] = ir_reasoning["effort"]
+        effort = ir_reasoning.get("effort")
+        if effort is not None:
+            # OpenAI Chat only supports low/medium/high
+            if effort == "minimal":
+                result["reasoning_effort"] = "low"
+                warnings.warn(
+                    "OpenAI Chat does not support 'minimal' effort, degrading to 'low'",
+                    stacklevel=2,
+                )
+            elif effort == "max":
+                result["reasoning_effort"] = "high"
+                warnings.warn(
+                    "OpenAI Chat does not support 'max' effort, degrading to 'high'",
+                    stacklevel=2,
+                )
+            else:
+                result["reasoning_effort"] = effort
 
         if "budget_tokens" in ir_reasoning:
             warnings.warn(

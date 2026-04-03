@@ -257,13 +257,23 @@ class GoogleGenAIConfigOps(BaseConfigOps):
 
     # ==================== Reasoning Config ====================
 
+    # Effort → Google ThinkingLevel mapping
+    _EFFORT_TO_LEVEL: dict[str, str] = {
+        "minimal": "MINIMAL",
+        "low": "LOW",
+        "medium": "MEDIUM",
+        "high": "HIGH",
+    }
+    _LEVEL_TO_EFFORT: dict[str, str] = {v: k for k, v in _EFFORT_TO_LEVEL.items()}
+
     @staticmethod
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
         """IR ReasoningConfig → Google GenAI reasoning parameters.
 
-        Google reasoning is usually automatic or model-specific
-        (e.g. Gemini 2.0 Thinking). There's no direct config field
-        for reasoning effort in the standard API.
+        Mapping:
+        - ``effort`` → ``thinking_config.thinking_level``
+          (minimal/low/medium/high direct map; max→HIGH with warning)
+        - ``budget_tokens`` → ``thinking_config.thinking_budget``
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -272,19 +282,26 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             Dict of Google config fields to merge (may be empty).
         """
         result: dict[str, Any] = {}
+        thinking_config: dict[str, Any] = {}
 
-        # Google doesn't have a direct reasoning_effort equivalent
-        if "effort" in ir_reasoning:
-            warnings.warn(
-                "Google GenAI does not support reasoning effort config, ignored",
-                stacklevel=2,
-            )
+        effort = ir_reasoning.get("effort")
+        if effort is not None:
+            level = GoogleGenAIConfigOps._EFFORT_TO_LEVEL.get(effort)
+            if level is not None:
+                thinking_config["thinking_level"] = level
+            elif effort == "max":
+                thinking_config["thinking_level"] = "HIGH"
+                warnings.warn(
+                    "Google GenAI does not support 'max' effort, "
+                    "degrading to thinking_level='HIGH'",
+                    stacklevel=2,
+                )
 
         if "budget_tokens" in ir_reasoning:
-            # Some Google models may support thinking budget
-            result["thinking_config"] = {
-                "thinking_budget": ir_reasoning["budget_tokens"]
-            }
+            thinking_config["thinking_budget"] = ir_reasoning["budget_tokens"]
+
+        if thinking_config:
+            result["thinking_config"] = thinking_config
 
         return result
 
@@ -314,6 +331,14 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             )
             if budget is not None:
                 result["budget_tokens"] = budget
+
+            level = thinking_config.get("thinking_level") or thinking_config.get(
+                "thinkingLevel"
+            )
+            if level is not None:
+                effort = GoogleGenAIConfigOps._LEVEL_TO_EFFORT.get(level)
+                if effort is not None:
+                    result["effort"] = effort
 
         return cast(ReasoningConfig, result)
 

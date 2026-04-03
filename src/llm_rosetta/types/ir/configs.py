@@ -105,15 +105,14 @@ class ReasoningConfig(TypedDict, total=False):
     Controls whether and how the model performs explicit reasoning.
 
     Provider mappings:
-    - OpenAI: reasoning_effort (low/medium/high)
-    - Anthropic: thinking.type (enabled/disabled) + thinking.budget_tokens
-    - Google: thinking_config.thinking_budget
+    - OpenAI: reasoning_effort (low/medium/high; minimal→low, max→high with warning)
+    - Anthropic: thinking.type (enabled/disabled/adaptive) + thinking.budget_tokens
+    - Google: thinking_config.thinking_level (MINIMAL/LOW/MEDIUM/HIGH; max→HIGH with warning)
+              + thinking_config.thinking_budget
     """
 
     enabled: bool  # Whether reasoning is enabled — Anthropic: thinking.type
-    effort: Literal[
-        "low", "medium", "high"
-    ]  # Reasoning effort — OpenAI: reasoning_effort
+    effort: Literal["minimal", "low", "medium", "high", "max"]  # Reasoning effort level
     budget_tokens: int  # Max tokens for reasoning — Anthropic/Google: budget_tokens
 
 

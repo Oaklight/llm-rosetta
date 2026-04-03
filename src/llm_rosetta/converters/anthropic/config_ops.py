@@ -231,10 +231,14 @@ class AnthropicConfigOps(BaseConfigOps):
         """IR ReasoningConfig → Anthropic thinking parameter.
 
         Mapping:
-        - ``enabled: True`` → ``thinking.type = "enabled"``
+        - ``enabled: True`` → ``thinking.type = "enabled"`` (requires budget_tokens)
         - ``enabled: False`` → ``thinking.type = "disabled"``
         - ``budget_tokens`` → ``thinking.budget_tokens``
-        - ``effort`` → not directly supported (warning)
+        - ``effort`` (without ``enabled``) → ``thinking.type = "adaptive"``
+          (``"minimal"`` degrades to ``"disabled"`` with warning)
+
+        When both ``enabled`` and ``effort`` are set, ``enabled`` takes
+        precedence for the thinking type.
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -245,20 +249,32 @@ class AnthropicConfigOps(BaseConfigOps):
         result: dict[str, Any] = {}
 
         enabled = ir_reasoning.get("enabled")
+        effort = ir_reasoning.get("effort")
+
         if enabled is True:
             thinking: dict[str, Any] = {"type": "enabled"}
             if "budget_tokens" in ir_reasoning:
                 thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
             result["thinking"] = thinking
+            if effort is not None:
+                warnings.warn(
+                    "Anthropic enabled mode requires explicit budget_tokens; "
+                    "effort is ignored when enabled=True",
+                    stacklevel=2,
+                )
         elif enabled is False:
             result["thinking"] = {"type": "disabled"}
-
-        if "effort" in ir_reasoning:
-            warnings.warn(
-                "Anthropic does not support reasoning effort level, "
-                "use enabled and budget_tokens instead",
-                stacklevel=2,
-            )
+        elif effort is not None:
+            # effort without explicit enabled → map to adaptive/disabled
+            if effort == "minimal":
+                result["thinking"] = {"type": "disabled"}
+                warnings.warn(
+                    "Anthropic does not support 'minimal' effort, "
+                    "degrading to thinking.type='disabled'",
+                    stacklevel=2,
+                )
+            else:
+                result["thinking"] = {"type": "adaptive"}
 
         return result
 
@@ -284,7 +300,7 @@ class AnthropicConfigOps(BaseConfigOps):
             return cast(ReasoningConfig, result)
 
         thinking_type = thinking.get("type")
-        if thinking_type == "enabled":
+        if thinking_type in ("enabled", "adaptive"):
             result["enabled"] = True
         elif thinking_type == "disabled":
             result["enabled"] = False

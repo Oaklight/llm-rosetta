@@ -259,8 +259,25 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         elif enabled is False:
             reasoning_p["type"] = "disabled"
 
-        if "effort" in ir_reasoning:
-            reasoning_p["effort"] = ir_reasoning["effort"]
+        effort = ir_reasoning.get("effort")
+        if effort is not None:
+            # OpenAI Responses only supports low/medium/high
+            if effort == "minimal":
+                reasoning_p["effort"] = "low"
+                warnings.warn(
+                    "OpenAI Responses does not support 'minimal' effort, "
+                    "degrading to 'low'",
+                    stacklevel=2,
+                )
+            elif effort == "max":
+                reasoning_p["effort"] = "high"
+                warnings.warn(
+                    "OpenAI Responses does not support 'max' effort, "
+                    "degrading to 'high'",
+                    stacklevel=2,
+                )
+            else:
+                reasoning_p["effort"] = effort
 
         if reasoning_p:
             result["reasoning"] = reasoning_p

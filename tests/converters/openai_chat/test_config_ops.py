@@ -158,6 +158,18 @@ class TestOpenAIChatConfigOps:
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "high"})
         assert result["reasoning_effort"] == "high"
 
+    def test_ir_reasoning_config_minimal_degrades(self):
+        """Test minimal effort → low with warning."""
+        with pytest.warns(UserWarning, match="'minimal' effort"):
+            result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "minimal"})
+        assert result["reasoning_effort"] == "low"
+
+    def test_ir_reasoning_config_max_degrades(self):
+        """Test max effort → high with warning."""
+        with pytest.warns(UserWarning, match="'max' effort"):
+            result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
+        assert result["reasoning_effort"] == "high"
+
     def test_ir_reasoning_config_budget_warning(self):
         """Test budget_tokens produces warning."""
         with pytest.warns(UserWarning, match="budget_tokens"):

@@ -250,13 +250,34 @@ class TestGoogleGenAIConfigOps:
         )
         assert result["thinking_config"]["thinking_budget"] == 4096
 
-    def test_ir_reasoning_config_effort_warning(self):
-        """Test effort field produces warning."""
-        with pytest.warns(UserWarning, match="reasoning effort"):
+    def test_ir_reasoning_config_effort_to_thinking_level(self):
+        """Test effort → thinking_config.thinking_level mapping."""
+        for effort, level in [
+            ("minimal", "MINIMAL"),
+            ("low", "LOW"),
+            ("medium", "MEDIUM"),
+            ("high", "HIGH"),
+        ]:
             result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-                cast(ReasoningConfig, {"effort": "high"})
+                cast(ReasoningConfig, {"effort": effort})
             )
-        assert result == {}
+            assert result["thinking_config"]["thinking_level"] == level
+
+    def test_ir_reasoning_config_effort_max_degrades(self):
+        """Test max effort → HIGH with warning."""
+        with pytest.warns(UserWarning, match="'max' effort"):
+            result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "max"})
+            )
+        assert result["thinking_config"]["thinking_level"] == "HIGH"
+
+    def test_ir_reasoning_config_effort_and_budget(self):
+        """Test effort and budget_tokens coexist in thinking_config."""
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "high", "budget_tokens": 4096})
+        )
+        assert result["thinking_config"]["thinking_level"] == "HIGH"
+        assert result["thinking_config"]["thinking_budget"] == 4096
 
     def test_ir_reasoning_config_empty(self):
         """Test empty reasoning config → empty result."""
@@ -271,6 +292,18 @@ class TestGoogleGenAIConfigOps:
         result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
         assert result["budget_tokens"] == 8192
 
+    def test_p_reasoning_config_to_ir_with_level(self):
+        """Test Google thinking_level → IR effort."""
+        provider = {"thinking_config": {"thinking_level": "MEDIUM"}}
+        result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["effort"] == "medium"
+
+    def test_p_reasoning_config_to_ir_camelcase_level(self):
+        """Test camelCase thinkingLevel → IR effort."""
+        provider = {"thinkingConfig": {"thinkingLevel": "LOW"}}
+        result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["effort"] == "low"
+
     def test_p_reasoning_config_to_ir_empty(self):
         """Test empty reasoning config → empty IR."""
         result = GoogleGenAIConfigOps.p_reasoning_config_to_ir({})
@@ -281,12 +314,19 @@ class TestGoogleGenAIConfigOps:
         result = GoogleGenAIConfigOps.p_reasoning_config_to_ir("invalid")
         assert result == {}
 
-    def test_reasoning_config_round_trip(self):
-        """Test reasoning config round-trip."""
+    def test_reasoning_config_budget_round_trip(self):
+        """Test reasoning config budget round-trip."""
         original = cast(ReasoningConfig, {"budget_tokens": 2048})
         provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
         restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
         assert restored["budget_tokens"] == 2048
+
+    def test_reasoning_config_effort_round_trip(self):
+        """Test reasoning config effort round-trip."""
+        original = cast(ReasoningConfig, {"effort": "high"})
+        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["effort"] == "high"
 
     # ==================== Cache Config ====================
 
