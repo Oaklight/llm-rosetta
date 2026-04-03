@@ -252,6 +252,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
 
         Mapping:
         - ``effort`` → ``reasoning_effort``
+          (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
         - ``budget_tokens`` → not supported (warning)
 
         Args:
@@ -263,7 +264,21 @@ class OpenAIChatConfigOps(BaseConfigOps):
         result: dict[str, Any] = {}
 
         if "effort" in ir_reasoning:
-            result["reasoning_effort"] = ir_reasoning["effort"]
+            effort = ir_reasoning["effort"]
+            if effort == "minimal":
+                warnings.warn(
+                    "OpenAI Chat does not support 'minimal' effort, "
+                    "downgrading to 'low'",
+                    stacklevel=2,
+                )
+                effort = "low"
+            elif effort == "max":
+                warnings.warn(
+                    "OpenAI Chat does not support 'max' effort, downgrading to 'high'",
+                    stacklevel=2,
+                )
+                effort = "high"
+            result["reasoning_effort"] = effort
 
         if "budget_tokens" in ir_reasoning:
             warnings.warn(

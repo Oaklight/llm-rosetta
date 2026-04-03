@@ -150,10 +150,38 @@ class TestAnthropicConfigOps:
         result = AnthropicConfigOps.ir_reasoning_config_to_p(ir_reasoning)
         assert result["thinking"]["type"] == "disabled"
 
-    def test_ir_reasoning_config_effort_warning(self):
-        """Test effort field produces warning."""
-        with pytest.warns(UserWarning, match="does not support reasoning effort"):
-            AnthropicConfigOps.ir_reasoning_config_to_p({"effort": "high"})
+    def test_ir_reasoning_config_effort_adaptive(self):
+        """Test effort → adaptive thinking."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "high"})
+        )
+        assert result["thinking"]["type"] == "adaptive"
+        assert result["thinking"]["effort"] == "high"
+
+    def test_ir_reasoning_config_effort_max(self):
+        """Test 'max' effort maps directly to Anthropic."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "max"})
+        )
+        assert result["thinking"]["type"] == "adaptive"
+        assert result["thinking"]["effort"] == "max"
+
+    def test_ir_reasoning_config_effort_minimal_warning(self):
+        """Test 'minimal' effort downgraded to 'low' with warning."""
+        with pytest.warns(UserWarning, match="minimal"):
+            result = AnthropicConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "minimal"})
+            )
+        assert result["thinking"]["effort"] == "low"
+
+    def test_ir_reasoning_config_effort_with_budget(self):
+        """Test effort + budget_tokens combined."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "medium", "budget_tokens": 4096})
+        )
+        assert result["thinking"]["type"] == "adaptive"
+        assert result["thinking"]["effort"] == "medium"
+        assert result["thinking"]["budget_tokens"] == 4096
 
     def test_p_reasoning_config_to_ir(self):
         """Test Anthropic thinking → IR ReasoningConfig."""
@@ -161,6 +189,13 @@ class TestAnthropicConfigOps:
         result = AnthropicConfigOps.p_reasoning_config_to_ir(provider)
         assert result["enabled"] is True
         assert result["budget_tokens"] == 4096
+
+    def test_p_reasoning_config_to_ir_adaptive(self):
+        """Test adaptive thinking → IR with effort."""
+        provider = {"thinking": {"type": "adaptive", "effort": "high"}}
+        result = AnthropicConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["enabled"] is True
+        assert result["effort"] == "high"
 
     def test_p_reasoning_config_to_ir_empty(self):
         """Test empty reasoning config → empty IR."""

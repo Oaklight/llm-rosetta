@@ -261,9 +261,10 @@ class GoogleGenAIConfigOps(BaseConfigOps):
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
         """IR ReasoningConfig → Google GenAI reasoning parameters.
 
-        Google reasoning is usually automatic or model-specific
-        (e.g. Gemini 2.0 Thinking). There's no direct config field
-        for reasoning effort in the standard API.
+        Mapping:
+        - ``effort`` → ``thinking_config.thinking_level``
+          (``"max"`` downgraded to ``"high"`` with warning)
+        - ``budget_tokens`` → ``thinking_config.thinking_budget``
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -272,19 +273,23 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             Dict of Google config fields to merge (may be empty).
         """
         result: dict[str, Any] = {}
+        thinking_config: dict[str, Any] = {}
 
-        # Google doesn't have a direct reasoning_effort equivalent
         if "effort" in ir_reasoning:
-            warnings.warn(
-                "Google GenAI does not support reasoning effort config, ignored",
-                stacklevel=2,
-            )
+            effort = ir_reasoning["effort"]
+            if effort == "max":
+                warnings.warn(
+                    "Google GenAI does not support 'max' effort, downgrading to 'high'",
+                    stacklevel=2,
+                )
+                effort = "high"
+            thinking_config["thinking_level"] = effort
 
         if "budget_tokens" in ir_reasoning:
-            # Some Google models may support thinking budget
-            result["thinking_config"] = {
-                "thinking_budget": ir_reasoning["budget_tokens"]
-            }
+            thinking_config["thinking_budget"] = ir_reasoning["budget_tokens"]
+
+        if thinking_config:
+            result["thinking_config"] = thinking_config
 
         return result
 
@@ -314,6 +319,12 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             )
             if budget is not None:
                 result["budget_tokens"] = budget
+
+            level = thinking_config.get("thinking_level") or thinking_config.get(
+                "thinkingLevel"
+            )
+            if level is not None:
+                result["effort"] = level
 
         return cast(ReasoningConfig, result)
 

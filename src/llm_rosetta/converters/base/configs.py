@@ -177,12 +177,12 @@ class BaseConfigOps(ABC):
 
         处理推理过程的控制：
         - 是否启用：enabled (bool) - Anthropic
-        - 推理努力：effort (low/medium/high) - OpenAI
+        - 推理努力：effort (minimal/low/medium/high/max)
         - 预算token：budget_tokens - Anthropic/Google
 
         Handles reasoning process control:
         - Enabled: enabled (bool) - Anthropic
-        - Reasoning effort: effort (low/medium/high) - OpenAI
+        - Reasoning effort: effort (minimal/low/medium/high/max)
         - Budget tokens: budget_tokens - Anthropic/Google
 
         Args:
