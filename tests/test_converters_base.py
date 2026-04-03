@@ -10,8 +10,8 @@ Tests for LLM-Rosetta Converters Base Module
 """
 
 from abc import ABC
+from collections.abc import Sequence
 from typing import Any, Union, cast
-from collections.abc import Iterable
 
 import pytest
 
@@ -138,7 +138,7 @@ class MockMessageOps(BaseMessageOps):
 
     @staticmethod
     def ir_messages_to_p(
-        ir_messages: Iterable[Union[Message, ExtensionItem]], **kwargs: Any
+        ir_messages: Sequence[Union[Message, ExtensionItem]], **kwargs: Any
     ) -> tuple[list[Any], list[str]]:
         provider_messages = []
         warnings = []
@@ -438,7 +438,7 @@ class MockConverter(BaseConverter):
         }
 
     def messages_to_provider(
-        self, messages: Iterable[Union[Message, ExtensionItem]], **kwargs: Any
+        self, messages: Sequence[Union[Message, ExtensionItem]], **kwargs: Any
     ) -> tuple[list[Any], list[str]]:
         return self.message_ops_class.ir_messages_to_p(messages, **kwargs)
 
@@ -802,14 +802,14 @@ class TestBaseMessageOps:
 
         # 无效消息 - 不是列表
         errors = self.message_ops.validate_messages(
-            cast(Iterable[Union[Message, ExtensionItem]], "not a list")
+            cast(Sequence[Union[Message, ExtensionItem]], "not a list")
         )
         assert len(errors) > 0
-        assert "must be an iterable" in errors[0]
+        assert "must be a list or sequence" in errors[0]
 
         # 无效消息 - 缺少role或type
         errors = self.message_ops.validate_messages(
-            cast(Iterable[Union[Message, ExtensionItem]], [{"some_field": "value"}])
+            cast(Sequence[Union[Message, ExtensionItem]], [{"some_field": "value"}])
         )
         assert len(errors) > 0
         assert "must have either 'role'" in errors[0]

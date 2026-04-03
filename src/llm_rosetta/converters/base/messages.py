@@ -17,8 +17,8 @@ Note: This layer will call methods from content.py and tools.py to handle messag
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
@@ -37,7 +37,7 @@ class BaseMessageOps(ABC):
     @staticmethod
     @abstractmethod
     def ir_messages_to_p(
-        ir_messages: Iterable[Message | ExtensionItem], **kwargs: Any
+        ir_messages: Sequence[Message | ExtensionItem], **kwargs: Any
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → Provider Messages
         将IR消息列表转换为Provider消息列表
@@ -141,7 +141,7 @@ class BaseMessageOps(ABC):
     # ==================== 辅助方法（子类可选实现） Helper methods (optional for subclasses) ====================
 
     def validate_messages(
-        self, messages: Iterable[Message | ExtensionItem]
+        self, messages: Sequence[Message | ExtensionItem]
     ) -> list[str]:
         """验证消息列表的有效性（可选实现）
         Validate message list validity (optional implementation)
@@ -157,8 +157,8 @@ class BaseMessageOps(ABC):
         """
         errors = []
 
-        if not isinstance(messages, Iterable) or isinstance(messages, (str, dict)):
-            errors.append("Messages must be an iterable (but not a string or dict)")
+        if not isinstance(messages, Sequence) or isinstance(messages, (str, bytes)):
+            errors.append("Messages must be a list or sequence")
             return errors
 
         for i, item in enumerate(messages):

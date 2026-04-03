@@ -9,8 +9,8 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
@@ -460,7 +460,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Message | ExtensionItem],
+        messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to OpenAI Responses input items.

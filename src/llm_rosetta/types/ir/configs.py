@@ -20,7 +20,6 @@ Contains various configuration parameters for controlling model generation behav
 """
 
 from typing import Any, Literal, TypedDict
-from collections.abc import Iterable
 
 # ============================================================================
 # 生成控制配置 Generation control configuration
@@ -68,7 +67,7 @@ class GenerationConfig(TypedDict, total=False):
     # OpenAI: stop (str | List[str])
     # Anthropic: stop_sequences (List[str])
     # Google: config.stop_sequences (List[str])
-    stop_sequences: Iterable[str]
+    stop_sequences: list[str]
 
     # 截断策略 Truncation strategy (OpenAI Responses, 少见)
     truncation: Literal["auto", "disabled"]

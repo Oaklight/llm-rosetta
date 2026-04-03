@@ -17,8 +17,8 @@ Handles all tool-related conversions:
 
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     Message,
@@ -204,7 +204,7 @@ def sanitize_schema(
 
 
 def fix_orphaned_tool_calls_ir(
-    messages: Iterable[Message],
+    messages: Sequence[Message],
     *,
     placeholder: str = "[No output available yet]",
 ) -> list[Message]:
@@ -354,7 +354,7 @@ def strip_orphaned_tool_config(ir_request: IRRequest) -> list[str]:
         List of warning strings for each stripped field.
     """
     tools = ir_request.get("tools")
-    has_tools = bool(tools and any(True for _ in tools))
+    has_tools = bool(tools)
 
     if has_tools:
         return []

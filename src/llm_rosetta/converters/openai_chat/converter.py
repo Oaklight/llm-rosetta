@@ -6,8 +6,8 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
@@ -445,7 +445,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Message | ExtensionItem],
+        messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to OpenAI Chat message format.

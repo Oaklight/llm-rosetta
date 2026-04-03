@@ -74,7 +74,7 @@ L3  Converter       — request_to_provider / request_from_provider / response_*
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `ir_messages_to_p` | `(ir_messages: Iterable[Message \| ExtensionItem]) → Tuple[List[Any], List[str]]` | 批量转换 IR 消息到 provider 格式（抽象） |
+| `ir_messages_to_p` | `(ir_messages: Sequence[Message \| ExtensionItem]) → Tuple[List[Any], List[str]]` | 批量转换 IR 消息到 provider 格式（抽象） |
 | `p_messages_to_ir` | `(provider_messages: List[Any]) → List[Message \| ExtensionItem]` | 批量转换 provider 消息到 IR 格式（抽象） |
 | `ir_message_to_p` | `(ir_message) → Tuple[Any, List[str]]` | 单个消息便利方法（具体） |
 | `p_message_to_ir` | `(provider_message) → Message \| ExtensionItem` | 单个消息便利方法（具体） |
@@ -113,7 +113,7 @@ config_ops_class: Optional[Type] = None    # → BaseConfigOps 子类
 | `request_from_provider` | `(provider_request: Dict) → IRRequest` | Provider 请求 → IR 请求 |
 | `response_from_provider` | `(provider_response: Dict) → IRResponse` | Provider 响应 → IR 响应 |
 | `response_to_provider` | `(ir_response: IRResponse) → Dict` | IR 响应 → provider 响应 |
-| `messages_to_provider` | `(messages: Iterable[Message \| ExtensionItem]) → Tuple[List, List[str]]` | IR 消息 → provider 消息 |
+| `messages_to_provider` | `(messages: Sequence[Message \| ExtensionItem]) → Tuple[List, List[str]]` | IR 消息 → provider 消息 |
 | `messages_from_provider` | `(provider_messages: List) → List[Message \| ExtensionItem]` | Provider 消息 → IR 消息 |
 
 **便利方法**（具体）：

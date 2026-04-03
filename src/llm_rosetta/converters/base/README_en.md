@@ -74,7 +74,7 @@ Handles message-level conversion. Serves as a bridge between content/tool layers
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `ir_messages_to_p` | `(ir_messages: Iterable[Message \| ExtensionItem]) → Tuple[List[Any], List[str]]` | Batch convert IR messages to provider format (abstract) |
+| `ir_messages_to_p` | `(ir_messages: Sequence[Message \| ExtensionItem]) → Tuple[List[Any], List[str]]` | Batch convert IR messages to provider format (abstract) |
 | `p_messages_to_ir` | `(provider_messages: List[Any]) → List[Message \| ExtensionItem]` | Batch convert provider messages to IR format (abstract) |
 | `ir_message_to_p` | `(ir_message) → Tuple[Any, List[str]]` | Single message convenience method (concrete) |
 | `p_message_to_ir` | `(provider_message) → Message \| ExtensionItem` | Single message convenience method (concrete) |
@@ -113,7 +113,7 @@ config_ops_class: Optional[Type] = None    # → BaseConfigOps subclass
 | `request_from_provider` | `(provider_request: Dict) → IRRequest` | Provider request → IR request |
 | `response_from_provider` | `(provider_response: Dict) → IRResponse` | Provider response → IR response |
 | `response_to_provider` | `(ir_response: IRResponse) → Dict` | IR response → provider response |
-| `messages_to_provider` | `(messages: Iterable[Message \| ExtensionItem]) → Tuple[List, List[str]]` | IR messages → provider messages |
+| `messages_to_provider` | `(messages: Sequence[Message \| ExtensionItem]) → Tuple[List, List[str]]` | IR messages → provider messages |
 | `messages_from_provider` | `(provider_messages: List) → List[Message \| ExtensionItem]` | Provider messages → IR messages |
 
 **Convenience methods** (concrete):
