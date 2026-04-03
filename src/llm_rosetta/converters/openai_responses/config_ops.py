@@ -240,7 +240,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         Responses API uses a ``reasoning`` object with ``type`` and ``effort``.
 
         Mapping:
-        - ``type`` → ``reasoning.type``
+        - ``enabled`` → ``reasoning.type`` ("enabled"/"disabled")
         - ``effort`` → ``reasoning.effort``
         - ``budget_tokens`` → not supported (warning)
 
@@ -253,8 +253,11 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: dict[str, Any] = {}
         reasoning_p: dict[str, Any] = {}
 
-        if "type" in ir_reasoning:
-            reasoning_p["type"] = ir_reasoning["type"]
+        enabled = ir_reasoning.get("enabled")
+        if enabled is True:
+            reasoning_p["type"] = "enabled"
+        elif enabled is False:
+            reasoning_p["type"] = "disabled"
 
         if "effort" in ir_reasoning:
             reasoning_p["effort"] = ir_reasoning["effort"]
@@ -292,8 +295,11 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         if not isinstance(reasoning, dict):
             return cast(ReasoningConfig, result)
 
-        if "type" in reasoning:
-            result["type"] = reasoning["type"]
+        reasoning_type = reasoning.get("type")
+        if reasoning_type == "enabled":
+            result["enabled"] = True
+        elif reasoning_type == "disabled":
+            result["enabled"] = False
 
         if "effort" in reasoning:
             result["effort"] = reasoning["effort"]
