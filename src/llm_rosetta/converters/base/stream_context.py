@@ -5,7 +5,12 @@ Maintains state across stream chunk conversions for stateful stream
 transformations in Man-in-the-Middle scenarios.
 """
 
+from __future__ import annotations
 
+from dataclasses import dataclass, field
+
+
+@dataclass
 class StreamContext:
     """Maintains state across stream chunk conversions.
 
@@ -18,34 +23,36 @@ class StreamContext:
         created: Unix timestamp of the response creation.
         current_block_index: Current 0-based content block index.
         tool_call_id_map: Mapping from tool_call_id to tool_name.
+        tool_call_item_id_map: Mapping from tool_call_id to item_id.
         pending_usage: Usage info stored by UsageEvent for later merging
             into a FinishEvent (prevents duplicate terminal events).
+        pending_finish: Deferred finish event payload.
         pending_response: Deferred response.completed payload stored by
             FinishEvent, emitted by StreamEndEvent after usage is merged.
     """
 
-    def __init__(self) -> None:
-        self.response_id: str = ""
-        self.model: str = ""
-        self.created: int = 0
-        self.current_block_index: int = -1
-        self.tool_call_id_map: dict[str, str] = {}  # tool_call_id -> tool_name
-        self.tool_call_item_id_map: dict[str, str] = {}  # tool_call_id -> item_id
-        self.pending_usage: dict | None = None
-        self.pending_finish: dict | None = None
-        self.pending_response: dict | None = None
-        self._started: bool = False
-        self._ended: bool = False
-        # Tool call accumulation for streaming
-        self._tool_call_args: dict[str, str] = {}  # call_id -> accumulated args
-        self._tool_call_order: list[str] = []  # call_ids in order received
-        # item_id -> call_id mapping (OpenAI uses item_id in delta events)
-        self._item_id_to_call_id: dict[str, str] = {}
-        # Responses API streaming state
-        self._output_item_emitted: bool = False
-        self._item_id: str = ""
-        self._accumulated_text: str = ""
-        self._content_part_done_emitted: bool = False
+    # Session-level metadata
+    response_id: str = ""
+    model: str = ""
+    created: int = 0
+    current_block_index: int = -1
+
+    # Tool call tracking
+    tool_call_id_map: dict[str, str] = field(default_factory=dict)
+    tool_call_item_id_map: dict[str, str] = field(default_factory=dict)
+
+    # Deferred event payloads
+    pending_usage: dict | None = None
+    pending_finish: dict | None = None
+    pending_response: dict | None = None
+
+    # Lifecycle flags
+    _started: bool = field(default=False, repr=False)
+    _ended: bool = field(default=False, repr=False)
+
+    # Tool call accumulation for streaming
+    _tool_call_args: dict[str, str] = field(default_factory=dict, repr=False)
+    _tool_call_order: list[str] = field(default_factory=list, repr=False)
 
     def next_block_index(self) -> int:
         """Increment and return the next block index.
@@ -77,7 +84,6 @@ class StreamContext:
         """
         if tool_call_id and item_id:
             self.tool_call_item_id_map[tool_call_id] = item_id
-            self._item_id_to_call_id[item_id] = tool_call_id
 
     def get_tool_call_item_id(self, tool_call_id: str) -> str:
         """Get the Responses output item ID for a tool call.

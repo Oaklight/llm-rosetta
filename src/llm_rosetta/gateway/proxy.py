@@ -22,7 +22,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.converters.base.stream_context import StreamContext
+
 
 from .logging import (
     get_logger,
@@ -423,8 +423,8 @@ async def handle_streaming(
 
     async def event_generator() -> AsyncIterator[str]:
         """Stream SSE events from upstream, converting each chunk."""
-        from_ctx = StreamContext()  # upstream -> IR
-        to_ctx = StreamContext()  # IR -> source
+        from_ctx = target_converter.create_stream_context()  # upstream -> IR
+        to_ctx = source_converter.create_stream_context()  # IR -> source
         chunk_count = 0
         t0 = time.monotonic()
 

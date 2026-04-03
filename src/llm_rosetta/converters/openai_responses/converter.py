@@ -37,6 +37,7 @@ from ...types.ir.stream import (
 from ..base import BaseConverter
 from ..base.stream_context import StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
@@ -72,6 +73,11 @@ class OpenAIResponsesConverter(BaseConverter):
         self.tool_ops = self.tool_ops_class()
         self.message_ops = self.message_ops_class(self.content_ops, self.tool_ops)
         self.config_ops = self.config_ops_class()
+
+    @classmethod
+    def create_stream_context(cls) -> OpenAIResponsesStreamContext:
+        """Create a stream context with Responses API specific state."""
+        return OpenAIResponsesStreamContext()
 
     # ==================== Top-level Interfaces ====================
 
@@ -731,10 +737,10 @@ class OpenAIResponsesConverter(BaseConverter):
         delta_text = chunk.get("delta", "")
         # Upstream may send call_id or item_id — resolve to call_id
         call_id = chunk.get("call_id", "")
-        if not call_id and context is not None:
+        if not call_id and isinstance(context, OpenAIResponsesStreamContext):
             item_id = chunk.get("item_id", "")
             if item_id:
-                call_id = context._item_id_to_call_id.get(item_id, "")
+                call_id = context.item_id_to_call_id.get(item_id, "")
         delta_event = ToolCallDeltaEvent(
             type="tool_call_delta",
             tool_call_id=call_id,
@@ -758,10 +764,10 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> None:
         # Resolve call_id from item_id if needed
         call_id = chunk.get("call_id", "")
-        if not call_id and context is not None:
+        if not call_id and isinstance(context, OpenAIResponsesStreamContext):
             item_id = chunk.get("item_id", "")
             if item_id:
-                call_id = context._item_id_to_call_id.get(item_id, "")
+                call_id = context.item_id_to_call_id.get(item_id, "")
         arguments = chunk.get("arguments", "")
         # Store final arguments in context
         if context is not None and call_id:
@@ -936,19 +942,17 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_content_block_start_to_p(
         self,
         event: ContentBlockStartEvent,
-        context: StreamContext | None,
+        context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         block_type = event["block_type"]
         if block_type == "text":
             # With context: emit output_item.added + content_part.added
             # and mark the item as emitted so the first TextDelta doesn't
             # re-emit them.
-            if context is not None and not getattr(
-                context, "_output_item_emitted", False
-            ):
-                context._output_item_emitted = True
+            if context is not None and not context.output_item_emitted:
+                context.output_item_emitted = True
                 item_id = generate_message_id(context.response_id)
-                context._item_id = item_id
+                context.item_id = item_id
                 return [
                     {
                         "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
@@ -985,11 +989,11 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_content_block_end_to_p(
         self,
         event: ContentBlockEndEvent,
-        context: StreamContext | None,
+        context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if context is not None:
-            context._content_part_done_emitted = True
-            accumulated = getattr(context, "_accumulated_text", "")
+            context.content_part_done_emitted = True
+            accumulated = context.accumulated_text
             # Emit output_text.done before content_part.done (matches
             # OpenAI's event ordering)
             return [
@@ -1016,7 +1020,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_text_delta_to_p(
         self,
         event: TextDeltaEvent,
-        context: StreamContext | None,
+        context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         choice_index = event.get("choice_index", 0)
         text = event["text"]
@@ -1029,16 +1033,14 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Accumulate text in context for response.completed output
         if context is not None:
-            if not hasattr(context, "_accumulated_text"):
-                context._accumulated_text = ""
-            context._accumulated_text += text
+            context.accumulated_text += text
 
         # Emit output_item.added + content_part.added before the first
         # text delta so clients (e.g. Codex CLI) can register the item.
-        if context is not None and not getattr(context, "_output_item_emitted", False):
-            context._output_item_emitted = True
+        if context is not None and not context.output_item_emitted:
+            context.output_item_emitted = True
             item_id = generate_message_id(context.response_id)
-            context._item_id = item_id
+            context.item_id = item_id
             return [
                 {
                     "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
@@ -1141,7 +1143,7 @@ class OpenAIResponsesConverter(BaseConverter):
     def _handle_finish_to_p(
         self,
         event: FinishEvent,
-        context: StreamContext | None,
+        context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         reason = event["finish_reason"]["reason"]
         status = RESPONSES_REASON_TO_STATUS.get(reason, "completed")
@@ -1175,14 +1177,14 @@ class OpenAIResponsesConverter(BaseConverter):
     def _build_finish_response(
         self,
         status: str,
-        context: StreamContext | None,
+        context: OpenAIResponsesStreamContext | None,
         finish_reason: str = "length",
     ) -> dict[str, Any]:
         """Build the response dict for a FinishEvent."""
         output: list[dict[str, Any]] = []
         if context is not None:
-            accumulated = getattr(context, "_accumulated_text", "")
-            item_id = getattr(context, "_item_id", "")
+            accumulated = context.accumulated_text
+            item_id = context.item_id
             if accumulated:
                 output.append(
                     {
@@ -1236,19 +1238,19 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _emit_text_done_events(
         self,
-        context: StreamContext,
+        context: OpenAIResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
         """Emit text done events if we had text output."""
-        if not getattr(context, "_output_item_emitted", False):
+        if not context.output_item_emitted:
             return
 
-        accumulated = getattr(context, "_accumulated_text", "")
-        item_id = getattr(context, "_item_id", "")
+        accumulated = context.accumulated_text
+        item_id = context.item_id
 
         # Only emit output_text.done + content_part.done if not
         # already emitted by a prior ContentBlockEndEvent
-        if not getattr(context, "_content_part_done_emitted", False):
+        if not context.content_part_done_emitted:
             results.append(
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
@@ -1280,7 +1282,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def _emit_tool_call_done_events(
         self,
-        context: StreamContext,
+        context: OpenAIResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
         """Emit done events for each tool call."""
@@ -1288,9 +1290,7 @@ class OpenAIResponsesConverter(BaseConverter):
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             item_id = context.get_tool_call_item_id(call_id) or call_id
-            output_index = tc_idx + (
-                1 if getattr(context, "_output_item_emitted", False) else 0
-            )
+            output_index = tc_idx + (1 if context.output_item_emitted else 0)
 
             # response.function_call_arguments.done
             results.append(
