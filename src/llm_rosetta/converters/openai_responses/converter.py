@@ -44,12 +44,12 @@ from ._constants import (
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_STATUS_TO_REASON,
     ResponsesEventType,
-    generate_message_id,
 )
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
 from .message_ops import OpenAIResponsesMessageOps
 from .tool_ops import OpenAIResponsesToolOps
+from .utils import build_message_preamble_events, resolve_call_id
 
 
 class OpenAIResponsesConverter(BaseConverter):
@@ -735,12 +735,7 @@ class OpenAIResponsesConverter(BaseConverter):
         events: list[IRStreamEvent],
     ) -> None:
         delta_text = chunk.get("delta", "")
-        # Upstream may send call_id or item_id — resolve to call_id
-        call_id = chunk.get("call_id", "")
-        if not call_id and isinstance(context, OpenAIResponsesStreamContext):
-            item_id = chunk.get("item_id", "")
-            if item_id:
-                call_id = context.item_id_to_call_id.get(item_id, "")
+        call_id = resolve_call_id(chunk, context)
         delta_event = ToolCallDeltaEvent(
             type="tool_call_delta",
             tool_call_id=call_id,
@@ -762,12 +757,7 @@ class OpenAIResponsesConverter(BaseConverter):
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        # Resolve call_id from item_id if needed
-        call_id = chunk.get("call_id", "")
-        if not call_id and isinstance(context, OpenAIResponsesStreamContext):
-            item_id = chunk.get("item_id", "")
-            if item_id:
-                call_id = context.item_id_to_call_id.get(item_id, "")
+        call_id = resolve_call_id(chunk, context)
         arguments = chunk.get("arguments", "")
         # Store final arguments in context
         if context is not None and call_id:
@@ -950,30 +940,7 @@ class OpenAIResponsesConverter(BaseConverter):
             # and mark the item as emitted so the first TextDelta doesn't
             # re-emit them.
             if context is not None and not context.output_item_emitted:
-                context.output_item_emitted = True
-                item_id = generate_message_id(context.response_id)
-                context.item_id = item_id
-                return [
-                    {
-                        "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                        "output_index": 0,
-                        "item": {
-                            "id": item_id,
-                            "type": "message",
-                            "role": "assistant",
-                            "content": [],
-                        },
-                    },
-                    {
-                        "type": ResponsesEventType.CONTENT_PART_ADDED,
-                        "output_index": 0,
-                        "content_index": 0,
-                        "part": {
-                            "type": "output_text",
-                            "text": "",
-                        },
-                    },
-                ]
+                return build_message_preamble_events(context, output_index=0)
             # Fallback: just emit content_part.added (e.g. no context, or
             # output item already emitted by a prior ContentBlockStartEvent)
             return {
@@ -1038,31 +1005,8 @@ class OpenAIResponsesConverter(BaseConverter):
         # Emit output_item.added + content_part.added before the first
         # text delta so clients (e.g. Codex CLI) can register the item.
         if context is not None and not context.output_item_emitted:
-            context.output_item_emitted = True
-            item_id = generate_message_id(context.response_id)
-            context.item_id = item_id
-            return [
-                {
-                    "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                    "output_index": choice_index,
-                    "item": {
-                        "id": item_id,
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [],
-                    },
-                },
-                {
-                    "type": ResponsesEventType.CONTENT_PART_ADDED,
-                    "output_index": choice_index,
-                    "content_index": 0,
-                    "part": {
-                        "type": "output_text",
-                        "text": "",
-                    },
-                },
-                delta_event,
-            ]
+            preamble = build_message_preamble_events(context, output_index=choice_index)
+            return preamble + [delta_event]
 
         return delta_event
 
