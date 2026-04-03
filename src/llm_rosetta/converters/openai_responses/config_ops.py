@@ -242,6 +242,7 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         Mapping:
         - ``enabled`` → ``reasoning.type`` ("enabled"/"disabled")
         - ``effort`` → ``reasoning.effort``
+          (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
         - ``budget_tokens`` → not supported (warning)
 
         Args:
@@ -260,7 +261,22 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             reasoning_p["type"] = "disabled"
 
         if "effort" in ir_reasoning:
-            reasoning_p["effort"] = ir_reasoning["effort"]
+            effort = ir_reasoning["effort"]
+            if effort == "minimal":
+                warnings.warn(
+                    "OpenAI Responses API does not support 'minimal' effort, "
+                    "downgrading to 'low'",
+                    stacklevel=2,
+                )
+                effort = "low"
+            elif effort == "max":
+                warnings.warn(
+                    "OpenAI Responses API does not support 'max' effort, "
+                    "downgrading to 'high'",
+                    stacklevel=2,
+                )
+                effort = "high"
+            reasoning_p["effort"] = effort
 
         if reasoning_p:
             result["reasoning"] = reasoning_p

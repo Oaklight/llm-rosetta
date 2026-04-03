@@ -279,6 +279,22 @@ class TestOpenAIResponsesConfigOps:
         assert result["reasoning"]["type"] == "enabled"
         assert result["reasoning"]["effort"] == "medium"
 
+    def test_ir_reasoning_config_minimal_warning(self):
+        """Test 'minimal' effort downgraded to 'low' with warning."""
+        with pytest.warns(UserWarning, match="minimal"):
+            result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "minimal"})
+            )
+        assert result["reasoning"]["effort"] == "low"
+
+    def test_ir_reasoning_config_max_warning(self):
+        """Test 'max' effort downgraded to 'high' with warning."""
+        with pytest.warns(UserWarning, match="max"):
+            result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "max"})
+            )
+        assert result["reasoning"]["effort"] == "high"
+
     def test_ir_reasoning_config_budget_warning(self):
         """Test budget_tokens produces warning."""
         with pytest.warns(UserWarning, match="budget_tokens"):
