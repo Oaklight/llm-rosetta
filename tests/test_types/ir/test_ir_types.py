@@ -698,12 +698,12 @@ class TestConfigTypes:
         """测试推理配置创建"""
         config: ReasoningConfig = {
             "effort": "medium",
-            "type": "enabled",
+            "enabled": True,
             "budget_tokens": 1000,
         }
 
         assert config["effort"] == "medium"
-        assert config["type"] == "enabled"
+        assert config["enabled"] is True
         assert config["budget_tokens"] == 1000
 
     def test_cache_config_creation(self):
