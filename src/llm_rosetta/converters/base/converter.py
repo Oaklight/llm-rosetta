@@ -241,6 +241,20 @@ class BaseConverter(ABC):
             return dict(data.__dict__)
         raise TypeError(f"Cannot normalize {type(data).__name__} to dict")
 
+    # ==================== Factory methods ====================
+
+    @classmethod
+    def create_stream_context(cls) -> StreamContext:
+        """Create a stream context appropriate for this converter.
+
+        Subclasses may override to return a provider-specific context
+        subclass with additional state fields.
+
+        Returns:
+            A new StreamContext instance.
+        """
+        return StreamContext()
+
     # ==================== 便利方法 Convenience methods ====================
 
     def message_to_provider(
