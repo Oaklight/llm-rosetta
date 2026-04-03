@@ -54,24 +54,6 @@ class TestOpenAIResponsesConverter:
         result, _ = self.converter.request_to_provider(ir_request)
         assert result["instructions"] == "You are helpful."
 
-    def test_request_to_provider_with_system_instruction_parts(self):
-        """Test IRRequest with parts-based system_instruction -> instructions."""
-        ir_request = cast(
-            IRRequest,
-            {
-                "model": "gpt-4o",
-                "messages": [
-                    {"role": "user", "content": [{"type": "text", "text": "Hi"}]}
-                ],
-                "system_instruction": [
-                    {"type": "text", "text": "Be helpful."},
-                    {"type": "text", "text": "Be concise."},
-                ],
-            },
-        )
-        result, _ = self.converter.request_to_provider(ir_request)
-        assert result["instructions"] == "Be helpful. Be concise."
-
     def test_request_to_provider_full(self):
         """Test full IRRequest with all config options."""
         ir_request = cast(

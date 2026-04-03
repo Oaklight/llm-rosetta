@@ -63,23 +63,11 @@ class TestGoogleGenAIConfigOps:
         result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
         assert result["seed"] == 42
 
-    def test_ir_generation_config_candidate_count(self):
-        """Test candidate_count conversion."""
-        ir_config = cast(GenerationConfig, {"candidate_count": 3})
-        result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
-        assert result["candidate_count"] == 3
-
     def test_ir_generation_config_n_to_candidate_count(self):
-        """Test n → candidate_count alias."""
+        """Test n → candidate_count mapping."""
         ir_config = cast(GenerationConfig, {"n": 2})
         result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
         assert result["candidate_count"] == 2
-
-    def test_ir_generation_config_candidate_count_takes_priority(self):
-        """Test candidate_count takes priority over n."""
-        ir_config = cast(GenerationConfig, {"candidate_count": 3, "n": 2})
-        result = GoogleGenAIConfigOps.ir_generation_config_to_p(ir_config)
-        assert result["candidate_count"] == 3
 
     def test_ir_generation_config_empty(self):
         """Test empty generation config."""
@@ -125,10 +113,10 @@ class TestGoogleGenAIConfigOps:
         assert result["seed"] == 123
 
     def test_p_generation_config_to_ir_candidate_count(self):
-        """Test candidate_count preserved in IR."""
+        """Test provider candidate_count → IR n."""
         provider = {"candidate_count": 3}
         result = GoogleGenAIConfigOps.p_generation_config_to_ir(provider)
-        assert result["candidate_count"] == 3
+        assert result["n"] == 3
 
     def test_p_generation_config_to_ir_empty(self):
         """Test empty provider config → empty IR."""

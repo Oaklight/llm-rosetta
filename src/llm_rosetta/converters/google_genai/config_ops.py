@@ -47,8 +47,7 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         - ``frequency_penalty`` → ``frequency_penalty`` (direct)
         - ``presence_penalty`` → ``presence_penalty`` (direct)
         - ``seed`` → ``seed`` (direct)
-        - ``candidate_count`` → ``candidate_count`` (Google-specific)
-        - ``n`` → ``candidate_count`` (alias)
+        - ``n`` → ``candidate_count`` (Google uses candidate_count)
 
         Args:
             ir_config: IR generation config.
@@ -67,7 +66,6 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             "frequency_penalty",
             "presence_penalty",
             "seed",
-            "candidate_count",
         ]
         for field in _DIRECT_FIELDS:
             if field in ir_config:
@@ -77,8 +75,8 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if "max_tokens" in ir_config:
             result["max_output_tokens"] = ir_config["max_tokens"]
 
-        # n → candidate_count (if candidate_count not already set)
-        if "n" in ir_config and "candidate_count" not in result:
+        # n → candidate_count (Google uses candidate_count)
+        if "n" in ir_config:
             result["candidate_count"] = ir_config["n"]
 
         # Unsupported fields
@@ -143,12 +141,12 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         if max_tokens is not None:
             result["max_tokens"] = max_tokens
 
-        # candidate_count → n (if present)
+        # candidate_count → n
         candidate_count = provider_config.get(
             "candidate_count", provider_config.get("candidateCount")
         )
         if candidate_count is not None:
-            result["candidate_count"] = candidate_count
+            result["n"] = candidate_count
 
         return cast(GenerationConfig, result)
 

@@ -84,16 +84,7 @@ class OpenAIChatConverter(BaseConverter):
         messages: list[dict[str, Any]] = []
         system_instruction = ir_request.get("system_instruction")
         if system_instruction:
-            if isinstance(system_instruction, str):
-                messages.append({"role": "system", "content": system_instruction})
-            elif isinstance(system_instruction, list):
-                text_parts = []
-                for part in system_instruction:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append(part["text"])
-                    elif isinstance(part, str):
-                        text_parts.append(part)
-                messages.append({"role": "system", "content": " ".join(text_parts)})
+            messages.append({"role": "system", "content": system_instruction})
 
         # 2. Messages — fix orphaned tool_calls at IR level before conversion.
         # OpenAI Chat API strictly requires every tool_call_id to have a
@@ -195,8 +186,9 @@ class OpenAIChatConverter(BaseConverter):
                     text_parts = []
                     for part in content:
                         if isinstance(part, dict) and part.get("type") == "text":
-                            text_parts.append({"type": "text", "text": part["text"]})
-                    ir_request["system_instruction"] = text_parts
+                            text_parts.append(part["text"])
+                    if text_parts:
+                        ir_request["system_instruction"] = " ".join(text_parts)
             else:
                 converted = self.message_ops._p_message_to_ir(msg)
                 if converted:

@@ -102,16 +102,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # 1. System instruction → instructions field
         system_instruction = ir_request.get("system_instruction")
         if system_instruction:
-            if isinstance(system_instruction, str):
-                result["instructions"] = system_instruction
-            elif isinstance(system_instruction, list):
-                text_parts = []
-                for part in system_instruction:
-                    if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append(part["text"])
-                    elif isinstance(part, str):
-                        text_parts.append(part)
-                result["instructions"] = " ".join(text_parts)
+            result["instructions"] = system_instruction
 
         # 2. Messages → input items — fix orphaned tool_calls at IR level
         # before conversion.  OpenAI Responses API strictly requires every
