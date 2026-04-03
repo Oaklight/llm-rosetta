@@ -139,14 +139,14 @@ class TestAnthropicConfigOps:
 
     def test_ir_reasoning_config_enabled(self):
         """Test reasoning enabled → Anthropic thinking param."""
-        ir_reasoning = cast(ReasoningConfig, {"type": "enabled", "budget_tokens": 2048})
+        ir_reasoning = cast(ReasoningConfig, {"enabled": True, "budget_tokens": 2048})
         result = AnthropicConfigOps.ir_reasoning_config_to_p(ir_reasoning)
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 2048
 
     def test_ir_reasoning_config_disabled(self):
         """Test reasoning disabled → Anthropic thinking param."""
-        ir_reasoning = cast(ReasoningConfig, {"type": "disabled"})
+        ir_reasoning = cast(ReasoningConfig, {"enabled": False})
         result = AnthropicConfigOps.ir_reasoning_config_to_p(ir_reasoning)
         assert result["thinking"]["type"] == "disabled"
 
@@ -159,7 +159,7 @@ class TestAnthropicConfigOps:
         """Test Anthropic thinking → IR ReasoningConfig."""
         provider = {"thinking": {"type": "enabled", "budget_tokens": 4096}}
         result = AnthropicConfigOps.p_reasoning_config_to_ir(provider)
-        assert result["type"] == "enabled"
+        assert result["enabled"] is True
         assert result["budget_tokens"] == 4096
 
     def test_p_reasoning_config_to_ir_empty(self):

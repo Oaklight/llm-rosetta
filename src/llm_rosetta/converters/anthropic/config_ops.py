@@ -231,8 +231,8 @@ class AnthropicConfigOps(BaseConfigOps):
         """IR ReasoningConfig → Anthropic thinking parameter.
 
         Mapping:
-        - ``type:"enabled"`` → ``thinking.type = "enabled"``
-        - ``type:"disabled"`` → ``thinking.type = "disabled"``
+        - ``enabled: True`` → ``thinking.type = "enabled"``
+        - ``enabled: False`` → ``thinking.type = "disabled"``
         - ``budget_tokens`` → ``thinking.budget_tokens``
         - ``effort`` → not directly supported (warning)
 
@@ -244,19 +244,19 @@ class AnthropicConfigOps(BaseConfigOps):
         """
         result: dict[str, Any] = {}
 
-        reasoning_type = ir_reasoning.get("type")
-        if reasoning_type == "enabled":
+        enabled = ir_reasoning.get("enabled")
+        if enabled is True:
             thinking: dict[str, Any] = {"type": "enabled"}
             if "budget_tokens" in ir_reasoning:
                 thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
             result["thinking"] = thinking
-        elif reasoning_type == "disabled":
+        elif enabled is False:
             result["thinking"] = {"type": "disabled"}
 
         if "effort" in ir_reasoning:
             warnings.warn(
                 "Anthropic does not support reasoning effort level, "
-                "use type and budget_tokens instead",
+                "use enabled and budget_tokens instead",
                 stacklevel=2,
             )
 
@@ -284,8 +284,10 @@ class AnthropicConfigOps(BaseConfigOps):
             return cast(ReasoningConfig, result)
 
         thinking_type = thinking.get("type")
-        if thinking_type:
-            result["type"] = thinking_type
+        if thinking_type == "enabled":
+            result["enabled"] = True
+        elif thinking_type == "disabled":
+            result["enabled"] = False
 
         budget_tokens = thinking.get("budget_tokens")
         if budget_tokens is not None:

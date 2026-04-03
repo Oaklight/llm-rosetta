@@ -101,20 +101,21 @@ class GenerationConfig(TypedDict, total=False):
 
 
 class ReasoningConfig(TypedDict, total=False):
-    """推理配置
-    Reasoning configuration
+    """Reasoning/thinking configuration.
 
-    不同provider有不同的实现方式：
+    Controls whether and how the model performs explicit reasoning.
+
+    Provider mappings:
     - OpenAI: reasoning_effort (low/medium/high)
-    - Anthropic: thinking (ThinkingConfig) + max_tokens + budget_tokens
-    - Google: thinking_config.thoughts_token_limit
+    - Anthropic: thinking.type (enabled/disabled) + thinking.budget_tokens
+    - Google: thinking_config.thinking_budget
     """
 
-    effort: Literal["low", "medium", "high"]  # OpenAI: reasoning_effort
-    type: Literal["enabled", "disabled"]  # Anthropic: thinking.type
-    budget_tokens: (
-        int  # Anthropic: thinking.budget_tokens / Google: thoughts_token_limit
-    )
+    enabled: bool  # Whether reasoning is enabled — Anthropic: thinking.type
+    effort: Literal[
+        "low", "medium", "high"
+    ]  # Reasoning effort — OpenAI: reasoning_effort
+    budget_tokens: int  # Max tokens for reasoning — Anthropic/Google: budget_tokens
 
 
 # ============================================================================

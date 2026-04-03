@@ -271,10 +271,10 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"] == {"effort": "high"}
 
-    def test_ir_reasoning_config_with_type(self):
-        """Test reasoning config with type field."""
+    def test_ir_reasoning_config_with_enabled(self):
+        """Test reasoning config with enabled field."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"type": "enabled", "effort": "medium"})
+            cast(ReasoningConfig, {"enabled": True, "effort": "medium"})
         )
         assert result["reasoning"]["type"] == "enabled"
         assert result["reasoning"]["effort"] == "medium"
@@ -299,7 +299,7 @@ class TestOpenAIResponsesConfigOps:
             {"reasoning": {"effort": "medium", "type": "enabled"}}
         )
         assert result["effort"] == "medium"
-        assert result["type"] == "enabled"
+        assert result["enabled"] is True
 
     def test_p_reasoning_config_to_ir_direct(self):
         """Test direct reasoning object (without nesting)."""
