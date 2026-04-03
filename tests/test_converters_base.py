@@ -102,11 +102,18 @@ class MockContentOps(BaseContentOps):
 
     @staticmethod
     def ir_audio_to_p(ir_audio: AudioPart, **kwargs: Any) -> dict[str, Any]:
-        return {"type": "audio", "id": ir_audio["audio_id"]}
+        audio_data = ir_audio.get("audio_data", {})
+        return {"type": "audio", "data": audio_data.get("data", "")}
 
     @staticmethod
     def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> AudioPart:
-        return {"type": "audio", "audio_id": provider_audio.get("id", "unknown")}
+        return {
+            "type": "audio",
+            "audio_data": {
+                "data": provider_audio.get("data", ""),
+                "media_type": "audio/wav",
+            },
+        }
 
     @staticmethod
     def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict[str, Any]:

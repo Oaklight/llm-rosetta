@@ -101,19 +101,6 @@ class AnthropicContentOps(BaseContentOps):
                 "source": {"type": "url", "url": image_url},
             }
 
-        # Top-level data + media_type (e.g. from Google GenAI converter)
-        raw_data = ir_image.get("data")
-        media_type = ir_image.get("media_type")
-        if raw_data and media_type:
-            return {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": raw_data,
-                },
-            }
-
         raise ValueError("ImagePart must have either image_url or image_data")
 
     @staticmethod

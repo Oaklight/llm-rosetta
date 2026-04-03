@@ -12,9 +12,11 @@ import warnings
 from typing import Any, cast
 
 from ...types.ir import (
+    AudioData,
     AudioPart,
     CitationPart,
     FilePart,
+    ImageData,
     ImagePart,
     ReasoningPart,
     RefusalPart,
@@ -83,16 +85,6 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             Google inline_data Part dict, or None if unsupported format.
         """
-        # Direct data and media_type fields
-        if "data" in ir_image and "media_type" in ir_image:
-            return {
-                "inlineData": {
-                    "mimeType": ir_image["media_type"],
-                    "data": ir_image["data"],
-                }
-            }
-
-        # image_data nested structure
         if "image_data" in ir_image:
             image_data = ir_image["image_data"]
             return {
@@ -125,11 +117,15 @@ class GoogleGenAIContentOps(BaseContentOps):
         inline_data = provider_image.get("inline_data") or provider_image.get(
             "inlineData", {}
         )
-        return {
-            "type": "image",
-            "data": inline_data.get("data", ""),
-            "media_type": inline_data.get("mime_type", inline_data.get("mimeType", "")),
-        }
+        return ImagePart(
+            type="image",
+            image_data=ImageData(
+                data=inline_data.get("data", ""),
+                media_type=inline_data.get(
+                    "mime_type", inline_data.get("mimeType", "")
+                ),
+            ),
+        )
 
     # ==================== File ====================
 
@@ -143,16 +139,6 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             Google inline_data Part dict, or None if unsupported format.
         """
-        # Direct data and media_type fields
-        if "data" in ir_file and "media_type" in ir_file:
-            return {
-                "inlineData": {
-                    "mimeType": ir_file["media_type"],
-                    "data": ir_file["data"],
-                }
-            }
-
-        # file_data nested structure
         if "file_data" in ir_file:
             file_data = ir_file["file_data"]
             return {
@@ -204,14 +190,6 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             Google inline_data Part dict, or None if unsupported format.
         """
-        if "data" in ir_audio and "media_type" in ir_audio:
-            return {
-                "inlineData": {
-                    "mimeType": ir_audio["media_type"],
-                    "data": ir_audio["data"],
-                }
-            }
-
         if "audio_data" in ir_audio:
             audio_data = ir_audio["audio_data"]
             return {
@@ -240,15 +218,18 @@ class GoogleGenAIContentOps(BaseContentOps):
         if raw_inline:
             return AudioPart(
                 type="audio",
-                data=raw_inline.get("data", ""),
-                media_type=raw_inline.get("mime_type", raw_inline.get("mimeType", "")),
+                audio_data=AudioData(
+                    data=raw_inline.get("data", ""),
+                    media_type=raw_inline.get(
+                        "mime_type", raw_inline.get("mimeType", "")
+                    ),
+                ),
             )
         raw_file = provider_audio.get("file_data") or provider_audio.get("fileData")
         if raw_file:
             return AudioPart(
                 type="audio",
                 url=raw_file.get("file_uri", raw_file.get("fileUri", "")),
-                media_type=raw_file.get("mime_type", raw_file.get("mimeType", "")),
             )
         raise ValueError("Audio part must have inline_data or file_data")
 
@@ -421,7 +402,6 @@ class GoogleGenAIContentOps(BaseContentOps):
                     AudioPart(
                         type="audio",
                         url=file_data["file_uri"],
-                        media_type=mime_type,
                     )
                 )
             else:

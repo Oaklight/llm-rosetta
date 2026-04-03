@@ -45,10 +45,10 @@ class ImagePart(TypedDict):
     type: Required[Literal["image"]]
     image_url: NotRequired[str]  # URL形式 URL form
     image_data: NotRequired[ImageData]  # base64形式 base64 form
-    data: NotRequired[str]  # 直接base64数据 Direct base64 data
-    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
     detail: NotRequired[Literal["auto", "low", "high"]]  # OpenAI特性 OpenAI feature
-    file_id: NotRequired[str]  # OpenAI file ID
+    provider_ref: NotRequired[
+        dict[str, Any]
+    ]  # Provider-specific reference (e.g. file_id)
 
 
 class FileData(TypedDict):
@@ -76,9 +76,9 @@ class FilePart(TypedDict):
     file_data: NotRequired[FileData]  # base64形式 base64 form
     file_name: NotRequired[str]
     file_type: NotRequired[str]  # MIME type
-    file_id: NotRequired[str]  # OpenAI file ID
-    data: NotRequired[str]  # 直接base64数据 Direct base64 data
-    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
+    provider_ref: NotRequired[
+        dict[str, Any]
+    ]  # Provider-specific reference (e.g. file_id)
 
 
 # ============================================================================
@@ -239,14 +239,14 @@ class AudioPart(TypedDict):
     """
 
     type: Required[Literal["audio"]]
-    audio_id: NotRequired[str]  # 音频ID Audio ID
     audio_data: NotRequired[AudioData]  # base64形式 base64 form
-    data: NotRequired[str]  # 直接base64数据 Direct base64 data
-    media_type: NotRequired[str]  # 直接MIME类型 Direct MIME type
     url: NotRequired[str]  # URL形式 URL form
     detail: NotRequired[
         Literal["auto", "low", "high"]
     ]  # 音频细节级别 Audio detail level
+    provider_ref: NotRequired[
+        dict[str, Any]
+    ]  # Provider-specific reference (e.g. audio_id)
 
 
 # ============================================================================

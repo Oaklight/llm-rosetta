@@ -81,6 +81,7 @@ from .messages import (
 # 内容部分类型 Content part types
 from .parts import (
     AssistantContentPart,
+    AudioData,
     AudioPart,
     CitationPart,
     ContentPart,
@@ -180,6 +181,7 @@ __all__ = [
     "RefusalPart",
     "CitationPart",
     "AudioPart",
+    "AudioData",
     # 角色特定内容类型 Role-specific content types
     "SystemContentPart",
     "UserContentPart",

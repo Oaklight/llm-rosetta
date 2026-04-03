@@ -125,8 +125,10 @@ class TestGoogleGenAIMessageOps:
                     "content": [
                         {
                             "type": "image",
-                            "data": "base64data",
-                            "media_type": "image/jpeg",
+                            "image_data": {
+                                "data": "base64data",
+                                "media_type": "image/jpeg",
+                            },
                         }
                     ],
                 }
@@ -170,8 +172,10 @@ class TestGoogleGenAIMessageOps:
                         {"type": "text", "text": "What is this?"},
                         {
                             "type": "image",
-                            "data": "imgdata",
-                            "media_type": "image/png",
+                            "image_data": {
+                                "data": "imgdata",
+                                "media_type": "image/png",
+                            },
                         },
                         {"type": "text", "text": "Please describe it."},
                     ],

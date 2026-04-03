@@ -92,16 +92,6 @@ class OpenAIChatContentOps(BaseContentOps):
                 "image_url": {"url": data_url, "detail": detail},
             }
 
-        # Top-level data + media_type (e.g. from Google GenAI converter)
-        raw_data = ir_image.get("data")
-        media_type = ir_image.get("media_type")
-        if raw_data and media_type:
-            data_url = f"data:{media_type};base64,{raw_data}"
-            return {
-                "type": "image_url",
-                "image_url": {"url": data_url, "detail": detail},
-            }
-
         raise ValueError("ImagePart must have either image_url or image_data")
 
     @staticmethod

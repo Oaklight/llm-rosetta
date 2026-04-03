@@ -206,10 +206,14 @@ class TestContentParts:
 
     def test_audio_part_creation(self):
         """测试音频部分创建"""
-        audio: AudioPart = {"type": "audio", "audio_id": "audio_123", "detail": "high"}
+        audio: AudioPart = {
+            "type": "audio",
+            "audio_data": {"data": "base64audio", "media_type": "audio/wav"},
+            "detail": "high",
+        }
 
         assert audio["type"] == "audio"
-        assert audio["audio_id"] == "audio_123"
+        assert audio["audio_data"]["data"] == "base64audio"
         assert is_part_type(audio, AudioPart)
 
 
