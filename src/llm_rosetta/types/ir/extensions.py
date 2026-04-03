@@ -7,7 +7,6 @@ IR extension type definitions for special scenario extensions
 
 import sys
 from typing import Any, Literal, TypedDict, TypeGuard, Union
-from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -107,9 +106,7 @@ class ToolChainNode(TypedDict):
     type: Required[Literal["tool_chain_node"]]
     node_id: Required[str]
     tool_call: Required[dict[str, Any]]  # ToolCallPart
-    depends_on: NotRequired[
-        Iterable[str]
-    ]  # 依赖的节点ID列表 List of dependent node IDs
+    depends_on: NotRequired[list[str]]  # 依赖的节点ID列表 List of dependent node IDs
     auto_execute: NotRequired[bool]  # 是否自动执行 Whether to auto execute
 
 

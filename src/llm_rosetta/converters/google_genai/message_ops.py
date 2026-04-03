@@ -14,8 +14,8 @@ Google-specific:
 """
 
 import warnings
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -73,7 +73,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Message | ExtensionItem],
+        ir_messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → Google GenAI Content list + system_instruction.
@@ -227,7 +227,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     @staticmethod
     def _reconcile_tool_call_ids(
-        ir_messages: list[Message | ExtensionItem],
+        ir_messages: Sequence[Message | ExtensionItem],
     ) -> None:
         """Match tool_result tool_call_ids to tool_call tool_call_ids by name.
 
@@ -380,7 +380,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     @staticmethod
     def extract_system_instruction(
-        ir_messages: Iterable[Message | ExtensionItem],
+        ir_messages: Sequence[Message | ExtensionItem],
     ) -> tuple[Any, list[Message | ExtensionItem]]:
         """Extract system messages from IR message list.
 
@@ -399,7 +399,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         for item in ir_messages:
             if is_message(item) and item.get("role") == "system":
                 parts: list[dict[str, str]] = []
-                for part in cast(Iterable[ContentPart], item.get("content", [])):
+                for part in cast(list[ContentPart], item.get("content", [])):
                     if is_text_part(part):
                         parts.append({"text": part["text"]})
                 if system_instruction is None:

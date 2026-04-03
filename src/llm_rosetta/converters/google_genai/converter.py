@@ -16,8 +16,8 @@ Also maintains backward compatibility with the old to_provider/from_provider API
 
 import json
 import time
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 
 from ...types.ir import (
@@ -529,7 +529,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Message | ExtensionItem],
+        messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Google GenAI Content format.
@@ -565,7 +565,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def build_config(
         self,
-        tools: Iterable[ToolDefinition] | None = None,
+        tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
     ) -> dict[str, Any] | None:
         """Build Google GenAI config parameters (backward compatibility).
@@ -592,7 +592,7 @@ class GoogleGenAIConverter(BaseConverter):
     def to_provider(
         self,
         ir_input: IRInput | IRRequest,
-        tools: Iterable[ToolDefinition] | None = None,
+        tools: Sequence[ToolDefinition] | None = None,
         tool_choice: ToolChoice | None = None,
         **kwargs: Any,
     ) -> tuple[dict[str, Any], list[str]]:

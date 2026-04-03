@@ -12,8 +12,8 @@ Output items include messages, function_call, reasoning, etc.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -53,7 +53,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Message | ExtensionItem],
+        ir_messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Responses input items.
@@ -110,7 +110,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return [], warnings
 
     def _ir_input_message_to_p(
-        self, role: str, content: Iterable, warnings: list[str]
+        self, role: str, content: list, warnings: list[str]
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR system/user/developer message to Responses API items.
 
@@ -161,7 +161,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_assistant_to_p(
-        self, content: Iterable, warnings: list[str]
+        self, content: list, warnings: list[str]
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
@@ -213,7 +213,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: Iterable, warnings: list[str]
+        self, content: list, warnings: list[str]
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR tool message content to Responses API function_call_output items.
 

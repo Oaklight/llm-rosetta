@@ -6,8 +6,8 @@ Defines the basic interface for converters (abstract base class, functional doma
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
@@ -128,7 +128,7 @@ class BaseConverter(ABC):
     @abstractmethod
     def messages_to_provider(
         self,
-        messages: Iterable[Message | ExtensionItem],
+        messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """将消息列表转换为provider消息格式

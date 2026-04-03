@@ -7,7 +7,6 @@ IR message type definitions with independent role TypedDicts
 
 import sys
 from typing import Any, Literal, TypedDict, Union
-from collections.abc import Iterable
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required
@@ -59,7 +58,7 @@ class BaseMessage(TypedDict):
     Base message type, common foundation for all role messages.
     """
 
-    content: Required[Iterable[ContentPart]]
+    content: Required[list[ContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -81,7 +80,7 @@ class SystemMessage(TypedDict):
     """
 
     role: Required[Literal["system"]]
-    content: Required[Iterable[SystemContentPart]]
+    content: Required[list[SystemContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -98,7 +97,7 @@ class UserMessage(TypedDict):
     """
 
     role: Required[Literal["user"]]
-    content: Required[Iterable[UserContentPart]]
+    content: Required[list[UserContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -115,7 +114,7 @@ class AssistantMessage(TypedDict):
     """
 
     role: Required[Literal["assistant"]]
-    content: Required[Iterable[AssistantContentPart]]
+    content: Required[list[AssistantContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -135,7 +134,7 @@ class ToolMessage(TypedDict):
     """
 
     role: Required[Literal["tool"]]
-    content: Required[Iterable[ToolContentPart]]
+    content: Required[list[ToolContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -161,7 +160,7 @@ class LegacyMessage(TypedDict):
     """
 
     role: Required[Literal["system", "user", "assistant", "tool"]]
-    content: Required[Iterable[ContentPart]]
+    content: Required[list[ContentPart]]
     metadata: NotRequired[MessageMetadata]
 
 

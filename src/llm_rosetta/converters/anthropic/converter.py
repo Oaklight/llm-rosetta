@@ -15,8 +15,8 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ExtensionItem,
@@ -400,7 +400,7 @@ class AnthropicConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Iterable[Message | ExtensionItem],
+        messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Anthropic message format.

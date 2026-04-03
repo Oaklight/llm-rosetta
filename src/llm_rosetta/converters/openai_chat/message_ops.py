@@ -7,8 +7,8 @@ Handles bidirectional conversion of system, user, assistant, and tool messages.
 This layer calls content_ops and tool_ops for part-level conversions.
 """
 
+from collections.abc import Sequence
 from typing import Any, cast
-from collections.abc import Iterable
 
 from ...types.ir import (
     ContentPart,
@@ -54,7 +54,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Iterable[Message | ExtensionItem],
+        ir_messages: Sequence[Message | ExtensionItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Chat messages.
@@ -184,7 +184,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return None, warnings
 
-    def _ir_system_to_p(self, content: Iterable) -> dict[str, Any]:
+    def _ir_system_to_p(self, content: list) -> dict[str, Any]:
         """Convert IR system message content to OpenAI system message.
 
         Concatenates all text parts into a single string.
@@ -196,7 +196,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return {"role": "system", "content": " ".join(text_parts)}
 
     def _ir_user_to_p(
-        self, content: Iterable, warnings: list[str]
+        self, content: list, warnings: list[str]
     ) -> tuple[Any, list[str]]:
         """Convert IR user message content to OpenAI user message(s).
 
@@ -249,7 +249,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return result_messages, warnings
 
     def _ir_assistant_to_p(
-        self, content: Iterable, warnings: list[str]
+        self, content: list, warnings: list[str]
     ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR assistant message content to OpenAI assistant message.
 
@@ -301,7 +301,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return openai_message, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: Iterable, warnings: list[str]
+        self, content: list, warnings: list[str]
     ) -> tuple[Any, list[str]]:
         """Convert IR tool message content to OpenAI tool role message(s).
 
