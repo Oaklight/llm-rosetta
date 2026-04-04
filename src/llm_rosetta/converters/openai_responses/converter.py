@@ -273,7 +273,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return cast(IRRequest, ir_request)
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,
@@ -366,7 +366,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if "service_tier" in provider_response:
             ir_response["service_tier"] = provider_response["service_tier"]
 
-        return cast(IRResponse, ir_response)
+        return self._validate_ir_response(ir_response)
 
     def response_to_provider(
         self,

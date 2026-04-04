@@ -18,8 +18,9 @@ Note: This layer will call methods from content.py and tools.py to handle messag
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any, Union
 
+from ..._vendor.validate import ValidationError, validate
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
 
@@ -143,53 +144,19 @@ class BaseMessageOps(ABC):
     def validate_messages(
         self, messages: Sequence[Message | ExtensionItem]
     ) -> list[str]:
-        """验证消息列表的有效性（可选实现）
-        Validate message list validity (optional implementation)
+        """Validate message list against IR Message/ExtensionItem types.
 
-        子类可以重写此方法来提供特定的验证逻辑。
-        Subclasses can override this method to provide specific validation logic.
+        Uses zerodep validate for structural validation against TypedDict
+        definitions. Subclasses can override for provider-specific logic.
 
         Args:
-            messages: 要验证的消息列表
+            messages: Message list to validate.
 
         Returns:
-            验证错误信息列表，空列表表示验证通过
+            List of validation error strings; empty list means valid.
         """
-        errors = []
-
-        if not isinstance(messages, Sequence) or isinstance(messages, (str, bytes)):
-            errors.append("Messages must be a list or sequence")
-            return errors
-
-        for i, item in enumerate(messages):
-            if not isinstance(item, dict):
-                errors.append(f"Item {i} must be a dictionary")
-                continue
-
-            # 检查是否是Message或ExtensionItem
-            if "role" in item:
-                # 这是一个Message
-                if item.get("role") not in ["system", "user", "assistant", "developer"]:
-                    errors.append(f"Message {i} has invalid role: {item.get('role')}")
-
-                if "content" not in item:
-                    errors.append(f"Message {i} missing required 'content' field")
-                elif not isinstance(cast(dict, item)["content"], list):
-                    errors.append(f"Message {i} 'content' must be a list")
-
-            elif "type" in item:
-                # 这是一个ExtensionItem
-                item_type = item.get("type")
-                if item_type not in [
-                    "system_event",
-                    "batch_marker",
-                    "session_control",
-                    "tool_chain_node",
-                ]:
-                    errors.append(f"ExtensionItem {i} has invalid type: {item_type}")
-            else:
-                errors.append(
-                    f"Item {i} must have either 'role' (Message) or 'type' (ExtensionItem)"
-                )
-
-        return errors
+        try:
+            validate(list(messages), list[Union[Message, ExtensionItem]])
+            return []
+        except ValidationError as e:
+            return [err.message for err in e.errors]

@@ -16,7 +16,7 @@ Key Anthropic differences from OpenAI:
 
 import time
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any
 
 from ...types.ir import (
     ExtensionItem,
@@ -253,7 +253,7 @@ class AnthropicConverter(BaseConverter):
                 {"stream": stream}
             )
 
-        return cast(IRRequest, ir_request)
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,
@@ -319,7 +319,7 @@ class AnthropicConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        return cast(IRResponse, ir_response)
+        return self._validate_ir_response(ir_response)
 
     def response_to_provider(
         self,

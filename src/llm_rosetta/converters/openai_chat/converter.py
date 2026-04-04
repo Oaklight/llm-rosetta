@@ -7,7 +7,7 @@ conversion between IR and OpenAI Chat Completions API format.
 """
 
 from collections.abc import Sequence
-from typing import Any, cast
+from typing import Any
 
 from ...types.ir import (
     ExtensionItem,
@@ -253,7 +253,7 @@ class OpenAIChatConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return cast(IRRequest, ir_request)
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,
@@ -332,7 +332,7 @@ class OpenAIChatConverter(BaseConverter):
         if "system_fingerprint" in provider_response:
             ir_response["system_fingerprint"] = provider_response["system_fingerprint"]
 
-        return cast(IRResponse, ir_response)
+        return self._validate_ir_response(ir_response)
 
     def response_to_provider(
         self,

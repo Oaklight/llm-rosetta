@@ -6,12 +6,12 @@ IR extension type definitions for special scenario extensions
 """
 
 import sys
-from typing import Any, Literal, TypedDict, TypeGuard, Union
+from typing import Any, Literal, TypeGuard, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
+    from typing import NotRequired, Required, TypedDict
 else:
-    from typing_extensions import NotRequired, Required
+    from typing_extensions import NotRequired, Required, TypedDict
 
 # ============================================================================
 # 扩展项类型（用于特殊场景） Extension item types (for special scenarios)

@@ -14,6 +14,7 @@ from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
 from ...types.ir.stream import IRStreamEvent
+from ...types.ir.validation import validate_ir_request, validate_ir_response
 from .stream_context import StreamContext
 
 
@@ -40,6 +41,9 @@ class BaseConverter(ABC):
     tool_ops_class: type | None = None
     message_ops_class: type | None = None
     config_ops_class: type | None = None
+
+    # Enable/disable IR validation on from_provider output
+    validate_output: bool = True
 
     # ==================== 顶层转换接口 Top-level conversion interface ====================
 
@@ -254,6 +258,40 @@ class BaseConverter(ABC):
             A new StreamContext instance.
         """
         return StreamContext()
+
+    # ==================== IR Validation helpers ====================
+
+    def _validate_ir_request(self, data: dict[str, Any]) -> IRRequest:
+        """Validate and return an IRRequest if validate_output is enabled.
+
+        Args:
+            data: Dict built by a concrete converter's request_from_provider.
+
+        Returns:
+            The validated IRRequest (same object, typed).
+
+        Raises:
+            ValidationError: If validation is enabled and data is malformed.
+        """
+        if self.validate_output:
+            return validate_ir_request(data)
+        return cast(IRRequest, data)
+
+    def _validate_ir_response(self, data: dict[str, Any]) -> IRResponse:
+        """Validate and return an IRResponse if validate_output is enabled.
+
+        Args:
+            data: Dict built by a concrete converter's response_from_provider.
+
+        Returns:
+            The validated IRResponse (same object, typed).
+
+        Raises:
+            ValidationError: If validation is enabled and data is malformed.
+        """
+        if self.validate_output:
+            return validate_ir_response(data)
+        return cast(IRResponse, data)
 
     # ==================== 便利方法 Convenience methods ====================
 

@@ -56,6 +56,14 @@ from .helpers import (
     extract_tool_calls,
 )
 
+# 验证工具 Validation utilities
+from .validation import (
+    ValidationError,
+    validate_ir_request,
+    validate_ir_response,
+    validate_messages,
+)
+
 # 消息类型 Message types
 from .messages import (
     AssistantMessage,
@@ -277,4 +285,9 @@ __all__ = [
     "extract_text_content",
     "extract_tool_calls",
     "create_tool_result_message",
+    # ========== 验证工具 Validation utilities ==========
+    "ValidationError",
+    "validate_ir_request",
+    "validate_ir_response",
+    "validate_messages",
 ]
