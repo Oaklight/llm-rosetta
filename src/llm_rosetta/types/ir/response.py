@@ -6,12 +6,12 @@ IR response type definitions including response statistics
 """
 
 import sys
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
+    from typing import NotRequired, Required, TypedDict
 else:
-    from typing_extensions import NotRequired, Required
+    from typing_extensions import NotRequired, Required, TypedDict
 
 from .extensions import ExtensionItem, is_extension_item
 from .messages import Message

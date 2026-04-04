@@ -6,12 +6,12 @@ IR tool-related type definitions
 """
 
 import sys
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired
+    from typing import NotRequired, TypedDict
 else:
-    from typing_extensions import NotRequired
+    from typing_extensions import NotRequired, TypedDict
 
 # ============================================================================
 # 工具定义类型 Tool definition types

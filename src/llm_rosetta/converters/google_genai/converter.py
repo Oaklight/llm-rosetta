@@ -377,7 +377,7 @@ class GoogleGenAIConverter(BaseConverter):
         if "thinking_config" in config or "thinkingConfig" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
-        return cast(IRRequest, ir_request)
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,
@@ -456,7 +456,7 @@ class GoogleGenAIConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        return cast(IRResponse, ir_response)
+        return self._validate_ir_response(ir_response)
 
     def response_to_provider(
         self,

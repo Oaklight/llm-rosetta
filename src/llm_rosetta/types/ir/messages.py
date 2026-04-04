@@ -6,12 +6,12 @@ IR message type definitions with independent role TypedDicts
 """
 
 import sys
-from typing import Any, Literal, TypedDict, Union
+from typing import Any, Literal, Union
 
 if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
+    from typing import NotRequired, Required, TypedDict
 else:
-    from typing_extensions import NotRequired, Required
+    from typing_extensions import NotRequired, Required, TypedDict
 
 from .parts import (
     AssistantContentPart,
