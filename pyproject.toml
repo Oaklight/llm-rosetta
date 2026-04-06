@@ -11,17 +11,17 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 keywords = [
-    "llm",
     "openai",
     "anthropic",
     "gemini",
+    "google-genai",
     "api-adapter",
     "llm-gateway",
-    "ai",
-    "streaming",
-    "generative-ai",
-    "type-safe",
     "llmir",
+    "streaming",
+    "tool-calling",
+    "multi-provider",
+    "responses-api",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
