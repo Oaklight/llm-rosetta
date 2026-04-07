@@ -738,7 +738,7 @@ class TestMultimodalToolResultPacking:
                 ],
             },
         ]
-        ir_msgs = self.message_ops.p_messages_to_ir(provider_msgs)
+        ir_msgs = cast(list[Message], self.message_ops.p_messages_to_ir(provider_msgs))
 
         # Should have: user, assistant, tool — synthetic user removed
         roles = [m["role"] for m in ir_msgs]
@@ -756,11 +756,11 @@ class TestMultimodalToolResultPacking:
             {"role": "user", "content": "Hello, how are you?"},
             {"role": "assistant", "content": "I'm fine!"},
         ]
-        ir_msgs = self.message_ops.p_messages_to_ir(provider_msgs)
+        ir_msgs = cast(list[Message], self.message_ops.p_messages_to_ir(provider_msgs))
 
         assert len(ir_msgs) == 2
         assert ir_msgs[0]["role"] == "user"
-        assert ir_msgs[0]["content"][0]["text"] == "Hello, how are you?"
+        assert cast(dict, ir_msgs[0]["content"][0])["text"] == "Hello, how are you?"
 
     # ==================== Roundtrip Tests ====================
 
@@ -776,11 +776,11 @@ class TestMultimodalToolResultPacking:
         )
         ir_msgs = self._make_ir_conversation([tr])
         provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
-        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+        restored = cast(list[Message], self.message_ops.p_messages_to_ir(provider_msgs))
 
         # Find the tool message
         tool_msg = [m for m in restored if m["role"] == "tool"][0]
-        result = tool_msg["content"][0]["result"]
+        result = tool_msg["content"][0]["result"]  # type: ignore[typeddict-item]
         assert isinstance(result, list)
         assert len(result) == 2
         assert result[0]["type"] == "text"
@@ -796,10 +796,10 @@ class TestMultimodalToolResultPacking:
         )
         ir_msgs = self._make_ir_conversation([tr])
         provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
-        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+        restored = cast(list[Message], self.message_ops.p_messages_to_ir(provider_msgs))
 
         tool_msg = [m for m in restored if m["role"] == "tool"][0]
-        result = tool_msg["content"][0]["result"]
+        result = tool_msg["content"][0]["result"]  # type: ignore[typeddict-item]
         assert result == "just text"
 
     def test_roundtrip_mixed_tools(self):
@@ -818,21 +818,25 @@ class TestMultimodalToolResultPacking:
         )
         ir_msgs = self._make_ir_conversation([tr_text, tr_img])
         provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
-        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+        restored = cast(list[Message], self.message_ops.p_messages_to_ir(provider_msgs))
 
         tool_msgs = [m for m in restored if m["role"] == "tool"]
         # Text tool result preserved as string
         text_tr = [
-            m for m in tool_msgs if m["content"][0]["tool_call_id"] == "call_m1"
+            m
+            for m in tool_msgs
+            if m["content"][0]["tool_call_id"] == "call_m1"  # type: ignore[typeddict-item]
         ][0]
-        assert isinstance(text_tr["content"][0]["result"], str)
+        assert isinstance(text_tr["content"][0]["result"], str)  # type: ignore[typeddict-item]
 
         # Image tool result preserved as list with ImagePart
-        img_tr = [m for m in tool_msgs if m["content"][0]["tool_call_id"] == "call_m2"][
-            0
-        ]
-        assert isinstance(img_tr["content"][0]["result"], list)
-        assert img_tr["content"][0]["result"][0]["type"] == "image"
+        img_tr = [
+            m
+            for m in tool_msgs
+            if m["content"][0]["tool_call_id"] == "call_m2"  # type: ignore[typeddict-item]
+        ][0]
+        assert isinstance(img_tr["content"][0]["result"], list)  # type: ignore[typeddict-item]
+        assert img_tr["content"][0]["result"][0]["type"] == "image"  # type: ignore[typeddict-item]
 
     # ==================== Detection & Edge Cases ====================
 
