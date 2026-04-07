@@ -83,7 +83,7 @@ def _p_block_to_ir(
 ) -> dict[str, Any] | None:
     """Convert a single provider content block to IR format."""
     if isinstance(block, str):
-        return dict(content_ops_class.p_text_to_ir(block))
+        return {**content_ops_class.p_text_to_ir(block)}
 
     if not isinstance(block, dict):
         return block
@@ -92,19 +92,19 @@ def _p_block_to_ir(
 
     # Text
     if block_type in _PROVIDER_TEXT_TYPES:
-        return dict(content_ops_class.p_text_to_ir(block))
+        return {**content_ops_class.p_text_to_ir(block)}
 
     # Image
     if block_type in _PROVIDER_IMAGE_TYPES:
-        return dict(content_ops_class.p_image_to_ir(block))
+        return {**content_ops_class.p_image_to_ir(block)}
 
     # File / Document
     if block_type in _PROVIDER_FILE_TYPES:
-        return dict(content_ops_class.p_file_to_ir(block))
+        return {**content_ops_class.p_file_to_ir(block)}
 
     # Google-style inline data (no "type" field, uses "inlineData" key)
     if "inlineData" in block or "inline_data" in block:
-        return dict(content_ops_class.p_image_to_ir(block))
+        return {**content_ops_class.p_image_to_ir(block)}
 
     # Unknown — pass through as-is
     logger.debug("Unknown content block type in tool result: %s", block_type)
@@ -117,7 +117,7 @@ def _ir_block_to_p(
 ) -> dict[str, Any] | None:
     """Convert a single IR content block to provider format."""
     if isinstance(block, str):
-        return dict(content_ops_class.ir_text_to_p({"type": "text", "text": block}))
+        return {**content_ops_class.ir_text_to_p({"type": "text", "text": block})}
 
     if not isinstance(block, dict):
         return block
@@ -127,13 +127,13 @@ def _ir_block_to_p(
     # IR text
     if block_type in _IR_TEXT_TYPES:
         result = content_ops_class.ir_text_to_p(block)
-        return dict(result) if result is not None else None
+        return {**result} if result is not None else None
 
     # IR image
     if block_type in _IR_IMAGE_TYPES:
         try:
             result = content_ops_class.ir_image_to_p(block)
-            return dict(result) if result is not None else None
+            return {**result} if result is not None else None
         except (ValueError, KeyError):
             logger.warning("Failed to convert IR image block: %s", block)
             return None
@@ -142,7 +142,7 @@ def _ir_block_to_p(
     if block_type in _IR_FILE_TYPES:
         try:
             result = content_ops_class.ir_file_to_p(block)
-            return dict(result) if result is not None else None
+            return {**result} if result is not None else None
         except (ValueError, KeyError):
             logger.warning("Failed to convert IR file block: %s", block)
             return None
