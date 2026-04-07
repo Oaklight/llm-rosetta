@@ -5,7 +5,10 @@ OpenAI Chat MessageOps unit tests.
 from typing import Any, Union, cast
 
 from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llm_rosetta.converters.openai_chat.message_ops import OpenAIChatMessageOps
+from llm_rosetta.converters.openai_chat.message_ops import (
+    OpenAIChatMessageOps,
+    _has_multimodal_content,
+)
 from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions import ExtensionItem
@@ -528,3 +531,377 @@ class TestOpenAIChatMessageOps:
         assert restored[1]["content"][0]["text"] == "Hello"
         assert restored[2]["role"] == "assistant"
         assert restored[2]["content"][0]["text"] == "Hi!"
+
+
+class TestMultimodalToolResultPacking:
+    """Tests for Phase 2 multimodal tool result dual encoding (packing/unpacking)."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.content_ops = OpenAIChatContentOps()
+        self.tool_ops = OpenAIChatToolOps()
+        self.message_ops = OpenAIChatMessageOps(self.content_ops, self.tool_ops)
+
+    # --- Helper builders ---
+
+    @staticmethod
+    def _make_ir_conversation(
+        tool_results: list[ToolResultPart],
+    ) -> list[Message]:
+        """Build a minimal IR conversation with an assistant tool_calls + tool results.
+
+        Creates: [user "run tools"] → [assistant with tool_calls] → [tool results].
+        """
+        tool_calls = [
+            ToolCallPart(
+                type="tool_call",
+                tool_call_id=tr["tool_call_id"],
+                tool_name=f"fn_{tr['tool_call_id']}",
+                tool_input={},
+                tool_type="function",
+            )
+            for tr in tool_results
+        ]
+        return cast(
+            list[Message],
+            [
+                {"role": "user", "content": [{"type": "text", "text": "run tools"}]},
+                {"role": "assistant", "content": tool_calls},
+                {"role": "tool", "content": list(tool_results)},
+            ],
+        )
+
+    # ==================== Packing Tests ====================
+
+    def test_text_only_no_packing(self):
+        """Text-only tool result → no synthetic user message."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_1",
+            result="plain text result",
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, warnings = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        # Should be: user, assistant, tool — no synthetic user msg
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool"]
+        assert result[2]["content"] == "plain text result"
+
+    def test_image_only_packing(self):
+        """Image-only tool result → json.dumps in tool msg + synthetic user msg."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_img",
+            result=[
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool", "user"]
+
+        # Tool message has json.dumps fallback
+        import json
+
+        tool_content = json.loads(result[2]["content"])
+        assert tool_content[0]["type"] == "image"
+
+        # Synthetic user message has tagged image_url
+        synthetic = result[3]
+        parts = synthetic["content"]
+        assert parts[0]["type"] == "text"
+        assert '<tool-content call-id="call_img">' in parts[0]["text"]
+        assert any(p["type"] == "image_url" for p in parts)
+        assert parts[-1]["type"] == "text"
+        assert parts[-1]["text"] == "</tool-content>"
+
+    def test_mixed_text_image_packing(self):
+        """Text+image tool result → both packed in synthetic user msg."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_mix",
+            result=[
+                {"type": "text", "text": "Here is the chart:"},
+                {"type": "image", "image_url": "https://example.com/img.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool", "user"]
+
+        synthetic = result[3]["content"]
+        # open tag, text, image_url, close tag
+        assert len(synthetic) == 4
+        assert synthetic[0]["text"].startswith("<tool-content")
+        assert synthetic[1]["type"] == "text"
+        assert synthetic[1]["text"] == "Here is the chart:"
+        assert synthetic[2]["type"] == "image_url"
+        assert synthetic[3]["text"] == "</tool-content>"
+
+    def test_multiple_tools_partial_packing(self):
+        """Two tools: one text-only, one image → only image tool gets packed."""
+        tr_text = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_t",
+            result="just text",
+        )
+        tr_img = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_i",
+            result=[{"type": "image", "image_url": "https://example.com/x.png"}],
+        )
+        ir_msgs = self._make_ir_conversation([tr_text, tr_img])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        roles = [m["role"] for m in result]
+        # user, assistant, tool(text), tool(img), user(synthetic)
+        assert roles == ["user", "assistant", "tool", "tool", "user"]
+
+        # Only one <tool-content> section in synthetic msg
+        synthetic = result[4]["content"]
+        open_tags = [
+            p
+            for p in synthetic
+            if p.get("type") == "text" and "<tool-content" in p.get("text", "")
+        ]
+        assert len(open_tags) == 1
+        assert 'call-id="call_i"' in open_tags[0]["text"]
+
+    def test_multiple_multimodal_one_user_msg(self):
+        """Two multimodal tools → one synthetic user msg with two sections."""
+        tr_a = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_a",
+            result=[{"type": "image", "image_url": "https://example.com/a.png"}],
+        )
+        tr_b = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_b",
+            result=[{"type": "image", "image_url": "https://example.com/b.png"}],
+        )
+        ir_msgs = self._make_ir_conversation([tr_a, tr_b])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool", "tool", "user"]
+
+        synthetic = result[4]["content"]
+        open_tags = [
+            p
+            for p in synthetic
+            if p.get("type") == "text" and "<tool-content" in p.get("text", "")
+        ]
+        assert len(open_tags) == 2
+        close_tags = [
+            p
+            for p in synthetic
+            if p.get("type") == "text" and p.get("text") == "</tool-content>"
+        ]
+        assert len(close_tags) == 2
+
+    # ==================== Unpacking Tests ====================
+
+    def test_unpack_synthetic_user_message(self):
+        """Provider messages with synthetic msg → IR tool result recovers multimodal."""
+        provider_msgs = [
+            {"role": "user", "content": "run tools"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_u1",
+                        "type": "function",
+                        "function": {"name": "plot", "arguments": "{}"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_u1",
+                "content": '[{"type":"image","image_url":"https://example.com/plot.png"}]',
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": '<tool-content call-id="call_u1">'},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "https://example.com/plot.png"},
+                    },
+                    {"type": "text", "text": "</tool-content>"},
+                ],
+            },
+        ]
+        ir_msgs = self.message_ops.p_messages_to_ir(provider_msgs)
+
+        # Should have: user, assistant, tool — synthetic user removed
+        roles = [m["role"] for m in ir_msgs]
+        assert roles == ["user", "assistant", "tool"]
+
+        # Tool result should have multimodal content (from synthetic msg)
+        tool_result = ir_msgs[2]["content"][0]
+        assert tool_result["type"] == "tool_result"
+        assert isinstance(tool_result["result"], list)
+        assert tool_result["result"][0]["type"] == "image"
+
+    def test_unpack_preserves_normal_user(self):
+        """Normal user message is not affected by unpacking."""
+        provider_msgs = [
+            {"role": "user", "content": "Hello, how are you?"},
+            {"role": "assistant", "content": "I'm fine!"},
+        ]
+        ir_msgs = self.message_ops.p_messages_to_ir(provider_msgs)
+
+        assert len(ir_msgs) == 2
+        assert ir_msgs[0]["role"] == "user"
+        assert ir_msgs[0]["content"][0]["text"] == "Hello, how are you?"
+
+    # ==================== Roundtrip Tests ====================
+
+    def test_roundtrip_multimodal(self):
+        """IR → Chat → IR roundtrip preserves image content."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_rt",
+            result=[
+                {"type": "text", "text": "chart output:"},
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+
+        # Find the tool message
+        tool_msg = [m for m in restored if m["role"] == "tool"][0]
+        result = tool_msg["content"][0]["result"]
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "text"
+        assert result[0]["text"] == "chart output:"
+        assert result[1]["type"] == "image"
+
+    def test_roundtrip_text_only(self):
+        """IR → Chat → IR roundtrip for text-only (no packing occurs)."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_txt",
+            result="just text",
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+
+        tool_msg = [m for m in restored if m["role"] == "tool"][0]
+        result = tool_msg["content"][0]["result"]
+        assert result == "just text"
+
+    def test_roundtrip_mixed_tools(self):
+        """IR → Chat → IR with mixed text/multimodal tools."""
+        tr_text = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_m1",
+            result="plain result",
+        )
+        tr_img = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_m2",
+            result=[
+                {"type": "image", "image_url": "https://example.com/img.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr_text, tr_img])
+        provider_msgs, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+        restored = self.message_ops.p_messages_to_ir(provider_msgs)
+
+        tool_msgs = [m for m in restored if m["role"] == "tool"]
+        # Text tool result preserved as string
+        text_tr = [
+            m for m in tool_msgs if m["content"][0]["tool_call_id"] == "call_m1"
+        ][0]
+        assert isinstance(text_tr["content"][0]["result"], str)
+
+        # Image tool result preserved as list with ImagePart
+        img_tr = [m for m in tool_msgs if m["content"][0]["tool_call_id"] == "call_m2"][
+            0
+        ]
+        assert isinstance(img_tr["content"][0]["result"], list)
+        assert img_tr["content"][0]["result"][0]["type"] == "image"
+
+    # ==================== Detection & Edge Cases ====================
+
+    def test_is_synthetic_detection(self):
+        """_is_synthetic_tool_content_msg correctly identifies synthetic vs normal."""
+        synthetic = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": '<tool-content call-id="call_1">'},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "https://example.com/x.png"},
+                },
+                {"type": "text", "text": "</tool-content>"},
+            ],
+        }
+        normal_user = {"role": "user", "content": "Hello!"}
+        normal_user_list = {
+            "role": "user",
+            "content": [{"type": "text", "text": "Hello!"}],
+        }
+        assistant = {"role": "assistant", "content": "Hi!"}
+
+        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(synthetic) is True
+        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(normal_user) is False
+        assert (
+            OpenAIChatMessageOps._is_synthetic_tool_content_msg(normal_user_list)
+            is False
+        )
+        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(assistant) is False
+
+    def test_file_part_skipped_with_warning(self):
+        """File parts in multimodal tool result produce warning, skipped during packing."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_f",
+            result=[
+                {"type": "text", "text": "some data"},
+                {
+                    "type": "file",
+                    "file_data": {"data": "abc", "media_type": "text/plain"},
+                },
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, warnings = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        # Should still pack (text part survives)
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool", "user"]
+        assert any("File content not supported" in w for w in warnings)
+
+        # Synthetic msg should have text but not file
+        synthetic = result[3]["content"]
+        types = [p["type"] for p in synthetic]
+        assert "text" in types
+        # No file-related part type in synthetic
+        assert "file" not in types
+
+    def test_has_multimodal_content_helper(self):
+        """_has_multimodal_content correctly detects multimodal vs text-only."""
+        assert _has_multimodal_content("just a string") is False
+        assert _has_multimodal_content([{"type": "text", "text": "hi"}]) is False
+        assert _has_multimodal_content([{"type": "image", "image_url": "x"}]) is True
+        assert (
+            _has_multimodal_content(
+                [{"type": "text", "text": "hi"}, {"type": "image", "image_url": "x"}]
+            )
+            is True
+        )
+        assert _has_multimodal_content([]) is False
+        assert _has_multimodal_content(None) is False
