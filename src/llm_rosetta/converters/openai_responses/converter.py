@@ -880,6 +880,10 @@ class OpenAIResponsesConverter(BaseConverter):
         and ``FinishEvent`` merges any pending usage into its
         ``response.completed`` output.
 
+        If a base ``StreamContext`` is passed, it is automatically upgraded
+        to ``OpenAIResponsesStreamContext`` (preserving existing state) so
+        that callers do not need to know about the provider-specific subclass.
+
         Args:
             event: IR stream event.
             context: Optional stream context for stateful conversions.
@@ -887,6 +891,12 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             OpenAI Responses SSE event dict, or a list of dicts.
         """
+        # Auto-upgrade base StreamContext to the provider-specific subclass
+        if context is not None and not isinstance(
+            context, OpenAIResponsesStreamContext
+        ):
+            context = OpenAIResponsesStreamContext.from_base(context)
+
         handler_name = self._TO_P_DISPATCH.get(event["type"])
         if handler_name is not None:
             return getattr(self, handler_name)(event, context)
