@@ -18,6 +18,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **运行时 IR 验证（零依赖内嵌验证器）** (#91)：`validate_ir_request()`、`validate_ir_response()` 和 `validate_ir_messages()` 工具函数，在运行时对 IR 结构进行 TypedDict 定义验证。4 个转换器的 `request_from_provider()` 和 `response_from_provider()` 现自动验证输出。替代手动 `BaseMessageOps.validate_messages` 实现。包含 Python <3.11 的 `typing_extensions.TypedDict` 兼容修复
 - **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
 - **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
+- **转换管线 `ConversionContext` 基类** (#106, PR #111)：新增 `ConversionContext` 数据类，包含 `warnings: list[str]`、`options: dict[str, Any]` 和 `metadata: dict[str, Any]`——为非流式转换提供结构化上下文容器。新增 `BaseConverter.create_conversion_context(**options)` 工厂方法，与已有的 `create_stream_context()` 对称。全部 6 个 `BaseConverter` 非流式方法现在接受可选的 `context: ConversionContext` 关键字参数；各转换器实现将警告同步到 `context.warnings`。网关代理为每个请求创建共享 context 并沿完整的 source→IR→target→response 管线传递
 
 ### 修复
 
@@ -36,6 +37,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **合并重复的 IR 概念** (#69)：移除 `GenerationConfig` 中的 `candidate_count`——改用 `n`（Google GenAI 转换器内部映射 `n` ↔ `candidate_count`）。`system_instruction` 类型从 `str | list[dict]` 统一为 `str`
 - **规范化 `ImagePart`、`FilePart`、`AudioPart` 为标准形式** (#68)：每种 Part 现在恰好有两种标准形式——URL 引用 + 结构化内联数据（如 `image_data`）——加上统一的 `provider_ref: dict[str, Any]` 用于提供商特定引用。移除冗余的顶层 `data`/`media_type` 字段，`file_id`/`audio_id` 替换为 `provider_ref`
 - **IR 类型字段从 `Iterable` 改为 `list`；函数参数改为 `Sequence`** (#67)：TypedDict 字段使用 `list` 以支持索引和序列化；函数参数使用 `Sequence`（协变、只读）。同时修复 `strip_orphaned_tool_config` 中 `any()` 消耗单次迭代器的潜在 bug
+- **`StreamContext` 继承自 `ConversionContext`** (#106, PR #111)：`StreamContext` 现为 `ConversionContext` 的子类（IS-A 关系），统一流式与非流式路径的上下文模型。文件重命名：`base/stream_context.py` → `base/context.py`
 - **`StreamContext` 转为 dataclass 并引入提供商子类** (#65)：`StreamContext` 现为 `@dataclass`（消除防御性 `getattr`/`hasattr` 模式）。OpenAI Responses 特有状态提取至 `OpenAIResponsesStreamContext` 子类。新增 `BaseConverter.create_stream_context()` 工厂方法
 
 ### 重构
