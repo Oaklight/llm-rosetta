@@ -8,7 +8,7 @@ IR helper functions for processing IR messages and content
 from typing import Any, cast
 
 from .messages import Message, ToolMessage, create_tool_message
-from .parts import TextPart, ToolCallPart
+from .parts import ReasoningPart, TextPart, ToolCallPart
 from .type_guards import is_part_type
 
 # ============================================================================
@@ -32,6 +32,31 @@ def extract_text_content(message: Message) -> str:
             text = part.get("text", "")
             if text is not None:  # 确保text不是None Ensure text is not None
                 texts.append(str(text))
+    return "".join(texts)
+
+
+def extract_all_text(message: Message) -> str:
+    """Extract text from both TextPart and ReasoningPart content.
+
+    Useful for thinking models (e.g. gemini-2.5-flash) that may place the
+    answer inside reasoning parts rather than text parts.
+
+    Args:
+        message: IR format message.
+
+    Returns:
+        Concatenated text from all text and reasoning parts.
+    """
+    texts = []
+    for part in message.get("content", []):
+        if is_part_type(part, TextPart):
+            text = part.get("text", "")
+            if text is not None:
+                texts.append(str(text))
+        elif is_part_type(part, ReasoningPart):
+            reasoning = part.get("reasoning", "")
+            if reasoning is not None:
+                texts.append(str(reasoning))
     return "".join(texts)
 
 
@@ -103,6 +128,7 @@ def create_tool_result_message(
 __all__ = [
     # 内容提取函数 Content extraction functions
     "extract_text_content",
+    "extract_all_text",
     "extract_tool_calls",
     # 消息创建函数 Message creation functions
     "create_tool_result_message",

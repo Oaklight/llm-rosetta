@@ -52,6 +52,7 @@ from .extensions import (
 # 辅助函数 Helper functions
 from .helpers import (
     create_tool_result_message,
+    extract_all_text,
     extract_text_content,
     extract_tool_calls,
 )
@@ -283,6 +284,7 @@ __all__ = [
     "IRInputSimple",
     # ========== 辅助函数 Helper functions ==========
     "extract_text_content",
+    "extract_all_text",
     "extract_tool_calls",
     "create_tool_result_message",
     # ========== 验证工具 Validation utilities ==========

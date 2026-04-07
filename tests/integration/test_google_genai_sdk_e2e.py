@@ -29,13 +29,20 @@ from google.genai import types
 
 from typing import Any, cast
 
-from examples.tools import available_tools, tools_spec
+from examples.tools import (
+    available_tools,
+    generate_chart,
+    multimodal_tools_spec,
+    tools_spec,
+)
 from llm_rosetta.converters.google_genai import GoogleGenAIConverter
 from llm_rosetta.types.ir import (
     IRRequest,
+    Message,
     ToolCallPart,
     ToolDefinition,
     create_tool_result_message,
+    extract_all_text,
     extract_text_content,
     extract_tool_calls,
 )
@@ -45,6 +52,14 @@ dotenv.load_dotenv(override=True)
 # ============================================================================
 # Setup
 # ============================================================================
+
+IMAGE_URL = (
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/"
+    "La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg/"
+    "3840px-La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg"
+)
 
 google_model = os.getenv("GOOGLE_MODEL", "gemini-2.0-flash")
 google_api_key = os.getenv("GOOGLE_API_KEY")
@@ -74,6 +89,12 @@ def ok(name: str) -> None:
 
 def fail(name: str, err: str) -> None:
     print(f"  ✗ FAIL: {name} — {err}")
+
+
+def get_text(msg: Message) -> str:
+    """Extract text from message, falling back to reasoning content for thinking models."""
+    text = extract_text_content(msg)
+    return text if text else extract_all_text(msg)
 
 
 def execute_tool(tc: ToolCallPart) -> str:
@@ -242,7 +263,7 @@ def test_non_stream_basic():
     assert len(ir_response["choices"]) >= 1
 
     msg = ir_response["choices"][0]["message"]
-    text = extract_text_content(msg)
+    text = get_text(msg)
     print(f"  Response text: {text}")
     assert "4" in text
 
@@ -325,6 +346,7 @@ def test_non_stream_tool_calls():
             tool_result_msg,
         ],
         "tools": cast(list[ToolDefinition], tools_spec),
+        "tool_choice": {"mode": "none"},
     }
 
     provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
@@ -341,7 +363,7 @@ def test_non_stream_tool_calls():
     ir_response_r2 = converter.response_from_provider(cast(dict[str, Any], response_r2))
 
     final_msg = ir_response_r2["choices"][0]["message"]
-    final_text = extract_text_content(final_msg)
+    final_text = get_text(final_msg)
     print(f"  Final response: {final_text[:120]}...")
     assert len(final_text) > 5
 
@@ -441,13 +463,212 @@ def test_response_round_trip():
 
 
 # ============================================================================
-# Test 5: Multi-turn conversation
+# Test 5: Multimodal tool result
+# ============================================================================
+
+
+def test_multimodal_tool_result():
+    """Test tool returning multimodal content (text + image)."""
+    section("Test 5: Multimodal tool result")
+
+    ir_request: IRRequest = {
+        "model": google_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Generate a bar chart for me."},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+        "tool_choice": {"mode": "tool", "tool_name": "generate_chart"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Round 1 warnings: {warnings}")
+
+    sdk_contents = build_sdk_contents(provider_req)
+    sdk_config = build_sdk_config(provider_req)
+
+    response = client.models.generate_content(
+        model=google_model,
+        contents=sdk_contents,
+        config=sdk_config,
+    )
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = get_text(assistant_msg)
+    print(f"  Tool calls: {len(tool_calls)}")
+
+    if tool_calls:
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+        assert tc["tool_name"] == "generate_chart"
+
+        result = generate_chart(**tc["tool_input"])
+        print(f"  Tool result type: {type(result).__name__}, length: {len(result)}")
+
+        tool_result_msg = create_tool_result_message(tc["tool_call_id"], result)
+
+        ir_request_r2: IRRequest = {
+            "model": google_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Generate a bar chart for me."},
+                    ],
+                },
+                assistant_msg,
+                tool_result_msg,
+            ],
+            "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+            "tool_choice": {"mode": "none"},
+        }
+
+        provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
+        print(f"  Round 2 warnings: {warnings_r2}")
+
+        sdk_contents_r2 = build_sdk_contents(provider_req_r2)
+        sdk_config_r2 = build_sdk_config(provider_req_r2)
+
+        response_r2 = client.models.generate_content(
+            model=google_model,
+            contents=sdk_contents_r2,
+            config=sdk_config_r2,
+        )
+        ir_response_r2 = converter.response_from_provider(
+            cast(dict[str, Any], response_r2)
+        )
+
+        final_text = get_text(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(
+            f"  Model ignored forced tool_choice, responded with text: {text[:120]}..."
+        )
+        assert len(text) > 5
+
+    ok("Multimodal tool result")
+    return True
+
+
+# ============================================================================
+# Test 6: Image input with tool calls
+# ============================================================================
+
+
+def test_image_with_tool_calls():
+    """Test image input combined with tool call capability."""
+    section("Test 6: Image input with tool calls")
+
+    ir_request: IRRequest = {
+        "model": google_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "This painting depicts a famous scene in Paris, France. "
+                            "What is the current weather in Paris?"
+                        ),
+                    },
+                    {"type": "image", "image_url": IMAGE_URL},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], tools_spec),
+        "tool_choice": {"mode": "auto"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Warnings: {warnings}")
+
+    sdk_contents = build_sdk_contents(provider_req)
+    sdk_config = build_sdk_config(provider_req)
+
+    response = client.models.generate_content(
+        model=google_model,
+        contents=sdk_contents,
+        config=sdk_config,
+    )
+    ir_response = converter.response_from_provider(cast(dict[str, Any], response))
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = get_text(assistant_msg)
+
+    if tool_calls:
+        print(f"  Tool calls: {len(tool_calls)}")
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+
+        result = execute_tool(tc)
+        tool_result_msg = create_tool_result_message(tc["tool_call_id"], result)
+
+        ir_request_r2: IRRequest = {
+            "model": google_model,
+            "messages": cast(
+                list[Message],
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "This painting depicts a famous scene in Paris. "
+                                    "What is the current weather in Paris?"
+                                ),
+                            },
+                            {"type": "image", "image_url": IMAGE_URL},
+                        ],
+                    },
+                    assistant_msg,
+                    tool_result_msg,
+                ],
+            ),
+            "tools": cast(list[ToolDefinition], tools_spec),
+            "tool_choice": {"mode": "none"},
+        }
+
+        provider_req_r2, _ = converter.request_to_provider(ir_request_r2)
+        sdk_contents_r2 = build_sdk_contents(provider_req_r2)
+        sdk_config_r2 = build_sdk_config(provider_req_r2)
+
+        response_r2 = client.models.generate_content(
+            model=google_model,
+            contents=sdk_contents_r2,
+            config=sdk_config_r2,
+        )
+        ir_response_r2 = converter.response_from_provider(
+            cast(dict[str, Any], response_r2)
+        )
+        final_text = get_text(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(f"  Model responded with text (no tool call): {text[:120]}...")
+        assert len(text) > 5
+
+    ok("Image input with tool calls")
+    return True
+
+
+# ============================================================================
+# Test 7: Multi-turn conversation
 # ============================================================================
 
 
 def test_multi_turn():
     """Test multi-turn conversation flow."""
-    section("Test 5: Multi-turn conversation")
+    section("Test 7: Multi-turn conversation")
 
     # Turn 1
     ir_request: IRRequest = {
@@ -472,7 +693,7 @@ def test_multi_turn():
     )
     ir_response = converter.response_from_provider(cast(dict[str, Any], response))
     assistant_msg_1 = ir_response["choices"][0]["message"]
-    text_1 = extract_text_content(assistant_msg_1)
+    text_1 = get_text(assistant_msg_1)
     print(f"  Turn 1 response: {text_1[:80]}...")
 
     # Turn 2
@@ -502,7 +723,7 @@ def test_multi_turn():
         config=sdk_config_2,
     )
     ir_response_2 = converter.response_from_provider(cast(dict[str, Any], response_2))
-    text_2 = extract_text_content(ir_response_2["choices"][0]["message"])
+    text_2 = get_text(ir_response_2["choices"][0]["message"])
     print(f"  Turn 2 response: {text_2[:80]}...")
     assert "alice" in text_2.lower()
 
@@ -523,6 +744,8 @@ def run_all():
     tests = [
         ("Non-stream basic text", test_non_stream_basic),
         ("Non-stream with tool calls", test_non_stream_tool_calls),
+        ("Multimodal tool result", test_multimodal_tool_result),
+        ("Image with tool calls", test_image_with_tool_calls),
         ("Request round-trip", test_request_round_trip),
         ("Response round-trip", test_response_round_trip),
         ("Multi-turn conversation", test_multi_turn),

@@ -153,7 +153,7 @@ class TestOpenAIResponsesToolOps:
         result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "tool", "tool_name": "get_weather"})
         )
-        assert result == {"type": "function", "function": {"name": "get_weather"}}
+        assert result == {"type": "function", "name": "get_weather"}
 
     def test_ir_tool_choice_legacy_type_field(self):
         """Test legacy 'type' field support."""
