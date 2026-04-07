@@ -33,6 +33,36 @@ class OpenAIResponsesStreamContext(StreamContext):
     accumulated_text: str = ""
     content_part_done_emitted: bool = False
 
+    @classmethod
+    def from_base(cls, base: StreamContext) -> OpenAIResponsesStreamContext:
+        """Create from a base StreamContext, preserving existing state.
+
+        Args:
+            base: The base StreamContext whose state should be carried over.
+
+        Returns:
+            A new OpenAIResponsesStreamContext with the base state copied.
+        """
+        ctx = cls()
+        # Copy base StreamContext fields
+        ctx.warnings = base.warnings
+        ctx.options = base.options
+        ctx.metadata = base.metadata
+        ctx.response_id = base.response_id
+        ctx.model = base.model
+        ctx.created = base.created
+        ctx.current_block_index = base.current_block_index
+        ctx.tool_call_id_map = base.tool_call_id_map
+        ctx.tool_call_item_id_map = base.tool_call_item_id_map
+        ctx.pending_usage = base.pending_usage
+        ctx.pending_finish = base.pending_finish
+        ctx.pending_response = base.pending_response
+        ctx._started = base._started
+        ctx._ended = base._ended
+        ctx._tool_call_args = base._tool_call_args
+        ctx._tool_call_order = base._tool_call_order
+        return ctx
+
     def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
         """Register tool call item with reverse item_id mapping.
 
