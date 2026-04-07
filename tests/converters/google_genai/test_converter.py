@@ -334,6 +334,18 @@ class TestGoogleGenAIConverter:
         )
         assert ir_request["model"] == "gemini-2.0-flash"
 
+    def test_request_from_provider_malformed_tool_raises_with_context(self):
+        """Test that malformed tools raise clear errors with tool type/name context."""
+        provider_request = {
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+            "config": {
+                "tools": [42],  # non-dict tool triggers conversion error
+            },
+        }
+        with pytest.raises(ValueError, match=r"Unsupported tool"):
+            self.converter.request_from_provider(provider_request)
+
     # ==================== response_from_provider ====================
 
     def test_response_from_provider_basic(self):

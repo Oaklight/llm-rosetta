@@ -221,9 +221,23 @@ class AnthropicConverter(BaseConverter):
         # 3. Tools
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = [
-                self.tool_ops.p_tool_definition_to_ir(t) for t in tools
-            ]
+            ir_tools = []
+            for t in tools:
+                try:
+                    ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+                except Exception as e:
+                    tool_type = (
+                        t.get("type", "unknown")
+                        if isinstance(t, dict)
+                        else type(t).__name__
+                    )
+                    tool_name = (
+                        t.get("name", "unnamed") if isinstance(t, dict) else str(t)
+                    )
+                    raise ValueError(
+                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                    ) from e
+            ir_request["tools"] = ir_tools
 
         # 4. Tool choice
         tool_choice = provider_request.get("tool_choice")

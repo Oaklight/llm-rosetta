@@ -332,7 +332,20 @@ class GoogleGenAIConverter(BaseConverter):
         if tools:
             ir_tools: list = []
             for t in tools:
-                result = self.tool_ops.p_tool_definition_to_ir(t)
+                try:
+                    result = self.tool_ops.p_tool_definition_to_ir(t)
+                except Exception as e:
+                    tool_type = (
+                        t.get("type", "unknown")
+                        if isinstance(t, dict)
+                        else type(t).__name__
+                    )
+                    tool_name = (
+                        t.get("name", "unnamed") if isinstance(t, dict) else str(t)
+                    )
+                    raise ValueError(
+                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                    ) from e
                 if result is None:
                     continue
                 if isinstance(result, list):

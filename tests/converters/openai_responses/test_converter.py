@@ -191,6 +191,16 @@ class TestOpenAIResponsesConverter:
         result = self.converter.request_from_provider(provider_request)
         assert result["response_format"]["type"] == "json_object"
 
+    def test_request_from_provider_malformed_tool_raises_with_context(self):
+        """Test that malformed tools raise clear errors with tool type/name context."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": [],
+            "tools": [42],  # non-dict tool triggers conversion error
+        }
+        with pytest.raises(ValueError, match=r"Unsupported tool"):
+            self.converter.request_from_provider(provider_request)
+
     # ==================== response_from_provider ====================
 
     def test_response_from_provider_basic(self):
