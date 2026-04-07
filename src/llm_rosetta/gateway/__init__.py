@@ -37,5 +37,13 @@ if _missing:
 from .app import create_app  # noqa: E402
 from .cli import main  # noqa: E402
 from .config import GatewayConfig, discover_config, load_config  # noqa: E402
+from .proxy import ProviderMetadataStore  # noqa: E402
 
-__all__ = ["create_app", "main", "GatewayConfig", "discover_config", "load_config"]
+__all__ = [
+    "ProviderMetadataStore",
+    "create_app",
+    "main",
+    "GatewayConfig",
+    "discover_config",
+    "load_config",
+]
