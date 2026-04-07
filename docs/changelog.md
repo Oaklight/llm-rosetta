@@ -22,6 +22,14 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 修复
 
+### 重构
+
+- **Warnings 单源收敛** (#113, PR #115)：4 个转换器的 `request_to_provider` 方法现在统一使用 `ConversionContext` 作为警告的唯一积累点。消除了之前警告同时写入本地列表和 `context.warnings` 的双写模式。返回的 warnings 列表与 `context.warnings` 是同一个对象——不可能产生重复
+- **`ProviderMetadataStore` 替代全局 metadata 缓存** (#112, PR #117)：`proxy.py` 中的模块级 `_provider_metadata_cache` 字典替换为 `ProviderMetadataStore` 类——提供 TTL 过期（30 分钟）、最大容量淘汰（10k 条目）和显式生命周期管理。Store 在 `create_app()` 中按应用创建并通过 `app.state` 传递，消除隐式全局状态变更。`close_clients()` 重命名为 `close_resources()` 以在关闭时同步清理 store
+- **缩减公共 API 导出面** (#114, PR #116)：各转换器包的 `__all__` 导出精简为仅包含主转换器类，移除内部实现细节（`*MessageOps`、`*ContentOps`、`*ConfigOps`、`*ToolOps`、`*Constants`）。内部模块仍可通过显式导入使用，但不再作为公共 API 面推广
+
+### 修复
+
 - **工具转换失败时提供上下文错误信息** (#85, PR #110)：当 `p_tool_definition_to_ir()` 在处理格式错误或不支持的工具定义时失败，`ValueError` 现在包含 `type=` 和 `name=` 上下文信息，帮助用户识别是哪个工具导致了问题。已应用于全部 4 个转换器（OpenAI Chat、OpenAI Responses、Anthropic、Google GenAI），附带单元测试
 - **OpenAI Responses `tool_choice` 格式** (PR #109)：此前使用 Chat Completions 格式（`{"type": "function", "function": {"name": "..."}}`），现在使用 Responses 格式（`{"type": "function", "name": "..."}`）
 - **OpenAI Responses 工具调用 ID 往返** (PR #109)：Responses API 使用 `fc_` 前缀 ID，IR 使用 `call_` 前缀。Responses 的 `id` 现在单独保存在 `provider_metadata` 中（与 `call_id` 分开），实现无损往返转换
