@@ -191,10 +191,8 @@ class TestWarningsSingleSource:
             {
                 "type": "function",
                 "name": "dummy",
-                "function": {
-                    "name": "dummy",
-                    "parameters": {"type": "object", "properties": {}},
-                },
+                "description": "A dummy tool",
+                "parameters": {"type": "object", "properties": {}},
             }
         ]
         ir["tool_config"] = {"max_calls": 5}
