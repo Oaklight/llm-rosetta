@@ -6,7 +6,7 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
-## 未发布
+## v0.3.0 — 2026-04-07
 
 ### 新增
 
@@ -19,14 +19,6 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
 - **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
 - **转换管线 `ConversionContext` 基类** (#106, PR #111)：新增 `ConversionContext` 数据类，包含 `warnings: list[str]`、`options: dict[str, Any]` 和 `metadata: dict[str, Any]`——为非流式转换提供结构化上下文容器。新增 `BaseConverter.create_conversion_context(**options)` 工厂方法，与已有的 `create_stream_context()` 对称。全部 6 个 `BaseConverter` 非流式方法现在接受可选的 `context: ConversionContext` 关键字参数；各转换器实现将警告同步到 `context.warnings`。网关代理为每个请求创建共享 context 并沿完整的 source→IR→target→response 管线传递
-
-### 修复
-
-### 重构
-
-- **Warnings 单源收敛** (#113, PR #115)：4 个转换器的 `request_to_provider` 方法现在统一使用 `ConversionContext` 作为警告的唯一积累点。消除了之前警告同时写入本地列表和 `context.warnings` 的双写模式。返回的 warnings 列表与 `context.warnings` 是同一个对象——不可能产生重复
-- **`ProviderMetadataStore` 替代全局 metadata 缓存** (#112, PR #117)：`proxy.py` 中的模块级 `_provider_metadata_cache` 字典替换为 `ProviderMetadataStore` 类——提供 TTL 过期（30 分钟）、最大容量淘汰（10k 条目）和显式生命周期管理。Store 在 `create_app()` 中按应用创建并通过 `app.state` 传递，消除隐式全局状态变更。`close_clients()` 重命名为 `close_resources()` 以在关闭时同步清理 store
-- **缩减公共 API 导出面** (#114, PR #116)：各转换器包的 `__all__` 导出精简为仅包含主转换器类，移除内部实现细节（`*MessageOps`、`*ContentOps`、`*ConfigOps`、`*ToolOps`、`*Constants`）。内部模块仍可通过显式导入使用，但不再作为公共 API 面推广
 
 ### 修复
 
@@ -50,6 +42,9 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 重构
 
+- **Warnings 单源收敛** (#113, PR #115)：4 个转换器的 `request_to_provider` 方法现在统一使用 `ConversionContext` 作为警告的唯一积累点。消除了之前警告同时写入本地列表和 `context.warnings` 的双写模式。返回的 warnings 列表与 `context.warnings` 是同一个对象——不可能产生重复
+- **`ProviderMetadataStore` 替代全局 metadata 缓存** (#112, PR #117)：`proxy.py` 中的模块级 `_provider_metadata_cache` 字典替换为 `ProviderMetadataStore` 类——提供 TTL 过期（30 分钟）、最大容量淘汰（10k 条目）和显式生命周期管理。Store 在 `create_app()` 中按应用创建并通过 `app.state` 传递，消除隐式全局状态变更。`close_clients()` 重命名为 `close_resources()` 以在关闭时同步清理 store
+- **缩减公共 API 导出面** (#114, PR #116)：各转换器包的 `__all__` 导出精简为仅包含主转换器类，移除内部实现细节（`*MessageOps`、`*ContentOps`、`*ConfigOps`、`*ToolOps`、`*Constants`）。内部模块仍可通过显式导入使用，但不再作为公共 API 面推广
 - **将单体流式方法拆分为事件处理器** (#63)：4 个转换器中 8 个单体 `if`/`elif` 流式方法（约 1,781 行）替换为通过类级处理器表分发的独立处理器方法。公共 API 不变
 - **提取 OpenAI Responses 转换器共享工具函数** (#66)：`resolve_call_id()` 和 `build_message_preamble_events()` 从 `converter.py` 提取至 `utils.py`，附带专用单元测试
 - **提取各提供商常量用于 reason 映射及魔法值** (#64)：4 个转换器中散布的内联 reason 映射字典、SSE 事件类型字符串字面量、status-to-reason 条件逻辑和 ID 生成模式，现已集中到各提供商的 `_constants.py` 模块中。包含 `AnthropicEventType` 和 `ResponsesEventType` 常量类、`REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` 字典，以及 `generate_tool_call_id()` / `generate_message_id()` 辅助函数
