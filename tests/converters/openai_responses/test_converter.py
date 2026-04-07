@@ -424,6 +424,26 @@ class TestOpenAIResponsesConverter:
         result = self.converter.response_from_provider(provider_response)
         assert result["service_tier"] == "default"
 
+    def test_response_from_provider_with_service_tier_none(self):
+        """Test response with service_tier=None does not break validation."""
+        provider_response = {
+            "id": "resp_st_none",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hi"}],
+                }
+            ],
+            "service_tier": None,
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert "service_tier" not in result
+
     # ==================== response_to_provider ====================
 
     def test_response_to_provider_basic(self):

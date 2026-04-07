@@ -382,7 +382,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        if "service_tier" in provider_response:
+        if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
 
         return self._validate_ir_response(ir_response)
