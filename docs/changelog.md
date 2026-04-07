@@ -21,6 +21,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 修复
 
+- **工具转换失败时提供上下文错误信息** (#85, PR #110)：当 `p_tool_definition_to_ir()` 在处理格式错误或不支持的工具定义时失败，`ValueError` 现在包含 `type=` 和 `name=` 上下文信息，帮助用户识别是哪个工具导致了问题。已应用于全部 4 个转换器（OpenAI Chat、OpenAI Responses、Anthropic、Google GenAI），附带单元测试
 - **OpenAI Responses `tool_choice` 格式** (PR #109)：此前使用 Chat Completions 格式（`{"type": "function", "function": {"name": "..."}}`），现在使用 Responses 格式（`{"type": "function", "name": "..."}`）
 - **OpenAI Responses 工具调用 ID 往返** (PR #109)：Responses API 使用 `fc_` 前缀 ID，IR 使用 `call_` 前缀。Responses 的 `id` 现在单独保存在 `provider_metadata` 中（与 `call_id` 分开），实现无损往返转换
 - **OpenAI Responses 推理项往返** (PR #109)：推理模型（如 gpt-5-nano）发出带有 `id`（rs_ 前缀）、结构化 `summary` 数组和 `encrypted_content` 的推理项。这些信息现通过 `provider_metadata` 保留以实现无损往返——修复了推理项缺少原始 `id` 回传时导致的 400 错误
