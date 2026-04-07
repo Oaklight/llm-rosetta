@@ -41,7 +41,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
-from ..base.stream_context import StreamContext
+from ..base.context import ConversionContext, StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
@@ -79,6 +79,8 @@ class AnthropicConverter(BaseConverter):
     def request_to_provider(
         self,
         ir_request: IRRequest,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to Anthropic Messages API request parameters.
@@ -178,11 +180,16 @@ class AnthropicConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
+        if context is not None:
+            context.warnings.extend(warnings)
+
         return result, warnings
 
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRRequest:
         """Convert Anthropic Messages API request to IRRequest.
@@ -272,6 +279,8 @@ class AnthropicConverter(BaseConverter):
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRResponse:
         """Convert Anthropic Messages API response to IRResponse.
@@ -338,6 +347,8 @@ class AnthropicConverter(BaseConverter):
     def response_to_provider(
         self,
         ir_response: IRResponse,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Convert IRResponse to Anthropic Messages API response.
@@ -407,6 +418,8 @@ class AnthropicConverter(BaseConverter):
     def messages_to_provider(
         self,
         messages: Sequence[Message | ExtensionItem],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Anthropic message format.
@@ -424,6 +437,8 @@ class AnthropicConverter(BaseConverter):
     def messages_from_provider(
         self,
         provider_messages: list[Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> list[Message | ExtensionItem]:
         """Convert Anthropic messages to IR message list.

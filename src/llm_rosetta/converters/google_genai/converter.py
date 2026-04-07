@@ -47,7 +47,7 @@ from ...types.ir.stream import (
     UsageEvent,
 )
 from ..base import BaseConverter
-from ..base.stream_context import StreamContext
+from ..base.context import ConversionContext, StreamContext
 from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
@@ -168,6 +168,8 @@ class GoogleGenAIConverter(BaseConverter):
     def request_to_provider(
         self,
         ir_request: IRRequest,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[dict[str, Any], list[str]]:
         """Convert IRRequest to Google GenAI request parameters.
@@ -186,7 +188,10 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        output_format: str = kwargs.pop("output_format", "sdk")
+        output_format: str = kwargs.pop(
+            "output_format",
+            context.options.get("output_format", "sdk") if context else "sdk",
+        )
         warnings_list: list[str] = []
         result: dict[str, Any] = {"model": ir_request["model"]}
 
@@ -275,6 +280,9 @@ class GoogleGenAIConverter(BaseConverter):
 
         result["config"] = config
 
+        if context is not None:
+            context.warnings.extend(warnings_list)
+
         if output_format == "rest":
             return self._to_rest_body(result), warnings_list
 
@@ -283,6 +291,8 @@ class GoogleGenAIConverter(BaseConverter):
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRRequest:
         """Convert Google GenAI request to IRRequest.
@@ -395,6 +405,8 @@ class GoogleGenAIConverter(BaseConverter):
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRResponse:
         """Convert Google GenAI response to IRResponse.
@@ -474,6 +486,8 @@ class GoogleGenAIConverter(BaseConverter):
     def response_to_provider(
         self,
         ir_response: IRResponse,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Convert IRResponse to Google GenAI response.
@@ -536,6 +550,8 @@ class GoogleGenAIConverter(BaseConverter):
     def messages_to_provider(
         self,
         messages: Sequence[Message | ExtensionItem],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """Convert IR message list to Google GenAI Content format.
@@ -553,6 +569,8 @@ class GoogleGenAIConverter(BaseConverter):
     def messages_from_provider(
         self,
         provider_messages: list[Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> list[Message | ExtensionItem]:
         """Convert Google GenAI Content list to IR message list.

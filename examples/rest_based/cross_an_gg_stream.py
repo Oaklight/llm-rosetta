@@ -47,7 +47,7 @@ from common import (  # noqa: E402
 )
 
 from llm_rosetta import AnthropicConverter, GoogleGenAIConverter  # noqa: E402
-from llm_rosetta.converters.base.stream_context import StreamContext  # noqa: E402
+from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
 
 # Initialize converters
 an_converter = AnthropicConverter()

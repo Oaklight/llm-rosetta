@@ -1,21 +1,47 @@
 """
-LLM-Rosetta - Stream Context
+LLM-Rosetta - Conversion Context
 
-Maintains state across stream chunk conversions for stateful stream
-transformations in Man-in-the-Middle scenarios.
+Provides the context hierarchy for conversion pipelines:
+
+- ``ConversionContext``: Base context for non-streaming conversions.
+  Carries warnings, structured options, and opaque metadata through
+  the conversion pipeline.
+- ``StreamContext``: Extended context for streaming conversions.
+  Adds session-level metadata, tool call tracking, lifecycle flags,
+  and deferred event payloads on top of ConversionContext.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
-class StreamContext:
+class ConversionContext:
+    """Shared context for a conversion pipeline.
+
+    Created once per conversion operation (request or response cycle)
+    and threaded through converter methods to carry shared state.
+
+    Attributes:
+        warnings: Accumulated warnings from conversion steps.
+        options: Structured conversion options (e.g., ``output_format``).
+        metadata: Opaque store for debugging and provider-specific state.
+    """
+
+    warnings: list[str] = field(default_factory=list)
+    options: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class StreamContext(ConversionContext):
     """Maintains state across stream chunk conversions.
 
-    Tracks session-level metadata and per-block state to enable
-    stateful stream transformations in Man-in-the-Middle scenarios.
+    Extends :class:`ConversionContext` with session-level metadata and
+    per-block state to enable stateful stream transformations in
+    Man-in-the-Middle scenarios.
 
     Attributes:
         response_id: Provider response ID (e.g., chatcmpl-xxx, msg_xxx).

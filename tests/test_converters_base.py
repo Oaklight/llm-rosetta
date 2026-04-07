@@ -382,7 +382,7 @@ class MockConverter(BaseConverter):
     config_ops_class = MockConfigOps
 
     def request_to_provider(
-        self, ir_request: IRRequest, **kwargs: Any
+        self, ir_request: IRRequest, *, context=None, **kwargs: Any
     ) -> tuple[dict[str, Any], list[str]]:
         provider_request: dict[str, Any] = {"model": ir_request["model"]}
         warnings = []
@@ -406,7 +406,7 @@ class MockConverter(BaseConverter):
         return provider_request, warnings
 
     def request_from_provider(
-        self, provider_request: dict[str, Any], **kwargs: Any
+        self, provider_request: dict[str, Any], *, context=None, **kwargs: Any
     ) -> IRRequest:
         ir_request: IRRequest = {"model": provider_request["model"], "messages": []}
 
@@ -421,7 +421,7 @@ class MockConverter(BaseConverter):
         return ir_request
 
     def response_from_provider(
-        self, provider_response: dict[str, Any], **kwargs: Any
+        self, provider_response: dict[str, Any], *, context=None, **kwargs: Any
     ) -> IRResponse:
         return {
             "id": provider_response.get("id", ""),
@@ -433,7 +433,7 @@ class MockConverter(BaseConverter):
         }
 
     def response_to_provider(
-        self, ir_response: IRResponse, **kwargs: Any
+        self, ir_response: IRResponse, *, context=None, **kwargs: Any
     ) -> dict[str, Any]:
         return {
             "id": ir_response["id"],
@@ -445,12 +445,16 @@ class MockConverter(BaseConverter):
         }
 
     def messages_to_provider(
-        self, messages: Sequence[Union[Message, ExtensionItem]], **kwargs: Any
+        self,
+        messages: Sequence[Union[Message, ExtensionItem]],
+        *,
+        context=None,
+        **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         return self.message_ops_class.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
-        self, provider_messages: list[Any], **kwargs: Any
+        self, provider_messages: list[Any], *, context=None, **kwargs: Any
     ) -> list[Union[Message, ExtensionItem]]:
         return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
 

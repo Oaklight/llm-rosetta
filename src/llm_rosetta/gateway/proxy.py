@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.converters.base.context import ConversionContext
 
 
 from .logging import (
@@ -284,9 +285,14 @@ async def handle_non_streaming(
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
+    # Shared context for the conversion pipeline
+    ctx = ConversionContext()
+    if target_provider == "google":
+        ctx.options["output_format"] = "rest"
+
     # 1. Source -> IR
     try:
-        ir_request = source_converter.request_from_provider(body)
+        ir_request = source_converter.request_from_provider(body, context=ctx)
     except Exception as exc:
         return error_response_for_source(
             source_provider, 400, f"Failed to parse request: {exc}"
@@ -300,12 +306,8 @@ async def handle_non_streaming(
 
     # 2. IR -> Target
     try:
-        # Google REST API needs flattened body; other providers use SDK format
-        convert_kwargs: dict[str, str] = {}
-        if target_provider == "google":
-            convert_kwargs["output_format"] = "rest"
         target_body, warnings = target_converter.request_to_provider(
-            ir_request, **convert_kwargs
+            ir_request, context=ctx
         )
     except Exception as exc:
         return error_response_for_source(
@@ -347,7 +349,9 @@ async def handle_non_streaming(
     # 6. Target response -> IR
     try:
         upstream_json = upstream_resp.json()
-        ir_response = target_converter.response_from_provider(upstream_json)
+        ir_response = target_converter.response_from_provider(
+            upstream_json, context=ctx
+        )
     except Exception as exc:
         return error_response_for_source(
             source_provider, 502, f"Failed to parse upstream response: {exc}"
@@ -361,7 +365,9 @@ async def handle_non_streaming(
 
     # 7. IR -> Source response
     try:
-        source_response = source_converter.response_to_provider(ir_response)
+        source_response = source_converter.response_to_provider(
+            ir_response, context=ctx
+        )
     except Exception as exc:
         return error_response_for_source(
             source_provider, 500, f"Failed to convert response: {exc}"
@@ -381,9 +387,14 @@ async def handle_streaming(
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
+    # Shared context for the request conversion phase
+    ctx = ConversionContext()
+    if target_provider == "google":
+        ctx.options["output_format"] = "rest"
+
     # 1. Source -> IR
     try:
-        ir_request = source_converter.request_from_provider(body)
+        ir_request = source_converter.request_from_provider(body, context=ctx)
     except Exception as exc:
         return error_response_for_source(
             source_provider, 400, f"Failed to parse request: {exc}"
@@ -397,12 +408,8 @@ async def handle_streaming(
 
     # 2. IR -> Target
     try:
-        # Google REST API needs flattened body; other providers use SDK format
-        convert_kwargs: dict[str, str] = {}
-        if target_provider == "google":
-            convert_kwargs["output_format"] = "rest"
         target_body, warnings = target_converter.request_to_provider(
-            ir_request, **convert_kwargs
+            ir_request, context=ctx
         )
     except Exception as exc:
         return error_response_for_source(
