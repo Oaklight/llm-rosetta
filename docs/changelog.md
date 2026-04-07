@@ -6,6 +6,13 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.3.1 — 2026-04-07
+
+### 修复
+
+- **`service_tier: None` 和 `system_fingerprint: None` 导致验证错误** (PR #118)：OpenAI 上游返回这些字段为 `null`，但存在性检查（`if "key" in dict`）通过后将 `None` 赋值给 IR 的 `NotRequired[str]` 字段。在 OpenAI Chat 和 OpenAI Responses 两个转换器中改为值非空检查。发现于 [Oaklight/argo-proxy#99](https://github.com/Oaklight/argo-proxy/issues/99) 测试过程中
+- **基类 `StreamContext` 在 Responses 流式传输中缺少提供商特定属性** (PR #118)：当网关传入基类 `StreamContext` 给 `OpenAIResponsesConverter.stream_response_to_provider()` 时，方法访问的 `accumulated_text`、`output_item_emitted` 等字段仅存在于 `OpenAIResponsesStreamContext` 子类。新增 `from_base()` 类方法自动升级，并通过 metadata 缓存保持跨调用状态
+
 ## v0.3.0 — 2026-04-07
 
 ### 新增
