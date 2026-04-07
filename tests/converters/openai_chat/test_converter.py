@@ -180,6 +180,16 @@ class TestOpenAIChatConverter:
         assert result["tool_choice"]["mode"] == "any"
         assert result["tool_config"]["disable_parallel"] is True
 
+    def test_request_from_provider_malformed_tool_raises_with_context(self):
+        """Test that malformed tools raise clear errors with tool type/name context."""
+        provider_request = {
+            "model": "gpt-4o",
+            "messages": [{"role": "user", "content": "Hi"}],
+            "tools": [42],  # non-dict tool triggers conversion error
+        }
+        with pytest.raises(ValueError, match=r"Unsupported tool"):
+            self.converter.request_from_provider(provider_request)
+
     # ==================== response_from_provider ====================
 
     def test_response_from_provider(self):

@@ -6,6 +6,8 @@ Tests the top-level AnthropicConverter with full request/response conversion.
 
 from typing import Any, cast
 
+import pytest
+
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.types.ir import (
     FinishEvent,
@@ -257,6 +259,17 @@ class TestAnthropicConverter:
             cast(dict[str, Any], MockPydanticModel())
         )
         assert ir_request["model"] == "claude-3-5-sonnet-20241022"
+
+    def test_request_from_provider_malformed_tool_raises_with_context(self):
+        """Test that malformed tools raise clear errors with tool type/name context."""
+        provider_request = {
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 1024,
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
+            "tools": [42],  # non-dict tool triggers conversion error
+        }
+        with pytest.raises(ValueError, match=r"Unsupported tool"):
+            self.converter.request_from_provider(provider_request)
 
     # ==================== response_from_provider ====================
 
