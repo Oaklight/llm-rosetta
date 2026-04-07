@@ -98,6 +98,7 @@ nav:
       - IR 类型: guide/ir-types.md
       - 流式处理: guide/streaming.md
       - 自动检测: guide/auto-detection.md
+      - API 分层: guide/api-layers.md
       - 提供商兼容性: guide/compatibility.md
   - 网关:
       - gateway/index.md
