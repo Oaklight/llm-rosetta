@@ -317,6 +317,28 @@ class TestOpenAIChatConverter:
         assert result["usage"]["cache_read_tokens"] == 5
         assert result["usage"]["reasoning_tokens"] == 8
 
+    def test_response_from_provider_with_service_tier_none(self):
+        """Test response with service_tier=None does not break validation."""
+        provider_response = {
+            "id": "chatcmpl-st-none",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Hi"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+            "service_tier": None,
+            "system_fingerprint": None,
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert "service_tier" not in result
+        assert "system_fingerprint" not in result
+
     # ==================== response_to_provider ====================
 
     def test_response_to_provider(self):

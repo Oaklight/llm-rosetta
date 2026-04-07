@@ -350,10 +350,10 @@ class OpenAIChatConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
-        if "service_tier" in provider_response:
+        if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
 
-        if "system_fingerprint" in provider_response:
+        if provider_response.get("system_fingerprint") is not None:
             ir_response["system_fingerprint"] = provider_response["system_fingerprint"]
 
         return self._validate_ir_response(ir_response)
