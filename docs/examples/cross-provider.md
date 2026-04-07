@@ -20,10 +20,8 @@ title: 跨提供商对话
 ## 示例：OpenAI ↔ Anthropic
 
 ```python
-from llm_rosetta import (
-    OpenAIChatConverter, AnthropicConverter,
-    extract_text_content, IRRequest,
-)
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta.types.ir import extract_text_content, IRRequest
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()

@@ -35,7 +35,8 @@ tools = [
 ## 跨提供商工具调用
 
 ```python
-from llm_rosetta import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta.types.ir import extract_tool_calls, create_tool_result_message
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
@@ -76,7 +77,7 @@ anthropic_req, _ = anthropic_conv.request_to_provider(ir_request)
 工具可以返回丰富内容（文本 + 图片 + 文件）而非纯字符串。适用于生成图表、图解或其他可视化输出的工具。
 
 ```python
-from llm_rosetta import create_tool_result_message
+from llm_rosetta.types.ir import create_tool_result_message
 
 # 返回多模态内容的工具函数
 def generate_chart(chart_type="bar"):

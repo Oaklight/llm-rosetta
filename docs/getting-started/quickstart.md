@@ -40,7 +40,7 @@ response = client.messages.create(**anthropic_request)
 ir_response = anthropic_conv.response_from_provider(response.model_dump())
 
 # 提取文本
-from llm_rosetta import extract_text_content
+from llm_rosetta.types.ir import extract_text_content
 text = extract_text_content(ir_response["choices"][0]["message"])
 ```
 

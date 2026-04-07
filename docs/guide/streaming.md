@@ -36,12 +36,3 @@ for chunk in provider_stream:
             print(event["text"], end="")
 ```
 
-## 累积为消息
-
-流式传输完成后，重建完整消息：
-
-```python
-from llm_rosetta import accumulate_stream_to_assistant_message
-
-full_message = accumulate_stream_to_assistant_message(all_events)
-```
