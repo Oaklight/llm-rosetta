@@ -83,7 +83,9 @@ class ChoiceInfo(TypedDict):
     index: Required[int]  # 选择索引 Choice index
     message: Required[Message]  # 生成的消息 Generated message
     finish_reason: Required[FinishReason]  # 停止原因 Stop reason
-    logprobs: NotRequired[dict[str, Any]]  # Log概率信息 Log probability information
+    logprobs: NotRequired[
+        dict[str, Any] | None
+    ]  # Log概率信息 Log probability information
 
 
 # ============================================================================
@@ -112,7 +114,7 @@ class IRResponse(TypedDict):
     # 可选字段 Optional fields
     usage: NotRequired[UsageInfo]  # Token使用统计 Token usage statistics
     service_tier: NotRequired[str]  # 服务等级 Service tier
-    system_fingerprint: NotRequired[str]  # 系统指纹 System fingerprint
+    system_fingerprint: NotRequired[str | None]  # 系统指纹 System fingerprint
 
 
 # ============================================================================

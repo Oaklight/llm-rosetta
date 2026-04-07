@@ -257,14 +257,42 @@ class TestOpenAIResponsesContentOps:
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result["type"] == "reasoning"
-        assert result["content"] == "thinking..."
+        assert result["summary"] == [{"type": "summary_text", "text": "thinking..."}]
 
     def test_ir_reasoning_to_p_empty(self):
-        """Test IR ReasoningPart with no reasoning → empty content."""
+        """Test IR ReasoningPart with no reasoning → empty summary."""
         ir_reasoning = cast(ReasoningPart, {"type": "reasoning"})
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result["type"] == "reasoning"
-        assert result["content"] == ""
+        assert result["summary"] == []
+
+    def test_ir_reasoning_to_p_with_id(self):
+        """Test IR ReasoningPart with provider_metadata id → preserves id."""
+        ir_reasoning = ReasoningPart(
+            type="reasoning",
+            reasoning="thinking...",
+            provider_metadata={"responses_reasoning_id": "rs_abc123"},
+        )
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result["type"] == "reasoning"
+        assert result["id"] == "rs_abc123"
+
+    def test_ir_reasoning_to_p_with_structured_summary(self):
+        """Test IR ReasoningPart with original summary in metadata → preserves it."""
+        original_summary = [
+            {"type": "summary_text", "text": "Step 1"},
+            {"type": "summary_text", "text": "Step 2"},
+        ]
+        ir_reasoning = ReasoningPart(
+            type="reasoning",
+            reasoning="Step 1Step 2",
+            provider_metadata={
+                "responses_reasoning_id": "rs_abc123",
+                "responses_reasoning_summary": original_summary,
+            },
+        )
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result["summary"] == original_summary
 
     def test_p_reasoning_to_ir_with_content(self):
         """Test OpenAI Responses reasoning with content → IR ReasoningPart."""
@@ -273,6 +301,18 @@ class TestOpenAIResponsesContentOps:
         assert result is not None
         assert result["type"] == "reasoning"
         assert result["reasoning"] == "I need to think about this..."
+
+    def test_p_reasoning_to_ir_with_summary(self):
+        """Test OpenAI Responses reasoning with summary array → IR ReasoningPart."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_abc123",
+            "summary": [{"type": "summary_text", "text": "thinking..."}],
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result["reasoning"] == "thinking..."
+        assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
 
     def test_p_reasoning_to_ir_with_reasoning_field(self):
         """Test OpenAI Responses reasoning with 'reasoning' field → IR ReasoningPart."""
@@ -287,6 +327,19 @@ class TestOpenAIResponsesContentOps:
         result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is None
 
+    def test_p_reasoning_to_ir_with_encrypted_content(self):
+        """Test reasoning with encrypted_content → signature field."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_abc123",
+            "encrypted_content": "enc_sig_xyz",
+            "summary": [],
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result["signature"] == "enc_sig_xyz"
+        assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
+
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
         original = ReasoningPart(type="reasoning", reasoning="Step by step analysis")
@@ -294,6 +347,19 @@ class TestOpenAIResponsesContentOps:
         restored = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert restored is not None
         assert restored["reasoning"] == original["reasoning"]
+
+    def test_reasoning_round_trip_with_id(self):
+        """Test reasoning round-trip preserves id."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_abc123",
+            "summary": [{"type": "summary_text", "text": "thinking..."}],
+        }
+        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert ir is not None
+        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir)
+        assert restored["id"] == "rs_abc123"
+        assert restored["summary"] == provider["summary"]
 
     # ==================== Refusal ====================
 

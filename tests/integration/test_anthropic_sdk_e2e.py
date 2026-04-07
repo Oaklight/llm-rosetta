@@ -28,7 +28,12 @@ import dotenv
 
 from typing import Any, cast
 
-from examples.tools import available_tools, tools_spec
+from examples.tools import (
+    available_tools,
+    generate_chart,
+    multimodal_tools_spec,
+    tools_spec,
+)
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.types.ir import (
     IRRequest,
@@ -44,6 +49,14 @@ dotenv.load_dotenv(override=True)
 # ============================================================================
 # Setup
 # ============================================================================
+
+IMAGE_URL = (
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/"
+    "La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg/"
+    "3840px-La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg"
+)
 
 anthropic_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
 anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -341,13 +354,175 @@ def test_stream_tool_calls():
 
 
 # ============================================================================
-# Test 5: Round-trip request conversion
+# Test 5: Multimodal tool result
+# ============================================================================
+
+
+def test_multimodal_tool_result():
+    """Test tool returning multimodal content (text + image)."""
+    section("Test 5: Multimodal tool result")
+
+    ir_request: IRRequest = {
+        "model": anthropic_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Generate a bar chart for me."},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+        "tool_choice": {"mode": "tool", "tool_name": "generate_chart"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Round 1 warnings: {warnings}")
+
+    response = client.messages.create(**provider_req)
+    ir_response = converter.response_from_provider(response)
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = extract_text_content(assistant_msg)
+    print(f"  Tool calls: {len(tool_calls)}")
+
+    if tool_calls:
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+        assert tc["tool_name"] == "generate_chart"
+
+        result = generate_chart(**tc["tool_input"])
+        print(f"  Tool result type: {type(result).__name__}, length: {len(result)}")
+
+        tool_result_msg = create_tool_result_message(tc["tool_call_id"], result)
+
+        ir_request_r2: IRRequest = {
+            "model": anthropic_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Generate a bar chart for me."},
+                    ],
+                },
+                assistant_msg,
+                tool_result_msg,
+            ],
+            "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+        }
+
+        provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
+        print(f"  Round 2 warnings: {warnings_r2}")
+
+        response_r2 = client.messages.create(**provider_req_r2)
+        ir_response_r2 = converter.response_from_provider(response_r2)
+
+        final_text = extract_text_content(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(
+            f"  Model ignored forced tool_choice, responded with text: {text[:120]}..."
+        )
+        assert len(text) > 5
+
+    ok("Multimodal tool result")
+    return True
+
+
+# ============================================================================
+# Test 6: Image input with tool calls
+# ============================================================================
+
+
+def test_image_with_tool_calls():
+    """Test image input combined with tool call capability."""
+    section("Test 6: Image input with tool calls")
+
+    ir_request: IRRequest = {
+        "model": anthropic_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "This painting depicts a famous scene in Paris, France. "
+                            "What is the current weather in Paris?"
+                        ),
+                    },
+                    {"type": "image", "image_url": IMAGE_URL},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], tools_spec),
+        "tool_choice": {"mode": "auto"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Warnings: {warnings}")
+
+    response = client.messages.create(**provider_req)
+    ir_response = converter.response_from_provider(response)
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = extract_text_content(assistant_msg)
+
+    if tool_calls:
+        print(f"  Tool calls: {len(tool_calls)}")
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+
+        result = execute_tool(tc)
+        tool_result_msg = create_tool_result_message(tc["tool_call_id"], result)
+
+        ir_request_r2: IRRequest = {
+            "model": anthropic_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": (
+                                "This painting depicts a famous scene in Paris, France. "
+                                "What is the current weather in Paris?"
+                            ),
+                        },
+                        {"type": "image", "image_url": IMAGE_URL},
+                    ],
+                },
+                assistant_msg,
+                tool_result_msg,
+            ],
+            "tools": cast(list[ToolDefinition], tools_spec),
+        }
+
+        provider_req_r2, _ = converter.request_to_provider(ir_request_r2)
+        response_r2 = client.messages.create(**provider_req_r2)
+        ir_response_r2 = converter.response_from_provider(response_r2)
+        final_text = extract_text_content(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(f"  Model responded with text (no tool call): {text[:120]}...")
+        assert len(text) > 5
+
+    ok("Image input with tool calls")
+    return True
+
+
+# ============================================================================
+# Test 7: Round-trip request conversion
 # ============================================================================
 
 
 def test_request_round_trip():
     """Test request_to_provider → request_from_provider round-trip."""
-    section("Test 5: Request round-trip conversion")
+    section("Test 7: Request round-trip conversion")
 
     ir_request: IRRequest = {
         "model": anthropic_model,
@@ -390,7 +565,7 @@ def test_request_round_trip():
 
 def test_response_round_trip():
     """Test response_from_provider → response_to_provider round-trip."""
-    section("Test 6: Response round-trip conversion")
+    section("Test 8: Response round-trip conversion")
 
     ir_request: IRRequest = {
         "model": anthropic_model,
@@ -442,6 +617,8 @@ def run_all():
         ("Non-stream with tool calls", test_non_stream_tool_calls),
         ("Streaming text", test_stream_text),
         ("Streaming with tool calls", test_stream_tool_calls),
+        ("Multimodal tool result", test_multimodal_tool_result),
+        ("Image with tool calls", test_image_with_tool_calls),
         ("Request round-trip", test_request_round_trip),
         ("Response round-trip", test_response_round_trip),
     ]

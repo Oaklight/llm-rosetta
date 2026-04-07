@@ -285,7 +285,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
             if not tool_name and "function" in ir_tool_choice:
                 tool_name = cast(dict, ir_tool_choice)["function"].get("name")
             if tool_name:
-                return {"type": "function", "function": {"name": tool_name}}
+                # Responses API format: {"type": "function", "name": "..."}
+                # (NOT Chat Completions format which nests under "function" key)
+                return {"type": "function", "name": tool_name}
             return "required"
 
         return "auto"
@@ -317,10 +319,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
 
         if isinstance(provider_tool_choice, dict):
             if provider_tool_choice.get("type") == "function":
-                func = provider_tool_choice.get("function", {})
-                return cast(
-                    ToolChoice, {"mode": "tool", "tool_name": func.get("name", "")}
-                )
+                # Support both Responses format {"name": "..."} and
+                # Chat Completions format {"function": {"name": "..."}}
+                tool_name = provider_tool_choice.get("name", "")
+                if not tool_name:
+                    func = provider_tool_choice.get("function", {})
+                    tool_name = func.get("name", "")
+                return cast(ToolChoice, {"mode": "tool", "tool_name": tool_name})
 
         return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
@@ -368,9 +373,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "status": "calling",
             }
         elif tool_type == "function":
+            # Recover Responses API item ID from provider_metadata if available;
+            # the API requires 'id' to start with 'fc_' prefix.
+            metadata = ir_tool_call.get("provider_metadata") or {}
+            item_id = metadata.get("responses_item_id", tool_call_id)
             return {
                 "type": "function_call",
-                "id": tool_call_id,
+                "id": item_id,
                 "call_id": tool_call_id,
                 "name": tool_name,
                 "arguments": arguments,
@@ -439,15 +448,24 @@ class OpenAIResponsesToolOps(BaseToolOps):
             tool_input = {}
 
         if item_type == "function_call":
-            return ToolCallPart(
+            # Responses API has both 'id' (item ID, fc_ prefix) and
+            # 'call_id' (correlation ID, call_ prefix). Store call_id as
+            # tool_call_id for correlation, preserve 'id' in provider_metadata
+            # for lossless round-trip.
+            call_id = provider_tool_call.get(
+                "call_id", provider_tool_call.get("id", "")
+            )
+            item_id = provider_tool_call.get("id", "")
+            part = ToolCallPart(
                 type="tool_call",
-                tool_call_id=provider_tool_call.get(
-                    "call_id", provider_tool_call.get("id", "")
-                ),
+                tool_call_id=call_id,
                 tool_name=provider_tool_call.get("name", ""),
                 tool_input=tool_input,
                 tool_type="function",
             )
+            if item_id and item_id != call_id:
+                part["provider_metadata"] = {"responses_item_id": item_id}
+            return part
         elif item_type == "mcp_call":
             # MCP call may use server/tool fields or name field
             server = provider_tool_call.get("server", "")

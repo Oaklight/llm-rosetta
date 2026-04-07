@@ -253,10 +253,34 @@ class OpenAIResponsesContentOps(BaseContentOps):
         Returns:
             OpenAI Responses reasoning item dict.
         """
-        return {
+        result: dict[str, Any] = {
             "type": "reasoning",
-            "content": ir_reasoning.get("reasoning", ""),
         }
+
+        # Recover the original reasoning item id for round-trip fidelity.
+        metadata = ir_reasoning.get("provider_metadata") or {}
+        item_id = metadata.get("responses_reasoning_id")
+        if item_id:
+            result["id"] = item_id
+
+        # Recover structured summary if available, otherwise use flat content.
+        summary = metadata.get("responses_reasoning_summary")
+        if summary:
+            result["summary"] = summary
+        else:
+            content = ir_reasoning.get("reasoning", "")
+            # The Responses API uses a summary array, not a flat content field.
+            if content:
+                result["summary"] = [{"type": "summary_text", "text": content}]
+            else:
+                result["summary"] = []
+
+        # Preserve encryption signature for encrypted reasoning.
+        signature = ir_reasoning.get("signature")
+        if signature:
+            result["encrypted_content"] = signature
+
+        return result
 
     @staticmethod
     def p_reasoning_to_ir(
@@ -265,6 +289,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
         """OpenAI Responses reasoning item → IR ReasoningPart.
 
         Handles cases where reasoning content may be None (e.g., o4-mini).
+        Preserves the item id and structured summary for round-trip fidelity.
 
         Args:
             provider_reasoning: OpenAI Responses reasoning item dict.
@@ -272,12 +297,44 @@ class OpenAIResponsesContentOps(BaseContentOps):
         Returns:
             IR ReasoningPart, or None if content is empty/null.
         """
-        reasoning_content = provider_reasoning.get(
-            "reasoning"
-        ) or provider_reasoning.get("content")
+        # Extract text from structured summary array or flat content.
+        summary = provider_reasoning.get("summary")
+        if isinstance(summary, list):
+            texts = [
+                s.get("text", "")
+                for s in summary
+                if isinstance(s, dict) and s.get("type") == "summary_text"
+            ]
+            reasoning_content = "".join(texts)
+        else:
+            reasoning_content = provider_reasoning.get(
+                "reasoning"
+            ) or provider_reasoning.get("content")
+
+        # Build provider_metadata for round-trip preservation.
+        metadata: dict[str, Any] = {}
+        item_id = provider_reasoning.get("id")
+        if item_id:
+            metadata["responses_reasoning_id"] = item_id
+        if isinstance(summary, list):
+            metadata["responses_reasoning_summary"] = summary
+
+        part = ReasoningPart(type="reasoning")
 
         if reasoning_content:
-            return ReasoningPart(type="reasoning", reasoning=str(reasoning_content))
+            part["reasoning"] = str(reasoning_content)
+
+        # Preserve encrypted_content as signature.
+        encrypted = provider_reasoning.get("encrypted_content")
+        if encrypted:
+            part["signature"] = str(encrypted)
+
+        if metadata:
+            part["provider_metadata"] = metadata
+
+        # Return part if it has any meaningful content or metadata to preserve.
+        if reasoning_content or encrypted or metadata:
+            return part
 
         return None
 

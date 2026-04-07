@@ -26,7 +26,12 @@ from openai import OpenAI
 
 from typing import cast
 
-from examples.tools import available_tools, tools_spec
+from examples.tools import (
+    available_tools,
+    generate_chart,
+    multimodal_tools_spec,
+    tools_spec,
+)
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir import (
     IRRequest,
@@ -42,6 +47,14 @@ dotenv.load_dotenv(override=True)
 # ============================================================================
 # Setup
 # ============================================================================
+
+IMAGE_URL = (
+    "https://upload.wikimedia.org/wikipedia/commons/thumb/0/02/"
+    "La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg/"
+    "3840px-La_Libert%C3%A9_guidant_le_peuple_-_Eug%C3%A8ne_Delacroix_-_"
+    "Mus%C3%A9e_du_Louvre_Peintures_RF_129_-_apr%C3%A8s_restauration_2024.jpg"
+)
 
 openai_model = os.getenv("OPENAI_RESPONSES_MODEL", "gpt-4o-mini")
 openai_api_key = os.getenv("OPENAI_RESPONSES_API_KEY")
@@ -228,13 +241,200 @@ def test_non_stream_tool_calls():
 
 
 # ============================================================================
-# Test 3: Request round-trip conversion
+# Test 3: Multimodal tool result
+# ============================================================================
+
+
+def test_multimodal_tool_result():
+    """Test tool returning multimodal content (text + image)."""
+    section("Test 3: Multimodal tool result")
+
+    ir_request: IRRequest = {
+        "model": openai_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Generate a bar chart for me."},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+        "tool_choice": {"mode": "tool", "tool_name": "generate_chart"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Round 1 warnings: {warnings}")
+
+    response = client.responses.create(**provider_req)
+    response_data = response.model_dump()
+    ir_response = converter.response_from_provider(response_data)
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = extract_text_content(assistant_msg)
+    print(f"  Tool calls: {len(tool_calls)}")
+
+    if tool_calls:
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+        assert tc["tool_name"] == "generate_chart"
+
+        result = generate_chart(**tc["tool_input"])
+        print(f"  Tool result type: {type(result).__name__}, length: {len(result)}")
+
+        ir_request_r2: IRRequest = {
+            "model": openai_model,
+            "messages": cast(
+                list[Message],
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Generate a bar chart for me."},
+                        ],
+                    },
+                    assistant_msg,
+                    {
+                        "role": "tool",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_call_id": tc["tool_call_id"],
+                                "result": result,
+                            }
+                        ],
+                    },
+                ],
+            ),
+            "tools": cast(list[ToolDefinition], multimodal_tools_spec),
+        }
+
+        provider_req_r2, warnings_r2 = converter.request_to_provider(ir_request_r2)
+        print(f"  Round 2 warnings: {warnings_r2}")
+
+        response_r2 = client.responses.create(**provider_req_r2)
+        response_data_r2 = response_r2.model_dump()
+        ir_response_r2 = converter.response_from_provider(response_data_r2)
+
+        final_text = extract_text_content(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(
+            f"  Model ignored forced tool_choice, responded with text: {text[:120]}..."
+        )
+        assert len(text) > 5
+
+    ok("Multimodal tool result")
+    return True
+
+
+# ============================================================================
+# Test 4: Image input with tool calls
+# ============================================================================
+
+
+def test_image_with_tool_calls():
+    """Test image input combined with tool call capability."""
+    section("Test 4: Image input with tool calls")
+
+    ir_request: IRRequest = {
+        "model": openai_model,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "This painting depicts a famous scene in Paris, France. "
+                            "What is the current weather in Paris?"
+                        ),
+                    },
+                    {"type": "image", "image_url": IMAGE_URL},
+                ],
+            },
+        ],
+        "tools": cast(list[ToolDefinition], tools_spec),
+        "tool_choice": {"mode": "auto"},
+    }
+
+    provider_req, warnings = converter.request_to_provider(ir_request)
+    print(f"  Warnings: {warnings}")
+
+    response = client.responses.create(**provider_req)
+    response_data = response.model_dump()
+    ir_response = converter.response_from_provider(response_data)
+
+    assistant_msg = ir_response["choices"][0]["message"]
+    tool_calls = extract_tool_calls(assistant_msg)
+    text = extract_text_content(assistant_msg)
+
+    if tool_calls:
+        print(f"  Tool calls: {len(tool_calls)}")
+        tc = tool_calls[0]
+        print(f"  Tool: {tc['tool_name']}({json.dumps(tc['tool_input'])})")
+
+        result = execute_tool(tc)
+
+        ir_request_r2: IRRequest = {
+            "model": openai_model,
+            "messages": cast(
+                list[Message],
+                [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "This painting depicts a famous scene in Paris. "
+                                    "What is the current weather in Paris?"
+                                ),
+                            },
+                            {"type": "image", "image_url": IMAGE_URL},
+                        ],
+                    },
+                    assistant_msg,
+                    {
+                        "role": "tool",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_call_id": tc["tool_call_id"],
+                                "result": result,
+                            }
+                        ],
+                    },
+                ],
+            ),
+            "tools": cast(list[ToolDefinition], tools_spec),
+        }
+
+        provider_req_r2, _ = converter.request_to_provider(ir_request_r2)
+        response_r2 = client.responses.create(**provider_req_r2)
+        response_data_r2 = response_r2.model_dump()
+        ir_response_r2 = converter.response_from_provider(response_data_r2)
+        final_text = extract_text_content(ir_response_r2["choices"][0]["message"])
+        print(f"  Final response: {final_text[:120]}...")
+        assert len(final_text) > 5
+    else:
+        print(f"  Model responded with text (no tool call): {text[:120]}...")
+        assert len(text) > 5
+
+    ok("Image input with tool calls")
+    return True
+
+
+# ============================================================================
+# Test 5: Request round-trip conversion
 # ============================================================================
 
 
 def test_request_round_trip():
     """Test request_to_provider → request_from_provider round-trip."""
-    section("Test 3: Request round-trip conversion")
+    section("Test 5: Request round-trip conversion")
 
     ir_request: IRRequest = {
         "model": openai_model,
@@ -280,7 +480,7 @@ def test_request_round_trip():
 
 def test_response_round_trip():
     """Test response_from_provider → response_to_provider round-trip."""
-    section("Test 4: Response round-trip conversion")
+    section("Test 6: Response round-trip conversion")
 
     ir_request: IRRequest = {
         "model": openai_model,
@@ -332,6 +532,8 @@ def run_all():
     tests = [
         ("Non-stream basic text", test_non_stream_basic),
         ("Non-stream with tool calls", test_non_stream_tool_calls),
+        ("Multimodal tool result", test_multimodal_tool_result),
+        ("Image with tool calls", test_image_with_tool_calls),
         ("Request round-trip", test_request_round_trip),
         ("Response round-trip", test_response_round_trip),
     ]
