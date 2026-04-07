@@ -891,11 +891,16 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             OpenAI Responses SSE event dict, or a list of dicts.
         """
-        # Auto-upgrade base StreamContext to the provider-specific subclass
+        # Auto-upgrade base StreamContext to the provider-specific subclass.
+        # Cache the upgraded instance in metadata so state persists across calls.
         if context is not None and not isinstance(
             context, OpenAIResponsesStreamContext
         ):
-            context = OpenAIResponsesStreamContext.from_base(context)
+            cached = context.metadata.get("_responses_stream_ctx")
+            if cached is None:
+                cached = OpenAIResponsesStreamContext.from_base(context)
+                context.metadata["_responses_stream_ctx"] = cached
+            context = cached
 
         handler_name = self._TO_P_DISPATCH.get(event["type"])
         if handler_name is not None:
