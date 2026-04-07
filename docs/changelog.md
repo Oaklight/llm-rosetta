@@ -8,18 +8,40 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
-### 重构
+### 新增
 
-- **提取各提供商常量用于 reason 映射及魔法值** (#64)：4 个转换器（Anthropic、Google GenAI、OpenAI Chat、OpenAI Responses）中散布的内联 reason 映射字典、SSE 事件类型字符串字面量、status-to-reason 条件逻辑和 ID 生成模式，现已集中到各提供商的 `_constants.py` 模块中。包含 `AnthropicEventType` 和 `ResponsesEventType` 命名空间事件类型常量类、每个提供商的 `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` 字典，以及 `generate_tool_call_id()` / `generate_message_id()` 辅助函数
+- **全部 4 个转换器支持多模态工具结果** (#92, PR #109)：工具现在可以返回多模态内容（文本 + 图片 + 文件）作为 `ToolResultPart.result`。三个提供商（Anthropic、OpenAI Responses、Google GenAI）原生支持；内容块通过每个提供商的 `content_ops` 层转换。详见下方提供商支持矩阵
+- **OpenAI Chat 多模态工具结果无损往返** (#92, PR #108)：OpenAI Chat Completions 的工具消息仅接受 `content: string`。实现双重编码策略——工具消息保留 `json.dumps(result)` 作为数据兜底，同时合成用户消息携带可视内容（`image_url` 部分）包裹在 `<tool-content call-id="...">` XML 标签中。解包时优先从合成消息恢复多模态结构，若合成消息被智能体框架裁剪则回退到 JSON 解析
+- **`extract_all_text()` 辅助函数** (PR #109)：从 `TextPart` 和 `ReasoningPart` 内容中提取文本——适用于思考模型（如 gemini-2.5-flash），这类模型可能将答案放在 reasoning 部分而非 text 部分
+- **`generate_chart` 示例工具** (PR #109)：`examples/tools.py` 中新增多模态工具，返回 `[TextPart, ImagePart]`（含内联 base64 PNG），以及 `multimodal_tools_spec` 组合全部 3 个示例工具
+- **全部 4 个提供商 SDK 的多模态集成测试** (PR #109)：每个提供商新增两个测试场景——(A) 工具返回多模态内容（文本 + 图片），(B) 图片输入结合工具调用。全部 30 个测试通过官方 API 验证：OpenAI Chat 9/9、OpenAI Responses 6/6、Anthropic 8/8、Google GenAI 7/7
+- **运行时 IR 验证（零依赖内嵌验证器）** (#91)：`validate_ir_request()`、`validate_ir_response()` 和 `validate_ir_messages()` 工具函数，在运行时对 IR 结构进行 TypedDict 定义验证。4 个转换器的 `request_from_provider()` 和 `response_from_provider()` 现自动验证输出。替代手动 `BaseMessageOps.validate_messages` 实现。包含 Python <3.11 的 `typing_extensions.TypedDict` 兼容修复
+- **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
+- **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
 
 ### 修复
 
+- **OpenAI Responses `tool_choice` 格式** (PR #109)：此前使用 Chat Completions 格式（`{"type": "function", "function": {"name": "..."}}`），现在使用 Responses 格式（`{"type": "function", "name": "..."}`）
+- **OpenAI Responses 工具调用 ID 往返** (PR #109)：Responses API 使用 `fc_` 前缀 ID，IR 使用 `call_` 前缀。Responses 的 `id` 现在单独保存在 `provider_metadata` 中（与 `call_id` 分开），实现无损往返转换
+- **OpenAI Responses 推理项往返** (PR #109)：推理模型（如 gpt-5-nano）发出带有 `id`（rs_ 前缀）、结构化 `summary` 数组和 `encrypted_content` 的推理项。这些信息现通过 `provider_metadata` 保留以实现无损往返——修复了推理项缺少原始 `id` 回传时导致的 400 错误
+- **IR 验证接受可选响应字段的 `None` 值** (PR #109)：`IRResponse` 中的 `logprobs` 和 `system_fingerprint` 现在接受 `None` 值（此前仅接受缺失键）
+- **OpenAI Responses `content_filter` finish reason 映射到错误状态** (#90)：`content_filter` 此前被错误映射到 `"completed"` 状态（`response_to_provider` 和 `stream_response_to_provider`）。现正确映射到 `"incomplete"` 状态，附带 `incomplete_details.reason = "content_filter"`
 - **Anthropic 流式传输缺少 `refusal` reason 映射**：流式传输的 `reason_map` 缺少非流式路径中存在的 `refusal` 条目，导致 Anthropic refusal 停止原因在流式传输期间被静默丢弃。作为常量提取的副作用修复（#64）——两条路径现在共享同一个 `ANTHROPIC_REASON_FROM_PROVIDER` 字典
 
-### 新增
+### 变更
 
-- **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
-- **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
+- **`ReasoningConfig.effort` 扩展为 5 级枚举** (#100)：Effort 级别新增 `"minimal"`、`"low"`、`"medium"`、`"high"`、`"max"`。提供商映射：Anthropic 映射到 `thinking.type="adaptive"` 配合 `thinking.effort`；OpenAI Chat/Responses 将 `"minimal"` 钳位为 `"low"`、`"max"` 钳位为 `"high"`（附带警告）；Google GenAI 映射到 `thinking_config.thinking_level`
+- **`ReasoningConfig.type` 替换为 `ReasoningConfig.enabled`** (#70)：`type: Literal["enabled", "disabled"]` 字段替换为 `enabled: bool`，避免遮蔽 Python 内建 `type`，提供更自然的 API
+- **合并重复的 IR 概念** (#69)：移除 `GenerationConfig` 中的 `candidate_count`——改用 `n`（Google GenAI 转换器内部映射 `n` ↔ `candidate_count`）。`system_instruction` 类型从 `str | list[dict]` 统一为 `str`
+- **规范化 `ImagePart`、`FilePart`、`AudioPart` 为标准形式** (#68)：每种 Part 现在恰好有两种标准形式——URL 引用 + 结构化内联数据（如 `image_data`）——加上统一的 `provider_ref: dict[str, Any]` 用于提供商特定引用。移除冗余的顶层 `data`/`media_type` 字段，`file_id`/`audio_id` 替换为 `provider_ref`
+- **IR 类型字段从 `Iterable` 改为 `list`；函数参数改为 `Sequence`** (#67)：TypedDict 字段使用 `list` 以支持索引和序列化；函数参数使用 `Sequence`（协变、只读）。同时修复 `strip_orphaned_tool_config` 中 `any()` 消耗单次迭代器的潜在 bug
+- **`StreamContext` 转为 dataclass 并引入提供商子类** (#65)：`StreamContext` 现为 `@dataclass`（消除防御性 `getattr`/`hasattr` 模式）。OpenAI Responses 特有状态提取至 `OpenAIResponsesStreamContext` 子类。新增 `BaseConverter.create_stream_context()` 工厂方法
+
+### 重构
+
+- **将单体流式方法拆分为事件处理器** (#63)：4 个转换器中 8 个单体 `if`/`elif` 流式方法（约 1,781 行）替换为通过类级处理器表分发的独立处理器方法。公共 API 不变
+- **提取 OpenAI Responses 转换器共享工具函数** (#66)：`resolve_call_id()` 和 `build_message_preamble_events()` 从 `converter.py` 提取至 `utils.py`，附带专用单元测试
+- **提取各提供商常量用于 reason 映射及魔法值** (#64)：4 个转换器中散布的内联 reason 映射字典、SSE 事件类型字符串字面量、status-to-reason 条件逻辑和 ID 生成模式，现已集中到各提供商的 `_constants.py` 模块中。包含 `AnthropicEventType` 和 `ResponsesEventType` 常量类、`REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` 字典，以及 `generate_tool_call_id()` / `generate_message_id()` 辅助函数
 
 ## v0.2.6 — 2026-03-29
 

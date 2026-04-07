@@ -6,8 +6,8 @@ title: SDK 与集成测试
 
 本页记录了用于验证 LLM-Rosetta 转换器管道的自动化测试套件，使用真实 API 调用。
 
-!!! info "最后更新：2026-03-23"
-    使用 llm-rosetta v0.2.5、argo-proxy v3.0.0b7
+!!! info "最后更新：2026-04-07"
+    使用 llm-rosetta v0.2.7（未发布）、argo-proxy v3.0.0b7
 
 ## 集成测试套件（`tests/integration/`）
 
@@ -36,12 +36,11 @@ python -m pytest tests/integration/test_anthropic_rest_e2e.py -v
 
 | 测试套件 | 测试数 | 结果 |
 |---------|:-----:|:----:|
-| Google GenAI SDK | 5 | **5/5** ✓ |
-| Google GenAI REST | 6 | **6/6** ✓ |
-| OpenAI Chat SDK | 5 | **5/5** ✓ |
-| OpenAI Responses SDK | 3 | **3/3** ✓ |
-| Anthropic REST | 3 | **3/3** ✓ |
-| **合计** | **22** | **22/22** ✓ |
+| OpenAI Chat SDK | 9 | **9/9** ✓ |
+| OpenAI Responses SDK | 6 | **6/6** ✓ |
+| Anthropic SDK | 8 | **8/8** ✓ |
+| Google GenAI SDK | 7 | **7/7** ✓ |
+| **合计** | **30** | **30/30** ✓ |
 
 ### 各套件测试覆盖
 
@@ -52,6 +51,8 @@ python -m pytest tests/integration/test_anthropic_rest_e2e.py -v
 | 非流式工具调用 | ✓ | ✓ | ✓ | ✓ |
 | 流式文本 | ✓ | — | ✓ | — |
 | 流式工具调用 | ✓ | — | ✓ | — |
+| 多模态工具结果 | ✓ | ✓ | ✓ | ✓ |
+| 图片输入 + 工具调用 | ✓ | ✓ | ✓ | ✓ |
 | 请求往返 | ✓ | ✓ | ✓ | ✓ |
 | 响应往返 | ✓ | ✓ | ✓ | ✓ |
 | 多轮对话 | — | — | — | ✓ |
