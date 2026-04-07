@@ -19,34 +19,11 @@ from .converters import (
     OpenAIChatConverter,
     OpenAIResponsesConverter,
 )
-from .types.ir import (
-    ContentPart,
-    ExtensionItem,
-    IRInput,
-    IRInputSimple,
-    Message,
-    ToolChoice,
-    ToolDefinition,
-    is_extension_item,
-    is_message,
-)
+from .converters.base.context import ConversionContext, StreamContext
 
 __version__ = "0.2.6"
 
 __all__ = [
-    # 核心类型 Core types
-    "IRInput",
-    "IRInputSimple",
-    "Message",
-    "ContentPart",
-    "ExtensionItem",
-    "ToolDefinition",
-    "ToolChoice",
-    "ProviderType",
-    # 类型守卫函数 Type guard functions
-    "is_message",
-    "is_extension_item",
-    "is_part_type",
     # 转换器 Converters
     "BaseConverter",
     "OpenAIChatConverter",
@@ -54,8 +31,12 @@ __all__ = [
     "GoogleGenAIConverter",
     "GoogleConverter",
     "OpenAIResponsesConverter",
+    # 转换上下文 Conversion context
+    "ConversionContext",
+    "StreamContext",
     # 自动检测和转换 Auto-detection and conversion
     "detect_provider",
     "get_converter_for_provider",
     "convert",
+    "ProviderType",
 ]
