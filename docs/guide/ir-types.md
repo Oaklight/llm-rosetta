@@ -9,7 +9,7 @@ title: IR 类型
 ## 消息
 
 ```python
-from llm_rosetta import SystemMessage, UserMessage, AssistantMessage, ToolMessage
+from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, ToolMessage
 ```
 
 | 类型 | 角色 | 典型内容 |
