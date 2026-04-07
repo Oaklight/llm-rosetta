@@ -51,6 +51,10 @@ from .ir import (
     # Response types
     IRResponse,
     ExtensionItem,
+    SystemEvent,
+    BatchMarker,
+    SessionControl,
+    ToolChainNode,
     UsageInfo,
     FinishReason,
     ChoiceInfo,
@@ -69,25 +73,6 @@ from .ir import (
     # Backward compatibility types
     IRInput,
     IRInputSimple,
-    # Type guards
-    is_message,
-    is_system_message,
-    is_user_message,
-    is_assistant_message,
-    is_tool_message,
-    is_extension_item,
-    is_part_type,
-    isinstance_part,
-    get_part_type,
-    TYPE_CLASS_MAP,
-    # Helper functions
-    extract_text_content,
-    extract_tool_calls,
-    create_tool_result_message,
-    create_system_message,
-    create_user_message,
-    create_assistant_message,
-    create_tool_message,
 )
 
 __all__ = [
@@ -135,6 +120,10 @@ __all__ = [
     # Response types
     "IRResponse",
     "ExtensionItem",
+    "SystemEvent",
+    "BatchMarker",
+    "SessionControl",
+    "ToolChainNode",
     "UsageInfo",
     "FinishReason",
     "ChoiceInfo",
@@ -153,23 +142,4 @@ __all__ = [
     # Backward compatibility types
     "IRInput",
     "IRInputSimple",
-    # Type guards
-    "is_message",
-    "is_system_message",
-    "is_user_message",
-    "is_assistant_message",
-    "is_tool_message",
-    "is_extension_item",
-    "is_part_type",
-    "isinstance_part",
-    "get_part_type",
-    "TYPE_CLASS_MAP",
-    # Helper functions
-    "extract_text_content",
-    "extract_tool_calls",
-    "create_tool_result_message",
-    "create_system_message",
-    "create_user_message",
-    "create_assistant_message",
-    "create_tool_message",
 ]

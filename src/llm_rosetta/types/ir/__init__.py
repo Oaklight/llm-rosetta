@@ -46,19 +46,19 @@ from .extensions import (
     SessionControl,
     SystemEvent,
     ToolChainNode,
-    is_extension_item,
+    is_extension_item,  # noqa: F401
 )
 
-# 辅助函数 Helper functions
-from .helpers import (
+# 辅助函数 Helper functions (advanced — import from .helpers directly)
+from .helpers import (  # noqa: F401
     create_tool_result_message,
     extract_all_text,
     extract_text_content,
     extract_tool_calls,
 )
 
-# 验证工具 Validation utilities
-from .validation import (
+# 验证工具 Validation utilities (internal — import from .validation directly)
+from .validation import (  # noqa: F401
     ValidationError,
     validate_ir_request,
     validate_ir_response,
@@ -76,15 +76,15 @@ from .messages import (
     SystemMessage,
     ToolMessage,
     UserMessage,
-    create_assistant_message,
-    create_system_message,
-    create_tool_message,
-    create_user_message,
-    is_assistant_message,
-    is_message,
-    is_system_message,
-    is_tool_message,
-    is_user_message,
+    create_assistant_message,  # noqa: F401
+    create_system_message,  # noqa: F401
+    create_tool_message,  # noqa: F401
+    create_user_message,  # noqa: F401
+    is_assistant_message,  # noqa: F401
+    is_message,  # noqa: F401
+    is_system_message,  # noqa: F401
+    is_tool_message,  # noqa: F401
+    is_user_message,  # noqa: F401
 )
 
 # 内容部分类型 Content part types
@@ -137,8 +137,8 @@ from .stream import (
 # 工具类型 Tool types
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
 
-# 类型守卫 Type guards
-from .type_guards import (
+# 类型守卫 Type guards (advanced/internal — import from .type_guards directly)
+from .type_guards import (  # noqa: F401
     TYPE_CLASS_MAP,
     get_part_type,
     is_audio_part,
@@ -196,32 +196,6 @@ __all__ = [
     "UserContentPart",
     "AssistantContentPart",
     "ToolContentPart",
-    # 类型守卫函数 Type guard functions
-    "is_part_type",
-    "isinstance_part",
-    "get_part_type",
-    "TYPE_CLASS_MAP",
-    # ContentPart TypeGuard functions
-    "is_text_part",
-    "is_image_part",
-    "is_file_part",
-    "is_audio_part",
-    "is_tool_call_part",
-    "is_tool_result_part",
-    "is_reasoning_part",
-    "is_refusal_part",
-    "is_citation_part",
-    # IRStreamEvent TypeGuard functions
-    "is_stream_start_event",
-    "is_stream_end_event",
-    "is_content_block_start_event",
-    "is_content_block_end_event",
-    "is_text_delta_event",
-    "is_reasoning_delta_event",
-    "is_tool_call_start_event",
-    "is_tool_call_delta_event",
-    "is_finish_event",
-    "is_usage_event",
     # ========== 消息类型 Message types ==========
     "Message",
     "BaseMessage",
@@ -232,17 +206,6 @@ __all__ = [
     "LegacyMessage",
     "MessageMetadata",
     "StreamingMetadata",
-    # 消息类型守卫 Message type guards
-    "is_message",
-    "is_system_message",
-    "is_user_message",
-    "is_assistant_message",
-    "is_tool_message",
-    # 消息创建函数 Message creation functions
-    "create_system_message",
-    "create_user_message",
-    "create_assistant_message",
-    "create_tool_message",
     # ========== 工具类型 Tool types ==========
     "ToolDefinition",
     "ToolChoice",
@@ -265,8 +228,6 @@ __all__ = [
     "UsageInfo",
     "FinishReason",
     "ChoiceInfo",
-    # 响应类型守卫 Response type guards
-    "is_extension_item",
     # ========== 流式事件类型 Stream event types ==========
     "IRStreamEvent",
     "StreamStartEvent",
@@ -282,14 +243,4 @@ __all__ = [
     # ========== 向后兼容类型 Backward compatibility types ==========
     "IRInput",
     "IRInputSimple",
-    # ========== 辅助函数 Helper functions ==========
-    "extract_text_content",
-    "extract_all_text",
-    "extract_tool_calls",
-    "create_tool_result_message",
-    # ========== 验证工具 Validation utilities ==========
-    "ValidationError",
-    "validate_ir_request",
-    "validate_ir_response",
-    "validate_messages",
 ]
