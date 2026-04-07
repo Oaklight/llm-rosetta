@@ -35,7 +35,8 @@ tools = [
 ## Cross-Provider Tool Calling
 
 ```python
-from llm_rosetta import OpenAIChatConverter, AnthropicConverter, extract_tool_calls
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta.types.ir import extract_tool_calls, create_tool_result_message
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
@@ -76,7 +77,7 @@ The tool definitions and tool call results are automatically converted to each p
 Tools can return rich content (text + images + files) instead of plain strings. This is useful for tools that generate charts, diagrams, or other visual outputs.
 
 ```python
-from llm_rosetta import create_tool_result_message
+from llm_rosetta.types.ir import create_tool_result_message
 
 # Tool function returning multimodal content
 def generate_chart(chart_type="bar"):

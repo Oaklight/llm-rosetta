@@ -36,12 +36,3 @@ for chunk in provider_stream:
             print(event["text"], end="")
 ```
 
-## Accumulating to Messages
-
-After streaming completes, reconstruct the full message:
-
-```python
-from llm_rosetta import accumulate_stream_to_assistant_message
-
-full_message = accumulate_stream_to_assistant_message(all_events)
-```

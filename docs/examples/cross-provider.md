@@ -20,10 +20,8 @@ The conversation history is maintained in IR format. Before each API call, the f
 ## Example: OpenAI ↔ Anthropic
 
 ```python
-from llm_rosetta import (
-    OpenAIChatConverter, AnthropicConverter,
-    extract_text_content, IRRequest, TextPart, UserMessage,
-)
+from llm_rosetta import OpenAIChatConverter, AnthropicConverter
+from llm_rosetta.types.ir import extract_text_content, IRRequest, TextPart, UserMessage
 
 openai_conv = OpenAIChatConverter()
 anthropic_conv = AnthropicConverter()
