@@ -9,7 +9,7 @@ The Intermediate Representation uses TypedDict-based types for zero-overhead typ
 ## Messages
 
 ```python
-from llm_rosetta import SystemMessage, UserMessage, AssistantMessage, ToolMessage
+from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, ToolMessage
 ```
 
 | Type | Role | Typical Content |
