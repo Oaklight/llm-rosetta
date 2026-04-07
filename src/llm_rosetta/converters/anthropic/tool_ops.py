@@ -16,6 +16,10 @@ import json
 import logging
 from typing import Any, cast
 
+from ..base.tool_content import (
+    convert_content_blocks_to_ir,
+    convert_ir_content_blocks_to_p,
+)
 from ...types.ir import (
     ToolCallPart,
     ToolChoice,
@@ -371,8 +375,14 @@ class AnthropicToolOps(BaseToolOps):
         }
 
         content = ir_tool_result.get("result", "")
-        if isinstance(content, (str, list)):
+        if isinstance(content, str):
             result["content"] = content
+        elif isinstance(content, list):
+            from .content_ops import AnthropicContentOps
+
+            result["content"] = convert_ir_content_blocks_to_p(
+                content, AnthropicContentOps
+            )
         elif content is not None:
             result["content"] = json.dumps(content)
         else:
@@ -394,10 +404,16 @@ class AnthropicToolOps(BaseToolOps):
         Returns:
             IR ToolResultPart.
         """
+        content = provider_tool_result.get("content", "")
+        if isinstance(content, list):
+            from .content_ops import AnthropicContentOps
+
+            content = convert_content_blocks_to_ir(content, AnthropicContentOps)
+
         return ToolResultPart(
             type="tool_result",
             tool_call_id=provider_tool_result.get("tool_use_id", ""),
-            result=provider_tool_result.get("content", ""),
+            result=content,
             is_error=provider_tool_result.get("is_error", False),
         )
 

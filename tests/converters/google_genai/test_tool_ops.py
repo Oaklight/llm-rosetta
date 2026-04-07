@@ -364,6 +364,48 @@ class TestGoogleGenAIToolOps:
         result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
         assert result["tool_call_id"] == "search"
 
+    def test_ir_tool_result_to_p_list_json_serialized(self):
+        """Test list result is serialized via json.dumps for Google Struct."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_list",
+            result=[{"type": "text", "text": "hello"}],
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        import json
+
+        output = result["functionResponse"]["response"]["output"]
+        assert isinstance(output, str)
+        assert json.loads(output) == [{"type": "text", "text": "hello"}]
+
+    def test_ir_tool_result_to_p_with_context_list_json_serialized(self):
+        """Test list result via context method is serialized via json.dumps."""
+        ir_input = [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_call",
+                        "tool_call_id": "call_list",
+                        "tool_name": "plot",
+                        "tool_input": {},
+                    }
+                ],
+            }
+        ]
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_list",
+            result=[{"type": "image", "image_url": "https://example.com/img.png"}],
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        import json
+
+        output = result["functionResponse"]["response"]["output"]
+        assert isinstance(output, str)
+        parsed = json.loads(output)
+        assert parsed[0]["type"] == "image"
+
     # ==================== Tool Config ====================
 
     def test_ir_tool_config_to_p(self):
