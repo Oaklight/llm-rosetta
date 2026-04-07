@@ -22,14 +22,15 @@ from .configs import BaseConfigOps
 from .content import BaseContentOps
 from .converter import BaseConverter
 from .messages import BaseMessageOps
-from .stream_context import StreamContext
+from .context import ConversionContext, StreamContext
 from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
 from .tools import BaseToolOps, sanitize_schema
 
 __all__ = [
     # 主转换器 Main converter
     "BaseConverter",
-    # 流式上下文 Stream context
+    # 转换上下文 Conversion context
+    "ConversionContext",
     "StreamContext",
     # 功能域操作类 Functional domain operation classes
     "BaseContentOps",

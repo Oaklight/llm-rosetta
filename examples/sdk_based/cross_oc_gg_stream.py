@@ -44,7 +44,7 @@ from common import (  # noqa: E402
 )
 
 from llm_rosetta import GoogleGenAIConverter, OpenAIChatConverter  # noqa: E402
-from llm_rosetta.converters.base.stream_context import StreamContext  # noqa: E402
+from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
 
 # Initialize converters
 oc_converter = OpenAIChatConverter()

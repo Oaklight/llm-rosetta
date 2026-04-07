@@ -1,6 +1,6 @@
 """Tests for openai_responses utility functions."""
 
-from llm_rosetta.converters.base.stream_context import StreamContext
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.openai_responses._constants import ResponsesEventType
 from llm_rosetta.converters.openai_responses.stream_context import (
     OpenAIResponsesStreamContext,

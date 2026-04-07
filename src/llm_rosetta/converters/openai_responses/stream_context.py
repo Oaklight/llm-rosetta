@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from ..base.stream_context import StreamContext
+from ..base.context import StreamContext
 
 
 @dataclass

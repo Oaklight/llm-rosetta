@@ -15,7 +15,7 @@ from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse
 from ...types.ir.stream import IRStreamEvent
 from ...types.ir.validation import validate_ir_request, validate_ir_response
-from .stream_context import StreamContext
+from .context import ConversionContext, StreamContext
 
 
 class BaseConverter(ABC):
@@ -51,6 +51,8 @@ class BaseConverter(ABC):
     def request_to_provider(
         self,
         ir_request: IRRequest,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[dict[str, Any], list[str]]:
         """将IRRequest转换为provider请求参数
@@ -68,6 +70,8 @@ class BaseConverter(ABC):
 
         Args:
             ir_request: IR格式的完整请求
+            context: Optional conversion context for carrying warnings,
+                options, and metadata through the pipeline.
             **kwargs: 额外参数
 
         Returns:
@@ -79,6 +83,8 @@ class BaseConverter(ABC):
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRRequest:
         """将provider请求转换为IRRequest
@@ -86,6 +92,7 @@ class BaseConverter(ABC):
 
         Args:
             provider_request: Provider格式的请求
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
@@ -97,6 +104,8 @@ class BaseConverter(ABC):
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRResponse:
         """将provider响应转换为IRResponse
@@ -104,6 +113,7 @@ class BaseConverter(ABC):
 
         Args:
             provider_response: Provider格式的响应
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
@@ -115,6 +125,8 @@ class BaseConverter(ABC):
     def response_to_provider(
         self,
         ir_response: IRResponse,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """将IRResponse转换为provider响应
@@ -122,6 +134,7 @@ class BaseConverter(ABC):
 
         Args:
             ir_response: IR格式的响应
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
@@ -133,6 +146,8 @@ class BaseConverter(ABC):
     def messages_to_provider(
         self,
         messages: Sequence[Message | ExtensionItem],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """将消息列表转换为provider消息格式
@@ -143,6 +158,7 @@ class BaseConverter(ABC):
 
         Args:
             messages: IR格式的消息列表（可包含扩展项）
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
@@ -154,6 +170,8 @@ class BaseConverter(ABC):
     def messages_from_provider(
         self,
         provider_messages: list[Any],
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> list[Message | ExtensionItem]:
         """将provider消息转换为IR消息列表
@@ -161,6 +179,7 @@ class BaseConverter(ABC):
 
         Args:
             provider_messages: Provider格式的消息列表
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
@@ -248,6 +267,19 @@ class BaseConverter(ABC):
     # ==================== Factory methods ====================
 
     @classmethod
+    def create_conversion_context(cls, **options: Any) -> ConversionContext:
+        """Create a conversion context for non-streaming conversions.
+
+        Args:
+            **options: Initial options to populate in the context
+                (e.g., ``output_format="rest"``).
+
+        Returns:
+            A new ConversionContext instance.
+        """
+        return ConversionContext(options=dict(options) if options else {})
+
+    @classmethod
     def create_stream_context(cls) -> StreamContext:
         """Create a stream context appropriate for this converter.
 
@@ -298,6 +330,8 @@ class BaseConverter(ABC):
     def message_to_provider(
         self,
         message: Message | ExtensionItem,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[Any, list[str]]:
         """将单个消息转换为provider格式（便利方法）
@@ -305,17 +339,22 @@ class BaseConverter(ABC):
 
         Args:
             message: IR格式的单个消息
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
             Tuple[转换后的消息, 警告信息列表]
         """
-        result, warnings = self.messages_to_provider([message], **kwargs)
+        result, warnings = self.messages_to_provider(
+            [message], context=context, **kwargs
+        )
         return result[0] if result else None, warnings
 
     def message_from_provider(
         self,
         provider_message: Any,
+        *,
+        context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> Message | ExtensionItem:
         """将provider消息转换为IR格式（便利方法）
@@ -323,10 +362,13 @@ class BaseConverter(ABC):
 
         Args:
             provider_message: Provider格式的消息
+            context: Optional conversion context.
             **kwargs: 额外参数
 
         Returns:
             IR格式的消息
         """
-        result = self.messages_from_provider([provider_message], **kwargs)
+        result = self.messages_from_provider(
+            [provider_message], context=context, **kwargs
+        )
         return result[0] if result else cast(Message, {})
