@@ -93,7 +93,7 @@ class AnthropicConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings: list[str] = []
+        ctx = context if context is not None else ConversionContext()
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → top-level system parameter
@@ -104,7 +104,7 @@ class AnthropicConverter(BaseConverter):
         # 2. Messages — fix orphaned tool_calls/results at IR level before
         #    conversion.  Anthropic strictly requires bidirectional pairing.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
-        warnings.extend(strip_orphaned_tool_config(ir_request))
+        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
         # Extract system messages from message list
         for item in ir_messages:
@@ -118,7 +118,7 @@ class AnthropicConverter(BaseConverter):
                     result["system"] = " ".join(text_parts)
 
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
-        warnings.extend(msg_warnings)
+        ctx.warnings.extend(msg_warnings)
         result["messages"] = converted_msgs
 
         # 3. Generation config (must come before tools since max_tokens is required)
@@ -149,7 +149,9 @@ class AnthropicConverter(BaseConverter):
                     result["tool_choice"] = {"type": "auto"}
                 result["tool_choice"].update(tc_fields)
             if "max_calls" in tool_config:
-                warnings.append("Anthropic does not support max_tool_calls, ignored")
+                ctx.warnings.append(
+                    "Anthropic does not support max_tool_calls, ignored"
+                )
 
         # 7. Response format (not supported)
         resp_format = ir_request.get("response_format")
@@ -180,10 +182,7 @@ class AnthropicConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
-        if context is not None:
-            context.warnings.extend(warnings)
-
-        return result, warnings
+        return result, ctx.warnings
 
     def request_from_provider(
         self,

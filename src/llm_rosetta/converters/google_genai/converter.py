@@ -188,11 +188,11 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
+        ctx = context if context is not None else ConversionContext()
         output_format: str = kwargs.pop(
             "output_format",
-            context.options.get("output_format", "sdk") if context else "sdk",
+            ctx.options.get("output_format", "sdk"),
         )
-        warnings_list: list[str] = []
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. Handle system_instruction
@@ -206,7 +206,7 @@ class GoogleGenAIConverter(BaseConverter):
         # 2. Handle messages — fix orphaned tool_calls/results and strip
         #    orphaned tool_choice/tool_config at IR level before conversion.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
-        warnings_list.extend(strip_orphaned_tool_config(ir_request))
+        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
         # Extract system messages from message list
         for item in ir_messages:
@@ -222,7 +222,7 @@ class GoogleGenAIConverter(BaseConverter):
 
         # Convert non-system messages
         contents, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
-        warnings_list.extend(msg_warnings)
+        ctx.warnings.extend(msg_warnings)
         result["contents"] = contents
 
         if system_instruction:
@@ -280,13 +280,10 @@ class GoogleGenAIConverter(BaseConverter):
 
         result["config"] = config
 
-        if context is not None:
-            context.warnings.extend(warnings_list)
-
         if output_format == "rest":
-            return self._to_rest_body(result), warnings_list
+            return self._to_rest_body(result), ctx.warnings
 
-        return result, warnings_list
+        return result, ctx.warnings
 
     def request_from_provider(
         self,

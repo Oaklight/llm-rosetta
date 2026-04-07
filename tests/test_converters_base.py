@@ -15,6 +15,7 @@ from typing import Any, Union, cast
 
 import pytest
 
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base import (
     BaseConfigOps,
     BaseContentOps,
@@ -384,8 +385,8 @@ class MockConverter(BaseConverter):
     def request_to_provider(
         self, ir_request: IRRequest, *, context=None, **kwargs: Any
     ) -> tuple[dict[str, Any], list[str]]:
+        ctx = context if context is not None else ConversionContext()
         provider_request: dict[str, Any] = {"model": ir_request["model"]}
-        warnings = []
 
         # 转换消息
         if "messages" in ir_request:
@@ -393,7 +394,7 @@ class MockConverter(BaseConverter):
                 ir_request["messages"], **kwargs
             )
             provider_request["messages"] = messages
-            warnings.extend(msg_warnings)
+            ctx.warnings.extend(msg_warnings)
 
         # 转换生成配置
         if "generation" in ir_request:
@@ -403,7 +404,7 @@ class MockConverter(BaseConverter):
                 )
             )
 
-        return provider_request, warnings
+        return provider_request, ctx.warnings
 
     def request_from_provider(
         self, provider_request: dict[str, Any], *, context=None, **kwargs: Any

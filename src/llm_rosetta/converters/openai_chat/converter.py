@@ -79,7 +79,7 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             Tuple of (provider request dict, warnings list).
         """
-        warnings: list[str] = []
+        ctx = context if context is not None else ConversionContext()
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → system message
@@ -94,10 +94,10 @@ class OpenAIChatConverter(BaseConverter):
         # are lenient, so cross-format conversions may carry orphaned
         # tool_calls from interrupted sessions.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
-        warnings.extend(strip_orphaned_tool_config(ir_request))
+        ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
         messages.extend(converted_msgs)
-        warnings.extend(msg_warnings)
+        ctx.warnings.extend(msg_warnings)
         result["messages"] = messages
 
         # 3. Tools
@@ -116,7 +116,9 @@ class OpenAIChatConverter(BaseConverter):
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
             result.update(tc_fields)
             if "max_calls" in tool_config:
-                warnings.append("OpenAI Chat does not support max_tool_calls, ignored")
+                ctx.warnings.append(
+                    "OpenAI Chat does not support max_tool_calls, ignored"
+                )
 
         # 6. Generation config
         gen_config = ir_request.get("generation")
@@ -153,10 +155,7 @@ class OpenAIChatConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
-        if context is not None:
-            context.warnings.extend(warnings)
-
-        return result, warnings
+        return result, ctx.warnings
 
     def request_from_provider(
         self,
