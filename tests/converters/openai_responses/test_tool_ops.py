@@ -439,6 +439,50 @@ class TestOpenAIResponsesToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
+    def test_p_tool_result_to_ir_converts_input_image_to_ir(self):
+        """Test input_image in parsed output → IR ImagePart."""
+        provider_tr = {
+            "type": "function_call_output",
+            "call_id": "call_img",
+            "output": json.dumps(
+                [
+                    {
+                        "type": "input_image",
+                        "image_url": "data:image/png;base64,AAAA",
+                    }
+                ]
+            ),
+        }
+        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        assert isinstance(result["result"], list)
+        assert len(result["result"]) == 1
+        assert result["result"][0]["type"] == "image"
+        assert result["result"][0]["image_data"]["data"] == "AAAA"
+        assert result["result"][0]["image_data"]["media_type"] == "image/png"
+
+    def test_ir_tool_result_to_p_multimodal_list(self):
+        """Test IR blocks → output array format."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_multi",
+            result=[
+                {"type": "text", "text": "Chart description"},
+                {
+                    "type": "image",
+                    "image_data": {"data": "CCCC", "media_type": "image/png"},
+                },
+            ],
+        )
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["type"] == "function_call_output"
+        output = result["output"]
+        assert isinstance(output, list)
+        assert len(output) == 2
+        assert output[0]["type"] == "input_text"
+        assert output[0]["text"] == "Chart description"
+        assert output[1]["type"] == "input_image"
+        assert "base64,CCCC" in output[1]["image_url"]
+
     # ==================== Tool Config ====================
 
     def test_ir_tool_config_to_p_disable_parallel(self):

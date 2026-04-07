@@ -353,7 +353,13 @@ class OpenAIChatToolOps(BaseToolOps):
             OpenAI tool role message dict.
         """
         result = ir_tool_result.get("result", "")
-        content = str(result) if result is not None else ""
+
+        if isinstance(result, (list, dict)):
+            content = json.dumps(result)
+        elif result is not None:
+            content = str(result)
+        else:
+            content = ""
 
         return {
             "role": "tool",

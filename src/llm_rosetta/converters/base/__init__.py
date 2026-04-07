@@ -23,6 +23,7 @@ from .content import BaseContentOps
 from .converter import BaseConverter
 from .messages import BaseMessageOps
 from .stream_context import StreamContext
+from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
 from .tools import BaseToolOps, sanitize_schema
 
 __all__ = [
@@ -37,4 +38,7 @@ __all__ = [
     "BaseConfigOps",
     # Schema utilities
     "sanitize_schema",
+    # Tool content conversion helpers
+    "convert_content_blocks_to_ir",
+    "convert_ir_content_blocks_to_p",
 ]

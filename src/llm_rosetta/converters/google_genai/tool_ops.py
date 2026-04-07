@@ -313,6 +313,13 @@ class GoogleGenAIToolOps(BaseToolOps):
             or ""
         )
 
+        # Google function_response uses Struct (dict), not content blocks.
+        # Serialize list/dict content to a string for the output field.
+        if isinstance(result_content, (list, dict)):
+            import json
+
+            result_content = json.dumps(result_content)
+
         response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):
             response_data = {"error": result_content}
@@ -371,6 +378,13 @@ class GoogleGenAIToolOps(BaseToolOps):
             or ir_tool_result.get("output")
             or ""
         )
+
+        # Google function_response uses Struct (dict), not content blocks.
+        # Serialize list/dict content to a string for the output field.
+        if isinstance(result_content, (list, dict)):
+            import json
+
+            result_content = json.dumps(result_content)
 
         response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):

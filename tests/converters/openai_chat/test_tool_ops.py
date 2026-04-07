@@ -266,6 +266,35 @@ class TestOpenAIChatToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
+    def test_ir_tool_result_to_p_list_json_serialized(self):
+        """Test list result is serialized via json.dumps, not str()."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_list",
+                "result": [{"type": "text", "text": "hello"}],
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == json.dumps([{"type": "text", "text": "hello"}])
+        # Verify it's valid JSON (not Python repr)
+        parsed = json.loads(result["content"])
+        assert parsed == [{"type": "text", "text": "hello"}]
+
+    def test_ir_tool_result_to_p_dict_json_serialized(self):
+        """Test dict result is serialized via json.dumps, not str()."""
+        ir_tr = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_dict",
+                "result": {"temperature": 72},
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
+        assert result["content"] == '{"temperature": 72}'
+
     # ==================== Tool Config ====================
 
     def test_ir_tool_config_to_p(self):

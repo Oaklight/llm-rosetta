@@ -16,6 +16,10 @@ import json
 import logging
 from typing import Any, cast
 
+from ..base.tool_content import (
+    convert_content_blocks_to_ir,
+    convert_ir_content_blocks_to_p,
+)
 from ...types.ir import (
     ToolCallPart,
     ToolChoice,
@@ -493,10 +497,24 @@ class OpenAIResponsesToolOps(BaseToolOps):
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
             "content", ""
         )
+
+        if isinstance(result_content, list):
+            from .content_ops import OpenAIResponsesContentOps
+
+            output = convert_ir_content_blocks_to_p(
+                result_content, OpenAIResponsesContentOps
+            )
+        elif isinstance(result_content, dict):
+            output = json.dumps(result_content)
+        elif isinstance(result_content, str):
+            output = result_content
+        else:
+            output = str(result_content)
+
         return {
             "type": "function_call_output",
             "call_id": ir_tool_result["tool_call_id"],
-            "output": str(result_content),
+            "output": output,
         }
 
     @staticmethod
@@ -519,6 +537,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 output = parsed
             except (json.JSONDecodeError, TypeError):
                 pass
+
+        # Normalize provider-specific content blocks to IR format
+        if isinstance(output, list):
+            from .content_ops import OpenAIResponsesContentOps
+
+            output = convert_content_blocks_to_ir(output, OpenAIResponsesContentOps)
 
         return ToolResultPart(
             type="tool_result",

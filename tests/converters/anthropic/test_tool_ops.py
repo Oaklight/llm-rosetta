@@ -260,16 +260,63 @@ class TestAnthropicToolOps:
         assert isinstance(result["content"], str)
         assert result["content"] == '{"temperature": 72, "unit": "F"}'
 
-    def test_ir_tool_result_to_p_list_content_passed_through(self):
-        """Test that list result content is passed through as-is."""
-        content_blocks = [{"type": "text", "text": "hello"}]
+    def test_ir_tool_result_to_p_list_content_converted(self):
+        """Test that list IR content blocks are converted to Anthropic format."""
+        ir_blocks = [{"type": "text", "text": "hello"}]
         ir_tr = ToolResultPart(
             type="tool_result",
             tool_call_id="call_list",
-            result=content_blocks,
+            result=ir_blocks,
         )
         result = AnthropicToolOps.ir_tool_result_to_p(ir_tr)
-        assert result["content"] == content_blocks
+        assert isinstance(result["content"], list)
+        assert result["content"][0]["type"] == "text"
+        assert result["content"][0]["text"] == "hello"
+
+    def test_ir_tool_result_to_p_converts_ir_image_blocks(self):
+        """Test IR ImagePart list → Anthropic image blocks with source."""
+        ir_blocks = [
+            {
+                "type": "image",
+                "image_data": {"data": "AAAA", "media_type": "image/png"},
+            }
+        ]
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_img",
+            result=ir_blocks,
+        )
+        result = AnthropicToolOps.ir_tool_result_to_p(ir_tr)
+        assert isinstance(result["content"], list)
+        assert len(result["content"]) == 1
+        img_block = result["content"][0]
+        assert img_block["type"] == "image"
+        assert img_block["source"]["type"] == "base64"
+        assert img_block["source"]["media_type"] == "image/png"
+        assert img_block["source"]["data"] == "AAAA"
+
+    def test_p_tool_result_to_ir_normalizes_image_blocks(self):
+        """Test Anthropic image blocks in tool_result → IR ImagePart."""
+        provider = {
+            "type": "tool_result",
+            "tool_use_id": "call_img",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": "BBBB",
+                    },
+                }
+            ],
+        }
+        result = AnthropicToolOps.p_tool_result_to_ir(provider)
+        assert isinstance(result["result"], list)
+        assert len(result["result"]) == 1
+        assert result["result"][0]["type"] == "image"
+        assert result["result"][0]["image_data"]["data"] == "BBBB"
+        assert result["result"][0]["image_data"]["media_type"] == "image/png"
 
     # ==================== Tool Config ====================
 
