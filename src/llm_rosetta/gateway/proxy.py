@@ -306,15 +306,13 @@ async def handle_non_streaming(
 
     # 2. IR -> Target
     try:
-        target_body, warnings = target_converter.request_to_provider(
-            ir_request, context=ctx
-        )
+        target_body, _ = target_converter.request_to_provider(ir_request, context=ctx)
     except Exception as exc:
         return error_response_for_source(
             source_provider, 400, f"Conversion error: {exc}"
         )
-    if warnings:
-        logger.warning("Conversion warnings: %s", warnings)
+    if ctx.warnings:
+        logger.warning("Conversion warnings: %s", ctx.warnings)
 
     # 3. Build upstream request
     url, headers, upstream_body = prepare_upstream(
@@ -408,15 +406,13 @@ async def handle_streaming(
 
     # 2. IR -> Target
     try:
-        target_body, warnings = target_converter.request_to_provider(
-            ir_request, context=ctx
-        )
+        target_body, _ = target_converter.request_to_provider(ir_request, context=ctx)
     except Exception as exc:
         return error_response_for_source(
             source_provider, 400, f"Conversion error: {exc}"
         )
-    if warnings:
-        logger.warning("Conversion warnings: %s", warnings)
+    if ctx.warnings:
+        logger.warning("Conversion warnings: %s", ctx.warnings)
 
     # 3. Build upstream request (with stream=True)
     url, headers, upstream_body = prepare_upstream(
