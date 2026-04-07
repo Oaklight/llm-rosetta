@@ -5,8 +5,10 @@ OpenAI Chat Completions API message conversion operations.
 Handles bidirectional conversion of system, user, assistant, and tool messages.
 
 This layer calls content_ops and tool_ops for part-level conversions.
+Also handles multimodal tool result packing/unpacking (Phase 2 dual encoding).
 """
 
+import logging
 from collections.abc import Sequence
 from typing import Any, cast
 
@@ -31,8 +33,25 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ._constants import TOOL_CONTENT_CLOSE_TAG, TOOL_CONTENT_OPEN_TAG_RE
 from .content_ops import OpenAIChatContentOps
 from .tool_ops import OpenAIChatToolOps
+
+logger = logging.getLogger(__name__)
+
+
+def _has_multimodal_content(result: Any) -> bool:
+    """Check if a tool result contains multimodal content blocks.
+
+    Returns True if ``result`` is a list containing at least one
+    non-text content block (image, file, etc.).
+    """
+    if not isinstance(result, list):
+        return False
+    return any(
+        isinstance(block, dict) and block.get("type") not in ("text", None)
+        for block in result
+    )
 
 
 class OpenAIChatMessageOps(BaseMessageOps):
@@ -71,10 +90,13 @@ class OpenAIChatMessageOps(BaseMessageOps):
         """
         messages: list[dict[str, Any]] = []
         warnings: list[str] = []
+        multimodal_packs: dict[str, list[dict[str, Any]]] = {}
 
         for item in ir_messages:
             if is_message(item):
-                converted, msg_warnings = self._ir_message_to_p(cast(Message, item))
+                converted, msg_warnings = self._ir_message_to_p(
+                    cast(Message, item), multimodal_packs
+                )
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
@@ -87,6 +109,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 warnings.extend(ext_warnings)
 
         messages = self._reorder_tool_messages(messages, warnings)
+        if multimodal_packs:
+            messages = self._inject_packed_tool_content(messages, multimodal_packs)
         return messages, warnings
 
     @staticmethod
@@ -160,11 +184,16 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return result
 
-    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
+    def _ir_message_to_p(
+        self,
+        message: Message,
+        multimodal_packs: dict[str, list[dict[str, Any]]],
+    ) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.
 
         Args:
             message: IR message dict.
+            multimodal_packs: Accumulator for multimodal tool result content.
 
         Returns:
             Tuple of (converted message or list of messages, warnings).
@@ -176,11 +205,11 @@ class OpenAIChatMessageOps(BaseMessageOps):
         if role == "system":
             return self._ir_system_to_p(content), warnings
         elif role == "user":
-            return self._ir_user_to_p(content, warnings)
+            return self._ir_user_to_p(content, warnings, multimodal_packs)
         elif role == "assistant":
             return self._ir_assistant_to_p(content, warnings)
         elif role == "tool":
-            return self._ir_tool_messages_to_p(content, warnings)
+            return self._ir_tool_messages_to_p(content, warnings, multimodal_packs)
 
         return None, warnings
 
@@ -196,11 +225,15 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return {"role": "system", "content": " ".join(text_parts)}
 
     def _ir_user_to_p(
-        self, content: list, warnings: list[str]
+        self,
+        content: list,
+        warnings: list[str],
+        multimodal_packs: dict[str, list[dict[str, Any]]],
     ) -> tuple[Any, list[str]]:
         """Convert IR user message content to OpenAI user message(s).
 
         ToolResultParts in user messages are split into separate tool role messages.
+        Multimodal tool results are packed for dual encoding.
         """
         user_content_parts: list[dict[str, Any]] = []
         tool_messages: list[dict[str, Any]] = []
@@ -212,7 +245,11 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 user_content_parts.append(self.content_ops.ir_image_to_p(part))
             elif is_tool_result_part(part):
                 # ToolResultPart in user message → separate tool role message
-                tool_messages.append(self.tool_ops.ir_tool_result_to_p(part))
+                tool_messages.append(
+                    self._convert_tool_result_with_packing(
+                        part, multimodal_packs, warnings
+                    )
+                )
             elif is_file_part(part):
                 warnings.append(
                     "File content not supported in OpenAI Chat Completions, ignored. "
@@ -301,17 +338,25 @@ class OpenAIChatMessageOps(BaseMessageOps):
         return openai_message, warnings
 
     def _ir_tool_messages_to_p(
-        self, content: list, warnings: list[str]
+        self,
+        content: list,
+        warnings: list[str],
+        multimodal_packs: dict[str, list[dict[str, Any]]],
     ) -> tuple[Any, list[str]]:
         """Convert IR tool message content to OpenAI tool role message(s).
 
         Each ToolResultPart becomes a separate tool role message.
+        Multimodal tool results are packed for dual encoding.
         """
         tool_messages: list[dict[str, Any]] = []
 
         for part in content:
             if is_tool_result_part(part):
-                tool_messages.append(self.tool_ops.ir_tool_result_to_p(part))
+                tool_messages.append(
+                    self._convert_tool_result_with_packing(
+                        part, multimodal_packs, warnings
+                    )
+                )
 
         if len(tool_messages) == 1:
             return tool_messages[0], warnings
@@ -346,6 +391,124 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return warnings
 
+    # ==================== Multimodal Packing ====================
+
+    def _convert_tool_result_with_packing(
+        self,
+        part: ToolResultPart,
+        multimodal_packs: dict[str, list[dict[str, Any]]],
+        warnings: list[str],
+    ) -> dict[str, Any]:
+        """Convert an IR ToolResultPart, packing multimodal content for dual encoding.
+
+        If the result contains multimodal content (images, files, etc.), the
+        visual content blocks are extracted and stored in ``multimodal_packs``
+        for later injection as a synthetic user message. The tool message itself
+        keeps ``json.dumps(result)`` as content (Phase 1 fallback).
+
+        Text-only results delegate directly to ``tool_ops.ir_tool_result_to_p()``.
+
+        Args:
+            part: IR tool result part.
+            multimodal_packs: Accumulator mapping call_id → provider content blocks.
+            warnings: Warning list.
+
+        Returns:
+            OpenAI tool role message dict.
+        """
+        result = part.get("result", "")
+        if not _has_multimodal_content(result):
+            return self.tool_ops.ir_tool_result_to_p(part)
+
+        # Multimodal: extract visual content for synthetic user message
+        call_id = part["tool_call_id"]
+        packed_parts: list[dict[str, Any]] = []
+
+        for block in result:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+            if block_type == "text":
+                packed_parts.append(self.content_ops.ir_text_to_p(block))
+            elif block_type == "image":
+                try:
+                    packed_parts.append(self.content_ops.ir_image_to_p(block))
+                except ValueError as e:
+                    warnings.append(f"Skipped image in tool result packing: {e}")
+            elif block_type == "file":
+                warnings.append(
+                    "File content not supported in OpenAI Chat tool result packing, "
+                    "skipped"
+                )
+            else:
+                warnings.append(
+                    f"Unsupported block type in tool result packing: {block_type}"
+                )
+
+        if packed_parts:
+            multimodal_packs[call_id] = packed_parts
+
+        # Tool message keeps json.dumps fallback (existing Phase 1 behavior)
+        return self.tool_ops.ir_tool_result_to_p(part)
+
+    @staticmethod
+    def _inject_packed_tool_content(
+        messages: list[dict[str, Any]],
+        multimodal_packs: dict[str, list[dict[str, Any]]],
+    ) -> list[dict[str, Any]]:
+        """Inject synthetic user message with packed multimodal tool content.
+
+        Walks the reordered message list and, after each group of consecutive
+        tool messages following an assistant, inserts a synthetic user message
+        containing ``<tool-content call-id="...">`` tagged content blocks for
+        any tool results that have multimodal content.
+
+        Args:
+            messages: Reordered OpenAI Chat messages.
+            multimodal_packs: Mapping of call_id → provider content blocks.
+
+        Returns:
+            Messages list with synthetic user messages injected.
+        """
+        if not multimodal_packs:
+            return messages
+
+        result: list[dict[str, Any]] = []
+        i = 0
+
+        while i < len(messages):
+            msg = messages[i]
+            result.append(msg)
+            i += 1
+
+            # After tool messages group, check for packed content
+            if msg.get("role") != "tool":
+                continue
+
+            # Collect consecutive tool messages (already appended first one)
+            tool_call_ids = [msg.get("tool_call_id")]
+            while i < len(messages) and messages[i].get("role") == "tool":
+                result.append(messages[i])
+                tool_call_ids.append(messages[i].get("tool_call_id"))
+                i += 1
+
+            # Build synthetic user message for packed call_ids
+            synthetic_parts: list[dict[str, Any]] = []
+            for tcid in tool_call_ids:
+                if tcid and tcid in multimodal_packs:
+                    synthetic_parts.append(
+                        {"type": "text", "text": f'<tool-content call-id="{tcid}">'}
+                    )
+                    synthetic_parts.extend(multimodal_packs[tcid])
+                    synthetic_parts.append(
+                        {"type": "text", "text": TOOL_CONTENT_CLOSE_TAG}
+                    )
+
+            if synthetic_parts:
+                result.append({"role": "user", "content": synthetic_parts})
+
+        return result
+
     # ==================== Provider → IR ====================
 
     def p_messages_to_ir(
@@ -355,7 +518,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
     ) -> list[Message | ExtensionItem]:
         """OpenAI Chat messages → IR Messages.
 
-        Converts each OpenAI message to the appropriate IR message type.
+        Pre-processes synthetic user messages (from dual encoding packing)
+        before converting each OpenAI message to the appropriate IR type.
 
         Args:
             provider_messages: List of OpenAI Chat message dicts.
@@ -363,20 +527,27 @@ class OpenAIChatMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: list[Message | ExtensionItem] = []
+        unpacked_content, clean_messages = self._unpack_tool_content(provider_messages)
 
-        for msg in provider_messages:
-            converted = self._p_message_to_ir(msg)
+        ir_messages: list[Message | ExtensionItem] = []
+        for msg in clean_messages:
+            converted = self._p_message_to_ir(msg, unpacked_content)
             if converted is not None:
                 ir_messages.append(converted)
 
         return ir_messages
 
-    def _p_message_to_ir(self, provider_message: Any) -> Any:
+    def _p_message_to_ir(
+        self,
+        provider_message: Any,
+        unpacked_content: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> Any:
         """Convert a single OpenAI message to IR format.
 
         Args:
             provider_message: OpenAI message dict.
+            unpacked_content: Mapping of call_id → provider content blocks
+                extracted from synthetic user messages.
 
         Returns:
             IR message dict, or None.
@@ -393,7 +564,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         elif role == "assistant":
             return self._p_assistant_to_ir(provider_message)
         elif role == "tool":
-            return self._p_tool_to_ir(provider_message)
+            return self._p_tool_to_ir(provider_message, unpacked_content)
         elif role == "function":
             return self._p_function_to_ir(provider_message)
 
@@ -462,14 +633,47 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         return {"role": "assistant", "content": ir_content}
 
-    def _p_tool_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
-        """OpenAI tool role message → IR ToolMessage."""
+    def _p_tool_to_ir(
+        self,
+        msg: dict[str, Any],
+        unpacked_content: dict[str, list[dict[str, Any]]] | None = None,
+    ) -> dict[str, Any]:
+        """OpenAI tool role message → IR ToolMessage.
+
+        If unpacked multimodal content exists for this tool_call_id (from a
+        synthetic user message), the visual content blocks are converted to IR
+        and used as the result. Otherwise, the tool message content string is
+        used as-is.
+
+        Args:
+            msg: OpenAI tool role message dict.
+            unpacked_content: Mapping of call_id → provider content blocks.
+        """
+        call_id = msg.get("tool_call_id", "")
+
+        if call_id and unpacked_content and call_id in unpacked_content:
+            # Restore multimodal content from synthetic user message
+            ir_parts: list[ContentPart] = []
+            for block in unpacked_content[call_id]:
+                converted = self._p_content_part_to_ir(block)
+                ir_parts.extend(converted)
+            return {
+                "role": "tool",
+                "content": [
+                    ToolResultPart(
+                        type="tool_result",
+                        tool_call_id=call_id,
+                        result=ir_parts,
+                    )
+                ],
+            }
+
         return {
             "role": "tool",
             "content": [
                 ToolResultPart(
                     type="tool_result",
-                    tool_call_id=msg.get("tool_call_id", ""),
+                    tool_call_id=call_id,
                     result=msg.get("content", ""),
                 )
             ],
@@ -490,6 +694,95 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 )
             ],
         }
+
+    # ==================== Multimodal Unpacking ====================
+
+    @staticmethod
+    def _is_synthetic_tool_content_msg(msg: dict[str, Any]) -> bool:
+        """Check if a user message is a synthetic tool content message.
+
+        A synthetic message has ``role: "user"`` and its content list starts
+        with a text part matching the ``<tool-content call-id="...">`` tag.
+
+        Args:
+            msg: OpenAI message dict.
+
+        Returns:
+            True if the message is a synthetic tool content message.
+        """
+        if msg.get("role") != "user":
+            return False
+        content = msg.get("content")
+        if not isinstance(content, list) or not content:
+            return False
+        first = content[0]
+        if isinstance(first, dict) and first.get("type") == "text":
+            return bool(TOOL_CONTENT_OPEN_TAG_RE.match(first.get("text", "")))
+        return False
+
+    @staticmethod
+    def _unpack_tool_content(
+        messages: list[dict[str, Any]],
+    ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
+        """Extract multimodal content from synthetic user messages.
+
+        Scans for synthetic user messages containing ``<tool-content>`` tags,
+        parses the tags to extract ``call_id → content blocks`` mapping, and
+        removes the synthetic messages from the message list.
+
+        Args:
+            messages: OpenAI Chat messages (may contain synthetic user messages).
+
+        Returns:
+            Tuple of (unpacked_content mapping, clean message list).
+        """
+        unpacked: dict[str, list[dict[str, Any]]] = {}
+        clean: list[dict[str, Any]] = []
+
+        for msg in messages:
+            if not OpenAIChatMessageOps._is_synthetic_tool_content_msg(msg):
+                clean.append(msg)
+                continue
+
+            # Parse <tool-content call-id="..."> sections
+            content = msg.get("content", [])
+            current_call_id: str | None = None
+            current_blocks: list[dict[str, Any]] = []
+
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+
+                if part.get("type") == "text":
+                    text = part.get("text", "")
+
+                    # Check for open tag
+                    open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
+                    if open_match:
+                        # Save previous section if any
+                        if current_call_id and current_blocks:
+                            unpacked[current_call_id] = current_blocks
+                        current_call_id = open_match.group(1)
+                        current_blocks = []
+                        continue
+
+                    # Check for close tag
+                    if text == TOOL_CONTENT_CLOSE_TAG:
+                        if current_call_id and current_blocks:
+                            unpacked[current_call_id] = current_blocks
+                        current_call_id = None
+                        current_blocks = []
+                        continue
+
+                # Content block within a section
+                if current_call_id is not None:
+                    current_blocks.append(part)
+
+            # Handle unclosed section
+            if current_call_id and current_blocks:
+                unpacked[current_call_id] = current_blocks
+
+        return unpacked, clean
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single OpenAI content part to IR content part(s).
