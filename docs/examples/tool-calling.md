@@ -70,3 +70,33 @@ anthropic_req, _ = anthropic_conv.request_to_provider(ir_request)
 ```
 
 The tool definitions and tool call results are automatically converted to each provider's native format.
+
+## Multimodal Tool Results
+
+Tools can return rich content (text + images + files) instead of plain strings. This is useful for tools that generate charts, diagrams, or other visual outputs.
+
+```python
+from llm_rosetta import create_tool_result_message
+
+# Tool function returning multimodal content
+def generate_chart(chart_type="bar"):
+    return [
+        {"type": "text", "text": f"Generated {chart_type} chart:"},
+        {"type": "image", "image_data": {"data": "<base64>", "media_type": "image/png"}},
+    ]
+
+# Execute tool and create multimodal result message
+result = generate_chart(**tool_call["function"]["arguments"])
+tool_msg = create_tool_result_message(tool_call["id"], result)
+```
+
+### Provider Support
+
+| Provider | Multimodal Tool Results | Handling |
+|----------|:----------------------:|----------|
+| Anthropic | Native | Content blocks (text, image, document) |
+| OpenAI Responses | Native | Content blocks (input_text, input_image, input_file) |
+| Google Gemini | Native | inline_data blobs |
+| OpenAI Chat | Emulated | Dual encoding: `json.dumps()` + synthetic user message with visual content |
+
+For OpenAI Chat, the converter automatically handles the dual encoding — no special code needed from the caller.

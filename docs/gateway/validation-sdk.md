@@ -6,8 +6,8 @@ title: SDK & Integration Tests
 
 This page documents the automated test suites used to validate LLM-Rosetta's converter pipelines with real API calls.
 
-!!! info "Last updated: 2026-03-23"
-    Tested with llm-rosetta v0.2.5, argo-proxy v3.0.0b7
+!!! info "Last updated: 2026-04-07"
+    Tested with llm-rosetta v0.2.7 (unreleased), argo-proxy v3.0.0b7
 
 ## Integration Test Suite (`tests/integration/`)
 
@@ -36,12 +36,11 @@ python -m pytest tests/integration/test_anthropic_rest_e2e.py -v
 
 | Test Suite | Tests | Result |
 |-----------|:-----:|:------:|
-| Google GenAI SDK | 5 | **5/5** ✓ |
-| Google GenAI REST | 6 | **6/6** ✓ |
-| OpenAI Chat SDK | 5 | **5/5** ✓ |
-| OpenAI Responses SDK | 3 | **3/3** ✓ |
-| Anthropic REST | 3 | **3/3** ✓ |
-| **Total** | **22** | **22/22** ✓ |
+| OpenAI Chat SDK | 9 | **9/9** ✓ |
+| OpenAI Responses SDK | 6 | **6/6** ✓ |
+| Anthropic SDK | 8 | **8/8** ✓ |
+| Google GenAI SDK | 7 | **7/7** ✓ |
+| **Total** | **30** | **30/30** ✓ |
 
 ### Test Coverage Per Suite
 
@@ -52,6 +51,8 @@ python -m pytest tests/integration/test_anthropic_rest_e2e.py -v
 | Non-stream with tool calls | ✓ | ✓ | ✓ | ✓ |
 | Streaming text | ✓ | — | ✓ | — |
 | Streaming with tool calls | ✓ | — | ✓ | — |
+| Multimodal tool result | ✓ | ✓ | ✓ | ✓ |
+| Image input + tool calls | ✓ | ✓ | ✓ | ✓ |
 | Request round-trip | ✓ | ✓ | ✓ | ✓ |
 | Response round-trip | ✓ | ✓ | ✓ | ✓ |
 | Multi-turn conversation | — | — | — | ✓ |
