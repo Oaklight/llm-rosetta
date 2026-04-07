@@ -16,7 +16,8 @@ from llm_rosetta.auto_detect import ProviderType
 from .config import GatewayConfig
 from .logging import get_logger
 from .proxy import (
-    close_clients,
+    ProviderMetadataStore,
+    close_resources,
     detect_stream_request,
     error_response_for_source,
     extract_model,
@@ -81,13 +82,25 @@ async def _proxy_handler(
         is_stream,
     )
 
+    store: ProviderMetadataStore = request.app.state.metadata_store
+
     if is_stream:
         return await handle_streaming(
-            source_provider, target_provider, provider_info, body, model
+            source_provider,
+            target_provider,
+            provider_info,
+            body,
+            model,
+            metadata_store=store,
         )
     else:
         return await handle_non_streaming(
-            source_provider, target_provider, provider_info, body, model
+            source_provider,
+            target_provider,
+            provider_info,
+            body,
+            model,
+            metadata_store=store,
         )
 
 
@@ -194,6 +207,8 @@ def create_app(config: GatewayConfig) -> Starlette:
     global _config
     _config = config
 
+    metadata_store = ProviderMetadataStore()
+
     routes = [
         Route("/v1/chat/completions", handle_openai_chat, methods=["POST"]),
         Route("/v1/messages", handle_anthropic, methods=["POST"]),
@@ -211,6 +226,8 @@ def create_app(config: GatewayConfig) -> Starlette:
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
         yield
-        await close_clients()
+        await close_resources(metadata_store=metadata_store)
 
-    return Starlette(routes=routes, lifespan=lifespan)
+    app = Starlette(routes=routes, lifespan=lifespan)
+    app.state.metadata_store = metadata_store
+    return app

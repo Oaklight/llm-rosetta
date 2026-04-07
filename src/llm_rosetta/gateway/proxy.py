@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
@@ -217,56 +218,117 @@ def get_client(proxy_url: str | None = None) -> httpx.AsyncClient:
     return _http_clients[proxy_url]
 
 
-async def close_clients() -> None:
-    """Close all pooled HTTP clients (called on app shutdown)."""
+async def close_resources(
+    *, metadata_store: ProviderMetadataStore | None = None
+) -> None:
+    """Close all pooled HTTP clients and clear metadata store (called on app shutdown)."""
     for client in _http_clients.values():
         await client.aclose()
     _http_clients.clear()
+    store = metadata_store or _default_metadata_store
+    store.clear()
 
 
 # ---------------------------------------------------------------------------
-# Provider metadata cache (e.g. Google thought_signature)
+# Provider metadata store (e.g. Google thought_signature)
 # ---------------------------------------------------------------------------
-# Maps tool_call_id → provider_metadata dict.  Populated when we receive
-# tool-call responses from upstream; consumed when the follow-up request
-# contains the corresponding tool results.  Short-lived: entries are
-# deleted once consumed.
-
-_provider_metadata_cache: dict[str, dict[str, Any]] = {}
-
-
-def _cache_provider_metadata(ir_response: dict[str, Any]) -> None:
-    """Extract provider_metadata from tool calls in an IR response and cache it."""
-    for choice in ir_response.get("choices", []):
-        msg = choice.get("message", {})
-        for part in msg.get("content", []):
-            if part.get("type") == "tool_call" and "provider_metadata" in part:
-                tool_call_id = part.get("tool_call_id")
-                if tool_call_id:
-                    _provider_metadata_cache[tool_call_id] = part["provider_metadata"]
-                    logger.debug(
-                        "Cached provider_metadata for tool_call %s", tool_call_id
-                    )
+# Bridges provider_metadata across HTTP request boundaries.  Request 1's
+# response may contain a ``thought_signature`` that must be injected into
+# Request 2's tool result.  Entries are keyed by ``tool_call_id`` and are
+# kept alive (``get``, not ``pop``) because clients resend the full
+# conversation history on every request.
 
 
-def _inject_provider_metadata(ir_request: dict[str, Any]) -> None:
-    """Inject cached provider_metadata into tool call parts in an IR request.
+@dataclass
+class _CacheEntry:
+    """A single cached provider_metadata entry with creation timestamp."""
 
-    Clients send the full conversation history on every request, so the same
-    tool_call_id may appear in multiple requests.  We use ``get()`` instead of
-    ``pop()`` to keep entries alive for subsequent turns.
+    data: dict[str, Any]
+    created: float = field(default_factory=time.monotonic)
+
+
+class ProviderMetadataStore:
+    """Stores provider_metadata across request boundaries with TTL and bounds.
+
+    Args:
+        ttl: Time-to-live in seconds for each entry.  Defaults to 30 minutes.
+        max_size: Maximum number of entries.  Oldest is evicted on overflow.
     """
-    logger.debug(
-        "_inject: cache has %d entries: %s",
-        len(_provider_metadata_cache),
-        list(_provider_metadata_cache.keys()),
-    )
-    for msg in ir_request.get("messages", []):
-        for part in msg.get("content", []):
-            if part.get("type") == "tool_call":
-                tool_call_id = part.get("tool_call_id")
-                if tool_call_id and tool_call_id in _provider_metadata_cache:
-                    part["provider_metadata"] = _provider_metadata_cache[tool_call_id]
+
+    def __init__(self, *, ttl: float = 1800.0, max_size: int = 10_000) -> None:
+        self._store: dict[str, _CacheEntry] = {}
+        self._ttl = ttl
+        self._max_size = max_size
+
+    def _evict_expired(self) -> None:
+        now = time.monotonic()
+        expired = [k for k, e in self._store.items() if now - e.created > self._ttl]
+        for k in expired:
+            del self._store[k]
+
+    def _evict_oldest(self) -> None:
+        if len(self._store) >= self._max_size:
+            oldest_key = min(self._store, key=lambda k: self._store[k].created)
+            del self._store[oldest_key]
+
+    def cache_from_response(self, ir_response: dict[str, Any]) -> None:
+        """Extract and cache provider_metadata from tool calls in an IR response."""
+        self._evict_expired()
+        for choice in ir_response.get("choices", []):
+            msg = choice.get("message", {})
+            for part in msg.get("content", []):
+                if part.get("type") == "tool_call" and "provider_metadata" in part:
+                    tool_call_id = part.get("tool_call_id")
+                    if tool_call_id:
+                        self._evict_oldest()
+                        self._store[tool_call_id] = _CacheEntry(
+                            data=part["provider_metadata"],
+                        )
+                        logger.debug(
+                            "Cached provider_metadata for tool_call %s", tool_call_id
+                        )
+
+    def cache_from_stream_event(self, ir_event: dict[str, Any]) -> None:
+        """Cache provider_metadata from a tool_call_start stream event."""
+        if (
+            ir_event.get("type") == "tool_call_start"
+            and "provider_metadata" in ir_event
+        ):
+            self._evict_expired()
+            self._evict_oldest()
+            self._store[ir_event["tool_call_id"]] = _CacheEntry(
+                data=ir_event["provider_metadata"],
+            )
+
+    def inject_into_request(self, ir_request: dict[str, Any]) -> None:
+        """Inject cached provider_metadata into tool call parts in an IR request.
+
+        Clients send the full conversation history on every request, so the
+        same tool_call_id may appear in multiple requests.  Entries are kept
+        alive (not popped) for subsequent turns.
+        """
+        self._evict_expired()
+        logger.debug(
+            "inject: store has %d entries: %s",
+            len(self._store),
+            list(self._store.keys()),
+        )
+        for msg in ir_request.get("messages", []):
+            for part in msg.get("content", []):
+                if part.get("type") == "tool_call":
+                    tool_call_id = part.get("tool_call_id")
+                    if tool_call_id and tool_call_id in self._store:
+                        part["provider_metadata"] = self._store[tool_call_id].data
+
+    def clear(self) -> None:
+        """Remove all entries."""
+        self._store.clear()
+
+    def __len__(self) -> int:
+        return len(self._store)
+
+
+_default_metadata_store = ProviderMetadataStore()
 
 
 # ---------------------------------------------------------------------------
@@ -280,8 +342,11 @@ async def handle_non_streaming(
     provider_info: ProviderInfo,
     body: dict[str, Any],
     model: str,
+    *,
+    metadata_store: ProviderMetadataStore | None = None,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
+    store = metadata_store or _default_metadata_store
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
@@ -299,7 +364,7 @@ async def handle_non_streaming(
         )
 
     # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
-    _inject_provider_metadata(ir_request)
+    store.inject_into_request(ir_request)
 
     # -- body log: IR request (after source -> IR) --
     log_original_request(ir_request)
@@ -359,7 +424,7 @@ async def handle_non_streaming(
     log_response(upstream_json, label="UPSTREAM RESPONSE")
 
     # 6b. Cache provider_metadata from tool calls for follow-up requests
-    _cache_provider_metadata(ir_response)
+    store.cache_from_response(ir_response)
 
     # 7. IR -> Source response
     try:
@@ -380,8 +445,11 @@ async def handle_streaming(
     provider_info: ProviderInfo,
     body: dict[str, Any],
     model: str,
+    *,
+    metadata_store: ProviderMetadataStore | None = None,
 ) -> Response:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
+    store = metadata_store or _default_metadata_store
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
@@ -399,7 +467,7 @@ async def handle_streaming(
         )
 
     # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
-    _inject_provider_metadata(ir_request)
+    store.inject_into_request(ir_request)
 
     # -- body log: IR request (after source -> IR) --
     log_original_request(ir_request)
@@ -486,13 +554,7 @@ async def handle_streaming(
                 # IR events -> source-format chunks
                 for ir_event in ir_events:
                     # Cache provider_metadata from tool_call_start events
-                    if (
-                        ir_event.get("type") == "tool_call_start"
-                        and "provider_metadata" in ir_event
-                    ):
-                        _provider_metadata_cache[ir_event["tool_call_id"]] = ir_event[
-                            "provider_metadata"
-                        ]
+                    store.cache_from_stream_event(ir_event)
 
                     source_chunks = source_converter.stream_response_to_provider(
                         ir_event, context=to_ctx
