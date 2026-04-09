@@ -364,7 +364,7 @@ class TestStreamResponseToProvider:
         assert result["output_index"] == 1
 
     def test_tool_call_start_no_index(self):
-        """ToolCallStartEvent without tool_call_index omits output_index."""
+        """ToolCallStartEvent without tool_call_index defaults output_index to 0."""
         event = cast(
             ToolCallStartEvent,
             {
@@ -375,7 +375,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["item"]["id"] == "call_abc"
-        assert "output_index" not in result
+        assert result["output_index"] == 0
 
     def test_tool_call_delta(self):
         """ToolCallDeltaEvent → response.function_call_arguments.delta."""
@@ -395,7 +395,7 @@ class TestStreamResponseToProvider:
         assert result["output_index"] == 1
 
     def test_tool_call_delta_no_index(self):
-        """ToolCallDeltaEvent without tool_call_index omits output_index."""
+        """ToolCallDeltaEvent without tool_call_index defaults output_index to 0."""
         event = cast(
             ToolCallDeltaEvent,
             {
@@ -406,7 +406,7 @@ class TestStreamResponseToProvider:
         )
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result["item_id"] == "call_abc"
-        assert "output_index" not in result
+        assert result["output_index"] == 0
 
     def test_tool_call_delta_empty_id_resolved_by_index(self):
         """ToolCallDeltaEvent with empty tool_call_id resolved via context index."""

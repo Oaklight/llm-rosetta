@@ -383,6 +383,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "call_id": tool_call_id,
                 "name": tool_name,
                 "arguments": arguments,
+                "status": "completed",
             }
         elif tool_type == "web_search":
             return {

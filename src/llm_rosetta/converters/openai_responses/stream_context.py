@@ -32,6 +32,7 @@ class OpenAIResponsesStreamContext(StreamContext):
     item_id: str = ""
     accumulated_text: str = ""
     content_part_done_emitted: bool = False
+    _sequence_number: int = 0
 
     @classmethod
     def from_base(cls, base: StreamContext) -> OpenAIResponsesStreamContext:

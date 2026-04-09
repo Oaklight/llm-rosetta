@@ -1,5 +1,9 @@
 """OpenAI Responses converter constants — event types, status mappings, and ID generation."""
 
+from __future__ import annotations
+
+from typing import Any
+
 # --- SSE event types ---
 
 
@@ -82,6 +86,7 @@ RESPONSES_PRESERVE_FIELDS: set[str] = {
     "prompt_cache_retention",
     "reasoning",
     "safety_identifier",
+    "service_tier",
     "store",
     "temperature",
     "text",
@@ -94,7 +99,35 @@ RESPONSES_PRESERVE_FIELDS: set[str] = {
     "metadata",
     # Lifecycle metadata
     "billing",
-    "completed_at",
     "error",
     "incomplete_details",
+}
+
+# Fields the Open Responses spec requires in every response resource.
+# When absent from echo, these are filled with null/default values.
+RESPONSES_REQUIRED_DEFAULTS: dict[str, Any] = {
+    "background": False,
+    "completed_at": None,
+    "error": None,
+    "incomplete_details": None,
+    "instructions": None,
+    "max_output_tokens": None,
+    "max_tool_calls": None,
+    "metadata": {},
+    "parallel_tool_calls": True,
+    "previous_response_id": None,
+    "prompt_cache_key": None,
+    "reasoning": None,
+    "safety_identifier": None,
+    "service_tier": "default",
+    "store": True,
+    "temperature": 1,
+    "text": {"format": {"type": "text"}},
+    "tool_choice": "auto",
+    "tools": [],
+    "top_p": 1,
+    "truncation": "disabled",
+    "top_logprobs": 0,
+    "frequency_penalty": 0,
+    "presence_penalty": 0,
 }
