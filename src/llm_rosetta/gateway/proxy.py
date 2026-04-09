@@ -501,6 +501,7 @@ async def handle_streaming(
 
         # Bridge preserve-mode metadata from request phase to streaming context
         to_ctx.options["metadata_mode"] = "preserve"
+        from_ctx.options["metadata_mode"] = "preserve"
         if "_request_echo" in ctx.metadata:
             to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
 
@@ -558,6 +559,12 @@ async def handle_streaming(
                 ir_events = target_converter.stream_response_from_provider(
                     chunk, context=from_ctx
                 )
+
+                # Bridge response extras captured during streaming
+                if "_response_extras" in from_ctx.metadata:
+                    to_ctx.metadata["_response_extras"] = from_ctx.metadata[
+                        "_response_extras"
+                    ]
 
                 # IR events -> source-format chunks
                 for ir_event in ir_events:

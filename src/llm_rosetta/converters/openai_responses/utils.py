@@ -61,16 +61,20 @@ def build_message_preamble_events(
                 "id": item_id,
                 "type": "message",
                 "role": "assistant",
+                "status": "in_progress",
                 "content": [],
             },
         },
         {
             "type": ResponsesEventType.CONTENT_PART_ADDED,
+            "item_id": item_id,
             "output_index": output_index,
             "content_index": 0,
             "part": {
                 "type": "output_text",
                 "text": "",
+                "annotations": [],
+                "logprobs": [],
             },
         },
     ]

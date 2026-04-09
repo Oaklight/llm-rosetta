@@ -9,6 +9,7 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
+import time
 from collections.abc import Sequence
 from typing import Any, cast
 
@@ -43,8 +44,10 @@ from ._constants import (
     RESPONSES_PRESERVE_FIELDS,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
+    RESPONSES_REQUIRED_DEFAULTS,
     RESPONSES_STATUS_TO_REASON,
     ResponsesEventType,
+    generate_message_id,
 )
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
@@ -464,20 +467,24 @@ class OpenAIResponsesConverter(BaseConverter):
             "status": "completed",
         }
 
+        msg_item_id = generate_message_id(ir_response.get("id", ""))
+
         for choice in ir_response.get("choices", []):
             message = choice.get("message")
             if not message:
                 continue
 
             content_parts = message.get("content", [])
+            text_parts: list[dict[str, Any]] = []
 
             for part in content_parts:
                 if is_text_part(part):
-                    provider_response["output"].append(
+                    text_parts.append(
                         {
-                            "type": "message",
-                            "role": "assistant",
-                            "content": [{"type": "output_text", "text": part["text"]}],
+                            "type": "output_text",
+                            "text": part["text"],
+                            "annotations": [],
+                            "logprobs": [],
                         }
                     )
                 elif is_tool_call_part(part):
@@ -488,6 +495,18 @@ class OpenAIResponsesConverter(BaseConverter):
                     provider_response["output"].append(
                         self.content_ops.ir_reasoning_to_p(part)
                     )
+
+            if text_parts:
+                provider_response["output"].insert(
+                    0,
+                    {
+                        "id": msg_item_id,
+                        "type": "message",
+                        "role": "assistant",
+                        "status": "completed",
+                        "content": text_parts,
+                    },
+                )
 
             # Set finish reason
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
@@ -504,17 +523,13 @@ class OpenAIResponsesConverter(BaseConverter):
                 "input_tokens": ir_usage.get("prompt_tokens") or 0,
                 "output_tokens": ir_usage.get("completion_tokens") or 0,
                 "total_tokens": ir_usage.get("total_tokens") or 0,
+                "input_tokens_details": {
+                    "cached_tokens": ir_usage.get("cache_read_tokens", 0),
+                },
+                "output_tokens_details": {
+                    "reasoning_tokens": ir_usage.get("reasoning_tokens", 0),
+                },
             }
-
-            if "cache_read_tokens" in ir_usage:
-                usage["input_tokens_details"] = {
-                    "cached_tokens": ir_usage["cache_read_tokens"]
-                }
-
-            if "reasoning_tokens" in ir_usage:
-                usage["output_tokens_details"] = {
-                    "reasoning_tokens": ir_usage["reasoning_tokens"]
-                }
 
             provider_response["usage"] = usage
 
@@ -535,9 +550,18 @@ class OpenAIResponsesConverter(BaseConverter):
                 "status",
                 "usage",
             }
+            # Apply required defaults first, then override with actual echo
+            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+                if k not in core_keys and k not in provider_response:
+                    provider_response[k] = v
             for k, v in echo.items():
                 if k not in core_keys:
                     provider_response[k] = v
+
+            # Ensure echoed tools have required 'strict' field
+            for tool in provider_response.get("tools", []):
+                if isinstance(tool, dict) and tool.get("type") == "function":
+                    tool.setdefault("strict", None)
 
             # Restore per-output-item metadata
             items_meta = ctx.get_output_items_meta()
@@ -719,6 +743,14 @@ class OpenAIResponsesConverter(BaseConverter):
             if created:
                 start_event["created"] = created
             events.append(start_event)
+
+            # Preserve mode: capture echo fields from the initial response
+            if context.metadata_mode == "preserve" and isinstance(response, dict):
+                extras = {
+                    k: v for k, v in response.items() if k in RESPONSES_PRESERVE_FIELDS
+                }
+                if extras:
+                    context.store_response_extras(extras)
 
     def _handle_output_text_delta_from_p(
         self,
@@ -997,7 +1029,18 @@ class OpenAIResponsesConverter(BaseConverter):
 
         handler_name = self._TO_P_DISPATCH.get(event["type"])
         if handler_name is not None:
-            return getattr(self, handler_name)(event, context)
+            result = getattr(self, handler_name)(event, context)
+            # Inject sequence_number into emitted events
+            if isinstance(context, OpenAIResponsesStreamContext):
+                if isinstance(result, list):
+                    for r in result:
+                        if isinstance(r, dict) and "type" in r:
+                            context._sequence_number += 1
+                            r["sequence_number"] = context._sequence_number
+                elif isinstance(result, dict) and "type" in result:
+                    context._sequence_number += 1
+                    result["sequence_number"] = context._sequence_number
+            return result
         return {}
 
     # --- to_provider handlers ---
@@ -1013,15 +1056,41 @@ class OpenAIResponsesConverter(BaseConverter):
             context.model = event["model"]
             context.created = event.get("created", 0)
             context.mark_started()
+
+        response: dict[str, Any] = {
+            "id": event["response_id"],
+            "object": "response",
+            "model": event["model"],
+            "status": "in_progress",
+            "output": [],
+        }
+        created = event.get("created", 0)
+        response["created_at"] = created or int(time.time())
+
+        # Preserve mode: include echo fields in response.created
+        if context is not None and context.metadata_mode == "preserve":
+            echo = context.get_echo_fields()
+            core_keys = {
+                "id",
+                "object",
+                "created_at",
+                "model",
+                "output",
+                "status",
+                "usage",
+            }
+            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+                if k not in core_keys and k not in response:
+                    response[k] = v
+            for k, v in echo.items():
+                if k not in core_keys:
+                    response[k] = v
+            # response.created must include usage: null (not yet available)
+            response.setdefault("usage", None)
+
         return {
             "type": ResponsesEventType.RESPONSE_CREATED,
-            "response": {
-                "id": event["response_id"],
-                "object": "response",
-                "model": event["model"],
-                "status": "in_progress",
-                "output": [],
-            },
+            "response": response,
         }
 
     def _handle_stream_end_to_p(
@@ -1067,11 +1136,17 @@ class OpenAIResponsesConverter(BaseConverter):
                 return build_message_preamble_events(context, output_index=0)
             # Fallback: just emit content_part.added (e.g. no context, or
             # output item already emitted by a prior ContentBlockStartEvent)
+            item_id = context.item_id if context is not None else ""
             return {
                 "type": ResponsesEventType.CONTENT_PART_ADDED,
+                "item_id": item_id,
+                "output_index": 0,
+                "content_index": 0,
                 "part": {
                     "type": "output_text",
                     "text": "",
+                    "annotations": [],
+                    "logprobs": [],
                 },
             }
         # Other block types are no-ops for now
@@ -1087,18 +1162,27 @@ class OpenAIResponsesConverter(BaseConverter):
             accumulated = context.accumulated_text
             # Emit output_text.done before content_part.done (matches
             # OpenAI's event ordering)
+            item_id = context.item_id
             return [
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
+                    "item_id": item_id,
                     "output_index": 0,
                     "content_index": 0,
                     "text": accumulated,
+                    "logprobs": [],
                 },
                 {
                     "type": ResponsesEventType.CONTENT_PART_DONE,
+                    "item_id": item_id,
                     "output_index": 0,
                     "content_index": 0,
-                    "part": {"type": "output_text", "text": accumulated},
+                    "part": {
+                        "type": "output_text",
+                        "text": accumulated,
+                        "annotations": [],
+                        "logprobs": [],
+                    },
                 },
             ]
         return {
@@ -1115,11 +1199,14 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         choice_index = event.get("choice_index", 0)
         text = event["text"]
+        item_id = context.item_id if context is not None else ""
         delta_event: dict[str, Any] = {
             "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
-            "delta": text,
+            "item_id": item_id,
             "output_index": choice_index,
             "content_index": 0,
+            "delta": text,
+            "logprobs": [],
         }
 
         # Accumulate text in context for response.completed output
@@ -1158,18 +1245,20 @@ class OpenAIResponsesConverter(BaseConverter):
             context.register_tool_call(call_id, tool_name)
             context.register_tool_call_item(call_id, item_id)
 
+        tc_index = event.get("tool_call_index")
+        output_index = tc_index if tc_index is not None else 0
         result: dict[str, Any] = {
             "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+            "output_index": output_index,
             "item": {
                 "id": item_id,
                 "type": "function_call",
                 "call_id": call_id,
                 "name": tool_name,
+                "arguments": "",
+                "status": "in_progress",
             },
         }
-        tc_index = event.get("tool_call_index")
-        if tc_index is not None:
-            result["output_index"] = tc_index
         return result
 
     def _handle_tool_call_delta_to_p(
@@ -1199,13 +1288,13 @@ class OpenAIResponsesConverter(BaseConverter):
         if not item_id and call_id:
             item_id = call_id
 
+        output_index = tc_index if tc_index is not None else 0
         result: dict[str, Any] = {
             "type": ResponsesEventType.FUNCTION_CALL_ARGS_DELTA,
             "item_id": item_id,
+            "output_index": output_index,
             "delta": delta,
         }
-        if tc_index is not None:
-            result["output_index"] = tc_index
         return result
 
     def _handle_finish_to_p(
@@ -1254,14 +1343,18 @@ class OpenAIResponsesConverter(BaseConverter):
             accumulated = context.accumulated_text
             item_id = context.item_id
             if accumulated:
-                output.append(
-                    {
-                        "id": item_id,
-                        "type": "message",
-                        "role": "assistant",
-                        "content": [{"type": "output_text", "text": accumulated}],
-                    }
-                )
+                msg_item: dict[str, Any] = {
+                    "id": item_id,
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": accumulated}],
+                }
+                if context.metadata_mode == "preserve":
+                    msg_item["status"] = "completed"
+                    for part in msg_item.get("content", []):
+                        part.setdefault("annotations", [])
+                        part.setdefault("logprobs", [])
+                output.append(msg_item)
 
             # Add accumulated function calls to output
             for call_id in context._tool_call_order:
@@ -1281,12 +1374,13 @@ class OpenAIResponsesConverter(BaseConverter):
 
         response: dict[str, Any] = {"status": status, "output": output}
 
-        # Populate id, object, model from context so clients can parse
-        # the completed response envelope.
+        # Populate id, object, model, created_at from context so clients can
+        # parse the completed response envelope.
         if context is not None:
             response["id"] = context.response_id
             response["object"] = "response"
             response["model"] = context.model
+            response["created_at"] = context.created or int(time.time())
 
         if status == "incomplete":
             incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(
@@ -1296,11 +1390,23 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Merge pending usage from context if available
         if context is not None and context.pending_usage is not None:
-            response["usage"] = {
+            usage: dict[str, Any] = {
                 "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
                 "output_tokens": context.pending_usage.get("completion_tokens") or 0,
                 "total_tokens": context.pending_usage.get("total_tokens") or 0,
             }
+            # Include token detail breakdowns if available
+            cache_read = context.pending_usage.get("cache_read_tokens")
+            if cache_read is not None:
+                usage["input_tokens_details"] = {"cached_tokens": cache_read}
+            else:
+                usage["input_tokens_details"] = {"cached_tokens": 0}
+            reasoning = context.pending_usage.get("reasoning_tokens")
+            if reasoning is not None:
+                usage["output_tokens_details"] = {"reasoning_tokens": reasoning}
+            else:
+                usage["output_tokens_details"] = {"reasoning_tokens": 0}
+            response["usage"] = usage
 
         # Preserve mode: inject echo fields into the response.completed payload
         if context is not None and context.metadata_mode == "preserve":
@@ -1314,6 +1420,10 @@ class OpenAIResponsesConverter(BaseConverter):
                 "status",
                 "usage",
             }
+            # Apply required defaults first, then override with actual echo
+            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+                if k not in core_keys and k not in response:
+                    response[k] = v
             for k, v in echo.items():
                 if k not in core_keys:
                     response[k] = v
@@ -1338,17 +1448,25 @@ class OpenAIResponsesConverter(BaseConverter):
             results.append(
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
+                    "item_id": item_id,
                     "output_index": 0,
                     "content_index": 0,
                     "text": accumulated,
+                    "logprobs": [],
                 }
             )
             results.append(
                 {
                     "type": ResponsesEventType.CONTENT_PART_DONE,
+                    "item_id": item_id,
                     "output_index": 0,
                     "content_index": 0,
-                    "part": {"type": "output_text", "text": accumulated},
+                    "part": {
+                        "type": "output_text",
+                        "text": accumulated,
+                        "annotations": [],
+                        "logprobs": [],
+                    },
                 }
             )
         results.append(
@@ -1359,7 +1477,15 @@ class OpenAIResponsesConverter(BaseConverter):
                     "id": item_id,
                     "type": "message",
                     "role": "assistant",
-                    "content": [{"type": "output_text", "text": accumulated}],
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": accumulated,
+                            "annotations": [],
+                            "logprobs": [],
+                        }
+                    ],
                 },
             }
         )
