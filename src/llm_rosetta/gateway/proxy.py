@@ -50,6 +50,7 @@ def prepare_upstream(
     model: str,
     *,
     stream: bool,
+    extra_headers: dict[str, str] | None = None,
 ) -> tuple[str, dict[str, str], dict[str, Any]]:
     """Return (url, headers, body) ready for the upstream HTTP call."""
     url = provider_info.upstream_url(model, stream=stream)
@@ -57,6 +58,8 @@ def prepare_upstream(
         "Content-Type": "application/json",
         **provider_info.auth_headers(),
     }
+    if extra_headers:
+        headers.update(extra_headers)
 
     body = dict(provider_request)
 
@@ -65,7 +68,7 @@ def prepare_upstream(
         if target_provider in ("openai_chat",):
             body["stream"] = True
             body["stream_options"] = {"include_usage": True}
-        elif target_provider in ("openai_responses", "anthropic"):
+        elif target_provider in ("openai_responses", "open_responses", "anthropic"):
             body["stream"] = True
         # Google streaming is signaled via URL, not body
 
@@ -133,6 +136,7 @@ def _format_sse_google(chunk: dict[str, Any]) -> str:
 SSE_FORMATTERS: dict[str, Any] = {
     "openai_chat": _format_sse_openai_chat,
     "openai_responses": _format_sse_openai_responses,
+    "open_responses": _format_sse_openai_responses,
     "anthropic": _format_sse_anthropic,
     "google": _format_sse_google,
 }
@@ -155,7 +159,7 @@ def error_response_for_source(
                 "code": None,
             }
         }
-    elif source_provider == "openai_responses":
+    elif source_provider in ("openai_responses", "open_responses"):
         body = {
             "error": {
                 "message": message,
@@ -189,7 +193,12 @@ def error_response_for_source(
 
 def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -> bool:
     """Detect if the incoming request asks for streaming."""
-    if source_provider in ("openai_chat", "openai_responses", "anthropic"):
+    if source_provider in (
+        "openai_chat",
+        "openai_responses",
+        "open_responses",
+        "anthropic",
+    ):
         return bool(body.get("stream", False))
     # Google streaming is determined by the endpoint path, not the body
     return False
@@ -344,6 +353,7 @@ async def handle_non_streaming(
     model: str,
     *,
     metadata_store: ProviderMetadataStore | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     store = metadata_store or _default_metadata_store
@@ -382,7 +392,12 @@ async def handle_non_streaming(
 
     # 3. Build upstream request
     url, headers, upstream_body = prepare_upstream(
-        target_provider, provider_info, target_body, model, stream=False
+        target_provider,
+        provider_info,
+        target_body,
+        model,
+        stream=False,
+        extra_headers=extra_headers,
     )
 
     # -- body log: target request body --
@@ -448,6 +463,7 @@ async def handle_streaming(
     model: str,
     *,
     metadata_store: ProviderMetadataStore | None = None,
+    extra_headers: dict[str, str] | None = None,
 ) -> Response:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
@@ -486,7 +502,12 @@ async def handle_streaming(
 
     # 3. Build upstream request (with stream=True)
     url, headers, upstream_body = prepare_upstream(
-        target_provider, provider_info, target_body, model, stream=True
+        target_provider,
+        provider_info,
+        target_body,
+        model,
+        stream=True,
+        extra_headers=extra_headers,
     )
 
     # -- body log: target request body --

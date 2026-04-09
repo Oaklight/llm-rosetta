@@ -275,6 +275,11 @@ class OpenAIResponsesContentOps(BaseContentOps):
             else:
                 result["summary"] = []
 
+        # Open Responses spec: raw `content` field
+        raw_content = metadata.get("responses_reasoning_content")
+        if raw_content:
+            result["content"] = raw_content
+
         # Preserve encryption signature for encrypted reasoning.
         signature = ir_reasoning.get("signature")
         if signature:
@@ -318,6 +323,13 @@ class OpenAIResponsesContentOps(BaseContentOps):
             metadata["responses_reasoning_id"] = item_id
         if isinstance(summary, list):
             metadata["responses_reasoning_summary"] = summary
+
+        # Open Responses spec: raw `content` field (distinct from `summary`)
+        raw_content = provider_reasoning.get("content")
+        if raw_content:
+            metadata["responses_reasoning_content"] = raw_content
+            if not reasoning_content:
+                reasoning_content = raw_content
 
         part = ReasoningPart(type="reasoning")
 
