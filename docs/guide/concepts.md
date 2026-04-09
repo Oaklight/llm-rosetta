@@ -38,6 +38,18 @@ Plus 2 streaming interfaces:
 
 - `stream_response_from_provider()` / `stream_response_to_provider()`
 
+## Conversion Context
+
+All converter methods accept an optional `ConversionContext` (non-streaming) or `StreamContext` (streaming) that threads shared state through the pipeline:
+
+- **`warnings`** — accumulated conversion notes (e.g., unsupported features dropped)
+- **`options`** — structured conversion options (e.g., `output_format`, `metadata_mode`)
+- **`metadata`** — opaque store for provider-specific state
+
+The `metadata_mode` option (`"strip"` or `"preserve"`) controls whether provider-specific fields survive the round-trip. See [Using Converters — Metadata Preservation](converters.md#metadata-preservation-lossless-round-trip) for details.
+
+`StreamContext` extends `ConversionContext` with session-level metadata, tool call tracking, and lifecycle flags for stateful stream transformations.
+
 ## IR Message Types
 
 The IR defines four message roles:

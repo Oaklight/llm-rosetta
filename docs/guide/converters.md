@@ -88,6 +88,56 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 The `"rest"` format lifts `tools`, `tool_config`, `response_mime_type`, and `response_schema` to the top level, and wraps generation parameters (temperature, top_p, etc.) into a `generationConfig` object — matching the [Google Gemini REST API](https://ai.google.dev/api/generate-content) schema.
 
+## Metadata Preservation (Lossless Round-Trip)
+
+By default, LLM-Rosetta performs **semantic-only** conversion — provider-specific fields that have no IR equivalent are stripped. This is fine for most cross-provider workflows, but when you need a **lossless round-trip** (same provider A → IR → A), you can enable metadata preservation mode.
+
+### How It Works
+
+Pass `metadata_mode="preserve"` via `ConversionContext` to capture provider-specific fields during `from_provider` and re-inject them during `to_provider`:
+
+```python
+from llm_rosetta import OpenAIResponsesConverter
+from llm_rosetta.converters.base import ConversionContext
+
+converter = OpenAIResponsesConverter()
+ctx = ConversionContext(options={"metadata_mode": "preserve"})
+
+# Provider → IR (captures echo fields, per-item metadata)
+ir_request = converter.request_from_provider(provider_request, context=ctx)
+
+# ... modify IR as needed ...
+
+# IR → same provider (re-injects preserved fields)
+provider_request, warnings = converter.request_to_provider(ir_request, context=ctx)
+```
+
+For responses:
+
+```python
+ir_response = converter.response_from_provider(provider_response, context=ctx)
+provider_response = converter.response_to_provider(ir_response, context=ctx)
+```
+
+### What Gets Preserved
+
+Each converter preserves different provider-specific fields:
+
+| Provider | Preserved Fields |
+|----------|-----------------|
+| OpenAI Responses | 28+ request echo fields (temperature, tools, reasoning, truncation, etc.), per-output-item metadata (id, status, annotations, logprobs), `RESPONSES_REQUIRED_DEFAULTS` |
+| Anthropic | `stop_sequence`, `container`, citations, OpenRouter extension usage fields |
+| OpenAI Chat | `refusal`, `annotations` on choices |
+| Google GenAI | `promptTokensDetails`, `cachedContentTokenCount` in usage |
+
+### Gateway: Automatic Preserve Mode
+
+The LLM-Rosetta Gateway automatically uses preserve mode for all conversions — both streaming and non-streaming. This ensures that when a client sends a request in format A and the upstream is also format A (passthrough scenario), all provider-specific fields survive the round-trip without data loss.
+
+### Strip Mode (Default)
+
+When `metadata_mode` is `"strip"` (the default), only IR-mapped fields survive the conversion. This is the recommended mode for cross-provider workflows where provider-specific fields are irrelevant to the target.
+
 ## Provider Dialect Differences
 
 Different LLM providers have subtly different requirements for the same conceptual operations. LLM-Rosetta handles these **dialect differences** automatically during conversion, so you don't have to worry about them.
