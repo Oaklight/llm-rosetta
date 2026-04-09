@@ -476,6 +476,26 @@ class GoogleGenAIConverter(BaseConverter):
             if thoughts is not None:
                 usage_info["reasoning_tokens"] = thoughts
 
+            # Cached content tokens
+            cached = p_usage.get("cached_content_token_count") or p_usage.get(
+                "cachedContentTokenCount"
+            )
+            if cached is not None:
+                usage_info["cache_read_tokens"] = cached
+
+            # Modality breakdowns (Google-specific)
+            prompt_details = p_usage.get("prompt_tokens_details") or p_usage.get(
+                "promptTokensDetails"
+            )
+            if prompt_details:
+                usage_info["prompt_tokens_details"] = prompt_details
+
+            candidates_details = p_usage.get(
+                "candidates_tokens_details"
+            ) or p_usage.get("candidatesTokensDetails")
+            if candidates_details:
+                usage_info["completion_tokens_details"] = candidates_details
+
             ir_response["usage"] = usage_info
 
         return self._validate_ir_response(ir_response)
@@ -539,6 +559,21 @@ class GoogleGenAIConverter(BaseConverter):
 
             if "reasoning_tokens" in ir_usage:
                 usage_metadata["thoughtsTokenCount"] = ir_usage["reasoning_tokens"]
+
+            if "cache_read_tokens" in ir_usage:
+                usage_metadata["cachedContentTokenCount"] = ir_usage[
+                    "cache_read_tokens"
+                ]
+
+            if "prompt_tokens_details" in ir_usage:
+                usage_metadata["promptTokensDetails"] = ir_usage[
+                    "prompt_tokens_details"
+                ]
+
+            if "completion_tokens_details" in ir_usage:
+                usage_metadata["candidatesTokensDetails"] = ir_usage[
+                    "completion_tokens_details"
+                ]
 
             provider_response["usageMetadata"] = usage_metadata
 

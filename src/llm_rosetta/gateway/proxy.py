@@ -352,6 +352,7 @@ async def handle_non_streaming(
 
     # Shared context for the conversion pipeline
     ctx = ConversionContext()
+    ctx.options["metadata_mode"] = "preserve"
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
 
@@ -455,6 +456,7 @@ async def handle_streaming(
 
     # Shared context for the request conversion phase
     ctx = ConversionContext()
+    ctx.options["metadata_mode"] = "preserve"
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
 
@@ -496,6 +498,12 @@ async def handle_streaming(
         """Stream SSE events from upstream, converting each chunk."""
         from_ctx = target_converter.create_stream_context()  # upstream -> IR
         to_ctx = source_converter.create_stream_context()  # IR -> source
+
+        # Bridge preserve-mode metadata from request phase to streaming context
+        to_ctx.options["metadata_mode"] = "preserve"
+        if "_request_echo" in ctx.metadata:
+            to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
+
         chunk_count = 0
         t0 = time.monotonic()
 

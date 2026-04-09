@@ -40,6 +40,7 @@ from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
+    RESPONSES_PRESERVE_FIELDS,
     RESPONSES_REASON_TO_INCOMPLETE_REASON,
     RESPONSES_REASON_TO_STATUS,
     RESPONSES_STATUS_TO_REASON,
@@ -290,6 +291,17 @@ class OpenAIResponsesConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
+        # Preserve mode: capture request fields for echo-back in response
+        ctx = context if context is not None else ConversionContext()
+        if ctx.metadata_mode == "preserve":
+            echo = {
+                k: v
+                for k, v in provider_request.items()
+                if k in RESPONSES_PRESERVE_FIELDS
+            }
+            if echo:
+                ctx.store_request_echo(echo)
+
         return self._validate_ir_request(ir_request)
 
     def response_from_provider(
@@ -385,6 +397,47 @@ class OpenAIResponsesConverter(BaseConverter):
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
 
+        # Preserve mode: capture extra fields for lossless round-trip
+        ctx = context if context is not None else ConversionContext()
+        if ctx.metadata_mode == "preserve":
+            # Top-level extra fields
+            extras = {
+                k: v
+                for k, v in provider_response.items()
+                if k in RESPONSES_PRESERVE_FIELDS and v is not None
+            }
+            if extras:
+                ctx.store_response_extras(extras)
+
+            # Per-output-item metadata (id, status, content-part annotations/logprobs)
+            items_meta: list[dict[str, Any]] = []
+            for item in output_items:
+                if not isinstance(item, dict):
+                    continue
+                meta: dict[str, Any] = {}
+                if "id" in item:
+                    meta["id"] = item["id"]
+                if "status" in item:
+                    meta["status"] = item["status"]
+                # Per-content-part metadata
+                content = item.get("content", [])
+                if isinstance(content, list):
+                    parts_meta: list[dict[str, Any]] = []
+                    for cp in content:
+                        if not isinstance(cp, dict):
+                            continue
+                        pm: dict[str, Any] = {}
+                        if "annotations" in cp:
+                            pm["annotations"] = cp["annotations"]
+                        if "logprobs" in cp:
+                            pm["logprobs"] = cp["logprobs"]
+                        parts_meta.append(pm)
+                    if parts_meta:
+                        meta["content_meta"] = parts_meta
+                items_meta.append(meta)
+            if items_meta:
+                ctx.store_output_items_meta(items_meta)
+
         return self._validate_ir_response(ir_response)
 
     def response_to_provider(
@@ -467,6 +520,46 @@ class OpenAIResponsesConverter(BaseConverter):
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
+
+        # Preserve mode: inject captured extra fields
+        ctx = context if context is not None else ConversionContext()
+        if ctx.metadata_mode == "preserve":
+            echo = ctx.get_echo_fields()
+            # Merge echo fields, but don't overwrite core fields already set
+            core_keys = {
+                "id",
+                "object",
+                "created_at",
+                "model",
+                "output",
+                "status",
+                "usage",
+            }
+            for k, v in echo.items():
+                if k not in core_keys:
+                    provider_response[k] = v
+
+            # Restore per-output-item metadata
+            items_meta = ctx.get_output_items_meta()
+            output = provider_response.get("output", [])
+            for i, meta in enumerate(items_meta):
+                if i >= len(output):
+                    break
+                item = output[i]
+                if "id" in meta:
+                    item["id"] = meta["id"]
+                if "status" in meta:
+                    item["status"] = meta["status"]
+                # Restore per-content-part metadata
+                content_meta = meta.get("content_meta", [])
+                content = item.get("content", [])
+                for j, pm in enumerate(content_meta):
+                    if j >= len(content):
+                        break
+                    if "annotations" in pm:
+                        content[j]["annotations"] = pm["annotations"]
+                    if "logprobs" in pm:
+                        content[j]["logprobs"] = pm["logprobs"]
 
         return provider_response
 
@@ -1208,6 +1301,22 @@ class OpenAIResponsesConverter(BaseConverter):
                 "output_tokens": context.pending_usage.get("completion_tokens") or 0,
                 "total_tokens": context.pending_usage.get("total_tokens") or 0,
             }
+
+        # Preserve mode: inject echo fields into the response.completed payload
+        if context is not None and context.metadata_mode == "preserve":
+            echo = context.get_echo_fields()
+            core_keys = {
+                "id",
+                "object",
+                "created_at",
+                "model",
+                "output",
+                "status",
+                "usage",
+            }
+            for k, v in echo.items():
+                if k not in core_keys:
+                    response[k] = v
 
         return response
 

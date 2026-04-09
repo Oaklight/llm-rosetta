@@ -12,6 +12,8 @@ from typing import Any
 from ...types.ir import (
     ExtensionItem,
     Message,
+    is_citation_part,
+    is_refusal_part,
     is_text_part,
     is_tool_call_part,
 )
@@ -391,12 +393,20 @@ class OpenAIChatConverter(BaseConverter):
             content_parts = message.get("content", [])
             text_parts: list[str] = []
             tool_calls: list[dict[str, Any]] = []
+            refusal_text: str | None = None
+            annotations: list[dict[str, Any]] = []
 
             for part in content_parts:
                 if is_text_part(part):
                     text_parts.append(part["text"])
                 elif is_tool_call_part(part):
                     tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
+                elif is_refusal_part(part):
+                    refusal_text = part.get("refusal", "")
+                elif is_citation_part(part):
+                    ann = self.content_ops.ir_citation_to_p(part)
+                    if ann:
+                        annotations.append(ann)
 
             if text_parts:
                 openai_message["content"] = " ".join(text_parts)
@@ -407,6 +417,12 @@ class OpenAIChatConverter(BaseConverter):
                 openai_message["tool_calls"] = tool_calls
                 if not text_parts:
                     openai_message["content"] = None
+
+            if refusal_text is not None:
+                openai_message["refusal"] = refusal_text
+
+            if annotations:
+                openai_message["annotations"] = annotations
 
             reason = choice.get("finish_reason", {}).get("reason", "stop")
             openai_choice: dict[str, Any] = {
