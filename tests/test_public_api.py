@@ -53,6 +53,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         "items": [
             "BaseConverter",
             "ConversionContext",
+            "MetadataMode",
             "StreamContext",
         ],
         "max_count": 5,

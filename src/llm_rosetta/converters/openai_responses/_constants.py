@@ -61,3 +61,40 @@ RESPONSES_REASON_TO_INCOMPLETE_REASON: dict[str, str] = {
 def generate_message_id(response_id: str) -> str:
     """Generate a message item ID from the response ID."""
     return f"msg_{response_id or ''}"
+
+
+# --- Preserve-mode echo fields ---
+
+# Fields from the OpenAI Responses API response that are not captured in IR.
+# These are request echo-back parameters, lifecycle metadata, and config that
+# the Responses API includes in every response resource.
+RESPONSES_PRESERVE_FIELDS: set[str] = {
+    # Request echo-back
+    "background",
+    "frequency_penalty",
+    "instructions",
+    "max_output_tokens",
+    "max_tool_calls",
+    "parallel_tool_calls",
+    "presence_penalty",
+    "previous_response_id",
+    "prompt_cache_key",
+    "prompt_cache_retention",
+    "reasoning",
+    "safety_identifier",
+    "store",
+    "temperature",
+    "text",
+    "tool_choice",
+    "tools",
+    "top_logprobs",
+    "top_p",
+    "truncation",
+    "user",
+    "metadata",
+    # Lifecycle metadata
+    "billing",
+    "completed_at",
+    "error",
+    "incomplete_details",
+}

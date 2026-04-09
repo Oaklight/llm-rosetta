@@ -14,7 +14,9 @@ Provides the context hierarchy for conversion pipelines:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
+
+MetadataMode = Literal["strip", "preserve"]
 
 
 @dataclass
@@ -26,13 +28,66 @@ class ConversionContext:
 
     Attributes:
         warnings: Accumulated warnings from conversion steps.
-        options: Structured conversion options (e.g., ``output_format``).
+        options: Structured conversion options (e.g., ``output_format``,
+            ``metadata_mode``).
         metadata: Opaque store for debugging and provider-specific state.
     """
 
     warnings: list[str] = field(default_factory=list)
     options: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def metadata_mode(self) -> MetadataMode:
+        """Return the metadata preservation mode.
+
+        Returns:
+            ``"preserve"`` to capture and restore provider-specific fields,
+            ``"strip"`` (default) for lossy semantic-only conversion.
+        """
+        return self.options.get("metadata_mode", "strip")
+
+    def store_request_echo(self, params: dict[str, Any]) -> None:
+        """Store request echo-back fields for later injection.
+
+        Args:
+            params: Provider-specific request parameters to echo back.
+        """
+        self.metadata["_request_echo"] = params
+
+    def store_response_extras(self, extras: dict[str, Any]) -> None:
+        """Store extra response fields not captured in IR.
+
+        Args:
+            extras: Provider-specific response fields to preserve.
+        """
+        self.metadata["_response_extras"] = extras
+
+    def store_output_items_meta(self, meta: list[dict[str, Any]]) -> None:
+        """Store per-output-item metadata for response reconstruction.
+
+        Args:
+            meta: List of metadata dicts, one per output item.
+        """
+        self.metadata["_output_items_meta"] = meta
+
+    def get_echo_fields(self) -> dict[str, Any]:
+        """Retrieve merged echo fields (response extras take priority).
+
+        Returns:
+            Merged dict of request echo + response extras.
+        """
+        echo = dict(self.metadata.get("_request_echo", {}))
+        echo.update(self.metadata.get("_response_extras", {}))
+        return echo
+
+    def get_output_items_meta(self) -> list[dict[str, Any]]:
+        """Retrieve per-output-item metadata.
+
+        Returns:
+            List of metadata dicts, or empty list if none stored.
+        """
+        return self.metadata.get("_output_items_meta", [])
 
 
 @dataclass

@@ -20,7 +20,7 @@ Provides abstract base classes for converters and functional domain organization
 
 from .configs import BaseConfigOps  # noqa: F401
 from .content import BaseContentOps  # noqa: F401
-from .context import ConversionContext, StreamContext
+from .context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
 from .messages import BaseMessageOps  # noqa: F401
 from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p  # noqa: F401
@@ -31,5 +31,6 @@ __all__ = [
     "BaseConverter",
     # 转换上下文 Conversion context
     "ConversionContext",
+    "MetadataMode",
     "StreamContext",
 ]

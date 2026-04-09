@@ -341,6 +341,54 @@ class AnthropicConverter(BaseConverter):
 
             ir_response["usage"] = usage_info
 
+        # Preserve mode: capture extra fields for lossless round-trip
+        ctx = context if context is not None else ConversionContext()
+        if ctx.metadata_mode == "preserve":
+            # Top-level extras (e.g. OpenRouter's "provider", "container")
+            _ANTHROPIC_CORE_KEYS = {
+                "id",
+                "type",
+                "role",
+                "content",
+                "model",
+                "stop_reason",
+                "stop_sequence",
+                "usage",
+            }
+            extras = {
+                k: v
+                for k, v in provider_response.items()
+                if k not in _ANTHROPIC_CORE_KEYS
+            }
+            # Extended usage fields (OpenRouter adds cost, speed, etc.)
+            _USAGE_CORE_KEYS = {
+                "input_tokens",
+                "output_tokens",
+                "cache_read_input_tokens",
+            }
+            if p_usage:
+                usage_extras = {
+                    k: v for k, v in p_usage.items() if k not in _USAGE_CORE_KEYS
+                }
+                if usage_extras:
+                    extras["_usage_extras"] = usage_extras
+            if extras:
+                ctx.store_response_extras(extras)
+
+            # Per-content-block metadata (citations etc.)
+            content_blocks = provider_response.get("content", [])
+            items_meta: list[dict[str, Any]] = []
+            for block in content_blocks:
+                if not isinstance(block, dict):
+                    items_meta.append({})
+                    continue
+                meta: dict[str, Any] = {}
+                if "citations" in block:
+                    meta["citations"] = block["citations"]
+                items_meta.append(meta)
+            if any(m for m in items_meta):
+                ctx.store_output_items_meta(items_meta)
+
         return self._validate_ir_response(ir_response)
 
     def response_to_provider(
@@ -411,6 +459,38 @@ class AnthropicConverter(BaseConverter):
                 usage["cache_read_input_tokens"] = ir_usage["cache_read_tokens"]
 
             provider_response["usage"] = usage
+
+        # Preserve mode: inject captured extra fields
+        ctx = context if context is not None else ConversionContext()
+        if ctx.metadata_mode == "preserve":
+            echo = ctx.get_echo_fields()
+            # Merge usage extras back into usage dict
+            usage_extras = echo.pop("_usage_extras", None)
+            if usage_extras and "usage" in provider_response:
+                provider_response["usage"].update(usage_extras)
+            # Merge top-level extras
+            _CORE_KEYS = {
+                "id",
+                "type",
+                "role",
+                "content",
+                "model",
+                "stop_reason",
+                "stop_sequence",
+                "usage",
+            }
+            for k, v in echo.items():
+                if k not in _CORE_KEYS:
+                    provider_response[k] = v
+
+            # Restore per-content-block metadata
+            items_meta = ctx.get_output_items_meta()
+            content = provider_response.get("content", [])
+            for i, meta in enumerate(items_meta):
+                if i >= len(content):
+                    break
+                for k, v in meta.items():
+                    content[i][k] = v
 
         return provider_response
 
