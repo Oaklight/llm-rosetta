@@ -294,6 +294,13 @@ class OpenAIResponsesConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
+        # 11. Provider extensions (passthrough fields like allowed_tools)
+        allowed_tools = provider_request.get("allowed_tools")
+        if allowed_tools is not None:
+            ir_request.setdefault("provider_extensions", {})["allowed_tools"] = (
+                allowed_tools
+            )
+
         # Preserve mode: capture request fields for echo-back in response
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":

@@ -29,6 +29,7 @@ from ...types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
+from ...types.ir.messages import MessageMetadata
 from ..base import BaseMessageOps
 from .content_ops import OpenAIResponsesContentOps
 from .tool_ops import OpenAIResponsesToolOps
@@ -100,10 +101,11 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         content = message.get("content", [])
         warnings: list[str] = []
 
+        metadata = message.get("metadata")
         if role in ("system", "user", "developer"):
             return self._ir_input_message_to_p(role, content, warnings)
         elif role == "assistant":
-            return self._ir_assistant_to_p(content, warnings)
+            return self._ir_assistant_to_p(content, warnings, metadata=metadata)
         elif role == "tool":
             return self._ir_tool_messages_to_p(content, warnings)
 
@@ -161,20 +163,38 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return result_items, warnings
 
     def _ir_assistant_to_p(
-        self, content: list, warnings: list[str]
+        self,
+        content: list,
+        warnings: list[str],
+        *,
+        metadata: MessageMetadata | None = None,
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
         Text parts become output_text in a message item.
         Tool calls become separate function_call items.
         Reasoning parts become separate reasoning items.
+        Slug-prefixed passthrough items are emitted verbatim.
         """
+        # Emit slug-prefixed passthrough items verbatim
+        passthrough_items: list[dict[str, Any]] = []
+        if metadata:
+            custom = metadata.get("custom", {})
+            passthrough_items = custom.get("_passthrough_items", [])
+
         content_parts: list[dict[str, Any]] = []
         tool_items: list[dict[str, Any]] = []
         reasoning_items: list[dict[str, Any]] = []
 
         for part in content:
             if is_text_part(part):
+                # Check for passthrough content part (slug-prefixed)
+                pt_meta = (part.get("provider_metadata") or {}).get(
+                    "_passthrough_content_part"
+                )
+                if pt_meta:
+                    content_parts.append(pt_meta)
+                    continue
                 # Check if it's reasoning text (legacy format)
                 if part.get("reasoning"):
                     reasoning_items.append(
@@ -209,6 +229,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         # Add tool call items
         result_items.extend(tool_items)
+
+        # Add slug-prefixed passthrough items verbatim
+        result_items.extend(passthrough_items)
 
         return result_items, warnings
 
@@ -359,6 +382,22 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     }
                 )
 
+            elif isinstance(item_type, str) and ":" in item_type:
+                # Slug-prefixed extension item (e.g. "openai:web_search_call")
+                # Preserve opaquely as a passthrough item on an assistant message
+                if current_message and current_message.get("role") == "assistant":
+                    metadata = current_message.setdefault("metadata", {})
+                    custom = metadata.setdefault("custom", {})
+                    custom.setdefault("_passthrough_items", []).append(dict(item))
+                else:
+                    if current_message:
+                        ir_input.append(current_message)
+                    current_message = {
+                        "role": "assistant",
+                        "content": [],
+                        "metadata": {"custom": {"_passthrough_items": [dict(item)]}},
+                    }
+
         # Handle the last message
         if current_message:
             if current_message.get("content"):
@@ -419,5 +458,17 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             return [self.content_ops.p_image_to_ir(provider_part)]
         elif part_type == "input_file":
             return [self.content_ops.p_file_to_ir(provider_part)]
+
+        # Slug-prefixed content part (e.g. "openai:summary_text") — preserve opaquely
+        if isinstance(part_type, str) and ":" in part_type:
+            return [
+                TextPart(
+                    type="text",
+                    text="",
+                    provider_metadata={
+                        "_passthrough_content_part": dict(provider_part)
+                    },
+                )
+            ]
 
         return []

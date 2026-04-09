@@ -7,6 +7,8 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -84,6 +86,12 @@ async def _proxy_handler(
 
     store: ProviderMetadataStore = request.app.state.metadata_store
 
+    # Forward OpenResponses-Version header to upstream if present
+    extra_headers: dict[str, str] | None = None
+    or_version = request.headers.get("openresponses-version")
+    if or_version:
+        extra_headers = {"OpenResponses-Version": or_version}
+
     if is_stream:
         return await handle_streaming(
             source_provider,
@@ -92,6 +100,7 @@ async def _proxy_handler(
             body,
             model,
             metadata_store=store,
+            extra_headers=extra_headers,
         )
     else:
         return await handle_non_streaming(
@@ -101,6 +110,7 @@ async def _proxy_handler(
             body,
             model,
             metadata_store=store,
+            extra_headers=extra_headers,
         )
 
 
@@ -228,6 +238,15 @@ def create_app(config: GatewayConfig) -> Starlette:
         yield
         await close_resources(metadata_store=metadata_store)
 
-    app = Starlette(routes=routes, lifespan=lifespan)
+    middleware = [
+        Middleware(
+            CORSMiddleware,
+            allow_origins=["*"],
+            allow_methods=["*"],
+            allow_headers=["*"],
+        ),
+    ]
+
+    app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
     app.state.metadata_store = metadata_store
     return app

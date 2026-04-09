@@ -128,6 +128,12 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "auth_header_fn": _openai_auth,
         "url_template": "{base_url}/responses",
     },
+    "open_responses": {
+        "default_base_url": "https://api.openai.com/v1",
+        "default_api_key_env": "OPENAI_API_KEY",
+        "auth_header_fn": _openai_auth,
+        "url_template": "{base_url}/responses",
+    },
     "anthropic": {
         "default_base_url": "https://api.anthropic.com",
         "default_api_key_env": "ANTHROPIC_API_KEY",

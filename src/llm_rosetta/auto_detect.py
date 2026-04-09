@@ -7,7 +7,9 @@ Utility functions for auto-detecting LLM provider request body formats
 
 from typing import Any, Literal
 
-ProviderType = Literal["openai_chat", "openai_responses", "anthropic", "google"]
+ProviderType = Literal[
+    "openai_chat", "openai_responses", "open_responses", "anthropic", "google"
+]
 
 
 def detect_provider(body: dict[str, Any]) -> ProviderType | None:
@@ -167,6 +169,7 @@ def get_converter_for_provider(provider: ProviderType):
     converter_map = {
         "openai_chat": OpenAIChatConverter,
         "openai_responses": OpenAIResponsesConverter,
+        "open_responses": OpenAIResponsesConverter,
         "anthropic": AnthropicConverter,
         "google": GoogleConverter,
     }
