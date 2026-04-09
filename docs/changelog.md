@@ -6,6 +6,21 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.4.0 — 2026-04-09
+
+### 新增
+
+- **元数据保留：实现无损 A→IR→A 往返转换** (#60, PR #119)：`ConversionContext` 新增 `MetadataMode`（`"strip"` / `"preserve"`）选项，在 `from_provider` 阶段捕获提供商特有字段，在 `to_provider` 阶段重新注入，实现无损往返转换。`ConversionContext` 新增辅助方法：`store_request_echo()`、`store_response_extras()`、`store_output_items_meta()`、`get_echo_fields()`、`get_output_items_meta()`。各提供商覆盖范围：
+    - **OpenAI Responses**：捕获/恢复 28+ 回显字段（temperature、tools、reasoning、truncation 等）、逐输出项元数据（id、status、annotations、logprobs），`RESPONSES_REQUIRED_DEFAULTS` 字典提供规范要求字段的合理默认值，所有 SSE 事件包含 `sequence_number`
+    - **Anthropic**：保留 `stop_sequence`、`container`、citations 及 OpenRouter 扩展 usage 字段
+    - **OpenAI Chat**：`response_to_provider` 现在重新输出 `refusal` 和 `annotations` 字段（此前被丢弃）
+    - **Google GenAI**：保留 usage 元数据中的 `promptTokensDetails` 和 `cachedContentTokenCount`
+    - **网关**：流式和非流式路径自动启用 preserve 模式；流式传输中在 `from_ctx` 和 `to_ctx` 之间桥接元数据
+
+### 修复
+
+- **Open Responses 规范合规性（流式与非流式）**：所有 SSE 事件添加必需字段（`item_id`、`logprobs`、`annotations`、`status`、`sequence_number`、`output_index`、`content_index`），添加 usage 详细分解（`output_tokens_details`、`input_tokens_details`），非流式输出项生成消息 item ID 和 status，tool_ops 添加 `function_call` status 字段，`service_tier` 默认值改为 `"default"`（字符串而非 null，符合规范），required defaults 中添加 `completed_at`，未提供时 `created_at` 回退到当前时间，规范化回显工具的 `strict: null`，网关流式传输中从 `from_ctx` 到 `to_ctx` 桥接元数据。全部 6 个 Open Responses 合规性测试通过（schema + 语义）
+
 ## v0.3.1 — 2026-04-07
 
 ### 修复

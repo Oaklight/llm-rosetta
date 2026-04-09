@@ -88,6 +88,56 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 `"rest"` 格式会将 `tools`、`tool_config`、`response_mime_type` 和 `response_schema` 提升到顶层，并将生成参数（temperature、top_p 等）包装到 `generationConfig` 对象中——与 [Google Gemini REST API](https://ai.google.dev/api/generate-content) 的请求格式完全一致。
 
+## 元数据保留（无损往返）
+
+默认情况下，LLM-Rosetta 执行**仅语义**转换——没有 IR 等价物的提供商特有字段会被剥离。这对大多数跨提供商工作流来说足够了，但当你需要**无损往返**（同一提供商 A → IR → A）时，可以启用元数据保留模式。
+
+### 工作原理
+
+通过 `ConversionContext` 传入 `metadata_mode="preserve"`，在 `from_provider` 阶段捕获提供商特有字段，在 `to_provider` 阶段重新注入：
+
+```python
+from llm_rosetta import OpenAIResponsesConverter
+from llm_rosetta.converters.base import ConversionContext
+
+converter = OpenAIResponsesConverter()
+ctx = ConversionContext(options={"metadata_mode": "preserve"})
+
+# 提供商 → IR（捕获回显字段、逐项元数据）
+ir_request = converter.request_from_provider(provider_request, context=ctx)
+
+# ... 按需修改 IR ...
+
+# IR → 同一提供商（重新注入保留的字段）
+provider_request, warnings = converter.request_to_provider(ir_request, context=ctx)
+```
+
+对于响应：
+
+```python
+ir_response = converter.response_from_provider(provider_response, context=ctx)
+provider_response = converter.response_to_provider(ir_response, context=ctx)
+```
+
+### 各提供商保留的字段
+
+每个转换器保留不同的提供商特有字段：
+
+| 提供商 | 保留字段 |
+|--------|----------|
+| OpenAI Responses | 28+ 请求回显字段（temperature、tools、reasoning、truncation 等）、逐输出项元数据（id、status、annotations、logprobs）、`RESPONSES_REQUIRED_DEFAULTS` |
+| Anthropic | `stop_sequence`、`container`、citations、OpenRouter 扩展 usage 字段 |
+| OpenAI Chat | choices 上的 `refusal`、`annotations` |
+| Google GenAI | usage 中的 `promptTokensDetails`、`cachedContentTokenCount` |
+
+### 网关：自动保留模式
+
+LLM-Rosetta 网关对所有转换自动使用保留模式——流式和非流式均适用。这确保了当客户端以格式 A 发送请求且上游也是格式 A（直通场景）时，所有提供商特有字段在往返中不丢失。
+
+### Strip 模式（默认）
+
+当 `metadata_mode` 为 `"strip"`（默认值）时，仅 IR 映射的字段在转换中保留。这是跨提供商工作流的推荐模式，因为提供商特有字段与目标格式无关。
+
 ## 提供商方言差异
 
 不同 LLM 提供商对同一概念性操作有着细微不同的要求。LLM-Rosetta 在转换过程中自动处理这些**方言差异**，无需手动干预。
