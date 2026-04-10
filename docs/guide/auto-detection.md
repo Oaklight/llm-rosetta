@@ -35,3 +35,16 @@ result = convert(
     source_provider=None,  # 自动检测
 )
 ```
+
+### 同提供商请求的强制转换
+
+默认情况下，当源和目标提供商相同时，`convert()` 会直接返回原始请求体。使用 `force_conversion=True` 可在此情况下仍执行完整的转换管线 — 适用于参数规范化：
+
+```python
+# 规范化 OpenAI Chat 参数（例如 max_tokens → max_completion_tokens）
+result = convert(
+    source_body=openai_request,
+    target_provider="openai_chat",
+    force_conversion=True,
+)
+```

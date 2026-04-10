@@ -6,6 +6,22 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.4.1 — 2026-04-10
+
+### 新增
+
+- **`convert()` 新增 `force_conversion` 参数**：新增 `force_conversion: bool = False` 仅关键字参数。设为 `True` 时，即使源和目标提供商相同，也会执行完整的 source→IR→target 转换管线，确保参数规范化（例如 OpenAI Chat 的 `max_tokens` → `max_completion_tokens`）。默认 `False` 保留现有的直通行为
+
+### 修复
+
+- **内嵌 `validate.py` 更新至 zerodep v0.4.1**：应用 pyupgrade 修复 — `Callable` 从 `collections.abc` 而非 `typing` 导入（UP035），`@functools.cache` 替换 `@functools.lru_cache(maxsize=None)`（UP033）
+- 移除 benchmark 脚本中未使用的 `sys` 导入
+- 对 benchmark 脚本执行 `ruff format` 格式化
+
+### 变更
+
+- 移除 README 中不准确的"相关项目"段落 — LLM-Rosetta 是独立项目，不属于 ToolRegistry 生态系统
+
 ## v0.4.0 — 2026-04-09
 
 ### 新增
