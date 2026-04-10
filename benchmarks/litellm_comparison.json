@@ -2,44 +2,44 @@
   "anthropic": {
     "simple_text": {
       "litellm": {
-        "median_us": 30.8,
-        "p95_us": 35.0,
-        "mean_us": 31.3,
-        "stdev_us": 4.0
+        "median_us": 28.1,
+        "p95_us": 30.0,
+        "mean_us": 28.3,
+        "stdev_us": 1.2
       },
       "rosetta": {
-        "median_us": 167.2,
-        "p95_us": 182.0,
-        "mean_us": 169.2,
-        "stdev_us": 9.1
+        "median_us": 23.6,
+        "p95_us": 25.1,
+        "mean_us": 23.9,
+        "stdev_us": 1.4
       }
     },
     "multi_turn": {
       "litellm": {
-        "median_us": 63.7,
-        "p95_us": 83.0,
-        "mean_us": 58.6,
-        "stdev_us": 34.2
+        "median_us": 34.2,
+        "p95_us": 39.5,
+        "mean_us": 34.8,
+        "stdev_us": 2.3
       },
       "rosetta": {
-        "median_us": 623.5,
-        "p95_us": 1154.0,
-        "mean_us": 811.2,
-        "stdev_us": 244.9
+        "median_us": 75.5,
+        "p95_us": 79.2,
+        "mean_us": 76.0,
+        "stdev_us": 2.7
       }
     },
     "tool_calls": {
       "litellm": {
-        "median_us": 29.3,
-        "p95_us": 35.8,
-        "mean_us": 30.0,
-        "stdev_us": 3.5
+        "median_us": 28.8,
+        "p95_us": 33.7,
+        "mean_us": 29.3,
+        "stdev_us": 2.2
       },
       "rosetta": {
-        "median_us": 227.7,
-        "p95_us": 474.8,
-        "mean_us": 305.9,
-        "stdev_us": 103.4
+        "median_us": 46.1,
+        "p95_us": 49.1,
+        "mean_us": 46.5,
+        "stdev_us": 2.0
       }
     }
   }
