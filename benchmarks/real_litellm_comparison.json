@@ -1,0 +1,30 @@
+{
+  "64msg": {
+    "litellm": {
+      "median_us": 375.5,
+      "p95_us": 397.8,
+      "mean_us": 377.3,
+      "stdev_us": 11.2
+    },
+    "rosetta": {
+      "median_us": 2736.2,
+      "p95_us": 2945.8,
+      "mean_us": 2760.0,
+      "stdev_us": 81.2
+    }
+  },
+  "218msg": {
+    "litellm": {
+      "median_us": 765.2,
+      "p95_us": 821.4,
+      "mean_us": 774.5,
+      "stdev_us": 30.8
+    },
+    "rosetta": {
+      "median_us": 5517.3,
+      "p95_us": 5912.1,
+      "mean_us": 5995.2,
+      "stdev_us": 4407.5
+    }
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "codex_responses_6msg": {
+    "responses_to_anthropic": {
+      "error": "2 validation error(s): Value at 'messages[0]' does not match any variant of SystemMessage | UserMessage | AssistantMessage | ToolMessage; Expected one of ('function', 'mcp') at 'tools[7].type', got 'web_search'"
+    }
+  },
+  "claude_code_64msg": {
+    "anthropic_roundtrip": {
+      "median_us": 23583.6,
+      "p95_us": 24432.8,
+      "mean_us": 23938.5,
+      "stdev_us": 2314.0
+    },
+    "anthropic_to_openai_chat": {
+      "median_us": 24259.3,
+      "p95_us": 24879.9,
+      "mean_us": 24314.8,
+      "stdev_us": 422.9
+    },
+    "anthropic_to_google": {
+      "median_us": 24730.0,
+      "p95_us": 25374.7,
+      "mean_us": 24781.1,
+      "stdev_us": 412.7
+    }
+  },
+  "claude_code_218msg": {
+    "anthropic_roundtrip": {
+      "median_us": 59874.1,
+      "p95_us": 61127.9,
+      "mean_us": 59943.4,
+      "stdev_us": 707.7
+    },
+    "anthropic_to_openai_chat": {
+      "median_us": 59634.2,
+      "p95_us": 60840.5,
+      "mean_us": 59728.1,
+      "stdev_us": 752.8
+    },
+    "anthropic_to_google": {
+      "median_us": 61850.6,
+      "p95_us": 63056.9,
+      "mean_us": 61942.1,
+      "stdev_us": 677.3
+    }
+  }
+}
