@@ -347,6 +347,23 @@ class TestConvert:
         result = convert(openai_body, "openai_chat")
         assert result == openai_body
 
+    def test_convert_same_provider_force_conversion(self):
+        """force_conversion=True normalises params even when source==target."""
+        openai_body = {
+            "messages": [{"role": "user", "content": "Hello"}],
+            "model": "gpt-4o",
+            "max_tokens": 256,
+        }
+
+        result = convert(openai_body, "openai_chat", force_conversion=True)
+
+        # max_tokens should be normalised to max_completion_tokens
+        assert "max_completion_tokens" in result
+        assert "max_tokens" not in result
+        assert result["max_completion_tokens"] == 256
+        # messages should survive the round-trip
+        assert result["messages"][0]["content"] == "Hello"
+
     def test_convert_with_tools(self):
         """测试带工具定义的转换"""
         openai_body = {

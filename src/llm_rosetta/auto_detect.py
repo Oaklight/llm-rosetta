@@ -184,34 +184,43 @@ def convert(
     source_body: dict[str, Any],
     target_provider: ProviderType,
     source_provider: ProviderType | None = None,
+    *,
+    force_conversion: bool = False,
 ) -> dict[str, Any]:
-    """自动检测源 provider 并转换到目标 provider 格式
-    Auto-detect source provider and convert to target provider format
+    """Auto-detect source provider and convert to target provider format.
 
-    这是一个便捷函数，自动检测源格式并执行转换。
-    This is a convenience function, auto-detects source format and performs conversion.
+    This is a convenience function that auto-detects the source format and
+    performs conversion through the IR (Intermediate Representation).
 
     Args:
-        source_body: 源 provider 的请求体 Source provider request body
-        target_provider: 目标 provider 类型 Target provider type
-        source_provider: 可选的源 provider 类型，如果不提供则自动检测 Optional source provider type, auto-detect if not provided
+        source_body: Source provider request body.
+        target_provider: Target provider type.
+        source_provider: Optional source provider type.  Auto-detected from
+            *source_body* when not provided.
+        force_conversion: When ``True``, always run the full conversion
+            pipeline (source -> IR -> target) even when source and target
+            providers are the same.  This normalises parameter names (e.g.
+            ``max_tokens`` -> ``max_completion_tokens`` for OpenAI Chat) and
+            ensures metadata is round-tripped consistently.
 
     Returns:
-        目标 provider 格式的请求体 Target provider format request body
+        Target provider format request body.
 
     Raises:
-        ValueError: 如果无法检测源 provider 或转换失败 If source provider cannot be detected or conversion fails
+        ValueError: If source provider cannot be detected or conversion fails.
 
     Examples:
-        >>> # 自动检测并转换 Auto-detect and convert
         >>> openai_body = {"messages": [{"role": "user", "content": "Hello"}]}
         >>> google_body = convert(openai_body, "google")
 
-        >>> # 指定源 provider Specify source provider
         >>> anthropic_body = {"messages": [...]}
         >>> openai_body = convert(anthropic_body, "openai_chat", source_provider="anthropic")
+
+        >>> # Force normalisation even for same-provider passthrough
+        >>> body = {"messages": [...], "max_tokens": 256}
+        >>> normalised = convert(body, "openai_chat", force_conversion=True)
     """
-    # 检测源 provider Detect source provider
+    # Detect source provider
     if source_provider is None:
         source_provider = detect_provider(source_body)
         if source_provider is None:
@@ -219,8 +228,8 @@ def convert(
                 "Unable to detect source provider. Please specify source_provider explicitly."
             )
 
-    # 如果源和目标相同，直接返回 If source and target are the same, return directly
-    if source_provider == target_provider:
+    # Skip conversion when source == target (unless forced)
+    if source_provider == target_provider and not force_conversion:
         return source_body
 
     # 获取转换器 Get converter
