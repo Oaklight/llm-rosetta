@@ -40,7 +40,10 @@ def _strip_base64_images(obj):
                 obj = {**obj, "image_url": "data:image/png;base64,AAAA"}
             elif isinstance(url, dict) and isinstance(url.get("url", ""), str):
                 if url["url"].startswith("data:"):
-                    obj = {**obj, "image_url": {**url, "url": "data:image/png;base64,AAAA"}}
+                    obj = {
+                        **obj,
+                        "image_url": {**url, "url": "data:image/png;base64,AAAA"},
+                    }
         if obj.get("type") == "image" and "source" in obj:
             src = obj["source"]
             if isinstance(src, dict) and src.get("type") == "base64":
@@ -57,12 +60,16 @@ if _codex:
     PAYLOADS["codex_responses_6msg"] = _strip_base64_images(_codex)
 
 # Claude Code payload (Anthropic format, 41 tools, 64 messages)
-_cc_medium = _load_dump(os.path.join(DUMP_DIR_LAMBDA, "error_20260410_004259_967174.json"))
+_cc_medium = _load_dump(
+    os.path.join(DUMP_DIR_LAMBDA, "error_20260410_004259_967174.json")
+)
 if _cc_medium:
     PAYLOADS["claude_code_64msg"] = _strip_base64_images(_cc_medium)
 
 # Claude Code payload (Anthropic format, 41 tools, 218 messages)
-_cc_large = _load_dump(os.path.join(DUMP_DIR_LAMBDA, "error_20260410_020434_355345.json"))
+_cc_large = _load_dump(
+    os.path.join(DUMP_DIR_LAMBDA, "error_20260410_020434_355345.json")
+)
 if _cc_large:
     PAYLOADS["claude_code_218msg"] = _strip_base64_images(_cc_large)
 

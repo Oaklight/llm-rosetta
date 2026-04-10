@@ -37,7 +37,9 @@ def bench_litellm(payload: dict, iterations: int) -> list[float]:
 
     cfg = AnthropicConfig()
     messages = payload["messages"]
-    optional_params = {k: v for k, v in payload.items() if k not in ("model", "messages")}
+    optional_params = {
+        k: v for k, v in payload.items() if k not in ("model", "messages")
+    }
     optional_params.setdefault("max_tokens", 4096)
 
     # Warmup
@@ -102,13 +104,17 @@ def compute_stats(timings: list[float]) -> dict:
 
 def main():
     if not PAYLOADS:
-        print("ERROR: No payloads found. Run the conversion step first.", file=sys.stderr)
+        print(
+            "ERROR: No payloads found. Run the conversion step first.", file=sys.stderr
+        )
         sys.exit(1)
 
     print(f"Loaded {len(PAYLOADS)} real-world payloads (OpenAI Chat format):")
     for name, p in PAYLOADS.items():
-        print(f"  {name}: {len(p['messages'])} messages, {len(p.get('tools', []))} tools, "
-              f"{len(json.dumps(p)) // 1024}KB")
+        print(
+            f"  {name}: {len(p['messages'])} messages, {len(p.get('tools', []))} tools, "
+            f"{len(json.dumps(p)) // 1024}KB"
+        )
     print()
 
     results = {}
@@ -120,8 +126,10 @@ def main():
         try:
             lt = bench_litellm(payload, ITERATIONS)
             lt_stats = compute_stats(lt)
-            print(f"    median={lt_stats['median_us']:>10.1f} μs  "
-                  f"p95={lt_stats['p95_us']:>10.1f} μs")
+            print(
+                f"    median={lt_stats['median_us']:>10.1f} μs  "
+                f"p95={lt_stats['p95_us']:>10.1f} μs"
+            )
         except Exception as e:
             print(f"    FAILED: {e}")
             lt_stats = {"error": str(e)}
@@ -130,8 +138,10 @@ def main():
         try:
             rt = bench_rosetta(payload, ITERATIONS)
             rt_stats = compute_stats(rt)
-            print(f"    median={rt_stats['median_us']:>10.1f} μs  "
-                  f"p95={rt_stats['p95_us']:>10.1f} μs")
+            print(
+                f"    median={rt_stats['median_us']:>10.1f} μs  "
+                f"p95={rt_stats['p95_us']:>10.1f} μs"
+            )
         except Exception as e:
             print(f"    FAILED: {e}")
             rt_stats = {"error": str(e)}
@@ -143,7 +153,9 @@ def main():
         results[name] = {"litellm": lt_stats, "rosetta": rt_stats}
         print()
 
-    output_path = os.path.join(os.path.dirname(__file__), "real_litellm_comparison.json")
+    output_path = os.path.join(
+        os.path.dirname(__file__), "real_litellm_comparison.json"
+    )
     with open(output_path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"Results saved to {output_path}")

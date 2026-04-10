@@ -45,9 +45,7 @@ OPENAI_CHAT_PAYLOADS = {
     },
     "tool_calls_request": {
         "model": "gpt-4o",
-        "messages": [
-            {"role": "user", "content": "What's the weather in NYC and SF?"}
-        ],
+        "messages": [{"role": "user", "content": "What's the weather in NYC and SF?"}],
         "tools": [
             {
                 "type": "function",
@@ -177,9 +175,7 @@ ANTHROPIC_PAYLOADS = {
         "messages": [
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": "What is the capital of France?"}
-                ],
+                "content": [{"type": "text", "text": "What is the capital of France?"}],
             },
             {
                 "role": "assistant",
@@ -189,9 +185,7 @@ ANTHROPIC_PAYLOADS = {
             },
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": "What about Germany?"}
-                ],
+                "content": [{"type": "text", "text": "What about Germany?"}],
             },
             {
                 "role": "assistant",
@@ -204,9 +198,7 @@ ANTHROPIC_PAYLOADS = {
             },
             {
                 "role": "user",
-                "content": [
-                    {"type": "text", "text": "And what about Italy?"}
-                ],
+                "content": [{"type": "text", "text": "And what about Italy?"}],
             },
         ],
         "max_tokens": 1024,
@@ -304,9 +296,7 @@ ANTHROPIC_PAYLOADS = {
 GOOGLE_GENAI_PAYLOADS = {
     "simple_text_request": {
         "model": "gemini-2.0-flash",
-        "contents": [
-            {"role": "user", "parts": [{"text": "Hello, how are you?"}]}
-        ],
+        "contents": [{"role": "user", "parts": [{"text": "Hello, how are you?"}]}],
         "config": {},
     },
     "multi_turn_request": {
@@ -369,9 +359,7 @@ GOOGLE_GENAI_PAYLOADS = {
                     ]
                 }
             ],
-            "tool_config": {
-                "function_calling_config": {"mode": "AUTO"}
-            },
+            "tool_config": {"function_calling_config": {"mode": "AUTO"}},
         },
     },
     "reasoning_request": {
@@ -447,9 +435,7 @@ OPENAI_RESPONSES_PAYLOADS = {
             {
                 "type": "message",
                 "role": "user",
-                "content": [
-                    {"type": "input_text", "text": "Hello, how are you?"}
-                ],
+                "content": [{"type": "input_text", "text": "Hello, how are you?"}],
             }
         ],
     },
@@ -480,9 +466,7 @@ OPENAI_RESPONSES_PAYLOADS = {
             {
                 "type": "message",
                 "role": "user",
-                "content": [
-                    {"type": "input_text", "text": "What about Germany?"}
-                ],
+                "content": [{"type": "input_text", "text": "What about Germany?"}],
             },
             {
                 "type": "message",
@@ -497,9 +481,7 @@ OPENAI_RESPONSES_PAYLOADS = {
             {
                 "type": "message",
                 "role": "user",
-                "content": [
-                    {"type": "input_text", "text": "And what about Italy?"}
-                ],
+                "content": [{"type": "input_text", "text": "And what about Italy?"}],
             },
         ],
     },
@@ -740,7 +722,9 @@ def run_benchmarks(iterations=1000):
 def print_summary(results):
     """Print a human-readable summary table."""
     print(f"\n{'=' * 100}")
-    print(f"{'Provider':<20} {'Benchmark':<40} {'Median(us)':>10} {'P95(us)':>10} {'P99(us)':>10} {'Bytes':>8}")
+    print(
+        f"{'Provider':<20} {'Benchmark':<40} {'Median(us)':>10} {'P95(us)':>10} {'P99(us)':>10} {'Bytes':>8}"
+    )
     print(f"{'=' * 100}")
 
     for provider, benchmarks in results.items():
@@ -779,12 +763,15 @@ def export_latex_table(results):
         for label, stats in benchmarks.items():
             p = provider_label if first else ""
             first = False
-            short_label = label.replace("from_provider/", "from: ").replace(
-                "roundtrip/", "rt: "
-            ).replace("_request", " req").replace("_response", " resp").replace(
-                "simple_text", "text"
-            ).replace("multi_turn", "multi").replace("tool_calls", "tools").replace(
-                "reasoning", "reason"
+            short_label = (
+                label.replace("from_provider/", "from: ")
+                .replace("roundtrip/", "rt: ")
+                .replace("_request", " req")
+                .replace("_response", " resp")
+                .replace("simple_text", "text")
+                .replace("multi_turn", "multi")
+                .replace("tool_calls", "tools")
+                .replace("reasoning", "reason")
             )
             lines.append(
                 f"  {p} & \\code{{{short_label}}} & "
@@ -816,9 +803,7 @@ def main():
         default=None,
         help="Output JSON file path",
     )
-    parser.add_argument(
-        "--latex", action="store_true", help="Also print LaTeX table"
-    )
+    parser.add_argument("--latex", action="store_true", help="Also print LaTeX table")
     args = parser.parse_args()
 
     print(f"Running benchmarks with {args.iterations} iterations per case...")
