@@ -130,14 +130,6 @@ ir_messages.extend(openai_conv.response_from_provider(openai_response))
 google_request = google_conv.request_to_provider({"messages": ir_messages})
 ```
 
-## Related Projects
-
-LLM-Rosetta is part of the ToolRegistry ecosystem:
-
-- **[ToolRegistry](https://github.com/Oaklight/ToolRegistry)** — Tool registration and management for LLM function calling
-- **[ToolRegistry Hub](https://github.com/Oaklight/toolregistry-hub)** — Ready-to-use tool collection
-- **[ToolRegistry Server](https://github.com/Oaklight/toolregistry-server)** — OpenAPI and MCP server adapters
-
 ## Contributing
 
 Contributions are welcome! Please visit the [GitHub repository](https://github.com/Oaklight/llm-rosetta) to get started.
