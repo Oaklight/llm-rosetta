@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.0"
+# version = "0.4.0"
 # deps = []
 # tier = "medium"
 # category = "data"
@@ -40,10 +40,10 @@ Annotated constraints::
 from __future__ import annotations
 
 import dataclasses
+import functools
 import re
 import typing
-from typing import Any, Union, get_type_hints
-from collections.abc import Callable
+from typing import Any, Callable, Union, get_type_hints
 
 __all__ = [
     # Constraint annotations
@@ -281,7 +281,7 @@ def _is_dataclass_type(tp: Any) -> bool:
 
 
 def _strip_required(tp: Any) -> Any:
-    """Strip Required/NotRequired wrappers, returning the inner type."""
+    """Strip ``Required`` / ``NotRequired`` wrappers, returning the inner type."""
     import sys
 
     origin = typing.get_origin(tp)
@@ -295,8 +295,15 @@ def _strip_required(tp: Any) -> Any:
     return tp
 
 
+@functools.lru_cache(maxsize=None)
 def _typeddict_fields(td: type) -> dict[str, tuple[Any, bool]]:
     """Get fields of a TypedDict with their types and required status.
+
+    Results are cached because TypedDict type structures are static at
+    runtime, and ``get_type_hints()`` is expensive on Python 3.10-3.12.
+
+    Strips ``Required``/``NotRequired`` wrappers so downstream sees the
+    actual type (e.g. ``Literal["response"]``, not ``Required[Literal["response"]]``).
 
     Returns:
         Dict mapping field name to ``(type_hint, is_required)``.
@@ -306,8 +313,6 @@ def _typeddict_fields(td: type) -> dict[str, tuple[Any, bool]]:
     optional = getattr(td, "__optional_keys__", set())
     result: dict[str, tuple[Any, bool]] = {}
     for name, tp in hints.items():
-        # Strip Required/NotRequired wrappers so downstream sees
-        # the actual type (e.g. Literal["response"], not Required[Literal["response"]])
         inner = _strip_required(tp)
         if name in required:
             result[name] = (inner, True)
@@ -319,8 +324,12 @@ def _typeddict_fields(td: type) -> dict[str, tuple[Any, bool]]:
     return result
 
 
+@functools.lru_cache(maxsize=None)
 def _dataclass_fields(dc: type) -> dict[str, tuple[Any, bool]]:
     """Get fields of a dataclass with their types and required status.
+
+    Results are cached because dataclass type structures are static at
+    runtime, and ``get_type_hints()`` is expensive on Python 3.10-3.12.
 
     Returns:
         Dict mapping field name to ``(type_hint, is_required)``.
@@ -370,20 +379,23 @@ def _type_name(tp: Any) -> str:
     return str(tp)
 
 
+@functools.lru_cache(maxsize=None)
 def _find_discriminator(union_args: tuple[Any, ...]) -> str | None:
     """Find a shared Literal field that can discriminate union members.
 
     Checks all TypedDict members for a common field whose type is
     ``Literal[...]``.  Returns the field name if found, else None.
+
+    Results are cached because union type structures are static.
     """
     td_args = [a for a in union_args if _is_typeddict(a)]
     if len(td_args) < 2:
         return None
 
     # Get all Literal field names from first TypedDict
-    first_hints = get_type_hints(td_args[0], include_extras=True)
+    first_fields = _typeddict_fields(td_args[0])
     candidates: list[str] = []
-    for name, hint in first_hints.items():
+    for name, (hint, _req) in first_fields.items():
         base, _ = _unwrap_annotated(hint)
         if typing.get_origin(base) is typing.Literal:
             candidates.append(name)
@@ -392,11 +404,11 @@ def _find_discriminator(union_args: tuple[Any, ...]) -> str | None:
         # Check that all other TypedDicts also have this field as Literal
         all_have = True
         for td in td_args[1:]:
-            hints = get_type_hints(td, include_extras=True)
-            if name not in hints:
+            fields = _typeddict_fields(td)
+            if name not in fields:
                 all_have = False
                 break
-            base, _ = _unwrap_annotated(hints[name])
+            base, _ = _unwrap_annotated(fields[name][0])
             if typing.get_origin(base) is not typing.Literal:
                 all_have = False
                 break
@@ -537,10 +549,10 @@ def _validate(
             for candidate in non_none_args:
                 if not _is_typeddict(candidate):
                     continue
-                hints = get_type_hints(candidate, include_extras=True)
-                if disc_field not in hints:
+                fields = _typeddict_fields(candidate)
+                if disc_field not in fields:
                     continue
-                base, _ = _unwrap_annotated(hints[disc_field])
+                base, _ = _unwrap_annotated(fields[disc_field][0])
                 if typing.get_origin(base) is typing.Literal:
                     if disc_val in typing.get_args(base):
                         return _validate(value, candidate, path, errors, coerce)
