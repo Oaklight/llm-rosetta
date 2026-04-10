@@ -35,3 +35,16 @@ result = convert(
     source_provider=None,  # auto-detect
 )
 ```
+
+### Force Conversion for Same-Provider Requests
+
+By default, `convert()` returns the body as-is when the source and target providers are the same. Use `force_conversion=True` to run the full conversion pipeline even in this case — useful for parameter normalization:
+
+```python
+# Normalize OpenAI Chat parameters (e.g. max_tokens → max_completion_tokens)
+result = convert(
+    source_body=openai_request,
+    target_provider="openai_chat",
+    force_conversion=True,
+)
+```
