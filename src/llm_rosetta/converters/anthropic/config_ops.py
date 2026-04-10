@@ -233,7 +233,9 @@ class AnthropicConfigOps(BaseConfigOps):
         Mapping:
         - ``effort`` → ``thinking.type = "adaptive"`` + ``thinking.effort``
           (``"minimal"`` downgraded to ``"low"`` with warning)
-        - ``enabled: True`` (no effort) → ``thinking.type = "enabled"``
+        - ``enabled: True`` + ``budget_tokens`` (no effort)
+          → ``thinking.type = "enabled"``
+        - ``enabled: True`` (no effort, no budget) → ``thinking.type = "adaptive"``
         - ``enabled: False`` → ``thinking.type = "disabled"``
         - ``budget_tokens`` → ``thinking.budget_tokens``
 
@@ -263,9 +265,15 @@ class AnthropicConfigOps(BaseConfigOps):
         else:
             enabled = ir_reasoning.get("enabled")
             if enabled is True:
-                thinking: dict[str, Any] = {"type": "enabled"}
                 if "budget_tokens" in ir_reasoning:
+                    # Explicit budget → "enabled" (full control over thinking budget)
+                    thinking: dict[str, Any] = {"type": "enabled"}
                     thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
+                else:
+                    # No budget, no effort → "adaptive" (let the model decide);
+                    # "enabled" requires budget_tokens, so fall back to "adaptive"
+                    # to ensure a valid round-trip.
+                    thinking: dict[str, Any] = {"type": "adaptive"}
                 result["thinking"] = thinking
             elif enabled is False:
                 result["thinking"] = {"type": "disabled"}
