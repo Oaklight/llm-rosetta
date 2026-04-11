@@ -124,8 +124,7 @@ class GatewayConfig:
         # If the provider config has a "type" field, use it; otherwise the
         # provider name itself is treated as the type (backward compatible).
         self.provider_types: dict[str, ProviderType] = {
-            name: cfg.get("type", name)
-            for name, cfg in self._raw_providers.items()
+            name: cfg.get("type", name) for name, cfg in self._raw_providers.items()
         }
 
         # Parse models — supports both string and dict formats:
