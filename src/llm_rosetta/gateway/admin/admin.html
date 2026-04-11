@@ -249,10 +249,10 @@ canvas { width: 100%; height: 160px; }
   <div class="header-right">
     <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
       <option value="indigo">Indigo Dark</option>
-      <option value="linear">Linear</option>
-      <option value="github">GitHub Dark</option>
+      <option value="dracula">Dracula</option>
+      <option value="nord">Nord</option>
       <option value="light">Light</option>
-      <option value="vercel">Vercel</option>
+      <option value="solarized">Solarized</option>
     </select>
     <div class="config-path" id="configPath"></div>
   </div>
@@ -424,25 +424,25 @@ const THEMES = {
     '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
     '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6',
   },
-  linear: {
-    '--bg':'#111113','--bg-card':'#191a1f','--bg-hover':'#232429','--border':'#2c2d33',
-    '--text':'#eeeffc','--text-dim':'#8a8f98','--accent':'#5e6ad2','--accent-hover':'#7c85d2',
-    '--green':'#4cc38a','--red':'#e5484d','--orange':'#f5a623','--blue':'#52a9ff',
+  dracula: {
+    '--bg':'#282a36','--bg-card':'#2d2f3d','--bg-hover':'#383a4a','--border':'#44475a',
+    '--text':'#f8f8f2','--text-dim':'#6272a4','--accent':'#bd93f9','--accent-hover':'#caa8fc',
+    '--green':'#50fa7b','--red':'#ff5555','--orange':'#ffb86c','--blue':'#8be9fd',
   },
-  github: {
-    '--bg':'#0d1117','--bg-card':'#161b22','--bg-hover':'#1c2128','--border':'#30363d',
-    '--text':'#e6edf3','--text-dim':'#7d8590','--accent':'#58a6ff','--accent-hover':'#79c0ff',
-    '--green':'#3fb950','--red':'#f85149','--orange':'#d29922','--blue':'#58a6ff',
+  nord: {
+    '--bg':'#2e3440','--bg-card':'#3b4252','--bg-hover':'#434c5e','--border':'#4c566a',
+    '--text':'#eceff4','--text-dim':'#81a1c1','--accent':'#88c0d0','--accent-hover':'#8fbcbb',
+    '--green':'#a3be8c','--red':'#bf616a','--orange':'#d08770','--blue':'#5e81ac',
   },
   light: {
     '--bg':'#ffffff','--bg-card':'#f6f8fa','--bg-hover':'#eef1f5','--border':'#d1d9e0',
     '--text':'#1f2328','--text-dim':'#656d76','--accent':'#0969da','--accent-hover':'#0550ae',
     '--green':'#1a7f37','--red':'#cf222e','--orange':'#bf8700','--blue':'#0969da',
   },
-  vercel: {
-    '--bg':'#000000','--bg-card':'#111111','--bg-hover':'#1a1a1a','--border':'#333333',
-    '--text':'#ededed','--text-dim':'#888888','--accent':'#0070f3','--accent-hover':'#3291ff',
-    '--green':'#50e3c2','--red':'#ee0000','--orange':'#f5a623','--blue':'#0070f3',
+  solarized: {
+    '--bg':'#002b36','--bg-card':'#073642','--bg-hover':'#0a4050','--border':'#586e75',
+    '--text':'#fdf6e3','--text-dim':'#839496','--accent':'#b58900','--accent-hover':'#cb9a09',
+    '--green':'#859900','--red':'#dc322f','--orange':'#cb4b16','--blue':'#268bd2',
   },
 };
 
