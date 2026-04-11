@@ -60,6 +60,33 @@ from .message_ops import GoogleGenAIMessageOps
 from .tool_ops import GoogleGenAIToolOps
 
 
+def _modality_list_to_dict(modality_list: list[dict]) -> dict[str, int]:
+    """Convert Google's ``list[ModalityTokenCount]`` to IR ``dict[str, int]``.
+
+    Example: ``[{"modality": "TEXT", "token_count": 42}]``
+    → ``{"text_tokens": 42}``
+    """
+    result: dict[str, int] = {}
+    for item in modality_list:
+        modality = (item.get("modality") or "unknown").lower()
+        count = item.get("token_count") or item.get("tokenCount") or 0
+        result[f"{modality}_tokens"] = count
+    return result
+
+
+def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
+    """Convert IR ``dict[str, int]`` back to Google's ``list[ModalityTokenCount]``.
+
+    Example: ``{"text_tokens": 42}``
+    → ``[{"modality": "TEXT", "tokenCount": 42}]``
+    """
+    result: list[dict[str, Any]] = []
+    for key, count in details.items():
+        modality = key.removesuffix("_tokens").upper()
+        result.append({"modality": modality, "tokenCount": count})
+    return result
+
+
 class GoogleGenAIConverter(BaseConverter):
     """Google GenAI API converter.
 
@@ -484,17 +511,28 @@ class GoogleGenAIConverter(BaseConverter):
                 usage_info["cache_read_tokens"] = cached
 
             # Modality breakdowns (Google-specific)
+            # Google returns list[ModalityTokenCount] e.g.
+            # [{"modality": "TEXT", "token_count": 42}];
+            # IR expects dict[str, int] e.g. {"text_tokens": 42}.
             prompt_details = p_usage.get("prompt_tokens_details") or p_usage.get(
                 "promptTokensDetails"
             )
             if prompt_details:
-                usage_info["prompt_tokens_details"] = prompt_details
+                usage_info["prompt_tokens_details"] = (
+                    _modality_list_to_dict(prompt_details)
+                    if isinstance(prompt_details, list)
+                    else prompt_details
+                )
 
             candidates_details = p_usage.get(
                 "candidates_tokens_details"
             ) or p_usage.get("candidatesTokensDetails")
             if candidates_details:
-                usage_info["completion_tokens_details"] = candidates_details
+                usage_info["completion_tokens_details"] = (
+                    _modality_list_to_dict(candidates_details)
+                    if isinstance(candidates_details, list)
+                    else candidates_details
+                )
 
             ir_response["usage"] = usage_info
 
@@ -566,14 +604,20 @@ class GoogleGenAIConverter(BaseConverter):
                 ]
 
             if "prompt_tokens_details" in ir_usage:
-                usage_metadata["promptTokensDetails"] = ir_usage[
-                    "prompt_tokens_details"
-                ]
+                details = ir_usage["prompt_tokens_details"]
+                usage_metadata["promptTokensDetails"] = (
+                    _dict_to_modality_list(details)
+                    if isinstance(details, dict)
+                    else details
+                )
 
             if "completion_tokens_details" in ir_usage:
-                usage_metadata["candidatesTokensDetails"] = ir_usage[
-                    "completion_tokens_details"
-                ]
+                details = ir_usage["completion_tokens_details"]
+                usage_metadata["candidatesTokensDetails"] = (
+                    _dict_to_modality_list(details)
+                    if isinstance(details, dict)
+                    else details
+                )
 
             provider_response["usageMetadata"] = usage_metadata
 
