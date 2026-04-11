@@ -61,7 +61,10 @@ async def serve_admin_html(request: Request) -> Response:
     global _admin_html
     if _admin_html is None:
         _admin_html = load_admin_html()
-    return HTMLResponse(_admin_html)
+    return HTMLResponse(
+        _admin_html,
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
 
 
 # ---------------------------------------------------------------------------
