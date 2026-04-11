@@ -168,7 +168,7 @@ class TestAnthropicConverter:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Think!"}]}
             ],
-            "reasoning": {"enabled": True, "budget_tokens": 2048},
+            "reasoning": {"mode": "enabled", "budget_tokens": 2048},
         }
         result, warnings = self.converter.request_to_provider(ir_request)
         assert result["thinking"]["type"] == "enabled"
@@ -236,7 +236,7 @@ class TestAnthropicConverter:
             ],
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert ir_request["reasoning"]["enabled"] is True
+        assert ir_request["reasoning"]["mode"] == "enabled"
         assert ir_request["reasoning"]["budget_tokens"] == 4096
 
     def test_request_from_provider_pydantic(self):

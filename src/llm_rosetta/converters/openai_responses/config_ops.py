@@ -240,7 +240,8 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         Responses API uses a ``reasoning`` object with ``type`` and ``effort``.
 
         Mapping:
-        - ``enabled`` → ``reasoning.type`` ("enabled"/"disabled")
+        - ``mode`` → ``reasoning.type`` ("enabled"/"disabled";
+          "auto" maps to "enabled" as OpenAI has no auto concept)
         - ``effort`` → ``reasoning.effort``
           (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
         - ``budget_tokens`` → not supported (warning)
@@ -254,10 +255,10 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: dict[str, Any] = {}
         reasoning_p: dict[str, Any] = {}
 
-        enabled = ir_reasoning.get("enabled")
-        if enabled is True:
+        mode = ir_reasoning.get("mode")
+        if mode in ("enabled", "auto"):
             reasoning_p["type"] = "enabled"
-        elif enabled is False:
+        elif mode == "disabled":
             reasoning_p["type"] = "disabled"
 
         if "effort" in ir_reasoning:
@@ -296,7 +297,8 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         """OpenAI Responses reasoning parameters → IR ReasoningConfig.
 
         Args:
-            provider_reasoning: Dict with ``reasoning`` field or reasoning object.
+            provider_reasoning: Provider request dict (or subset with
+                ``reasoning`` field).
 
         Returns:
             IR ReasoningConfig.
@@ -313,9 +315,9 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
 
         reasoning_type = reasoning.get("type")
         if reasoning_type == "enabled":
-            result["enabled"] = True
+            result["mode"] = "enabled"
         elif reasoning_type == "disabled":
-            result["enabled"] = False
+            result["mode"] = "disabled"
 
         if "effort" in reasoning:
             result["effort"] = reasoning["effort"]

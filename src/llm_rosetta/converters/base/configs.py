@@ -176,12 +176,12 @@ class BaseConfigOps(ABC):
         将IR推理配置转换为Provider推理配置
 
         处理推理过程的控制：
-        - 是否启用：enabled (bool) - Anthropic
+        - 推理模式：mode (auto/enabled/disabled) - Anthropic, OpenAI Responses, Google
         - 推理努力：effort (minimal/low/medium/high/max)
         - 预算token：budget_tokens - Anthropic/Google
 
         Handles reasoning process control:
-        - Enabled: enabled (bool) - Anthropic
+        - Reasoning mode: mode (auto/enabled/disabled) - Anthropic, OpenAI Responses, Google
         - Reasoning effort: effort (minimal/low/medium/high/max)
         - Budget tokens: budget_tokens - Anthropic/Google
 
@@ -203,7 +203,7 @@ class BaseConfigOps(ABC):
         将Provider推理配置转换为IR推理配置
 
         Args:
-            provider_reasoning: Provider格式的推理配置
+            provider_reasoning: Provider请求字典（完整的provider_request）
             **kwargs: 额外参数
 
         Returns:

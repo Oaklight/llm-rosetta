@@ -261,10 +261,9 @@ class AnthropicConverter(BaseConverter):
             ir_request["generation"] = gen_config
 
         # 6. Reasoning config
-        if "thinking" in provider_request:
-            ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(
-                {"thinking": provider_request["thinking"]}
-            )
+        reasoning = self.config_ops.p_reasoning_config_to_ir(provider_request)
+        if reasoning:
+            ir_request["reasoning"] = reasoning
 
         # 7. Stream config
         stream = provider_request.get("stream")

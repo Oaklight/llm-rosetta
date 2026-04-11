@@ -228,55 +228,70 @@ class AnthropicConfigOps(BaseConfigOps):
 
     @staticmethod
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
-        """IR ReasoningConfig → Anthropic thinking parameter.
+        """IR ReasoningConfig → Anthropic thinking + output_config parameters.
 
         Mapping:
-        - ``effort`` → ``thinking.type = "adaptive"`` + ``thinking.effort``
+        - ``mode: "auto"`` (or ``effort`` without ``mode``)
+          → ``thinking.type = "adaptive"``
+        - ``mode: "enabled"`` + ``budget_tokens``
+          → ``thinking.type = "enabled"`` + ``thinking.budget_tokens``
+        - ``mode: "enabled"`` without ``budget_tokens``
+          → falls back to ``"adaptive"`` with warning
+        - ``mode: "disabled"`` → ``thinking.type = "disabled"``
+        - ``budget_tokens`` alone → ``thinking.type = "enabled"``
+        - ``effort`` → ``output_config.effort`` (top-level, NOT ``thinking.effort``)
           (``"minimal"`` downgraded to ``"low"`` with warning)
-        - ``enabled: True`` + ``budget_tokens`` (no effort)
-          → ``thinking.type = "enabled"``
-        - ``enabled: True`` (no effort, no budget) → ``thinking.type = "adaptive"``
-        - ``enabled: False`` → ``thinking.type = "disabled"``
-        - ``budget_tokens`` → ``thinking.budget_tokens``
 
         Args:
             ir_reasoning: IR reasoning config.
 
         Returns:
-            Dict of Anthropic request fields to merge.
+            Dict of Anthropic request fields to merge (``thinking`` and/or
+            ``output_config``).
         """
         result: dict[str, Any] = {}
-
+        mode = ir_reasoning.get("mode")
         effort = ir_reasoning.get("effort")
-        if effort is not None:
-            # Anthropic 4.6+: adaptive thinking with effort level
+        budget_tokens = ir_reasoning.get("budget_tokens")
+
+        # Determine thinking type from mode
+        if mode == "disabled":
+            result["thinking"] = {"type": "disabled"}
+            return result  # effort/budget irrelevant when disabled
+
+        if mode == "enabled":
+            if budget_tokens is not None:
+                result["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": budget_tokens,
+                }
+            else:
+                # "enabled" requires budget_tokens; fall back to adaptive
+                warnings.warn(
+                    "Anthropic 'enabled' thinking requires budget_tokens, "
+                    "falling back to 'adaptive'",
+                    stacklevel=2,
+                )
+                result["thinking"] = {"type": "adaptive"}
+        elif mode == "auto" or effort is not None:
+            # auto mode, or effort without explicit mode → adaptive
             thinking: dict[str, Any] = {"type": "adaptive"}
+            if budget_tokens is not None:
+                thinking["budget_tokens"] = budget_tokens
+            result["thinking"] = thinking
+        elif budget_tokens is not None:
+            # budget_tokens without mode or effort → "enabled"
+            result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
+
+        # effort → output_config.effort (separate top-level field)
+        if effort is not None:
             if effort == "minimal":
                 warnings.warn(
                     "Anthropic does not support 'minimal' effort, downgrading to 'low'",
                     stacklevel=2,
                 )
-                thinking["effort"] = "low"
-            else:
-                thinking["effort"] = effort
-            if "budget_tokens" in ir_reasoning:
-                thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
-            result["thinking"] = thinking
-        else:
-            enabled = ir_reasoning.get("enabled")
-            if enabled is True:
-                if "budget_tokens" in ir_reasoning:
-                    # Explicit budget → "enabled" (full control over thinking budget)
-                    thinking: dict[str, Any] = {"type": "enabled"}
-                    thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
-                else:
-                    # No budget, no effort → "adaptive" (let the model decide);
-                    # "enabled" requires budget_tokens, so fall back to "adaptive"
-                    # to ensure a valid round-trip.
-                    thinking: dict[str, Any] = {"type": "adaptive"}
-                result["thinking"] = thinking
-            elif enabled is False:
-                result["thinking"] = {"type": "disabled"}
+                effort = "low"
+            result["output_config"] = {"effort": effort}
 
         return result
 
@@ -284,10 +299,14 @@ class AnthropicConfigOps(BaseConfigOps):
     def p_reasoning_config_to_ir(
         provider_reasoning: Any, **kwargs: Any
     ) -> ReasoningConfig:
-        """Anthropic thinking parameter → IR ReasoningConfig.
+        """Anthropic thinking + output_config → IR ReasoningConfig.
+
+        Extracts ``thinking.type`` → ``mode``, ``thinking.budget_tokens`` →
+        ``budget_tokens``, and ``output_config.effort`` → ``effort``.
 
         Args:
-            provider_reasoning: Dict with ``thinking`` field.
+            provider_reasoning: Dict with ``thinking`` and/or ``output_config``
+                fields (typically the full provider request).
 
         Returns:
             IR ReasoningConfig.
@@ -298,22 +317,25 @@ class AnthropicConfigOps(BaseConfigOps):
             return cast(ReasoningConfig, result)
 
         thinking = provider_reasoning.get("thinking")
-        if not isinstance(thinking, dict):
-            return cast(ReasoningConfig, result)
+        if isinstance(thinking, dict):
+            thinking_type = thinking.get("type")
+            if thinking_type == "adaptive":
+                result["mode"] = "auto"
+            elif thinking_type == "enabled":
+                result["mode"] = "enabled"
+            elif thinking_type == "disabled":
+                result["mode"] = "disabled"
 
-        thinking_type = thinking.get("type")
-        if thinking_type in ("enabled", "adaptive"):
-            result["enabled"] = True
-        elif thinking_type == "disabled":
-            result["enabled"] = False
+            budget_tokens = thinking.get("budget_tokens")
+            if budget_tokens is not None:
+                result["budget_tokens"] = budget_tokens
 
-        effort = thinking.get("effort")
-        if effort is not None:
-            result["effort"] = effort
-
-        budget_tokens = thinking.get("budget_tokens")
-        if budget_tokens is not None:
-            result["budget_tokens"] = budget_tokens
+        # effort lives in output_config, not thinking
+        output_config = provider_reasoning.get("output_config")
+        if isinstance(output_config, dict):
+            effort = output_config.get("effort")
+            if effort is not None:
+                result["effort"] = effort
 
         return cast(ReasoningConfig, result)
 

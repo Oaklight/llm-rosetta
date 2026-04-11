@@ -253,6 +253,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Mapping:
         - ``effort`` → ``reasoning_effort``
           (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
+        - ``mode: "disabled"`` → skip ``reasoning_effort`` entirely
         - ``budget_tokens`` → not supported (warning)
 
         Args:
@@ -262,6 +263,10 @@ class OpenAIChatConfigOps(BaseConfigOps):
             Dict of OpenAI request fields to merge.
         """
         result: dict[str, Any] = {}
+
+        # mode: "disabled" → skip reasoning_effort
+        if ir_reasoning.get("mode") == "disabled":
+            return result
 
         if "effort" in ir_reasoning:
             effort = ir_reasoning["effort"]
@@ -294,8 +299,11 @@ class OpenAIChatConfigOps(BaseConfigOps):
     ) -> ReasoningConfig:
         """OpenAI Chat reasoning parameters → IR ReasoningConfig.
 
+        Extracts ``reasoning_effort`` from the provider request.
+
         Args:
-            provider_reasoning: Dict with ``reasoning_effort`` field.
+            provider_reasoning: Provider request dict (or subset with
+                ``reasoning_effort``).
 
         Returns:
             IR ReasoningConfig.

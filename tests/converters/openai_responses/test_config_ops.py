@@ -271,13 +271,28 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"] == {"effort": "high"}
 
-    def test_ir_reasoning_config_with_enabled(self):
-        """Test reasoning config with enabled field."""
+    def test_ir_reasoning_config_with_mode(self):
+        """Test reasoning config with mode field."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"enabled": True, "effort": "medium"})
+            cast(ReasoningConfig, {"mode": "enabled", "effort": "medium"})
         )
         assert result["reasoning"]["type"] == "enabled"
         assert result["reasoning"]["effort"] == "medium"
+
+    def test_ir_reasoning_config_auto_mode(self):
+        """Test mode: auto maps to reasoning.type: enabled."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
+        )
+        assert result["reasoning"]["type"] == "enabled"
+        assert result["reasoning"]["effort"] == "high"
+
+    def test_ir_reasoning_config_disabled_mode(self):
+        """Test mode: disabled maps to reasoning.type: disabled."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "disabled"})
+        )
+        assert result["reasoning"]["type"] == "disabled"
 
     def test_ir_reasoning_config_minimal_warning(self):
         """Test 'minimal' effort downgraded to 'low' with warning."""
@@ -315,7 +330,7 @@ class TestOpenAIResponsesConfigOps:
             {"reasoning": {"effort": "medium", "type": "enabled"}}
         )
         assert result["effort"] == "medium"
-        assert result["enabled"] is True
+        assert result["mode"] == "enabled"
 
     def test_p_reasoning_config_to_ir_direct(self):
         """Test direct reasoning object (without nesting)."""

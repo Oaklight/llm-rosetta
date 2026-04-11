@@ -269,11 +269,9 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         # 8. Reasoning config
-        reasoning = provider_request.get("reasoning")
+        reasoning = self.config_ops.p_reasoning_config_to_ir(provider_request)
         if reasoning:
-            ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(
-                {"reasoning": reasoning}
-            )
+            ir_request["reasoning"] = reasoning
 
         # 9. Stream config
         stream = provider_request.get("stream")
