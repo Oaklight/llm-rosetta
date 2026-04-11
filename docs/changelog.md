@@ -6,6 +6,20 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.4.2 — 2026-04-11
+
+### 变更
+
+- **`ReasoningConfig.enabled` 替换为 `mode` 字段**：布尔值 `enabled` 字段已被 `mode: Literal["auto", "enabled", "disabled"]` 替换。这使 IR 更贴近提供商语义（Anthropic 的三态 `thinking.type`、OpenAI Responses 的 `reasoning.type`）。省略 `mode` 保留原有的"提供商默认"行为。`effort` 字段现在直接位于 `ReasoningConfig` 中，而非嵌套
+
+### 修复
+
+- **Responses API `developer` 角色映射**：OpenAI Responses API 使用 `role: "developer"`（等同于 Chat 的 `"system"`）。此前该角色在 Provider→IR 转换中原样传递，导致验证失败。现已正确映射为 IR `"system"`
+- **Google GenAI `additionalProperties` 拒绝**：Google 的 function_declarations API 拒绝 JSON Schema 中的 `additionalProperties` 关键字。为 `sanitize_schema()` 新增 `extra_strip_keys` 参数，允许提供商剥离特定不支持的关键字。Google tool_ops 现递归剥离嵌套 schema 中的 `additionalProperties`
+- **Google GenAI `prompt_tokens_details` 格式不匹配**：Google 以 `list[ModalityTokenCount]` 格式返回 modality token 详情（如 `[{"modality": "TEXT", "token_count": 42}]`），但 IR 期望 `dict[str, int]`（如 `{"text_tokens": 42}`）。新增双向转换辅助函数 `_modality_list_to_dict()` 和 `_dict_to_modality_list()`，同时支持 SDK（`token_count`）和 REST API（`tokenCount`）字段名
+- **跨格式 tool call ID 前缀映射**：Responses API 强制要求 tool call ID 以 `fc_` 前缀，但 Chat 使用 `call_`，Anthropic 使用 `toolu_`。在 Responses 转换中新增自动前缀映射，防止跨格式场景下的验证失败
+- **自适应思考回退**：将 IR 推理配置转换为 Anthropic 格式时，`mode: "enabled"` 但缺少 `budget_tokens` 现在正确回退为 `{"type": "adaptive"}` 并发出警告，而非产生无效的不含必需 `budget_tokens` 的 `{"type": "enabled"}`
+
 ## v0.4.1 — 2026-04-10
 
 ### 新增
