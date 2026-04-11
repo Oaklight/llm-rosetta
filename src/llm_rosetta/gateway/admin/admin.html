@@ -697,11 +697,15 @@ function openModelModal(model, provider, capabilities) {
 
 // ===================== Config Tab =====================
 async function loadConfig() {
-  configData = await api.get('/admin/api/config');
-  document.getElementById('configPath').textContent = configData.config_path || '';
-  document.getElementById('globalProxy').value = (configData.server && configData.server.proxy) || '';
-  renderProviders();
-  renderModels();
+  try {
+    configData = await api.get('/admin/api/config');
+    document.getElementById('configPath').textContent = configData.config_path || '';
+    document.getElementById('globalProxy').value = (configData.server && configData.server.proxy) || '';
+    renderProviders();
+    renderModels();
+  } catch(e) {
+    console.error('Failed to load config:', e);
+  }
 }
 
 async function saveServerSettings() {
