@@ -143,6 +143,13 @@ async def put_provider(request: Request) -> Response:
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
+    # If the submitted api_key is a masked value (contains ***), preserve the
+    # original key from the config file to prevent accidental overwrite.
+    existing_providers = data.get("providers", {})
+    resolve_name = body.get("rename_from", name) or name
+    if "***" in api_key and resolve_name in existing_providers:
+        api_key = existing_providers[resolve_name].get("api_key", api_key)
+
     provider_entry: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
 
     # Include API standard type if provided
@@ -155,6 +162,31 @@ async def put_provider(request: Request) -> Response:
         proxy = body["proxy"]
         if proxy:
             provider_entry["proxy"] = proxy
+
+    # Handle rename: remove old entry and update model references
+    rename_from = body.get("rename_from")
+    if rename_from and rename_from != name:
+        providers = data.get("providers", {})
+        if rename_from not in providers:
+            return JSONResponse(
+                {"error": f"Original provider '{rename_from}' not found"},
+                status_code=404,
+            )
+        if name in providers:
+            return JSONResponse(
+                {"error": f"Provider '{name}' already exists"},
+                status_code=409,
+            )
+        del providers[rename_from]
+        # Update all model references from old name to new name
+        models = data.get("models", {})
+        for model_name, model_val in models.items():
+            if isinstance(model_val, str) and model_val == rename_from:
+                models[model_name] = name
+            elif (
+                isinstance(model_val, dict) and model_val.get("provider") == rename_from
+            ):
+                model_val["provider"] = name
 
     data.setdefault("providers", {})[name] = provider_entry
 
@@ -468,6 +500,26 @@ async def clear_requests(request: Request) -> Response:
     return JSONResponse({"ok": True})
 
 
+async def get_provider_key(request: Request) -> Response:
+    """Return the raw (unmasked) API key for a single provider."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    name = request.path_params["name"]
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    provider = data.get("providers", {}).get(name)
+    if not provider:
+        return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
+
+    return JSONResponse({"api_key": provider.get("api_key", "")})
+
+
 # ---------------------------------------------------------------------------
 # Route table
 # ---------------------------------------------------------------------------
@@ -487,6 +539,11 @@ admin_routes: list[Route] = [
         "/admin/api/config/providers/{name}",
         delete_provider,
         methods=["DELETE"],
+    ),
+    Route(
+        "/admin/api/config/providers/{name}/key",
+        get_provider_key,
+        methods=["GET"],
     ),
     Route(
         "/admin/api/config/models/{name:path}",
