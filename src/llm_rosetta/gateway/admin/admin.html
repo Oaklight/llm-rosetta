@@ -33,7 +33,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 .header h1 { font-size: 18px; font-weight: 600; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
-.header-right { display: flex; align-items: center; gap: 12px; }
+.header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
 .header .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
 .header-select {
   padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
@@ -247,17 +247,19 @@ canvas { width: 100%; height: 160px; }
     <h1>llm-rosetta <span>gateway admin</span></h1>
   </div>
   <div class="header-right">
-    <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
-      <option value="indigo">Indigo Dark</option>
-      <option value="dracula">Dracula</option>
-      <option value="nord">Nord</option>
-      <option value="light">Light</option>
-      <option value="solarized">Solarized</option>
-    </select>
-    <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
-      <option value="en">EN</option>
-      <option value="zh">中文</option>
-    </select>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
+        <option value="indigo">Indigo Dark</option>
+        <option value="dracula">Dracula</option>
+        <option value="nord">Nord</option>
+        <option value="light">Light</option>
+        <option value="solarized">Solarized</option>
+      </select>
+      <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
+        <option value="en">EN</option>
+        <option value="zh">中文</option>
+      </select>
+    </div>
     <div class="config-path" id="configPath"></div>
   </div>
 </div>
@@ -356,8 +358,12 @@ canvas { width: 100%; height: 160px; }
   <div class="modal">
     <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
     <div class="form-group">
-      <label data-i18n="label.providerName">Provider Name / Type</label>
-      <input id="provName" placeholder="e.g. openai_chat, anthropic, my_custom">
+      <label data-i18n="label.providerName">Provider Name</label>
+      <input id="provName" placeholder="e.g. my-openai, openrouter-claude">
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.apiStandard">API Standard</label>
+      <select id="provType"></select>
     </div>
     <div class="form-group">
       <label data-i18n="label.baseUrl">Base URL</label>
@@ -478,7 +484,8 @@ const I18N = {
     'btn.addProvider':'+ Add Provider', 'btn.addModel':'+ Add Model',
     'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.clearLog':'Clear Log',
     'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
-    'label.providerName':'Provider Name / Type', 'label.baseUrl':'Base URL',
+    'label.providerName':'Provider Name', 'label.apiStandard':'API Standard',
+    'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.capabilities':'Capabilities',
@@ -521,7 +528,8 @@ const I18N = {
     'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u5546', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
     'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.clearLog':'\u6e05\u9664\u65e5\u5fd7',
     'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
-    'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0 / \u7c7b\u578b', 'label.baseUrl':'Base URL',
+    'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0', 'label.apiStandard':'API \u6807\u51c6',
+    'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.capabilities':'\u80fd\u529b',
@@ -627,10 +635,20 @@ function showToast(msg, type='success') {
 // ===================== Modal =====================
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
-function openProviderModal(name, baseUrl, apiKey, proxy) {
+function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('providerModalTitle').textContent = name ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
   document.getElementById('provName').readOnly = !!name;
+  // Populate API Standard dropdown
+  const typeSel = document.getElementById('provType');
+  typeSel.innerHTML = '';
+  const knownTypes = (configData && configData.known_provider_types) || [];
+  for (const pt of knownTypes) {
+    const opt = document.createElement('option');
+    opt.value = pt; opt.textContent = pt;
+    if (pt === provType) opt.selected = true;
+    typeSel.appendChild(opt);
+  }
   document.getElementById('provBaseUrl').value = baseUrl || '';
   document.getElementById('provApiKey').value = apiKey || '';
   document.getElementById('provProxy').value = proxy || '';
@@ -685,6 +703,7 @@ function renderProviders() {
   grid.innerHTML = Object.entries(providers).map(([name, cfg]) => `
     <div class="provider-card">
       <div class="name">${esc(name)}</div>
+      <div class="field">Type: <code>${esc(cfg.type || name)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
       <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
@@ -738,11 +757,12 @@ function renderModels() {
 
 async function saveProvider() {
   const name = document.getElementById('provName').value.trim();
+  const provType = document.getElementById('provType').value;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
   const apiKey = document.getElementById('provApiKey').value.trim();
   const proxy = document.getElementById('provProxy').value.trim();
   if (!name || !baseUrl || !apiKey) { showToast(t('error.fieldsRequired'), 'error'); return; }
-  const body = {api_key: apiKey, base_url: baseUrl, proxy};
+  const body = {type: provType, api_key: apiKey, base_url: baseUrl, proxy};
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
   if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
@@ -757,7 +777,7 @@ async function deleteProvider(name) {
 
 function editProvider(name) {
   const cfg = configData.providers[name] || {};
-  openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy);
+  openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
 }
 
 async function saveModel() {

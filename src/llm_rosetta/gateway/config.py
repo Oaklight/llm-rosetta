@@ -120,6 +120,14 @@ class GatewayConfig:
     def __init__(self, raw: dict[str, Any]) -> None:
         self._raw_providers: dict[str, dict[str, str]] = raw.get("providers", {})
 
+        # Map provider name → API standard type.
+        # If the provider config has a "type" field, use it; otherwise the
+        # provider name itself is treated as the type (backward compatible).
+        self.provider_types: dict[str, ProviderType] = {
+            name: cfg.get("type", name)
+            for name, cfg in self._raw_providers.items()
+        }
+
         # Parse models — supports both string and dict formats:
         #   "model": "provider"                     (legacy)
         #   "model": {"provider": "p", "capabilities": ["text", "vision"]}
@@ -155,7 +163,9 @@ class GatewayConfig:
 
         # Build ProviderInfo objects (with key rotation support)
         self.providers: dict[str, ProviderInfo] = {
-            name: build_provider_info(name, cfg, global_proxy=self.proxy)
+            name: build_provider_info(
+                self.provider_types[name], cfg, global_proxy=self.proxy
+            )
             for name, cfg in self._raw_providers.items()
         }
 
@@ -173,7 +183,11 @@ class GatewayConfig:
     def resolve_model(self, model: str) -> tuple[ProviderType, ProviderInfo]:
         """Return (provider_type, provider_info) for a model name.
 
+        ``provider_type`` is the API standard (e.g. ``"openai_chat"``),
+        resolved from the provider's ``type`` field or its name as fallback.
+
         Raises KeyError if the model is not in the routing table.
         """
-        provider_type = self.models[model]
-        return provider_type, self.providers[provider_type]
+        provider_name = self.models[model]
+        provider_type = self.provider_types[provider_name]
+        return provider_type, self.providers[provider_name]

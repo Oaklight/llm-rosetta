@@ -80,13 +80,16 @@ async def get_config(request: Request) -> Response:
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
-    # Mask API keys in the response
+    # Mask API keys and ensure each provider has a "type" field
     providers = raw.get("providers", {})
     masked_providers: dict[str, Any] = {}
     for name, cfg in providers.items():
         masked = dict(cfg)
         if "api_key" in masked:
             masked["api_key"] = _mask_api_key(masked["api_key"])
+        # Ensure explicit type — fall back to provider name for legacy configs
+        if "type" not in masked:
+            masked["type"] = name
         masked_providers[name] = masked
 
     # Normalize models to dict format for consistent admin UI
@@ -138,6 +141,11 @@ async def put_provider(request: Request) -> Response:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
     provider_entry: dict[str, Any] = {"api_key": api_key, "base_url": base_url}
+
+    # Include API standard type if provided
+    provider_type = body.get("type")
+    if provider_type:
+        provider_entry["type"] = provider_type
 
     # Include proxy if provided, empty string removes it
     if "proxy" in body:
@@ -194,7 +202,11 @@ async def delete_provider(request: Request) -> Response:
 
     # Check if any model still references this provider
     models = data.get("models", {})
-    referencing = [m for m, p in models.items() if p == name]
+    referencing = [
+        m
+        for m, p in models.items()
+        if (p["provider"] if isinstance(p, dict) else p) == name
+    ]
     if referencing:
         return JSONResponse(
             {
