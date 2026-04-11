@@ -89,11 +89,23 @@ async def get_config(request: Request) -> Response:
             masked["api_key"] = _mask_api_key(masked["api_key"])
         masked_providers[name] = masked
 
+    # Normalize models to dict format for consistent admin UI
+    raw_models = raw.get("models", {})
+    models_normalized: dict[str, Any] = {}
+    for name, value in raw_models.items():
+        if isinstance(value, str):
+            models_normalized[name] = {"provider": value, "capabilities": ["text"]}
+        elif isinstance(value, dict):
+            models_normalized[name] = {
+                "provider": value.get("provider", ""),
+                "capabilities": value.get("capabilities", ["text"]),
+            }
+
     return JSONResponse(
         {
             "config_path": config_path,
             "providers": masked_providers,
-            "models": raw.get("models", {}),
+            "models": models_normalized,
             "server": raw.get("server", {}),
             "known_provider_types": known_provider_types(),
         }
@@ -250,7 +262,11 @@ async def put_model(request: Request) -> Response:
             {"error": f"Provider '{provider}' not found in config"}, status_code=400
         )
 
-    data.setdefault("models", {})[name] = provider
+    capabilities = body.get("capabilities", ["text"])
+    data.setdefault("models", {})[name] = {
+        "provider": provider,
+        "capabilities": capabilities,
+    }
 
     try:
         write_config(config_path, data)
@@ -276,6 +292,7 @@ async def put_model(request: Request) -> Response:
             "ok": True,
             "model": name,
             "provider": provider,
+            "capabilities": capabilities,
             "models": dict(new_config.models),
         }
     )

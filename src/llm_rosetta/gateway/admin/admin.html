@@ -172,6 +172,16 @@ canvas { width: 100%; height: 160px; }
 .badge-error { background: rgba(239,68,68,0.15); color: var(--red); }
 .badge-stream { background: rgba(99,102,241,0.15); color: var(--accent); }
 
+/* Capability badges */
+.badge-cap { background: rgba(139,144,165,0.15); color: var(--text-dim); font-size: 10px; padding: 1px 6px; margin-right: 3px; }
+.badge-cap-vision { background: rgba(245,158,11,0.12); color: var(--orange); }
+.badge-cap-tools { background: rgba(59,130,246,0.12); color: var(--blue); }
+
+/* Checkbox group */
+.checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; }
+.checkbox-group label { font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 5px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.checkbox-group input[type="checkbox"] { accent-color: var(--accent); }
+
 /* Test button dropdown */
 .test-group { position: relative; display: inline-flex; }
 .test-group .btn-test {
@@ -196,6 +206,8 @@ canvas { width: 100%; height: 160px; }
 .test-menu-item:hover { background: var(--bg-hover); }
 .test-menu-item:first-child { border-radius: var(--radius) var(--radius) 0 0; }
 .test-menu-item:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+.test-menu-item.disabled { color: var(--text-dim); opacity: 0.4; cursor: not-allowed; }
+.test-menu-item.disabled:hover { background: none; }
 
 /* Test result modal (wider) */
 .modal-wide { width: 620px; max-width: 95vw; }
@@ -360,6 +372,14 @@ canvas { width: 100%; height: 160px; }
       <label>Provider</label>
       <select id="modelProvider"></select>
     </div>
+    <div class="form-group">
+      <label>Capabilities</label>
+      <div class="checkbox-group">
+        <label><input type="checkbox" id="capText" checked disabled> text</label>
+        <label><input type="checkbox" id="capVision"> vision</label>
+        <label><input type="checkbox" id="capTools"> tools</label>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modelModal')">Cancel</button>
       <button class="btn btn-primary" onclick="saveModel()">Save</button>
@@ -432,7 +452,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy) {
   document.getElementById('providerModal').classList.add('open');
 }
 
-function openModelModal(model, provider) {
+function openModelModal(model, provider, capabilities) {
   document.getElementById('modelModalTitle').textContent = model ? 'Edit Model' : 'Add Model';
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').readOnly = !!model;
@@ -447,6 +467,10 @@ function openModelModal(model, provider) {
       sel.appendChild(opt);
     }
   }
+  // Set capability checkboxes
+  const caps = capabilities || ['text'];
+  document.getElementById('capVision').checked = caps.includes('vision');
+  document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('modelModal').classList.add('open');
 }
 
@@ -494,9 +518,17 @@ function renderModels() {
     tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-dim)">No models configured.</td></tr>';
     return;
   }
-  tbody.innerHTML = Object.entries(models).map(([name, prov]) => `
-    <tr>
-      <td><code>${esc(name)}</code></td>
+  tbody.innerHTML = Object.entries(models).map(([name, info]) => {
+    const prov = typeof info === 'string' ? info : info.provider;
+    const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+    const capBadges = caps.map(c => {
+      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : 'badge-cap';
+      return `<span class="badge ${cls}">${esc(c)}</span>`;
+    }).join('');
+    const hasVision = caps.includes('vision');
+    const hasTools = caps.includes('tools');
+    return `<tr>
+      <td><code>${esc(name)}</code> ${capBadges}</td>
       <td>${esc(prov)}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="test-group">
@@ -505,15 +537,15 @@ function renderModels() {
           <div class="test-menu">
             <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">Simple Text</div>
             <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">Stream</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','tools')">Function Call</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','vision')">Image Understanding</div>
+            <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">Function Call</div>
+            <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">Image Understanding</div>
           </div>
         </div>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">Edit</button>
         <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">Delete</button>
       </td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 
   // Update filter dropdowns
   updateFilterOptions();
@@ -547,7 +579,10 @@ async function saveModel() {
   const name = document.getElementById('modelName').value.trim();
   const provider = document.getElementById('modelProvider').value;
   if (!name || !provider) { showToast('All fields are required', 'error'); return; }
-  const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, {provider});
+  const capabilities = ['text'];
+  if (document.getElementById('capVision').checked) capabilities.push('vision');
+  if (document.getElementById('capTools').checked) capabilities.push('tools');
+  const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, {provider, capabilities});
   if (res.ok) { showToast(`Model '${name}' saved`); closeModal('modelModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
@@ -560,7 +595,9 @@ async function deleteModel(name) {
 }
 
 function editModel(name, provider) {
-  openModelModal(name, provider);
+  const info = configData.models[name];
+  const caps = (typeof info === 'object' && info.capabilities) ? info.capabilities : ['text'];
+  openModelModal(name, provider, caps);
 }
 
 // ===================== Dashboard Tab =====================
@@ -769,8 +806,8 @@ function formatDuration(seconds) {
 }
 
 // ===================== Test Model =====================
-// A tiny 8x8 PNG with colored quadrants (red/green/blue/yellow), base64 encoded
-const TEST_IMAGE_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAANklEQVQI12P4z8BAAGBiIEoBEwMM/GdgYPj/H8r+D2YzMEDYcDYjIyMDAwMDGAxhw0XgbABhLxAP0k3xLgAAAABJRU5ErkJggg==';
+// Public domain test image (Wikimedia Commons — PNG transparency demo)
+const TEST_IMAGE_URL = 'https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png';
 
 const TEST_LABELS = {text:'Simple Text', stream:'Stream', tools:'Function Call', vision:'Image Understanding'};
 
@@ -794,7 +831,7 @@ function buildTestPayload(model, type) {
       return {...base,
         messages:[{role:'user', content:[
           {type:'text', text:'Describe what you see in this image in one sentence.'},
-          {type:'image_url', image_url:{url:'data:image/png;base64,' + TEST_IMAGE_B64}}
+          {type:'image_url', image_url:{url: TEST_IMAGE_URL}}
         ]}]
       };
   }
