@@ -117,10 +117,11 @@ tr:hover td { background: var(--bg-hover); }
   font-family: var(--mono); color: var(--text); background: var(--bg);
   padding: 2px 6px; border-radius: 4px; font-size: 11px;
 }
+.provider-card .field code { overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: inline-block; vertical-align: bottom; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
-.key-field { display: flex; align-items: center; gap: 4px; }
+.key-actions { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
 .key-btn {
-  background: none; border: none; cursor: pointer; padding: 1px 3px;
+  background: none; border: none; cursor: pointer; padding: 2px 4px;
   color: var(--text-dim); font-size: 13px; line-height: 1; border-radius: 3px;
 }
 .key-btn:hover { color: var(--accent); background: var(--bg-hover); }
@@ -379,7 +380,11 @@ canvas { width: 100%; height: 160px; }
     </div>
     <div class="form-group">
       <label data-i18n="label.apiKey">API Key (or ${ENV_VAR} placeholder)</label>
-      <input id="provApiKey" placeholder="${OPENAI_API_KEY}">
+      <div style="display:flex;gap:4px;align-items:center">
+        <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1">
+        <button type="button" class="key-btn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="key-btn" title="Copy" onclick="copyModalKey()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      </div>
     </div>
     <div class="form-group">
       <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)</label>
@@ -678,9 +683,17 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     typeSel.appendChild(opt);
   }
   document.getElementById('provBaseUrl').value = baseUrl || '';
-  document.getElementById('provApiKey').value = apiKey || '';
+  const keyInput = document.getElementById('provApiKey');
+  keyInput.value = apiKey || '';
+  keyInput.type = 'password';
   document.getElementById('provProxy').value = proxy || '';
   document.getElementById('providerModal').classList.add('open');
+  // When editing, fetch the real (unmasked) key
+  if (name) {
+    api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
+      if (res.api_key) keyInput.value = res.api_key;
+    }).catch(() => {});
+  }
 }
 
 function openModelModal(model, provider, capabilities) {
@@ -737,10 +750,7 @@ function renderProviders() {
       <div class="name">${esc(name)}</div>
       <div class="field">Type: <code>${esc(cfg.type || name)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-      <div class="field key-field">API Key: <code id="key-${esc(name)}" data-masked="${esc(cfg.api_key || '')}">${esc(cfg.api_key || '')}</code>
-        <button class="key-btn" title="Toggle visibility" onclick="toggleKeyVisibility('${esc(name)}')">&#128065;</button>
-        <button class="key-btn" title="Copy" onclick="copyKey('${esc(name)}')">&#128203;</button>
-      </div>
+      <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
@@ -819,51 +829,15 @@ function editProvider(name) {
   openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
 }
 
-// Cache revealed keys so we don't re-fetch on every toggle
-const _revealedKeys = {};
-
-async function toggleKeyVisibility(name) {
-  const el = document.getElementById('key-' + name);
-  if (!el) return;
-  if (el.dataset.revealed === 'true') {
-    // Hide — restore masked value
-    el.textContent = el.dataset.masked;
-    el.dataset.revealed = 'false';
-    return;
-  }
-  // Reveal — fetch real key
-  if (_revealedKeys[name]) {
-    el.textContent = _revealedKeys[name];
-    el.dataset.revealed = 'true';
-    return;
-  }
-  try {
-    const res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`);
-    if (res.api_key) {
-      _revealedKeys[name] = res.api_key;
-      el.textContent = res.api_key;
-      el.dataset.revealed = 'true';
-    }
-  } catch(e) {
-    showToast('Failed to reveal key', 'error');
-  }
+function toggleModalKeyVisibility() {
+  const input = document.getElementById('provApiKey');
+  input.type = input.type === 'password' ? 'text' : 'password';
 }
 
-async function copyKey(name) {
-  let key = _revealedKeys[name];
-  if (!key) {
-    try {
-      const res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`);
-      key = res.api_key;
-      if (key) _revealedKeys[name] = key;
-    } catch(e) {
-      showToast('Failed to fetch key', 'error');
-      return;
-    }
-  }
-  if (!key) return;
+async function copyModalKey() {
+  const input = document.getElementById('provApiKey');
   try {
-    await navigator.clipboard.writeText(key);
+    await navigator.clipboard.writeText(input.value);
     showToast('API key copied');
   } catch(e) {
     showToast('Copy failed', 'error');
