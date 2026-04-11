@@ -287,17 +287,60 @@ class TestGoogleGenAIConfigOps:
         )
         assert result == {}
 
+    def test_ir_reasoning_config_mode_disabled(self):
+        """Test mode: disabled → thinking_budget: 0."""
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "disabled"})
+        )
+        assert result["thinking_config"]["thinking_budget"] == 0
+
+    def test_ir_reasoning_config_mode_auto(self):
+        """Test mode: auto → thinking_budget: -1."""
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "auto"})
+        )
+        assert result["thinking_config"]["thinking_budget"] == -1
+
+    def test_ir_reasoning_config_mode_auto_with_effort(self):
+        """Test mode: auto + effort → thinking_budget: -1 + thinking_level."""
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
+        )
+        assert result["thinking_config"]["thinking_budget"] == -1
+        assert result["thinking_config"]["thinking_level"] == "high"
+
+    def test_ir_reasoning_config_mode_enabled_with_budget(self):
+        """Test mode: enabled + budget → uses budget_tokens."""
+        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 4096})
+        )
+        assert result["thinking_config"]["thinking_budget"] == 4096
+
     def test_p_reasoning_config_to_ir(self):
         """Test Google thinking_config → IR ReasoningConfig."""
         provider = {"thinking_config": {"thinking_budget": 8192}}
         result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["mode"] == "enabled"
         assert result["budget_tokens"] == 8192
 
+    def test_p_reasoning_config_to_ir_budget_zero(self):
+        """Test thinking_budget: 0 → mode: disabled."""
+        provider = {"thinking_config": {"thinking_budget": 0}}
+        result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["mode"] == "disabled"
+
+    def test_p_reasoning_config_to_ir_budget_negative(self):
+        """Test thinking_budget: -1 → mode: auto."""
+        provider = {"thinking_config": {"thinking_budget": -1}}
+        result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["mode"] == "auto"
+
     def test_p_reasoning_config_to_ir_with_level(self):
-        """Test thinking_level → IR effort."""
+        """Test thinking_level → IR effort + mode: auto."""
         provider = {"thinking_config": {"thinking_level": "low"}}
         result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
         assert result["effort"] == "low"
+        assert result["mode"] == "auto"
 
     def test_p_reasoning_config_to_ir_empty(self):
         """Test empty reasoning config → empty IR."""
@@ -310,10 +353,11 @@ class TestGoogleGenAIConfigOps:
         assert result == {}
 
     def test_reasoning_config_round_trip(self):
-        """Test reasoning config round-trip."""
-        original = cast(ReasoningConfig, {"budget_tokens": 2048})
+        """Test reasoning config round-trip: enabled + budget."""
+        original = cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 2048})
         provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
         restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["mode"] == "enabled"
         assert restored["budget_tokens"] == 2048
 
     def test_reasoning_config_effort_round_trip(self):
@@ -322,6 +366,22 @@ class TestGoogleGenAIConfigOps:
         provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
         restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
         assert restored["effort"] == "high"
+
+    def test_reasoning_config_roundtrip_auto(self):
+        """Test round-trip: auto → thinking_budget: -1 → auto."""
+        original = cast(ReasoningConfig, {"mode": "auto"})
+        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        assert provider["thinking_config"]["thinking_budget"] == -1
+        restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["mode"] == "auto"
+
+    def test_reasoning_config_roundtrip_disabled(self):
+        """Test round-trip: disabled → thinking_budget: 0 → disabled."""
+        original = cast(ReasoningConfig, {"mode": "disabled"})
+        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        assert provider["thinking_config"]["thinking_budget"] == 0
+        restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["mode"] == "disabled"
 
     # ==================== Cache Config ====================
 

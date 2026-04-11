@@ -252,11 +252,9 @@ class OpenAIChatConverter(BaseConverter):
             )
 
         # 7. Reasoning config
-        reasoning_effort = provider_request.get("reasoning_effort")
-        if reasoning_effort:
-            ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(
-                {"reasoning_effort": reasoning_effort}
-            )
+        reasoning = self.config_ops.p_reasoning_config_to_ir(provider_request)
+        if reasoning:
+            ir_request["reasoning"] = reasoning
 
         # 8. Stream config
         stream = provider_request.get("stream")

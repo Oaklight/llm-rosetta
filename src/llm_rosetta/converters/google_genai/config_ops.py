@@ -262,6 +262,9 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         """IR ReasoningConfig → Google GenAI reasoning parameters.
 
         Mapping:
+        - ``mode: "disabled"`` → ``thinking_config.thinking_budget = 0``
+        - ``mode: "auto"`` (no budget) → ``thinking_config.thinking_budget = -1``
+        - ``mode: "enabled"`` → uses provided ``budget_tokens``
         - ``effort`` → ``thinking_config.thinking_level``
           (``"max"`` downgraded to ``"high"`` with warning)
         - ``budget_tokens`` → ``thinking_config.thinking_budget``
@@ -274,6 +277,12 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         """
         result: dict[str, Any] = {}
         thinking_config: dict[str, Any] = {}
+
+        mode = ir_reasoning.get("mode")
+        if mode == "disabled":
+            thinking_config["thinking_budget"] = 0
+        elif mode == "auto" and "budget_tokens" not in ir_reasoning:
+            thinking_config["thinking_budget"] = -1
 
         if "effort" in ir_reasoning:
             effort = ir_reasoning["effort"]
@@ -299,8 +308,15 @@ class GoogleGenAIConfigOps(BaseConfigOps):
     ) -> ReasoningConfig:
         """Google GenAI reasoning parameters → IR ReasoningConfig.
 
+        Mapping:
+        - ``thinking_budget == 0`` → ``mode: "disabled"``
+        - ``thinking_budget == -1`` → ``mode: "auto"``
+        - ``thinking_budget > 0`` → ``mode: "enabled"`` + ``budget_tokens``
+        - ``thinking_level`` only → ``mode: "auto"``
+
         Args:
-            provider_reasoning: Dict with Google reasoning fields.
+            provider_reasoning: Provider request dict (or generation_config
+                subset with Google reasoning fields).
 
         Returns:
             IR ReasoningConfig.
@@ -314,17 +330,26 @@ class GoogleGenAIConfigOps(BaseConfigOps):
             "thinking_config"
         ) or provider_reasoning.get("thinkingConfig")
         if thinking_config:
-            budget = thinking_config.get("thinking_budget") or thinking_config.get(
-                "thinkingBudget"
-            )
+            budget = thinking_config.get("thinking_budget")
+            if budget is None:
+                budget = thinking_config.get("thinkingBudget")
             if budget is not None:
-                result["budget_tokens"] = budget
+                if budget == 0:
+                    result["mode"] = "disabled"
+                elif budget == -1:
+                    result["mode"] = "auto"
+                else:
+                    result["mode"] = "enabled"
+                    result["budget_tokens"] = budget
 
             level = thinking_config.get("thinking_level") or thinking_config.get(
                 "thinkingLevel"
             )
             if level is not None:
                 result["effort"] = level
+                # effort implies active reasoning
+                if "mode" not in result:
+                    result["mode"] = "auto"
 
         return cast(ReasoningConfig, result)
 

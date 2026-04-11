@@ -175,6 +175,20 @@ class TestOpenAIChatConfigOps:
         with pytest.warns(UserWarning, match="budget_tokens"):
             OpenAIChatConfigOps.ir_reasoning_config_to_p({"budget_tokens": 1000})
 
+    def test_ir_reasoning_config_mode_disabled(self):
+        """Test mode: disabled skips reasoning_effort entirely."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
+            {"mode": "disabled", "effort": "high"}
+        )
+        assert result == {}
+
+    def test_ir_reasoning_config_mode_auto_with_effort(self):
+        """Test mode: auto still outputs reasoning_effort."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
+            {"mode": "auto", "effort": "medium"}
+        )
+        assert result["reasoning_effort"] == "medium"
+
     def test_p_reasoning_config_to_ir(self):
         """Test OpenAI reasoning_effort → IR ReasoningConfig."""
         result = OpenAIChatConfigOps.p_reasoning_config_to_ir(
