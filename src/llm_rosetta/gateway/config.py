@@ -114,9 +114,30 @@ def discover_config(explicit_path: str | None = None) -> str | None:
 class GatewayConfig:
     """Parsed and validated gateway configuration."""
 
+    # Default capabilities when not specified in config.
+    DEFAULT_CAPABILITIES: list[str] = ["text"]
+
     def __init__(self, raw: dict[str, Any]) -> None:
         self._raw_providers: dict[str, dict[str, str]] = raw.get("providers", {})
-        self.models: dict[str, ProviderType] = raw.get("models", {})
+
+        # Parse models — supports both string and dict formats:
+        #   "model": "provider"                     (legacy)
+        #   "model": {"provider": "p", "capabilities": ["text", "vision"]}
+        raw_models = raw.get("models", {})
+        self.models: dict[str, ProviderType] = {}
+        self.model_capabilities: dict[str, list[str]] = {}
+        for name, value in raw_models.items():
+            if isinstance(value, str):
+                self.models[name] = value
+                self.model_capabilities[name] = list(self.DEFAULT_CAPABILITIES)
+            elif isinstance(value, dict):
+                self.models[name] = value["provider"]
+                self.model_capabilities[name] = value.get(
+                    "capabilities", list(self.DEFAULT_CAPABILITIES)
+                )
+            else:
+                raise ValueError(f"config: invalid model entry for '{name}'")
+
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
         self.proxy: str | None = raw.get("server", {}).get("proxy")
