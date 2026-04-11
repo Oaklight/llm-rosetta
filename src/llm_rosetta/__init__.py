@@ -21,7 +21,7 @@ from .converters import (
 )
 from .converters.base.context import ConversionContext, StreamContext
 
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 __all__ = [
     # 转换器 Converters
