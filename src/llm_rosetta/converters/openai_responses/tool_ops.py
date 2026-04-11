@@ -376,7 +376,16 @@ class OpenAIResponsesToolOps(BaseToolOps):
             # Recover Responses API item ID from provider_metadata if available;
             # the API requires 'id' to start with 'fc_' prefix.
             metadata = ir_tool_call.get("provider_metadata") or {}
-            item_id = metadata.get("responses_item_id", tool_call_id)
+            item_id = metadata.get("responses_item_id")
+            if not item_id:
+                # Cross-format: ensure fc_ prefix required by Responses API
+                if tool_call_id and tool_call_id.startswith("fc_"):
+                    item_id = tool_call_id
+                elif tool_call_id and tool_call_id.startswith("call_"):
+                    item_id = "fc_" + tool_call_id[5:]
+                else:
+                    # Other prefixes (e.g. toolu_ from Anthropic)
+                    item_id = "fc_" + tool_call_id
             return {
                 "type": "function_call",
                 "id": item_id,
@@ -453,10 +462,14 @@ class OpenAIResponsesToolOps(BaseToolOps):
             # 'call_id' (correlation ID, call_ prefix). Store call_id as
             # tool_call_id for correlation, preserve 'id' in provider_metadata
             # for lossless round-trip.
-            call_id = provider_tool_call.get(
-                "call_id", provider_tool_call.get("id", "")
-            )
+            call_id = provider_tool_call.get("call_id")
             item_id = provider_tool_call.get("id", "")
+            if not call_id:
+                # Fallback: derive call_ prefix from fc_ prefix
+                if item_id.startswith("fc_"):
+                    call_id = "call_" + item_id[3:]
+                else:
+                    call_id = item_id
             part = ToolCallPart(
                 type="tool_call",
                 tool_call_id=call_id,
