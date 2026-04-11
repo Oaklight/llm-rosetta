@@ -33,7 +33,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 .header h1 { font-size: 18px; font-weight: 600; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
-.header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.header-right { display: flex; align-items: center; gap: 10px; }
 .header .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
 .header-select {
   padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
@@ -43,7 +43,7 @@ a { color: var(--accent); text-decoration: none; }
 /* Tabs */
 .tabs {
   display: flex; gap: 0; border-bottom: 1px solid var(--border);
-  padding: 0 24px;
+  padding: 0 24px; align-items: center;
 }
 .tab {
   padding: 12px 20px; cursor: pointer; font-size: 14px; color: var(--text-dim);
@@ -118,6 +118,12 @@ tr:hover td { background: var(--bg-hover); }
   padding: 2px 6px; border-radius: 4px; font-size: 11px;
 }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+.key-field { display: flex; align-items: center; gap: 4px; }
+.key-btn {
+  background: none; border: none; cursor: pointer; padding: 1px 3px;
+  color: var(--text-dim); font-size: 13px; line-height: 1; border-radius: 3px;
+}
+.key-btn:hover { color: var(--accent); background: var(--bg-hover); }
 
 /* Modal */
 .modal-overlay {
@@ -247,23 +253,20 @@ canvas { width: 100%; height: 160px; }
     <h1>llm-rosetta <span>gateway admin</span></h1>
   </div>
   <div class="header-right">
-    <div style="display:flex;gap:8px;align-items:center">
-      <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
-        <option value="light">Light</option>
-        <option value="indigo">Indigo Dark</option>
-        <option value="dracula">Dracula</option>
-        <option value="nord">Nord</option>
-        <option value="solarized">Solarized</option>
-        <option value="osaka-jade">Osaka Jade</option>
-        <option value="one-dark">One Dark</option>
-        <option value="rosepine">Rosé Pine</option>
-      </select>
-      <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
-        <option value="en">EN</option>
-        <option value="zh">中文</option>
-      </select>
-    </div>
-    <div class="config-path" id="configPath"></div>
+    <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
+      <option value="light">Light</option>
+      <option value="indigo">Indigo Dark</option>
+      <option value="dracula">Dracula</option>
+      <option value="nord">Nord</option>
+      <option value="solarized">Solarized</option>
+      <option value="osaka-jade">Osaka Jade</option>
+      <option value="one-dark">One Dark</option>
+      <option value="rosepine">Rosé Pine</option>
+    </select>
+    <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
+      <option value="en">EN</option>
+      <option value="zh">中文</option>
+    </select>
   </div>
 </div>
 
@@ -271,6 +274,8 @@ canvas { width: 100%; height: 160px; }
   <div class="tab active" data-tab="config" data-i18n="tab.config">Configuration</div>
   <div class="tab" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
   <div class="tab" data-tab="logs" data-i18n="tab.logs">Request Log</div>
+  <div style="flex:1"></div>
+  <div class="config-path" id="configPath"></div>
 </div>
 
 <div class="content">
@@ -488,8 +493,7 @@ function setTheme(name) {
   if (currentTab === 'dashboard') loadMetrics();
 }
 
-// Apply saved theme on load
-setTheme(currentTheme);
+// Theme is applied after state variables are declared (see below).
 
 // ===================== i18n =====================
 const I18N = {
@@ -622,6 +626,9 @@ const LOG_LIMIT = 30;
 let dashboardTimer = null;
 let logTimer = null;
 
+// Apply saved theme now that state vars are declared
+setTheme(currentTheme);
+
 // ===================== API =====================
 const api = {
   async get(url) {
@@ -653,10 +660,13 @@ function showToast(msg, type='success') {
 // ===================== Modal =====================
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
+let _editingProviderName = null; // original name when editing (for rename)
+
 function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
+  _editingProviderName = name || null;
   document.getElementById('providerModalTitle').textContent = name ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
-  document.getElementById('provName').readOnly = !!name;
+  document.getElementById('provName').readOnly = false;
   // Populate API Standard dropdown
   const typeSel = document.getElementById('provType');
   typeSel.innerHTML = '';
@@ -727,7 +737,10 @@ function renderProviders() {
       <div class="name">${esc(name)}</div>
       <div class="field">Type: <code>${esc(cfg.type || name)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-      <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
+      <div class="field key-field">API Key: <code id="key-${esc(name)}" data-masked="${esc(cfg.api_key || '')}">${esc(cfg.api_key || '')}</code>
+        <button class="key-btn" title="Toggle visibility" onclick="toggleKeyVisibility('${esc(name)}')">&#128065;</button>
+        <button class="key-btn" title="Copy" onclick="copyKey('${esc(name)}')">&#128203;</button>
+      </div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
@@ -785,6 +798,10 @@ async function saveProvider() {
   const proxy = document.getElementById('provProxy').value.trim();
   if (!name || !baseUrl || !apiKey) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const body = {type: provType, api_key: apiKey, base_url: baseUrl, proxy};
+  // If editing and name changed, include rename_from so backend updates model references
+  if (_editingProviderName && _editingProviderName !== name) {
+    body.rename_from = _editingProviderName;
+  }
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
   if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
@@ -800,6 +817,57 @@ async function deleteProvider(name) {
 function editProvider(name) {
   const cfg = configData.providers[name] || {};
   openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
+}
+
+// Cache revealed keys so we don't re-fetch on every toggle
+const _revealedKeys = {};
+
+async function toggleKeyVisibility(name) {
+  const el = document.getElementById('key-' + name);
+  if (!el) return;
+  if (el.dataset.revealed === 'true') {
+    // Hide — restore masked value
+    el.textContent = el.dataset.masked;
+    el.dataset.revealed = 'false';
+    return;
+  }
+  // Reveal — fetch real key
+  if (_revealedKeys[name]) {
+    el.textContent = _revealedKeys[name];
+    el.dataset.revealed = 'true';
+    return;
+  }
+  try {
+    const res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`);
+    if (res.api_key) {
+      _revealedKeys[name] = res.api_key;
+      el.textContent = res.api_key;
+      el.dataset.revealed = 'true';
+    }
+  } catch(e) {
+    showToast('Failed to reveal key', 'error');
+  }
+}
+
+async function copyKey(name) {
+  let key = _revealedKeys[name];
+  if (!key) {
+    try {
+      const res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`);
+      key = res.api_key;
+      if (key) _revealedKeys[name] = key;
+    } catch(e) {
+      showToast('Failed to fetch key', 'error');
+      return;
+    }
+  }
+  if (!key) return;
+  try {
+    await navigator.clipboard.writeText(key);
+    showToast('API key copied');
+  } catch(e) {
+    showToast('Copy failed', 'error');
+  }
 }
 
 async function saveModel() {
