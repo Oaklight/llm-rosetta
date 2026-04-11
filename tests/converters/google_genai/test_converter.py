@@ -463,6 +463,64 @@ class TestGoogleGenAIConverter:
         result = self.converter.response_from_provider(provider_response)
         assert result["usage"]["reasoning_tokens"] == 100
 
+    def test_response_from_provider_modality_token_details(self):
+        """Test Google list[ModalityTokenCount] → IR dict[str, int]."""
+        provider_response = {
+            "response_id": "resp-modality",
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": [{"text": "Hi"}]},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 50,
+                "candidates_token_count": 20,
+                "total_token_count": 70,
+                "prompt_tokens_details": [
+                    {"modality": "TEXT", "token_count": 40},
+                    {"modality": "IMAGE", "token_count": 10},
+                ],
+                "candidates_tokens_details": [
+                    {"modality": "TEXT", "token_count": 20},
+                ],
+            },
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert result["usage"]["prompt_tokens_details"] == {
+            "text_tokens": 40,
+            "image_tokens": 10,
+        }
+        assert result["usage"]["completion_tokens_details"] == {
+            "text_tokens": 20,
+        }
+
+    def test_response_from_provider_modality_camelcase(self):
+        """Test camelCase modality token details (REST API format)."""
+        provider_response = {
+            "responseId": "resp-camel",
+            "modelVersion": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": [{"text": "Hi"}]},
+                    "finishReason": "STOP",
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 30,
+                "candidatesTokenCount": 10,
+                "totalTokenCount": 40,
+                "promptTokensDetails": [
+                    {"modality": "TEXT", "tokenCount": 30},
+                ],
+            },
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert result["usage"]["prompt_tokens_details"] == {"text_tokens": 30}
+
     def test_response_from_provider_finish_reasons(self):
         """Test various finish reason mappings."""
         reason_map = {
@@ -665,6 +723,54 @@ class TestGoogleGenAIConverter:
         )
         result = self.converter.response_to_provider(ir_response)
         assert result["usageMetadata"]["thoughtsTokenCount"] == 50
+
+    def test_response_to_provider_modality_token_details(self):
+        """Test IR dict[str, int] → Google list[ModalityTokenCount]."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_mod",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hi"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 50,
+                    "completion_tokens": 20,
+                    "total_tokens": 70,
+                    "prompt_tokens_details": {
+                        "text_tokens": 40,
+                        "image_tokens": 10,
+                    },
+                    "completion_tokens_details": {
+                        "text_tokens": 20,
+                    },
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        prompt_details = result["usageMetadata"]["promptTokensDetails"]
+        assert isinstance(prompt_details, list)
+        assert len(prompt_details) == 2
+        # Convert to dict for easier assertion (order may vary)
+        detail_map = {d["modality"]: d["tokenCount"] for d in prompt_details}
+        assert detail_map["TEXT"] == 40
+        assert detail_map["IMAGE"] == 10
+
+        comp_details = result["usageMetadata"]["candidatesTokensDetails"]
+        assert isinstance(comp_details, list)
+        assert len(comp_details) == 1
+        assert comp_details[0]["modality"] == "TEXT"
+        assert comp_details[0]["tokenCount"] == 20
 
     def test_response_to_provider_finish_reasons(self):
         """Test finish reason mapping to provider."""
@@ -932,6 +1038,37 @@ class TestGoogleGenAIConverterFullRoundTrip:
         assert restored["candidates"][0]["content"]["parts"][0]["text"] == "Hello!"
         assert restored["candidates"][0]["finishReason"] == "STOP"
         assert restored["usageMetadata"]["totalTokenCount"] == 15
+
+    def test_response_round_trip_with_modality_details(self):
+        """Test modality token details survive Google → IR → Google round-trip."""
+        provider_response = {
+            "response_id": "resp-mod-rt",
+            "model_version": "gemini-2.0-flash",
+            "candidates": [
+                {
+                    "index": 0,
+                    "content": {"role": "model", "parts": [{"text": "Hi"}]},
+                    "finish_reason": "STOP",
+                }
+            ],
+            "usage_metadata": {
+                "prompt_token_count": 50,
+                "candidates_token_count": 20,
+                "total_token_count": 70,
+                "prompt_tokens_details": [
+                    {"modality": "TEXT", "token_count": 40},
+                    {"modality": "IMAGE", "token_count": 10},
+                ],
+            },
+        }
+        ir_response = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir_response)
+
+        details = restored["usageMetadata"]["promptTokensDetails"]
+        assert isinstance(details, list)
+        detail_map = {d["modality"]: d["tokenCount"] for d in details}
+        assert detail_map["TEXT"] == 40
+        assert detail_map["IMAGE"] == 10
 
     def test_message_round_trip(self):
         """Test message round-trip: IR -> Google -> IR."""
