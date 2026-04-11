@@ -33,7 +33,12 @@ a { color: var(--accent); text-decoration: none; }
 }
 .header h1 { font-size: 18px; font-weight: 600; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
+.header-right { display: flex; align-items: center; gap: 12px; }
 .header .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.header-select {
+  padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); cursor: pointer;
+}
 
 /* Tabs */
 .tabs {
@@ -241,7 +246,16 @@ canvas { width: 100%; height: 160px; }
   <div>
     <h1>llm-rosetta <span>gateway admin</span></h1>
   </div>
-  <div class="config-path" id="configPath"></div>
+  <div class="header-right">
+    <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
+      <option value="indigo">Indigo Dark</option>
+      <option value="linear">Linear</option>
+      <option value="github">GitHub Dark</option>
+      <option value="light">Light</option>
+      <option value="vercel">Vercel</option>
+    </select>
+    <div class="config-path" id="configPath"></div>
+  </div>
 </div>
 
 <div class="tabs">
@@ -403,6 +417,52 @@ canvas { width: 100%; height: 160px; }
 <div class="toast" id="toast"></div>
 
 <script>
+// ===================== Themes =====================
+const THEMES = {
+  indigo: {
+    '--bg':'#0f1117','--bg-card':'#1a1d27','--bg-hover':'#242838','--border':'#2d3148',
+    '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
+    '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6',
+  },
+  linear: {
+    '--bg':'#111113','--bg-card':'#191a1f','--bg-hover':'#232429','--border':'#2c2d33',
+    '--text':'#eeeffc','--text-dim':'#8a8f98','--accent':'#5e6ad2','--accent-hover':'#7c85d2',
+    '--green':'#4cc38a','--red':'#e5484d','--orange':'#f5a623','--blue':'#52a9ff',
+  },
+  github: {
+    '--bg':'#0d1117','--bg-card':'#161b22','--bg-hover':'#1c2128','--border':'#30363d',
+    '--text':'#e6edf3','--text-dim':'#7d8590','--accent':'#58a6ff','--accent-hover':'#79c0ff',
+    '--green':'#3fb950','--red':'#f85149','--orange':'#d29922','--blue':'#58a6ff',
+  },
+  light: {
+    '--bg':'#ffffff','--bg-card':'#f6f8fa','--bg-hover':'#eef1f5','--border':'#d1d9e0',
+    '--text':'#1f2328','--text-dim':'#656d76','--accent':'#0969da','--accent-hover':'#0550ae',
+    '--green':'#1a7f37','--red':'#cf222e','--orange':'#bf8700','--blue':'#0969da',
+  },
+  vercel: {
+    '--bg':'#000000','--bg-card':'#111111','--bg-hover':'#1a1a1a','--border':'#333333',
+    '--text':'#ededed','--text-dim':'#888888','--accent':'#0070f3','--accent-hover':'#3291ff',
+    '--green':'#50e3c2','--red':'#ee0000','--orange':'#f5a623','--blue':'#0070f3',
+  },
+};
+
+let currentTheme = localStorage.getItem('llm-rosetta-theme') || 'indigo';
+
+function setTheme(name) {
+  const vars = THEMES[name];
+  if (!vars) return;
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+  currentTheme = name;
+  localStorage.setItem('llm-rosetta-theme', name);
+  document.getElementById('themeSwitcher').value = name;
+  // Redraw charts if on dashboard tab
+  if (currentTab === 'dashboard') loadMetrics();
+}
+
+// Apply saved theme on load
+setTheme(currentTheme);
+
 // ===================== State =====================
 let currentTab = 'config';
 let configData = null;
@@ -643,6 +703,12 @@ function drawChart(canvasId, series, key, unit) {
 
   ctx.clearRect(0, 0, w, h);
 
+  // Read theme colors from CSS variables
+  const cs = getComputedStyle(document.documentElement);
+  const gridColor = cs.getPropertyValue('--border').trim();
+  const dimColor = cs.getPropertyValue('--text-dim').trim();
+  const accentColor = cs.getPropertyValue('--accent').trim();
+
   const values = series.map(s => s[key]);
   const maxVal = Math.max(...values, 1);
 
@@ -651,7 +717,7 @@ function drawChart(canvasId, series, key, unit) {
   const chartH = h - padT - padB;
 
   // Grid lines
-  ctx.strokeStyle = '#2d3148';
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
     const y = padT + (chartH / 4) * i;
@@ -659,7 +725,7 @@ function drawChart(canvasId, series, key, unit) {
   }
 
   // Y-axis labels
-  ctx.fillStyle = '#8b90a5';
+  ctx.fillStyle = dimColor;
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
@@ -677,7 +743,7 @@ function drawChart(canvasId, series, key, unit) {
   if (values.length === 0) return;
 
   // Line
-  ctx.strokeStyle = '#6366f1';
+  ctx.strokeStyle = accentColor;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
   for (let i = 0; i < values.length; i++) {
@@ -691,7 +757,7 @@ function drawChart(canvasId, series, key, unit) {
   ctx.lineTo(padL + chartW, padT + chartH);
   ctx.lineTo(padL, padT + chartH);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(99,102,241,0.08)';
+  ctx.fillStyle = accentColor.startsWith('#') ? accentColor + '14' : 'rgba(99,102,241,0.08)';
   ctx.fill();
 }
 
