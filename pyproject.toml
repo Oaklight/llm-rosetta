@@ -65,6 +65,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "llm_rosetta" = ["py.typed"]
+"llm_rosetta.gateway.admin" = ["admin.html"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }

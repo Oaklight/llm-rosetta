@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -92,26 +93,68 @@ async def _proxy_handler(
     if or_version:
         extra_headers = {"OpenResponses-Version": or_version}
 
-    if is_stream:
-        return await handle_streaming(
-            source_provider,
-            target_provider,
-            provider_info,
-            body,
-            model,
-            metadata_store=store,
-            extra_headers=extra_headers,
-        )
-    else:
-        return await handle_non_streaming(
-            source_provider,
-            target_provider,
-            provider_info,
-            body,
-            model,
-            metadata_store=store,
-            extra_headers=extra_headers,
-        )
+    # --- Metrics instrumentation ---
+    metrics = getattr(request.app.state, "metrics", None)
+    request_log = getattr(request.app.state, "request_log", None)
+    t0 = time.monotonic()
+    status_code = 500
+    error_detail: str | None = None
+
+    try:
+        if is_stream:
+            if metrics:
+                metrics.active_streams += 1
+            response = await handle_streaming(
+                source_provider,
+                target_provider,
+                provider_info,
+                body,
+                model,
+                metadata_store=store,
+                extra_headers=extra_headers,
+            )
+        else:
+            response = await handle_non_streaming(
+                source_provider,
+                target_provider,
+                provider_info,
+                body,
+                model,
+                metadata_store=store,
+                extra_headers=extra_headers,
+            )
+        status_code = response.status_code
+        return response
+    except Exception as exc:
+        error_detail = str(exc)
+        raise
+    finally:
+        duration_ms = (time.monotonic() - t0) * 1000
+        if is_stream and metrics:
+            metrics.active_streams -= 1
+        if metrics:
+            metrics.record_request(
+                model=model,
+                source=source_provider,
+                target=target_provider,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                is_stream=is_stream,
+            )
+        if request_log:
+            from .admin.request_log import RequestLogEntry
+
+            request_log.add(
+                RequestLogEntry.create(
+                    model=model,
+                    source_provider=source_provider,
+                    target_provider=target_provider,
+                    is_stream=is_stream,
+                    status_code=status_code,
+                    duration_ms=duration_ms,
+                    error_detail=error_detail,
+                )
+            )
 
 
 # --- Endpoint handlers ---
@@ -212,7 +255,7 @@ async def handle_health(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-def create_app(config: GatewayConfig) -> Starlette:
+def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlette:
     """Create the Starlette ASGI application."""
     global _config
     _config = config
@@ -247,6 +290,16 @@ def create_app(config: GatewayConfig) -> Starlette:
         ),
     ]
 
+    # Append admin panel routes before constructing the app so that
+    # Starlette's Router compiles them into its lookup structures.
+    from .admin import setup_admin
+    from .admin.routes import admin_routes
+
+    routes.extend(admin_routes)
+
     app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
     app.state.metadata_store = metadata_store
+
+    setup_admin(app, config, config_path)
+
     return app
