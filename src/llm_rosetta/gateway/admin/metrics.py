@@ -138,6 +138,30 @@ class MetricsCollector:
 
         self._window.record(duration_ms, is_error=is_error)
 
+    def export_counters(self) -> dict:
+        """Return counters suitable for persistence (no time-series)."""
+        return {
+            "total_requests": self.total_requests,
+            "total_errors": self.total_errors,
+            "total_streams": self.total_streams,
+            "by_model": dict(self.by_model),
+            "by_source_provider": dict(self.by_source_provider),
+            "by_target_provider": dict(self.by_target_provider),
+            "by_status_code": {str(k): v for k, v in self.by_status_code.items()},
+        }
+
+    def load_counters(self, data: dict) -> None:
+        """Restore counters from a previously exported dict."""
+        self.total_requests = data.get("total_requests", 0)
+        self.total_errors = data.get("total_errors", 0)
+        self.total_streams = data.get("total_streams", 0)
+        self.by_model = dict(data.get("by_model", {}))
+        self.by_source_provider = dict(data.get("by_source_provider", {}))
+        self.by_target_provider = dict(data.get("by_target_provider", {}))
+        self.by_status_code = {
+            int(k): v for k, v in data.get("by_status_code", {}).items()
+        }
+
     def snapshot(self, series_seconds: int = 60) -> dict:
         """Return a JSON-serializable metrics snapshot."""
         uptime = time.monotonic() - self._start_time

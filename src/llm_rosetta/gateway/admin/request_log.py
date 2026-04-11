@@ -74,10 +74,12 @@ class RequestLog:
     def __init__(self, max_entries: int = 500) -> None:
         self._entries: deque[RequestLogEntry] = deque(maxlen=max_entries)
         self._max_entries = max_entries
+        self._pending: list[RequestLogEntry] = []
 
     def add(self, entry: RequestLogEntry) -> None:
         """Append *entry* to the log (oldest entry evicted if full)."""
         self._entries.append(entry)
+        self._pending.append(entry)
 
     def get_entries(
         self,
@@ -123,6 +125,25 @@ class RequestLog:
             if e.id == entry_id:
                 return e.to_dict()
         return None
+
+    def load_entries(self, entries: list[dict]) -> None:
+        """Bulk-load entries from persistence (oldest first)."""
+        for d in entries:
+            try:
+                entry = RequestLogEntry(**d)
+                self._entries.append(entry)
+            except (TypeError, KeyError):
+                continue  # skip malformed entries
+
+    def pending_entries(self) -> list[dict]:
+        """Return and clear entries added since last call.
+
+        Used by the persistence flush loop to get new entries
+        without re-writing the entire log.
+        """
+        entries = [e.to_dict() for e in self._pending]
+        self._pending.clear()
+        return entries
 
     def clear(self) -> None:
         """Remove all entries."""
