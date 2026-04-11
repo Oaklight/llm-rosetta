@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
@@ -251,6 +252,70 @@ async def handle_health(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Persistence flush helpers
+# ---------------------------------------------------------------------------
+
+_FLUSH_LOG_INTERVAL = 10  # seconds
+_FLUSH_METRICS_INTERVAL = 30  # seconds
+
+
+async def _periodic_flush(app: Starlette) -> None:
+    """Periodically flush request log and metrics to disk."""
+    ticks = 0
+    while True:
+        await asyncio.sleep(_FLUSH_LOG_INTERVAL)
+        ticks += _FLUSH_LOG_INTERVAL
+        persistence = getattr(app.state, "persistence", None)
+        if persistence is None:
+            continue
+
+        # Flush pending request log entries every tick
+        request_log = getattr(app.state, "request_log", None)
+        if request_log is not None:
+            entries = request_log.pending_entries()
+            if entries:
+                try:
+                    persistence.append_log_entries(entries)
+                except Exception as exc:
+                    logger.warning("Failed to flush request log: %s", exc)
+
+        # Flush metrics counters less frequently
+        if ticks >= _FLUSH_METRICS_INTERVAL:
+            ticks = 0
+            metrics = getattr(app.state, "metrics", None)
+            if metrics is not None:
+                try:
+                    persistence.save_metrics(metrics.export_counters())
+                except Exception as exc:
+                    logger.warning("Failed to flush metrics: %s", exc)
+
+
+def _flush_now(app: Starlette) -> None:
+    """Final synchronous flush on shutdown."""
+    persistence = getattr(app.state, "persistence", None)
+    if persistence is None:
+        return
+
+    request_log = getattr(app.state, "request_log", None)
+    if request_log is not None:
+        entries = request_log.pending_entries()
+        if entries:
+            try:
+                persistence.append_log_entries(entries)
+            except Exception as exc:
+                logger.warning("Shutdown: failed to flush request log: %s", exc)
+
+    metrics = getattr(app.state, "metrics", None)
+    if metrics is not None:
+        try:
+            persistence.save_metrics(metrics.export_counters())
+        except Exception as exc:
+            logger.warning("Shutdown: failed to flush metrics: %s", exc)
+
+    logger.info("Persistence flushed on shutdown")
+
+
+# ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
 
@@ -278,7 +343,14 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
 
     @asynccontextmanager
     async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
+        flush_task = asyncio.create_task(_periodic_flush(app))
         yield
+        flush_task.cancel()
+        try:
+            await flush_task
+        except asyncio.CancelledError:
+            pass
+        _flush_now(app)
         await close_resources(metadata_store=metadata_store)
 
     middleware = [
