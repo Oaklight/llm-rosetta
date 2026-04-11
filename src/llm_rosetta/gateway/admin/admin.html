@@ -254,14 +254,18 @@ canvas { width: 100%; height: 160px; }
       <option value="light">Light</option>
       <option value="solarized">Solarized</option>
     </select>
+    <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
+      <option value="en">EN</option>
+      <option value="zh">中文</option>
+    </select>
     <div class="config-path" id="configPath"></div>
   </div>
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="config">Configuration</div>
-  <div class="tab" data-tab="dashboard">Dashboard</div>
-  <div class="tab" data-tab="logs">Request Log</div>
+  <div class="tab active" data-tab="config" data-i18n="tab.config">Configuration</div>
+  <div class="tab" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
+  <div class="tab" data-tab="logs" data-i18n="tab.logs">Request Log</div>
 </div>
 
 <div class="content">
@@ -269,33 +273,33 @@ canvas { width: 100%; height: 160px; }
   <div class="tab-panel active" id="tab-config">
     <div class="section">
       <div class="section-header">
-        <h2>Server Settings</h2>
+        <h2 data-i18n="section.server">Server Settings</h2>
       </div>
       <div class="provider-card" style="max-width:480px">
         <div class="form-group" style="margin-bottom:0">
-          <label>Global Proxy URL</label>
+          <label data-i18n="label.globalProxy">Global Proxy URL</label>
           <div style="display:flex;gap:8px">
             <input id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
-            <button class="btn btn-primary btn-sm" onclick="saveServerSettings()">Save</button>
+            <button class="btn btn-primary btn-sm" onclick="saveServerSettings()" data-i18n="btn.save">Save</button>
           </div>
-          <div style="font-size:11px;color:var(--text-dim);margin-top:6px">Applies to all providers unless overridden per-provider.</div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px" data-i18n="label.globalProxy.hint">Applies to all providers unless overridden per-provider.</div>
         </div>
       </div>
     </div>
     <div class="section">
       <div class="section-header">
-        <h2>Providers</h2>
-        <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ Add Provider</button>
+        <h2 data-i18n="section.providers">Providers</h2>
+        <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
     <div class="section">
       <div class="section-header">
-        <h2>Model Routing</h2>
-        <button class="btn btn-primary btn-sm" onclick="openModelModal()">+ Add Model</button>
+        <h2 data-i18n="section.models">Model Routing</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
       </div>
       <table>
-        <thead><tr><th>Model</th><th>Provider</th><th></th></tr></thead>
+        <thead><tr><th data-i18n="col.model">Model</th><th data-i18n="col.provider">Provider</th><th></th></tr></thead>
         <tbody id="modelTable"></tbody>
       </table>
     </div>
@@ -306,18 +310,18 @@ canvas { width: 100%; height: 160px; }
     <div class="stats-grid" id="statsGrid"></div>
     <div class="chart-row">
       <div class="chart-box">
-        <h3>Throughput (req/s)</h3>
+        <h3 data-i18n="chart.throughput">Throughput (req/s)</h3>
         <canvas id="chartThroughput"></canvas>
       </div>
       <div class="chart-box">
-        <h3>Latency (ms)</h3>
+        <h3 data-i18n="chart.latency">Latency (ms)</h3>
         <canvas id="chartLatency"></canvas>
       </div>
     </div>
     <div class="section">
-      <h2 style="margin-bottom:12px">Per-Provider Breakdown</h2>
+      <h2 style="margin-bottom:12px" data-i18n="section.breakdown">Per-Provider Breakdown</h2>
       <table>
-        <thead><tr><th>Provider</th><th>Requests</th></tr></thead>
+        <thead><tr><th data-i18n="col.provider">Provider</th><th data-i18n="col.requests">Requests</th></tr></thead>
         <tbody id="providerBreakdown"></tbody>
       </table>
     </div>
@@ -326,23 +330,23 @@ canvas { width: 100%; height: 160px; }
   <!-- Request Log Tab -->
   <div class="tab-panel" id="tab-logs">
     <div class="filters">
-      <select id="filterModel"><option value="">All Models</option></select>
-      <select id="filterProvider"><option value="">All Providers</option></select>
+      <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
+      <select id="filterProvider"><option value="" data-i18n="filter.allProviders">All Providers</option></select>
       <select id="filterStatus">
-        <option value="">All Status</option>
-        <option value="ok">OK (2xx/3xx)</option>
-        <option value="error">Error (4xx/5xx)</option>
+        <option value="" data-i18n="filter.allStatus">All Status</option>
+        <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
+        <option value="error" data-i18n="filter.error">Error (4xx/5xx)</option>
       </select>
-      <button class="btn btn-danger btn-sm" onclick="clearLogs()">Clear Log</button>
+      <button class="btn btn-danger btn-sm" onclick="clearLogs()" data-i18n="btn.clearLog">Clear Log</button>
     </div>
     <table>
-      <thead><tr><th>Time</th><th>Model</th><th>Source &rarr; Target</th><th>Mode</th><th>Status</th><th>Duration</th></tr></thead>
+      <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
       <tbody id="logTable"></tbody>
     </table>
     <div class="pagination">
-      <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)">Prev</button>
+      <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)" data-i18n="btn.prev">Prev</button>
       <span class="info" id="pageInfo"></span>
-      <button class="btn btn-sm" id="nextPage" onclick="changePage(1)">Next</button>
+      <button class="btn btn-sm" id="nextPage" onclick="changePage(1)" data-i18n="btn.next">Next</button>
     </div>
   </div>
 </div>
@@ -350,26 +354,26 @@ canvas { width: 100%; height: 160px; }
 <!-- Provider Modal -->
 <div class="modal-overlay" id="providerModal">
   <div class="modal">
-    <h3 id="providerModalTitle">Add Provider</h3>
+    <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
     <div class="form-group">
-      <label>Provider Name / Type</label>
+      <label data-i18n="label.providerName">Provider Name / Type</label>
       <input id="provName" placeholder="e.g. openai_chat, anthropic, my_custom">
     </div>
     <div class="form-group">
-      <label>Base URL</label>
+      <label data-i18n="label.baseUrl">Base URL</label>
       <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
     </div>
     <div class="form-group">
-      <label>API Key (or ${ENV_VAR} placeholder)</label>
+      <label data-i18n="label.apiKey">API Key (or ${ENV_VAR} placeholder)</label>
       <input id="provApiKey" placeholder="${OPENAI_API_KEY}">
     </div>
     <div class="form-group">
-      <label>Proxy URL (optional, overrides global)</label>
+      <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)</label>
       <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
     </div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('providerModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveProvider()">Save</button>
+      <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
     </div>
   </div>
 </div>
@@ -377,17 +381,17 @@ canvas { width: 100%; height: 160px; }
 <!-- Model Modal -->
 <div class="modal-overlay" id="modelModal">
   <div class="modal">
-    <h3 id="modelModalTitle">Add Model</h3>
+    <h3 id="modelModalTitle" data-i18n="modal.addModel">Add Model</h3>
     <div class="form-group">
-      <label>Model Name</label>
+      <label data-i18n="label.modelName">Model Name</label>
       <input id="modelName" placeholder="e.g. gpt-4o, claude-sonnet-4-20250514">
     </div>
     <div class="form-group">
-      <label>Provider</label>
+      <label data-i18n="label.provider">Provider</label>
       <select id="modelProvider"></select>
     </div>
     <div class="form-group">
-      <label>Capabilities</label>
+      <label data-i18n="label.capabilities">Capabilities</label>
       <div class="checkbox-group">
         <label><input type="checkbox" id="capText" checked disabled> text</label>
         <label><input type="checkbox" id="capVision" checked> vision</label>
@@ -395,8 +399,8 @@ canvas { width: 100%; height: 160px; }
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('modelModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveModel()">Save</button>
+      <button class="btn" onclick="closeModal('modelModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="saveModel()" data-i18n="btn.save">Save</button>
     </div>
   </div>
 </div>
@@ -408,7 +412,7 @@ canvas { width: 100%; height: 160px; }
     <div class="test-meta" id="testMeta"></div>
     <div class="test-output" id="testOutput"></div>
     <div class="modal-actions">
-      <button class="btn" onclick="closeModal('testModal')">Close</button>
+      <button class="btn" onclick="closeModal('testModal')" data-i18n="btn.close">Close</button>
     </div>
   </div>
 </div>
@@ -463,6 +467,127 @@ function setTheme(name) {
 // Apply saved theme on load
 setTheme(currentTheme);
 
+// ===================== i18n =====================
+const I18N = {
+  en: {
+    'tab.config':'Configuration', 'tab.dashboard':'Dashboard', 'tab.logs':'Request Log',
+    'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
+    'label.globalProxy':'Global Proxy URL',
+    'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
+    'btn.save':'Save', 'btn.cancel':'Cancel', 'btn.close':'Close',
+    'btn.addProvider':'+ Add Provider', 'btn.addModel':'+ Add Model',
+    'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.clearLog':'Clear Log',
+    'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
+    'label.providerName':'Provider Name / Type', 'label.baseUrl':'Base URL',
+    'label.apiKey':'API Key (or ${ENV_VAR} placeholder)',
+    'label.proxyUrl':'Proxy URL (optional, overrides global)',
+    'label.modelName':'Model Name', 'label.provider':'Provider', 'label.capabilities':'Capabilities',
+    'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
+    'modal.addModel':'Add Model', 'modal.editModel':'Edit Model',
+    'col.model':'Model', 'col.provider':'Provider', 'col.time':'Time',
+    'col.sourceTarget':'Source \u2192 Target', 'col.mode':'Mode',
+    'col.status':'Status', 'col.duration':'Duration', 'col.requests':'Requests',
+    'stat.totalRequests':'Total Requests', 'stat.errorRate':'Error Rate',
+    'stat.activeStreams':'Active Streams', 'stat.uptime':'Uptime',
+    'chart.throughput':'Throughput (req/s)', 'chart.latency':'Latency (ms)',
+    'section.breakdown':'Per-Provider Breakdown',
+    'filter.allModels':'All Models', 'filter.allProviders':'All Providers',
+    'filter.allStatus':'All Status', 'filter.ok':'OK (2xx/3xx)', 'filter.error':'Error (4xx/5xx)',
+    'test.text':'Simple Text', 'test.stream':'Stream',
+    'test.tools':'Function Call', 'test.vision':'Image Understanding',
+    'empty.providers':'No providers configured.', 'empty.models':'No models configured.',
+    'empty.logs':'No requests logged yet', 'empty.data':'No data yet',
+    'toast.serverSaved':'Server settings saved',
+    'toast.providerSaved':"Provider '{name}' saved",
+    'toast.providerDeleted':"Provider '{name}' deleted",
+    'toast.modelSaved':"Model '{name}' saved",
+    'toast.modelDeleted':"Model '{name}' deleted",
+    'toast.logCleared':'Logs cleared',
+    'confirm.deleteProvider':"Delete provider '{name}'?",
+    'confirm.deleteModel':"Delete model '{name}'?",
+    'confirm.clearLogs':'Clear all request logs?',
+    'error.fieldsRequired':'Name, Base URL, and API Key are required',
+    'error.modelRequired':'All fields are required',
+    'page.info':'Page {current} / {total} ({count} total)',
+    'test.connecting':'Connecting...', 'test.sending':'Sending request...',
+    'test.emptyResponse':'(empty response)',
+  },
+  zh: {
+    'tab.config':'\u914d\u7f6e\u7ba1\u7406', 'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
+    'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u5546', 'section.models':'\u6a21\u578b\u8def\u7531',
+    'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
+    'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u5546\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
+    'btn.save':'\u4fdd\u5b58', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
+    'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u5546', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
+    'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.clearLog':'\u6e05\u9664\u65e5\u5fd7',
+    'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
+    'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0 / \u7c7b\u578b', 'label.baseUrl':'Base URL',
+    'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09',
+    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
+    'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.capabilities':'\u80fd\u529b',
+    'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u5546', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u5546',
+    'modal.addModel':'\u6dfb\u52a0\u6a21\u578b', 'modal.editModel':'\u7f16\u8f91\u6a21\u578b',
+    'col.model':'\u6a21\u578b', 'col.provider':'\u670d\u52a1\u5546', 'col.time':'\u65f6\u95f4',
+    'col.sourceTarget':'\u6765\u6e90 \u2192 \u76ee\u6807', 'col.mode':'\u6a21\u5f0f',
+    'col.status':'\u72b6\u6001', 'col.duration':'\u8017\u65f6', 'col.requests':'\u8bf7\u6c42\u6570',
+    'stat.totalRequests':'\u603b\u8bf7\u6c42\u6570', 'stat.errorRate':'\u9519\u8bef\u7387',
+    'stat.activeStreams':'\u6d3b\u8dc3\u6d41', 'stat.uptime':'\u8fd0\u884c\u65f6\u95f4',
+    'chart.throughput':'\u541e\u5410\u91cf (req/s)', 'chart.latency':'\u5ef6\u8fdf (ms)',
+    'section.breakdown':'\u670d\u52a1\u5546\u7edf\u8ba1',
+    'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u5546',
+    'filter.allStatus':'\u5168\u90e8\u72b6\u6001', 'filter.ok':'\u6b63\u5e38 (2xx/3xx)', 'filter.error':'\u9519\u8bef (4xx/5xx)',
+    'test.text':'\u7b80\u5355\u6587\u672c', 'test.stream':'\u6d41\u5f0f',
+    'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3',
+    'empty.providers':'\u6682\u65e0\u670d\u52a1\u5546\u914d\u7f6e\u3002', 'empty.models':'\u6682\u65e0\u6a21\u578b\u914d\u7f6e\u3002',
+    'empty.logs':'\u6682\u65e0\u8bf7\u6c42\u8bb0\u5f55', 'empty.data':'\u6682\u65e0\u6570\u636e',
+    'toast.serverSaved':'\u670d\u52a1\u5668\u8bbe\u7f6e\u5df2\u4fdd\u5b58',
+    'toast.providerSaved':"\u670d\u52a1\u5546 '{name}' \u5df2\u4fdd\u5b58",
+    'toast.providerDeleted':"\u670d\u52a1\u5546 '{name}' \u5df2\u5220\u9664",
+    'toast.modelSaved':"\u6a21\u578b '{name}' \u5df2\u4fdd\u5b58",
+    'toast.modelDeleted':"\u6a21\u578b '{name}' \u5df2\u5220\u9664",
+    'toast.logCleared':'\u65e5\u5fd7\u5df2\u6e05\u9664',
+    'confirm.deleteProvider':"\u786e\u5b9a\u5220\u9664\u670d\u52a1\u5546 '{name}'\uff1f",
+    'confirm.deleteModel':"\u786e\u5b9a\u5220\u9664\u6a21\u578b '{name}'\uff1f",
+    'confirm.clearLogs':'\u786e\u5b9a\u6e05\u9664\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\uff1f',
+    'error.fieldsRequired':'\u540d\u79f0\u3001Base URL \u548c API Key \u4e3a\u5fc5\u586b\u9879',
+    'error.modelRequired':'\u6240\u6709\u5b57\u6bb5\u4e3a\u5fc5\u586b\u9879',
+    'page.info':'\u7b2c {current} / {total} \u9875\uff08\u5171 {count} \u6761\uff09',
+    'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...',
+    'test.emptyResponse':'\uff08\u7a7a\u54cd\u5e94\uff09',
+  },
+};
+
+let currentLang = localStorage.getItem('llm-rosetta-lang') || 'en';
+
+function t(key, params) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) || I18N.en[key] || key;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) s = s.replace(`{${k}}`, v);
+  }
+  return s;
+}
+
+function setLang(lang) {
+  currentLang = lang;
+  localStorage.setItem('llm-rosetta-lang', lang);
+  document.getElementById('langSwitcher').value = lang;
+  applyI18n();
+}
+
+function applyI18n() {
+  // Update static elements with data-i18n attribute
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  // Re-render dynamic content
+  if (configData) { renderProviders(); renderModels(); }
+  if (currentTab === 'dashboard') loadMetrics();
+  if (currentTab === 'logs') loadLogs();
+}
+
 // ===================== State =====================
 let currentTab = 'config';
 let configData = null;
@@ -503,7 +628,7 @@ function showToast(msg, type='success') {
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 
 function openProviderModal(name, baseUrl, apiKey, proxy) {
-  document.getElementById('providerModalTitle').textContent = name ? 'Edit Provider' : 'Add Provider';
+  document.getElementById('providerModalTitle').textContent = name ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
   document.getElementById('provName').readOnly = !!name;
   document.getElementById('provBaseUrl').value = baseUrl || '';
@@ -513,7 +638,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy) {
 }
 
 function openModelModal(model, provider, capabilities) {
-  document.getElementById('modelModalTitle').textContent = model ? 'Edit Model' : 'Add Model';
+  document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').readOnly = !!model;
   // Populate provider dropdown from config
@@ -546,7 +671,7 @@ async function loadConfig() {
 async function saveServerSettings() {
   const proxy = document.getElementById('globalProxy').value.trim();
   const res = await api.put('/admin/api/config/server', {proxy});
-  if (res.ok) { showToast('Server settings saved'); loadConfig(); }
+  if (res.ok) { showToast(t('toast.serverSaved')); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
@@ -554,7 +679,7 @@ function renderProviders() {
   const grid = document.getElementById('providerGrid');
   const providers = configData.providers || {};
   if (Object.keys(providers).length === 0) {
-    grid.innerHTML = '<p style="color:var(--text-dim)">No providers configured.</p>';
+    grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
     return;
   }
   grid.innerHTML = Object.entries(providers).map(([name, cfg]) => `
@@ -564,8 +689,8 @@ function renderProviders() {
       <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
-        <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">Delete</button>
+        <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
       </div>
     </div>
   `).join('');
@@ -575,7 +700,7 @@ function renderModels() {
   const tbody = document.getElementById('modelTable');
   const models = configData.models || {};
   if (Object.keys(models).length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-dim)">No models configured.</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
     return;
   }
   tbody.innerHTML = Object.entries(models).map(([name, info]) => {
@@ -592,17 +717,17 @@ function renderModels() {
       <td>${esc(prov)}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="test-group">
-          <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">Test</button>
+          <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">Simple Text</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">Stream</div>
-            <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">Function Call</div>
-            <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">Image Understanding</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">${t('test.text')}</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">${t('test.stream')}</div>
+            <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">${t('test.tools')}</div>
+            <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
           </div>
         </div>
-        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">Edit</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">Delete</button>
+        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">${t('btn.delete')}</button>
       </td>
     </tr>`;
   }).join('');
@@ -616,17 +741,17 @@ async function saveProvider() {
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
   const apiKey = document.getElementById('provApiKey').value.trim();
   const proxy = document.getElementById('provProxy').value.trim();
-  if (!name || !baseUrl || !apiKey) { showToast('Name, Base URL, and API Key are required', 'error'); return; }
+  if (!name || !baseUrl || !apiKey) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const body = {api_key: apiKey, base_url: baseUrl, proxy};
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
-  if (res.ok) { showToast(`Provider '${name}' saved`); closeModal('providerModal'); loadConfig(); }
+  if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
 async function deleteProvider(name) {
-  if (!confirm(`Delete provider '${name}'?`)) return;
+  if (!confirm(t('confirm.deleteProvider',{name}))) return;
   const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}`);
-  if (res.ok) { showToast(`Provider '${name}' deleted`); loadConfig(); }
+  if (res.ok) { showToast(t('toast.providerDeleted',{name})); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
@@ -638,19 +763,19 @@ function editProvider(name) {
 async function saveModel() {
   const name = document.getElementById('modelName').value.trim();
   const provider = document.getElementById('modelProvider').value;
-  if (!name || !provider) { showToast('All fields are required', 'error'); return; }
+  if (!name || !provider) { showToast(t('error.modelRequired'), 'error'); return; }
   const capabilities = ['text'];
   if (document.getElementById('capVision').checked) capabilities.push('vision');
   if (document.getElementById('capTools').checked) capabilities.push('tools');
   const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, {provider, capabilities});
-  if (res.ok) { showToast(`Model '${name}' saved`); closeModal('modelModal'); loadConfig(); }
+  if (res.ok) { showToast(t('toast.modelSaved',{name})); closeModal('modelModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
 async function deleteModel(name) {
-  if (!confirm(`Delete model '${name}'?`)) return;
+  if (!confirm(t('confirm.deleteModel',{name}))) return;
   const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
-  if (res.ok) { showToast(`Model '${name}' deleted`); loadConfig(); }
+  if (res.ok) { showToast(t('toast.modelDeleted',{name})); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
@@ -673,10 +798,10 @@ function renderStats(d) {
   const uptime = formatDuration(d.uptime_seconds);
   const errRate = (d.error_rate * 100).toFixed(1) + '%';
   document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-card"><div class="label">Total Requests</div><div class="value">${d.total_requests}</div></div>
-    <div class="stat-card"><div class="label">Error Rate</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
-    <div class="stat-card"><div class="label">Active Streams</div><div class="value blue">${d.active_streams}</div></div>
-    <div class="stat-card"><div class="label">Uptime</div><div class="value">${uptime}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${d.total_requests}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
   `;
 }
 
@@ -684,7 +809,7 @@ function renderProviderBreakdown(d) {
   const tbody = document.getElementById('providerBreakdown');
   const entries = Object.entries(d.by_target_provider || {}).sort((a,b) => b[1]-a[1]);
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text-dim)">No data yet</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="2" style="color:var(--text-dim)">${t('empty.data')}</td></tr>`;
     return;
   }
   tbody.innerHTML = entries.map(([p,c]) => `<tr><td>${esc(p)}</td><td>${c}</td></tr>`).join('');
@@ -778,7 +903,7 @@ async function loadLogs() {
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim)">No requests logged yet</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map(e => {
       const time = new Date(e.timestamp).toLocaleTimeString();
@@ -798,7 +923,7 @@ function renderLogs(entries, total) {
   // Pagination
   const totalPages = Math.ceil(total / LOG_LIMIT) || 1;
   const currentPage = Math.floor(logOffset / LOG_LIMIT) + 1;
-  document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages} (${total} total)`;
+  document.getElementById('pageInfo').textContent = t('page.info', {current: currentPage, total: totalPages, count: total});
   document.getElementById('prevPage').disabled = logOffset === 0;
   document.getElementById('nextPage').disabled = logOffset + LOG_LIMIT >= total;
 }
@@ -809,11 +934,11 @@ function changePage(dir) {
 }
 
 async function clearLogs() {
-  if (!confirm('Clear all request logs?')) return;
+  if (!confirm(t('confirm.clearLogs'))) return;
   await api.del('/admin/api/requests');
   logOffset = 0;
   loadLogs();
-  showToast('Logs cleared');
+  showToast(t('toast.logCleared'));
 }
 
 function updateFilterOptions() {
@@ -824,8 +949,8 @@ function updateFilterOptions() {
   const pSel = document.getElementById('filterProvider');
   // preserve selection
   const mVal = mSel.value, pVal = pSel.value;
-  mSel.innerHTML = '<option value="">All Models</option>' + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
-  pSel.innerHTML = '<option value="">All Providers</option>' + providers.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  mSel.innerHTML = `<option value="">${t('filter.allModels')}</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  pSel.innerHTML = `<option value="">${t('filter.allProviders')}</option>` + providers.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
   mSel.value = mVal; pSel.value = pVal;
 }
 
@@ -875,7 +1000,7 @@ function formatDuration(seconds) {
 // Public domain test image (Wikimedia Commons — PNG transparency demo)
 const TEST_IMAGE_URL = 'https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png';
 
-const TEST_LABELS = {text:'Simple Text', stream:'Stream', tools:'Function Call', vision:'Image Understanding'};
+function getTestLabel(type) { return t('test.' + type); }
 
 function buildTestPayload(model, type) {
   const base = {model, max_tokens: 256};
@@ -919,7 +1044,7 @@ async function runTest(model, type) {
 
   const output = document.getElementById('testOutput');
   const meta = document.getElementById('testMeta');
-  document.getElementById('testModalTitle').textContent = `Test: ${TEST_LABELS[type]}`;
+  document.getElementById('testModalTitle').textContent = `Test: ${getTestLabel(type)}`;
   meta.innerHTML = `<div class="meta-item"><strong>Model:</strong> ${esc(model)}</div>`;
   output.textContent = '';
   output.className = 'test-output';
@@ -930,7 +1055,7 @@ async function runTest(model, type) {
 
   if (type === 'stream') {
     output.classList.add('streaming');
-    output.innerHTML = '<span class="test-spinner"></span>Connecting...';
+    output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
     try {
       const res = await fetch('/v1/chat/completions', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
@@ -967,7 +1092,7 @@ async function runTest(model, type) {
         }
       }
       output.className = 'test-output';
-      if (!fullText) output.textContent = '(empty response)';
+      if (!fullText) output.textContent = t('test.emptyResponse');
       const elapsed = ((performance.now() - t0)/1000).toFixed(2);
       meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">OK (stream)</span></div>`;
     } catch(e) {
@@ -976,7 +1101,7 @@ async function runTest(model, type) {
     }
   } else {
     // Non-streaming
-    output.innerHTML = '<span class="test-spinner"></span>Sending request...';
+    output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     try {
       const res = await fetch('/v1/chat/completions', {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
@@ -1016,6 +1141,7 @@ async function runTest(model, type) {
 
 // ===================== Init =====================
 loadConfig();
+setLang(currentLang);
 </script>
 </body>
 </html>
