@@ -340,6 +340,24 @@ class TestOpenAIResponsesMessageOps:
         assert result[0]["role"] == "system"
         assert result[0]["content"][0]["text"] == "Be helpful"
 
+    def test_p_message_to_ir_developer(self):
+        """Test OpenAI Responses developer message → IR SystemMessage."""
+        result = cast(
+            list[Any],
+            self.message_ops.p_messages_to_ir(
+                [
+                    {
+                        "type": "message",
+                        "role": "developer",
+                        "content": [{"type": "input_text", "text": "Be helpful"}],
+                    }
+                ]
+            ),
+        )
+        assert len(result) == 1
+        assert result[0]["role"] == "system"
+        assert result[0]["content"][0]["text"] == "Be helpful"
+
     def test_p_message_to_ir_assistant(self):
         """Test OpenAI Responses assistant message → IR AssistantMessage."""
         result = cast(
