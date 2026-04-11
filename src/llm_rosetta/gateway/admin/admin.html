@@ -376,8 +376,8 @@ canvas { width: 100%; height: 160px; }
       <label>Capabilities</label>
       <div class="checkbox-group">
         <label><input type="checkbox" id="capText" checked disabled> text</label>
-        <label><input type="checkbox" id="capVision"> vision</label>
-        <label><input type="checkbox" id="capTools"> tools</label>
+        <label><input type="checkbox" id="capVision" checked> vision</label>
+        <label><input type="checkbox" id="capTools" checked> tools</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -467,8 +467,8 @@ function openModelModal(model, provider, capabilities) {
       sel.appendChild(opt);
     }
   }
-  // Set capability checkboxes
-  const caps = capabilities || ['text'];
+  // Set capability checkboxes (default all enabled for new models)
+  const caps = capabilities || ['text', 'vision', 'tools'];
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('modelModal').classList.add('open');
