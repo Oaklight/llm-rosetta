@@ -68,6 +68,18 @@ def load_config(path: str) -> dict[str, Any]:
     return json.loads(substituted)
 
 
+def write_config(path: str, data: dict[str, Any]) -> None:
+    """Write a config dict as formatted JSON to *path*.
+
+    Creates parent directories if needed.  Comments in the original
+    JSONC file (if any) are **not** preserved.
+    """
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
 def load_config_raw(path: str) -> dict[str, Any]:
     """Load and parse a JSONC config file *without* env-var substitution.
 

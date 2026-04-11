@@ -21,6 +21,7 @@ from .config import (
     discover_config,
     load_config,
     load_config_raw,
+    write_config,
 )
 from .logging import get_logger, setup_logging
 from .providers import (
@@ -88,10 +89,7 @@ def _load_or_create_config(path: str) -> tuple[dict[str, Any], str]:
 
 
 def _write_jsonc(path: str, data: dict[str, Any]) -> None:
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    write_config(path, data)
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +346,7 @@ def main() -> None:
     if config.log_bodies:
         logger.info("Request/response body logging enabled")
 
-    app = create_app(config)
+    app = create_app(config, config_path=config_path)
     uvicorn.run(
         app,
         host=host,
