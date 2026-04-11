@@ -6,18 +6,18 @@
 <title>llm-rosetta Gateway — Admin</title>
 <style>
 :root {
-  --bg: #0f1117;
-  --bg-card: #1a1d27;
-  --bg-hover: #242838;
-  --border: #2d3148;
-  --text: #e4e7ef;
-  --text-dim: #8b90a5;
-  --accent: #6366f1;
-  --accent-hover: #818cf8;
-  --green: #22c55e;
-  --red: #ef4444;
-  --orange: #f59e0b;
-  --blue: #3b82f6;
+  --bg: #ffffff;
+  --bg-card: #f6f8fa;
+  --bg-hover: #eef1f5;
+  --border: #d1d9e0;
+  --text: #1f2328;
+  --text-dim: #656d76;
+  --accent: #0969da;
+  --accent-hover: #0550ae;
+  --green: #1a7f37;
+  --red: #cf222e;
+  --orange: #bf8700;
+  --blue: #0969da;
   --radius: 8px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -249,11 +249,14 @@ canvas { width: 100%; height: 160px; }
   <div class="header-right">
     <div style="display:flex;gap:8px;align-items:center">
       <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
+        <option value="light">Light</option>
         <option value="indigo">Indigo Dark</option>
         <option value="dracula">Dracula</option>
         <option value="nord">Nord</option>
-        <option value="light">Light</option>
         <option value="solarized">Solarized</option>
+        <option value="osaka-jade">Osaka Jade</option>
+        <option value="one-dark">One Dark</option>
+        <option value="rosepine">Rosé Pine</option>
       </select>
       <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
         <option value="en">EN</option>
@@ -454,9 +457,24 @@ const THEMES = {
     '--text':'#fdf6e3','--text-dim':'#839496','--accent':'#b58900','--accent-hover':'#cb9a09',
     '--green':'#859900','--red':'#dc322f','--orange':'#cb4b16','--blue':'#268bd2',
   },
+  'osaka-jade': {
+    '--bg':'#1a1f1e','--bg-card':'#222928','--bg-hover':'#2c3432','--border':'#3a4542',
+    '--text':'#d4ddd6','--text-dim':'#7a9486','--accent':'#5cba8c','--accent-hover':'#74d4a4',
+    '--green':'#5cba8c','--red':'#e06c6c','--orange':'#d4a24c','--blue':'#5c9aba',
+  },
+  'one-dark': {
+    '--bg':'#282c34','--bg-card':'#2c313c','--bg-hover':'#353b48','--border':'#3e4452',
+    '--text':'#abb2bf','--text-dim':'#636d83','--accent':'#61afef','--accent-hover':'#80bfff',
+    '--green':'#98c379','--red':'#e06c75','--orange':'#d19a66','--blue':'#61afef',
+  },
+  rosepine: {
+    '--bg':'#191724','--bg-card':'#1f1d2e','--bg-hover':'#26233a','--border':'#403d52',
+    '--text':'#e0def4','--text-dim':'#908caa','--accent':'#c4a7e7','--accent-hover':'#d4bff7',
+    '--green':'#9ccfd8','--red':'#eb6f92','--orange':'#f6c177','--blue':'#31748f',
+  },
 };
 
-let currentTheme = localStorage.getItem('llm-rosetta-theme') || 'indigo';
+let currentTheme = localStorage.getItem('llm-rosetta-theme') || 'light';
 
 function setTheme(name) {
   const vars = THEMES[name];
