@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llm-rosetta Gateway — Admin</title>
+<style>
+:root {
+  --bg: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-hover: #242838;
+  --border: #2d3148;
+  --text: #e4e7ef;
+  --text-dim: #8b90a5;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f59e0b;
+  --blue: #3b82f6;
+  --radius: 8px;
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+a { color: var(--accent); text-decoration: none; }
+
+/* Header */
+.header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 24px; border-bottom: 1px solid var(--border);
+}
+.header h1 { font-size: 18px; font-weight: 600; }
+.header h1 span { color: var(--text-dim); font-weight: 400; }
+.header .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+
+/* Tabs */
+.tabs {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+}
+.tab {
+  padding: 12px 20px; cursor: pointer; font-size: 14px; color: var(--text-dim);
+  border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Content */
+.content { padding: 24px; max-width: 1200px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Cards */
+.stats-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px; margin-bottom: 24px;
+}
+.stat-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.stat-card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.stat-card .value.green { color: var(--green); }
+.stat-card .value.red { color: var(--red); }
+.stat-card .value.blue { color: var(--blue); }
+
+/* Section */
+.section { margin-bottom: 32px; }
+.section-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.section-header h2 { font-size: 16px; font-weight: 600; }
+
+/* Buttons */
+.btn {
+  padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--bg-card); color: var(--text); cursor: pointer; font-size: 13px;
+  transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { color: var(--red); }
+.btn-danger:hover { background: rgba(239,68,68,0.1); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; }
+th, td {
+  text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+tr:hover td { background: var(--bg-hover); }
+
+/* Provider cards */
+.provider-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+.provider-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.provider-card .name { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+.provider-card .field { font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.provider-card .field code {
+  font-family: var(--mono); color: var(--text); background: var(--bg);
+  padding: 2px 6px; border-radius: 4px; font-size: 11px;
+}
+.provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+  display: none; align-items: center; justify-content: center; z-index: 100;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; width: 440px; max-width: 90vw;
+}
+.modal h3 { margin-bottom: 16px; font-size: 16px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+.form-group input, .form-group select {
+  width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 14px; font-family: var(--mono);
+}
+.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 12px 20px; border-radius: var(--radius); font-size: 13px;
+  z-index: 200; opacity: 0; transition: opacity 0.3s;
+}
+.toast.show { opacity: 1; }
+.toast.success { background: var(--green); color: #fff; }
+.toast.error { background: var(--red); color: #fff; }
+
+/* Charts */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+.chart-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px;
+}
+.chart-box h3 { font-size: 13px; color: var(--text-dim); margin-bottom: 12px; }
+canvas { width: 100%; height: 160px; }
+
+/* Filters */
+.filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.filters select, .filters input {
+  padding: 6px 10px; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text); font-size: 13px;
+}
+
+/* Pagination */
+.pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; justify-content: center; }
+.pagination .info { font-size: 13px; color: var(--text-dim); }
+
+/* Status badge */
+.badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+}
+.badge-ok { background: rgba(34,197,94,0.15); color: var(--green); }
+.badge-error { background: rgba(239,68,68,0.15); color: var(--red); }
+.badge-stream { background: rgba(99,102,241,0.15); color: var(--accent); }
+
+/* Test button dropdown */
+.test-group { position: relative; display: inline-flex; }
+.test-group .btn-test {
+  border-radius: var(--radius) 0 0 var(--radius); border-right: none;
+  color: var(--orange); font-weight: 600;
+}
+.test-group .btn-test:hover { background: rgba(245,158,11,0.1); }
+.test-group .btn-caret {
+  border-radius: 0 var(--radius) var(--radius) 0; padding: 4px 6px;
+  color: var(--orange);
+}
+.test-group .btn-caret:hover { background: rgba(245,158,11,0.1); }
+.test-menu {
+  display: none; position: absolute; top: 100%; right: 0; margin-top: 4px;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  min-width: 180px; z-index: 50; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.test-menu.open { display: block; }
+.test-menu-item {
+  padding: 8px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;
+}
+.test-menu-item:hover { background: var(--bg-hover); }
+.test-menu-item:first-child { border-radius: var(--radius) var(--radius) 0 0; }
+.test-menu-item:last-child { border-radius: 0 0 var(--radius) var(--radius); }
+
+/* Test result modal (wider) */
+.modal-wide { width: 620px; max-width: 95vw; }
+.test-meta { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+.test-meta .meta-item { font-size: 12px; color: var(--text-dim); }
+.test-meta .meta-item strong { color: var(--text); }
+.test-output {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px; font-family: var(--mono); font-size: 13px; line-height: 1.6;
+  max-height: 360px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+}
+.test-output.streaming { border-color: var(--accent); }
+.test-spinner {
+  display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .chart-row { grid-template-columns: 1fr; }
+  .provider-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>llm-rosetta <span>gateway admin</span></h1>
+  </div>
+  <div class="config-path" id="configPath"></div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" data-tab="config">Configuration</div>
+  <div class="tab" data-tab="dashboard">Dashboard</div>
+  <div class="tab" data-tab="logs">Request Log</div>
+</div>
+
+<div class="content">
+  <!-- Configuration Tab -->
+  <div class="tab-panel active" id="tab-config">
+    <div class="section">
+      <div class="section-header">
+        <h2>Server Settings</h2>
+      </div>
+      <div class="provider-card" style="max-width:480px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Global Proxy URL</label>
+          <div style="display:flex;gap:8px">
+            <input id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+            <button class="btn btn-primary btn-sm" onclick="saveServerSettings()">Save</button>
+          </div>
+          <div style="font-size:11px;color:var(--text-dim);margin-top:6px">Applies to all providers unless overridden per-provider.</div>
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <h2>Providers</h2>
+        <button class="btn btn-primary btn-sm" onclick="openProviderModal()">+ Add Provider</button>
+      </div>
+      <div class="provider-grid" id="providerGrid"></div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <h2>Model Routing</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModelModal()">+ Add Model</button>
+      </div>
+      <table>
+        <thead><tr><th>Model</th><th>Provider</th><th></th></tr></thead>
+        <tbody id="modelTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Dashboard Tab -->
+  <div class="tab-panel" id="tab-dashboard">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="chart-row">
+      <div class="chart-box">
+        <h3>Throughput (req/s)</h3>
+        <canvas id="chartThroughput"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Latency (ms)</h3>
+        <canvas id="chartLatency"></canvas>
+      </div>
+    </div>
+    <div class="section">
+      <h2 style="margin-bottom:12px">Per-Provider Breakdown</h2>
+      <table>
+        <thead><tr><th>Provider</th><th>Requests</th></tr></thead>
+        <tbody id="providerBreakdown"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Request Log Tab -->
+  <div class="tab-panel" id="tab-logs">
+    <div class="filters">
+      <select id="filterModel"><option value="">All Models</option></select>
+      <select id="filterProvider"><option value="">All Providers</option></select>
+      <select id="filterStatus">
+        <option value="">All Status</option>
+        <option value="ok">OK (2xx/3xx)</option>
+        <option value="error">Error (4xx/5xx)</option>
+      </select>
+      <button class="btn btn-danger btn-sm" onclick="clearLogs()">Clear Log</button>
+    </div>
+    <table>
+      <thead><tr><th>Time</th><th>Model</th><th>Source &rarr; Target</th><th>Mode</th><th>Status</th><th>Duration</th></tr></thead>
+      <tbody id="logTable"></tbody>
+    </table>
+    <div class="pagination">
+      <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)">Prev</button>
+      <span class="info" id="pageInfo"></span>
+      <button class="btn btn-sm" id="nextPage" onclick="changePage(1)">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- Provider Modal -->
+<div class="modal-overlay" id="providerModal">
+  <div class="modal">
+    <h3 id="providerModalTitle">Add Provider</h3>
+    <div class="form-group">
+      <label>Provider Name / Type</label>
+      <input id="provName" placeholder="e.g. openai_chat, anthropic, my_custom">
+    </div>
+    <div class="form-group">
+      <label>Base URL</label>
+      <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
+    </div>
+    <div class="form-group">
+      <label>API Key (or ${ENV_VAR} placeholder)</label>
+      <input id="provApiKey" placeholder="${OPENAI_API_KEY}">
+    </div>
+    <div class="form-group">
+      <label>Proxy URL (optional, overrides global)</label>
+      <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('providerModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveProvider()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Model Modal -->
+<div class="modal-overlay" id="modelModal">
+  <div class="modal">
+    <h3 id="modelModalTitle">Add Model</h3>
+    <div class="form-group">
+      <label>Model Name</label>
+      <input id="modelName" placeholder="e.g. gpt-4o, claude-sonnet-4-20250514">
+    </div>
+    <div class="form-group">
+      <label>Provider</label>
+      <select id="modelProvider"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('modelModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveModel()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Test Result Modal -->
+<div class="modal-overlay" id="testModal">
+  <div class="modal modal-wide">
+    <h3 id="testModalTitle">Test Result</h3>
+    <div class="test-meta" id="testMeta"></div>
+    <div class="test-output" id="testOutput"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('testModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ===================== State =====================
+let currentTab = 'config';
+let configData = null;
+let logOffset = 0;
+const LOG_LIMIT = 30;
+let dashboardTimer = null;
+let logTimer = null;
+
+// ===================== API =====================
+const api = {
+  async get(url) {
+    const r = await fetch(url);
+    return r.json();
+  },
+  async put(url, body) {
+    const r = await fetch(url, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    return r.json();
+  },
+  async del(url) {
+    const r = await fetch(url, {method:'DELETE'});
+    return r.json();
+  },
+  async post(url) {
+    const r = await fetch(url, {method:'POST'});
+    return r.json();
+  }
+};
+
+// ===================== Toast =====================
+function showToast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast', 3000);
+}
+
+// ===================== Modal =====================
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+function openProviderModal(name, baseUrl, apiKey, proxy) {
+  document.getElementById('providerModalTitle').textContent = name ? 'Edit Provider' : 'Add Provider';
+  document.getElementById('provName').value = name || '';
+  document.getElementById('provName').readOnly = !!name;
+  document.getElementById('provBaseUrl').value = baseUrl || '';
+  document.getElementById('provApiKey').value = apiKey || '';
+  document.getElementById('provProxy').value = proxy || '';
+  document.getElementById('providerModal').classList.add('open');
+}
+
+function openModelModal(model, provider) {
+  document.getElementById('modelModalTitle').textContent = model ? 'Edit Model' : 'Add Model';
+  document.getElementById('modelName').value = model || '';
+  document.getElementById('modelName').readOnly = !!model;
+  // Populate provider dropdown from config
+  const sel = document.getElementById('modelProvider');
+  sel.innerHTML = '';
+  if (configData) {
+    for (const p of Object.keys(configData.providers)) {
+      const opt = document.createElement('option');
+      opt.value = p; opt.textContent = p;
+      if (p === provider) opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+  document.getElementById('modelModal').classList.add('open');
+}
+
+// ===================== Config Tab =====================
+async function loadConfig() {
+  configData = await api.get('/admin/api/config');
+  document.getElementById('configPath').textContent = configData.config_path || '';
+  document.getElementById('globalProxy').value = (configData.server && configData.server.proxy) || '';
+  renderProviders();
+  renderModels();
+}
+
+async function saveServerSettings() {
+  const proxy = document.getElementById('globalProxy').value.trim();
+  const res = await api.put('/admin/api/config/server', {proxy});
+  if (res.ok) { showToast('Server settings saved'); loadConfig(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+function renderProviders() {
+  const grid = document.getElementById('providerGrid');
+  const providers = configData.providers || {};
+  if (Object.keys(providers).length === 0) {
+    grid.innerHTML = '<p style="color:var(--text-dim)">No providers configured.</p>';
+    return;
+  }
+  grid.innerHTML = Object.entries(providers).map(([name, cfg]) => `
+    <div class="provider-card">
+      <div class="name">${esc(name)}</div>
+      <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
+      <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
+      ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
+      <div class="actions">
+        <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">Delete</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderModels() {
+  const tbody = document.getElementById('modelTable');
+  const models = configData.models || {};
+  if (Object.keys(models).length === 0) {
+    tbody.innerHTML = '<tr><td colspan="3" style="color:var(--text-dim)">No models configured.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = Object.entries(models).map(([name, prov]) => `
+    <tr>
+      <td><code>${esc(name)}</code></td>
+      <td>${esc(prov)}</td>
+      <td style="text-align:right; white-space:nowrap">
+        <div class="test-group">
+          <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">Test</button>
+          <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
+          <div class="test-menu">
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">Simple Text</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">Stream</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','tools')">Function Call</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','vision')">Image Understanding</div>
+          </div>
+        </div>
+        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">Edit</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+
+  // Update filter dropdowns
+  updateFilterOptions();
+}
+
+async function saveProvider() {
+  const name = document.getElementById('provName').value.trim();
+  const baseUrl = document.getElementById('provBaseUrl').value.trim();
+  const apiKey = document.getElementById('provApiKey').value.trim();
+  const proxy = document.getElementById('provProxy').value.trim();
+  if (!name || !baseUrl || !apiKey) { showToast('Name, Base URL, and API Key are required', 'error'); return; }
+  const body = {api_key: apiKey, base_url: baseUrl, proxy};
+  const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
+  if (res.ok) { showToast(`Provider '${name}' saved`); closeModal('providerModal'); loadConfig(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+async function deleteProvider(name) {
+  if (!confirm(`Delete provider '${name}'?`)) return;
+  const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}`);
+  if (res.ok) { showToast(`Provider '${name}' deleted`); loadConfig(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+function editProvider(name) {
+  const cfg = configData.providers[name] || {};
+  openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy);
+}
+
+async function saveModel() {
+  const name = document.getElementById('modelName').value.trim();
+  const provider = document.getElementById('modelProvider').value;
+  if (!name || !provider) { showToast('All fields are required', 'error'); return; }
+  const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, {provider});
+  if (res.ok) { showToast(`Model '${name}' saved`); closeModal('modelModal'); loadConfig(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+async function deleteModel(name) {
+  if (!confirm(`Delete model '${name}'?`)) return;
+  const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
+  if (res.ok) { showToast(`Model '${name}' deleted`); loadConfig(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+function editModel(name, provider) {
+  openModelModal(name, provider);
+}
+
+// ===================== Dashboard Tab =====================
+async function loadMetrics() {
+  const data = await api.get('/admin/api/metrics?seconds=60');
+  renderStats(data);
+  drawChart('chartThroughput', data.series, 'count', 'req/s');
+  drawChart('chartLatency', data.series, 'avg_ms', 'ms');
+  renderProviderBreakdown(data);
+}
+
+function renderStats(d) {
+  const uptime = formatDuration(d.uptime_seconds);
+  const errRate = (d.error_rate * 100).toFixed(1) + '%';
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card"><div class="label">Total Requests</div><div class="value">${d.total_requests}</div></div>
+    <div class="stat-card"><div class="label">Error Rate</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
+    <div class="stat-card"><div class="label">Active Streams</div><div class="value blue">${d.active_streams}</div></div>
+    <div class="stat-card"><div class="label">Uptime</div><div class="value">${uptime}</div></div>
+  `;
+}
+
+function renderProviderBreakdown(d) {
+  const tbody = document.getElementById('providerBreakdown');
+  const entries = Object.entries(d.by_target_provider || {}).sort((a,b) => b[1]-a[1]);
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text-dim)">No data yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = entries.map(([p,c]) => `<tr><td>${esc(p)}</td><td>${c}</td></tr>`).join('');
+}
+
+// ===================== Canvas Charts =====================
+function drawChart(canvasId, series, key, unit) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.scale(dpr, dpr);
+  const w = rect.width, h = rect.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const values = series.map(s => s[key]);
+  const maxVal = Math.max(...values, 1);
+
+  const padL = 40, padR = 8, padT = 8, padB = 24;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  // Grid lines
+  ctx.strokeStyle = '#2d3148';
+  ctx.lineWidth = 0.5;
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (chartH / 4) * i;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
+  }
+
+  // Y-axis labels
+  ctx.fillStyle = '#8b90a5';
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'right';
+  for (let i = 0; i <= 4; i++) {
+    const y = padT + (chartH / 4) * i;
+    const val = maxVal * (1 - i/4);
+    ctx.fillText(val.toFixed(val >= 10 ? 0 : 1), padL - 6, y + 3);
+  }
+
+  // X-axis labels
+  ctx.textAlign = 'center';
+  ctx.fillText('-60s', padL, h - 4);
+  ctx.fillText('-30s', padL + chartW/2, h - 4);
+  ctx.fillText('now', padL + chartW, h - 4);
+
+  if (values.length === 0) return;
+
+  // Line
+  ctx.strokeStyle = '#6366f1';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < values.length; i++) {
+    const x = padL + (i / (values.length - 1)) * chartW;
+    const y = padT + chartH - (values[i] / maxVal) * chartH;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  // Fill
+  ctx.lineTo(padL + chartW, padT + chartH);
+  ctx.lineTo(padL, padT + chartH);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(99,102,241,0.08)';
+  ctx.fill();
+}
+
+// ===================== Request Log Tab =====================
+async function loadLogs() {
+  const model = document.getElementById('filterModel').value;
+  const provider = document.getElementById('filterProvider').value;
+  const status = document.getElementById('filterStatus').value;
+  let url = `/admin/api/requests?limit=${LOG_LIMIT}&offset=${logOffset}`;
+  if (model) url += `&model=${encodeURIComponent(model)}`;
+  if (provider) url += `&provider=${encodeURIComponent(provider)}`;
+  if (status) url += `&status=${encodeURIComponent(status)}`;
+
+  const data = await api.get(url);
+  renderLogs(data.entries, data.total);
+}
+
+function renderLogs(entries, total) {
+  const tbody = document.getElementById('logTable');
+  if (entries.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--text-dim)">No requests logged yet</td></tr>';
+  } else {
+    tbody.innerHTML = entries.map(e => {
+      const time = new Date(e.timestamp).toLocaleTimeString();
+      const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
+      const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
+      return `<tr>
+        <td>${time}</td>
+        <td><code>${esc(e.model)}</code></td>
+        <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider)}</td>
+        <td>${modeBadge}</td>
+        <td><span class="badge ${statusCls}">${e.status_code}</span></td>
+        <td>${e.duration_ms.toFixed(0)} ms</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(total / LOG_LIMIT) || 1;
+  const currentPage = Math.floor(logOffset / LOG_LIMIT) + 1;
+  document.getElementById('pageInfo').textContent = `Page ${currentPage} / ${totalPages} (${total} total)`;
+  document.getElementById('prevPage').disabled = logOffset === 0;
+  document.getElementById('nextPage').disabled = logOffset + LOG_LIMIT >= total;
+}
+
+function changePage(dir) {
+  logOffset = Math.max(0, logOffset + dir * LOG_LIMIT);
+  loadLogs();
+}
+
+async function clearLogs() {
+  if (!confirm('Clear all request logs?')) return;
+  await api.del('/admin/api/requests');
+  logOffset = 0;
+  loadLogs();
+  showToast('Logs cleared');
+}
+
+function updateFilterOptions() {
+  if (!configData) return;
+  const models = Object.keys(configData.models || {});
+  const providers = Object.keys(configData.providers || {});
+  const mSel = document.getElementById('filterModel');
+  const pSel = document.getElementById('filterProvider');
+  // preserve selection
+  const mVal = mSel.value, pVal = pSel.value;
+  mSel.innerHTML = '<option value="">All Models</option>' + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  pSel.innerHTML = '<option value="">All Providers</option>' + providers.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+  mSel.value = mVal; pSel.value = pVal;
+}
+
+// ===================== Tabs =====================
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    const id = tab.dataset.tab;
+    document.getElementById('tab-' + id).classList.add('active');
+    currentTab = id;
+    stopTimers();
+    if (id === 'dashboard') { loadMetrics(); dashboardTimer = setInterval(loadMetrics, 3000); }
+    if (id === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
+    if (id === 'config') { loadConfig(); }
+  });
+});
+
+function stopTimers() {
+  if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+}
+
+// Filter change handlers
+document.getElementById('filterModel').addEventListener('change', () => { logOffset = 0; loadLogs(); });
+document.getElementById('filterProvider').addEventListener('change', () => { logOffset = 0; loadLogs(); });
+document.getElementById('filterStatus').addEventListener('change', () => { logOffset = 0; loadLogs(); });
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+
+// ===================== Helpers =====================
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function formatDuration(seconds) {
+  if (seconds < 60) return Math.floor(seconds) + 's';
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm ' + Math.floor(seconds%60) + 's';
+  const h = Math.floor(seconds/3600);
+  const m = Math.floor((seconds%3600)/60);
+  return h + 'h ' + m + 'm';
+}
+
+// ===================== Test Model =====================
+// A tiny 8x8 PNG with colored quadrants (red/green/blue/yellow), base64 encoded
+const TEST_IMAGE_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAANklEQVQI12P4z8BAAGBiIEoBEwMM/GdgYPj/H8r+D2YzMEDYcDYjIyMDAwMDGAxhw0XgbABhLxAP0k3xLgAAAABJRU5ErkJggg==';
+
+const TEST_LABELS = {text:'Simple Text', stream:'Stream', tools:'Function Call', vision:'Image Understanding'};
+
+function buildTestPayload(model, type) {
+  const base = {model, max_tokens: 256};
+  switch(type) {
+    case 'text':
+      return {...base, messages:[{role:'user', content:'Say "Hello! The gateway test is working." and nothing else.'}]};
+    case 'stream':
+      return {...base, stream:true, messages:[{role:'user', content:'Count from 1 to 5, one number per line.'}]};
+    case 'tools':
+      return {...base,
+        messages:[{role:'user', content:"What's the weather in San Francisco?"}],
+        tools:[{type:'function', function:{
+          name:'get_weather',
+          description:'Get current weather for a location',
+          parameters:{type:'object', properties:{location:{type:'string',description:'City name'}}, required:['location']}
+        }}]
+      };
+    case 'vision':
+      return {...base,
+        messages:[{role:'user', content:[
+          {type:'text', text:'Describe what you see in this image in one sentence.'},
+          {type:'image_url', image_url:{url:'data:image/png;base64,' + TEST_IMAGE_B64}}
+        ]}]
+      };
+  }
+}
+
+function toggleTestMenu(btn) {
+  // Close any other open menus first
+  document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
+  const menu = btn.parentElement.querySelector('.test-menu');
+  menu.classList.toggle('open');
+  // Close on outside click
+  const close = (e) => { if (!menu.contains(e.target) && e.target !== btn) { menu.classList.remove('open'); document.removeEventListener('click', close); }};
+  setTimeout(() => document.addEventListener('click', close), 0);
+}
+
+async function runTest(model, type) {
+  // Close any open dropdown
+  document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
+
+  const output = document.getElementById('testOutput');
+  const meta = document.getElementById('testMeta');
+  document.getElementById('testModalTitle').textContent = `Test: ${TEST_LABELS[type]}`;
+  meta.innerHTML = `<div class="meta-item"><strong>Model:</strong> ${esc(model)}</div>`;
+  output.textContent = '';
+  output.className = 'test-output';
+  document.getElementById('testModal').classList.add('open');
+
+  const payload = buildTestPayload(model, type);
+  const t0 = performance.now();
+
+  if (type === 'stream') {
+    output.classList.add('streaming');
+    output.innerHTML = '<span class="test-spinner"></span>Connecting...';
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        output.className = 'test-output';
+        output.textContent = `Error ${res.status}: ${errText}`;
+        meta.innerHTML += `<div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
+        return;
+      }
+      output.textContent = '';
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
+      while(true) {
+        const {done, value} = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, {stream:true});
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // keep incomplete line
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+          try {
+            const chunk = JSON.parse(data);
+            const delta = chunk.choices?.[0]?.delta?.content || '';
+            fullText += delta;
+            output.textContent = fullText;
+            output.scrollTop = output.scrollHeight;
+          } catch(e) {}
+        }
+      }
+      output.className = 'test-output';
+      if (!fullText) output.textContent = '(empty response)';
+      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">OK (stream)</span></div>`;
+    } catch(e) {
+      output.className = 'test-output';
+      output.textContent = `Network error: ${e.message}`;
+    }
+  } else {
+    // Non-streaming
+    output.innerHTML = '<span class="test-spinner"></span>Sending request...';
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+      });
+      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+      const body = await res.json();
+
+      if (!res.ok) {
+        output.textContent = JSON.stringify(body, null, 2);
+        meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
+        return;
+      }
+
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
+
+      // Extract usage if present
+      if (body.usage) {
+        meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in / ${body.usage.completion_tokens || '?'} out</div>`;
+      }
+
+      // Display result based on type
+      const choice = body.choices?.[0];
+      if (type === 'tools' && choice?.message?.tool_calls) {
+        const tc = choice.message.tool_calls[0];
+        output.textContent = `Tool call: ${tc.function?.name || tc.name || '?'}(${tc.function?.arguments || JSON.stringify(tc.arguments) || '{}'})`;
+        if (choice.message.content) {
+          output.textContent += '\n\nContent: ' + choice.message.content;
+        }
+      } else {
+        output.textContent = choice?.message?.content || JSON.stringify(body, null, 2);
+      }
+    } catch(e) {
+      output.textContent = `Network error: ${e.message}`;
+    }
+  }
+}
+
+// ===================== Init =====================
+loadConfig();
+</script>
+</body>
+</html>
