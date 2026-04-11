@@ -141,7 +141,7 @@ async def _proxy_handler(
                 duration_ms=duration_ms,
                 is_stream=is_stream,
             )
-        if request_log:
+        if request_log is not None:
             from .admin.request_log import RequestLogEntry
 
             request_log.add(
