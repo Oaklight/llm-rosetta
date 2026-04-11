@@ -40,6 +40,30 @@ class TestGoogleGenAIToolOps:
         assert func_decl["description"] == "Get current weather"
         assert "parameters" in func_decl
 
+    def test_ir_tool_definition_to_p_strips_additional_properties(self):
+        """Test additionalProperties is stripped for Google GenAI."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "create_item",
+            "description": "Create an item",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string", "additionalProperties": False},
+                    },
+                },
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        }
+        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        params = result["function_declarations"][0]["parameters"]
+        assert "additionalProperties" not in params
+        assert "additionalProperties" not in params["properties"]["tags"]["items"]
+
     def test_p_tool_definition_to_ir(self):
         """Test Google FunctionDeclaration → IR ToolDefinition."""
         provider_tool = {

@@ -58,7 +58,10 @@ class GoogleGenAIToolOps(BaseToolOps):
         parameters = ir_tool.get("parameters")
         if parameters:
             func_decl["parameters"] = (
-                sanitize_schema(parameters)
+                sanitize_schema(
+                    parameters,
+                    extra_strip_keys={"additionalProperties"},
+                )
                 if isinstance(parameters, dict)
                 else parameters
             )

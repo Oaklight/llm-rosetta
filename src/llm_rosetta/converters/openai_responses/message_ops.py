@@ -430,9 +430,12 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 if converted:
                     ir_content.extend(converted)
 
+        # Map Responses API "developer" role to IR "system"
+        ir_role = "system" if role == "developer" else role
+
         # Empty messages are also created because subsequent tool calls
         # may need to be appended
-        return {"role": role, "content": ir_content}
+        return {"role": ir_role, "content": ir_content}
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Responses API content part to IR content part(s).

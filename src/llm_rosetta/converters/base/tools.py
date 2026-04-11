@@ -140,6 +140,7 @@ def _resolve_ref(ref: str, defs: dict[str, dict[str, Any]]) -> dict[str, Any]:
 def sanitize_schema(
     schema: dict[str, Any],
     defs: dict[str, dict[str, Any]] | None = None,
+    extra_strip_keys: set[str] | None = None,
 ) -> dict[str, Any]:
     """Recursively remove unsupported JSON Schema keywords.
 
@@ -153,6 +154,8 @@ def sanitize_schema(
         defs: Collected ``$defs``/``definitions`` from the top-level schema.
             Populated automatically on the first call if the schema contains
             definition maps.
+        extra_strip_keys: Additional provider-specific keys to strip
+            (e.g. ``{"additionalProperties"}`` for Google GenAI).
 
     Returns:
         A new dict with unsupported keys removed at every level.
@@ -165,6 +168,8 @@ def sanitize_schema(
             if isinstance(d, dict):
                 defs.update(d)
 
+    strip_keys = UNSUPPORTED_SCHEMA_KEYS | (extra_strip_keys or set())
+
     # Resolve $ref: inline the referenced definition (merge siblings).
     ref = schema.get("$ref")
     if isinstance(ref, str) and defs:
@@ -174,20 +179,22 @@ def sanitize_schema(
             # replaced by the resolved definition's content.
             merged = {k: v for k, v in schema.items() if k != "$ref"}
             merged.update(resolved)
-            return sanitize_schema(merged, defs)
+            return sanitize_schema(merged, defs, extra_strip_keys)
 
     result: dict[str, Any] = {}
     for key, value in schema.items():
-        if key in UNSUPPORTED_SCHEMA_KEYS or key in _DEFS_KEYS:
+        if key in strip_keys or key in _DEFS_KEYS:
             continue
         if key == "$ref":
             # Unresolvable $ref — drop it to avoid upstream rejection.
             continue
         if isinstance(value, dict):
-            result[key] = sanitize_schema(value, defs)
+            result[key] = sanitize_schema(value, defs, extra_strip_keys)
         elif isinstance(value, list):
             result[key] = [
-                sanitize_schema(item, defs) if isinstance(item, dict) else item
+                sanitize_schema(item, defs, extra_strip_keys)
+                if isinstance(item, dict)
+                else item
                 for item in value
             ]
         else:
