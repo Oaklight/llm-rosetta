@@ -99,9 +99,11 @@ nav:
       - Streaming: guide/streaming.md
       - Auto Detection: guide/auto-detection.md
       - API Layers: guide/api-layers.md
+      - Reasoning / Thinking: guide/reasoning.md
       - Provider Compatibility: guide/compatibility.md
   - Gateway:
       - gateway/index.md
+      - Admin Panel: gateway/admin-panel.md
       - Validation: gateway/validation.md
       - CLI Cross-Format Testing: gateway/validation-cli.md
       - SDK & Integration Tests: gateway/validation-sdk.md

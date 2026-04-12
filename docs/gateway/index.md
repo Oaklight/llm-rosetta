@@ -122,6 +122,7 @@ curl http://localhost:8765/v1/messages \
 | `GET /v1/models` | OpenAI / Anthropic | List configured models (compatible with both SDKs) |
 | `GET /v1beta/models` | Google GenAI | List configured models (Google SDK format) |
 | `GET /health` | — | Health check |
+| `GET /admin/` | — | [Admin panel](admin-panel.md) (web UI) |
 
 The endpoint path determines the source format — no auto-detection needed.
 
@@ -435,6 +436,10 @@ Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
     Gemini CLI makes outbound connections to `github.com` and `play.googleapis.com` during startup. These must be reachable (directly or via proxy) for the CLI to function.
 
 **Supported**: chat, streaming ✅
+
+## Admin Panel
+
+The gateway includes a built-in web admin panel at `/admin/` for managing configuration, monitoring real-time metrics, and viewing request logs. See the [Admin Panel](admin-panel.md) page for details.
 
 ## How It Works
 
