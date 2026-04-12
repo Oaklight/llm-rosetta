@@ -99,9 +99,11 @@ nav:
       - 流式处理: guide/streaming.md
       - 自动检测: guide/auto-detection.md
       - API 分层: guide/api-layers.md
+      - 推理 / 思考参数: guide/reasoning.md
       - 提供商兼容性: guide/compatibility.md
   - 网关:
       - gateway/index.md
+      - 管理面板: gateway/admin-panel.md
       - 验证报告: gateway/validation.md
       - CLI 跨格式测试: gateway/validation-cli.md
       - SDK 与集成测试: gateway/validation-sdk.md
