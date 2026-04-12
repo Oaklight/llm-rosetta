@@ -6,8 +6,8 @@ title: SDK & Integration Tests
 
 This page documents the automated test suites used to validate LLM-Rosetta's converter pipelines with real API calls.
 
-!!! info "Last updated: 2026-04-07"
-    Tested with llm-rosetta v0.2.7 (unreleased), argo-proxy v3.0.0b7
+!!! info "Last updated: 2026-04-12"
+    Tested with llm-rosetta v0.5.0, argo-proxy v3.0.0b7
 
 ## Integration Test Suite (`tests/integration/`)
 

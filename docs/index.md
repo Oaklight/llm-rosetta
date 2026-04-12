@@ -71,6 +71,19 @@ flowchart LR
 - **[API Reference](api/)** — Complete API documentation
 - **[Changelog](changelog.md)** — Version history
 
+## Citation
+
+If you use LLM-Rosetta in your research, please cite our paper:
+
+```bibtex
+@article{ding2025llmrosetta,
+  title={LLM-Rosetta: A Hub-and-Spoke Intermediate Representation for Cross-Provider LLM API Translation},
+  author={Ding, Peng},
+  journal={arXiv preprint arXiv:XXXX.XXXXX},
+  year={2025}
+}
+```
+
 ## License
 
 MIT License

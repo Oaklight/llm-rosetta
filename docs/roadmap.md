@@ -4,61 +4,59 @@ title: Roadmap
 
 # Roadmap
 
-This page outlines planned features and areas where community contributions are welcome.
+This page outlines the current feature status and areas where community contributions are welcome.
 
 ## Current Status
 
-LLM-Rosetta v0.2.0 supports bidirectional conversion between 4 provider APIs:
+LLM-Rosetta v0.5.0 supports bidirectional conversion between 5 API standards:
 
 | Provider | Format | Streaming | Tool Calls |
 |----------|--------|:---------:|:----------:|
 | OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
 | OpenAI Responses | `openai_responses` | ✓ | ✓ |
+| Open Responses | `open_responses` | ✓ | ✓ |
 | Anthropic Messages | `anthropic` | ✓ | ✓ |
 | Google GenAI | `google` | ✓ | ✓ |
 
-The [Gateway](gateway/index.md) provides real-time HTTP proxying between any combination of these formats, verified with [5 CLI tools and SDK test suites](gateway/validation.md).
+The [Gateway](gateway/index.md) provides real-time HTTP proxying between any combination of these formats, verified with [5 CLI tools and SDK test suites](gateway/validation.md). The gateway also includes a built-in [admin panel](gateway/admin-panel.md) for configuration management, metrics monitoring, and request logging.
+
+See [API Standards](guide/api-standards.md) for details on each format.
+
+---
+
+## Recently Completed
+
+### Open Responses Integration
+
+!!! success "Status: Done (v0.5.0)"
+
+[Open Responses](https://www.openresponses.org/) is an open-source specification (Apache 2.0) initiated by OpenAI in January 2026. It turns the proprietary OpenAI Responses API into a **vendor-neutral standard** with formal extensibility rules.
+
+**What was implemented**:
+
+- `open_responses` provider type — reuses `OpenAIResponsesConverter` since the wire format is compatible
+- Gateway forwards `OpenResponses-Version` header to upstream when present
+- Auto-detection recognizes Open Responses request bodies
+- Configurable as a distinct provider type in gateway config
+
+Major adopters include OpenRouter, Hugging Face, Vercel, LM Studio, Ollama, and vLLM.
+
+See the full [analysis](https://github.com/Oaklight/llm-rosetta/blob/master/analysis/openapi_specs_and_open_responses.md) for detailed schema comparisons.
+
+### Ollama Support
+
+!!! success "Status: Done (v0.5.0)"
+
+[Ollama](https://ollama.com/) (v0.13+) works with the gateway in two ways:
+
+- **As an upstream provider**: Point a gateway provider at `http://localhost:11434/v1` using the `openai_chat` type — no new converter needed
+- **As a client**: Ollama's OpenAI-compatible endpoints (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`) can target the gateway to reach cloud providers
+
+See [CLI Integrations — Ollama](gateway/cli-integrations.md#ollama) for configuration examples.
 
 ---
 
 ## Planned Features
-
-### Open Responses Integration
-
-!!! tip "Status: Planned"
-
-[Open Responses](https://www.openresponses.org/) is an open-source specification (Apache 2.0) initiated by OpenAI in January 2026. It turns the proprietary OpenAI Responses API into a **vendor-neutral standard** with formal extensibility rules.
-
-**Why it matters**: Open Responses is a **proper superset** of the OpenAI Responses API. A client already talking to OpenAI's Responses API can talk to an Open Responses endpoint with minimal changes. Major adopters include OpenRouter, Hugging Face, Vercel, LM Studio, Ollama, and vLLM.
-
-**Implementation strategy**: Extend the existing `openai_responses` converter rather than building a separate one. The delta is small:
-
-| Feature | Description |
-|---------|-------------|
-| Reasoning `content` field | Raw reasoning traces from open-weight models (in addition to `summary` and `encrypted_content`) |
-| Slug-prefixed extensions | `implementor:type_name` items, tools, and events (e.g., `openai:web_search_call`) |
-| `allowed_tools` field | Cache-preserving tool restriction |
-| `OpenResponses-Version` header | Spec versioning mechanism |
-| Stateless default | Already compatible — llm-rosetta doesn't assume server-side state |
-
-This could be exposed as:
-
-- A flag: `output_format="open_responses"` on the converter
-- Or a thin subclass: `OpenResponsesConverter(OpenAIResponsesConverter)`
-- Gateway: detect via `OpenResponses-Version` header and route accordingly
-
-See the full [analysis](https://github.com/Oaklight/llm-rosetta/blob/master/analysis/openapi_specs_and_open_responses.md) for detailed schema comparisons.
-
-### Ollama Provider Support
-
-!!! tip "Status: Planned"
-
-[Ollama](https://ollama.com/) is a popular tool for running LLMs locally. It exposes both a native API and an OpenAI-compatible API.
-
-**Implementation approach**:
-
-- **OpenAI-compatible mode**: Ollama's `/v1/chat/completions` endpoint is already compatible with the `openai_chat` converter — no new converter needed, just gateway configuration pointing to `http://localhost:11434/v1`
-- **Native Ollama API**: A dedicated converter could support Ollama-specific features (model management, embedding, etc.) but is lower priority since the OpenAI-compatible mode covers the primary use case
 
 ### LM Studio Provider Support
 
@@ -89,4 +87,4 @@ We welcome pull requests for any of the planned features above. Here's how to ge
 3. Look at existing converters (e.g., `src/llm_rosetta/converters/openai_chat/`) as templates
 4. Run `ruff check` and `uvx ty check` before submitting
 
-For larger features (Open Responses, new providers), please open an issue first to discuss the approach.
+For larger features (new providers), please open an issue first to discuss the approach.

@@ -6,8 +6,8 @@ title: Gateway Validation
 
 This page summarizes end-to-end validation of the LLM-Rosetta Gateway (via [argo-proxy](https://github.com/Oaklight/argo-proxy)) with real-world CLI tools, SDK test suites, and cross-format routing.
 
-!!! info "Last updated: 2026-03-23"
-    Tested with llm-rosetta v0.2.5 and argo-proxy v3.0.0b7
+!!! info "Last updated: 2026-04-12"
+    Tested with llm-rosetta v0.5.0 and argo-proxy v3.0.0b7
 
 ## Cross-Format Routing Matrix
 

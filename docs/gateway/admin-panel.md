@@ -103,8 +103,6 @@ The admin panel ships with 8 themes, selectable from the dropdown in the top-rig
 | One Dark | Atom editor's dark theme |
 | Rose Pine | Muted rose and pine tones |
 
-![One Dark theme example](images/admin-dark-theme.png)
-
 Theme selection is stored in `localStorage` and persists across browser sessions.
 
 ## Internationalization
