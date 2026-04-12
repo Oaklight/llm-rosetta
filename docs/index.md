@@ -28,14 +28,18 @@ Different LLM providers use incompatible API formats. A request that works with 
 
 **LLM-Rosetta** introduces a central **Intermediate Representation (IR)** as a hub. Each provider only needs one converter to/from the IR, reducing the total from N² to 2N.
 
-```mermaid
-flowchart LR
-    OC[OpenAI Chat] <--> IR
-    OR[OpenAI Responses] <--> IR
-    ORe[Open Responses] <--> IR
-    AN[Anthropic] <--> IR
-    GG[Google GenAI] <--> IR
-    IR[IR - Intermediate Representation]
+```text
+                    ┌──────────────┐
+  OpenAI Chat  ◄──►│              │
+                    │              │
+  OpenAI Resp  ◄──►│              │
+                    │     IR       │
+  Open Resp    ◄──►│ Intermediate │
+                    │    Repr.     │
+  Anthropic    ◄──►│              │
+                    │              │
+  Google GenAI ◄──►│              │
+                    └──────────────┘
 ```
 
 ---
