@@ -28,14 +28,18 @@ hide:
 
 **LLM-Rosetta** 引入了中央**中间表示（IR）**作为枢纽。每个提供商只需与 IR 之间进行转换，将总数从 N² 降为 2N。
 
-```mermaid
-flowchart LR
-    OC[OpenAI Chat] <--> IR
-    OR[OpenAI Responses] <--> IR
-    ORe[Open Responses] <--> IR
-    AN[Anthropic] <--> IR
-    GG[Google GenAI] <--> IR
-    IR[IR - 中间表示]
+```text
+                    ┌──────────────┐
+  OpenAI Chat  ◄──►│              │
+                    │              │
+  OpenAI Resp  ◄──►│              │
+                    │     IR       │
+  Open Resp    ◄──►│   中间表示    │
+                    │              │
+  Anthropic    ◄──►│              │
+                    │              │
+  Google GenAI ◄──►│              │
+                    └──────────────┘
 ```
 
 ---
