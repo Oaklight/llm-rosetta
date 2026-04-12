@@ -6,6 +6,25 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## v0.5.0 — 2026-04-12
+
+### 新增
+
+- **网关管理面板**：在 `/admin/` 提供内置 Web 管理面板，支持管理网关配置、监控流量和查看请求日志，无需编辑配置文件或重启服务器
+    - **Configuration 标签页**：可视化管理提供商（添加、编辑、重命名、删除）和模型路由，支持能力标记（text/vision/tools）
+    - **Dashboard 标签页**：实时指标摘要卡片（总请求数、错误率、活跃流式连接、运行时间），滚动 60 秒吞吐量和延迟图表，按提供商分类统计
+    - **Request Log 标签页**：可过滤的请求日志，支持按模型、提供商、状态筛选，分页显示，状态码颜色标记
+    - **8 种主题**：Light、Indigo Dark、Dracula、Nord、Solarized、Osaka Jade、One Dark、Rosé Pine — 保存在 localStorage 中
+    - **国际化**：支持 English 和中文切换，选择保存在 localStorage 中
+- **文件持久化**：指标计数器（JSON）和请求日志（JSONL）自动保存到配置文件旁的磁盘目录中，数据在服务器重启后恢复。日志轮转支持 gzip 压缩（2 MB 限制，最多 3 个备份）
+- **提供商重命名**：重命名提供商时自动更新所有模型路由引用
+- **API Key 安全**：提供商卡片显示脱敏 Key，编辑弹窗中支持可见性切换和复制按钮。脱敏值不会被写回配置文件
+
+### 变更
+
+- **提供商名称与 API 标准类型解耦**：提供商名称现在是用户自定义字符串（如 `"my-openai"`、`"OpenRouter_anthropic"`），不再受限于 4 种标准类型标识符。独立的 `type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）
+- 将 `write_config()` 提取到 `config.py`，供 CLI 和管理面板共用
+
 ## v0.4.2 — 2026-04-11
 
 ### 变更
