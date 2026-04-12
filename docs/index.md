@@ -28,19 +28,7 @@ Different LLM providers use incompatible API formats. A request that works with 
 
 **LLM-Rosetta** introduces a central **Intermediate Representation (IR)** as a hub. Each provider only needs one converter to/from the IR, reducing the total from N² to 2N.
 
-```text
-                    ┌──────────────┐
-  OpenAI Chat  ◄──►│              │
-                    │              │
-  OpenAI Resp  ◄──►│              │
-                    │     IR       │
-  Open Resp    ◄──►│ Intermediate │
-                    │    Repr.     │
-  Anthropic    ◄──►│              │
-                    │              │
-  Google GenAI ◄──►│              │
-                    └──────────────┘
-```
+Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
 
 ---
 
