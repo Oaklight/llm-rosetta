@@ -28,19 +28,7 @@ hide:
 
 **LLM-Rosetta** 引入了中央**中间表示（IR）**作为枢纽。每个提供商只需与 IR 之间进行转换，将总数从 N² 降为 2N。
 
-```text
-                    ┌──────────────┐
-  OpenAI Chat  ◄──►│              │
-                    │              │
-  OpenAI Resp  ◄──►│              │
-                    │     IR       │
-  Open Resp    ◄──►│   中间表示    │
-                    │              │
-  Anthropic    ◄──►│              │
-                    │              │
-  Google GenAI ◄──►│              │
-                    └──────────────┘
-```
+Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出。
 
 ---
 
