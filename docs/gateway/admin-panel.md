@@ -103,8 +103,6 @@ title: 管理面板
 | One Dark | Atom 编辑器深色主题 |
 | Rosé Pine | 柔和的玫瑰与松木色调 |
 
-![One Dark 主题示例](images/admin-dark-theme.png)
-
 主题选择存储在 `localStorage` 中，浏览器关闭后依然保留。
 
 ## 国际化

@@ -6,8 +6,8 @@ title: SDK 与集成测试
 
 本页记录了用于验证 LLM-Rosetta 转换器管道的自动化测试套件，使用真实 API 调用。
 
-!!! info "最后更新：2026-04-07"
-    使用 llm-rosetta v0.2.7（未发布）、argo-proxy v3.0.0b7
+!!! info "最后更新：2026-04-12"
+    使用 llm-rosetta v0.5.0、argo-proxy v3.0.0b7
 
 ## 集成测试套件（`tests/integration/`）
 

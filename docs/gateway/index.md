@@ -29,18 +29,15 @@ pip install "llm-rosetta[gateway]"
 ```jsonc
 {
   "providers": {
-    "openai_chat":      { "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
-    "openai_responses": { "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
-    "anthropic":        { "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
-    "google":           { "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" }
+    "my-openai":    { "type": "openai_chat",      "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
+    "my-anthropic": { "type": "anthropic",         "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
+    "my-google":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" }
   },
   "models": {
-    "gpt-4o": "openai_chat",
-    "gpt-4o-mini": "openai_chat",
-    "claude-sonnet-4-20250514": "anthropic",
-    "claude-3-5-haiku-20241022": "anthropic",
-    "gemini-2.0-flash": "google",
-    "gemini-2.5-pro": "google"
+    "gpt-4o": "my-openai",
+    "gpt-4o-mini": "my-openai",
+    "claude-sonnet-4-20250514": "my-anthropic",
+    "gemini-2.0-flash": "my-google"
   },
   "server": {
     "host": "0.0.0.0",
@@ -49,7 +46,7 @@ pip install "llm-rosetta[gateway]"
 }
 ```
 
-API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取。
+提供商名称是用户自定义的字符串。`type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。详见[配置](configuration.md)页面。
 
 ### 2. 启动网关
 
@@ -70,22 +67,7 @@ python -m llm_rosetta.gateway
 2. `~/.config/llm-rosetta-gateway/config.jsonc`
 3. `~/.llm-rosetta-gateway/config.jsonc`
 
-也可以使用 `init` 或 `add` 子命令快速创建配置文件：
-
-```bash
-# 在 ~/.config/llm-rosetta-gateway/config.jsonc 创建模板配置
-llm-rosetta-gateway init
-
-# 或通过 add 子命令逐步构建配置
-llm-rosetta-gateway add provider openai_chat
-llm-rosetta-gateway add provider anthropic
-llm-rosetta-gateway add provider google
-
-# 添加模型路由条目
-llm-rosetta-gateway add model gpt-4o --provider openai_chat
-llm-rosetta-gateway add model claude-sonnet-4-20250514 --provider anthropic
-llm-rosetta-gateway add model gemini-2.0-flash --provider google
-```
+也可以使用 `init` 或 `add` 子命令快速创建配置文件。详见 [CLI 参考](cli.md)页面。
 
 ### 3. 发送请求
 
@@ -142,300 +124,6 @@ curl http://localhost:8765/v1/chat/completions \
 ```
 
 网关实时在提供商格式之间转换 SSE 数据块。
-
-## 配置说明
-
-### 提供商配置
-
-每个提供商需要 `api_key` 和 `base_url`：
-
-```jsonc
-"providers": {
-  "openai_chat":      { "api_key": "sk-...",     "base_url": "https://api.openai.com/v1" },
-  "anthropic":        { "api_key": "sk-ant-...", "base_url": "https://api.anthropic.com" },
-  "google":           { "api_key": "AIza...",    "base_url": "https://generativelanguage.googleapis.com" }
-}
-```
-
-提供商名称必须是以下之一：`openai_chat`、`openai_responses`、`anthropic`、`google`。
-
-#### API 密钥轮转
-
-每个提供商支持通过逗号分隔配置多个 API 密钥，网关以轮询方式依次使用：
-
-```jsonc
-"openai_chat": { "api_key": "sk-key1,sk-key2,sk-key3", "base_url": "https://api.openai.com/v1" }
-```
-
-#### 逐提供商代理
-
-可为单个提供商指定代理：
-
-```jsonc
-"anthropic": { "api_key": "sk-ant-...", "base_url": "https://api.anthropic.com", "proxy": "http://proxy:8080" }
-```
-
-### 代理配置
-
-可在 `server` 部分设置全局代理，适用于所有提供商（除非逐提供商覆盖）：
-
-```jsonc
-{
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8765,
-    "proxy": "http://proxy.example.com:8080"
-  }
-}
-```
-
-CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
-
-### 模型路由
-
-`models` 部分将模型名称映射到提供商：
-
-```jsonc
-"models": {
-  "gpt-4o": "openai_chat",
-  "claude-sonnet-4-20250514": "anthropic",
-  "gemini-2.0-flash": "google"
-}
-```
-
-当请求包含 `"model": "claude-sonnet-4-20250514"` 时，网关查找到 `anthropic` 并相应转发。
-
-### CLI 选项
-
-```
-llm-rosetta-gateway [选项] [命令]
-
-选项:
-  --config, -c PATH    配置文件路径（未指定时自动搜索）
-  --version, -V        显示版本并退出
-  --no-banner          抑制启动横幅显示
-  --edit, -e           在 $EDITOR 中打开配置文件进行编辑
-  --host HOST          覆盖服务器主机
-  --port PORT          覆盖服务器端口
-  --proxy URL          所有上游请求的 HTTP/SOCKS 代理 URL
-  --log-level LEVEL    日志级别：debug, info, warning, error（默认：info）
-
-命令:
-  init                 在 ~/.config/llm-rosetta-gateway/ 创建模板 config.jsonc
-
-  add provider <name>  添加提供商条目到配置
-    --api-key KEY        API 密钥或 ${ENV_VAR} 占位符
-    --base-url URL       提供商基础 URL（已知提供商自动填充）
-
-  add model <name>     添加模型路由条目到配置
-    --provider NAME      目标提供商名称
-```
-
-#### 配置文件自动发现
-
-未指定 `--config` 时，网关按以下顺序搜索配置文件：
-
-1. `./config.jsonc` — 当前工作目录
-2. `~/.config/llm-rosetta-gateway/config.jsonc` — XDG 标准位置
-3. `~/.llm-rosetta-gateway/config.jsonc` — dotfile 约定
-
-## 编程方式使用
-
-网关也可以作为库使用：
-
-```python
-from llm_rosetta.gateway import create_app, GatewayConfig, load_config
-
-# 加载配置并创建 ASGI 应用
-raw = load_config("config.jsonc")
-config = GatewayConfig(raw)
-app = create_app(config)
-
-# 挂载到你自己的 ASGI 应用中，或使用任意 ASGI 服务器运行
-import uvicorn
-uvicorn.run(app, host="0.0.0.0", port=8765)
-```
-
-## CLI 工具集成
-
-网关可以作为主流 AI 编程 CLI 工具的后端。每个工具使用不同的 API 格式——网关会自动处理格式转换。
-
-### Claude Code
-
-Claude Code 使用 Anthropic Messages API (`/v1/messages`)。
-
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:8765
-export ANTHROPIC_API_KEY=your-key  # 或任意占位符
-export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
-claude --model claude-sonnet-4-20250514
-```
-
-或在 `~/.claude/settings.json` 中配置：
-
-```json
-{
-  "env": {
-    "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
-    "ANTHROPIC_BASE_URL": "http://localhost:8765",
-    "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
-  }
-}
-```
-
-**支持功能**：对话、多轮对话、图片、工具调用、流式传输 ✅
-
-### Kilo Code
-
-Kilo Code 使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
-
-在 `~/.config/kilo/kilo.jsonc` 中添加自定义提供商：
-
-```jsonc
-{
-  "provider": {
-    "rosetta": {
-      "api": "openai",
-      "name": "Rosetta Gateway",
-      "models": {
-        "claude-sonnet-4-20250514": {
-          "name": "Claude Sonnet 4",
-          "attachment": true,
-          "tool_call": true,
-          "cost": { "input": 0, "output": 0 },
-          "limit": { "context": 200000, "output": 8192 }
-        }
-        // 根据需要添加更多模型
-      },
-      "options": {
-        "apiKey": "your-key",
-        "baseURL": "http://localhost:8765/v1"
-      }
-    }
-  }
-}
-```
-
-然后使用：`kilo --model rosetta/claude-sonnet-4-20250514`
-
-**支持功能**：对话、多轮对话、工具调用、流式传输 ✅
-
-### OpenAI Codex CLI
-
-Codex CLI 使用 OpenAI Responses API (`/v1/responses`)。
-
-创建 `~/.codex/config.toml`：
-
-```toml
-model = "gpt-4o"
-model_provider = "rosetta"
-
-[model_providers.rosetta]
-name = "Rosetta Gateway"
-base_url = "http://localhost:8765/v1"
-env_key = "ROSETTA_API_KEY"
-wire_api = "responses"
-```
-
-然后：
-
-```bash
-export ROSETTA_API_KEY=your-key
-codex "your prompt here"
-```
-
-**支持功能**：对话、多轮对话、工具调用、流式传输 ✓
-
-### Ollama
-
-[Ollama](https://ollama.com/)（v0.13+）在本地提供 OpenAI 兼容接口，非常适合作为网关的上游提供商或客户端。
-
-#### 将 Ollama 作为上游提供商
-
-将网关提供商指向本地 Ollama 实例：
-
-```jsonc
-"providers": {
-  "openai_chat": { "api_key": "ollama", "base_url": "http://localhost:11434/v1" }
-},
-"models": {
-  "llama3.2": "openai_chat",
-  "qwen3:8b": "openai_chat"
-}
-```
-
-这样任何客户端（Anthropic SDK、Google SDK 等）都可以通过网关查询本地 Ollama 模型，格式自动转换。
-
-#### 将 Ollama 作为客户端
-
-Ollama v0.13+ 支持网关可以提供的三种 API 格式：
-
-| Ollama 端点 | 网关路由 | 转换器 |
-|---|---|---|
-| `/v1/chat/completions` | 相同 | `openai_chat` |
-| `/v1/responses` | 相同 | `openai_responses`（v0.13.3+） |
-| `/v1/messages` | 相同 | `anthropic`（v0.14.0+） |
-
-这意味着基于 Ollama OpenAI 兼容层构建的工具可以通过网关访问云提供商（Anthropic、Google 等），无需更改代码——只需将 base URL 指向网关即可。
-
-### Gemini CLI
-
-Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
-
-=== "配置文件（推荐）"
-
-    **`~/.gemini/.env`** — Gemini CLI 启动时自动读取此文件：
-
-    ```bash
-    GEMINI_API_KEY=your-key
-    GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-    ```
-
-    **`~/.gemini/settings.json`** — 设置认证模式和默认模型：
-
-    ```json
-    {
-        "model": {
-            "name": "gemini-2.5-pro"
-        },
-        "security": {
-            "auth": {
-                "selectedType": "gemini-api-key"
-            }
-        }
-    }
-    ```
-
-    两个文件配置好后，直接运行 `gemini` 即可，无需额外参数。
-
-=== "环境变量"
-
-    ```bash
-    export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-    export GEMINI_API_KEY=your-key
-    gemini -m gemini-2.5-pro -p "your prompt here"
-    ```
-
-!!! tip "Bearer token 认证"
-    如果上游代理要求 Bearer token 认证（如 OneAPI），在 `~/.gemini/.env` 中添加：
-
-    ```bash
-    GEMINI_API_KEY_AUTH_MECHANISM=bearer
-    ```
-
-    这会将 API key 作为 `Bearer` token 放在 `Authorization` 请求头中发送，而非作为查询参数。
-
-!!! note "TTY 要求"
-    Gemini CLI 即使在无头模式（`-p`）下也需要 TTY。在脚本或非交互式 shell 中运行时，请使用 `script` 包装：
-
-    ```bash
-    script -qec 'gemini -m gemini-2.5-pro -p "your prompt"' /dev/null
-    ```
-
-!!! note "网络依赖"
-    Gemini CLI 在启动时会连接 `github.com` 和 `play.googleapis.com`。这些地址必须可达（直连或通过代理）。
-
-**支持功能**：对话、流式传输 ✅
 
 ## 管理面板
 
