@@ -6,7 +6,7 @@ hide:
 ---
 
 <div style="display: flex; align-items: center; gap: 1.5em; margin-bottom: 0.5em;">
-  <img src="images/rosetta_stone.jpg" alt="Rosetta Stone" style="width: 96px; border-radius: 10px; flex-shrink: 0;">
+  <img src="images/rosetta_stone.png" alt="Rosetta Stone" style="width: 96px; border-radius: 10px; flex-shrink: 0;">
   <div>
     <h1 style="margin: 0 0 0.2em 0;">LLM-Rosetta</h1>
     <p style="margin: 0; font-size: 1.1em; opacity: 0.85;">用于 LLM 提供商 API 之间的统一消息格式转换库。</p>
