@@ -162,9 +162,11 @@ class GatewayConfig:
                     "capabilities", list(self.DEFAULT_CAPABILITIES)
                 )
 
-        self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
-        self.port: int = raw.get("server", {}).get("port", 8765)
-        self.proxy: str | None = raw.get("server", {}).get("proxy")
+        _server = raw.get("server", {})
+        self.host: str = _server.get("host", "0.0.0.0")
+        self.port: int = _server.get("port", 8765)
+        self.proxy: str | None = _server.get("proxy")
+        self.api_key: str | None = _server.get("api_key")
 
         # Debug / logging options (config + env-var overrides)
         _debug = raw.get("debug", {})

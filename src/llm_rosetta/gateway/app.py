@@ -325,6 +325,14 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
     global _config
     _config = config
 
+    # Expose global proxy as env vars so downstream code (e.g. image
+    # downloads in converters) can use it without threading config through.
+    import os
+
+    if config.proxy:
+        os.environ.setdefault("HTTP_PROXY", config.proxy)
+        os.environ.setdefault("HTTPS_PROXY", config.proxy)
+
     metadata_store = ProviderMetadataStore()
 
     routes = [
@@ -353,13 +361,16 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
         _flush_now(app)
         await close_resources(metadata_store=metadata_store)
 
+    from .auth import GatewayAuthMiddleware
+
     middleware = [
         Middleware(
-            CORSMiddleware,
+            CORSMiddleware,  # type: ignore[arg-type]
             allow_origins=["*"],
             allow_methods=["*"],
             allow_headers=["*"],
         ),
+        Middleware(GatewayAuthMiddleware, api_key=config.api_key),  # type: ignore[arg-type]
     ]
 
     # Append admin panel routes before constructing the app so that
