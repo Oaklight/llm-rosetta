@@ -1,0 +1,30 @@
+# NOTE: Inside the container, "localhost" / "127.0.0.1" refers to the
+# container itself, NOT the host machine. If your config.jsonc uses a
+# proxy or base_url pointing to the host (e.g. a local proxy server),
+# replace "localhost" with one of:
+#   - "host.docker.internal"  (Docker Desktop on macOS/Windows)
+#   - "172.17.0.1"            (default Docker bridge on Linux)
+#   - the actual LAN IP of your host
+#
+# Example in config.jsonc:
+#   "server": { "proxy": "http://host.docker.internal:7890" }
+#   "providers": { "my_local": { "base_url": "http://172.17.0.1:11434/v1" } }
+
+services:
+  llm-rosetta-gateway:
+    image: oaklight/llm-rosetta-gateway
+    ports:
+      - "8765:8765" # Gateway API + admin panel
+    volumes:
+      - ./config:/config # Mount your config directory (contains config.jsonc)
+    environment:
+      - PUID=${PUID:-1000} # Match your host user's UID
+      - PGID=${PGID:-1000} # Match your host user's GID
+      # API keys — referenced as ${ENV_VAR} in config.jsonc
+      # - OPENAI_API_KEY=sk-xxx
+      # - ANTHROPIC_API_KEY=sk-ant-xxx
+      # - GOOGLE_API_KEY=xxx
+    # Uncomment to allow the container to reach host services via "host.docker.internal"
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"
+    restart: unless-stopped
