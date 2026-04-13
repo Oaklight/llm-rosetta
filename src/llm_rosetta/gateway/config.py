@@ -130,7 +130,7 @@ class GatewayConfig:
         # Map provider name → API standard type.
         # If the provider config has a "type" field, use it; otherwise the
         # provider name itself is treated as the type (backward compatible).
-        self.provider_types: dict[str, ProviderType] = {  # type: ignore[invalid-assignment]
+        self.provider_types: dict[str, ProviderType] = {  # ty: ignore[invalid-assignment]
             name: cfg.get("type", name) for name, cfg in self._raw_providers.items()
         }
 
