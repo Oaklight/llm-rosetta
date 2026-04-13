@@ -6,6 +6,33 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## Unreleased
+
+### Added
+
+- **Gateway API key authentication**: Configurable API key (`server.api_key`) protects AI request endpoints (`/v1/*`). Supports format-native credential extraction — OpenAI `Authorization: Bearer`, Anthropic `x-api-key`, Google `x-goog-api-key` / `?key=` query param. When no key is configured, all requests pass through (backward compatible)
+- **Provider enable/disable**: Each provider now supports an `enabled` field (default `true`). Disabled providers and their models are silently excluded from routing
+- **Docker support**: Official `Dockerfile`, `docker-compose.yml`, and Makefile targets (`build-docker`, `push-docker`, `run-docker`) for containerized deployment. Alpine-based image with non-root user, config volume mount, and PUID/PGID support
+- **Admin panel enhancements**:
+    - Provider toggle switches (enable/disable without deleting)
+    - Model search and column sorting
+    - Provider rename with automatic model reference updates
+    - Network diagnostics button (connectivity check + proxy test)
+    - Model testing with collapsible raw request/response details and image preview for vision tests
+    - Embedded test image (base64 data URI) to avoid external network downloads
+    - `reasoning_effort: 'low'` for reasoning model tests to limit token budget
+
+### Changed
+
+- **Admin panel authentication removed from gateway**: Admin panel endpoints (`/admin/*`) no longer require the gateway API key. Admin access control is delegated to the reverse proxy (e.g. Caddy, Nginx). The gateway API key now only authenticates AI request endpoints (`/v1/*`)
+
+### Fixed
+
+- **User-Agent header for image URL downloads**: Google GenAI content converter now sends `User-Agent: llm-rosetta/1.0 (image fetch)` when downloading image URLs for inline base64 conversion, preventing 403 Forbidden from servers like Wikimedia
+- **Image URL download with proxy support**: Image downloads in the Google GenAI converter now respect `HTTPS_PROXY` / `HTTP_PROXY` environment variables
+- **Empty content fallback for reasoning models**: Admin panel test results now correctly handle `content: ""` (from reasoning models where all `max_tokens` are consumed by reasoning tokens) instead of showing raw JSON
+- **Config file not found error**: Gateway now shows a friendly error message when the config file doesn't exist, instead of a Python traceback
+
 ## v0.5.0 — 2026-04-12
 
 ### Added

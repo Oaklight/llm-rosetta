@@ -25,6 +25,16 @@ Available types: `openai_chat`, `openai_responses`, `anthropic`, `google`.
 !!! note "Backward compatibility"
     If `type` is omitted, the provider name itself is used as the type. This means configs using the old format (where provider names were `openai_chat`, `anthropic`, etc.) continue to work without changes.
 
+### Enabling / Disabling Providers
+
+Each provider supports an `enabled` field (default `true`). Disabled providers and their associated models are silently excluded from routing:
+
+```jsonc
+"my-openai": { "type": "openai_chat", "api_key": "sk-...", "base_url": "https://api.openai.com/v1", "enabled": false }
+```
+
+This is useful for temporarily taking a provider offline without deleting its configuration. The [admin panel](admin-panel.md) provides toggle switches for this.
+
 ### API Key Rotation
 
 Each provider supports multiple API keys via comma-separated values. The gateway rotates through them in round-robin order:
@@ -94,6 +104,39 @@ Available capabilities: `text`, `vision`, `tools`. If not specified, defaults to
 
 Capabilities are displayed in the [admin panel](admin-panel.md) and can be edited there.
 
+## Gateway API Key
+
+Protect AI request endpoints with a gateway-level API key:
+
+```jsonc
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "api_key": "my-secret-gateway-key"
+  }
+}
+```
+
+When configured, all `/v1/*` endpoints require authentication using the format native to each API standard:
+
+| API Standard | Credential Format |
+|-------------|-------------------|
+| OpenAI Chat / Responses | `Authorization: Bearer <key>` |
+| Anthropic | `x-api-key: <key>` |
+| Google GenAI | `x-goog-api-key: <key>` or `?key=<key>` query param |
+
+The API key also supports `${ENV_VAR}` substitution:
+
+```jsonc
+"api_key": "${GATEWAY_API_KEY}"
+```
+
+!!! note "Admin panel"
+    The admin panel (`/admin/*`) does **not** require the gateway API key. If you need to protect the admin panel, use a reverse proxy (e.g. Caddy with `basicauth`, Nginx with `auth_basic`).
+
+When no `api_key` is configured, all requests pass through without authentication (backward compatible).
+
 ## Debug Options
 
 ```jsonc
@@ -124,7 +167,8 @@ These can also be set via environment variables: `LLM_ROSETTA_VERBOSE=1`, `LLM_R
   },
   "server": {
     "host": "0.0.0.0",
-    "port": 8765
+    "port": 8765,
+    "api_key": "${GATEWAY_API_KEY}"
   }
 }
 ```

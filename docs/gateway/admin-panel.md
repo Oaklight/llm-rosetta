@@ -33,9 +33,25 @@ When editing, API keys are shown as a password field with a visibility toggle an
 
 Below the providers section, a model routing table lists all configured models with their target provider and capabilities (text, vision, tools). You can:
 
+- **Search** models by name using the search box
+- **Sort** by model name or provider by clicking column headers
 - **Add** a new model with provider assignment
 - **Edit** model capabilities inline
 - **Delete** a model routing entry
+- **Test** a model directly from the admin panel (text, vision, streaming, or tool calling)
+
+### Model Testing
+
+Click the **Test** button on any model row to run a quick test. The test dropdown offers:
+
+| Test Type | Description |
+|-----------|-------------|
+| Text | Simple text query |
+| Vision | Image comprehension (embedded test image) |
+| Stream | Streaming text response |
+| Tools | Function calling with a weather tool |
+
+Test results show the extracted model reply in the main output area, with collapsible sections for the raw request payload, raw response body, and (for vision tests) the test image preview.
 
 ## Dashboard
 
@@ -104,6 +120,16 @@ The admin panel ships with 8 themes, selectable from the dropdown in the top-rig
 | Rose Pine | Muted rose and pine tones |
 
 Theme selection is stored in `localStorage` and persists across browser sessions.
+
+## Authentication
+
+The admin panel does **not** require the gateway API key. If your gateway is exposed to a network, protect the admin panel using a reverse proxy:
+
+- **Caddy**: Use `basicauth` directive
+- **Nginx**: Use `auth_basic` directive
+- **Traefik**: Use BasicAuth middleware
+
+The gateway API key (configured via `server.api_key`) only protects AI request endpoints (`/v1/*`). See [Configuration — Gateway API Key](configuration.md#gateway-api-key) for details.
 
 ## Internationalization
 

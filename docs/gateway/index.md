@@ -125,6 +125,29 @@ curl http://localhost:8765/v1/chat/completions \
 
 The gateway converts SSE chunks in real time between provider formats.
 
+## Authentication
+
+Protect AI endpoints with a gateway API key in the `server` config:
+
+```jsonc
+"server": { "api_key": "my-secret-key" }
+```
+
+Requests must provide the key in the format native to each API standard (Bearer token, `x-api-key` header, etc.). See [Configuration — Gateway API Key](configuration.md#gateway-api-key) for details.
+
+## Docker Deployment
+
+```bash
+# Build and run with Docker Compose
+docker compose up -d
+
+# Or build manually
+docker build -t llm-rosetta-gateway .
+docker run -p 8765:8765 -v /path/to/config:/config llm-rosetta-gateway
+```
+
+See the `docker/` directory for `docker-compose.yml` and the Makefile for `build-docker` / `run-docker` targets.
+
 ## Admin Panel
 
 The gateway includes a built-in web admin panel at `/admin/` for managing configuration, monitoring real-time metrics, and viewing request logs. See the [Admin Panel](admin-panel.md) page for details.
