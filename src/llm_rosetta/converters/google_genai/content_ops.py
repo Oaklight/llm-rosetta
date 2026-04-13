@@ -8,8 +8,13 @@ and other content parts using Google's Part-based architecture.
 Self-contained: does not depend on utils/FieldMapper or utils/ToolCallConverter.
 """
 
+import base64
+import logging
+import mimetypes
 import warnings
 from typing import Any, cast
+
+import httpx
 
 from ...types.ir import (
     AudioData,
@@ -94,13 +99,45 @@ class GoogleGenAIContentOps(BaseContentOps):
                 }
             }
 
-        # URL-based images not supported
-        if "image_url" in ir_image or "url" in ir_image:
-            warnings.warn(
-                "Google GenAI不直接支持图片URL，需要先上传文件。"
-                "请考虑使用file_data或先转换为inline_data。"
-            )
-            return None
+        # URL-based images: download and convert to inline base64
+        url = ir_image.get("image_url") or ir_image.get("url")
+        if url:
+            # Handle data URIs directly
+            if url.startswith("data:"):
+                # data:image/png;base64,<data>
+                try:
+                    header, data = url.split(",", 1)
+                    mime = header.split(":")[1].split(";")[0]
+                    return {"inlineData": {"mimeType": mime, "data": data}}
+                except (IndexError, ValueError):
+                    pass
+                return None
+
+            try:
+                import os
+
+                proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+                client_kwargs: dict[str, Any] = {
+                    "timeout": 30,
+                    "follow_redirects": True,
+                }
+                if proxy:
+                    client_kwargs["proxy"] = proxy
+                resp = httpx.get(url, **client_kwargs)
+                resp.raise_for_status()
+                mime = (
+                    resp.headers.get("content-type", "").split(";")[0].strip()
+                    or mimetypes.guess_type(url)[0]
+                    or "image/jpeg"
+                )
+                b64 = base64.b64encode(resp.content).decode()
+                return {"inlineData": {"mimeType": mime, "data": b64}}
+            except Exception as exc:
+                logging.getLogger("llm-rosetta").warning(
+                    "Failed to download image URL for Google GenAI conversion: %s",
+                    exc,
+                )
+                return None
 
         return None
 

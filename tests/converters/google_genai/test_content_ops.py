@@ -72,12 +72,41 @@ class TestGoogleGenAIContentOps:
         assert result["inlineData"]["mimeType"] == "image/png"
         assert result["inlineData"]["data"] == "abc123"
 
-    def test_ir_image_to_p_with_url_warns(self):
-        """Test IR ImagePart with URL emits warning and returns None."""
+    def test_ir_image_to_p_with_url_downloads(self):
+        """Test IR ImagePart with URL downloads and converts to inline base64."""
+        from unittest.mock import MagicMock, patch
+
         ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
-        with pytest.warns(UserWarning, match="不直接支持图片URL"):
+        mock_resp = MagicMock()
+        mock_resp.content = b"\x89PNG\r\n"
+        mock_resp.headers = {"content-type": "image/png"}
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("llm_rosetta.converters.google_genai.content_ops.httpx.get", return_value=mock_resp):
+            result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
+
+        assert result is not None
+        assert result["inlineData"]["mimeType"] == "image/png"
+        import base64
+        assert result["inlineData"]["data"] == base64.b64encode(b"\x89PNG\r\n").decode()
+
+    def test_ir_image_to_p_with_url_download_failure(self):
+        """Test IR ImagePart with URL returns None on download failure."""
+        from unittest.mock import patch
+
+        ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
+        with patch("llm_rosetta.converters.google_genai.content_ops.httpx.get", side_effect=Exception("timeout")):
             result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
         assert result is None
+
+    def test_ir_image_to_p_with_data_uri(self):
+        """Test IR ImagePart with data URI is parsed directly."""
+        data_uri = "data:image/png;base64,aWNvbg=="
+        ir_image = ImagePart(type="image", image_url=data_uri)
+        result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
+        assert result is not None
+        assert result["inlineData"]["mimeType"] == "image/png"
+        assert result["inlineData"]["data"] == "aWNvbg=="
 
     def test_p_image_to_ir(self):
         """Test Google inline_data image Part → IR ImagePart."""
