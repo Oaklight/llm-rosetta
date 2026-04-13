@@ -234,6 +234,23 @@ canvas { width: 100%; height: 160px; }
 .test-meta { display: flex; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
 .test-meta .meta-item { font-size: 12px; color: var(--text-dim); }
 .test-meta .meta-item strong { color: var(--text); }
+.test-details { margin-bottom: 10px; }
+.test-details summary {
+  cursor: pointer; font-size: 12px; color: var(--text-dim); user-select: none;
+  padding: 4px 0; list-style: none;
+}
+.test-details summary::before { content:'\25B6'; display:inline-block; margin-right:6px; font-size:9px; transition:transform .15s; }
+.test-details[open] summary::before { transform:rotate(90deg); }
+.test-details .detail-body {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 10px 12px; font-family: var(--mono); font-size: 11px; line-height: 1.5;
+  max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-word;
+  margin-top: 4px;
+}
+.test-details .detail-body .detail-label { color: var(--text-dim); font-size: 10px; text-transform: uppercase; margin-bottom: 2px; }
+.test-details .detail-body .detail-section { margin-bottom: 8px; }
+.test-details .detail-body .detail-section:last-child { margin-bottom: 0; }
+.test-details .detail-body img { max-width: 120px; max-height: 80px; border-radius: 4px; margin-top: 4px; }
 .test-output {
   background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 14px; font-family: var(--mono); font-size: 13px; line-height: 1.6;
@@ -475,6 +492,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   <div class="modal modal-wide">
     <h3 id="testModalTitle">Test Result</h3>
     <div class="test-meta" id="testMeta"></div>
+    <details class="test-details" id="testDetails">
+      <summary data-i18n="test.requestDetails">Request Details</summary>
+      <div class="detail-body" id="testDetailsBody"></div>
+    </details>
     <div class="test-output" id="testOutput"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('testModal')" data-i18n="btn.close">Close</button>
@@ -590,7 +611,7 @@ const I18N = {
     'error.fieldsRequired':'Name, Base URL, and API Key are required',
     'error.modelRequired':'All fields are required',
     'page.info':'Page {current} / {total} ({count} total)',
-    'test.connecting':'Connecting...', 'test.sending':'Sending request...',
+    'test.connecting':'Connecting...', 'test.sending':'Sending request...', 'test.requestDetails':'Request Details',
     'test.emptyResponse':'(empty response)',
     'hint.docker':'In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.',
     'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
@@ -640,7 +661,7 @@ const I18N = {
     'error.fieldsRequired':'\u540d\u79f0\u3001Base URL \u548c API Key \u4e3a\u5fc5\u586b\u9879',
     'error.modelRequired':'\u6240\u6709\u5b57\u6bb5\u4e3a\u5fc5\u586b\u9879',
     'page.info':'\u7b2c {current} / {total} \u9875\uff08\u5171 {count} \u6761\uff09',
-    'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...',
+    'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...', 'test.requestDetails':'\u8bf7\u6c42\u8be6\u60c5',
     'test.emptyResponse':'\uff08\u7a7a\u54cd\u5e94\uff09',
     'hint.docker':'\u5728 Docker \u4e2d\uff0c"localhost" \u6307\u7684\u662f\u5bb9\u5668\u81ea\u8eab\u3002\u8981\u8bbf\u95ee\u5bbf\u4e3b\u673a\uff0c\u8bf7\u4f7f\u7528 "host.docker.internal"\uff08macOS/Windows\uff09\u6216 "172.17.0.1"\uff08Linux\uff09\u3002',
     'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
@@ -1281,14 +1302,35 @@ function toggleTestMenu(btn) {
   setTimeout(() => document.addEventListener('click', close), 0);
 }
 
+function buildTestDetails(type) {
+  switch(type) {
+    case 'text':
+      return `<div class="detail-section"><div class="detail-label">Prompt</div>Say "Hello! The gateway test is working." and nothing else.</div>`;
+    case 'stream':
+      return `<div class="detail-section"><div class="detail-label">Prompt</div>Count from 1 to 5, one number per line.</div>
+<div class="detail-section"><div class="detail-label">Mode</div>stream: true</div>`;
+    case 'tools':
+      return `<div class="detail-section"><div class="detail-label">Prompt</div>What's the weather in San Francisco?</div>
+<div class="detail-section"><div class="detail-label">Tool</div>get_weather(location: string)\nGet current weather for a location</div>`;
+    case 'vision':
+      return `<div class="detail-section"><div class="detail-label">Prompt</div>Describe what you see in this image in one sentence.</div>
+<div class="detail-section"><div class="detail-label">Image</div><img src="${TEST_IMAGE_URL}" alt="test image"></div>`;
+    default: return '';
+  }
+}
+
 async function runTest(model, type) {
   // Close any open dropdown
   document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
 
   const output = document.getElementById('testOutput');
   const meta = document.getElementById('testMeta');
+  const details = document.getElementById('testDetails');
+  const detailsBody = document.getElementById('testDetailsBody');
   document.getElementById('testModalTitle').textContent = `Test: ${getTestLabel(type)}`;
   meta.innerHTML = `<div class="meta-item"><strong>Model:</strong> ${esc(model)}</div>`;
+  details.removeAttribute('open');
+  detailsBody.innerHTML = buildTestDetails(type);
   output.textContent = '';
   output.className = 'test-output';
   document.getElementById('testModal').classList.add('open');
