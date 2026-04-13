@@ -313,8 +313,18 @@ def main() -> None:
         logger.error(
             "No config file found. Searched:\n  %s\n"
             "Provide one with --config or create a config at one of the above paths.\n"
-            "Tip: use 'llm-rosetta-gateway add provider <name>' to bootstrap a config.",
+            "Tip: use 'llm-rosetta-gateway init' to create a template config.",
             "\n  ".join(PATHS_TO_TRY),
+        )
+        sys.exit(1)
+
+    if not os.path.isfile(config_path):
+        logging.basicConfig(level=logging.ERROR)
+        logger.error(
+            "Config file not found: %s\n"
+            "Tip: use 'llm-rosetta-gateway init --config %s' to create one.",
+            config_path,
+            config_path,
         )
         sys.exit(1)
 
