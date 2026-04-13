@@ -163,6 +163,12 @@ async def put_provider(request: Request) -> Response:
         if proxy:
             provider_entry["proxy"] = proxy
 
+    # Preserve enabled state from existing entry (toggle is separate endpoint)
+    if resolve_name in existing_providers:
+        existing_enabled = existing_providers[resolve_name].get("enabled")
+        if existing_enabled is not None:
+            provider_entry["enabled"] = existing_enabled
+
     # Handle rename: remove old entry and update model references
     rename_from = body.get("rename_from")
     if rename_from and rename_from != name:
@@ -280,6 +286,55 @@ async def delete_provider(request: Request) -> Response:
     )
 
 
+async def toggle_provider(request: Request) -> Response:
+    """Toggle a provider's enabled/disabled state."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    name = request.path_params["name"]
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    providers = data.get("providers", {})
+    if name not in providers:
+        return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
+
+    # Toggle: if currently enabled (or unset → default True), disable; otherwise enable
+    currently_enabled = providers[name].get("enabled", True)
+    new_enabled = not currently_enabled
+
+    if new_enabled:
+        # Remove the key entirely when re-enabling (True is the default)
+        providers[name].pop("enabled", None)
+    else:
+        providers[name]["enabled"] = False
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse({"ok": True, "provider": name, "enabled": new_enabled})
+
+
 async def put_model(request: Request) -> Response:
     """Add or update a model routing entry."""
     config_path = _get_config_path(request)
@@ -310,6 +365,23 @@ async def put_model(request: Request) -> Response:
         )
 
     capabilities = body.get("capabilities", ["text"])
+
+    # Handle rename: remove old entry
+    rename_from = body.get("rename_from")
+    if rename_from and rename_from != name:
+        models = data.get("models", {})
+        if rename_from not in models:
+            return JSONResponse(
+                {"error": f"Original model '{rename_from}' not found"},
+                status_code=404,
+            )
+        if name in models:
+            return JSONResponse(
+                {"error": f"Model '{name}' already exists"},
+                status_code=409,
+            )
+        del models[rename_from]
+
     data.setdefault("models", {})[name] = {
         "provider": provider,
         "capabilities": capabilities,
@@ -521,6 +593,67 @@ async def get_provider_key(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Network diagnostics
+# ---------------------------------------------------------------------------
+
+
+async def network_diagnostics(request: Request) -> Response:
+    """Run basic network diagnostics: IP geolocation and Google connectivity.
+
+    Uses the gateway's configured global proxy (if any) so the diagnostics
+    reflect the actual outbound path of API requests.
+    """
+    import httpx
+
+    # Resolve the global proxy from current gateway config
+    gw_config: GatewayConfig | None = getattr(
+        request.app.state, "gateway_config", None
+    )
+    proxy_url = gw_config.proxy if gw_config else None
+
+    client_kwargs: dict[str, Any] = {"timeout": 15}
+    if proxy_url:
+        client_kwargs["proxy"] = proxy_url
+
+    results: dict[str, Any] = {}
+    if proxy_url:
+        results["proxy"] = proxy_url
+
+    # IP geolocation via ip-api.com (no key required, JSON by default)
+    try:
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            resp = await client.get(
+                "http://ip-api.com/json/?fields=query,country,city,isp"
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                results["ip"] = {
+                    "ok": True,
+                    "ip": data.get("query", ""),
+                    "country": data.get("country", ""),
+                    "city": data.get("city", ""),
+                    "isp": data.get("isp", ""),
+                }
+            else:
+                results["ip"] = {"ok": False, "error": f"HTTP {resp.status_code}"}
+    except Exception as exc:
+        results["ip"] = {"ok": False, "error": str(exc)}
+
+    # Google connectivity
+    try:
+        async with httpx.AsyncClient(**client_kwargs) as client:
+            resp = await client.get("https://www.google.com/generate_204")
+            results["google"] = {
+                "ok": resp.status_code == 204,
+                "status": resp.status_code,
+            }
+    except Exception as exc:
+        results["google"] = {"ok": False, "error": str(exc)}
+
+    return JSONResponse(results)
+
+
+# ---------------------------------------------------------------------------
 # Route table
 # ---------------------------------------------------------------------------
 
@@ -539,6 +672,11 @@ admin_routes: list[Route] = [
         "/admin/api/config/providers/{name}",
         delete_provider,
         methods=["DELETE"],
+    ),
+    Route(
+        "/admin/api/config/providers/{name}/toggle",
+        toggle_provider,
+        methods=["POST"],
     ),
     Route(
         "/admin/api/config/providers/{name}/key",
@@ -562,4 +700,6 @@ admin_routes: list[Route] = [
     # Request log
     Route("/admin/api/requests", get_requests, methods=["GET"]),
     Route("/admin/api/requests", clear_requests, methods=["DELETE"]),
+    # Network diagnostics
+    Route("/admin/api/diagnostics/network", network_diagnostics, methods=["GET"]),
 ]

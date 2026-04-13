@@ -118,7 +118,15 @@ tr:hover td { background: var(--bg-hover); }
   padding: 2px 6px; border-radius: 4px; font-size: 11px;
 }
 .provider-card .field code { overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: inline-block; vertical-align: bottom; }
+.provider-card.disabled { opacity: 0.5; }
+.provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+.toggle { position:relative;display:inline-block;width:36px;height:20px; }
+.toggle input { opacity:0;width:0;height:0; }
+.toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:20px;transition:.2s; }
+.toggle .slider::before { content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s; }
+.toggle input:checked + .slider { background:var(--accent); }
+.toggle input:checked + .slider::before { transform:translateX(16px); }
 .key-actions { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
 .key-btn {
   background: none; border: none; cursor: pointer; padding: 2px 4px;
@@ -239,6 +247,32 @@ canvas { width: 100%; height: 160px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Tooltip */
+.hint-icon { display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:11px;font-weight:700;cursor:help;position:relative;vertical-align:middle;margin-left:4px;flex-shrink:0; }
+.hint-icon .hint-popup { display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:12px;font-weight:400;line-height:1.5;color:var(--text);white-space:normal;width:280px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:none; }
+.hint-icon:hover .hint-popup { display:block; }
+
+/* Network diagnostics */
+.net-diag { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
+.net-diag .diag-item { font-size:12px;padding:3px 8px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px; }
+.net-diag .diag-dot { width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0; }
+.net-diag .diag-dot.ok { background:#22c55e; }
+.net-diag .diag-dot.fail { background:#ef4444; }
+.net-diag .diag-dot.loading { background:var(--accent);animation:pulse 1s infinite; }
+@keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.3; } }
+
+/* Sortable table headers */
+th.sortable { cursor:pointer;user-select:none; }
+th.sortable:hover { color:var(--text); }
+th.sortable::after { content:'';display:inline-block;margin-left:4px;opacity:.4;font-size:10px; }
+th.sortable.asc::after { content:'\25B2';opacity:.8; }
+th.sortable.desc::after { content:'\25BC';opacity:.8; }
+
+/* Model search */
+.model-search { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
+.model-search input { flex:1;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.model-count { font-size:12px;color:var(--text-dim); }
+
 /* Responsive */
 @media (max-width: 768px) {
   .chart-row { grid-template-columns: 1fr; }
@@ -288,12 +322,16 @@ canvas { width: 100%; height: 160px; }
       </div>
       <div class="provider-card" style="max-width:480px">
         <div class="form-group" style="margin-bottom:0">
-          <label data-i18n="label.globalProxy">Global Proxy URL</label>
+          <label data-i18n="label.globalProxy">Global Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
           <div style="display:flex;gap:8px">
             <input id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
             <button class="btn btn-primary btn-sm" onclick="saveServerSettings()" data-i18n="btn.save">Save</button>
           </div>
           <div style="font-size:11px;color:var(--text-dim);margin-top:6px" data-i18n="label.globalProxy.hint">Applies to all providers unless overridden per-provider.</div>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="runNetDiag()" data-i18n="diag.runDiag">Network Diagnostics</button>
+            <div class="net-diag" id="netDiagResults"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -309,8 +347,16 @@ canvas { width: 100%; height: 160px; }
         <h2 data-i18n="section.models">Model Routing</h2>
         <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
       </div>
+      <div class="model-search">
+        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
+        <span class="model-count" id="modelCount"></span>
+      </div>
       <table>
-        <thead><tr><th data-i18n="col.model">Model</th><th data-i18n="col.provider">Provider</th><th></th></tr></thead>
+        <thead><tr>
+          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model">Model</th>
+          <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider">Provider</th>
+          <th></th>
+        </tr></thead>
         <tbody id="modelTable"></tbody>
       </table>
     </div>
@@ -375,7 +421,7 @@ canvas { width: 100%; height: 160px; }
       <select id="provType"></select>
     </div>
     <div class="form-group">
-      <label data-i18n="label.baseUrl">Base URL</label>
+      <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
       <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
     </div>
     <div class="form-group">
@@ -387,7 +433,7 @@ canvas { width: 100%; height: 160px; }
       </div>
     </div>
     <div class="form-group">
-      <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)</label>
+      <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
       <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
     </div>
     <div class="modal-actions">
@@ -534,6 +580,7 @@ const I18N = {
     'toast.serverSaved':'Server settings saved',
     'toast.providerSaved':"Provider '{name}' saved",
     'toast.providerDeleted':"Provider '{name}' deleted",
+    'provider.enabled':'Enabled', 'provider.disabled':'Disabled',
     'toast.modelSaved':"Model '{name}' saved",
     'toast.modelDeleted':"Model '{name}' deleted",
     'toast.logCleared':'Logs cleared',
@@ -545,6 +592,11 @@ const I18N = {
     'page.info':'Page {current} / {total} ({count} total)',
     'test.connecting':'Connecting...', 'test.sending':'Sending request...',
     'test.emptyResponse':'(empty response)',
+    'hint.docker':'In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.',
+    'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
+    'diag.testing':'testing...', 'diag.unknown':'unknown', 'diag.direct':'direct, no proxy',
+    'label.searchModels':'Search models...',
+    'model.count':'{shown} / {total} models',
   },
   zh: {
     'tab.config':'\u914d\u7f6e\u7ba1\u7406', 'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
@@ -578,6 +630,7 @@ const I18N = {
     'toast.serverSaved':'\u670d\u52a1\u5668\u8bbe\u7f6e\u5df2\u4fdd\u5b58',
     'toast.providerSaved':"\u670d\u52a1\u5546 '{name}' \u5df2\u4fdd\u5b58",
     'toast.providerDeleted':"\u670d\u52a1\u5546 '{name}' \u5df2\u5220\u9664",
+    'provider.enabled':'\u5df2\u542f\u7528', 'provider.disabled':'\u5df2\u7981\u7528',
     'toast.modelSaved':"\u6a21\u578b '{name}' \u5df2\u4fdd\u5b58",
     'toast.modelDeleted':"\u6a21\u578b '{name}' \u5df2\u5220\u9664",
     'toast.logCleared':'\u65e5\u5fd7\u5df2\u6e05\u9664',
@@ -589,6 +642,11 @@ const I18N = {
     'page.info':'\u7b2c {current} / {total} \u9875\uff08\u5171 {count} \u6761\uff09',
     'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...',
     'test.emptyResponse':'\uff08\u7a7a\u54cd\u5e94\uff09',
+    'hint.docker':'\u5728 Docker \u4e2d\uff0c"localhost" \u6307\u7684\u662f\u5bb9\u5668\u81ea\u8eab\u3002\u8981\u8bbf\u95ee\u5bbf\u4e3b\u673a\uff0c\u8bf7\u4f7f\u7528 "host.docker.internal"\uff08macOS/Windows\uff09\u6216 "172.17.0.1"\uff08Linux\uff09\u3002',
+    'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
+    'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
+    'label.searchModels':'\u641c\u7d22\u6a21\u578b...',
+    'model.count':'{shown} / {total} \u4e2a\u6a21\u578b',
   },
 };
 
@@ -699,7 +757,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
 function openModelModal(model, provider, capabilities) {
   document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
-  document.getElementById('modelName').readOnly = !!model;
+  document.getElementById('modelName').dataset.originalName = model || '';
   // Populate provider dropdown from config
   const sel = document.getElementById('modelProvider');
   sel.innerHTML = '';
@@ -738,6 +796,27 @@ async function saveServerSettings() {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
+async function runNetDiag() {
+  const el = document.getElementById('netDiagResults');
+  el.innerHTML = `
+    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.ip')}: ${t('diag.testing')}</span>
+    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.google')}: ${t('diag.testing')}</span>`;
+  try {
+    const data = await api.get('/admin/api/diagnostics/network');
+    const ipInfo = data.ip || {};
+    const googleInfo = data.google || {};
+    const proxyText = data.proxy ? `(via ${esc(data.proxy)})` : `(${t('diag.direct')})`;
+    const ipText = ipInfo.ok ? `${ipInfo.ip} (${ipInfo.city}, ${ipInfo.country})` : (ipInfo.error || t('diag.unknown'));
+    const googleText = googleInfo.ok ? 'OK' : (googleInfo.error || 'unreachable');
+    el.innerHTML = `
+      <span class="diag-item" style="color:var(--text-dim);font-size:11px">${proxyText}</span>
+      <span class="diag-item"><span class="diag-dot ${ipInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.ip')}: ${esc(ipText)}</span>
+      <span class="diag-item"><span class="diag-dot ${googleInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.google')}: ${esc(googleText)}</span>`;
+  } catch(e) {
+    el.innerHTML = `<span class="diag-item"><span class="diag-dot fail"></span>Error: ${esc(String(e))}</span>`;
+  }
+}
+
 function renderProviders() {
   const grid = document.getElementById('providerGrid');
   const providers = configData.providers || {};
@@ -745,9 +824,17 @@ function renderProviders() {
     grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
     return;
   }
-  grid.innerHTML = Object.entries(providers).map(([name, cfg]) => `
-    <div class="provider-card">
-      <div class="name">${esc(name)}</div>
+  grid.innerHTML = Object.entries(providers).map(([name, cfg]) => {
+    const enabled = cfg.enabled !== false;
+    return `
+    <div class="provider-card${enabled ? '' : ' disabled'}">
+      <div class="card-header">
+        <div class="name">${esc(name)}</div>
+        <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
+          <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleProvider('${esc(name)}')">
+          <span class="slider"></span>
+        </label>
+      </div>
       <div class="field">Type: <code>${esc(cfg.type || name)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
       <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
@@ -756,19 +843,77 @@ function renderProviders() {
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
+}
+
+let _modelSortKey = 'name';
+let _modelSortDir = 'asc';
+
+function sortModels(key) {
+  if (_modelSortKey === key) {
+    _modelSortDir = _modelSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _modelSortKey = key;
+    _modelSortDir = 'asc';
+  }
+  renderModels();
 }
 
 function renderModels() {
   const tbody = document.getElementById('modelTable');
   const models = configData.models || {};
-  if (Object.keys(models).length === 0) {
+  const totalCount = Object.keys(models).length;
+
+  // Update sort header indicators
+  document.getElementById('sortName').className = 'sortable' + (_modelSortKey === 'name' ? ` ${_modelSortDir}` : '');
+  document.getElementById('sortProvider').className = 'sortable' + (_modelSortKey === 'provider' ? ` ${_modelSortDir}` : '');
+
+  if (totalCount === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
+    document.getElementById('modelCount').textContent = '';
+    return;
+  }
+
+  // Filter by search query (partial match on model name and provider)
+  const query = (document.getElementById('modelSearch').value || '').trim().toLowerCase();
+  let entries = Object.entries(models).map(([name, info]) => {
+    const prov = typeof info === 'string' ? info : info.provider;
+    return {name, prov, info};
+  });
+  if (query) {
+    entries = entries.filter(e => e.name.toLowerCase().includes(query) || e.prov.toLowerCase().includes(query));
+  }
+
+  // Sort
+  const dir = _modelSortDir === 'asc' ? 1 : -1;
+  entries.sort((a, b) => {
+    const va = _modelSortKey === 'provider' ? a.prov : a.name;
+    const vb = _modelSortKey === 'provider' ? b.prov : b.name;
+    return va.localeCompare(vb) * dir;
+  });
+
+  // Update count
+  const countEl = document.getElementById('modelCount');
+  if (query || entries.length !== totalCount) {
+    countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
+  } else {
+    countEl.textContent = t('model.count', {shown: totalCount, total: totalCount});
+  }
+
+  if (entries.length === 0) {
     tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
     return;
   }
-  tbody.innerHTML = Object.entries(models).map(([name, info]) => {
-    const prov = typeof info === 'string' ? info : info.provider;
+
+  // Determine which providers are disabled
+  const providers = configData.providers || {};
+  const disabledProviders = new Set(
+    Object.entries(providers).filter(([,cfg]) => cfg.enabled === false).map(([n]) => n)
+  );
+
+  tbody.innerHTML = entries.map(({name, prov, info}) => {
+    const provDisabled = disabledProviders.has(prov);
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const capBadges = caps.map(c => {
       const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : 'badge-cap';
@@ -776,9 +921,9 @@ function renderModels() {
     }).join('');
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
-    return `<tr>
+    return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
       <td><code>${esc(name)}</code> ${capBadges}</td>
-      <td>${esc(prov)}</td>
+      <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="test-group">
           <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">${t('btn.test')}</button>
@@ -824,6 +969,15 @@ async function deleteProvider(name) {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
+async function toggleProvider(name) {
+  const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/toggle`);
+  if (res.ok) {
+    const stateKey = res.enabled ? 'provider.enabled' : 'provider.disabled';
+    showToast(`${name}: ${t(stateKey)}`);
+    loadConfig();
+  } else { showToast(res.error || 'Failed', 'error'); }
+}
+
 function editProvider(name) {
   const cfg = configData.providers[name] || {};
   openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
@@ -851,7 +1005,12 @@ async function saveModel() {
   const capabilities = ['text'];
   if (document.getElementById('capVision').checked) capabilities.push('vision');
   if (document.getElementById('capTools').checked) capabilities.push('tools');
-  const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, {provider, capabilities});
+  const body = {provider, capabilities};
+  const originalName = document.getElementById('modelName').dataset.originalName;
+  if (originalName && originalName !== name) {
+    body.rename_from = originalName;
+  }
+  const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, body);
   if (res.ok) { showToast(t('toast.modelSaved',{name})); closeModal('modelModal'); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
 }
