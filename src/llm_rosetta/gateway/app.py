@@ -145,6 +145,7 @@ async def _proxy_handler(
         if request_log is not None:
             from .admin.request_log import RequestLogEntry
 
+            api_key_label = getattr(request.state, "api_key_label", None)
             request_log.add(
                 RequestLogEntry.create(
                     model=model,
@@ -154,6 +155,7 @@ async def _proxy_handler(
                     status_code=status_code,
                     duration_ms=duration_ms,
                     error_detail=error_detail,
+                    api_key_label=api_key_label,
                 )
             )
 
@@ -361,7 +363,11 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
         _flush_now(app)
         await close_resources(metadata_store=metadata_store)
 
+    import secrets
+
     from .auth import GatewayAuthMiddleware
+
+    internal_token = f"rsk-internal-{secrets.token_hex(16)}"
 
     middleware = [
         Middleware(
@@ -370,7 +376,12 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
             allow_methods=["*"],
             allow_headers=["*"],
         ),
-        Middleware(GatewayAuthMiddleware, api_key=config.api_key),  # type: ignore[arg-type]
+        Middleware(
+            GatewayAuthMiddleware,  # type: ignore[arg-type]
+            api_key_set=config.api_key_set,
+            api_key_labels=config.api_key_labels,
+            internal_token=internal_token,
+        ),
     ]
 
     # Append admin panel routes before constructing the app so that
@@ -382,6 +393,7 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
 
     app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
     app.state.metadata_store = metadata_store
+    app.state.internal_token = internal_token
 
     setup_admin(app, config, config_path)
 

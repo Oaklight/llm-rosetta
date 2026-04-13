@@ -1,17 +1,19 @@
 """Gateway API key authentication middleware.
 
-Validates incoming requests against the gateway's configured API key,
+Validates incoming requests against the gateway's configured API keys,
 extracting credentials in the format native to each API standard:
 
 - OpenAI Chat/Responses: ``Authorization: Bearer <key>``
 - Anthropic: ``x-api-key: <key>``
 - Google GenAI: ``x-goog-api-key: <key>`` or ``?key=<key>`` query param
 
-If no ``api_key`` is configured in ``server`` config, all requests pass
-through (backward compatible).
+Supports multiple API keys with labels for tracking. If no keys are
+configured, all requests pass through (backward compatible).
 """
 
 from __future__ import annotations
+
+from collections.abc import Iterable
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -96,12 +98,28 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
 class GatewayAuthMiddleware:
     """Starlette ASGI middleware for gateway API key authentication."""
 
-    def __init__(self, app: ASGIApp, api_key: str | None = None) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        api_key: str | None = None,
+        api_key_set: Iterable[str] | None = None,
+        api_key_labels: dict[str, str] | None = None,
+        internal_token: str | None = None,
+    ) -> None:
         self.app = app
-        self.api_key = api_key
+        # Accept either multi-key set or legacy single key
+        if api_key_set is not None:
+            self._key_set: frozenset[str] = frozenset(api_key_set)
+        elif api_key:
+            self._key_set = frozenset({api_key})
+        else:
+            self._key_set = frozenset()
+        self._labels: dict[str, str] = dict(api_key_labels or {})
+        self._internal_token: str | None = internal_token
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not self.api_key:
+        if scope["type"] != "http" or not self._key_set:
             await self.app(scope, receive, send)
             return
 
@@ -120,9 +138,18 @@ class GatewayAuthMiddleware:
 
         # API paths: extract key using format-appropriate strategy
         key = _extract_key(request)
-        if key != self.api_key:
+
+        # Check internal token first (admin panel test requests)
+        if key and self._internal_token and key == self._internal_token:
+            scope.setdefault("state", {})["api_key_label"] = "internal"
+            await self.app(scope, receive, send)
+            return
+
+        if key not in self._key_set:
             response = _error_for_path(path, 401, "Invalid or missing API key")
             await response(scope, receive, send)
             return
 
+        # Attach key label for request logging
+        scope.setdefault("state", {})["api_key_label"] = self._labels.get(key, "")
         await self.app(scope, receive, send)

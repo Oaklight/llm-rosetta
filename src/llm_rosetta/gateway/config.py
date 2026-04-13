@@ -166,7 +166,26 @@ class GatewayConfig:
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)
         self.proxy: str | None = _server.get("proxy")
-        self.api_key: str | None = _server.get("api_key")
+
+        # Multi-key auth: server.api_keys takes precedence over server.api_key
+        self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
+        if not self.api_keys and _server.get("api_key"):
+            # Backward compat: single api_key → synthetic entry
+            self.api_keys = [
+                {
+                    "id": "default",
+                    "key": _server["api_key"],
+                    "label": "default",
+                    "created": "",
+                }
+            ]
+        # O(1) lookup set and key→label map for auth middleware
+        self.api_key_set: frozenset[str] = frozenset(
+            entry["key"] for entry in self.api_keys
+        )
+        self.api_key_labels: dict[str, str] = {
+            entry["key"]: entry.get("label", "") for entry in self.api_keys
+        }
 
         # Debug / logging options (config + env-var overrides)
         _debug = raw.get("debug", {})
@@ -203,6 +222,11 @@ class GatewayConfig:
                 raise ValueError(
                     f"config: model '{model}' references unknown provider '{provider}'"
                 )
+
+    @property
+    def api_key(self) -> str | None:
+        """First configured key (for backward-compat middleware init)."""
+        return self.api_keys[0]["key"] if self.api_keys else None
 
     def resolve_model(self, model: str) -> tuple[ProviderType, ProviderInfo]:
         """Return (provider_type, provider_info) for a model name.

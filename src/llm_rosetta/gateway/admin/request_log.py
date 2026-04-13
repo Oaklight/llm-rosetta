@@ -21,6 +21,7 @@ class RequestLogEntry:
     status_code: int
     duration_ms: float
     error_detail: str | None = None
+    api_key_label: str | None = None
 
     @classmethod
     def create(
@@ -33,6 +34,7 @@ class RequestLogEntry:
         status_code: int,
         duration_ms: float,
         error_detail: str | None = None,
+        api_key_label: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -45,6 +47,7 @@ class RequestLogEntry:
             status_code=status_code,
             duration_ms=round(duration_ms, 2),
             error_detail=error_detail,
+            api_key_label=api_key_label,
         )
 
     def to_dict(self) -> dict:
@@ -61,6 +64,8 @@ class RequestLogEntry:
         }
         if self.error_detail is not None:
             d["error_detail"] = self.error_detail
+        if self.api_key_label is not None:
+            d["api_key_label"] = self.api_key_label
         return d
 
 

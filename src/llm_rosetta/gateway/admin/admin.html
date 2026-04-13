@@ -323,7 +323,9 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 </div>
 
 <div class="tabs">
-  <div class="tab active" data-tab="config" data-i18n="tab.config">Configuration</div>
+  <div class="tab active" data-tab="providers" data-i18n="tab.providers">Providers</div>
+  <div class="tab" data-tab="models" data-i18n="tab.models">Models</div>
+  <div class="tab" data-tab="keys" data-i18n="tab.keys">API Keys</div>
   <div class="tab" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
   <div class="tab" data-tab="logs" data-i18n="tab.logs">Request Log</div>
   <div style="flex:1"></div>
@@ -331,8 +333,8 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 </div>
 
 <div class="content">
-  <!-- Configuration Tab -->
-  <div class="tab-panel active" id="tab-config">
+  <!-- Providers Tab -->
+  <div class="tab-panel active" id="tab-providers">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.server">Server Settings</h2>
@@ -359,6 +361,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
+  </div>
+
+  <!-- Models Tab -->
+  <div class="tab-panel" id="tab-models">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.models">Model Routing</h2>
@@ -375,6 +381,26 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
           <th></th>
         </tr></thead>
         <tbody id="modelTable"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- API Keys Tab -->
+  <div class="tab-panel" id="tab-keys">
+    <div class="section">
+      <div class="section-header">
+        <h2 data-i18n="section.apiKeys">API Keys</h2>
+        <button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</p>
+      <table>
+        <thead><tr>
+          <th data-i18n="col.label">Label</th>
+          <th data-i18n="col.key">Key</th>
+          <th data-i18n="col.created">Created</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="keysTable"></tbody>
       </table>
     </div>
   </div>
@@ -414,7 +440,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <button class="btn btn-danger btn-sm" onclick="clearLogs()" data-i18n="btn.clearLog">Clear Log</button>
     </div>
     <table>
-      <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
+      <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
       <tbody id="logTable"></tbody>
     </table>
     <div class="pagination">
@@ -511,6 +537,40 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   </div>
 </div>
 
+<!-- API Key Modal -->
+<div class="modal-overlay" id="keyModal">
+  <div class="modal">
+    <h3 id="keyModalTitle" data-i18n="modal.generateKey">Generate API Key</h3>
+    <div class="form-group">
+      <label data-i18n="label.keyLabel">Label (optional)</label>
+      <input id="keyLabel" placeholder="e.g. Production, Dev testing">
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.keyManual">Manual key (leave empty to auto-generate)</label>
+      <input id="keyManual" placeholder="rsk-... (auto-generated if empty)" style="font-family:var(--mono)">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('keyModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="generateKey()" data-i18n="btn.generate">Generate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Key Created Modal -->
+<div class="modal-overlay" id="keyCreatedModal">
+  <div class="modal">
+    <h3 data-i18n="modal.keyCreated">Key Created</h3>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="keys.copyWarning">Copy this key now. It will not be shown again in full.</p>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="createdKeyValue" readonly style="flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+      <button class="btn btn-sm" onclick="copyCreatedKey()" data-i18n="btn.copy">Copy</button>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-primary" onclick="closeModal('keyCreatedModal')" data-i18n="btn.close">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -578,7 +638,8 @@ function setTheme(name) {
 // ===================== i18n =====================
 const I18N = {
   en: {
-    'tab.config':'Configuration', 'tab.dashboard':'Dashboard', 'tab.logs':'Request Log',
+    'tab.providers':'Providers', 'tab.models':'Models', 'tab.keys':'API Keys',
+    'tab.dashboard':'Dashboard', 'tab.logs':'Request Log',
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL',
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
@@ -626,9 +687,27 @@ const I18N = {
     'diag.testing':'testing...', 'diag.unknown':'unknown', 'diag.direct':'direct, no proxy',
     'label.searchModels':'Search models...',
     'model.count':'{shown} / {total} models',
+    'section.apiKeys':'API Keys',
+    'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy',
+    'col.label':'Label', 'col.key':'Key', 'col.created':'Created',
+    'col.apiKey':'API Key',
+    'modal.generateKey':'Generate API Key',
+    'modal.keyCreated':'Key Created',
+    'label.keyLabel':'Label (optional)',
+    'label.keyManual':'Manual key (leave empty to auto-generate)',
+    'keys.description':'Manage gateway API keys used to authenticate requests to /v1/* endpoints.',
+    'keys.copyWarning':'Copy this key now. It will not be shown again in full.',
+    'keys.noKeys':'No API keys configured. Endpoints are open without authentication.',
+    'toast.keySaved':'API key created',
+    'toast.keyDeleted':'API key deleted',
+    'toast.keyLabelUpdated':'Label updated',
+    'toast.keyCopied':'Key copied to clipboard',
+    'confirm.deleteKey':"Delete API key '{label}'?",
+    'filter.allKeys':'All Keys',
   },
   zh: {
-    'tab.config':'\u914d\u7f6e\u7ba1\u7406', 'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
+    'tab.providers':'\u670d\u52a1\u5546', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
+    'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
     'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u5546', 'section.models':'\u6a21\u578b\u8def\u7531',
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
     'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u5546\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
@@ -676,6 +755,23 @@ const I18N = {
     'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
     'label.searchModels':'\u641c\u7d22\u6a21\u578b...',
     'model.count':'{shown} / {total} \u4e2a\u6a21\u578b',
+    'section.apiKeys':'API \u5bc6\u94a5',
+    'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236',
+    'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4',
+    'col.apiKey':'API \u5bc6\u94a5',
+    'modal.generateKey':'\u751f\u6210 API \u5bc6\u94a5',
+    'modal.keyCreated':'\u5bc6\u94a5\u5df2\u521b\u5efa',
+    'label.keyLabel':'\u6807\u7b7e\uff08\u53ef\u9009\uff09',
+    'label.keyManual':'\u624b\u52a8\u8f93\u5165\u5bc6\u94a5\uff08\u7559\u7a7a\u5219\u81ea\u52a8\u751f\u6210\uff09',
+    'keys.description':'\u7ba1\u7406\u7f51\u5173 API \u5bc6\u94a5\uff0c\u7528\u4e8e\u8ba4\u8bc1 /v1/* \u7aef\u70b9\u7684\u8bf7\u6c42\u3002',
+    'keys.copyWarning':'\u8bf7\u7acb\u5373\u590d\u5236\u6b64\u5bc6\u94a5\u3002\u5b8c\u6574\u5bc6\u94a5\u4ec5\u663e\u793a\u4e00\u6b21\u3002',
+    'keys.noKeys':'\u672a\u914d\u7f6e API \u5bc6\u94a5\u3002\u7aef\u70b9\u5f00\u653e\u65e0\u9700\u8ba4\u8bc1\u3002',
+    'toast.keySaved':'API \u5bc6\u94a5\u5df2\u521b\u5efa',
+    'toast.keyDeleted':'API \u5bc6\u94a5\u5df2\u5220\u9664',
+    'toast.keyLabelUpdated':'\u6807\u7b7e\u5df2\u66f4\u65b0',
+    'toast.keyCopied':'\u5bc6\u94a5\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
+    'confirm.deleteKey':"\u786e\u5b9a\u5220\u9664 API \u5bc6\u94a5 '{label}'\uff1f",
+    'filter.allKeys':'\u5168\u90e8\u5bc6\u94a5',
   },
 };
 
@@ -706,13 +802,16 @@ function applyI18n() {
   });
   // Re-render dynamic content
   if (configData) { renderProviders(); renderModels(); }
+  if (keysData) renderKeys();
   if (currentTab === 'dashboard') loadMetrics();
   if (currentTab === 'logs') loadLogs();
 }
 
 // ===================== State =====================
-let currentTab = 'config';
+let currentTab = 'providers';
 let configData = null;
+let keysData = null;
+let internalToken = null;
 let logOffset = 0;
 const LOG_LIMIT = 30;
 let dashboardTimer = null;
@@ -735,8 +834,10 @@ const api = {
     const r = await fetch(url, {method:'DELETE'});
     return r.json();
   },
-  async post(url) {
-    const r = await fetch(url, {method:'POST'});
+  async post(url, body) {
+    const opts = {method:'POST'};
+    if (body !== undefined) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(body); }
+    const r = await fetch(url, opts);
     return r.json();
   }
 };
@@ -1057,6 +1158,107 @@ function editModel(name, provider) {
   openModelModal(name, provider, caps);
 }
 
+// ===================== API Keys Tab =====================
+async function loadKeys() {
+  try {
+    keysData = await api.get('/admin/api/keys');
+    renderKeys();
+  } catch(e) {
+    console.error('Failed to load keys:', e);
+  }
+}
+
+function renderKeys() {
+  const tbody = document.getElementById('keysTable');
+  const keys = (keysData && keysData.keys) || [];
+  if (keys.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = keys.map(k => {
+    const created = k.created ? new Date(k.created).toLocaleDateString() : '—';
+    return `<tr>
+      <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
+        <button class="btn btn-sm" style="margin-left:4px;padding:2px 6px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit">&#9998;</button></td>
+      <td><code class="key-masked">${esc(k.key)}</code>
+        <button class="btn btn-sm" style="padding:2px 6px" onclick="revealKey('${k.id}',this)" title="Reveal">&#128065;</button>
+        <button class="btn btn-sm" style="padding:2px 6px" onclick="copyKeyById('${k.id}')" title="Copy">&#128203;</button></td>
+      <td>${created}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}')">${t('btn.delete')}</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function openKeyModal() {
+  document.getElementById('keyLabel').value = '';
+  document.getElementById('keyManual').value = '';
+  document.getElementById('keyModal').classList.add('open');
+}
+
+async function generateKey() {
+  const label = document.getElementById('keyLabel').value.trim();
+  const manual = document.getElementById('keyManual').value.trim();
+  const body = {label};
+  if (manual) body.key = manual;
+  const res = await api.post('/admin/api/keys', body);
+  if (res.ok) {
+    closeModal('keyModal');
+    showToast(t('toast.keySaved'));
+    // Show the created key for one-time copy
+    document.getElementById('createdKeyValue').value = res.key.key;
+    document.getElementById('keyCreatedModal').classList.add('open');
+    loadKeys();
+  } else {
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
+async function copyCreatedKey() {
+  const input = document.getElementById('createdKeyValue');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showToast(t('toast.keyCopied'));
+  } catch(e) {
+    showToast('Copy failed', 'error');
+  }
+}
+
+async function deleteKey(id, label) {
+  if (!confirm(t('confirm.deleteKey', {label}))) return;
+  const res = await api.del(`/admin/api/keys/${encodeURIComponent(id)}`);
+  if (res.ok) { showToast(t('toast.keyDeleted')); loadKeys(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
+async function revealKey(id, btn) {
+  const res = await api.get(`/admin/api/keys/${encodeURIComponent(id)}/reveal`);
+  if (res.key) {
+    const code = btn.parentElement.querySelector('code');
+    code.textContent = res.key;
+    btn.style.display = 'none';
+  }
+}
+
+async function copyKeyById(id) {
+  const res = await api.get(`/admin/api/keys/${encodeURIComponent(id)}/reveal`);
+  if (res.key) {
+    try {
+      await navigator.clipboard.writeText(res.key);
+      showToast(t('toast.keyCopied'));
+    } catch(e) {
+      showToast('Copy failed', 'error');
+    }
+  }
+}
+
+async function editKeyLabel(id, currentLabel) {
+  const newLabel = prompt('Label:', currentLabel);
+  if (newLabel === null) return;
+  const res = await api.put(`/admin/api/keys/${encodeURIComponent(id)}`, {label: newLabel});
+  if (res.ok) { showToast(t('toast.keyLabelUpdated')); loadKeys(); }
+  else { showToast(res.error || 'Failed', 'error'); }
+}
+
 // ===================== Dashboard Tab =====================
 async function loadMetrics() {
   const data = await api.get('/admin/api/metrics?seconds=60');
@@ -1175,17 +1377,19 @@ async function loadLogs() {
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map(e => {
       const time = new Date(e.timestamp).toLocaleTimeString();
       const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
       const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
+      const keyLabel = e.api_key_label || '—';
       return `<tr>
         <td>${time}</td>
         <td><code>${esc(e.model)}</code></td>
         <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider)}</td>
         <td>${modeBadge}</td>
+        <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td><span class="badge ${statusCls}">${e.status_code}</span></td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
@@ -1238,7 +1442,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     stopTimers();
     if (id === 'dashboard') { loadMetrics(); dashboardTimer = setInterval(loadMetrics, 3000); }
     if (id === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
-    if (id === 'config') { loadConfig(); }
+    if (id === 'providers' || id === 'models') { loadConfig(); }
+    if (id === 'keys') { loadKeys(); }
   });
 });
 
@@ -1356,8 +1561,10 @@ async function runTest(model, type) {
     output.classList.add('streaming');
     output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
     try {
+      const testHeaders = {'Content-Type':'application/json'};
+      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -1409,8 +1616,10 @@ async function runTest(model, type) {
     // Non-streaming
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     try {
+      const testHeaders = {'Content-Type':'application/json'};
+      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
       });
       const elapsed = ((performance.now() - t0)/1000).toFixed(2);
       const body = await res.json();
@@ -1452,6 +1661,7 @@ async function runTest(model, type) {
 
 // ===================== Init =====================
 loadConfig();
+api.get('/admin/api/internal-token').then(r => { internalToken = r.token; }).catch(() => {});
 setLang(currentLang);
 </script>
 </body>

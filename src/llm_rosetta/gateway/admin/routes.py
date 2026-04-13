@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import re
+import secrets
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from starlette.requests import Request
@@ -40,7 +43,9 @@ def _get_config_path(request: Request) -> str | None:
 def _reload_gateway_config(request: Request, config_path: str) -> GatewayConfig:
     """Re-read config from disk, rebuild GatewayConfig, swap into app state.
 
-    The import of ``app._config`` is deferred to avoid circular imports.
+    Also refreshes the auth middleware's key set so new/deleted keys take
+    effect immediately.  The import of ``app._config`` is deferred to
+    avoid circular imports.
     """
     import llm_rosetta.gateway.app as _app_mod
 
@@ -48,7 +53,23 @@ def _reload_gateway_config(request: Request, config_path: str) -> GatewayConfig:
     new_config = GatewayConfig(raw)
     _app_mod._config = new_config
     request.app.state.gateway_config = new_config
+
+    _sync_auth_middleware(request.app, new_config)
+
     return new_config
+
+
+def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
+    """Walk the ASGI middleware chain and update the auth middleware keys."""
+    from ..auth import GatewayAuthMiddleware
+
+    layer: Any = app.middleware_stack
+    while layer is not None:
+        if isinstance(layer, GatewayAuthMiddleware):
+            layer._key_set = config.api_key_set
+            layer._labels = dict(config.api_key_labels)
+            break
+        layer = getattr(layer, "app", None)
 
 
 # ---------------------------------------------------------------------------
@@ -107,12 +128,22 @@ async def get_config(request: Request) -> Response:
                 "capabilities": value.get("capabilities", ["text"]),
             }
 
+    # Mask api_keys in server section for the response
+    server = dict(raw.get("server", {}))
+    if "api_key" in server:
+        server["api_key"] = _mask_api_key(server["api_key"])
+    if "api_keys" in server:
+        server["api_keys"] = [
+            {**entry, "key": _mask_api_key(entry.get("key", ""))}
+            for entry in server["api_keys"]
+        ]
+
     return JSONResponse(
         {
             "config_path": config_path,
             "providers": masked_providers,
             "models": models_normalized,
-            "server": raw.get("server", {}),
+            "server": server,
             "known_provider_types": known_provider_types(),
         }
     )
@@ -606,9 +637,7 @@ async def network_diagnostics(request: Request) -> Response:
     import httpx
 
     # Resolve the global proxy from current gateway config
-    gw_config: GatewayConfig | None = getattr(
-        request.app.state, "gateway_config", None
-    )
+    gw_config: GatewayConfig | None = getattr(request.app.state, "gateway_config", None)
     proxy_url = gw_config.proxy if gw_config else None
 
     client_kwargs: dict[str, Any] = {"timeout": 15}
@@ -651,6 +680,224 @@ async def network_diagnostics(request: Request) -> Response:
         results["google"] = {"ok": False, "error": str(exc)}
 
     return JSONResponse(results)
+
+
+# ---------------------------------------------------------------------------
+# API Key management
+# ---------------------------------------------------------------------------
+
+
+async def get_api_keys(request: Request) -> Response:
+    """List all gateway API keys (values masked)."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    server = data.get("server", {})
+    keys = list(server.get("api_keys", []))
+    # Backward compat: expose legacy single key as a synthetic entry
+    if not keys and server.get("api_key"):
+        keys = [
+            {
+                "id": "default",
+                "key": server["api_key"],
+                "label": "default",
+                "created": "",
+            }
+        ]
+
+    masked = [{**entry, "key": _mask_api_key(entry.get("key", ""))} for entry in keys]
+    return JSONResponse({"keys": masked})
+
+
+async def create_api_key(request: Request) -> Response:
+    """Create a new gateway API key."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    label = body.get("label", "")
+    manual_key = body.get("key")
+    key_value = manual_key if manual_key else f"rsk-{secrets.token_hex(16)}"
+
+    entry = {
+        "id": uuid.uuid4().hex[:8],
+        "key": key_value,
+        "label": label,
+        "created": datetime.now(timezone.utc).isoformat(),
+    }
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    server = data.setdefault("server", {})
+
+    # Migrate legacy single key → api_keys array
+    if "api_key" in server and "api_keys" not in server:
+        old_key = server.pop("api_key")
+        server["api_keys"] = [
+            {"id": "default", "key": old_key, "label": "default", "created": ""}
+        ]
+
+    server.setdefault("api_keys", []).append(entry)
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    # Return the full key exactly once so the user can copy it
+    return JSONResponse({"ok": True, "key": entry})
+
+
+async def update_api_key(request: Request) -> Response:
+    """Update an API key's label."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    key_id = request.path_params["key_id"]
+
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    keys = data.get("server", {}).get("api_keys", [])
+    target = None
+    for entry in keys:
+        if entry.get("id") == key_id:
+            target = entry
+            break
+
+    if target is None:
+        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+
+    if "label" in body:
+        target["label"] = body["label"]
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse({"ok": True, "id": key_id, "label": target["label"]})
+
+
+async def delete_api_key(request: Request) -> Response:
+    """Delete a gateway API key."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    key_id = request.path_params["key_id"]
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    keys = data.get("server", {}).get("api_keys", [])
+    original_len = len(keys)
+    keys[:] = [e for e in keys if e.get("id") != key_id]
+
+    if len(keys) == original_len:
+        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse({"ok": True, "deleted": key_id})
+
+
+async def reveal_api_key(request: Request) -> Response:
+    """Return the raw (unmasked) API key value."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    key_id = request.path_params["key_id"]
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    keys = data.get("server", {}).get("api_keys", [])
+    for entry in keys:
+        if entry.get("id") == key_id:
+            return JSONResponse({"key": entry.get("key", "")})
+
+    return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+
+
+async def get_internal_token(request: Request) -> Response:
+    """Return the ephemeral internal token for admin panel test requests."""
+    token = getattr(request.app.state, "internal_token", None)
+    if not token:
+        return JSONResponse({"error": "No internal token available"}, status_code=500)
+    return JSONResponse({"token": token})
 
 
 # ---------------------------------------------------------------------------
@@ -702,4 +949,11 @@ admin_routes: list[Route] = [
     Route("/admin/api/requests", clear_requests, methods=["DELETE"]),
     # Network diagnostics
     Route("/admin/api/diagnostics/network", network_diagnostics, methods=["GET"]),
+    # API key management
+    Route("/admin/api/keys", get_api_keys, methods=["GET"]),
+    Route("/admin/api/keys", create_api_key, methods=["POST"]),
+    Route("/admin/api/keys/{key_id}", update_api_key, methods=["PUT"]),
+    Route("/admin/api/keys/{key_id}", delete_api_key, methods=["DELETE"]),
+    Route("/admin/api/keys/{key_id}/reveal", reveal_api_key, methods=["GET"]),
+    Route("/admin/api/internal-token", get_internal_token, methods=["GET"]),
 ]
