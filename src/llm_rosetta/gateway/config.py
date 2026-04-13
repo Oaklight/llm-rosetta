@@ -118,32 +118,49 @@ class GatewayConfig:
     DEFAULT_CAPABILITIES: list[str] = ["text"]
 
     def __init__(self, raw: dict[str, Any]) -> None:
-        self._raw_providers: dict[str, dict[str, str]] = raw.get("providers", {})
+        all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
+
+        # Filter out disabled providers (enabled defaults to True)
+        self._raw_providers: dict[str, dict[str, str]] = {
+            name: cfg
+            for name, cfg in all_providers.items()
+            if cfg.get("enabled", True) is not False
+        }
 
         # Map provider name → API standard type.
         # If the provider config has a "type" field, use it; otherwise the
         # provider name itself is treated as the type (backward compatible).
-        self.provider_types: dict[str, ProviderType] = {
+        self.provider_types: dict[str, ProviderType] = {  # type: ignore[invalid-assignment]
             name: cfg.get("type", name) for name, cfg in self._raw_providers.items()
         }
 
         # Parse models — supports both string and dict formats:
         #   "model": "provider"                     (legacy)
         #   "model": {"provider": "p", "capabilities": ["text", "vision"]}
+        # Models referencing disabled providers are silently skipped.
         raw_models = raw.get("models", {})
         self.models: dict[str, ProviderType] = {}
         self.model_capabilities: dict[str, list[str]] = {}
         for name, value in raw_models.items():
             if isinstance(value, str):
-                self.models[name] = value
-                self.model_capabilities[name] = list(self.DEFAULT_CAPABILITIES)
+                provider_name = value
             elif isinstance(value, dict):
-                self.models[name] = value["provider"]
+                provider_name = value["provider"]
+            else:
+                raise ValueError(f"config: invalid model entry for '{name}'")
+
+            if provider_name not in self._raw_providers:
+                # Skip models whose provider is disabled or missing
+                # (validation below only checks enabled providers)
+                continue
+
+            self.models[name] = provider_name
+            if isinstance(value, str):
+                self.model_capabilities[name] = list(self.DEFAULT_CAPABILITIES)
+            else:
                 self.model_capabilities[name] = value.get(
                     "capabilities", list(self.DEFAULT_CAPABILITIES)
                 )
-            else:
-                raise ValueError(f"config: invalid model entry for '{name}'")
 
         self.host: str = raw.get("server", {}).get("host", "0.0.0.0")
         self.port: int = raw.get("server", {}).get("port", 8765)
@@ -170,9 +187,15 @@ class GatewayConfig:
 
     def _validate(self) -> None:
         if not self._raw_providers:
-            raise ValueError("config: 'providers' section is empty")
+            logger.warning(
+                "config: no enabled providers — all providers may be disabled"
+            )
+            return
         if not self.models:
-            raise ValueError("config: 'models' section is empty")
+            logger.warning(
+                "config: no routable models — models may reference disabled providers"
+            )
+            return
         for model, provider in self.models.items():
             if provider not in self._raw_providers:
                 raise ValueError(
