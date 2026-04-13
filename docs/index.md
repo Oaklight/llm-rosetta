@@ -128,11 +128,11 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 如果您在研究中使用了 LLM-Rosetta，请引用我们的论文：
 
 ```bibtex
-@article{ding2025llmrosetta,
+@article{ding2026llmrosetta,
   title={LLM-Rosetta: A Hub-and-Spoke Intermediate Representation for Cross-Provider LLM API Translation},
   author={Ding, Peng},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
-  year={2025}
+  journal={arXiv preprint arXiv:2604.09360},
+  year={2026}
 }
 ```
 
