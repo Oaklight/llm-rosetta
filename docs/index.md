@@ -128,11 +128,11 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons.
 If you use LLM-Rosetta in your research, please cite our paper:
 
 ```bibtex
-@article{ding2025llmrosetta,
+@article{ding2026llmrosetta,
   title={LLM-Rosetta: A Hub-and-Spoke Intermediate Representation for Cross-Provider LLM API Translation},
   author={Ding, Peng},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
-  year={2025}
+  journal={arXiv preprint arXiv:2604.09360},
+  year={2026}
 }
 ```
 
