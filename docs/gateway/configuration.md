@@ -25,6 +25,16 @@ title: 配置
 !!! note "向后兼容"
     如果省略 `type`，提供商名称本身将用作类型。这意味着使用旧格式（提供商名称为 `openai_chat`、`anthropic` 等）的配置无需修改即可继续使用。
 
+### 启用 / 禁用提供商
+
+每个提供商支持 `enabled` 字段（默认 `true`）。禁用的提供商及其关联模型将从路由中静默排除：
+
+```jsonc
+"my-openai": { "type": "openai_chat", "api_key": "sk-...", "base_url": "https://api.openai.com/v1", "enabled": false }
+```
+
+这在需要临时下线提供商但不删除配置时很有用。[管理面板](admin-panel.md)提供了切换开关来操作此功能。
+
 ### API 密钥轮转
 
 每个提供商支持通过逗号分隔配置多个 API 密钥，网关以轮询方式依次使用：
@@ -94,6 +104,39 @@ CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
 
 能力信息显示在[管理面板](admin-panel.md)中，也可在面板中编辑。
 
+## 网关 API Key
+
+通过网关级 API Key 保护 AI 请求端点：
+
+```jsonc
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "api_key": "my-secret-gateway-key"
+  }
+}
+```
+
+配置后，所有 `/v1/*` 端点需要使用对应 API 标准的原生格式进行认证：
+
+| API 标准 | 凭证格式 |
+|---------|---------|
+| OpenAI Chat / Responses | `Authorization: Bearer <key>` |
+| Anthropic | `x-api-key: <key>` |
+| Google GenAI | `x-goog-api-key: <key>` 或 `?key=<key>` 查询参数 |
+
+API Key 也支持 `${ENV_VAR}` 替换：
+
+```jsonc
+"api_key": "${GATEWAY_API_KEY}"
+```
+
+!!! note "管理面板"
+    管理面板（`/admin/*`）**不需要**网关 API Key。如需保护管理面板，请使用反向代理（如 Caddy 的 `basicauth`、Nginx 的 `auth_basic`）。
+
+未配置 `api_key` 时，所有请求无需认证直接通过（向后兼容）。
+
 ## 调试选项
 
 ```jsonc
@@ -124,7 +167,8 @@ CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
   },
   "server": {
     "host": "0.0.0.0",
-    "port": 8765
+    "port": 8765,
+    "api_key": "${GATEWAY_API_KEY}"
   }
 }
 ```

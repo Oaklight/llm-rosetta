@@ -125,6 +125,29 @@ curl http://localhost:8765/v1/chat/completions \
 
 网关实时在提供商格式之间转换 SSE 数据块。
 
+## 认证
+
+通过 `server` 配置中的网关 API Key 保护 AI 端点：
+
+```jsonc
+"server": { "api_key": "my-secret-key" }
+```
+
+请求必须以对应 API 标准的原生格式提供 Key（Bearer token、`x-api-key` 头部等）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
+
+## Docker 部署
+
+```bash
+# 使用 Docker Compose 构建并运行
+docker compose up -d
+
+# 或手动构建
+docker build -t llm-rosetta-gateway .
+docker run -p 8765:8765 -v /path/to/config:/config llm-rosetta-gateway
+```
+
+详见 `docker/` 目录下的 `docker-compose.yml` 以及 Makefile 中的 `build-docker` / `run-docker` 目标。
+
 ## 管理面板
 
 网关内置了 Web 管理面板，访问地址为 `/admin/`，支持配置管理、实时指标监控和请求日志查看。详见[管理面板](admin-panel.md)页面。

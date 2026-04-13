@@ -6,6 +6,33 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## 未发布
+
+### 新增
+
+- **网关 API Key 认证**：可配置的 API Key（`server.api_key`）保护 AI 请求端点（`/v1/*`）。支持各格式原生凭证提取——OpenAI `Authorization: Bearer`、Anthropic `x-api-key`、Google `x-goog-api-key` / `?key=` 查询参数。未配置 Key 时所有请求直通（向后兼容）
+- **提供商启用/禁用**：每个提供商现在支持 `enabled` 字段（默认 `true`）。禁用的提供商及其模型从路由中静默排除
+- **Docker 支持**：官方 `Dockerfile`、`docker-compose.yml` 和 Makefile 目标（`build-docker`、`push-docker`、`run-docker`），支持容器化部署。基于 Alpine 的镜像，非 root 用户，配置卷挂载，PUID/PGID 支持
+- **管理面板增强**：
+    - 提供商开关切换（启用/禁用，无需删除）
+    - 模型搜索和列排序
+    - 提供商重命名，自动更新模型引用
+    - 网络诊断按钮（连通性检查 + 代理测试）
+    - 模型测试支持可折叠的原始请求/响应详情及视觉测试的图片预览
+    - 内嵌测试图片（base64 Data URI），避免外部网络下载
+    - 推理模型测试使用 `reasoning_effort: 'low'` 限制 token 预算
+
+### 变更
+
+- **移除管理面板的网关级认证**：管理面板端点（`/admin/*`）不再需要网关 API Key。管理访问控制委托给反向代理（如 Caddy、Nginx）。网关 API Key 仅认证 AI 请求端点（`/v1/*`）
+
+### 修复
+
+- **图片 URL 下载添加 User-Agent**：Google GenAI 内容转换器下载图片 URL 进行 base64 内联转换时，现在发送 `User-Agent: llm-rosetta/1.0 (image fetch)`，防止 Wikimedia 等服务器返回 403 Forbidden
+- **图片下载代理支持**：Google GenAI 转换器的图片下载现在遵循 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量
+- **推理模型空内容回退**：管理面板测试结果现在正确处理 `content: ""`（推理模型将所有 `max_tokens` 消耗在推理 token 上时），而非显示原始 JSON
+- **配置文件未找到错误**：网关在配置文件不存在时显示友好的错误信息，而非 Python 堆栈跟踪
+
 ## v0.5.0 — 2026-04-12
 
 ### 新增
