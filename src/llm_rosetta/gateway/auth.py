@@ -44,10 +44,7 @@ def _extract_key(request: Request) -> str | None:
         return request.headers.get("x-api-key")
     elif strategy == "google":
         # Google uses x-goog-api-key header or ?key= query param
-        return (
-            request.headers.get("x-goog-api-key")
-            or request.query_params.get("key")
-        )
+        return request.headers.get("x-goog-api-key") or request.query_params.get("key")
     else:
         # OpenAI-style Bearer token
         auth = request.headers.get("authorization", "")
@@ -66,17 +63,32 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
 
     if strategy == "anthropic":
         return JSONResponse(
-            {"type": "error", "error": {"type": "authentication_error", "message": message}},
+            {
+                "type": "error",
+                "error": {"type": "authentication_error", "message": message},
+            },
             status_code=status,
         )
     elif strategy == "google":
         return JSONResponse(
-            {"error": {"code": status, "message": message, "status": "UNAUTHENTICATED"}},
+            {
+                "error": {
+                    "code": status,
+                    "message": message,
+                    "status": "UNAUTHENTICATED",
+                }
+            },
             status_code=status,
         )
     else:
         return JSONResponse(
-            {"error": {"message": message, "type": "invalid_request_error", "code": "invalid_api_key"}},
+            {
+                "error": {
+                    "message": message,
+                    "type": "invalid_request_error",
+                    "code": "invalid_api_key",
+                }
+            },
             status_code=status,
         )
 
@@ -101,20 +113,8 @@ class GatewayAuthMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Admin panel paths: use Bearer token (same gateway key)
+        # Admin panel: no gateway-level auth — delegate to reverse proxy
         if path.startswith("/admin"):
-            auth = request.headers.get("authorization", "")
-            key = auth[7:] if auth.startswith("Bearer ") else None
-            # Allow admin HTML pages without auth (SPA loads first, then JS adds headers)
-            if path in ("/admin", "/admin/") and request.method == "GET":
-                await self.app(scope, receive, send)
-                return
-            if key != self.api_key:
-                response = JSONResponse(
-                    {"error": "Invalid or missing API key"}, status_code=401
-                )
-                await response(scope, receive, send)
-                return
             await self.app(scope, receive, send)
             return
 

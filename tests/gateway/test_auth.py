@@ -147,19 +147,12 @@ class TestWithApiKey:
         )
         assert resp.status_code == 200
 
-    # --- Admin ---
+    # --- Admin (no gateway-level auth — delegated to reverse proxy) ---
     def test_admin_html_no_auth(self, client: TestClient):
-        """Admin HTML page loads without auth (SPA needs to load first)."""
         resp = client.get("/admin")
         assert resp.status_code == 200
 
-    def test_admin_api_valid(self, client: TestClient):
-        resp = client.get(
-            "/admin/api/config",
-            headers={"Authorization": f"Bearer {self.KEY}"},
-        )
-        assert resp.status_code == 200
-
-    def test_admin_api_missing(self, client: TestClient):
+    def test_admin_api_no_auth(self, client: TestClient):
+        """Admin API endpoints pass through without gateway auth."""
         resp = client.get("/admin/api/config")
-        assert resp.status_code == 401
+        assert resp.status_code == 200
