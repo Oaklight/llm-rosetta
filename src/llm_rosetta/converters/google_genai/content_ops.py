@@ -117,9 +117,13 @@ class GoogleGenAIContentOps(BaseContentOps):
                 import os
 
                 proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+                headers = {
+                    "User-Agent": "llm-rosetta/1.0 (image fetch)",
+                }
                 client_kwargs: dict[str, Any] = {
                     "timeout": 30,
                     "follow_redirects": True,
+                    "headers": headers,
                 }
                 if proxy:
                     client_kwargs["proxy"] = proxy
