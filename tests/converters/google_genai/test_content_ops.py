@@ -82,12 +82,16 @@ class TestGoogleGenAIContentOps:
         mock_resp.headers = {"content-type": "image/png"}
         mock_resp.raise_for_status = MagicMock()
 
-        with patch("llm_rosetta.converters.google_genai.content_ops.httpx.get", return_value=mock_resp):
+        with patch(
+            "llm_rosetta.converters.google_genai.content_ops.httpx.get",
+            return_value=mock_resp,
+        ):
             result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
 
         assert result is not None
         assert result["inlineData"]["mimeType"] == "image/png"
         import base64
+
         assert result["inlineData"]["data"] == base64.b64encode(b"\x89PNG\r\n").decode()
 
     def test_ir_image_to_p_with_url_download_failure(self):
@@ -95,7 +99,10 @@ class TestGoogleGenAIContentOps:
         from unittest.mock import patch
 
         ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
-        with patch("llm_rosetta.converters.google_genai.content_ops.httpx.get", side_effect=Exception("timeout")):
+        with patch(
+            "llm_rosetta.converters.google_genai.content_ops.httpx.get",
+            side_effect=Exception("timeout"),
+        ):
             result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
         assert result is None
 
