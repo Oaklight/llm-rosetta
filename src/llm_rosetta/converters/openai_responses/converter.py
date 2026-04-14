@@ -216,25 +216,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # 3. Tools
         tools = provider_request.get("tools")
         if tools:
-            ir_tools = []
-            for t in tools:
-                # Skip disabled tools (e.g. web_search with external_web_access=false)
-                if isinstance(t, dict) and t.get("external_web_access") is False:
-                    continue
-                try:
-                    ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
-                except Exception as e:
-                    tool_type = (
-                        t.get("type", "unknown")
-                        if isinstance(t, dict)
-                        else type(t).__name__
-                    )
-                    tool_name = (
-                        t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                    )
-                    raise ValueError(
-                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                    ) from e
+            ir_tools = self._convert_tools_from_p(tools)
             if ir_tools:
                 ir_request["tools"] = ir_tools
 
@@ -408,43 +390,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Preserve mode: capture extra fields for lossless round-trip
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            # Top-level extra fields
-            extras = {
-                k: v
-                for k, v in provider_response.items()
-                if k in RESPONSES_PRESERVE_FIELDS and v is not None
-            }
-            if extras:
-                ctx.store_response_extras(extras)
-
-            # Per-output-item metadata (id, status, content-part annotations/logprobs)
-            items_meta: list[dict[str, Any]] = []
-            for item in output_items:
-                if not isinstance(item, dict):
-                    continue
-                meta: dict[str, Any] = {}
-                if "id" in item:
-                    meta["id"] = item["id"]
-                if "status" in item:
-                    meta["status"] = item["status"]
-                # Per-content-part metadata
-                content = item.get("content", [])
-                if isinstance(content, list):
-                    parts_meta: list[dict[str, Any]] = []
-                    for cp in content:
-                        if not isinstance(cp, dict):
-                            continue
-                        pm: dict[str, Any] = {}
-                        if "annotations" in cp:
-                            pm["annotations"] = cp["annotations"]
-                        if "logprobs" in cp:
-                            pm["logprobs"] = cp["logprobs"]
-                        parts_meta.append(pm)
-                    if parts_meta:
-                        meta["content_meta"] = parts_meta
-                items_meta.append(meta)
-            if items_meta:
-                ctx.store_output_items_meta(items_meta)
+            self._capture_preserve_metadata(provider_response, output_items, ctx)
 
         return self._validate_ir_response(ir_response)
 
@@ -551,6 +497,68 @@ class OpenAIResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
     # Preserve-mode helpers
     # ------------------------------------------------------------------
+
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        """Convert provider tool definitions to IR, skipping disabled tools."""
+        ir_tools = []
+        for t in tools:
+            if isinstance(t, dict) and t.get("external_web_access") is False:
+                continue
+            try:
+                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+        return ir_tools
+
+    @staticmethod
+    def _capture_preserve_metadata(
+        provider_response: dict[str, Any],
+        output_items: list[Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Capture extra fields from provider response for lossless round-trip."""
+        extras = {
+            k: v
+            for k, v in provider_response.items()
+            if k in RESPONSES_PRESERVE_FIELDS and v is not None
+        }
+        if extras:
+            ctx.store_response_extras(extras)
+
+        items_meta: list[dict[str, Any]] = []
+        for item in output_items:
+            if not isinstance(item, dict):
+                continue
+            meta: dict[str, Any] = {}
+            if "id" in item:
+                meta["id"] = item["id"]
+            if "status" in item:
+                meta["status"] = item["status"]
+            content = item.get("content", [])
+            if isinstance(content, list):
+                parts_meta: list[dict[str, Any]] = []
+                for cp in content:
+                    if not isinstance(cp, dict):
+                        continue
+                    pm: dict[str, Any] = {}
+                    if "annotations" in cp:
+                        pm["annotations"] = cp["annotations"]
+                    if "logprobs" in cp:
+                        pm["logprobs"] = cp["logprobs"]
+                    parts_meta.append(pm)
+                if parts_meta:
+                    meta["content_meta"] = parts_meta
+            items_meta.append(meta)
+        if items_meta:
+            ctx.store_output_items_meta(items_meta)
 
     @staticmethod
     def _apply_preserve_metadata(

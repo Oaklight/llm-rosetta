@@ -159,6 +159,35 @@ class OpenAIChatConverter(BaseConverter):
 
         return result, ctx.warnings
 
+    def _extract_system_and_messages(
+        self, messages: list[Any]
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Split system messages from user/assistant messages.
+
+        Returns:
+            Tuple of (non-system IR messages, system text or None).
+        """
+        ir_messages: list[dict[str, Any]] = []
+        system_text: str | None = None
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get("role") == "system":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    system_text = content
+                elif isinstance(content, list):
+                    text_parts = [
+                        part["text"]
+                        for part in content
+                        if isinstance(part, dict) and part.get("type") == "text"
+                    ]
+                    if text_parts:
+                        system_text = " ".join(text_parts)
+            else:
+                converted = self.message_ops._p_message_to_ir(msg)
+                if converted:
+                    ir_messages.append(converted)
+        return ir_messages, system_text
+
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
@@ -183,26 +212,10 @@ class OpenAIChatConverter(BaseConverter):
 
         # 1. Messages - separate system messages as system_instruction
         messages = provider_request.get("messages", [])
-        ir_messages: list[dict[str, Any]] = []
-
-        for msg in messages:
-            if isinstance(msg, dict) and msg.get("role") == "system":
-                content = msg.get("content", "")
-                if isinstance(content, str):
-                    ir_request["system_instruction"] = content
-                elif isinstance(content, list):
-                    text_parts = []
-                    for part in content:
-                        if isinstance(part, dict) and part.get("type") == "text":
-                            text_parts.append(part["text"])
-                    if text_parts:
-                        ir_request["system_instruction"] = " ".join(text_parts)
-            else:
-                converted = self.message_ops._p_message_to_ir(msg)
-                if converted:
-                    ir_messages.append(converted)
-
+        ir_messages, system_text = self._extract_system_and_messages(messages)
         ir_request["messages"] = ir_messages
+        if system_text:
+            ir_request["system_instruction"] = system_text
 
         # 2. Tools
         tools = provider_request.get("tools")
@@ -437,35 +450,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: dict[str, Any] = {
-                "prompt_tokens": ir_usage.get("prompt_tokens") or 0,
-                "completion_tokens": ir_usage.get("completion_tokens") or 0,
-                "total_tokens": ir_usage.get("total_tokens") or 0,
-            }
-
-            if "prompt_tokens_details" in ir_usage:
-                usage["prompt_tokens_details"] = ir_usage["prompt_tokens_details"]
-
-            if "completion_tokens_details" in ir_usage:
-                usage["completion_tokens_details"] = ir_usage[
-                    "completion_tokens_details"
-                ]
-
-            if "cache_read_tokens" in ir_usage:
-                if "prompt_tokens_details" not in usage:
-                    usage["prompt_tokens_details"] = {}
-                usage["prompt_tokens_details"]["cached_tokens"] = ir_usage[
-                    "cache_read_tokens"
-                ]
-
-            if "reasoning_tokens" in ir_usage:
-                if "completion_tokens_details" not in usage:
-                    usage["completion_tokens_details"] = {}
-                usage["completion_tokens_details"]["reasoning_tokens"] = ir_usage[
-                    "reasoning_tokens"
-                ]
-
-            provider_response["usage"] = usage
+            provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -474,6 +459,31 @@ class OpenAIChatConverter(BaseConverter):
             provider_response["system_fingerprint"] = ir_response["system_fingerprint"]
 
         return provider_response
+
+    @staticmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build OpenAI Chat usage dict from IR usage."""
+        usage: dict[str, Any] = {
+            "prompt_tokens": ir_usage.get("prompt_tokens") or 0,
+            "completion_tokens": ir_usage.get("completion_tokens") or 0,
+            "total_tokens": ir_usage.get("total_tokens") or 0,
+        }
+
+        if "prompt_tokens_details" in ir_usage:
+            usage["prompt_tokens_details"] = ir_usage["prompt_tokens_details"]
+        if "completion_tokens_details" in ir_usage:
+            usage["completion_tokens_details"] = ir_usage["completion_tokens_details"]
+
+        if "cache_read_tokens" in ir_usage:
+            usage.setdefault("prompt_tokens_details", {})["cached_tokens"] = ir_usage[
+                "cache_read_tokens"
+            ]
+        if "reasoning_tokens" in ir_usage:
+            usage.setdefault("completion_tokens_details", {})["reasoning_tokens"] = (
+                ir_usage["reasoning_tokens"]
+            )
+
+        return usage
 
     def messages_to_provider(
         self,

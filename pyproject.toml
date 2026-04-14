@@ -85,7 +85,7 @@ select = ["E", "F", "UP", "C901"]
 ignore = ["UP007", "E501"]  # Allow Union[X, Y] syntax; tolerate long lines
 
 [tool.ruff.lint.mccabe]
-max-complexity = 25
+max-complexity = 20
 
 [tool.ruff.lint.per-file-ignores]
 "src/llm_rosetta/_vendor/*" = ["C901"]
