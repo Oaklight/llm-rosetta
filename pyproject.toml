@@ -45,6 +45,7 @@ dev = [
     "python-dotenv",
     "pytest",
     "pytest-cov",
+    "complexipy>=5.2.0",
     "ty>=0.0.21",
     "build>=1.2.2.post1",
     "twine>=6.1.0",
@@ -80,5 +81,16 @@ include = ["src", "tests"]
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "UP"]
+select = ["E", "F", "UP", "C901"]
 ignore = ["UP007", "E501"]  # Allow Union[X, Y] syntax; tolerate long lines
+
+[tool.ruff.lint.mccabe]
+max-complexity = 25
+
+[tool.ruff.lint.per-file-ignores]
+"src/llm_rosetta/_vendor/*" = ["C901"]
+
+[tool.complexipy]
+paths = ["src"]
+max-complexity-allowed = 15
+exclude = ["src/llm_rosetta/_vendor"]
