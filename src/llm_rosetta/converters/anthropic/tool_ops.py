@@ -36,6 +36,30 @@ logger = logging.getLogger(__name__)
 # ==================== Orphaned Tool Call Fix ====================
 
 
+def _collect_anthropic_tool_ids(
+    messages: list[dict[str, Any]],
+) -> tuple[set[str], set[str]]:
+    """Collect all tool_use IDs and answered (tool_result) IDs."""
+    known_use_ids: set[str] = set()
+    answered_ids: set[str] = set()
+    for msg in messages:
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                use_id = block.get("id")
+                if use_id:
+                    known_use_ids.add(use_id)
+            elif block.get("type") == "tool_result":
+                use_id = block.get("tool_use_id")
+                if use_id:
+                    answered_ids.add(use_id)
+    return known_use_ids, answered_ids
+
+
 def fix_orphaned_tool_calls(
     messages: list[dict[str, Any]],
     *,
@@ -71,30 +95,13 @@ def fix_orphaned_tool_calls(
     Returns:
         A new messages list with orphaned tool_use/results fixed.
     """
-    # --- Pass 1: collect known tool_use ids and answered ids ---
-    known_use_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in messages:
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            continue
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") == "tool_use":
-                use_id = block.get("id")
-                if use_id:
-                    known_use_ids.add(use_id)
-            elif block.get("type") == "tool_result":
-                use_id = block.get("tool_use_id")
-                if use_id:
-                    answered_ids.add(use_id)
+    known_use_ids, answered_ids = _collect_anthropic_tool_ids(messages)
 
     # Fast path: nothing to fix
     if not known_use_ids and not answered_ids:
         return messages
 
-    # --- Pass 2: walk messages, inject/remove as needed ---
+    # --- Walk messages, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
     orphaned_use_ids: list[str] = []
     orphaned_result_ids: list[str] = []

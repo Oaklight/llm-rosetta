@@ -210,6 +210,28 @@ def sanitize_schema(
 # ==================== Orphaned Tool Call Fix (IR level) ====================
 
 
+def _collect_ir_tool_ids(
+    messages: Sequence[Message],
+) -> tuple[set[str], set[str]]:
+    """Collect all tool_call IDs and answered (tool_result) IDs from IR messages."""
+    known_call_ids: set[str] = set()
+    answered_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            for part in msg.get("content", []):
+                if isinstance(part, dict) and part.get("type") == "tool_call":
+                    tc_id = part.get("tool_call_id")
+                    if tc_id:
+                        known_call_ids.add(tc_id)
+        elif msg.get("role") == "tool":
+            for part in msg.get("content", []):
+                if isinstance(part, dict) and part.get("type") == "tool_result":
+                    tc_id = part.get("tool_call_id")
+                    if tc_id:
+                        answered_ids.add(tc_id)
+    return known_call_ids, answered_ids
+
+
 def fix_orphaned_tool_calls_ir(
     messages: Sequence[Message],
     *,
@@ -250,30 +272,13 @@ def fix_orphaned_tool_calls_ir(
     """
     msg_list = list(messages)
 
-    # --- Pass 1: collect known tool_call_ids and answered ids ---
-    known_call_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in msg_list:
-        if msg.get("role") == "assistant":
-            content = msg.get("content", [])
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "tool_call":
-                    tc_id = part.get("tool_call_id")
-                    if tc_id:
-                        known_call_ids.add(tc_id)
-        elif msg.get("role") == "tool":
-            content = msg.get("content", [])
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "tool_result":
-                    tc_id = part.get("tool_call_id")
-                    if tc_id:
-                        answered_ids.add(tc_id)
+    known_call_ids, answered_ids = _collect_ir_tool_ids(msg_list)
 
     # Fast path: nothing to fix
     if not known_call_ids and not answered_ids:
         return msg_list
 
-    # --- Pass 2: walk messages, inject/remove as needed ---
+    # --- Walk messages, inject/remove as needed ---
     patched: list[Message] = []
     orphaned_call_ids: list[str] = []
     orphaned_result_ids: list[str] = []

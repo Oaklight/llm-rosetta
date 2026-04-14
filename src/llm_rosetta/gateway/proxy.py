@@ -455,6 +455,107 @@ async def handle_non_streaming(
     return JSONResponse(source_response)
 
 
+async def _stream_event_generator(
+    *,
+    source_provider: ProviderType,
+    target_provider: ProviderType,
+    source_converter: Any,
+    target_converter: Any,
+    ctx: ConversionContext,
+    provider_info: ProviderInfo,
+    url: str,
+    upstream_body: dict[str, Any],
+    headers: dict[str, str],
+    format_sse: Any,
+    store: ProviderMetadataStore,
+    model: str,
+) -> AsyncIterator[str]:
+    """Stream SSE events from upstream, converting each chunk."""
+    from_ctx = target_converter.create_stream_context()  # upstream -> IR
+    to_ctx = source_converter.create_stream_context()  # IR -> source
+
+    # Bridge preserve-mode metadata from request phase to streaming context
+    to_ctx.options["metadata_mode"] = "preserve"
+    from_ctx.options["metadata_mode"] = "preserve"
+    if "_request_echo" in ctx.metadata:
+        to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
+
+    chunk_count = 0
+    t0 = time.monotonic()
+
+    client = get_client(provider_info.proxy_url)
+    async with client.stream(
+        "POST", url, json=upstream_body, headers=headers
+    ) as upstream_resp:
+        if upstream_resp.status_code >= 400:
+            await upstream_resp.aread()
+            error_text = upstream_resp.text
+            log_upstream_error(
+                upstream_resp.status_code,
+                error_text,
+                endpoint=str(target_provider),
+                is_streaming=True,
+            )
+            try:
+                error_body = json.loads(error_text)
+                error_msg = json.dumps(error_body)
+            except json.JSONDecodeError:
+                error_msg = error_text
+            yield f"data: {error_msg}\n\n"
+            return
+
+        async for line in upstream_resp.aiter_lines():
+            parsed = _iter_sse_lines(line)
+            if parsed is None:
+                continue
+            field, value = parsed
+
+            if field == "event":
+                continue
+            if field != "data" or value is None:
+                continue
+            if _is_openai_done(value):
+                break
+
+            try:
+                chunk = json.loads(value)
+            except json.JSONDecodeError:
+                logger.warning("Skipping malformed SSE data: %s", value[:200])
+                continue
+
+            chunk_count += 1
+
+            ir_events = target_converter.stream_response_from_provider(
+                chunk, context=from_ctx
+            )
+
+            if "_response_extras" in from_ctx.metadata:
+                to_ctx.metadata["_response_extras"] = from_ctx.metadata[
+                    "_response_extras"
+                ]
+
+            for ir_event in ir_events:
+                store.cache_from_stream_event(ir_event)
+                source_chunks = source_converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(source_chunks, list):
+                    for sc in source_chunks:
+                        if sc:
+                            yield format_sse(sc)
+                elif source_chunks:
+                    yield format_sse(source_chunks)
+
+    if source_provider == "openai_chat":
+        yield _format_sse_openai_chat_done()
+
+    log_stream_summary(
+        model=model,
+        duration_s=time.monotonic() - t0,
+        chunk_count=chunk_count,
+    )
+
+
 async def handle_streaming(
     source_provider: ProviderType,
     target_provider: ProviderType,
@@ -515,102 +616,20 @@ async def handle_streaming(
 
     format_sse = SSE_FORMATTERS[source_provider]
 
-    async def event_generator() -> AsyncIterator[str]:
-        """Stream SSE events from upstream, converting each chunk."""
-        from_ctx = target_converter.create_stream_context()  # upstream -> IR
-        to_ctx = source_converter.create_stream_context()  # IR -> source
-
-        # Bridge preserve-mode metadata from request phase to streaming context
-        to_ctx.options["metadata_mode"] = "preserve"
-        from_ctx.options["metadata_mode"] = "preserve"
-        if "_request_echo" in ctx.metadata:
-            to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
-
-        chunk_count = 0
-        t0 = time.monotonic()
-
-        client = get_client(provider_info.proxy_url)
-        async with client.stream(
-            "POST", url, json=upstream_body, headers=headers
-        ) as upstream_resp:
-            if upstream_resp.status_code >= 400:
-                # Read error body and yield as error
-                await upstream_resp.aread()
-                error_text = upstream_resp.text
-                log_upstream_error(
-                    upstream_resp.status_code,
-                    error_text,
-                    endpoint=str(target_provider),
-                    is_streaming=True,
-                )
-                try:
-                    error_body = json.loads(error_text)
-                    error_msg = json.dumps(error_body)
-                except json.JSONDecodeError:
-                    error_msg = error_text
-                yield f"data: {error_msg}\n\n"
-                return
-
-            async for line in upstream_resp.aiter_lines():
-                parsed = _iter_sse_lines(line)
-                if parsed is None:
-                    continue
-                field, value = parsed
-
-                # Skip event-type lines (type info is inside the data JSON)
-                if field == "event":
-                    continue
-
-                if field != "data" or value is None:
-                    continue
-
-                # OpenAI [DONE] signal
-                if _is_openai_done(value):
-                    break
-
-                try:
-                    chunk = json.loads(value)
-                except json.JSONDecodeError:
-                    logger.warning("Skipping malformed SSE data: %s", value[:200])
-                    continue
-
-                chunk_count += 1
-
-                # Upstream chunk -> IR events
-                ir_events = target_converter.stream_response_from_provider(
-                    chunk, context=from_ctx
-                )
-
-                # Bridge response extras captured during streaming
-                if "_response_extras" in from_ctx.metadata:
-                    to_ctx.metadata["_response_extras"] = from_ctx.metadata[
-                        "_response_extras"
-                    ]
-
-                # IR events -> source-format chunks
-                for ir_event in ir_events:
-                    # Cache provider_metadata from tool_call_start events
-                    store.cache_from_stream_event(ir_event)
-
-                    source_chunks = source_converter.stream_response_to_provider(
-                        ir_event, context=to_ctx
-                    )
-                    if isinstance(source_chunks, list):
-                        for sc in source_chunks:
-                            if sc:
-                                yield format_sse(sc)
-                    elif source_chunks:
-                        yield format_sse(source_chunks)
-
-        # Emit end-of-stream marker for OpenAI Chat format
-        if source_provider == "openai_chat":
-            yield _format_sse_openai_chat_done()
-
-        # -- stream summary (no per-chunk spam) --
-        log_stream_summary(
+    return StreamingResponse(
+        _stream_event_generator(
+            source_provider=source_provider,
+            target_provider=target_provider,
+            source_converter=source_converter,
+            target_converter=target_converter,
+            ctx=ctx,
+            provider_info=provider_info,
+            url=url,
+            upstream_body=upstream_body,
+            headers=headers,
+            format_sse=format_sse,
+            store=store,
             model=model,
-            duration_s=time.monotonic() - t0,
-            chunk_count=chunk_count,
-        )
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+        ),
+        media_type="text/event-stream",
+    )
