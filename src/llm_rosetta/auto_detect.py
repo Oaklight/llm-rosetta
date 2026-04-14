@@ -12,140 +12,121 @@ ProviderType = Literal[
 ]
 
 
-def detect_provider(body: dict[str, Any]) -> ProviderType | None:
-    """自动检测 provider 类型
-    Auto-detect provider type
+_RESPONSES_ITEM_TYPES = frozenset(
+    {
+        "message",
+        "function_call",
+        "function_call_output",
+        "mcp_call",
+        "mcp_call_output",
+        "reasoning",
+        "system_event",
+        "input_text",
+        "output_text",
+    }
+)
 
-    基于请求体的结构特征识别 provider 类型。
-    Identify provider type based on request body structure features.
+_ANTHROPIC_CONTENT_TYPES = frozenset(
+    {"image", "tool_use", "tool_result", "thinking", "document"}
+)
+
+
+def _is_google_format(body: dict[str, Any]) -> bool:
+    """Check if body matches Google GenAI format (contents with parts)."""
+    contents = body.get("contents")
+    if not isinstance(contents, list) or len(contents) == 0:
+        return False
+    first = contents[0]
+    return isinstance(first, dict) and "parts" in first
+
+
+def _is_responses_format(body: dict[str, Any]) -> bool:
+    """Check if body matches OpenAI Responses API format (input/output with typed items)."""
+    items = body.get("input") or body.get("output")
+    if not isinstance(items, list) or len(items) == 0:
+        return False
+    first = items[0]
+    return isinstance(first, dict) and first.get("type") in _RESPONSES_ITEM_TYPES
+
+
+def _has_anthropic_content_blocks(content: list[Any]) -> bool:
+    """Check if any content block in a message uses Anthropic-specific types."""
+    for part in content:
+        if isinstance(part, dict) and part.get("type") in _ANTHROPIC_CONTENT_TYPES:
+            return True
+    return False
+
+
+def _is_anthropic_messages(body: dict[str, Any]) -> bool:
+    """Check if a messages-based body is Anthropic rather than OpenAI Chat.
+
+    Both Anthropic and OpenAI Chat use ``messages``, so this inspects
+    top-level fields and content-block types to disambiguate.
+    """
+    # Anthropic-specific top-level fields
+    if "system" in body and isinstance(body["system"], (str, list)):
+        return True
+    if "anthropic_version" in body or "max_tokens_to_sample" in body:
+        return True
+
+    messages = body.get("messages")
+    if not isinstance(messages, list) or len(messages) == 0:
+        return False
+
+    first_message = messages[0]
+    if not isinstance(first_message, dict):
+        return False
+
+    content = first_message.get("content")
+    if not isinstance(content, list) or len(content) == 0:
+        return False
+
+    return _has_anthropic_content_blocks(content)
+
+
+def detect_provider(body: dict[str, Any]) -> ProviderType | None:
+    """Auto-detect provider type from request body structure.
 
     Args:
-        body: Provider 请求体字典 Provider request body dict
+        body: Provider request body dict.
 
     Returns:
-        检测到的 provider 类型，如果无法识别则返回 None Detected provider type, returns None if not recognized
+        Detected provider type, or ``None`` if unrecognised.
 
     Examples:
-        >>> # OpenAI Chat Completions
         >>> detect_provider({"messages": [{"role": "user", "content": "Hello"}]})
         'openai_chat'
-
-        >>> # OpenAI Responses API
         >>> detect_provider({"input": [{"type": "message", "role": "user"}]})
         'openai_responses'
-
-        >>> # Anthropic
         >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
         'anthropic'
-
-        >>> # Google GenAI
         >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
         'google'
     """
     if not isinstance(body, dict):
         return None
 
-    # 检测 Google GenAI: 必有 contents 字段 Detect Google GenAI: must have contents field
-    if "contents" in body:
-        contents = body["contents"]
-        if isinstance(contents, list) and len(contents) > 0:
-            # 验证是否有 parts 结构
-            first_content = contents[0]
-            if isinstance(first_content, dict) and "parts" in first_content:
-                return "google"
+    if _is_google_format(body):
+        return "google"
 
-    # 检测 OpenAI Responses API: 必有 input 或 output 字段 Detect OpenAI Responses API: must have input or output field
-    if "input" in body or "output" in body:
-        items = body.get("input") or body.get("output")
-        if isinstance(items, list) and len(items) > 0:
-            # 验证是否有 type 字段（message, function_call, etc.） Verify if there is a type field (message, function_call, etc.)
-            first_item = items[0]
-            if isinstance(first_item, dict) and "type" in first_item:
-                item_type = first_item["type"]
-                # Responses API 特有的类型 Types specific to Responses API
-                if item_type in [
-                    "message",
-                    "function_call",
-                    "function_call_output",
-                    "mcp_call",
-                    "mcp_call_output",
-                    "reasoning",
-                    "system_event",
-                    "input_text",
-                    "output_text",
-                ]:
-                    return "openai_responses"
+    if ("input" in body or "output" in body) and _is_responses_format(body):
+        return "openai_responses"
 
-    # 检测 Anthropic 和 OpenAI Chat: 都有 messages 字段 Detect Anthropic and OpenAI Chat: both have messages field
-    if "messages" in body:
-        # Anthropic 特有字段检测（优先） Anthropic specific field detection (priority)
-        if "system" in body and isinstance(body["system"], (str, list)):
-            # Anthropic 使用独立的 system 参数 Anthropic uses a separate system parameter
-            return "anthropic"
+    if "messages" not in body:
+        return None
 
-        if "anthropic_version" in body or "max_tokens_to_sample" in body:
-            return "anthropic"
+    if _is_anthropic_messages(body):
+        return "anthropic"
 
-        messages = body["messages"]
-        if isinstance(messages, list) and len(messages) > 0:
-            first_message = messages[0]
-            if isinstance(first_message, dict) and "content" in first_message:
-                content = first_message["content"]
+    # Check for OpenAI-specific tool_calls in message history
+    messages = body.get("messages")
+    if isinstance(messages, list):
+        for msg in messages:
+            if isinstance(msg, dict) and "tool_calls" in msg:
+                return "openai_chat"
 
-                # OpenAI Chat: content 是字符串 OpenAI Chat: content is string
-                if isinstance(content, str):
-                    return "openai_chat"
-
-                # 如果 content 是列表，需要区分 OpenAI 和 Anthropic If content is a list, need to distinguish OpenAI and Anthropic
-                if isinstance(content, list) and len(content) > 0:
-                    first_part = content[0]
-                    if isinstance(first_part, dict) and "type" in first_part:
-                        part_type = first_part["type"]
-
-                        # OpenAI Chat 特有的内容类型 Content types specific to OpenAI Chat
-                        if part_type in ["image_url", "input_audio"]:
-                            return "openai_chat"
-
-                        # Anthropic 特有的内容类型 Content types specific to Anthropic
-                        if part_type in [
-                            "image",
-                            "tool_use",
-                            "tool_result",
-                            "thinking",
-                            "document",
-                        ]:
-                            return "anthropic"
-
-                        # 对于 "text" 类型，检查更深层的结构 For "text" type, check deeper structure
-                        if part_type == "text":
-                            # 检查是否有 Anthropic 特有的嵌套结构
-                            # Anthropic 的 image 有 source 字段 Anthropic's image has source field
-                            for part in content:
-                                if isinstance(part, dict):
-                                    if part.get("type") == "image" and "source" in part:
-                                        return "anthropic"
-                                    if part.get("type") in [
-                                        "tool_use",
-                                        "thinking",
-                                        "document",
-                                    ]:
-                                        return "anthropic"
-
-                            # 默认 text 类型无法明确区分，返回 openai_chat Default text type cannot be clearly distinguished, return openai_chat
-                            # 因为 OpenAI 也支持 [{"type": "text", "text": "..."}] 格式 Because OpenAI also supports [{"type": "text", "text": "..."}] format
-                            pass
-
-        # 检查消息中是否有 tool_calls（OpenAI 特有） Check if there are tool_calls in messages (OpenAI specific)
-        if messages and isinstance(messages, list):
-            for msg in messages:
-                if isinstance(msg, dict) and "tool_calls" in msg:
-                    return "openai_chat"
-
-        # 如果无法明确区分，默认为 OpenAI Chat（更常见） If cannot be clearly distinguished, default to OpenAI Chat (more common)
-        return "openai_chat"
-
-    # 无法识别 Cannot recognize
-    return None
+    # Default: OpenAI Chat is the most common messages-based format
+    return "openai_chat"
 
 
 def get_converter_for_provider(provider: ProviderType):
