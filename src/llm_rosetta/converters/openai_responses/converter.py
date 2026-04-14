@@ -544,53 +544,64 @@ class OpenAIResponsesConverter(BaseConverter):
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            echo = ctx.get_echo_fields()
-            # Merge echo fields, but don't overwrite core fields already set
-            core_keys = {
-                "id",
-                "object",
-                "created_at",
-                "model",
-                "output",
-                "status",
-                "usage",
-            }
-            # Apply required defaults first, then override with actual echo
-            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
-                if k not in core_keys and k not in provider_response:
-                    provider_response[k] = v
-            for k, v in echo.items():
-                if k not in core_keys:
-                    provider_response[k] = v
-
-            # Ensure echoed tools have required 'strict' field
-            for tool in provider_response.get("tools", []):
-                if isinstance(tool, dict) and tool.get("type") == "function":
-                    tool.setdefault("strict", None)
-
-            # Restore per-output-item metadata
-            items_meta = ctx.get_output_items_meta()
-            output = provider_response.get("output", [])
-            for i, meta in enumerate(items_meta):
-                if i >= len(output):
-                    break
-                item = output[i]
-                if "id" in meta:
-                    item["id"] = meta["id"]
-                if "status" in meta:
-                    item["status"] = meta["status"]
-                # Restore per-content-part metadata
-                content_meta = meta.get("content_meta", [])
-                content = item.get("content", [])
-                for j, pm in enumerate(content_meta):
-                    if j >= len(content):
-                        break
-                    if "annotations" in pm:
-                        content[j]["annotations"] = pm["annotations"]
-                    if "logprobs" in pm:
-                        content[j]["logprobs"] = pm["logprobs"]
+            self._apply_preserve_metadata(provider_response, ctx)
 
         return provider_response
+
+    # ------------------------------------------------------------------
+    # Preserve-mode helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _apply_preserve_metadata(
+        provider_response: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Re-inject captured metadata fields in *preserve* mode."""
+        echo = ctx.get_echo_fields()
+        core_keys = {
+            "id",
+            "object",
+            "created_at",
+            "model",
+            "output",
+            "status",
+            "usage",
+        }
+        # Apply required defaults first, then override with actual echo
+        for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+            if k not in core_keys and k not in provider_response:
+                provider_response[k] = v
+        for k, v in echo.items():
+            if k not in core_keys:
+                provider_response[k] = v
+
+        # Ensure echoed tools have required 'strict' field
+        for tool in provider_response.get("tools", []):
+            if isinstance(tool, dict) and tool.get("type") == "function":
+                tool.setdefault("strict", None)
+
+        # Restore per-output-item metadata
+        items_meta = ctx.get_output_items_meta()
+        output = provider_response.get("output", [])
+        for i, meta in enumerate(items_meta):
+            if i >= len(output):
+                break
+            item = output[i]
+            if "id" in meta:
+                item["id"] = meta["id"]
+            if "status" in meta:
+                item["status"] = meta["status"]
+            # Restore per-content-part metadata
+            content_meta = meta.get("content_meta", [])
+            content = item.get("content", [])
+            for j, pm in enumerate(content_meta):
+                if j >= len(content):
+                    break
+                if "annotations" in pm:
+                    content[j]["annotations"] = pm["annotations"]
+                if "logprobs" in pm:
+                    content[j]["logprobs"] = pm["logprobs"]
 
     def messages_to_provider(
         self,

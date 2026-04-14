@@ -281,6 +281,55 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     # ==================== Provider → IR ====================
 
+    @staticmethod
+    def _normalize_shorthand_item(item: dict[str, Any]) -> dict[str, Any]:
+        """Normalize shorthand ``{"role": ..., "content": ...}`` to typed item.
+
+        Converts plain ``{"role": "user", "content": "hi"}`` into
+        ``{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]}``.
+        """
+        content = item.get("content", "")
+        if isinstance(content, str):
+            content = [{"type": "input_text", "text": content}]
+        elif isinstance(content, list):
+            normalized = []
+            for part in content:
+                if isinstance(part, str):
+                    normalized.append({"type": "input_text", "text": part})
+                elif isinstance(part, dict) and "type" not in part:
+                    normalized.append({"type": "input_text", **part})
+                else:
+                    normalized.append(part)
+            content = normalized
+        return {"type": "message", "role": item["role"], "content": content}
+
+    @staticmethod
+    def _append_or_start(
+        ir_input: list[Any],
+        current_message: dict[str, Any] | None,
+        part: Any,
+        target_role: str,
+    ) -> dict[str, Any]:
+        """Append *part* to *current_message* if roles match, else flush and start a new message."""
+        if current_message and current_message.get("role") == target_role:
+            cast(list, current_message["content"]).append(part)
+            return current_message
+        if current_message:
+            ir_input.append(current_message)
+        return {"role": target_role, "content": [part]}
+
+    _TOOL_CALL_TYPES = frozenset(
+        {
+            "function_call",
+            "mcp_call",
+            "shell_call",
+            "computer_call",
+            "code_interpreter_call",
+        }
+    )
+
+    _TOOL_RESULT_TYPES = frozenset({"function_call_output", "mcp_call_output"})
+
     def p_messages_to_ir(
         self,
         provider_messages: list[Any],
@@ -301,75 +350,38 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         current_message: dict[str, Any] | None = None
 
         for item in provider_messages:
-            # Normalize shorthand items: {"role": "user", "content": "..."}
-            # → {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "..."}]}
             if isinstance(item, dict) and "type" not in item and "role" in item:
-                content = item.get("content", "")
-                if isinstance(content, str):
-                    content = [{"type": "input_text", "text": content}]
-                elif isinstance(content, list):
-                    normalized = []
-                    for part in content:
-                        if isinstance(part, str):
-                            normalized.append({"type": "input_text", "text": part})
-                        elif isinstance(part, dict) and "type" not in part:
-                            normalized.append({"type": "input_text", **part})
-                        else:
-                            normalized.append(part)
-                    content = normalized
-                item = {"type": "message", "role": item["role"], "content": content}
+                item = self._normalize_shorthand_item(item)
 
             item_type = item.get("type") if isinstance(item, dict) else None
 
             if item_type == "message":
-                # Message type: create new message
                 new_message = self._p_message_to_ir(item)
                 if new_message:
                     if current_message:
                         ir_input.append(current_message)
                     current_message = new_message
 
-            elif item_type in (
-                "function_call",
-                "mcp_call",
-                "shell_call",
-                "computer_call",
-                "code_interpreter_call",
-            ):
-                # Tool call: convert to ToolCallPart
+            elif item_type in self._TOOL_CALL_TYPES:
                 tool_call = self.tool_ops.p_tool_call_to_ir(item)
-                if current_message and current_message.get("role") == "assistant":
-                    cast(list, current_message["content"]).append(tool_call)
-                else:
-                    if current_message:
-                        ir_input.append(current_message)
-                    current_message = {"role": "assistant", "content": [tool_call]}
+                current_message = self._append_or_start(
+                    ir_input, current_message, tool_call, "assistant"
+                )
 
-            elif item_type in ("function_call_output", "mcp_call_output"):
-                # Tool result: convert to ToolResultPart
-                # Use role="tool" (not "user") so fix_orphaned_tool_calls_ir
-                # can correctly detect answered tool calls across formats.
+            elif item_type in self._TOOL_RESULT_TYPES:
                 tool_result = self.tool_ops.p_tool_result_to_ir(item)
-                if current_message and current_message.get("role") == "tool":
-                    cast(list, current_message["content"]).append(tool_result)
-                else:
-                    if current_message:
-                        ir_input.append(current_message)
-                    current_message = {"role": "tool", "content": [tool_result]}
+                current_message = self._append_or_start(
+                    ir_input, current_message, tool_result, "tool"
+                )
 
             elif item_type == "reasoning":
-                # Reasoning content
                 reasoning = self.content_ops.p_reasoning_to_ir(item)
                 if reasoning:
-                    if current_message and current_message.get("role") == "assistant":
-                        cast(list, current_message["content"]).append(reasoning)
-                    else:
-                        if current_message:
-                            ir_input.append(current_message)
-                        current_message = {"role": "assistant", "content": [reasoning]}
+                    current_message = self._append_or_start(
+                        ir_input, current_message, reasoning, "assistant"
+                    )
 
             elif item_type == "system_event":
-                # System event: add as extension item
                 if current_message:
                     ir_input.append(current_message)
                     current_message = None
@@ -383,8 +395,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 )
 
             elif isinstance(item_type, str) and ":" in item_type:
-                # Slug-prefixed extension item (e.g. "openai:web_search_call")
-                # Preserve opaquely as a passthrough item on an assistant message
+                # Slug-prefixed extension item — preserve opaquely on assistant
                 if current_message and current_message.get("role") == "assistant":
                     metadata = current_message.setdefault("metadata", {})
                     custom = metadata.setdefault("custom", {})
@@ -398,10 +409,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                         "metadata": {"custom": {"_passthrough_items": [dict(item)]}},
                     }
 
-        # Handle the last message
-        if current_message:
-            if current_message.get("content"):
-                ir_input.append(current_message)
+        if current_message and current_message.get("content"):
+            ir_input.append(current_message)
 
         return ir_input
 
