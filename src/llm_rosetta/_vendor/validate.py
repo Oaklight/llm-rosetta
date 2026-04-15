@@ -1,8 +1,9 @@
 # /// zerodep
-# version = "0.4.1"
+# version = "0.4.2"
 # deps = []
 # tier = "medium"
 # category = "data"
+# note = "Install/update via `zerodep add validate`"
 # ///
 
 """Zero-dependency runtime validator for TypedDict and dataclass types.
@@ -471,6 +472,386 @@ _SIMPLE_TYPES: dict[type, type | tuple[type, ...]] = {
 }
 
 
+def _validate_annotated(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+) -> Any:
+    """Validate an ``Annotated[base, ...]`` type: check base then constraints."""
+    base, constraints = _unwrap_annotated(tp)
+    err_count_before = len(errors)
+    value = _validate(value, base, path, errors, coerce)
+    if len(errors) == err_count_before:
+        for c in constraints:
+            if not c.check(value):
+                errors.append(
+                    ErrorDetail(
+                        path=path or "$",
+                        expected=str(c),
+                        actual=repr(value),
+                        message=f"Constraint {c} failed for value {value!r} at '{path or '$'}'",
+                    )
+                )
+    return value
+
+
+def _validate_literal(
+    value: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``Literal[...]`` type."""
+    if value not in args:
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=f"Literal[{', '.join(repr(a) for a in args)}]",
+                actual=repr(value),
+                message=f"Expected one of {args!r} at '{path or '$'}', got {value!r}",
+            )
+        )
+    return value
+
+
+def _try_discriminated(
+    value: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    non_none_args: list[Any],
+) -> tuple[Any, bool]:
+    """Try to resolve a discriminated union via a shared Literal field.
+
+    Returns:
+        ``(result, True)`` if a discriminator matched, ``(value, False)`` otherwise.
+    """
+    disc_field = _find_discriminator(tuple(non_none_args))
+    if disc_field is None or not isinstance(value, dict) or disc_field not in value:
+        return value, False
+    disc_val = value[disc_field]
+    for candidate in non_none_args:
+        if not _is_typeddict(candidate):
+            continue
+        fields = _typeddict_fields(candidate)
+        if disc_field not in fields:
+            continue
+        base, _ = _unwrap_annotated(fields[disc_field][0])
+        if typing.get_origin(base) is typing.Literal:
+            if disc_val in typing.get_args(base):
+                return _validate(value, candidate, path, errors, coerce), True
+    return value, False
+
+
+def _validate_union(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``Union`` / ``Optional`` type."""
+    none_args = [a for a in args if a is type(None)]
+    non_none_args = [a for a in args if a is not type(None)]
+
+    if value is None:
+        if none_args:
+            return value
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=_type_name(tp),
+                actual="None",
+                message=f"Expected {_type_name(tp)} at '{path or '$'}', got None",
+            )
+        )
+        return value
+
+    # Try discriminated union for TypedDicts
+    result, matched = _try_discriminated(value, path, errors, coerce, non_none_args)
+    if matched:
+        return result
+
+    # Try each variant, pick the one with no errors
+    for variant in non_none_args:
+        test_errors: list[ErrorDetail] = []
+        result = _validate(value, variant, path, test_errors, coerce)
+        if not test_errors:
+            return result
+
+    errors.append(
+        ErrorDetail(
+            path=path or "$",
+            expected=_type_name(tp),
+            actual=type(value).__name__,
+            message=f"Value at '{path or '$'}' does not match any variant of {_type_name(tp)}",
+        )
+    )
+    return value
+
+
+def _validate_struct_fields(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    fields: dict[str, tuple[Any, bool]],
+) -> Any:
+    """Validate a struct-like type (TypedDict or dataclass) against its fields."""
+    if not isinstance(value, dict):
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=tp.__name__,
+                actual=type(value).__name__,
+                message=f"Expected dict for {tp.__name__} at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+        return value
+
+    for name, (field_tp, required) in fields.items():
+        if required and name not in value:
+            errors.append(
+                ErrorDetail(
+                    path=_join_path(path, name),
+                    expected=_type_name(field_tp),
+                    actual="MISSING",
+                    message=f"Missing required field '{name}' at '{path or '$'}'",
+                )
+            )
+
+    for name, val in value.items():
+        if name in fields:
+            field_tp, _ = fields[name]
+            _validate(val, field_tp, _join_path(path, name), errors, coerce)
+
+    return value
+
+
+def _validate_list(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``list[X]`` type."""
+    if not isinstance(value, list):
+        coerced, ok = _try_coerce(value, list, coerce)
+        if ok:
+            value = coerced
+        else:
+            errors.append(
+                ErrorDetail(
+                    path=path or "$",
+                    expected=_type_name(tp),
+                    actual=type(value).__name__,
+                    message=f"Expected list at '{path or '$'}', got {type(value).__name__}",
+                )
+            )
+            return value
+    if args:
+        item_tp = args[0]
+        for i, item in enumerate(value):
+            _validate(item, item_tp, _join_path(path, i), errors, coerce)
+    return value
+
+
+def _validate_dict(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``dict[K, V]`` type."""
+    if not isinstance(value, dict):
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=_type_name(tp),
+                actual=type(value).__name__,
+                message=f"Expected dict at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+        return value
+    if args and len(args) == 2:
+        key_tp, val_tp = args
+        for k, v in value.items():
+            _validate(k, key_tp, _join_path(path, f"<key:{k!r}>"), errors, coerce)
+            _validate(v, val_tp, _join_path(path, str(k)), errors, coerce)
+    return value
+
+
+def _validate_tuple(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``tuple[X, ...]`` or ``tuple[X, Y, Z]`` type."""
+    if not isinstance(value, (tuple, list)):
+        coerced, ok = _try_coerce(value, tuple, coerce)
+        if ok:
+            value = coerced
+        else:
+            errors.append(
+                ErrorDetail(
+                    path=path or "$",
+                    expected=_type_name(tp),
+                    actual=type(value).__name__,
+                    message=f"Expected tuple at '{path or '$'}', got {type(value).__name__}",
+                )
+            )
+            return value
+    if args:
+        if len(args) == 2 and args[1] is Ellipsis:
+            item_tp = args[0]
+            for i, item in enumerate(value):
+                _validate(item, item_tp, _join_path(path, i), errors, coerce)
+        elif len(value) != len(args):
+            errors.append(
+                ErrorDetail(
+                    path=path or "$",
+                    expected=f"tuple of length {len(args)}",
+                    actual=f"length {len(value)}",
+                    message=f"Expected tuple of {len(args)} elements at '{path or '$'}', got {len(value)}",
+                )
+            )
+        else:
+            for i, (item, item_tp) in enumerate(zip(value, args)):
+                _validate(item, item_tp, _join_path(path, i), errors, coerce)
+    return value
+
+
+def _validate_set(
+    value: Any,
+    tp: Any,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+    args: tuple[Any, ...],
+) -> Any:
+    """Validate a ``set[X]`` or ``frozenset[X]`` type."""
+    if not isinstance(value, (set, frozenset, list)):
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=_type_name(tp),
+                actual=type(value).__name__,
+                message=f"Expected set at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+        return value
+    items = value if isinstance(value, (set, frozenset)) else value
+    if args:
+        item_tp = args[0]
+        for i, item in enumerate(items):
+            _validate(item, item_tp, _join_path(path, i), errors, coerce)
+    return value
+
+
+def _validate_bool(value: Any, path: str, errors: list[ErrorDetail]) -> Any:
+    """Validate a ``bool`` type."""
+    if not isinstance(value, bool):
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected="bool",
+                actual=type(value).__name__,
+                message=f"Expected bool at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+    return value
+
+
+def _validate_int(
+    value: Any, path: str, errors: list[ErrorDetail], coerce: bool
+) -> Any:
+    """Validate an ``int`` type (rejects bools)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        coerced, ok = _try_coerce(value, int, coerce)
+        if ok:
+            return coerced
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected="int",
+                actual=type(value).__name__,
+                message=f"Expected int at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+    return value
+
+
+def _validate_float(
+    value: Any, path: str, errors: list[ErrorDetail], coerce: bool
+) -> Any:
+    """Validate a ``float`` type (rejects bools, accepts ints)."""
+    if isinstance(value, bool):
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected="float",
+                actual="bool",
+                message=f"Expected float at '{path or '$'}', got bool",
+            )
+        )
+        return value
+    if not isinstance(value, (int, float)):
+        coerced, ok = _try_coerce(value, float, coerce)
+        if ok:
+            return coerced
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected="float",
+                actual=type(value).__name__,
+                message=f"Expected float at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+    return value
+
+
+def _validate_simple(
+    value: Any,
+    tp: type,
+    path: str,
+    errors: list[ErrorDetail],
+    coerce: bool,
+) -> Any:
+    """Validate a simple type (bool, int, float, str, bytes, etc.)."""
+    if tp is bool:
+        return _validate_bool(value, path, errors)
+    if tp is int:
+        return _validate_int(value, path, errors, coerce)
+    if tp is float:
+        return _validate_float(value, path, errors, coerce)
+
+    # General isinstance check for str, bytes, etc.
+    if not isinstance(value, tp):
+        coerced, ok = _try_coerce(value, tp, coerce)
+        if ok:
+            return coerced
+        errors.append(
+            ErrorDetail(
+                path=path or "$",
+                expected=tp.__name__,
+                actual=type(value).__name__,
+                message=f"Expected {tp.__name__} at '{path or '$'}', got {type(value).__name__}",
+            )
+        )
+    return value
+
+
 def _validate(
     value: Any,
     tp: Any,
@@ -481,12 +862,11 @@ def _validate(
     """Recursively validate *value* against type *tp*.
 
     Mutates *errors* in place.  Returns the (possibly coerced) value.
+    Dispatches to per-type helpers for each supported annotation kind.
     """
-    # 1. Any — accept everything
     if tp is Any:
         return value
 
-    # 2. None / NoneType
     if tp is None or tp is type(None):
         if value is not None:
             errors.append(
@@ -499,330 +879,37 @@ def _validate(
             )
         return value
 
-    # Resolve origin for generic types
     origin = typing.get_origin(tp)
     args = typing.get_args(tp)
 
-    # 3. Annotated — unwrap, validate base, then check constraints
     if origin is typing.Annotated:
-        base, constraints = _unwrap_annotated(tp)
-        err_count_before = len(errors)
-        value = _validate(value, base, path, errors, coerce)
-        if len(errors) == err_count_before:
-            # Only check constraints if base type validated ok
-            for c in constraints:
-                if not c.check(value):
-                    errors.append(
-                        ErrorDetail(
-                            path=path or "$",
-                            expected=str(c),
-                            actual=repr(value),
-                            message=f"Constraint {c} failed for value {value!r} at '{path or '$'}'",
-                        )
-                    )
-        return value
-
-    # 4. Literal
+        return _validate_annotated(value, tp, path, errors, coerce)
     if origin is typing.Literal:
-        if value not in args:
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=f"Literal[{', '.join(repr(a) for a in args)}]",
-                    actual=repr(value),
-                    message=f"Expected one of {args!r} at '{path or '$'}', got {value!r}",
-                )
-            )
-        return value
-
-    # 5. Union (includes Optional)
+        return _validate_literal(value, path, errors, args)
     if origin is Union:
-        # Filter out NoneType for nullable check
-        none_args = [a for a in args if a is type(None)]
-        non_none_args = [a for a in args if a is not type(None)]
-
-        if value is None:
-            if none_args:
-                return value
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=_type_name(tp),
-                    actual="None",
-                    message=f"Expected {_type_name(tp)} at '{path or '$'}', got None",
-                )
-            )
-            return value
-
-        # Try discriminated union for TypedDicts
-        disc_field = _find_discriminator(tuple(non_none_args))
-        if disc_field is not None and isinstance(value, dict) and disc_field in value:
-            disc_val = value[disc_field]
-            for candidate in non_none_args:
-                if not _is_typeddict(candidate):
-                    continue
-                fields = _typeddict_fields(candidate)
-                if disc_field not in fields:
-                    continue
-                base, _ = _unwrap_annotated(fields[disc_field][0])
-                if typing.get_origin(base) is typing.Literal:
-                    if disc_val in typing.get_args(base):
-                        return _validate(value, candidate, path, errors, coerce)
-
-        # Try each variant, pick the one with no errors
-        for variant in non_none_args:
-            test_errors: list[ErrorDetail] = []
-            result = _validate(value, variant, path, test_errors, coerce)
-            if not test_errors:
-                return result
-
-        errors.append(
-            ErrorDetail(
-                path=path or "$",
-                expected=_type_name(tp),
-                actual=type(value).__name__,
-                message=f"Value at '{path or '$'}' does not match any variant of {_type_name(tp)}",
-            )
-        )
-        return value
-
-    # 6. TypedDict
-    if _is_typeddict(tp):
-        if not isinstance(value, dict):
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=tp.__name__,
-                    actual=type(value).__name__,
-                    message=f"Expected dict for {tp.__name__} at '{path or '$'}', got {type(value).__name__}",
-                )
-            )
-            return value
-
-        fields = _typeddict_fields(tp)
-
-        # Check for missing required fields
-        for name, (field_tp, required) in fields.items():
-            if required and name not in value:
-                errors.append(
-                    ErrorDetail(
-                        path=_join_path(path, name),
-                        expected=_type_name(field_tp),
-                        actual="MISSING",
-                        message=f"Missing required field '{name}' at '{path or '$'}'",
-                    )
-                )
-
-        # Validate present fields
-        for name, val in value.items():
-            if name in fields:
-                field_tp, _ = fields[name]
-                _validate(val, field_tp, _join_path(path, name), errors, coerce)
-
-        return value
-
-    # 7. dataclass
-    if _is_dataclass_type(tp):
-        if not isinstance(value, dict):
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=tp.__name__,
-                    actual=type(value).__name__,
-                    message=f"Expected dict for {tp.__name__} at '{path or '$'}', got {type(value).__name__}",
-                )
-            )
-            return value
-
-        fields = _dataclass_fields(tp)
-
-        for name, (field_tp, required) in fields.items():
-            if required and name not in value:
-                errors.append(
-                    ErrorDetail(
-                        path=_join_path(path, name),
-                        expected=_type_name(field_tp),
-                        actual="MISSING",
-                        message=f"Missing required field '{name}' at '{path or '$'}'",
-                    )
-                )
-
-        for name, val in value.items():
-            if name in fields:
-                field_tp, _ = fields[name]
-                _validate(val, field_tp, _join_path(path, name), errors, coerce)
-
-        return value
-
-    # 8. list[X]
+        return _validate_union(value, tp, path, errors, coerce, args)
     if origin is list:
-        if not isinstance(value, list):
-            coerced, ok = _try_coerce(value, list, coerce)
-            if ok:
-                value = coerced
-            else:
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected=_type_name(tp),
-                        actual=type(value).__name__,
-                        message=f"Expected list at '{path or '$'}', got {type(value).__name__}",
-                    )
-                )
-                return value
-        if args:
-            item_tp = args[0]
-            for i, item in enumerate(value):
-                _validate(item, item_tp, _join_path(path, i), errors, coerce)
-        return value
-
-    # 9. dict[K, V]
+        return _validate_list(value, tp, path, errors, coerce, args)
     if origin is dict:
-        if not isinstance(value, dict):
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=_type_name(tp),
-                    actual=type(value).__name__,
-                    message=f"Expected dict at '{path or '$'}', got {type(value).__name__}",
-                )
-            )
-            return value
-        if args and len(args) == 2:
-            key_tp, val_tp = args
-            for k, v in value.items():
-                _validate(k, key_tp, _join_path(path, f"<key:{k!r}>"), errors, coerce)
-                _validate(v, val_tp, _join_path(path, str(k)), errors, coerce)
-        return value
-
-    # 10. tuple
+        return _validate_dict(value, tp, path, errors, coerce, args)
     if origin is tuple:
-        if not isinstance(value, (tuple, list)):
-            coerced, ok = _try_coerce(value, tuple, coerce)
-            if ok:
-                value = coerced
-            else:
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected=_type_name(tp),
-                        actual=type(value).__name__,
-                        message=f"Expected tuple at '{path or '$'}', got {type(value).__name__}",
-                    )
-                )
-                return value
-        if args:
-            if len(args) == 2 and args[1] is Ellipsis:
-                # tuple[X, ...] — homogeneous
-                item_tp = args[0]
-                for i, item in enumerate(value):
-                    _validate(item, item_tp, _join_path(path, i), errors, coerce)
-            else:
-                # tuple[X, Y, Z] — positional
-                if len(value) != len(args):
-                    errors.append(
-                        ErrorDetail(
-                            path=path or "$",
-                            expected=f"tuple of length {len(args)}",
-                            actual=f"length {len(value)}",
-                            message=f"Expected tuple of {len(args)} elements at '{path or '$'}', got {len(value)}",
-                        )
-                    )
-                else:
-                    for i, (item, item_tp) in enumerate(zip(value, args)):
-                        _validate(item, item_tp, _join_path(path, i), errors, coerce)
-        return value
-
-    # 11. set / frozenset
+        return _validate_tuple(value, tp, path, errors, coerce, args)
     if origin in (set, frozenset):
-        if not isinstance(value, (set, frozenset, list)):
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=_type_name(tp),
-                    actual=type(value).__name__,
-                    message=f"Expected set at '{path or '$'}', got {type(value).__name__}",
-                )
-            )
-            return value
-        # Accept list as set (common in JSON)
-        items = value if isinstance(value, (set, frozenset)) else value
-        if args:
-            item_tp = args[0]
-            for i, item in enumerate(items):
-                _validate(item, item_tp, _join_path(path, i), errors, coerce)
-        return value
+        return _validate_set(value, tp, path, errors, coerce, args)
 
-    # 12. Simple types (bool before int!)
+    if _is_typeddict(tp):
+        return _validate_struct_fields(
+            value, tp, path, errors, coerce, _typeddict_fields(tp)
+        )
+    if _is_dataclass_type(tp):
+        return _validate_struct_fields(
+            value, tp, path, errors, coerce, _dataclass_fields(tp)
+        )
+
     if isinstance(tp, type):
-        if tp is bool:
-            if not isinstance(value, bool):
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected="bool",
-                        actual=type(value).__name__,
-                        message=f"Expected bool at '{path or '$'}', got {type(value).__name__}",
-                    )
-                )
-            return value
+        return _validate_simple(value, tp, path, errors, coerce)
 
-        if tp is int:
-            if isinstance(value, bool) or not isinstance(value, int):
-                coerced, ok = _try_coerce(value, int, coerce)
-                if ok:
-                    return coerced
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected="int",
-                        actual=type(value).__name__,
-                        message=f"Expected int at '{path or '$'}', got {type(value).__name__}",
-                    )
-                )
-            return value
-
-        if tp is float:
-            if isinstance(value, bool):
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected="float",
-                        actual="bool",
-                        message=f"Expected float at '{path or '$'}', got bool",
-                    )
-                )
-                return value
-            if not isinstance(value, (int, float)):
-                coerced, ok = _try_coerce(value, float, coerce)
-                if ok:
-                    return coerced
-                errors.append(
-                    ErrorDetail(
-                        path=path or "$",
-                        expected="float",
-                        actual=type(value).__name__,
-                        message=f"Expected float at '{path or '$'}', got {type(value).__name__}",
-                    )
-                )
-            return value
-
-        # General isinstance check for str, bytes, etc.
-        if not isinstance(value, tp):
-            coerced, ok = _try_coerce(value, tp, coerce)
-            if ok:
-                return coerced
-            errors.append(
-                ErrorDetail(
-                    path=path or "$",
-                    expected=tp.__name__,
-                    actual=type(value).__name__,
-                    message=f"Expected {tp.__name__} at '{path or '$'}', got {type(value).__name__}",
-                )
-            )
-        return value
-
-    # 13. Fallback — unknown type, skip validation
+    # Fallback — unknown type, skip validation
     return value
 
 
@@ -837,125 +924,122 @@ _PY_TO_JSON_TYPE: dict[type, str] = {
 }
 
 
-def _type_to_schema(tp: Any) -> dict[str, Any]:
-    """Convert a Python type annotation to a JSON Schema dict."""
-    origin = typing.get_origin(tp)
-    args = typing.get_args(tp)
+def _schema_annotated(tp: Any) -> dict[str, Any]:
+    """Generate JSON Schema for an ``Annotated[base, ...]`` type."""
+    base, constraints = _unwrap_annotated(tp)
+    schema = _type_to_schema(base)
+    for c in constraints:
+        kw = c.schema_kw()
+        if schema.get("type") == "array" and hasattr(c, "schema_kw_array"):
+            kw = c.schema_kw_array()
+        schema.update(kw)
+    return schema
 
-    # Annotated — merge constraint keywords
-    if origin is typing.Annotated:
-        base, constraints = _unwrap_annotated(tp)
-        schema = _type_to_schema(base)
-        for c in constraints:
-            kw = c.schema_kw()
-            # Use array-specific keywords for array types
-            if schema.get("type") == "array" and hasattr(c, "schema_kw_array"):
-                kw = c.schema_kw_array()
-            schema.update(kw)
+
+def _schema_union(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Generate JSON Schema for a ``Union`` type."""
+    none_args = [a for a in args if a is type(None)]
+    non_none = [a for a in args if a is not type(None)]
+
+    if len(non_none) == 1 and none_args:
+        schema = _type_to_schema(non_none[0])
+        if "type" in schema:
+            schema["type"] = [schema["type"], "null"]
+        else:
+            schema = {"oneOf": [schema, {"type": "null"}]}
         return schema
 
-    # None
+    return {"oneOf": [_type_to_schema(a) for a in args]}
+
+
+def _schema_struct(fields: dict[str, tuple[Any, bool]]) -> dict[str, Any]:
+    """Generate JSON Schema for a struct-like type (TypedDict or dataclass)."""
+    properties: dict[str, Any] = {}
+    required: list[str] = []
+    for name, (field_tp, is_required) in fields.items():
+        properties[name] = _type_to_schema(field_tp)
+        if is_required:
+            required.append(name)
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": properties,
+    }
+    if required:
+        schema["required"] = required
+    return schema
+
+
+def _schema_tuple(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Generate JSON Schema for a ``tuple`` type."""
+    if args:
+        if len(args) == 2 and args[1] is Ellipsis:
+            return {"type": "array", "items": _type_to_schema(args[0])}
+        return {
+            "type": "array",
+            "prefixItems": [_type_to_schema(a) for a in args],
+            "minItems": len(args),
+            "maxItems": len(args),
+        }
+    return {"type": "array"}
+
+
+def _schema_list(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Generate JSON Schema for a ``list[X]`` type."""
+    schema: dict[str, Any] = {"type": "array"}
+    if args:
+        schema["items"] = _type_to_schema(args[0])
+    return schema
+
+
+def _schema_dict(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Generate JSON Schema for a ``dict[K, V]`` type."""
+    schema: dict[str, Any] = {"type": "object"}
+    if args and len(args) == 2:
+        schema["additionalProperties"] = _type_to_schema(args[1])
+    return schema
+
+
+def _schema_set(args: tuple[Any, ...]) -> dict[str, Any]:
+    """Generate JSON Schema for a ``set`` or ``frozenset`` type."""
+    schema: dict[str, Any] = {"type": "array", "uniqueItems": True}
+    if args:
+        schema["items"] = _type_to_schema(args[0])
+    return schema
+
+
+def _type_to_schema(tp: Any) -> dict[str, Any]:
+    """Convert a Python type annotation to a JSON Schema dict.
+
+    Dispatches to per-type schema helpers for each supported annotation kind.
+    """
+    if tp is Any:
+        return {}
     if tp is None or tp is type(None):
         return {"type": "null"}
 
-    # Literal
+    origin = typing.get_origin(tp)
+    args = typing.get_args(tp)
+
+    if origin is typing.Annotated:
+        return _schema_annotated(tp)
     if origin is typing.Literal:
         return {"enum": list(args)}
-
-    # Union
     if origin is Union:
-        none_args = [a for a in args if a is type(None)]
-        non_none = [a for a in args if a is not type(None)]
-
-        if len(non_none) == 1 and none_args:
-            # Optional[X] -> nullable
-            schema = _type_to_schema(non_none[0])
-            if "type" in schema:
-                schema["type"] = [schema["type"], "null"]
-            else:
-                schema = {"oneOf": [schema, {"type": "null"}]}
-            return schema
-
-        variants = [_type_to_schema(a) for a in args]
-        return {"oneOf": variants}
-
-    # TypedDict
-    if _is_typeddict(tp):
-        fields = _typeddict_fields(tp)
-        properties: dict[str, Any] = {}
-        required: list[str] = []
-        for name, (field_tp, is_required) in fields.items():
-            properties[name] = _type_to_schema(field_tp)
-            if is_required:
-                required.append(name)
-        schema: dict[str, Any] = {
-            "type": "object",
-            "properties": properties,
-        }
-        if required:
-            schema["required"] = required
-        return schema
-
-    # dataclass
-    if _is_dataclass_type(tp):
-        fields = _dataclass_fields(tp)
-        properties = {}
-        required = []
-        for name, (field_tp, is_required) in fields.items():
-            properties[name] = _type_to_schema(field_tp)
-            if is_required:
-                required.append(name)
-        schema: dict[str, Any] = {
-            "type": "object",
-            "properties": properties,
-        }
-        if required:
-            schema["required"] = required
-        return schema
-
-    # list[X]
+        return _schema_union(args)
     if origin is list:
-        schema: dict[str, Any] = {"type": "array"}
-        if args:
-            schema["items"] = _type_to_schema(args[0])
-        return schema
-
-    # dict[K, V]
+        return _schema_list(args)
     if origin is dict:
-        schema: dict[str, Any] = {"type": "object"}
-        if args and len(args) == 2:
-            schema["additionalProperties"] = _type_to_schema(args[1])
-        return schema
-
-    # tuple
+        return _schema_dict(args)
     if origin is tuple:
-        if args:
-            if len(args) == 2 and args[1] is Ellipsis:
-                return {"type": "array", "items": _type_to_schema(args[0])}
-            return {
-                "type": "array",
-                "prefixItems": [_type_to_schema(a) for a in args],
-                "minItems": len(args),
-                "maxItems": len(args),
-            }
-        return {"type": "array"}
-
-    # set / frozenset
+        return _schema_tuple(args)
     if origin in (set, frozenset):
-        schema: dict[str, Any] = {"type": "array", "uniqueItems": True}
-        if args:
-            schema["items"] = _type_to_schema(args[0])
-        return schema
-
-    # Simple types
+        return _schema_set(args)
+    if _is_typeddict(tp):
+        return _schema_struct(_typeddict_fields(tp))
+    if _is_dataclass_type(tp):
+        return _schema_struct(_dataclass_fields(tp))
     if isinstance(tp, type) and tp in _PY_TO_JSON_TYPE:
         return {"type": _PY_TO_JSON_TYPE[tp]}
-
-    # Any
-    if tp is Any:
-        return {}
-
-    # Fallback
     return {}
 
 
