@@ -119,6 +119,7 @@ nav:
       - api/index.md
       - Converters: api/converters.md
       - IR Types: api/types.md
+      - Tool Ops: api/tool-ops.md
       - Utilities: api/utils.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md
