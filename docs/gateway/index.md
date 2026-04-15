@@ -137,16 +137,28 @@ curl http://localhost:8765/v1/chat/completions \
 
 ## Docker 部署
 
+网关镜像已发布至 DockerHub：
+
 ```bash
-# 使用 Docker Compose 构建并运行
-docker compose up -d
+# 从 DockerHub 拉取并运行
+docker pull oaklight/llm-rosetta-gateway:latest
+docker run -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
+
+# 或使用 Docker Compose（见 docker/docker-compose.yaml）
+cd docker && docker compose up -d
+```
+
+从源码构建：
+
+```bash
+# 通过 Makefile 构建（优先使用本地 wheel，否则从 PyPI 安装）
+make build-docker
 
 # 或手动构建
 docker build -t llm-rosetta-gateway .
-docker run -p 8765:8765 -v /path/to/config:/config llm-rosetta-gateway
 ```
 
-详见 `docker/` 目录下的 `docker-compose.yml` 以及 Makefile 中的 `build-docker` / `run-docker` 目标。
+设置 `PUID`/`PGID` 环境变量以匹配宿主机用户的 UID/GID。完整配置示例见 `docker/docker-compose.yaml`。
 
 ## 管理面板
 
