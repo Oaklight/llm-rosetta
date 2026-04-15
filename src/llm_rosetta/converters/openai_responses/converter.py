@@ -415,7 +415,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)
+            provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -997,7 +997,7 @@ class OpenAIResponsesConverter(BaseConverter):
         events.append(
             FinishEvent(
                 type="finish",
-                finish_reason={"reason": reason},
+                finish_reason={"reason": reason},  # ty: ignore[invalid-argument-type]
             )
         )
 

@@ -378,7 +378,7 @@ class TestGoogleGenAIConverter:
         choice = result["choices"][0]
         assert choice["index"] == 0
         assert choice["message"]["role"] == "assistant"
-        assert list(choice["message"]["content"])[0]["text"] == "Hello! How can I help?"
+        assert list(choice["message"]["content"])[0]["text"] == "Hello! How can I help?"  # ty: ignore[invalid-key]
         assert choice["finish_reason"]["reason"] == "stop"
 
         assert result["usage"]["prompt_tokens"] == 15

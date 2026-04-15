@@ -496,7 +496,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)
+            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
 
         return provider_response
 
@@ -814,7 +814,7 @@ class GoogleGenAIConverter(BaseConverter):
                 deferred_finish = FinishEvent(
                     type="finish",
                     finish_reason={
-                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")
+                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
                     },
                     choice_index=choice_index,
                 )

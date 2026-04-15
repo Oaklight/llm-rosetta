@@ -570,7 +570,7 @@ class TestBaseConverter:
         ir_request = self.converter.request_from_provider(provider_request)
 
         assert ir_request["model"] == "test-model"
-        messages_list = cast(list[Message], ir_request["messages"])
+        messages_list = ir_request["messages"]
         assert len(messages_list) == 1
         assert cast(UserMessage, messages_list[0])["role"] == "user"
 
