@@ -19,6 +19,7 @@ from .converters import (
     OpenAIChatConverter,
     OpenAIResponsesConverter,
 )
+from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 
 __version__ = "0.5.0"
@@ -34,6 +35,8 @@ __all__ = [
     # 转换上下文 Conversion context
     "ConversionContext",
     "StreamContext",
+    # 工具定义便利 API Tool definition convenience API
+    "tool_ops",
     # 自动检测和转换 Auto-detection and conversion
     "detect_provider",
     "get_converter_for_provider",

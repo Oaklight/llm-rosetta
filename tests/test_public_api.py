@@ -33,13 +33,15 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Conversion context
             "ConversionContext",
             "StreamContext",
+            # Tool definition convenience API
+            "tool_ops",
             # Auto-detection and conversion
             "detect_provider",
             "get_converter_for_provider",
             "convert",
             "ProviderType",
         ],
-        "max_count": 15,
+        "max_count": 16,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
