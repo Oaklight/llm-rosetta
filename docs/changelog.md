@@ -38,6 +38,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **推理模型空内容回退**：管理面板测试结果现在正确处理 `content: ""`（推理模型将所有 `max_tokens` 消耗在推理 token 上时），而非显示原始 JSON
 - **配置文件未找到错误**：网关在配置文件不存在时显示友好的错误信息，而非 Python 堆栈跟踪
 - **ty 类型检查兼容性**：为 TypedDict 与 `dict[str, Any]` 不匹配及 `FinishReason` Literal 类型窄化添加 `ty: ignore` 注解
+- **Google 转换器在 thinking 耗尽所有 token 时崩溃**（[#152](https://github.com/Oaklight/llm-rosetta/issues/152)）：Gemini 2.5 Pro 在 `max_tokens` 较小时，thinking 可能消耗全部 token，产生无内容部分的响应。转换器现在回退到空 assistant 消息，而非 IR 验证失败
 
 ## v0.5.0 — 2026-04-12
 
