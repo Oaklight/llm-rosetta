@@ -38,6 +38,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Empty content fallback for reasoning models**: Admin panel test results now correctly handle `content: ""` (from reasoning models where all `max_tokens` are consumed by reasoning tokens) instead of showing raw JSON
 - **Config file not found error**: Gateway now shows a friendly error message when the config file doesn't exist, instead of a Python traceback
 - **ty type checker compatibility**: Added `ty: ignore` annotations for TypedDict vs `dict[str, Any]` mismatches and `FinishReason` Literal type narrowing
+- **Google converter crash when thinking consumes all tokens** ([#152](https://github.com/Oaklight/llm-rosetta/issues/152)): Gemini 2.5 Pro with small `max_tokens` could have all tokens consumed by thinking, producing a response with no content parts. The converter now falls back to an empty assistant message instead of failing IR validation
 
 ## v0.5.0 — 2026-04-12
 
