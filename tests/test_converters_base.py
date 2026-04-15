@@ -473,6 +473,25 @@ class MockConverter(BaseConverter):
     ) -> Union[dict[str, Any], list[dict[str, Any]]]:
         return {}
 
+    @staticmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        return p_usage
+
+    @staticmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        return ir_usage
+
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        return tools
+
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        pass
+
 
 # ============================================================================
 # Test classes

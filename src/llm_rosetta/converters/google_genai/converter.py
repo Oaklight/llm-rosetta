@@ -255,11 +255,9 @@ class GoogleGenAIConverter(BaseConverter):
         if system_instruction:
             result["system_instruction"] = system_instruction
 
-        # 3. Build config dict
-        config: dict[str, Any] = {}
-
-        # Tools + tool choice
-        self._apply_tool_config(ir_request, config)
+        # 3. Build config dict (tools written by _apply_tool_config)
+        self._apply_tool_config(ir_request, result, ctx)
+        config = result.setdefault("config", {})
 
         # Generation config
         gen_config = ir_request.get("generation")
@@ -295,8 +293,6 @@ class GoogleGenAIConverter(BaseConverter):
         extensions = ir_request.get("provider_extensions")
         if extensions:
             config.update(extensions)
-
-        result["config"] = config
 
         if output_format == "rest":
             return self._to_rest_body(result), ctx.warnings
@@ -511,9 +507,11 @@ class GoogleGenAIConverter(BaseConverter):
     def _apply_tool_config(
         self,
         ir_request: IRRequest,
-        config: dict[str, Any],
+        result: dict[str, Any],
+        ctx: ConversionContext,
     ) -> None:
         """Apply tools and tool_choice to provider config dict."""
+        config = result.setdefault("config", {})
         tools = ir_request.get("tools")
         if tools:
             config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
