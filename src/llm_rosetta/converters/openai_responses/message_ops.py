@@ -385,34 +385,47 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 if current_message:
                     ir_input.append(current_message)
                     current_message = None
-                ir_input.append(
-                    {
-                        "type": "system_event",
-                        "event_type": item.get("event_type", "unknown"),
-                        "timestamp": item.get("timestamp", ""),
-                        "message": item.get("message", ""),
-                    }
-                )
+                ir_input.append(self._make_system_event(item))
 
             elif isinstance(item_type, str) and ":" in item_type:
-                # Slug-prefixed extension item — preserve opaquely on assistant
-                if current_message and current_message.get("role") == "assistant":
-                    metadata = current_message.setdefault("metadata", {})
-                    custom = metadata.setdefault("custom", {})
-                    custom.setdefault("_passthrough_items", []).append(dict(item))
-                else:
-                    if current_message:
-                        ir_input.append(current_message)
-                    current_message = {
-                        "role": "assistant",
-                        "content": [],
-                        "metadata": {"custom": {"_passthrough_items": [dict(item)]}},
-                    }
+                current_message = self._handle_p_extension_item(
+                    item, current_message, ir_input
+                )
 
         if current_message and current_message.get("content"):
             ir_input.append(current_message)
 
         return ir_input
+
+    @staticmethod
+    def _make_system_event(item: dict[str, Any]) -> dict[str, Any]:
+        """Build an IR system_event from a Responses API system_event item."""
+        return {
+            "type": "system_event",
+            "event_type": item.get("event_type", "unknown"),
+            "timestamp": item.get("timestamp", ""),
+            "message": item.get("message", ""),
+        }
+
+    @staticmethod
+    def _handle_p_extension_item(
+        item: dict[str, Any],
+        current_message: dict[str, Any] | None,
+        ir_input: list[Any],
+    ) -> dict[str, Any]:
+        """Handle a slug-prefixed extension item, preserving it opaquely."""
+        if current_message and current_message.get("role") == "assistant":
+            metadata = current_message.setdefault("metadata", {})
+            custom = metadata.setdefault("custom", {})
+            custom.setdefault("_passthrough_items", []).append(dict(item))
+            return current_message
+        if current_message:
+            ir_input.append(current_message)
+        return {
+            "role": "assistant",
+            "content": [],
+            "metadata": {"custom": {"_passthrough_items": [dict(item)]}},
+        }
 
     def _p_message_to_ir(self, provider_message: Any) -> Any:
         """Convert a single Responses API message item to IR format.

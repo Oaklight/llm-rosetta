@@ -130,28 +130,8 @@ class AnthropicConverter(BaseConverter):
             # Anthropic requires max_tokens
             result["max_tokens"] = 4096
 
-        # 4. Tools
-        tools = ir_request.get("tools")
-        if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        # 5. Tool choice
-        tool_choice = ir_request.get("tool_choice")
-        if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-
-        # 6. Tool config (disable_parallel_tool_use merges into tool_choice)
-        tool_config = ir_request.get("tool_config")
-        if tool_config:
-            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
-            if tc_fields:
-                if "tool_choice" not in result:
-                    result["tool_choice"] = {"type": "auto"}
-                result["tool_choice"].update(tc_fields)
-            if "max_calls" in tool_config:
-                ctx.warnings.append(
-                    "Anthropic does not support max_tool_calls, ignored"
-                )
+        # 4-6. Tools, tool choice, tool config
+        self._apply_tool_config(ir_request, result, ctx)
 
         # 7. Response format (not supported)
         resp_format = ir_request.get("response_format")
@@ -227,23 +207,7 @@ class AnthropicConverter(BaseConverter):
         # 3. Tools
         tools = provider_request.get("tools")
         if tools:
-            ir_tools = []
-            for t in tools:
-                try:
-                    ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
-                except Exception as e:
-                    tool_type = (
-                        t.get("type", "unknown")
-                        if isinstance(t, dict)
-                        else type(t).__name__
-                    )
-                    tool_name = (
-                        t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                    )
-                    raise ValueError(
-                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                    ) from e
-            ir_request["tools"] = ir_tools
+            ir_request["tools"] = self._convert_tools_from_p(tools)
 
         # 4. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -327,66 +291,12 @@ class AnthropicConverter(BaseConverter):
         # Usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            input_tokens = p_usage.get("input_tokens") or 0
-            output_tokens = p_usage.get("output_tokens") or 0
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": input_tokens,
-                "completion_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            }
-
-            if "cache_read_input_tokens" in p_usage:
-                usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
-
-            ir_response["usage"] = usage_info
+            ir_response["usage"] = self._build_ir_usage(p_usage)
 
         # Preserve mode: capture extra fields for lossless round-trip
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            # Top-level extras (e.g. OpenRouter's "provider", "container")
-            _ANTHROPIC_CORE_KEYS = {
-                "id",
-                "type",
-                "role",
-                "content",
-                "model",
-                "stop_reason",
-                "stop_sequence",
-                "usage",
-            }
-            extras = {
-                k: v
-                for k, v in provider_response.items()
-                if k not in _ANTHROPIC_CORE_KEYS
-            }
-            # Extended usage fields (OpenRouter adds cost, speed, etc.)
-            _USAGE_CORE_KEYS = {
-                "input_tokens",
-                "output_tokens",
-                "cache_read_input_tokens",
-            }
-            if p_usage:
-                usage_extras = {
-                    k: v for k, v in p_usage.items() if k not in _USAGE_CORE_KEYS
-                }
-                if usage_extras:
-                    extras["_usage_extras"] = usage_extras
-            if extras:
-                ctx.store_response_extras(extras)
-
-            # Per-content-block metadata (citations etc.)
-            content_blocks = provider_response.get("content", [])
-            items_meta: list[dict[str, Any]] = []
-            for block in content_blocks:
-                if not isinstance(block, dict):
-                    items_meta.append({})
-                    continue
-                meta: dict[str, Any] = {}
-                if "citations" in block:
-                    meta["citations"] = block["citations"]
-                items_meta.append(meta)
-            if any(m for m in items_meta):
-                ctx.store_output_items_meta(items_meta)
+            self._capture_preserve_metadata(provider_response, p_usage, ctx)
 
         return self._validate_ir_response(ir_response)
 
@@ -449,49 +359,167 @@ class AnthropicConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: dict[str, Any] = {
-                "input_tokens": ir_usage.get("prompt_tokens") or 0,
-                "output_tokens": ir_usage.get("completion_tokens") or 0,
-            }
-
-            if "cache_read_tokens" in ir_usage:
-                usage["cache_read_input_tokens"] = ir_usage["cache_read_tokens"]
-
-            provider_response["usage"] = usage
+            provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            echo = ctx.get_echo_fields()
-            # Merge usage extras back into usage dict
-            usage_extras = echo.pop("_usage_extras", None)
-            if usage_extras and "usage" in provider_response:
-                provider_response["usage"].update(usage_extras)
-            # Merge top-level extras
-            _CORE_KEYS = {
-                "id",
-                "type",
-                "role",
-                "content",
-                "model",
-                "stop_reason",
-                "stop_sequence",
-                "usage",
-            }
-            for k, v in echo.items():
-                if k not in _CORE_KEYS:
-                    provider_response[k] = v
-
-            # Restore per-content-block metadata
-            items_meta = ctx.get_output_items_meta()
-            content = provider_response.get("content", [])
-            for i, meta in enumerate(items_meta):
-                if i >= len(content):
-                    break
-                for k, v in meta.items():
-                    content[i][k] = v
+            self._apply_preserve_metadata(provider_response, ctx)
 
         return provider_response
+
+    # ------------------------------------------------------------------
+    # Cross-provider consistency helpers
+    # ------------------------------------------------------------------
+
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Apply tools, tool_choice, and tool_config to provider request."""
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
+            if tc_fields:
+                if "tool_choice" not in result:
+                    result["tool_choice"] = {"type": "auto"}
+                result["tool_choice"].update(tc_fields)
+            if "max_calls" in tool_config:
+                ctx.warnings.append(
+                    "Anthropic does not support max_tool_calls, ignored"
+                )
+
+    @staticmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build IR usage dict from Anthropic usage."""
+        input_tokens = p_usage.get("input_tokens") or 0
+        output_tokens = p_usage.get("output_tokens") or 0
+        usage_info: dict[str, Any] = {
+            "prompt_tokens": input_tokens,
+            "completion_tokens": output_tokens,
+            "total_tokens": input_tokens + output_tokens,
+        }
+        if "cache_read_input_tokens" in p_usage:
+            usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
+        return usage_info
+
+    @staticmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build Anthropic usage dict from IR usage."""
+        usage: dict[str, Any] = {
+            "input_tokens": ir_usage.get("prompt_tokens") or 0,
+            "output_tokens": ir_usage.get("completion_tokens") or 0,
+        }
+        if "cache_read_tokens" in ir_usage:
+            usage["cache_read_input_tokens"] = ir_usage["cache_read_tokens"]
+        return usage
+
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        """Convert provider tool definitions to IR."""
+        ir_tools = []
+        for t in tools:
+            try:
+                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+        return ir_tools
+
+    @staticmethod
+    def _capture_preserve_metadata(
+        provider_response: dict[str, Any],
+        p_usage: dict[str, Any] | None,
+        ctx: ConversionContext,
+    ) -> None:
+        """Capture extra fields from provider response for lossless round-trip."""
+        _ANTHROPIC_CORE_KEYS = {
+            "id",
+            "type",
+            "role",
+            "content",
+            "model",
+            "stop_reason",
+            "stop_sequence",
+            "usage",
+        }
+        extras = {
+            k: v for k, v in provider_response.items() if k not in _ANTHROPIC_CORE_KEYS
+        }
+        _USAGE_CORE_KEYS = {
+            "input_tokens",
+            "output_tokens",
+            "cache_read_input_tokens",
+        }
+        if p_usage:
+            usage_extras = {
+                k: v for k, v in p_usage.items() if k not in _USAGE_CORE_KEYS
+            }
+            if usage_extras:
+                extras["_usage_extras"] = usage_extras
+        if extras:
+            ctx.store_response_extras(extras)
+
+        content_blocks = provider_response.get("content", [])
+        items_meta: list[dict[str, Any]] = []
+        for block in content_blocks:
+            if not isinstance(block, dict):
+                items_meta.append({})
+                continue
+            meta: dict[str, Any] = {}
+            if "citations" in block:
+                meta["citations"] = block["citations"]
+            items_meta.append(meta)
+        if any(m for m in items_meta):
+            ctx.store_output_items_meta(items_meta)
+
+    @staticmethod
+    def _apply_preserve_metadata(
+        provider_response: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Re-inject captured metadata fields in preserve mode."""
+        echo = ctx.get_echo_fields()
+        usage_extras = echo.pop("_usage_extras", None)
+        if usage_extras and "usage" in provider_response:
+            provider_response["usage"].update(usage_extras)
+        _CORE_KEYS = {
+            "id",
+            "type",
+            "role",
+            "content",
+            "model",
+            "stop_reason",
+            "stop_sequence",
+            "usage",
+        }
+        for k, v in echo.items():
+            if k not in _CORE_KEYS:
+                provider_response[k] = v
+
+        items_meta = ctx.get_output_items_meta()
+        content = provider_response.get("content", [])
+        for i, meta in enumerate(items_meta):
+            if i >= len(content):
+                break
+            for k, v in meta.items():
+                content[i][k] = v
 
     def messages_to_provider(
         self,

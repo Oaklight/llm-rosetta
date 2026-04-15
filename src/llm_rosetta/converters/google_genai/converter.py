@@ -258,17 +258,8 @@ class GoogleGenAIConverter(BaseConverter):
         # 3. Build config dict
         config: dict[str, Any] = {}
 
-        # Tools
-        tools = ir_request.get("tools")
-        if tools:
-            config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        # Tool choice
-        tool_choice = ir_request.get("tool_choice")
-        if tool_choice:
-            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-            if tc_p:
-                config["tool_config"] = tc_p
+        # Tools + tool choice
+        self._apply_tool_config(ir_request, config)
 
         # Generation config
         gen_config = ir_request.get("generation")
@@ -337,16 +328,9 @@ class GoogleGenAIConverter(BaseConverter):
         # 1. System instruction
         system_instruction = provider_request.get("system_instruction")
         if system_instruction:
-            if isinstance(system_instruction, str):
-                ir_request["system_instruction"] = system_instruction
-            elif isinstance(system_instruction, dict):
-                parts = system_instruction.get("parts", [])
-                text_parts = []
-                for part in parts:
-                    if isinstance(part, dict) and "text" in part:
-                        text_parts.append(part["text"])
-                if text_parts:
-                    ir_request["system_instruction"] = " ".join(text_parts)
+            parsed = self._parse_system_instruction(system_instruction)
+            if parsed:
+                ir_request["system_instruction"] = parsed
 
         # 2. Messages
         contents = provider_request.get("contents", [])
@@ -364,29 +348,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Tools — check SDK config first, then REST top-level
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
-            ir_tools: list = []
-            for t in tools:
-                try:
-                    result = self.tool_ops.p_tool_definition_to_ir(t)
-                except Exception as e:
-                    tool_type = (
-                        t.get("type", "unknown")
-                        if isinstance(t, dict)
-                        else type(t).__name__
-                    )
-                    tool_name = (
-                        t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                    )
-                    raise ValueError(
-                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                    ) from e
-                if result is None:
-                    continue
-                if isinstance(result, list):
-                    ir_tools.extend(result)
-                else:
-                    ir_tools.append(result)
-            ir_request["tools"] = ir_tools
+            ir_request["tools"] = self._convert_tools_from_p(tools)
 
         # Tool choice — check SDK/REST snake_case/camelCase
         tool_config = (
@@ -483,58 +445,7 @@ class GoogleGenAIConverter(BaseConverter):
             "usageMetadata"
         )
         if p_usage:
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": p_usage.get(
-                    "prompt_token_count", p_usage.get("promptTokenCount", 0)
-                ),
-                "completion_tokens": p_usage.get(
-                    "candidates_token_count",
-                    p_usage.get("candidatesTokenCount", 0),
-                ),
-                "total_tokens": p_usage.get(
-                    "total_token_count", p_usage.get("totalTokenCount", 0)
-                ),
-            }
-
-            # Reasoning tokens
-            thoughts = p_usage.get("thoughts_token_count") or p_usage.get(
-                "thoughtsTokenCount"
-            )
-            if thoughts is not None:
-                usage_info["reasoning_tokens"] = thoughts
-
-            # Cached content tokens
-            cached = p_usage.get("cached_content_token_count") or p_usage.get(
-                "cachedContentTokenCount"
-            )
-            if cached is not None:
-                usage_info["cache_read_tokens"] = cached
-
-            # Modality breakdowns (Google-specific)
-            # Google returns list[ModalityTokenCount] e.g.
-            # [{"modality": "TEXT", "token_count": 42}];
-            # IR expects dict[str, int] e.g. {"text_tokens": 42}.
-            prompt_details = p_usage.get("prompt_tokens_details") or p_usage.get(
-                "promptTokensDetails"
-            )
-            if prompt_details:
-                usage_info["prompt_tokens_details"] = (
-                    _modality_list_to_dict(prompt_details)
-                    if isinstance(prompt_details, list)
-                    else prompt_details
-                )
-
-            candidates_details = p_usage.get(
-                "candidates_tokens_details"
-            ) or p_usage.get("candidatesTokensDetails")
-            if candidates_details:
-                usage_info["completion_tokens_details"] = (
-                    _modality_list_to_dict(candidates_details)
-                    if isinstance(candidates_details, list)
-                    else candidates_details
-                )
-
-            ir_response["usage"] = usage_info
+            ir_response["usage"] = self._build_ir_usage(p_usage)
 
         return self._validate_ir_response(ir_response)
 
@@ -589,39 +500,152 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage_metadata: dict[str, Any] = {
-                "promptTokenCount": ir_usage.get("prompt_tokens") or 0,
-                "candidatesTokenCount": ir_usage.get("completion_tokens") or 0,
-                "totalTokenCount": ir_usage.get("total_tokens") or 0,
-            }
-
-            if "reasoning_tokens" in ir_usage:
-                usage_metadata["thoughtsTokenCount"] = ir_usage["reasoning_tokens"]
-
-            if "cache_read_tokens" in ir_usage:
-                usage_metadata["cachedContentTokenCount"] = ir_usage[
-                    "cache_read_tokens"
-                ]
-
-            if "prompt_tokens_details" in ir_usage:
-                details = ir_usage["prompt_tokens_details"]
-                usage_metadata["promptTokensDetails"] = (
-                    _dict_to_modality_list(details)
-                    if isinstance(details, dict)
-                    else details
-                )
-
-            if "completion_tokens_details" in ir_usage:
-                details = ir_usage["completion_tokens_details"]
-                usage_metadata["candidatesTokensDetails"] = (
-                    _dict_to_modality_list(details)
-                    if isinstance(details, dict)
-                    else details
-                )
-
-            provider_response["usageMetadata"] = usage_metadata
+            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)
 
         return provider_response
+
+    # ------------------------------------------------------------------
+    # Cross-provider consistency helpers
+    # ------------------------------------------------------------------
+
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        config: dict[str, Any],
+    ) -> None:
+        """Apply tools and tool_choice to provider config dict."""
+        tools = ir_request.get("tools")
+        if tools:
+            config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            tc_p = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+            if tc_p:
+                config["tool_config"] = tc_p
+
+    @staticmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build IR usage dict from Google usage metadata."""
+        usage_info: dict[str, Any] = {
+            "prompt_tokens": p_usage.get(
+                "prompt_token_count", p_usage.get("promptTokenCount", 0)
+            ),
+            "completion_tokens": p_usage.get(
+                "candidates_token_count",
+                p_usage.get("candidatesTokenCount", 0),
+            ),
+            "total_tokens": p_usage.get(
+                "total_token_count", p_usage.get("totalTokenCount", 0)
+            ),
+        }
+
+        thoughts = p_usage.get("thoughts_token_count") or p_usage.get(
+            "thoughtsTokenCount"
+        )
+        if thoughts is not None:
+            usage_info["reasoning_tokens"] = thoughts
+
+        cached = p_usage.get("cached_content_token_count") or p_usage.get(
+            "cachedContentTokenCount"
+        )
+        if cached is not None:
+            usage_info["cache_read_tokens"] = cached
+
+        prompt_details = p_usage.get("prompt_tokens_details") or p_usage.get(
+            "promptTokensDetails"
+        )
+        if prompt_details:
+            usage_info["prompt_tokens_details"] = (
+                _modality_list_to_dict(prompt_details)
+                if isinstance(prompt_details, list)
+                else prompt_details
+            )
+
+        candidates_details = p_usage.get("candidates_tokens_details") or p_usage.get(
+            "candidatesTokensDetails"
+        )
+        if candidates_details:
+            usage_info["completion_tokens_details"] = (
+                _modality_list_to_dict(candidates_details)
+                if isinstance(candidates_details, list)
+                else candidates_details
+            )
+
+        return usage_info
+
+    @staticmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build Google usage metadata dict from IR usage."""
+        usage_metadata: dict[str, Any] = {
+            "promptTokenCount": ir_usage.get("prompt_tokens") or 0,
+            "candidatesTokenCount": ir_usage.get("completion_tokens") or 0,
+            "totalTokenCount": ir_usage.get("total_tokens") or 0,
+        }
+
+        if "reasoning_tokens" in ir_usage:
+            usage_metadata["thoughtsTokenCount"] = ir_usage["reasoning_tokens"]
+
+        if "cache_read_tokens" in ir_usage:
+            usage_metadata["cachedContentTokenCount"] = ir_usage["cache_read_tokens"]
+
+        if "prompt_tokens_details" in ir_usage:
+            details = ir_usage["prompt_tokens_details"]
+            usage_metadata["promptTokensDetails"] = (
+                _dict_to_modality_list(details)
+                if isinstance(details, dict)
+                else details
+            )
+
+        if "completion_tokens_details" in ir_usage:
+            details = ir_usage["completion_tokens_details"]
+            usage_metadata["candidatesTokensDetails"] = (
+                _dict_to_modality_list(details)
+                if isinstance(details, dict)
+                else details
+            )
+
+        return usage_metadata
+
+    @staticmethod
+    def _parse_system_instruction(system_instruction: Any) -> str | None:
+        """Parse Google GenAI system_instruction to plain text."""
+        if isinstance(system_instruction, str):
+            return system_instruction
+        if isinstance(system_instruction, dict):
+            parts = system_instruction.get("parts", [])
+            text_parts = [
+                part["text"]
+                for part in parts
+                if isinstance(part, dict) and "text" in part
+            ]
+            if text_parts:
+                return " ".join(text_parts)
+        return None
+
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        """Convert provider tool definitions to IR."""
+        ir_tools: list[Any] = []
+        for t in tools:
+            try:
+                result = self.tool_ops.p_tool_definition_to_ir(t)
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+            if result is None:
+                continue
+            if isinstance(result, list):
+                ir_tools.extend(result)
+            else:
+                ir_tools.append(result)
+        return ir_tools
 
     def messages_to_provider(
         self,
