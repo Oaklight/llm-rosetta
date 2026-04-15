@@ -6,10 +6,12 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
-## 未发布
+## v0.5.1 — 2026-04-15
 
 ### 新增
 
+- **`tool_ops` 便利 API**（[#148](https://github.com/Oaklight/llm-rosetta/issues/148)）：新增顶层 `llm_rosetta.tool_ops` 模块，无需实例化完整转换器即可独立进行工具定义转换。提供 `to_provider()` / `from_provider()` 统一分派及各提供商快捷函数（`to_openai_chat()`、`to_anthropic()` 等）。所有导入均为延迟加载
+- **多 Key API 管理**：管理面板支持每个网关多个 API Key，支持按 Key 标签标注、创建/查看/删除操作，以及请求日志中的使用追踪
 - **网关 API Key 认证**：可配置的 API Key（`server.api_key`）保护 AI 请求端点（`/v1/*`）。支持各格式原生凭证提取——OpenAI `Authorization: Bearer`、Anthropic `x-api-key`、Google `x-goog-api-key` / `?key=` 查询参数。未配置 Key 时所有请求直通（向后兼容）
 - **提供商启用/禁用**：每个提供商现在支持 `enabled` 字段（默认 `true`）。禁用的提供商及其模型从路由中静默排除
 - **Docker 支持**：官方 `Dockerfile`、`docker-compose.yml` 和 Makefile 目标（`build-docker`、`push-docker`、`run-docker`），支持容器化部署。基于 Alpine 的镜像，非 root 用户，配置卷挂载，PUID/PGID 支持
@@ -25,6 +27,9 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 ### 变更
 
 - **移除管理面板的网关级认证**：管理面板端点（`/admin/*`）不再需要网关 API Key。管理访问控制委托给反向代理（如 Caddy、Nginx）。网关 API Key 仅认证 AI 请求端点（`/v1/*`）
+- **C901 圈复杂度阈值降至 15**：逐步从 25 → 20 → 15 降低所有转换器和网关模块的复杂度。提取跨提供商一致性辅助方法（`_build_ir_usage`、`_build_provider_usage`、`_convert_tools_from_p`、`_apply_tool_config`），4 个转换器使用统一命名
+- **`BaseConverter` 抽象方法**：新增 4 个抽象方法，规范化跨提供商辅助方法模式。preserve 模式钩子作为约定文档化，供支持无损往返的提供商使用
+- **vendored `validate.py` 更新至 zerodep v0.4.2**：内部重构，将单体 `_validate()` 拆分为专用辅助函数；无功能变化
 
 ### 修复
 
@@ -32,6 +37,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **图片下载代理支持**：Google GenAI 转换器的图片下载现在遵循 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量
 - **推理模型空内容回退**：管理面板测试结果现在正确处理 `content: ""`（推理模型将所有 `max_tokens` 消耗在推理 token 上时），而非显示原始 JSON
 - **配置文件未找到错误**：网关在配置文件不存在时显示友好的错误信息，而非 Python 堆栈跟踪
+- **ty 类型检查兼容性**：为 TypedDict 与 `dict[str, Any]` 不匹配及 `FinishReason` Literal 类型窄化添加 `ty: ignore` 注解
 
 ## v0.5.0 — 2026-04-12
 

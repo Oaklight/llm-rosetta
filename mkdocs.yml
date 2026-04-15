@@ -119,6 +119,7 @@ nav:
       - api/index.md
       - 转换器: api/converters.md
       - IR 类型: api/types.md
+      - Tool Ops: api/tool-ops.md
       - 工具函数: api/utils.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md
