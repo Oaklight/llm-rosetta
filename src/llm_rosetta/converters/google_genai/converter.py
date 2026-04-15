@@ -409,8 +409,11 @@ class GoogleGenAIConverter(BaseConverter):
             message = (
                 self.message_ops._p_message_to_ir(content)
                 if content
-                else {"role": "assistant", "content": []}
+                else None
             )
+            # Fallback for empty candidates (e.g. thinking consumed all tokens)
+            if message is None:
+                message = {"role": "assistant", "content": []}
 
             finish_reason_val = p_candidate.get("finish_reason") or p_candidate.get(
                 "finishReason"
