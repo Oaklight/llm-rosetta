@@ -68,6 +68,9 @@ class BaseConverter(ABC):
         - Uses config_ops to handle generation, stream and other config fields
         - Uses tool_ops to handle tools, tool_choice and other tool fields
 
+        Subclass helper: call ``self._apply_tool_config(ir_request, result, ctx)``
+        to handle the tools / tool_choice / tool_config fields.
+
         Args:
             ir_request: IR格式的完整请求
             context: Optional conversion context for carrying warnings,
@@ -90,6 +93,9 @@ class BaseConverter(ABC):
         """将provider请求转换为IRRequest
         Convert provider request to IRRequest
 
+        Subclass helper: call ``self._convert_tools_from_p(tools)`` to convert
+        provider tool definitions to IR format.
+
         Args:
             provider_request: Provider格式的请求
             context: Optional conversion context.
@@ -111,6 +117,9 @@ class BaseConverter(ABC):
         """将provider响应转换为IRResponse
         Convert provider response to IRResponse
 
+        Subclass helper: call ``self._build_ir_usage(p_usage)`` to convert
+        provider usage to IR format.
+
         Args:
             provider_response: Provider格式的响应
             context: Optional conversion context.
@@ -131,6 +140,9 @@ class BaseConverter(ABC):
     ) -> dict[str, Any]:
         """将IRResponse转换为provider响应
         Convert IRResponse to provider response
+
+        Subclass helper: call ``self._build_provider_usage(ir_usage)`` to convert
+        IR usage to provider format.
 
         Args:
             ir_response: IR格式的响应
@@ -234,6 +246,64 @@ class BaseConverter(ABC):
             dicts when the event maps to multiple provider-level messages.
         """
         pass
+
+    # ==================== Provider-specific helpers (abstract) ====================
+
+    @staticmethod
+    @abstractmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        """Convert provider usage dict to IR usage format.
+
+        Called by ``response_from_provider`` to normalize provider-specific
+        token usage fields (e.g. ``input_tokens``, ``prompt_token_count``)
+        into the IR schema (``prompt_tokens``, ``completion_tokens``, ...).
+        """
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        """Convert IR usage dict to provider-specific usage format.
+
+        Called by ``response_to_provider`` to map IR token usage fields
+        back to the provider's native naming (e.g. ``promptTokenCount``
+        for Google, ``input_tokens`` for Anthropic).
+        """
+        ...
+
+    @abstractmethod
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        """Convert provider tool definitions to IR ToolDefinition list.
+
+        Called by ``request_from_provider`` to normalize the provider's
+        tool schema into IR format.  Implementations should iterate
+        ``tools``, call ``self.tool_ops.p_tool_definition_to_ir()``,
+        and raise ``ValueError`` for unsupported tool types.
+        """
+        ...
+
+    @abstractmethod
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: "ConversionContext",
+    ) -> None:
+        """Apply tools, tool_choice, and tool_config from IR to provider request.
+
+        Called by ``request_to_provider`` to populate tool-related fields in
+        the provider request dict.  Implementations should handle all three
+        IR fields (``tools``, ``tool_choice``, ``tool_config``) and emit
+        warnings to ``ctx`` for unsupported options.
+        """
+        ...
+
+    # Optional preserve-mode hooks (implement if provider supports lossless
+    # round-trip, currently anthropic and openai_responses):
+    #   _capture_preserve_metadata(provider_response: dict, ctx) -> None
+    #       Called in response_from_provider to capture non-core fields.
+    #   _apply_preserve_metadata(provider_response: dict, ctx) -> None
+    #       Called in response_to_provider to re-inject captured metadata.
 
     # ==================== Normalization ====================
 

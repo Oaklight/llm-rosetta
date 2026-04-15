@@ -296,7 +296,7 @@ class AnthropicConverter(BaseConverter):
         # Preserve mode: capture extra fields for lossless round-trip
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            self._capture_preserve_metadata(provider_response, p_usage, ctx)
+            self._capture_preserve_metadata(provider_response, ctx)
 
         return self._validate_ir_response(ir_response)
 
@@ -445,10 +445,10 @@ class AnthropicConverter(BaseConverter):
     @staticmethod
     def _capture_preserve_metadata(
         provider_response: dict[str, Any],
-        p_usage: dict[str, Any] | None,
         ctx: ConversionContext,
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
+        p_usage = provider_response.get("usage")
         _ANTHROPIC_CORE_KEYS = {
             "id",
             "type",

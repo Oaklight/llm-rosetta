@@ -335,7 +335,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Preserve mode: capture extra fields for lossless round-trip
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
-            self._capture_preserve_metadata(provider_response, output_items, ctx)
+            self._capture_preserve_metadata(provider_response, ctx)
 
         return self._validate_ir_response(ir_response)
 
@@ -542,10 +542,10 @@ class OpenAIResponsesConverter(BaseConverter):
     @staticmethod
     def _capture_preserve_metadata(
         provider_response: dict[str, Any],
-        output_items: list[Any],
         ctx: ConversionContext,
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
+        output_items = provider_response.get("output", [])
         extras = {
             k: v
             for k, v in provider_response.items()
