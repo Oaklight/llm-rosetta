@@ -137,16 +137,28 @@ Requests must provide the key in the format native to each API standard (Bearer 
 
 ## Docker Deployment
 
+The gateway is available as a pre-built image on DockerHub:
+
 ```bash
-# Build and run with Docker Compose
-docker compose up -d
+# Pull from DockerHub and run
+docker pull oaklight/llm-rosetta-gateway:latest
+docker run -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
+
+# Or use Docker Compose (see docker/docker-compose.yaml)
+cd docker && docker compose up -d
+```
+
+To build from source:
+
+```bash
+# Build with Makefile (uses local wheel if available, otherwise PyPI)
+make build-docker
 
 # Or build manually
 docker build -t llm-rosetta-gateway .
-docker run -p 8765:8765 -v /path/to/config:/config llm-rosetta-gateway
 ```
 
-See the `docker/` directory for `docker-compose.yml` and the Makefile for `build-docker` / `run-docker` targets.
+Set `PUID`/`PGID` environment variables to match your host user's UID/GID. See `docker/docker-compose.yaml` for the full configuration example.
 
 ## Admin Panel
 
