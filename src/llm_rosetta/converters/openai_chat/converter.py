@@ -462,14 +462,14 @@ class OpenAIChatConverter(BaseConverter):
         }
 
         for choice in ir_response.get("choices", []):
-            openai_choice = self._build_choice_to_provider(choice)
+            openai_choice = self._build_choice_to_provider(choice)  # ty: ignore[invalid-argument-type]
             if openai_choice is not None:
                 provider_response["choices"].append(openai_choice)
 
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)
+            provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -727,7 +727,7 @@ class OpenAIChatConverter(BaseConverter):
             FinishEvent(
                 type="finish",
                 finish_reason={
-                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(
+                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(  # ty: ignore[invalid-argument-type]
                         finish_reason, "stop"
                     )
                 },

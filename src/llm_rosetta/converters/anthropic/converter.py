@@ -359,7 +359,7 @@ class AnthropicConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)
+            provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
 
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
@@ -762,7 +762,7 @@ class AnthropicConverter(BaseConverter):
                 FinishEvent(
                     type="finish",
                     finish_reason={
-                        "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(
+                        "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(  # ty: ignore[invalid-argument-type]
                             stop_reason, "stop"
                         )
                     },
