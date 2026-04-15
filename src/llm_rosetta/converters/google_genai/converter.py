@@ -406,11 +406,7 @@ class GoogleGenAIConverter(BaseConverter):
 
         for p_candidate in candidates:
             content = p_candidate.get("content")
-            message = (
-                self.message_ops._p_message_to_ir(content)
-                if content
-                else None
-            )
+            message = self.message_ops._p_message_to_ir(content) if content else None
             # Fallback for empty candidates (e.g. thinking consumed all tokens)
             if message is None:
                 message = {"role": "assistant", "content": []}
