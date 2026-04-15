@@ -102,25 +102,8 @@ class OpenAIChatConverter(BaseConverter):
         ctx.warnings.extend(msg_warnings)
         result["messages"] = messages
 
-        # 3. Tools
-        tools = ir_request.get("tools")
-        if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        # 4. Tool choice
-        tool_choice = ir_request.get("tool_choice")
-        if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-
-        # 5. Tool config
-        tool_config = ir_request.get("tool_config")
-        if tool_config:
-            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
-            result.update(tc_fields)
-            if "max_calls" in tool_config:
-                ctx.warnings.append(
-                    "OpenAI Chat does not support max_tool_calls, ignored"
-                )
+        # 3-5. Tools + tool_choice + tool_config
+        self._apply_tool_config(ir_request, result, ctx)
 
         # 6. Generation config
         gen_config = ir_request.get("generation")
@@ -158,6 +141,128 @@ class OpenAIChatConverter(BaseConverter):
             result.update(extensions)
 
         return result, ctx.warnings
+
+    @staticmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build IR usage dict from OpenAI Chat usage."""
+        usage_info: dict[str, Any] = {
+            "prompt_tokens": p_usage.get("prompt_tokens") or 0,
+            "completion_tokens": p_usage.get("completion_tokens") or 0,
+            "total_tokens": p_usage.get("total_tokens") or 0,
+        }
+        p_prompt_details = p_usage.get("prompt_tokens_details")
+        if p_prompt_details:
+            usage_info["prompt_tokens_details"] = p_prompt_details
+            if "cached_tokens" in p_prompt_details:
+                usage_info["cache_read_tokens"] = p_prompt_details["cached_tokens"]
+        p_completion_details = p_usage.get("completion_tokens_details")
+        if p_completion_details:
+            usage_info["completion_tokens_details"] = p_completion_details
+            if "reasoning_tokens" in p_completion_details:
+                usage_info["reasoning_tokens"] = p_completion_details[
+                    "reasoning_tokens"
+                ]
+        return usage_info
+
+    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+        """Convert provider tool definitions to IR."""
+        ir_tools = []
+        for t in tools:
+            try:
+                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = (
+                    (t.get("function", {}).get("name") or t.get("name", "unnamed"))
+                    if isinstance(t, dict)
+                    else str(t)
+                )
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+        return ir_tools
+
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Apply tools, tool_choice, and tool_config to provider request."""
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
+            result.update(tc_fields)
+            if "max_calls" in tool_config:
+                ctx.warnings.append(
+                    "OpenAI Chat does not support max_tool_calls, ignored"
+                )
+
+    def _build_choice_to_provider(
+        self, choice: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Build a single OpenAI Chat choice dict from an IR choice."""
+        message = choice.get("message")
+        if not message:
+            return None
+
+        openai_message: dict[str, Any] = {"role": message.get("role", "assistant")}
+
+        content_parts = message.get("content", [])
+        text_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        refusal_text: str | None = None
+        annotations: list[dict[str, Any]] = []
+
+        for part in content_parts:
+            if is_text_part(part):
+                text_parts.append(part["text"])
+            elif is_tool_call_part(part):
+                tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
+            elif is_refusal_part(part):
+                refusal_text = part.get("refusal", "")
+            elif is_citation_part(part):
+                ann = self.content_ops.ir_citation_to_p(part)
+                if ann:
+                    annotations.append(ann)
+
+        if text_parts:
+            openai_message["content"] = " ".join(text_parts)
+        elif not tool_calls:
+            openai_message["content"] = ""
+
+        if tool_calls:
+            openai_message["tool_calls"] = tool_calls
+            if not text_parts:
+                openai_message["content"] = None
+
+        if refusal_text is not None:
+            openai_message["refusal"] = refusal_text
+
+        if annotations:
+            openai_message["annotations"] = annotations
+
+        reason = choice.get("finish_reason", {}).get("reason", "stop")
+        openai_choice: dict[str, Any] = {
+            "index": choice.get("index", 0),
+            "message": openai_message,
+            "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+        }
+
+        if "logprobs" in choice:
+            openai_choice["logprobs"] = choice["logprobs"]
+
+        return openai_choice
 
     def _extract_system_and_messages(
         self, messages: list[Any]
@@ -220,25 +325,7 @@ class OpenAIChatConverter(BaseConverter):
         # 2. Tools
         tools = provider_request.get("tools")
         if tools:
-            ir_tools = []
-            for t in tools:
-                try:
-                    ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
-                except Exception as e:
-                    tool_type = (
-                        t.get("type", "unknown")
-                        if isinstance(t, dict)
-                        else type(t).__name__
-                    )
-                    tool_name = (
-                        (t.get("function", {}).get("name") or t.get("name", "unnamed"))
-                        if isinstance(t, dict)
-                        else str(t)
-                    )
-                    raise ValueError(
-                        f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                    ) from e
-            ir_request["tools"] = ir_tools
+            ir_request["tools"] = self._convert_tools_from_p(tools)
 
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -341,27 +428,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": p_usage.get("prompt_tokens") or 0,
-                "completion_tokens": p_usage.get("completion_tokens") or 0,
-                "total_tokens": p_usage.get("total_tokens") or 0,
-            }
-
-            p_prompt_details = p_usage.get("prompt_tokens_details")
-            if p_prompt_details:
-                usage_info["prompt_tokens_details"] = p_prompt_details
-                if "cached_tokens" in p_prompt_details:
-                    usage_info["cache_read_tokens"] = p_prompt_details["cached_tokens"]
-
-            p_completion_details = p_usage.get("completion_tokens_details")
-            if p_completion_details:
-                usage_info["completion_tokens_details"] = p_completion_details
-                if "reasoning_tokens" in p_completion_details:
-                    usage_info["reasoning_tokens"] = p_completion_details[
-                        "reasoning_tokens"
-                    ]
-
-            ir_response["usage"] = usage_info
+            ir_response["usage"] = self._build_ir_usage(p_usage)
 
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
@@ -395,57 +462,9 @@ class OpenAIChatConverter(BaseConverter):
         }
 
         for choice in ir_response.get("choices", []):
-            message = choice.get("message")
-            if not message:
-                continue
-
-            openai_message: dict[str, Any] = {"role": message.get("role", "assistant")}
-
-            content_parts = message.get("content", [])
-            text_parts: list[str] = []
-            tool_calls: list[dict[str, Any]] = []
-            refusal_text: str | None = None
-            annotations: list[dict[str, Any]] = []
-
-            for part in content_parts:
-                if is_text_part(part):
-                    text_parts.append(part["text"])
-                elif is_tool_call_part(part):
-                    tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
-                elif is_refusal_part(part):
-                    refusal_text = part.get("refusal", "")
-                elif is_citation_part(part):
-                    ann = self.content_ops.ir_citation_to_p(part)
-                    if ann:
-                        annotations.append(ann)
-
-            if text_parts:
-                openai_message["content"] = " ".join(text_parts)
-            elif not tool_calls:
-                openai_message["content"] = ""
-
-            if tool_calls:
-                openai_message["tool_calls"] = tool_calls
-                if not text_parts:
-                    openai_message["content"] = None
-
-            if refusal_text is not None:
-                openai_message["refusal"] = refusal_text
-
-            if annotations:
-                openai_message["annotations"] = annotations
-
-            reason = choice.get("finish_reason", {}).get("reason", "stop")
-            openai_choice: dict[str, Any] = {
-                "index": choice.get("index", 0),
-                "message": openai_message,
-                "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
-            }
-
-            if "logprobs" in choice:
-                openai_choice["logprobs"] = choice["logprobs"]
-
-            provider_response["choices"].append(openai_choice)
+            openai_choice = self._build_choice_to_provider(choice)
+            if openai_choice is not None:
+                provider_response["choices"].append(openai_choice)
 
         # Usage
         ir_usage = ir_response.get("usage")

@@ -455,6 +455,47 @@ async def handle_non_streaming(
     return JSONResponse(source_response)
 
 
+_SENTINEL_DONE = object()
+
+
+def _parse_sse_data(line: str) -> Any:
+    """Parse a single SSE line and return the JSON chunk, or None to skip.
+
+    Returns ``_SENTINEL_DONE`` when the stream signals completion.
+    """
+    parsed = _iter_sse_lines(line)
+    if parsed is None:
+        return None
+    field, value = parsed
+    if field == "event" or field != "data" or value is None:
+        return None
+    if _is_openai_done(value):
+        return _SENTINEL_DONE
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        logger.warning("Skipping malformed SSE data: %s", value[:200])
+        return None
+
+
+async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
+    """Read an error response from upstream and format it as an SSE data line."""
+    await upstream_resp.aread()
+    error_text = upstream_resp.text
+    log_upstream_error(
+        upstream_resp.status_code,
+        error_text,
+        endpoint=endpoint,
+        is_streaming=True,
+    )
+    try:
+        error_body = json.loads(error_text)
+        error_msg = json.dumps(error_body)
+    except json.JSONDecodeError:
+        error_msg = error_text
+    return f"data: {error_msg}\n\n"
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -488,39 +529,17 @@ async def _stream_event_generator(
         "POST", url, json=upstream_body, headers=headers
     ) as upstream_resp:
         if upstream_resp.status_code >= 400:
-            await upstream_resp.aread()
-            error_text = upstream_resp.text
-            log_upstream_error(
-                upstream_resp.status_code,
-                error_text,
-                endpoint=str(target_provider),
-                is_streaming=True,
+            error_sse = await _format_upstream_error(
+                upstream_resp, str(target_provider)
             )
-            try:
-                error_body = json.loads(error_text)
-                error_msg = json.dumps(error_body)
-            except json.JSONDecodeError:
-                error_msg = error_text
-            yield f"data: {error_msg}\n\n"
+            yield error_sse
             return
 
         async for line in upstream_resp.aiter_lines():
-            parsed = _iter_sse_lines(line)
-            if parsed is None:
-                continue
-            field, value = parsed
-
-            if field == "event":
-                continue
-            if field != "data" or value is None:
-                continue
-            if _is_openai_done(value):
+            chunk = _parse_sse_data(line)
+            if chunk is _SENTINEL_DONE:
                 break
-
-            try:
-                chunk = json.loads(value)
-            except json.JSONDecodeError:
-                logger.warning("Skipping malformed SSE data: %s", value[:200])
+            if chunk is None:
                 continue
 
             chunk_count += 1

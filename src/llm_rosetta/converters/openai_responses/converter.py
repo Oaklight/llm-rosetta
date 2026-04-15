@@ -119,21 +119,8 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx.warnings.extend(msg_warnings)
         result["input"] = items
 
-        # 3. Tools
-        tools = ir_request.get("tools")
-        if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        # 4. Tool choice
-        tool_choice = ir_request.get("tool_choice")
-        if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-
-        # 5. Tool config
-        tool_config = ir_request.get("tool_config")
-        if tool_config:
-            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
-            result.update(tc_fields)
+        # 3-5. Tools + tool_choice + tool_config
+        self._apply_tool_config(ir_request, result, ctx)
 
         # 6. Generation config
         gen_config = ir_request.get("generation")
@@ -220,23 +207,8 @@ class OpenAIResponsesConverter(BaseConverter):
             if ir_tools:
                 ir_request["tools"] = ir_tools
 
-        # 4. Tool choice
-        tool_choice = provider_request.get("tool_choice")
-        if tool_choice is not None:
-            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_choice)
-
-        # 5. Tool config
-        tool_config_fields = {}
-        if "parallel_tool_calls" in provider_request:
-            tool_config_fields["parallel_tool_calls"] = provider_request[
-                "parallel_tool_calls"
-            ]
-        if "max_tool_calls" in provider_request:
-            tool_config_fields["max_tool_calls"] = provider_request["max_tool_calls"]
-        if tool_config_fields:
-            ir_request["tool_config"] = self.tool_ops.p_tool_config_to_ir(
-                tool_config_fields
-            )
+        # 4-5. Tool choice + tool config
+        self._convert_tool_config_from_p(provider_request, ir_request)
 
         # 6. Generation config
         gen_config = self.config_ops.p_generation_config_to_ir(provider_request)
@@ -264,15 +236,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         # 10. Cache config
-        cache_fields = {}
-        if "prompt_cache_key" in provider_request:
-            cache_fields["prompt_cache_key"] = provider_request["prompt_cache_key"]
-        if "prompt_cache_retention" in provider_request:
-            cache_fields["prompt_cache_retention"] = provider_request[
-                "prompt_cache_retention"
-            ]
-        if cache_fields:
-            ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
+        self._convert_cache_from_p(provider_request, ir_request)
 
         # 11. Provider extensions (passthrough fields like allowed_tools)
         allowed_tools = provider_request.get("allowed_tools")
@@ -363,26 +327,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Handle usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": p_usage.get("input_tokens") or 0,
-                "completion_tokens": p_usage.get("output_tokens") or 0,
-                "total_tokens": p_usage.get("total_tokens") or 0,
-            }
-
-            # Handle detailed statistics
-            p_input_details = p_usage.get("input_tokens_details")
-            if p_input_details:
-                if "cached_tokens" in p_input_details:
-                    usage_info["cache_read_tokens"] = p_input_details["cached_tokens"]
-
-            p_output_details = p_usage.get("output_tokens_details")
-            if p_output_details:
-                if "reasoning_tokens" in p_output_details:
-                    usage_info["reasoning_tokens"] = p_output_details[
-                        "reasoning_tokens"
-                    ]
-
-            ir_response["usage"] = usage_info
+            ir_response["usage"] = self._build_ir_usage(p_usage)
 
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
@@ -470,19 +415,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            usage: dict[str, Any] = {
-                "input_tokens": ir_usage.get("prompt_tokens") or 0,
-                "output_tokens": ir_usage.get("completion_tokens") or 0,
-                "total_tokens": ir_usage.get("total_tokens") or 0,
-                "input_tokens_details": {
-                    "cached_tokens": ir_usage.get("cache_read_tokens", 0),
-                },
-                "output_tokens_details": {
-                    "reasoning_tokens": ir_usage.get("reasoning_tokens", 0),
-                },
-            }
-
-            provider_response["usage"] = usage
+            provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -495,8 +428,41 @@ class OpenAIResponsesConverter(BaseConverter):
         return provider_response
 
     # ------------------------------------------------------------------
-    # Preserve-mode helpers
+    # Cross-provider consistency helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build IR usage dict from Responses API usage."""
+        usage_info: dict[str, Any] = {
+            "prompt_tokens": p_usage.get("input_tokens") or 0,
+            "completion_tokens": p_usage.get("output_tokens") or 0,
+            "total_tokens": p_usage.get("total_tokens") or 0,
+        }
+        p_input_details = p_usage.get("input_tokens_details")
+        if p_input_details:
+            if "cached_tokens" in p_input_details:
+                usage_info["cache_read_tokens"] = p_input_details["cached_tokens"]
+        p_output_details = p_usage.get("output_tokens_details")
+        if p_output_details:
+            if "reasoning_tokens" in p_output_details:
+                usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
+        return usage_info
+
+    @staticmethod
+    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build Responses API usage dict from IR usage."""
+        return {
+            "input_tokens": ir_usage.get("prompt_tokens") or 0,
+            "output_tokens": ir_usage.get("completion_tokens") or 0,
+            "total_tokens": ir_usage.get("total_tokens") or 0,
+            "input_tokens_details": {
+                "cached_tokens": ir_usage.get("cache_read_tokens", 0),
+            },
+            "output_tokens_details": {
+                "reasoning_tokens": ir_usage.get("reasoning_tokens", 0),
+            },
+        }
 
     def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
         """Convert provider tool definitions to IR, skipping disabled tools."""
@@ -517,6 +483,61 @@ class OpenAIResponsesConverter(BaseConverter):
                     f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
                 ) from e
         return ir_tools
+
+    def _apply_tool_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Apply tools, tool_choice, and tool_config to provider request."""
+        tools = ir_request.get("tools")
+        if tools:
+            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+        tool_choice = ir_request.get("tool_choice")
+        if tool_choice:
+            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
+        tool_config = ir_request.get("tool_config")
+        if tool_config:
+            tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
+            result.update(tc_fields)
+
+    def _convert_tool_config_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Extract tool_choice and tool_config from provider request into IR."""
+        tool_choice = provider_request.get("tool_choice")
+        if tool_choice is not None:
+            ir_request["tool_choice"] = self.tool_ops.p_tool_choice_to_ir(tool_choice)
+        tool_config_fields: dict[str, Any] = {}
+        if "parallel_tool_calls" in provider_request:
+            tool_config_fields["parallel_tool_calls"] = provider_request[
+                "parallel_tool_calls"
+            ]
+        if "max_tool_calls" in provider_request:
+            tool_config_fields["max_tool_calls"] = provider_request["max_tool_calls"]
+        if tool_config_fields:
+            ir_request["tool_config"] = self.tool_ops.p_tool_config_to_ir(
+                tool_config_fields
+            )
+
+    def _convert_cache_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Extract cache config from provider request into IR."""
+        cache_fields: dict[str, Any] = {}
+        if "prompt_cache_key" in provider_request:
+            cache_fields["prompt_cache_key"] = provider_request["prompt_cache_key"]
+        if "prompt_cache_retention" in provider_request:
+            cache_fields["prompt_cache_retention"] = provider_request[
+                "prompt_cache_retention"
+            ]
+        if cache_fields:
+            ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
     @staticmethod
     def _capture_preserve_metadata(
@@ -1362,40 +1383,7 @@ class OpenAIResponsesConverter(BaseConverter):
         finish_reason: str = "length",
     ) -> dict[str, Any]:
         """Build the response dict for a FinishEvent."""
-        output: list[dict[str, Any]] = []
-        if context is not None:
-            accumulated = context.accumulated_text
-            item_id = context.item_id
-            if accumulated:
-                msg_item: dict[str, Any] = {
-                    "id": item_id,
-                    "type": "message",
-                    "role": "assistant",
-                    "content": [{"type": "output_text", "text": accumulated}],
-                }
-                if context.metadata_mode == "preserve":
-                    msg_item["status"] = "completed"
-                    for part in msg_item.get("content", []):
-                        part.setdefault("annotations", [])
-                        part.setdefault("logprobs", [])
-                output.append(msg_item)
-
-            # Add accumulated function calls to output
-            for call_id in context._tool_call_order:
-                tool_name = context.get_tool_name(call_id)
-                arguments = context._tool_call_args.get(call_id, "")
-                tc_item_id = context.get_tool_call_item_id(call_id) or call_id
-                output.append(
-                    {
-                        "id": tc_item_id,
-                        "type": "function_call",
-                        "call_id": call_id,
-                        "name": tool_name,
-                        "arguments": arguments,
-                        "status": "completed",
-                    }
-                )
-
+        output = self._collect_finish_output(context)
         response: dict[str, Any] = {"status": status, "output": output}
 
         # Populate id, object, model, created_at from context so clients can
@@ -1414,45 +1402,92 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Merge pending usage from context if available
         if context is not None and context.pending_usage is not None:
-            usage: dict[str, Any] = {
-                "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
-                "output_tokens": context.pending_usage.get("completion_tokens") or 0,
-                "total_tokens": context.pending_usage.get("total_tokens") or 0,
-            }
-            # Include token detail breakdowns if available
-            cache_read = context.pending_usage.get("cache_read_tokens")
-            if cache_read is not None:
-                usage["input_tokens_details"] = {"cached_tokens": cache_read}
-            else:
-                usage["input_tokens_details"] = {"cached_tokens": 0}
-            reasoning = context.pending_usage.get("reasoning_tokens")
-            if reasoning is not None:
-                usage["output_tokens_details"] = {"reasoning_tokens": reasoning}
-            else:
-                usage["output_tokens_details"] = {"reasoning_tokens": 0}
-            response["usage"] = usage
+            response["usage"] = self._build_finish_usage(context.pending_usage)
 
         # Preserve mode: inject echo fields into the response.completed payload
         if context is not None and context.metadata_mode == "preserve":
-            echo = context.get_echo_fields()
-            core_keys = {
-                "id",
-                "object",
-                "created_at",
-                "model",
-                "output",
-                "status",
-                "usage",
-            }
-            # Apply required defaults first, then override with actual echo
-            for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
-                if k not in core_keys and k not in response:
-                    response[k] = v
-            for k, v in echo.items():
-                if k not in core_keys:
-                    response[k] = v
+            self._apply_finish_echo(response, context)
 
         return response
+
+    def _collect_finish_output(
+        self, context: OpenAIResponsesStreamContext | None
+    ) -> list[dict[str, Any]]:
+        """Collect text and tool call output items from stream context."""
+        output: list[dict[str, Any]] = []
+        if context is None:
+            return output
+
+        accumulated = context.accumulated_text
+        if accumulated:
+            msg_item: dict[str, Any] = {
+                "id": context.item_id,
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": accumulated}],
+            }
+            if context.metadata_mode == "preserve":
+                msg_item["status"] = "completed"
+                for part in msg_item.get("content", []):
+                    part.setdefault("annotations", [])
+                    part.setdefault("logprobs", [])
+            output.append(msg_item)
+
+        for call_id in context._tool_call_order:
+            tool_name = context.get_tool_name(call_id)
+            arguments = context._tool_call_args.get(call_id, "")
+            tc_item_id = context.get_tool_call_item_id(call_id) or call_id
+            output.append(
+                {
+                    "id": tc_item_id,
+                    "type": "function_call",
+                    "call_id": call_id,
+                    "name": tool_name,
+                    "arguments": arguments,
+                    "status": "completed",
+                }
+            )
+        return output
+
+    @staticmethod
+    def _build_finish_usage(pending_usage: dict[str, Any]) -> dict[str, Any]:
+        """Build usage dict for the finish response from pending IR usage."""
+        usage: dict[str, Any] = {
+            "input_tokens": pending_usage.get("prompt_tokens") or 0,
+            "output_tokens": pending_usage.get("completion_tokens") or 0,
+            "total_tokens": pending_usage.get("total_tokens") or 0,
+        }
+        cache_read = pending_usage.get("cache_read_tokens")
+        usage["input_tokens_details"] = {
+            "cached_tokens": cache_read if cache_read is not None else 0
+        }
+        reasoning = pending_usage.get("reasoning_tokens")
+        usage["output_tokens_details"] = {
+            "reasoning_tokens": reasoning if reasoning is not None else 0
+        }
+        return usage
+
+    @staticmethod
+    def _apply_finish_echo(
+        response: dict[str, Any], context: OpenAIResponsesStreamContext
+    ) -> None:
+        """Inject preserve-mode echo fields into the finish response."""
+        echo = context.get_echo_fields()
+        core_keys = {
+            "id",
+            "object",
+            "created_at",
+            "model",
+            "output",
+            "status",
+            "usage",
+        }
+        for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
+            if k not in core_keys and k not in response:
+                response[k] = v
+        for k, v in echo.items():
+            if k not in core_keys:
+                response[k] = v
 
     def _emit_text_done_events(
         self,

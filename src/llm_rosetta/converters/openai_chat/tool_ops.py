@@ -32,6 +32,31 @@ logger = logging.getLogger(__name__)
 # ==================== Orphaned Tool Call Fix ====================
 
 
+def _collect_openai_tool_ids(
+    messages: list[dict[str, Any]],
+) -> tuple[set[str], set[str]]:
+    """Collect tool_call_ids from assistant messages and answered ids from tool messages.
+
+    Returns:
+        Tuple of (known_call_ids, answered_ids).
+    """
+    known_call_ids: set[str] = set()
+    answered_ids: set[str] = set()
+    for msg in messages:
+        if msg.get("role") == "assistant":
+            tool_calls = msg.get("tool_calls")
+            if tool_calls and isinstance(tool_calls, list):
+                for tc in tool_calls:
+                    tc_id = tc.get("id")
+                    if tc_id:
+                        known_call_ids.add(tc_id)
+        elif msg.get("role") == "tool":
+            tc_id = msg.get("tool_call_id")
+            if tc_id:
+                answered_ids.add(tc_id)
+    return known_call_ids, answered_ids
+
+
 def fix_orphaned_tool_calls(
     messages: list[dict[str, Any]],
     *,
@@ -68,20 +93,7 @@ def fix_orphaned_tool_calls(
         A new messages list with orphaned tool_calls/results fixed.
     """
     # --- Pass 1: collect known tool_call_ids and answered ids ---
-    known_call_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for msg in messages:
-        if msg.get("role") == "assistant":
-            tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list):
-                for tc in tool_calls:
-                    tc_id = tc.get("id")
-                    if tc_id:
-                        known_call_ids.add(tc_id)
-        elif msg.get("role") == "tool":
-            tc_id = msg.get("tool_call_id")
-            if tc_id:
-                answered_ids.add(tc_id)
+    known_call_ids, answered_ids = _collect_openai_tool_ids(messages)
 
     # Fast path: nothing to fix
     if not known_call_ids and not answered_ids:
