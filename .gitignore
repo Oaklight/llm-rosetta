@@ -214,3 +214,16 @@ __marimo__/
 docs_en/
 docs_zh/
 reference/
+
+# AI coding agents
+.claude/
+.opencode/
+.codex/
+
+# Tool caches
+.complexipy_cache/
+.playwright-mcp/
+
+# Temporary notes
+REVIEW_*
+TEMP_*
