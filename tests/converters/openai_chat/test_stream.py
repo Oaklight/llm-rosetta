@@ -41,15 +41,17 @@ class TestStreamResponseFromProvider:
         assert events[0]["text"] == "Hello"
         assert events[0]["choice_index"] == 0
 
-    def test_text_delta_empty_string(self):
-        """Empty string content should still produce a TextDeltaEvent."""
+    def test_text_delta_empty_string_is_skipped(self):
+        """Empty string content is skipped to avoid inflating events.
+
+        The first OpenAI chunk typically has delta: {role: "assistant",
+        content: ""} — the empty content should NOT produce a TextDeltaEvent.
+        """
         chunk = {
             "choices": [{"index": 0, "delta": {"content": ""}, "finish_reason": None}]
         }
         events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
-        assert len(events) == 1
-        assert events[0]["type"] == "text_delta"
-        assert events[0]["text"] == ""
+        assert len(events) == 0
 
     def test_text_delta_choice_index(self):
         """Choice index is preserved in the event."""

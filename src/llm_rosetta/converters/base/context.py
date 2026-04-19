@@ -110,6 +110,9 @@ class StreamContext(ConversionContext):
         pending_finish: Deferred finish event payload.
         pending_response: Deferred response.completed payload stored by
             FinishEvent, emitted by StreamEndEvent after usage is merged.
+        pending_text: Text content deferred from a compound text+finish
+            chunk (e.g. Google GenAI) so that it can be merged into the
+            finish event and avoid inflating the output event count.
     """
 
     # Session-level metadata
@@ -126,6 +129,7 @@ class StreamContext(ConversionContext):
     pending_usage: dict | None = None
     pending_finish: dict | None = None
     pending_response: dict | None = None
+    pending_text: str | None = None
 
     # Lifecycle flags
     _started: bool = field(default=False, repr=False)
