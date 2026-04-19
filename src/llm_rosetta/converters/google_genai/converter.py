@@ -988,28 +988,6 @@ class GoogleGenAIConverter(BaseConverter):
 
     # --- to_provider ---
 
-    def stream_response_to_provider(
-        self,
-        event: IRStreamEvent,
-        context: StreamContext | None = None,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Convert an IR stream event to a Google GenAI stream chunk.
-
-        Reconstructs a ``GenerateContentResponse``-shaped chunk from an IR
-        stream event.
-
-        Args:
-            event: IR stream event.
-            context: Optional stream context for stateful conversions.
-
-        Returns:
-            Google GenAI stream chunk dict.
-        """
-        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
-        if handler_name is None:
-            return {}
-        return getattr(self, handler_name)(event, context)
-
     def _handle_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
@@ -1136,9 +1114,11 @@ class GoogleGenAIConverter(BaseConverter):
         # Merge buffered usage into the finish chunk so that
         # finishReason and usageMetadata stay in a single chunk,
         # matching the original Google format.
-        if context is not None and context.pending_usage is not None:
-            usage = context.pending_usage
-            context.pending_usage = None
+        if context is not None:
+            usage = context.pop_pending_usage()
+        else:
+            usage = None
+        if usage is not None:
             usage_metadata: dict[str, Any] = {
                 "promptTokenCount": usage.get("prompt_tokens") or 0,
                 "candidatesTokenCount": usage.get("completion_tokens") or 0,
@@ -1164,7 +1144,7 @@ class GoogleGenAIConverter(BaseConverter):
         """
         usage = event["usage"]
         if context is not None:
-            context.pending_usage = dict(usage)
+            context.buffer_usage(usage)
             return {}
         usage_metadata: dict[str, Any] = {
             "promptTokenCount": usage.get("prompt_tokens") or 0,
@@ -1176,19 +1156,6 @@ class GoogleGenAIConverter(BaseConverter):
             usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
 
         return {"usageMetadata": usage_metadata}
-
-    _TO_P_DISPATCH: dict[str, str] = {
-        "stream_start": "_handle_stream_start_to_p",
-        "stream_end": "_handle_stream_end_to_p",
-        "content_block_start": "_handle_content_block_start_to_p",
-        "content_block_end": "_handle_content_block_end_to_p",
-        "text_delta": "_handle_text_delta_to_p",
-        "reasoning_delta": "_handle_reasoning_delta_to_p",
-        "tool_call_start": "_handle_tool_call_start_to_p",
-        "tool_call_delta": "_handle_tool_call_delta_to_p",
-        "finish": "_handle_finish_to_p",
-        "usage": "_handle_usage_to_p",
-    }
 
 
 # Backward compatibility alias

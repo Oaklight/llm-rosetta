@@ -789,45 +789,23 @@ class OpenAIChatConverter(BaseConverter):
 
     # --- to_provider ---
 
-    def stream_response_to_provider(
+    def _post_process_to_provider(
         self,
+        result: dict[str, Any] | list[dict[str, Any]],
         event: IRStreamEvent,
-        context: StreamContext | None = None,
+        context: StreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Convert an IR stream event to an OpenAI SSE chunk.
-
-        When a ``context`` is provided and the stream has been started,
-        top-level fields (``id``, ``object``, ``model``, ``created``) are
-        populated on every output chunk.
-
-        Args:
-            event: IR stream event.
-            context: Optional stream context for stateful conversions.
-
-        Returns:
-            OpenAI SSE chunk dict, or a list of chunk dicts.
-        """
-        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
-        if handler_name is None:
-            return {}
-        result = getattr(self, handler_name)(event, context)
-
-        # Populate top-level fields when context is available and started
+        """Inject top-level envelope fields (id, object, model, created)."""
         if (
             context is not None
             and context.is_started
             and isinstance(result, dict)
             and result
         ):
-            if "id" not in result:
-                result["id"] = context.response_id
-            if "object" not in result:
-                result["object"] = "chat.completion.chunk"
-            if "model" not in result:
-                result["model"] = context.model
-            if "created" not in result:
-                result["created"] = context.created
-
+            result.setdefault("id", context.response_id)
+            result.setdefault("object", "chat.completion.chunk")
+            result.setdefault("model", context.model)
+            result.setdefault("created", context.created)
         return result
 
     def _handle_stream_start_to_p(
@@ -875,9 +853,8 @@ class OpenAIChatConverter(BaseConverter):
         """
         if context is not None:
             context.mark_ended()
-            if context.pending_usage is not None:
-                usage = context.pending_usage
-                context.pending_usage = None
+            usage = context.pop_pending_usage()
+            if usage is not None:
                 return {
                     "id": context.response_id,
                     "object": "chat.completion.chunk",
@@ -1035,7 +1012,7 @@ class OpenAIChatConverter(BaseConverter):
         """
         usage = event["usage"]
         if context is not None:
-            context.pending_usage = dict(usage)
+            context.buffer_usage(usage)
             return {}
         return {
             "choices": [],
@@ -1045,16 +1022,3 @@ class OpenAIChatConverter(BaseConverter):
                 "total_tokens": usage.get("total_tokens") or 0,
             },
         }
-
-    _TO_P_DISPATCH: dict[str, str] = {
-        "stream_start": "_handle_stream_start_to_p",
-        "stream_end": "_handle_stream_end_to_p",
-        "content_block_start": "_handle_content_block_start_to_p",
-        "content_block_end": "_handle_content_block_end_to_p",
-        "text_delta": "_handle_text_delta_to_p",
-        "reasoning_delta": "_handle_reasoning_delta_to_p",
-        "tool_call_start": "_handle_tool_call_start_to_p",
-        "tool_call_delta": "_handle_tool_call_delta_to_p",
-        "finish": "_handle_finish_to_p",
-        "usage": "_handle_usage_to_p",
-    }

@@ -45,6 +45,22 @@ class BaseConverter(ABC):
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
 
+    # Default dispatch table for stream_response_to_provider.
+    # Maps IR stream event types to handler method names.
+    # Subclasses may override to extend or customise the mapping.
+    _TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_stream_start_to_p",
+        "stream_end": "_handle_stream_end_to_p",
+        "content_block_start": "_handle_content_block_start_to_p",
+        "content_block_end": "_handle_content_block_end_to_p",
+        "text_delta": "_handle_text_delta_to_p",
+        "reasoning_delta": "_handle_reasoning_delta_to_p",
+        "tool_call_start": "_handle_tool_call_start_to_p",
+        "tool_call_delta": "_handle_tool_call_delta_to_p",
+        "finish": "_handle_finish_to_p",
+        "usage": "_handle_usage_to_p",
+    }
+
     # ==================== 顶层转换接口 Top-level conversion interface ====================
 
     @abstractmethod
@@ -226,7 +242,6 @@ class BaseConverter(ABC):
         """
         pass
 
-    @abstractmethod
     def stream_response_to_provider(
         self,
         event: IRStreamEvent,
@@ -234,8 +249,13 @@ class BaseConverter(ABC):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to provider-native stream chunk(s).
 
-        Some IR events (e.g., lifecycle events) may need to produce multiple
-        provider chunks, or may be silently consumed (returning an empty list).
+        Uses ``_TO_P_DISPATCH`` to route each event type to its handler,
+        then applies ``_post_process_to_provider`` for any provider-specific
+        decoration of the result.
+
+        Subclasses that need pre-dispatch logic (e.g., context upgrades)
+        may override this method, perform their pre-processing, and call
+        ``super().stream_response_to_provider(event, context)``.
 
         Args:
             event: IR stream event to convert.
@@ -245,7 +265,33 @@ class BaseConverter(ABC):
             A single provider-native stream chunk dict, or a list of chunk
             dicts when the event maps to multiple provider-level messages.
         """
-        pass
+        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
+        if handler_name is None:
+            return {}
+        result = getattr(self, handler_name)(event, context)
+        return self._post_process_to_provider(result, event, context)
+
+    def _post_process_to_provider(
+        self,
+        result: dict[str, Any] | list[dict[str, Any]],
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Hook for provider-specific post-processing of stream handler results.
+
+        Called by ``stream_response_to_provider`` after the dispatch handler
+        produces its result.  The default implementation is a no-op;
+        subclasses override to inject provider-specific envelope fields.
+
+        Args:
+            result: The handler's raw result (dict or list of dicts).
+            event: The original IR stream event (for reference).
+            context: The stream context.
+
+        Returns:
+            The (possibly modified) result.
+        """
+        return result
 
     # ==================== Provider-specific helpers (abstract) ====================
 

@@ -110,6 +110,92 @@ class TestOpenAIResponsesStreamContextInheritance:
         assert ctx.output_item_emitted is False
 
 
+class TestStreamContextBufferMethods:
+    """Test StreamContext buffer/pop convenience methods."""
+
+    def test_buffer_usage_sets_pending(self):
+        ctx = StreamContext()
+        ctx.buffer_usage({"prompt_tokens": 10, "completion_tokens": 5})
+        assert ctx.pending_usage == {"prompt_tokens": 10, "completion_tokens": 5}
+
+    def test_buffer_usage_copies_dict(self):
+        ctx = StreamContext()
+        original = {"prompt_tokens": 10}
+        ctx.buffer_usage(original)
+        original["prompt_tokens"] = 99
+        assert ctx.pending_usage["prompt_tokens"] == 10
+
+    def test_pop_pending_usage_returns_and_clears(self):
+        ctx = StreamContext()
+        ctx.buffer_usage({"prompt_tokens": 10})
+        result = ctx.pop_pending_usage()
+        assert result == {"prompt_tokens": 10}
+        assert ctx.pending_usage is None
+
+    def test_pop_pending_usage_returns_none_when_empty(self):
+        ctx = StreamContext()
+        assert ctx.pop_pending_usage() is None
+
+    def test_buffer_finish_sets_pending(self):
+        ctx = StreamContext()
+        ctx.buffer_finish({"stop_reason": "end_turn"})
+        assert ctx.pending_finish == {"stop_reason": "end_turn"}
+
+    def test_buffer_finish_copies_dict(self):
+        ctx = StreamContext()
+        original = {"stop_reason": "end_turn"}
+        ctx.buffer_finish(original)
+        original["stop_reason"] = "changed"
+        assert ctx.pending_finish["stop_reason"] == "end_turn"
+
+    def test_pop_pending_finish_returns_and_clears(self):
+        ctx = StreamContext()
+        ctx.buffer_finish({"stop_reason": "end_turn"})
+        result = ctx.pop_pending_finish()
+        assert result == {"stop_reason": "end_turn"}
+        assert ctx.pending_finish is None
+
+    def test_pop_pending_finish_returns_none_when_empty(self):
+        ctx = StreamContext()
+        assert ctx.pop_pending_finish() is None
+
+
+class TestBaseConverterDispatch:
+    """Test BaseConverter._TO_P_DISPATCH and dispatch skeleton."""
+
+    def test_dispatch_table_has_10_entries(self):
+        assert len(BaseConverter._TO_P_DISPATCH) == 10
+
+    def test_dispatch_table_keys(self):
+        expected = {
+            "stream_start",
+            "stream_end",
+            "content_block_start",
+            "content_block_end",
+            "text_delta",
+            "reasoning_delta",
+            "tool_call_start",
+            "tool_call_delta",
+            "finish",
+            "usage",
+        }
+        assert set(BaseConverter._TO_P_DISPATCH.keys()) == expected
+
+    def test_post_process_noop(self):
+        converter = OpenAIChatConverter()
+        # Call the base _post_process_to_provider directly via BaseConverter
+        result = {"test": True}
+        out = BaseConverter._post_process_to_provider(
+            converter, result, {"type": "text_delta"}, None
+        )
+        assert out is result
+
+    def test_unknown_event_returns_empty(self):
+        converter = OpenAIChatConverter()
+        result = converter.stream_response_to_provider({"type": "nonexistent"})
+        assert result == {}
+
+
 class TestFactoryMethods:
     """Test create_conversion_context and create_stream_context."""
 

@@ -256,3 +256,25 @@ class StreamContext(ConversionContext):
     def is_ended(self) -> bool:
         """Whether the stream has been ended."""
         return self._ended
+
+    # Buffer convenience methods
+
+    def buffer_usage(self, usage: dict) -> None:
+        """Store usage info for later merging into a terminal event."""
+        self.pending_usage = dict(usage)
+
+    def pop_pending_usage(self) -> dict | None:
+        """Return and clear buffered pending usage, if any."""
+        usage = self.pending_usage
+        self.pending_usage = None
+        return usage
+
+    def buffer_finish(self, finish: dict) -> None:
+        """Store finish event payload for later merging."""
+        self.pending_finish = dict(finish)
+
+    def pop_pending_finish(self) -> dict | None:
+        """Return and clear buffered pending finish, if any."""
+        finish = self.pending_finish
+        self.pending_finish = None
+        return finish

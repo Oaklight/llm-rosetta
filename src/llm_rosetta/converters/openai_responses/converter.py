@@ -1043,23 +1043,11 @@ class OpenAIResponsesConverter(BaseConverter):
         event: IRStreamEvent,
         context: StreamContext | None = None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Convert an IR stream event to an OpenAI Responses SSE event.
-
-        When a ``context`` is provided, ``UsageEvent`` stores usage info in
-        the context instead of emitting a duplicate ``response.completed``,
-        and ``FinishEvent`` merges any pending usage into its
-        ``response.completed`` output.
+        """Convert IR stream event with automatic context upgrade.
 
         If a base ``StreamContext`` is passed, it is automatically upgraded
         to ``OpenAIResponsesStreamContext`` (preserving existing state) so
         that callers do not need to know about the provider-specific subclass.
-
-        Args:
-            event: IR stream event.
-            context: Optional stream context for stateful conversions.
-
-        Returns:
-            OpenAI Responses SSE event dict, or a list of dicts.
         """
         # Auto-upgrade base StreamContext to the provider-specific subclass.
         # Cache the upgraded instance in metadata so state persists across calls.
@@ -1072,21 +1060,25 @@ class OpenAIResponsesConverter(BaseConverter):
                 context.metadata["_responses_stream_ctx"] = cached
             context = cached
 
-        handler_name = self._TO_P_DISPATCH.get(event["type"])
-        if handler_name is not None:
-            result = getattr(self, handler_name)(event, context)
-            # Inject sequence_number into emitted events
-            if isinstance(context, OpenAIResponsesStreamContext):
-                if isinstance(result, list):
-                    for r in result:
-                        if isinstance(r, dict) and "type" in r:
-                            context._sequence_number += 1
-                            r["sequence_number"] = context._sequence_number
-                elif isinstance(result, dict) and "type" in result:
-                    context._sequence_number += 1
-                    result["sequence_number"] = context._sequence_number
-            return result
-        return {}
+        return super().stream_response_to_provider(event, context)
+
+    def _post_process_to_provider(
+        self,
+        result: dict[str, Any] | list[dict[str, Any]],
+        event: IRStreamEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        """Inject sequence_number into emitted Responses events."""
+        if isinstance(context, OpenAIResponsesStreamContext):
+            if isinstance(result, list):
+                for r in result:
+                    if isinstance(r, dict) and "type" in r:
+                        context._sequence_number += 1
+                        r["sequence_number"] = context._sequence_number
+            elif isinstance(result, dict) and "type" in result:
+                context._sequence_number += 1
+                result["sequence_number"] = context._sequence_number
+        return result
 
     # --- to_provider handlers ---
 
@@ -1597,7 +1589,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # With context: store usage for later merging, avoid duplicate
         # response.completed
         if context is not None:
-            context.pending_usage = dict(usage)
+            context.buffer_usage(usage)
             return {}
 
         # Without context: preserve backward-compatible behavior
@@ -1614,19 +1606,6 @@ class OpenAIResponsesConverter(BaseConverter):
             "type": ResponsesEventType.RESPONSE_COMPLETED,
             "response": resp,
         }
-
-    _TO_P_DISPATCH: dict[str, str] = {
-        "stream_start": "_handle_stream_start_to_p",
-        "stream_end": "_handle_stream_end_to_p",
-        "content_block_start": "_handle_content_block_start_to_p",
-        "content_block_end": "_handle_content_block_end_to_p",
-        "text_delta": "_handle_text_delta_to_p",
-        "reasoning_delta": "_handle_reasoning_delta_to_p",
-        "tool_call_start": "_handle_tool_call_start_to_p",
-        "tool_call_delta": "_handle_tool_call_delta_to_p",
-        "finish": "_handle_finish_to_p",
-        "usage": "_handle_usage_to_p",
-    }
 
     # ==================== Backward Compatibility ====================
 
