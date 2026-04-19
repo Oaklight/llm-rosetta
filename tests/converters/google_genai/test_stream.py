@@ -529,7 +529,12 @@ class TestStreamResponseToProvider:
         assert ctx.get_tool_call_args("call_1") == '{"q": "test"}'
 
     def test_finish_emits_accumulated_tool_calls(self):
-        """FinishEvent with tool_calls flushes accumulated function_calls."""
+        """FinishEvent merges accumulated tool_calls into finish chunk.
+
+        Tool call parts are included in the finish candidate's content
+        parts, matching Google's native format where functionCall and
+        finishReason appear in the same chunk.
+        """
         ctx = StreamContext()
         ctx.register_tool_call("call_1", "search")
         ctx.append_tool_call_args("call_1", '{"q": "test"}')
@@ -546,12 +551,13 @@ class TestStreamResponseToProvider:
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        # Should be [function_call_chunk, finish_chunk]
-        assert len(result) == 2
-        fc = result[0]["candidates"][0]["content"]["parts"][0]["functionCall"]
+        # Tool calls merged into the single finish chunk.
+        assert len(result) == 1
+        candidate = result[0]["candidates"][0]
+        fc = candidate["content"]["parts"][0]["functionCall"]
         assert fc["name"] == "search"
         assert fc["args"] == {"q": "test"}
-        assert result[1]["candidates"][0]["finishReason"] == "STOP"
+        assert candidate["finishReason"] == "STOP"
 
     def test_finish_event_stop(self):
         """FinishEvent with 'stop' → [finish_chunk] with STOP."""
@@ -1197,7 +1203,7 @@ class TestStreamResponseToProviderWithContext:
         assert result == {}
 
     def test_finish_flushes_tool_calls_from_context(self):
-        """FinishEvent flushes accumulated tool calls from context."""
+        """FinishEvent merges accumulated tool calls into finish chunk."""
         context = StreamContext()
         context.register_tool_call("call_1", "get_weather")
         context.append_tool_call_args("call_1", '{"city": "NYC"}')
@@ -1214,11 +1220,12 @@ class TestStreamResponseToProviderWithContext:
             list[dict[str, Any]],
             self.converter.stream_response_to_provider(event, context=context),
         )
-        assert len(result) == 2
-        fc = result[0]["candidates"][0]["content"]["parts"][0]["functionCall"]
+        assert len(result) == 1
+        candidate = result[0]["candidates"][0]
+        fc = candidate["content"]["parts"][0]["functionCall"]
         assert fc["name"] == "get_weather"
         assert fc["args"] == {"city": "NYC"}
-        assert result[1]["candidates"][0]["finishReason"] == "STOP"
+        assert candidate["finishReason"] == "STOP"
 
     def test_stream_start_without_context(self):
         """StreamStartEvent without context returns empty dict."""
