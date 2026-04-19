@@ -620,9 +620,9 @@ class OpenAIChatConverter(BaseConverter):
         choice_index = p_choice.get("index", 0)
         delta = p_choice.get("delta", {})
 
-        # Text delta
+        # Text delta (skip empty content from role-only chunks)
         content = delta.get("content")
-        if content is not None:
+        if content:
             events.append(
                 TextDeltaEvent(
                     type="text_delta",

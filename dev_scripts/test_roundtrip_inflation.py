@@ -815,6 +815,101 @@ OPENAI_RESPONSES_TOOL_EVENTS: list[dict[str, Any]] = [
 ]
 
 
+# ============================================================
+# Edge Case: OpenAI Chat role chunk with empty content
+# (gpt-5-nano sends delta: {role: "assistant", content: "", refusal: null})
+# ============================================================
+OPENAI_CHAT_ROLE_EMPTY_CONTENT_EVENTS: list[dict[str, Any]] = [
+    {
+        "id": "chatcmpl-002",
+        "object": "chat.completion.chunk",
+        "model": "gpt-5-nano",
+        "created": 1700000000,
+        "choices": [
+            {
+                "index": 0,
+                "delta": {"role": "assistant", "content": "", "refusal": None},
+                "finish_reason": None,
+            }
+        ],
+        "usage": None,
+    },
+    {
+        "id": "chatcmpl-002",
+        "object": "chat.completion.chunk",
+        "model": "gpt-5-nano",
+        "created": 1700000000,
+        "choices": [
+            {"index": 0, "delta": {"content": "2 + 2"}, "finish_reason": None}
+        ],
+    },
+    {
+        "id": "chatcmpl-002",
+        "object": "chat.completion.chunk",
+        "model": "gpt-5-nano",
+        "created": 1700000000,
+        "choices": [
+            {"index": 0, "delta": {"content": " = 4."}, "finish_reason": None}
+        ],
+    },
+    {
+        "id": "chatcmpl-002",
+        "object": "chat.completion.chunk",
+        "model": "gpt-5-nano",
+        "created": 1700000000,
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+    },
+    {
+        "id": "chatcmpl-002",
+        "object": "chat.completion.chunk",
+        "model": "gpt-5-nano",
+        "created": 1700000000,
+        "choices": [],
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 8,
+            "total_tokens": 18,
+        },
+    },
+]
+
+# ============================================================
+# Edge Case: Google compound text+finish chunk
+# (gemini-2.5-flash returns text AND finishReason in the same chunk)
+# ============================================================
+GOOGLE_COMPOUND_TEXT_FINISH_EVENTS: list[dict[str, Any]] = [
+    {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "2 plus "}], "role": "model"},
+                "index": 0,
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 6,
+            "candidatesTokenCount": 3,
+            "totalTokenCount": 9,
+        },
+        "modelVersion": "gemini-2.5-flash",
+    },
+    {
+        "candidates": [
+            {
+                "content": {"parts": [{"text": "2 equals 4."}], "role": "model"},
+                "finishReason": "STOP",
+                "index": 0,
+            }
+        ],
+        "usageMetadata": {
+            "promptTokenCount": 6,
+            "candidatesTokenCount": 8,
+            "totalTokenCount": 14,
+        },
+        "modelVersion": "gemini-2.5-flash",
+    },
+]
+
+
 def run_test_case(
     label: str,
     provider: str,
@@ -859,6 +954,8 @@ def main() -> None:
         ("tool-call", "google", GOOGLE_TOOL_EVENTS),
         ("thinking", "google", GOOGLE_THINKING_EVENTS),
         ("no-empty-text", "google", GOOGLE_NO_EMPTY_TEXT_EVENTS),
+        ("role-empty-content", "openai_chat", OPENAI_CHAT_ROLE_EMPTY_CONTENT_EVENTS),
+        ("compound-text-finish", "google", GOOGLE_COMPOUND_TEXT_FINISH_EVENTS),
         ("tool-call", "openai_responses", OPENAI_RESPONSES_TOOL_EVENTS),
     ]
 

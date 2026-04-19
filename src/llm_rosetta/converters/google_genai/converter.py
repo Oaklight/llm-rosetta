@@ -802,12 +802,35 @@ class GoogleGenAIConverter(BaseConverter):
             choice_index = candidate.get("index", 0)
             content = candidate.get("content", {})
 
-            for part in content.get("parts", []):
-                self._handle_part_from_p(part, choice_index, context, events)
-
             finish_reason = candidate.get("finish_reason") or candidate.get(
                 "finishReason"
             )
+
+            # Track how many events existed before processing this
+            # candidate's parts, so we can identify which text_delta
+            # events belong to this compound chunk.
+            pre_parts_len = len(events)
+
+            for part in content.get("parts", []):
+                self._handle_part_from_p(part, choice_index, context, events)
+
+            # When a compound chunk has both text and finishReason,
+            # defer the text into context so _handle_finish_to_p can
+            # merge it into the finish candidate's parts, avoiding
+            # an extra output event.
+            if finish_reason and context is not None:
+                new_events = events[pre_parts_len:]
+                deferred_texts: list[str] = []
+                kept_new: list[IRStreamEvent] = []
+                for ev in new_events:
+                    if ev["type"] == "text_delta":
+                        deferred_texts.append(ev["text"])  # type: ignore[typeddict-item]
+                    else:
+                        kept_new.append(ev)
+                if deferred_texts:
+                    context.pending_text = "".join(deferred_texts)
+                    events[pre_parts_len:] = kept_new
+
             if finish_reason:
                 has_finish_reason = True
                 deferred_finish = FinishEvent(
@@ -1112,11 +1135,17 @@ class GoogleGenAIConverter(BaseConverter):
                     }
                 )
 
+        # Merge deferred text from compound text+finish chunks.
+        parts: list[dict[str, Any]] = []
+        if context is not None and context.pending_text is not None:
+            parts.append({"text": context.pending_text})
+            context.pending_text = None
+
         finish_chunk: dict[str, Any] = {
             "candidates": [
                 {
                     "index": choice_index,
-                    "content": {"role": "model", "parts": []},
+                    "content": {"role": "model", "parts": parts},
                     "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
                 }
             ]
