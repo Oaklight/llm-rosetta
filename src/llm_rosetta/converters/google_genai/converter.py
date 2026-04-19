@@ -824,7 +824,7 @@ class GoogleGenAIConverter(BaseConverter):
                 kept_new: list[IRStreamEvent] = []
                 for ev in new_events:
                     if ev["type"] == "text_delta":
-                        deferred_texts.append(ev["text"])  # type: ignore[typeddict-item]
+                        deferred_texts.append(ev["text"])
                     else:
                         kept_new.append(ev)
                 if deferred_texts:

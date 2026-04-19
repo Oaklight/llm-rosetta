@@ -46,7 +46,8 @@ dev = [
     "pytest",
     "pytest-cov",
     "complexipy>=5.2.0",
-    "ty>=0.0.21",
+    "ruff>=0.15.0",
+    "ty>=0.0.31",
     "build>=1.2.2.post1",
     "twine>=6.1.0",
 ]

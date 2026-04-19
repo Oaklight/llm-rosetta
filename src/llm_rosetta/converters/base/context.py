@@ -14,6 +14,7 @@ Provides the context hierarchy for conversion pipelines:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import Any, Literal
 
 MetadataMode = Literal["strip", "preserve"]
@@ -259,21 +260,21 @@ class StreamContext(ConversionContext):
 
     # Buffer convenience methods
 
-    def buffer_usage(self, usage: dict) -> None:
+    def buffer_usage(self, usage: Mapping[str, Any]) -> None:
         """Store usage info for later merging into a terminal event."""
         self.pending_usage = dict(usage)
 
-    def pop_pending_usage(self) -> dict | None:
+    def pop_pending_usage(self) -> dict[str, Any] | None:
         """Return and clear buffered pending usage, if any."""
         usage = self.pending_usage
         self.pending_usage = None
         return usage
 
-    def buffer_finish(self, finish: dict) -> None:
+    def buffer_finish(self, finish: dict[str, Any]) -> None:
         """Store finish event payload for later merging."""
         self.pending_finish = dict(finish)
 
-    def pop_pending_finish(self) -> dict | None:
+    def pop_pending_finish(self) -> dict[str, Any] | None:
         """Return and clear buffered pending finish, if any."""
         finish = self.pending_finish
         self.pending_finish = None
