@@ -22,7 +22,7 @@ from .converters import (
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 
-__version__ = "0.5.1"
+__version__ = "0.5.2"
 
 __all__ = [
     # 转换器 Converters
