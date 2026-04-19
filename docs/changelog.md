@@ -6,6 +6,26 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## 未发布
+
+### 修复
+
+- **流式往返事件膨胀**（[#157](https://github.com/Oaklight/llm-rosetta/issues/157)）：修复了多种 `Provider A → IR → Provider B` 流式转换中输出事件多于输入事件的场景：
+    - OpenAI Chat、Anthropic 和 Google GenAI 转换器在没有打开内容块时发出多余的 `content_block_end` 事件，导致输出流膨胀
+    - Google GenAI 复合 chunk（同一 SSE 帧中包含 text + finish）触发重复的文本和结束事件。通过 `StreamContext.pending_text` / `pending_finish` 延迟合并为单个事件
+    - 工具调用事件在非 Anthropic 目标中生成多余的 `content_block_start` / `content_block_end` 包装。通过 `_started` 生命周期守卫抑制
+
+### 重构
+
+- **统一 `stream_response_to_provider` 分派**（[#157](https://github.com/Oaklight/llm-rosetta/issues/157)）：将 4 个 provider converter 中完全相同的分派逻辑（10 项 `_TO_P_DISPATCH` 表 + 分派骨架）提取到 `BaseConverter`。每个 converter 只需实现特定于 provider 的 `_post_process_to_provider` 钩子（OpenAI Chat 注入 envelope 字段；OpenAI Responses 注入 `sequence_number`）。净减少约 27 行
+- **`StreamContext` 缓冲便捷方法**：新增 `buffer_usage()` / `pop_pending_usage()` / `buffer_finish()` / `pop_pending_finish()`，替换 4 个 converter 中手动 set-and-clear 模式
+
+### 变更
+
+- **固定开发工具版本**：`ty>=0.0.31` 和 `ruff>=0.15.0` 现在声明在 `pyproject.toml` 的 dev 依赖中。CI 不再单独安装，使用 `pip install -e ".[all]"` 中的版本
+- **Converter 测试加入 CI**：`tests/converters/`（1086+ 测试）现在与 `tests/test_types/` 一起在 GitHub Actions 中运行
+- **往返膨胀回归测试**：新增 pytest 参数化测试套件（`tests/converters/test_roundtrip_inflation.py`，15 个用例），验证所有 4 个 provider 在文本、推理、工具调用和复合场景下 `len(output_events) <= len(input_events)`
+
 ## v0.5.1 — 2026-04-15
 
 ### 新增
