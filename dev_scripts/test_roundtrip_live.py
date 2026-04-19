@@ -88,7 +88,7 @@ def capture_anthropic(
     }
     body: dict[str, Any] = {
         "model": model,
-        "max_tokens": 512,
+        "max_tokens": 2048,
         "stream": True,
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -140,7 +140,7 @@ def capture_openai_chat(
     }
     body: dict[str, Any] = {
         "model": model,
-        "max_completion_tokens": 512,
+        "max_completion_tokens": 2048,
         "stream": True,
         "stream_options": {"include_usage": True},
         "messages": [{"role": "user", "content": prompt}],
@@ -196,7 +196,7 @@ def capture_openai_responses(
     }
     body: dict[str, Any] = {
         "model": model,
-        "max_output_tokens": 512,
+        "max_output_tokens": 2048,
         "stream": True,
         "input": [{"role": "user", "content": prompt}],
     }
@@ -251,7 +251,7 @@ def capture_google(
 
     body: dict[str, Any] = {
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        "generationConfig": {"maxOutputTokens": 512},
+        "generationConfig": {"maxOutputTokens": 2048},
     }
     if use_tools:
         body["tools"] = [
