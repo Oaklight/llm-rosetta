@@ -537,6 +537,95 @@ class TestStreamRoundTrip:
         )
         assert restored["usage"]["total_tokens"] == 30
 
+    def test_full_stream_round_trip_no_inflation(self):
+        """Full stream round-trip produces same event count (5→5)."""
+        input_events = [
+            {
+                "id": "chatcmpl-001",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4o",
+                "created": 1700000000,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant"},
+                        "finish_reason": None,
+                    }
+                ],
+            },
+            {
+                "id": "chatcmpl-001",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4o",
+                "created": 1700000000,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": "Hello"},
+                        "finish_reason": None,
+                    }
+                ],
+            },
+            {
+                "id": "chatcmpl-001",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4o",
+                "created": 1700000000,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"content": " world!"},
+                        "finish_reason": None,
+                    }
+                ],
+            },
+            {
+                "id": "chatcmpl-001",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4o",
+                "created": 1700000000,
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            },
+            {
+                "id": "chatcmpl-001",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4o",
+                "created": 1700000000,
+                "choices": [],
+                "usage": {
+                    "prompt_tokens": 12,
+                    "completion_tokens": 5,
+                    "total_tokens": 17,
+                },
+            },
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        assert len(output_events) == 5
+        # role_delta, content, content, finish, usage
+        assert output_events[0]["choices"][0]["delta"]["role"] == "assistant"
+        assert output_events[1]["choices"][0]["delta"]["content"] == "Hello"
+        assert output_events[2]["choices"][0]["delta"]["content"] == " world!"
+        assert output_events[3]["choices"][0]["finish_reason"] == "stop"
+        assert output_events[4]["choices"] == []
+        assert output_events[4]["usage"]["total_tokens"] == 17
+
 
 class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""
@@ -872,8 +961,8 @@ class TestStreamResponseToProviderWithContext:
         assert "id" not in result
         assert "object" not in result
 
-    def test_stream_end_event_to_empty_choices_chunk(self):
-        """StreamEndEvent produces chunk with empty choices."""
+    def test_stream_end_event_no_pending_usage_returns_empty(self):
+        """StreamEndEvent without pending_usage returns empty dict."""
         ctx = StreamContext()
         ctx.response_id = "chatcmpl-abc123"
         ctx.model = "gpt-4"
@@ -885,12 +974,37 @@ class TestStreamResponseToProviderWithContext:
             dict[str, Any],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
+        assert result == {}
+        assert ctx.is_ended is True
+
+    def test_stream_end_event_flushes_pending_usage(self):
+        """StreamEndEvent with pending_usage emits combined usage chunk."""
+        ctx = StreamContext()
+        ctx.response_id = "chatcmpl-abc123"
+        ctx.model = "gpt-4"
+        ctx.created = 1700000000
+        ctx.mark_started()
+        ctx.pending_usage = {
+            "prompt_tokens": 12,
+            "completion_tokens": 5,
+            "total_tokens": 17,
+        }
+
+        event = cast(StreamEndEvent, {"type": "stream_end"})
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
         assert result["id"] == "chatcmpl-abc123"
         assert result["object"] == "chat.completion.chunk"
         assert result["model"] == "gpt-4"
         assert result["created"] == 1700000000
         assert result["choices"] == []
+        assert result["usage"]["prompt_tokens"] == 12
+        assert result["usage"]["completion_tokens"] == 5
+        assert result["usage"]["total_tokens"] == 17
         assert ctx.is_ended is True
+        assert ctx.pending_usage is None
 
     def test_stream_end_without_context(self):
         """StreamEndEvent without context produces chunk with empty fields."""
@@ -946,8 +1060,8 @@ class TestStreamResponseToProviderWithContext:
         assert result["id"] == "chatcmpl-abc123"
         assert result["choices"][0]["finish_reason"] == "stop"
 
-    def test_usage_event_with_context_has_top_level_fields(self):
-        """UsageEvent includes top-level fields when context is started."""
+    def test_usage_event_with_context_buffers_pending_usage(self):
+        """UsageEvent with context buffers into pending_usage instead of emitting."""
         ctx = StreamContext()
         ctx.response_id = "chatcmpl-abc123"
         ctx.model = "gpt-4"
@@ -969,5 +1083,6 @@ class TestStreamResponseToProviderWithContext:
             dict[str, Any],
             self.converter.stream_response_to_provider(event, context=ctx),
         )
-        assert result["id"] == "chatcmpl-abc123"
-        assert result["usage"]["total_tokens"] == 15
+        assert result == {}
+        assert ctx.pending_usage is not None
+        assert ctx.pending_usage["total_tokens"] == 15

@@ -838,11 +838,15 @@ class AnthropicConverter(BaseConverter):
         if context is not None:
             # Flush any buffered finish that never got a UsageEvent
             if context.pending_finish is not None:
+                output_tokens = 0
+                if context.pending_usage is not None:
+                    output_tokens = context.pending_usage.get("completion_tokens") or 0
+                    context.pending_usage = None
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
                         "delta": context.pending_finish,
-                        "usage": {"output_tokens": 0},
+                        "usage": {"output_tokens": output_tokens},
                     }
                 )
                 context.pending_finish = None
@@ -879,6 +883,8 @@ class AnthropicConverter(BaseConverter):
         self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → content_block_stop."""
+        if context is not None:
+            context.current_block_index = -1
         return {
             "type": AnthropicEventType.CONTENT_BLOCK_STOP,
             "index": event["block_index"],
@@ -998,7 +1004,22 @@ class AnthropicConverter(BaseConverter):
                         "index": context.current_block_index,
                     }
                 )
-            context.pending_finish = {"stop_reason": stop_reason}
+                context.current_block_index = -1
+            if context.pending_usage is not None:
+                # Usage already buffered — merge and emit immediately.
+                usage = context.pending_usage
+                context.pending_usage = None
+                output_tokens = usage.get("completion_tokens") or 0
+                results.append(
+                    {
+                        "type": AnthropicEventType.MESSAGE_DELTA,
+                        "delta": {"stop_reason": stop_reason},
+                        "usage": {"output_tokens": output_tokens},
+                    }
+                )
+            else:
+                # Buffer finish for later UsageEvent or StreamEnd flush.
+                context.pending_finish = {"stop_reason": stop_reason}
             return results if results else {}
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
@@ -1009,16 +1030,32 @@ class AnthropicConverter(BaseConverter):
     def _handle_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle UsageEvent → message_delta (merged with pending finish)."""
+        """Handle UsageEvent → message_delta (merged with pending finish).
+
+        When a pending_finish exists, merges usage into it and emits a
+        message_delta immediately.  Otherwise buffers the usage for a
+        later FinishEvent or StreamEndEvent to consume, preventing the
+        extra empty message_delta that caused round-trip inflation.
+        """
         usage = event["usage"]
+        if context is not None:
+            if context.pending_finish is not None:
+                # Merge with buffered finish and emit.
+                delta = context.pending_finish
+                context.pending_finish = None
+                output_tokens = usage.get("completion_tokens") or 0
+                return {
+                    "type": AnthropicEventType.MESSAGE_DELTA,
+                    "delta": delta,
+                    "usage": {"output_tokens": output_tokens},
+                }
+            # No pending finish — buffer for later merge.
+            context.pending_usage = dict(usage)
+            return {}
         output_tokens = usage.get("completion_tokens") or 0
-        delta: dict[str, Any] = {}
-        if context is not None and context.pending_finish is not None:
-            delta = context.pending_finish
-            context.pending_finish = None
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
-            "delta": delta,
+            "delta": {},
             "usage": {"output_tokens": output_tokens},
         }
 

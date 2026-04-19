@@ -746,6 +746,81 @@ class TestStreamRoundTrip:
         )
         assert restored["usageMetadata"]["totalTokenCount"] == 30
 
+    def test_full_stream_round_trip_no_inflation(self):
+        """Full stream round-trip produces same event count (3→3)."""
+        input_events = [
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": "Hello"}],
+                            "role": "model",
+                        },
+                        "index": 0,
+                    }
+                ],
+                "modelVersion": "gemini-2.0-flash",
+            },
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": " world!"}],
+                            "role": "model",
+                        },
+                        "index": 0,
+                    }
+                ],
+            },
+            {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": ""}],
+                            "role": "model",
+                        },
+                        "finishReason": "STOP",
+                        "index": 0,
+                    }
+                ],
+                "usageMetadata": {
+                    "promptTokenCount": 12,
+                    "candidatesTokenCount": 5,
+                    "totalTokenCount": 17,
+                },
+                "modelVersion": "gemini-2.0-flash",
+            },
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        assert len(output_events) == 3
+        # text, text, finish+usage
+        assert (
+            output_events[0]["candidates"][0]["content"]["parts"][0]["text"] == "Hello"
+        )
+        assert (
+            output_events[1]["candidates"][0]["content"]["parts"][0]["text"]
+            == " world!"
+        )
+        assert output_events[2]["candidates"][0]["finishReason"] == "STOP"
+        assert output_events[2]["usageMetadata"]["totalTokenCount"] == 17
+
 
 class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""

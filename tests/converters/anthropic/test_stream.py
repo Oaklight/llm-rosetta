@@ -479,6 +479,78 @@ class TestStreamRoundTrip:
         )
         assert restored["delta"]["stop_reason"] == "end_turn"
 
+    def test_full_stream_round_trip_no_inflation(self):
+        """Full stream round-trip produces same event count (7→7)."""
+        input_events = [
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_001",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-sonnet-4-20250514",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 12, "output_tokens": 1},
+                },
+            },
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hello"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": " world!"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 5},
+            },
+            {"type": "message_stop"},
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        assert len(output_events) == 7
+        out_types = [e["type"] for e in output_events]
+        assert out_types == [
+            "message_start",
+            "content_block_start",
+            "content_block_delta",
+            "content_block_delta",
+            "content_block_stop",
+            "message_delta",
+            "message_stop",
+        ]
+        # Verify the message_delta has stop_reason and usage merged
+        msg_delta = output_events[5]
+        assert msg_delta["delta"]["stop_reason"] == "end_turn"
+        assert msg_delta["usage"]["output_tokens"] == 5
+
 
 class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""
