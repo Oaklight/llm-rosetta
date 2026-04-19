@@ -1020,7 +1020,13 @@ class GoogleGenAIConverter(BaseConverter):
     def _handle_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle TextDeltaEvent → text part chunk."""
+        """Handle TextDeltaEvent → text part chunk.
+
+        Returns empty for empty-text deltas (e.g. padding in Google
+        finish chunks) to avoid inflating the output event count.
+        """
+        if not event["text"]:
+            return {}
         choice_index = event.get("choice_index", 0)
         return {
             "candidates": [
@@ -1106,25 +1112,49 @@ class GoogleGenAIConverter(BaseConverter):
                     }
                 )
 
-        chunks.append(
-            {
-                "candidates": [
-                    {
-                        "index": choice_index,
-                        "content": {"role": "model", "parts": []},
-                        "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
-                    }
-                ]
+        finish_chunk: dict[str, Any] = {
+            "candidates": [
+                {
+                    "index": choice_index,
+                    "content": {"role": "model", "parts": []},
+                    "finishReason": GOOGLE_REASON_TO_PROVIDER.get(reason, "STOP"),
+                }
+            ]
+        }
+
+        # Merge buffered usage into the finish chunk so that
+        # finishReason and usageMetadata stay in a single chunk,
+        # matching the original Google format.
+        if context is not None and context.pending_usage is not None:
+            usage = context.pending_usage
+            context.pending_usage = None
+            usage_metadata: dict[str, Any] = {
+                "promptTokenCount": usage.get("prompt_tokens") or 0,
+                "candidatesTokenCount": usage.get("completion_tokens") or 0,
+                "totalTokenCount": usage.get("total_tokens") or 0,
             }
-        )
+            if "reasoning_tokens" in usage:
+                usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+            finish_chunk["usageMetadata"] = usage_metadata
+
+        chunks.append(finish_chunk)
 
         return chunks
 
     def _handle_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle UsageEvent → usageMetadata chunk."""
+        """Handle UsageEvent → buffer for FinishEvent merge.
+
+        When context is provided, buffers usage in pending_usage so
+        FinishEvent can emit a single combined chunk with both
+        finishReason and usageMetadata, matching the original Google
+        format and preventing round-trip inflation.
+        """
         usage = event["usage"]
+        if context is not None:
+            context.pending_usage = dict(usage)
+            return {}
         usage_metadata: dict[str, Any] = {
             "promptTokenCount": usage.get("prompt_tokens") or 0,
             "candidatesTokenCount": usage.get("completion_tokens") or 0,

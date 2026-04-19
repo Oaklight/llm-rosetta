@@ -856,14 +856,35 @@ class OpenAIChatConverter(BaseConverter):
     def _handle_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle StreamEndEvent → empty choices chunk."""
+        """Handle StreamEndEvent → usage chunk (if buffered) or empty.
+
+        When pending_usage was buffered by a preceding UsageEvent,
+        emits a single combined choices=[]+usage chunk.  Otherwise
+        returns empty to avoid a redundant empty-choices chunk.
+        """
         if context is not None:
             context.mark_ended()
+            if context.pending_usage is not None:
+                usage = context.pending_usage
+                context.pending_usage = None
+                return {
+                    "id": context.response_id,
+                    "object": "chat.completion.chunk",
+                    "model": context.model,
+                    "created": context.created,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": usage.get("prompt_tokens") or 0,
+                        "completion_tokens": usage.get("completion_tokens") or 0,
+                        "total_tokens": usage.get("total_tokens") or 0,
+                    },
+                }
+            return {}
         return {
-            "id": context.response_id if context else "",
+            "id": "",
             "object": "chat.completion.chunk",
-            "model": context.model if context else "",
-            "created": context.created if context else 0,
+            "model": "",
+            "created": 0,
             "choices": [],
         }
 
@@ -971,8 +992,16 @@ class OpenAIChatConverter(BaseConverter):
     def _handle_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle UsageEvent → usage chunk with empty choices."""
+        """Handle UsageEvent → buffer for StreamEndEvent merge.
+
+        When context is provided, buffers usage in pending_usage so
+        StreamEndEvent can emit a single combined chunk, preventing
+        the extra empty-choices chunk that caused round-trip inflation.
+        """
         usage = event["usage"]
+        if context is not None:
+            context.pending_usage = dict(usage)
+            return {}
         return {
             "choices": [],
             "usage": {
