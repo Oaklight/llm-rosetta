@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from llm_rosetta import get_converter_for_provider
@@ -60,7 +59,7 @@ def _event_label(provider: str, e: dict[str, Any]) -> str:
         if "role" in delta:
             return "role_delta"
         if "content" in delta:
-            return f"content_delta"
+            return "content_delta"
         if "tool_calls" in delta:
             return "tool_calls_delta"
         return "choice_chunk"
@@ -85,12 +84,20 @@ def print_comparison(
     in_types = [_event_label(provider, e) for e in input_events]
     out_types = [_event_label(provider, e) for e in output_events]
 
-    inflated = len(out_types) != len(in_types) or in_types != out_types
+    # Only flag when output has MORE events than input (inflation).
+    # Deflation (output < input) is legitimate — compound chunks can
+    # merge during round-trip (e.g. role + first content merge).
+    inflated = len(out_types) > len(in_types)
 
-    status = "INFLATED" if inflated else "OK"
-    print(f"\n{'='*60}")
+    if len(out_types) == len(in_types):
+        status = "OK (exact)"
+    elif len(out_types) < len(in_types):
+        status = f"OK (deflated {len(in_types)}→{len(out_types)})"
+    else:
+        status = "INFLATED"
+    print(f"\n{'=' * 60}")
     print(f"  {provider}: {len(in_types)} → {len(out_types)} events  [{status}]")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"  INPUT  ({len(in_types)}): {in_types}")
     print(f"  OUTPUT ({len(out_types)}): {out_types}")
 
@@ -98,7 +105,7 @@ def print_comparison(
         # Show detailed diff
         max_len = max(len(in_types), len(out_types))
         print(f"\n  {'#':>3}  {'INPUT':<30} {'OUTPUT':<30} {'DIFF'}")
-        print(f"  {'---':>3}  {'-'*30} {'-'*30} {'----'}")
+        print(f"  {'---':>3}  {'-' * 30} {'-' * 30} {'----'}")
         for i in range(max_len):
             inp = in_types[i] if i < len(in_types) else "(none)"
             out = out_types[i] if i < len(out_types) else "(none)"
@@ -157,7 +164,9 @@ OPENAI_CHAT_EVENTS: list[dict[str, Any]] = [
         "object": "chat.completion.chunk",
         "model": "gpt-4o",
         "created": 1700000000,
-        "choices": [{"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}],
+        "choices": [
+            {"index": 0, "delta": {"role": "assistant"}, "finish_reason": None}
+        ],
     },
     {
         "id": "chatcmpl-001",
@@ -542,9 +551,7 @@ OPENAI_CHAT_TOOL_EVENTS: list[dict[str, Any]] = [
         "object": "chat.completion.chunk",
         "model": "gpt-4o",
         "created": 1700000000,
-        "choices": [
-            {"index": 0, "delta": {}, "finish_reason": "tool_calls"}
-        ],
+        "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}],
     },
     {
         "id": "chatcmpl-002",
@@ -839,18 +846,14 @@ OPENAI_CHAT_ROLE_EMPTY_CONTENT_EVENTS: list[dict[str, Any]] = [
         "object": "chat.completion.chunk",
         "model": "gpt-5-nano",
         "created": 1700000000,
-        "choices": [
-            {"index": 0, "delta": {"content": "2 + 2"}, "finish_reason": None}
-        ],
+        "choices": [{"index": 0, "delta": {"content": "2 + 2"}, "finish_reason": None}],
     },
     {
         "id": "chatcmpl-002",
         "object": "chat.completion.chunk",
         "model": "gpt-5-nano",
         "created": 1700000000,
-        "choices": [
-            {"index": 0, "delta": {"content": " = 4."}, "finish_reason": None}
-        ],
+        "choices": [{"index": 0, "delta": {"content": " = 4."}, "finish_reason": None}],
     },
     {
         "id": "chatcmpl-002",
@@ -924,9 +927,9 @@ def run_test_case(
         results[key] = inflated
     except Exception as exc:
         key = f"{provider}/{label}"
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  {key}: ERROR — {exc}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         import traceback
 
         traceback.print_exc()
@@ -971,9 +974,9 @@ def main() -> None:
     for label, provider, events in edge_cases:
         run_test_case(label, provider, events, results)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print("  SUMMARY")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     any_failed = False
     for key, inflated in results.items():
         status = "INFLATED" if inflated else "OK"
@@ -982,9 +985,9 @@ def main() -> None:
         print(f"  {key:<40} {status}")
 
     if any_failed:
-        print(f"\n  *** SOME TESTS FAILED ***")
+        print("\n  *** SOME TESTS FAILED ***")
     else:
-        print(f"\n  ALL TESTS PASSED")
+        print("\n  ALL TESTS PASSED")
 
 
 if __name__ == "__main__":

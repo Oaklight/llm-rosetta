@@ -1107,39 +1107,21 @@ class GoogleGenAIConverter(BaseConverter):
 
         chunks: list[dict[str, Any]] = []
 
-        # Flush accumulated tool calls as complete function_call chunks.
-        if context is not None:
-            for call_id, tool_name, args_str in context.get_pending_tool_calls():
-                try:
-                    args = json.loads(args_str) if args_str else {}
-                except (json.JSONDecodeError, TypeError):
-                    args = {}
-                chunks.append(
-                    {
-                        "candidates": [
-                            {
-                                "index": choice_index,
-                                "content": {
-                                    "role": "model",
-                                    "parts": [
-                                        {
-                                            "functionCall": {
-                                                "name": tool_name,
-                                                "args": args,
-                                            }
-                                        }
-                                    ],
-                                },
-                            }
-                        ]
-                    }
-                )
-
-        # Merge deferred text from compound text+finish chunks.
+        # Merge deferred text and tool calls into the finish chunk's
+        # parts array, matching Google's native format where a single
+        # candidate carries content parts alongside finishReason.
         parts: list[dict[str, Any]] = []
         if context is not None and context.pending_text is not None:
             parts.append({"text": context.pending_text})
             context.pending_text = None
+
+        if context is not None:
+            for _call_id, tool_name, args_str in context.get_pending_tool_calls():
+                try:
+                    args = json.loads(args_str) if args_str else {}
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+                parts.append({"functionCall": {"name": tool_name, "args": args}})
 
         finish_chunk: dict[str, Any] = {
             "candidates": [

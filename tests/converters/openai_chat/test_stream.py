@@ -540,7 +540,11 @@ class TestStreamRoundTrip:
         assert restored["usage"]["total_tokens"] == 30
 
     def test_full_stream_round_trip_no_inflation(self):
-        """Full stream round-trip produces same event count (5→5)."""
+        """Full stream round-trip: output ≤ input (no inflation).
+
+        With context, the role chunk is buffered and merged into the
+        first content delta.  5 input → 4 output (deflated, not inflated).
+        """
         input_events = [
             {
                 "id": "chatcmpl-001",
@@ -619,14 +623,14 @@ class TestStreamRoundTrip:
                 elif result:
                     output_events.append(result)
 
-        assert len(output_events) == 5
-        # role_delta, content, content, finish, usage
+        # Role merged into first content delta → 4 output from 5 input.
+        assert len(output_events) == 4
         assert output_events[0]["choices"][0]["delta"]["role"] == "assistant"
-        assert output_events[1]["choices"][0]["delta"]["content"] == "Hello"
-        assert output_events[2]["choices"][0]["delta"]["content"] == " world!"
-        assert output_events[3]["choices"][0]["finish_reason"] == "stop"
-        assert output_events[4]["choices"] == []
-        assert output_events[4]["usage"]["total_tokens"] == 17
+        assert output_events[0]["choices"][0]["delta"]["content"] == "Hello"
+        assert output_events[1]["choices"][0]["delta"]["content"] == " world!"
+        assert output_events[2]["choices"][0]["finish_reason"] == "stop"
+        assert output_events[3]["choices"] == []
+        assert output_events[3]["usage"]["total_tokens"] == 17
 
 
 class TestStreamResponseFromProviderWithContext:

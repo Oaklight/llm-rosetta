@@ -833,13 +833,14 @@ class OpenAIChatConverter(BaseConverter):
     def _handle_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle StreamStartEvent → initial chunk with role delta."""
-        if context is not None:
-            context.response_id = event["response_id"]
-            context.model = event["model"]
-            context.created = event.get("created", 0)
-            context.mark_started()
-        return {
+        """Handle StreamStartEvent → initial chunk with role delta.
+
+        When context is available the role chunk is buffered so that it
+        can be merged into the first content event (text delta or tool
+        call start), matching the original OpenAI format where the first
+        chunk carries both ``role`` and the first content delta.
+        """
+        chunk = {
             "id": event["response_id"],
             "object": "chat.completion.chunk",
             "model": event["model"],
@@ -852,6 +853,16 @@ class OpenAIChatConverter(BaseConverter):
                 }
             ],
         }
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.created = event.get("created", 0)
+            context.mark_started()
+            # Buffer the role chunk; the first content handler will
+            # merge it and emit a combined chunk.
+            context.pending_response = chunk
+            return {}
+        return chunk
 
     def _handle_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
@@ -900,12 +911,34 @@ class OpenAIChatConverter(BaseConverter):
         """Handle ContentBlockEndEvent → no-op for OpenAI Chat."""
         return {}
 
+    def _merge_pending_role(
+        self, chunk: dict[str, Any], context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Merge a buffered role chunk into the given content chunk.
+
+        When stream_start buffers its role chunk in context.pending_response,
+        this merges the role and envelope fields (id, model, created) into
+        the first real content chunk, matching the original OpenAI format.
+        """
+        if context is None or context.pending_response is None:
+            return chunk
+        role_chunk = context.pending_response
+        context.pending_response = None
+        # Copy envelope fields from the role chunk.
+        for key in ("id", "object", "model", "created"):
+            if key in role_chunk:
+                chunk[key] = role_chunk[key]
+        # Merge role into the delta.
+        if chunk.get("choices"):
+            chunk["choices"][0].setdefault("delta", {})["role"] = "assistant"
+        return chunk
+
     def _handle_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle TextDeltaEvent → content delta chunk."""
         choice_index = event.get("choice_index", 0)
-        return {
+        chunk = {
             "choices": [
                 {
                     "index": choice_index,
@@ -913,6 +946,7 @@ class OpenAIChatConverter(BaseConverter):
                 }
             ]
         }
+        return self._merge_pending_role(chunk, context)
 
     def _handle_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
@@ -943,7 +977,7 @@ class OpenAIChatConverter(BaseConverter):
                 "arguments": "",
             },
         }
-        return {
+        chunk = {
             "choices": [
                 {
                     "index": choice_index,
@@ -951,6 +985,7 @@ class OpenAIChatConverter(BaseConverter):
                 }
             ]
         }
+        return self._merge_pending_role(chunk, context)
 
     def _handle_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
