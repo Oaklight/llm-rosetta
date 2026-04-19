@@ -48,7 +48,9 @@ All converter methods accept an optional `ConversionContext` (non-streaming) or 
 
 The `metadata_mode` option (`"strip"` or `"preserve"`) controls whether provider-specific fields survive the round-trip. See [Using Converters — Metadata Preservation](converters.md#metadata-preservation-lossless-round-trip) for details.
 
-`StreamContext` extends `ConversionContext` with session-level metadata, tool call tracking, and lifecycle flags for stateful stream transformations.
+`StreamContext` extends `ConversionContext` with session-level metadata, tool call tracking, and lifecycle flags for stateful stream transformations. See the [Streaming](streaming.md) guide for full details.
+
+The base `stream_response_to_provider()` implementation uses a class-level dispatch table (`_TO_P_DISPATCH`) to route IR stream events to handler methods. Provider converters customize behavior through the `_post_process_to_provider()` hook rather than reimplementing the dispatch logic.
 
 ## IR Message Types
 
