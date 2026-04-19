@@ -839,7 +839,7 @@ ROUNDTRIP_CASES = [
 @pytest.mark.parametrize(
     ("provider", "label", "input_events"),
     ROUNDTRIP_CASES,
-    ids=[f"{p}/{l}" for p, l, _ in ROUNDTRIP_CASES],
+    ids=[f"{p}/{label}" for p, label, _ in ROUNDTRIP_CASES],
 )
 def test_no_roundtrip_inflation(
     provider: str,
