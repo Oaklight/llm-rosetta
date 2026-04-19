@@ -33,5 +33,8 @@ jobs:
       - name: Type check with ty
         run: ty check
 
+      - name: Run converter tests
+        run: python -m pytest tests/converters/ -v
+
       - name: Run type compatibility tests
         run: python -m pytest tests/test_types/ -v

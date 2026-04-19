@@ -791,24 +791,6 @@ class AnthropicConverter(BaseConverter):
 
     # --- to_provider ---
 
-    def stream_response_to_provider(
-        self,
-        event: IRStreamEvent,
-        context: StreamContext | None = None,
-    ) -> dict[str, Any] | list[dict[str, Any]]:
-        """Convert an IR stream event to an Anthropic SSE event.
-
-        Args:
-            event: IR stream event.
-
-        Returns:
-            Anthropic SSE event dict.
-        """
-        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
-        if handler_name is None:
-            return {}
-        return getattr(self, handler_name)(event, context)
-
     def _handle_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
@@ -837,19 +819,19 @@ class AnthropicConverter(BaseConverter):
         results: list[dict[str, Any]] = []
         if context is not None:
             # Flush any buffered finish that never got a UsageEvent
-            if context.pending_finish is not None:
+            finish = context.pop_pending_finish()
+            if finish is not None:
                 output_tokens = 0
-                if context.pending_usage is not None:
-                    output_tokens = context.pending_usage.get("completion_tokens") or 0
-                    context.pending_usage = None
+                usage = context.pop_pending_usage()
+                if usage is not None:
+                    output_tokens = usage.get("completion_tokens") or 0
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
-                        "delta": context.pending_finish,
+                        "delta": finish,
                         "usage": {"output_tokens": output_tokens},
                     }
                 )
-                context.pending_finish = None
             context.mark_ended()
         results.append({"type": AnthropicEventType.MESSAGE_STOP})
         return results if len(results) > 1 else results[0]
@@ -1005,10 +987,9 @@ class AnthropicConverter(BaseConverter):
                     }
                 )
                 context.current_block_index = -1
-            if context.pending_usage is not None:
+            usage = context.pop_pending_usage()
+            if usage is not None:
                 # Usage already buffered — merge and emit immediately.
-                usage = context.pending_usage
-                context.pending_usage = None
                 output_tokens = usage.get("completion_tokens") or 0
                 results.append(
                     {
@@ -1019,7 +1000,7 @@ class AnthropicConverter(BaseConverter):
                 )
             else:
                 # Buffer finish for later UsageEvent or StreamEnd flush.
-                context.pending_finish = {"stop_reason": stop_reason}
+                context.buffer_finish({"stop_reason": stop_reason})
             return results if results else {}
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
@@ -1039,10 +1020,9 @@ class AnthropicConverter(BaseConverter):
         """
         usage = event["usage"]
         if context is not None:
-            if context.pending_finish is not None:
+            delta = context.pop_pending_finish()
+            if delta is not None:
                 # Merge with buffered finish and emit.
-                delta = context.pending_finish
-                context.pending_finish = None
                 output_tokens = usage.get("completion_tokens") or 0
                 return {
                     "type": AnthropicEventType.MESSAGE_DELTA,
@@ -1050,7 +1030,7 @@ class AnthropicConverter(BaseConverter):
                     "usage": {"output_tokens": output_tokens},
                 }
             # No pending finish — buffer for later merge.
-            context.pending_usage = dict(usage)
+            context.buffer_usage(usage)
             return {}
         output_tokens = usage.get("completion_tokens") or 0
         return {
@@ -1058,16 +1038,3 @@ class AnthropicConverter(BaseConverter):
             "delta": {},
             "usage": {"output_tokens": output_tokens},
         }
-
-    _TO_P_DISPATCH: dict[str, str] = {
-        "stream_start": "_handle_stream_start_to_p",
-        "stream_end": "_handle_stream_end_to_p",
-        "content_block_start": "_handle_content_block_start_to_p",
-        "content_block_end": "_handle_content_block_end_to_p",
-        "text_delta": "_handle_text_delta_to_p",
-        "reasoning_delta": "_handle_reasoning_delta_to_p",
-        "tool_call_start": "_handle_tool_call_start_to_p",
-        "tool_call_delta": "_handle_tool_call_delta_to_p",
-        "finish": "_handle_finish_to_p",
-        "usage": "_handle_usage_to_p",
-    }
