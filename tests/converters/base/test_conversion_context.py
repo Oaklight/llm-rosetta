@@ -1,6 +1,6 @@
 """Tests for ConversionContext and StreamContext inheritance."""
 
-from typing import cast
+from typing import Any, cast
 
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
@@ -123,6 +123,7 @@ class TestStreamContextBufferMethods:
         original = {"prompt_tokens": 10}
         ctx.buffer_usage(original)
         original["prompt_tokens"] = 99
+        assert ctx.pending_usage is not None
         assert ctx.pending_usage["prompt_tokens"] == 10
 
     def test_pop_pending_usage_returns_and_clears(self):
@@ -146,6 +147,7 @@ class TestStreamContextBufferMethods:
         original = {"stop_reason": "end_turn"}
         ctx.buffer_finish(original)
         original["stop_reason"] = "changed"
+        assert ctx.pending_finish is not None
         assert ctx.pending_finish["stop_reason"] == "end_turn"
 
     def test_pop_pending_finish_returns_and_clears(self):
@@ -182,17 +184,21 @@ class TestBaseConverterDispatch:
         assert set(BaseConverter._TO_P_DISPATCH.keys()) == expected
 
     def test_post_process_noop(self):
-        converter = OpenAIChatConverter()
-        # Call the base _post_process_to_provider directly via BaseConverter
-        result = {"test": True}
-        out = BaseConverter._post_process_to_provider(
-            converter, result, {"type": "text_delta"}, None
+        # Google inherits base _post_process_to_provider without override
+        converter = GoogleGenAIConverter()
+        result: dict[str, Any] = {"test": True}
+        out = converter._post_process_to_provider(
+            result,
+            {"type": "text_delta"},  # ty: ignore[invalid-argument-type]
+            None,
         )
         assert out is result
 
     def test_unknown_event_returns_empty(self):
         converter = OpenAIChatConverter()
-        result = converter.stream_response_to_provider({"type": "nonexistent"})
+        result = converter.stream_response_to_provider(
+            {"type": "nonexistent"}  # ty: ignore[invalid-argument-type]
+        )
         assert result == {}
 
 

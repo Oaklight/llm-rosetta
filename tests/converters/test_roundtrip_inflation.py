@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta import get_converter_for_provider
+from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.context import StreamContext
 
 
@@ -24,7 +25,7 @@ from llm_rosetta.converters.base.context import StreamContext
 
 
 def run_roundtrip(
-    provider: str,
+    provider: ProviderType,
     input_events: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Run a streaming round-trip and return output events."""
@@ -842,7 +843,7 @@ ROUNDTRIP_CASES = [
     ids=[f"{p}/{label}" for p, label, _ in ROUNDTRIP_CASES],
 )
 def test_no_roundtrip_inflation(
-    provider: str,
+    provider: ProviderType,
     label: str,
     input_events: list[dict[str, Any]],
 ) -> None:
