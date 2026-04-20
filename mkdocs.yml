@@ -51,6 +51,47 @@ plugins:
             merge_init_into_class: true
             separate_signature: true
             show_signature_annotations: true
+  - llmstxt:
+      full_output: llms-full.txt
+      sections:
+        Home:
+          - index.md
+        Getting Started:
+          - getting-started/installation.md
+          - getting-started/quickstart.md
+        Guide:
+          - guide/concepts.md
+          - guide/converters.md
+          - guide/ir-types.md
+          - guide/streaming.md
+          - guide/auto-detection.md
+          - guide/api-layers.md
+          - guide/api-standards.md
+          - guide/reasoning.md
+          - guide/compatibility.md
+        Gateway:
+          - gateway/index.md
+          - gateway/configuration.md
+          - gateway/cli.md
+          - gateway/cli-integrations.md
+          - gateway/admin-panel.md
+          - gateway/validation.md
+          - gateway/validation-cli.md
+          - gateway/validation-sdk.md
+        Examples:
+          - examples/index.md
+          - examples/cross-provider.md
+          - examples/tool-calling.md
+        API Reference:
+          - api/index.md
+          - api/converters.md
+          - api/types.md
+          - api/tool-ops.md
+          - api/utils.md
+        Roadmap:
+          - roadmap.md
+        Changelog:
+          - changelog.md
 
 markdown_extensions:
   - admonition
