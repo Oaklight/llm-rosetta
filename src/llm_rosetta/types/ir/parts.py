@@ -256,12 +256,13 @@ class AudioPart(TypedDict):
 # 系统消息内容类型 - 目前只允许文本
 SystemContentPart = TextPart
 
-# 用户消息内容类型 - 文本、图像，未来支持文件、音频
+# 用户消息内容类型 - 文本、图像、文件，未来支持音频
+# User message content types - text, images, files, future support for audio
 UserContentPart = Union[
     TextPart,
     ImagePart,
+    FilePart,
     # 未来支持 Future support:
-    # FilePart,
     # AudioPart,
 ]
 
