@@ -31,19 +31,12 @@ def setup_admin(
     instance is constructed so that its Router compiles them properly.
     """
     metrics = MetricsCollector()
-    request_log = RequestLog()
 
-    # Set up file persistence alongside the config file
+    # Set up SQLite persistence alongside the config file
     persistence: PersistenceManager | None = None
     if config_path:
         data_dir = os.path.join(os.path.dirname(config_path), "data")
         persistence = PersistenceManager(data_dir)
-
-        # Restore persisted request log
-        saved_entries = persistence.load_log_entries(request_log._max_entries)
-        if saved_entries:
-            request_log.load_entries(saved_entries)
-            logger.info("Loaded %d request log entries from disk", len(saved_entries))
 
         # Restore persisted metrics counters
         saved_metrics = persistence.load_metrics()
@@ -53,6 +46,9 @@ def setup_admin(
                 "Loaded metrics from disk (total_requests=%d)",
                 metrics.total_requests,
             )
+
+    # Request log delegates to persistence when available
+    request_log = RequestLog(persistence=persistence)
 
     app.state.metrics = metrics
     app.state.request_log = request_log

@@ -257,39 +257,26 @@ async def handle_health(request: Request) -> Response:
 # Persistence flush helpers
 # ---------------------------------------------------------------------------
 
-_FLUSH_LOG_INTERVAL = 10  # seconds
 _FLUSH_METRICS_INTERVAL = 30  # seconds
 
 
 async def _periodic_flush(app: Starlette) -> None:
-    """Periodically flush request log and metrics to disk."""
-    ticks = 0
+    """Periodically flush metrics counters to disk.
+
+    Request log entries are written to SQLite immediately by
+    :class:`RequestLog`, so only metrics need periodic flushing.
+    """
     while True:
-        await asyncio.sleep(_FLUSH_LOG_INTERVAL)
-        ticks += _FLUSH_LOG_INTERVAL
+        await asyncio.sleep(_FLUSH_METRICS_INTERVAL)
         persistence = getattr(app.state, "persistence", None)
         if persistence is None:
             continue
-
-        # Flush pending request log entries every tick
-        request_log = getattr(app.state, "request_log", None)
-        if request_log is not None:
-            entries = request_log.pending_entries()
-            if entries:
-                try:
-                    persistence.append_log_entries(entries)
-                except Exception as exc:
-                    logger.warning("Failed to flush request log: %s", exc)
-
-        # Flush metrics counters less frequently
-        if ticks >= _FLUSH_METRICS_INTERVAL:
-            ticks = 0
-            metrics = getattr(app.state, "metrics", None)
-            if metrics is not None:
-                try:
-                    persistence.save_metrics(metrics.export_counters())
-                except Exception as exc:
-                    logger.warning("Failed to flush metrics: %s", exc)
+        metrics = getattr(app.state, "metrics", None)
+        if metrics is not None:
+            try:
+                persistence.save_metrics(metrics.export_counters())
+            except Exception as exc:
+                logger.warning("Failed to flush metrics: %s", exc)
 
 
 def _flush_now(app: Starlette) -> None:
@@ -298,15 +285,6 @@ def _flush_now(app: Starlette) -> None:
     if persistence is None:
         return
 
-    request_log = getattr(app.state, "request_log", None)
-    if request_log is not None:
-        entries = request_log.pending_entries()
-        if entries:
-            try:
-                persistence.append_log_entries(entries)
-            except Exception as exc:
-                logger.warning("Shutdown: failed to flush request log: %s", exc)
-
     metrics = getattr(app.state, "metrics", None)
     if metrics is not None:
         try:
@@ -314,7 +292,8 @@ def _flush_now(app: Starlette) -> None:
         except Exception as exc:
             logger.warning("Shutdown: failed to flush metrics: %s", exc)
 
-    logger.info("Persistence flushed on shutdown")
+    persistence.close()
+    logger.info("Persistence flushed and closed on shutdown")
 
 
 # ---------------------------------------------------------------------------
