@@ -237,6 +237,7 @@ class TestPersistenceManagerMetrics:
         pm.save_metrics({"total_requests": 20})
 
         loaded = pm.load_metrics()
+        assert loaded is not None
         assert loaded["total_requests"] == 20
         pm.close()
 
@@ -267,6 +268,7 @@ class TestLegacyMigration:
 
         pm = PersistenceManager(str(tmp_path))
         loaded = pm.load_metrics()
+        assert loaded is not None
         assert loaded["total_requests"] == 99
 
         assert not metrics_path.exists()
