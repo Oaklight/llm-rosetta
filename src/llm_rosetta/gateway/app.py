@@ -125,6 +125,10 @@ async def _proxy_handler(
                 extra_headers=extra_headers,
             )
         status_code = response.status_code
+        if status_code >= 400 and hasattr(response, "body"):
+            body_bytes = response.body
+            if isinstance(body_bytes, bytes):
+                error_detail = body_bytes.decode("utf-8", errors="replace")
         return response
     except Exception as exc:
         error_detail = str(exc)

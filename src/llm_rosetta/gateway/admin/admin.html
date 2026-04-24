@@ -1429,15 +1429,22 @@ function renderLogs(entries, total) {
       const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
       const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
       const keyLabel = e.api_key_label || '—';
-      return `<tr>
+      const hasError = !!e.error_detail;
+      const rowStyle = hasError ? ' style="cursor:pointer" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden"' : '';
+      const expandHint = hasError ? ' title="Click to expand error"' : '';
+      let rows = `<tr${rowStyle}${expandHint}>
         <td>${time}</td>
         <td><code>${esc(e.model)}</code></td>
         <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider)}</td>
         <td>${modeBadge}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
-        <td><span class="badge ${statusCls}">${e.status_code}</span></td>
+        <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span></td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
+      if (hasError) {
+        rows += `<tr hidden><td colspan="7"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+      }
+      return rows;
     }).join('');
   }
 
