@@ -133,6 +133,8 @@ tr:hover td { background: var(--bg-hover); }
   color: var(--text-dim); font-size: 13px; line-height: 1; border-radius: 3px;
 }
 .key-btn:hover { color: var(--accent); background: var(--bg-hover); }
+code.copyable { cursor: pointer; transition: background 0.15s; }
+code.copyable:hover { background: var(--bg-hover); }
 
 /* Modal */
 .modal-overlay {
@@ -702,6 +704,7 @@ const I18N = {
     'toast.keyDeleted':'API key deleted',
     'toast.keyLabelUpdated':'Label updated',
     'toast.keyCopied':'Key copied to clipboard',
+    'toast.copied':'Copied to clipboard',
     'confirm.deleteKey':"Delete API key '{label}'?",
     'filter.allKeys':'All Keys',
   },
@@ -770,6 +773,7 @@ const I18N = {
     'toast.keyDeleted':'API \u5bc6\u94a5\u5df2\u5220\u9664',
     'toast.keyLabelUpdated':'\u6807\u7b7e\u5df2\u66f4\u65b0',
     'toast.keyCopied':'\u5bc6\u94a5\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
+    'toast.copied':'\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
     'confirm.deleteKey':"\u786e\u5b9a\u5220\u9664 API \u5bc6\u94a5 '{label}'\uff1f",
     'filter.allKeys':'\u5168\u90e8\u5bc6\u94a5',
   },
@@ -841,6 +845,31 @@ const api = {
     return r.json();
   }
 };
+
+// ===================== Copy Helper =====================
+async function copyText(text, toastMsg) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(toastMsg || t('toast.copied'));
+  } catch(e) {
+    showToast('Copy failed', 'error');
+  }
+}
+
+function copyProviderEntry(name) {
+  const cfg = configData.providers[name] || {};
+  // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
+  openProviderModal('', cfg.base_url, '', cfg.proxy, cfg.type || name);
+}
+
+function copyModelEntry(name) {
+  const models = configData.models || {};
+  const info = models[name];
+  const provider = typeof info === 'string' ? info : (info.provider || '');
+  const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+  let text = `${name}:\n  provider: ${provider}\n  capabilities: [${caps.join(', ')}]`;
+  copyText(text, t('toast.copied'));
+}
 
 // ===================== Toast =====================
 function showToast(msg, type='success') {
@@ -970,6 +999,7 @@ function renderProviders() {
       <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
+        <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.copy')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
       </div>
@@ -1052,7 +1082,7 @@ function renderModels() {
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
     return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
-      <td><code>${esc(name)}</code> ${capBadges}</td>
+      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code> ${capBadges}</td>
       <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="test-group">
@@ -1065,6 +1095,7 @@ function renderModels() {
             <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
           </div>
         </div>
+        <button class="btn btn-sm" onclick="copyModelEntry('${esc(name)}')">${t('btn.copy')}</button>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">${t('btn.delete')}</button>
       </td>
