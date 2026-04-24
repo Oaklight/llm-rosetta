@@ -127,7 +127,9 @@ tr:hover td { background: var(--bg-hover); }
 .toggle .slider::before { content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s; }
 .toggle input:checked + .slider { background:var(--accent); }
 .toggle input:checked + .slider::before { transform:translateX(16px); }
-.key-actions { display: inline-flex; gap: 2px; margin-left: 4px; vertical-align: middle; }
+.key-cell { display: flex; align-items: center; gap: 4px; }
+.key-cell code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.key-actions { display: flex; gap: 2px; flex-shrink: 0; }
 .key-btn {
   background: none; border: none; cursor: pointer; padding: 2px 4px;
   color: var(--text-dim); font-size: 13px; line-height: 1; border-radius: 3px;
@@ -1211,11 +1213,11 @@ function renderKeys() {
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
-      <td><code class="key-masked" data-masked="${esc(k.key)}">${esc(k.key)}</code>
+      <td style="width:40%"><div class="key-cell"><code class="key-masked" data-masked="${esc(k.key)}">${esc(k.key)}</code>
         <span class="key-actions">
           <button class="key-btn" onclick="toggleKey('${k.id}',this)" title="Toggle visibility"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           <button class="key-btn" onclick="copyKeyById('${k.id}')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-        </span></td>
+        </span></div></td>
       <td>${created}</td>
       <td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}')">${t('btn.delete')}</button></td>
     </tr>`;
