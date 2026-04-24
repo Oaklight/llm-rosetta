@@ -72,8 +72,10 @@ jobs:
         run: |
           python -m venv /tmp/smoke-venv
           /tmp/smoke-venv/bin/pip install --upgrade pip
-          /tmp/smoke-venv/bin/pip install dist/*.whl${{ matrix.variant.extras }}
+          WHL=$(ls dist/*.whl)
+          /tmp/smoke-venv/bin/pip install "${WHL}${{ matrix.variant.extras }}"
 
       - name: Smoke test imports
         run: |
-          /tmp/smoke-venv/bin/${{ matrix.variant.check }}
+          source /tmp/smoke-venv/bin/activate
+          ${{ matrix.variant.check }}
