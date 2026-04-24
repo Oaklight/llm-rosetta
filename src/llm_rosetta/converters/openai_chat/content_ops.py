@@ -6,7 +6,6 @@ Handles bidirectional conversion of text, image, and other content parts.
 """
 
 import re
-import warnings
 from typing import Any
 
 from ...types.ir import (
@@ -175,33 +174,39 @@ class OpenAIChatContentOps(BaseContentOps):
     # ==================== Reasoning ====================
 
     @staticmethod
-    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict | None:
-        """IR ReasoningPart → OpenAI reasoning content.
+    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
+        """IR ReasoningPart → OpenAI Chat reasoning_content field value.
 
-        OpenAI Chat Completions does not support reasoning content in requests.
-        Returns None and emits a warning.
+        Returns the reasoning text string. The caller (message_ops) is responsible
+        for placing it in the ``reasoning_content`` field of the assistant message.
 
         Args:
             ir_reasoning: IR reasoning part.
 
         Returns:
-            None (reasoning is dropped with a warning).
+            Dict with ``reasoning_content`` key.
         """
-        warnings.warn(
-            "Reasoning content not supported in OpenAI Chat Completions, ignored",
-            stacklevel=2,
-        )
-        return None
+        return {"reasoning_content": ir_reasoning.get("reasoning", "")}
 
     @staticmethod
     def p_reasoning_to_ir(provider_reasoning: Any, **kwargs: Any) -> ReasoningPart:
-        """OpenAI reasoning content → IR ReasoningPart.
+        """OpenAI Chat reasoning_content → IR ReasoningPart.
 
-        Raises:
-            NotImplementedError: OpenAI Chat Completions does not produce reasoning parts.
+        Handles the ``reasoning_content`` field used by DeepSeek and other
+        OpenAI Chat-compatible providers that extend the standard with
+        reasoning content at the message level.
+
+        Args:
+            provider_reasoning: Reasoning content string from the provider.
+
+        Returns:
+            IR ReasoningPart.
         """
-        raise NotImplementedError(
-            "OpenAI Chat Completions does not produce reasoning content parts."
+        if isinstance(provider_reasoning, str):
+            return ReasoningPart(type="reasoning", reasoning=provider_reasoning)
+        return ReasoningPart(
+            type="reasoning",
+            reasoning=str(provider_reasoning) if provider_reasoning else "",
         )
 
     # ==================== Refusal ====================

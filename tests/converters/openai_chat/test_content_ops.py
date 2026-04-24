@@ -142,13 +142,29 @@ class TestOpenAIChatContentOps:
 
     # ==================== Reasoning ====================
 
-    def test_ir_reasoning_to_p_returns_none(self):
-        """Test ir_reasoning_to_p returns None with warning."""
-        with pytest.warns(UserWarning, match="Reasoning content not supported"):
-            result = OpenAIChatContentOps.ir_reasoning_to_p(
-                {"type": "reasoning", "reasoning": "thinking..."}
-            )
-        assert result is None
+    def test_ir_reasoning_to_p(self):
+        """Test IR ReasoningPart → reasoning_content dict."""
+        result = OpenAIChatContentOps.ir_reasoning_to_p(
+            {"type": "reasoning", "reasoning": "thinking..."}
+        )
+        assert result == {"reasoning_content": "thinking..."}
+
+    def test_ir_reasoning_to_p_empty(self):
+        """Test IR ReasoningPart with no reasoning field → empty string."""
+        result = OpenAIChatContentOps.ir_reasoning_to_p({"type": "reasoning"})
+        assert result == {"reasoning_content": ""}
+
+    def test_p_reasoning_to_ir(self):
+        """Test reasoning_content string → IR ReasoningPart."""
+        result = OpenAIChatContentOps.p_reasoning_to_ir("Let me think step by step...")
+        assert result["type"] == "reasoning"
+        assert result["reasoning"] == "Let me think step by step..."
+
+    def test_p_reasoning_to_ir_empty(self):
+        """Test empty reasoning_content string → IR ReasoningPart with empty reasoning."""
+        result = OpenAIChatContentOps.p_reasoning_to_ir("")
+        assert result["type"] == "reasoning"
+        assert result["reasoning"] == ""
 
     # ==================== Refusal ====================
 

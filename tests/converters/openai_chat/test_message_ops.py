@@ -276,8 +276,28 @@ class TestOpenAIChatMessageOps:
         assert len(warnings) == 1
         assert "File content not supported" in warnings[0]
 
-    def test_reasoning_content_warning(self):
-        """Test reasoning content produces warning."""
+    def test_reasoning_content_ir_to_p(self):
+        """Test IR ReasoningPart → reasoning_content field in assistant message."""
+        messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "reasoning", "reasoning": "thinking step by step"},
+                        {"type": "text", "text": "The answer is 42"},
+                    ],
+                }
+            ],
+        )
+        result, warnings = self.message_ops.ir_messages_to_p(messages)
+        assert len(warnings) == 0
+        assert result[0]["role"] == "assistant"
+        assert result[0]["reasoning_content"] == "thinking step by step"
+        assert result[0]["content"] == "The answer is 42"
+
+    def test_reasoning_content_ir_to_p_only_reasoning(self):
+        """Test IR assistant message with only ReasoningPart."""
         messages = cast(
             list[Message],
             [
@@ -288,8 +308,81 @@ class TestOpenAIChatMessageOps:
             ],
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
-        assert len(warnings) == 1
-        assert "Reasoning content not supported" in warnings[0]
+        assert len(warnings) == 0
+        assert result[0]["reasoning_content"] == "thinking"
+        assert result[0]["content"] == ""
+
+    def test_reasoning_content_p_to_ir(self):
+        """Test reasoning_content field in provider message → IR ReasoningPart."""
+        messages = [
+            {
+                "role": "assistant",
+                "reasoning_content": "Let me think...",
+                "content": "The answer is 42",
+            }
+        ]
+        result = self.message_ops.p_messages_to_ir(messages)
+        assistant_msg = result[0]
+        assert assistant_msg["role"] == "assistant"
+        parts = assistant_msg["content"]
+        assert len(parts) == 2
+        assert parts[0]["type"] == "reasoning"
+        assert parts[0]["reasoning"] == "Let me think..."
+        assert parts[1]["type"] == "text"
+        assert parts[1]["text"] == "The answer is 42"
+
+    def test_reasoning_content_p_to_ir_no_reasoning(self):
+        """Test standard assistant message without reasoning_content."""
+        messages = [{"role": "assistant", "content": "Hello"}]
+        result = self.message_ops.p_messages_to_ir(messages)
+        parts = result[0]["content"]
+        assert len(parts) == 1
+        assert parts[0]["type"] == "text"
+
+    def test_reasoning_content_round_trip(self):
+        """Test round-trip: DeepSeek-style response → IR → back preserves reasoning_content."""
+        provider_messages = [
+            {
+                "role": "assistant",
+                "reasoning_content": "Step 1: analyze\nStep 2: conclude",
+                "content": "The answer is 42",
+            }
+        ]
+        # Provider → IR
+        ir_messages = self.message_ops.p_messages_to_ir(provider_messages)
+        # IR → Provider
+        restored, warnings = self.message_ops.ir_messages_to_p(
+            cast(list[Message], ir_messages)
+        )
+        assert len(warnings) == 0
+        assert restored[0]["reasoning_content"] == "Step 1: analyze\nStep 2: conclude"
+        assert restored[0]["content"] == "The answer is 42"
+
+    def test_reasoning_content_with_tool_calls(self):
+        """Test reasoning_content + content + tool_calls together."""
+        messages = [
+            {
+                "role": "assistant",
+                "reasoning_content": "I need to call a tool",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "NYC"}',
+                        },
+                    }
+                ],
+            }
+        ]
+        result = self.message_ops.p_messages_to_ir(messages)
+        parts = result[0]["content"]
+        # reasoning first, then tool call (no text since content is empty)
+        assert parts[0]["type"] == "reasoning"
+        assert parts[0]["reasoning"] == "I need to call a tool"
+        assert parts[1]["type"] == "tool_call"
 
     # ==================== Tool message reordering ====================
 

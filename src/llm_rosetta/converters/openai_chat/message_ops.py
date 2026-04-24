@@ -295,6 +295,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         text_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
         refusal_text = None
+        reasoning_text: str | None = None
 
         for part in content:
             if is_text_part(part):
@@ -302,9 +303,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             elif is_tool_call_part(part):
                 tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_reasoning_part(part):
-                warnings.append(
-                    "Reasoning content not supported in OpenAI Chat Completions, ignored"
-                )
+                reasoning_text = part.get("reasoning", "")
             elif is_refusal_part(part):
                 refusal_text = part.get("refusal", "")
             elif is_citation_part(part):
@@ -316,6 +315,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 )
 
         openai_message: dict[str, Any] = {"role": "assistant"}
+
+        # Set reasoning content (DeepSeek / extended OpenAI Chat providers)
+        if reasoning_text is not None:
+            openai_message["reasoning_content"] = reasoning_text
 
         # Set text content
         if text_parts:
@@ -603,6 +606,12 @@ class OpenAIChatMessageOps(BaseMessageOps):
     def _p_assistant_to_ir(self, msg: dict[str, Any]) -> dict[str, Any]:
         """OpenAI assistant message → IR AssistantMessage."""
         ir_content: list[ContentPart] = []
+
+        # Handle reasoning_content (DeepSeek / extended OpenAI Chat providers)
+        # Prepend before text content to match convention (reasoning first)
+        reasoning_content = msg.get("reasoning_content")
+        if reasoning_content:
+            ir_content.append(self.content_ops.p_reasoning_to_ir(reasoning_content))
 
         # Handle text content
         content = msg.get("content")
