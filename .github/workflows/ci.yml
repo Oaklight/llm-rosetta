@@ -37,3 +37,43 @@ jobs:
 
       - name: Run type compatibility tests
         run: python -m pytest tests/test_types/ -v
+
+  install-smoke-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant:
+          - name: core
+            extras: ""
+            check: |
+              python -c "from llm_rosetta import get_converter_for_provider; print('core import OK')"
+              python -c "from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOps; print('google converter OK')"
+          - name: gateway
+            extras: "[gateway]"
+            check: |
+              python -c "from llm_rosetta.gateway import main; print('gateway import OK')"
+              llm-rosetta-gateway --version
+
+    name: smoke-test (${{ matrix.variant.name }})
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Build wheel
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build --wheel
+
+      - name: Install from wheel in clean venv
+        run: |
+          python -m venv /tmp/smoke-venv
+          /tmp/smoke-venv/bin/pip install --upgrade pip
+          /tmp/smoke-venv/bin/pip install dist/*.whl${{ matrix.variant.extras }}
+
+      - name: Smoke test imports
+        run: |
+          /tmp/smoke-venv/bin/${{ matrix.variant.check }}
