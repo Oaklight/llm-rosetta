@@ -6,6 +6,17 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## 未发布
+
+### 修复
+
+- **`UserContentPart` 缺少 `FilePart`**（[#160](https://github.com/Oaklight/llm-rosetta/issues/160)、[#162](https://github.com/Oaklight/llm-rosetta/pull/162)）：`UserContentPart` 联合类型未包含 `FilePart`，导致 `validate_ir_request()` 拒绝所有包含文件内容的用户消息（如 Claude Code 以 Anthropic `document` 块发送的 PDF 附件）。Anthropic（`document`）、Google（`inlineData`）和 OpenAI Responses（`input_file`）的双向转换逻辑已完整实现，仅类型定义缺失
+
+### 已知问题
+
+- **`google_genai/content_ops.py` 在模块顶层导入 `httpx`**（[#163](https://github.com/Oaklight/llm-rosetta/issues/163)）：`httpx` 仅声明为 `[gateway]` 可选依赖，但在核心 Google 转换器中被无条件导入，导致未安装 `[gateway]` extra 时报 `ModuleNotFoundError`
+- **Google 工具 schema `required` 验证失败**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：部分 Anthropic 工具 schema 的 `required` 条目引用了未定义的属性，导致 Google API 以 `INVALID_ARGUMENT` 拒绝请求
+
 ## v0.5.2 — 2026-04-19
 
 ### 修复
