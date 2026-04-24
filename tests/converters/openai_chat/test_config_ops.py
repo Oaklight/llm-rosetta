@@ -170,24 +170,46 @@ class TestOpenAIChatConfigOps:
             result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
         assert result["reasoning_effort"] == "high"
 
-    def test_ir_reasoning_config_budget_warning(self):
-        """Test budget_tokens produces warning."""
-        with pytest.warns(UserWarning, match="budget_tokens"):
-            OpenAIChatConfigOps.ir_reasoning_config_to_p({"budget_tokens": 1000})
+    def test_ir_reasoning_config_budget_tokens(self):
+        """Test budget_tokens → thinking.budget_tokens."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"budget_tokens": 1000})
+        assert result["thinking"]["budget_tokens"] == 1000
 
     def test_ir_reasoning_config_mode_disabled(self):
-        """Test mode: disabled skips reasoning_effort entirely."""
+        """Test mode: disabled skips reasoning_effort, emits thinking."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "disabled", "effort": "high"}
         )
-        assert result == {}
+        assert "reasoning_effort" not in result
+        assert result["thinking"]["type"] == "disabled"
+
+    def test_ir_reasoning_config_mode_enabled(self):
+        """Test mode: enabled → thinking.type = enabled."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"mode": "enabled"})
+        assert result["thinking"]["type"] == "enabled"
 
     def test_ir_reasoning_config_mode_auto_with_effort(self):
-        """Test mode: auto still outputs reasoning_effort."""
+        """Test mode: auto outputs both reasoning_effort and thinking."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "auto", "effort": "medium"}
         )
         assert result["reasoning_effort"] == "medium"
+        assert result["thinking"]["type"] == "auto"
+
+    def test_ir_reasoning_config_all_fields(self):
+        """Test mode + effort + budget_tokens coexistence."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
+            {"mode": "enabled", "effort": "high", "budget_tokens": 4096}
+        )
+        assert result["reasoning_effort"] == "high"
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 4096
+
+    def test_ir_reasoning_config_effort_only_no_thinking(self):
+        """Test effort-only does not produce thinking object."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "high"})
+        assert result["reasoning_effort"] == "high"
+        assert "thinking" not in result
 
     def test_p_reasoning_config_to_ir(self):
         """Test OpenAI reasoning_effort → IR ReasoningConfig."""
@@ -195,6 +217,38 @@ class TestOpenAIChatConfigOps:
             {"reasoning_effort": "medium"}
         )
         assert result["effort"] == "medium"
+
+    def test_p_reasoning_config_thinking_to_ir(self):
+        """Test thinking object → IR mode + budget_tokens."""
+        result = OpenAIChatConfigOps.p_reasoning_config_to_ir(
+            {"thinking": {"type": "enabled", "budget_tokens": 4096}}
+        )
+        assert result["mode"] == "enabled"
+        assert result["budget_tokens"] == 4096
+
+    def test_p_reasoning_config_thinking_and_effort(self):
+        """Test reasoning_effort + thinking coexistence in P→IR."""
+        result = OpenAIChatConfigOps.p_reasoning_config_to_ir(
+            {
+                "reasoning_effort": "high",
+                "thinking": {"type": "enabled", "budget_tokens": 2048},
+            }
+        )
+        assert result["effort"] == "high"
+        assert result["mode"] == "enabled"
+        assert result["budget_tokens"] == 2048
+
+    def test_reasoning_config_roundtrip(self):
+        """Test thinking config round-trip: P → IR → P."""
+        original = {
+            "reasoning_effort": "high",
+            "thinking": {"type": "enabled", "budget_tokens": 4096},
+        }
+        ir = OpenAIChatConfigOps.p_reasoning_config_to_ir(original)
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(ir)
+        assert result["reasoning_effort"] == "high"
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 4096
 
     # ==================== Cache Config ====================
 
