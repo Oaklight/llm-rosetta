@@ -253,8 +253,10 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Mapping:
         - ``effort`` → ``reasoning_effort``
           (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
-        - ``mode: "disabled"`` → skip ``reasoning_effort`` entirely
-        - ``budget_tokens`` → not supported (warning)
+        - ``mode`` → ``thinking.type`` (DeepSeek/Volcengine extension)
+        - ``budget_tokens`` → ``thinking.budget_tokens``
+        - ``mode: "disabled"`` → skip ``reasoning_effort``, emit
+          ``thinking.type = "disabled"``
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -263,9 +265,19 @@ class OpenAIChatConfigOps(BaseConfigOps):
             Dict of OpenAI request fields to merge.
         """
         result: dict[str, Any] = {}
+        mode = ir_reasoning.get("mode")
+
+        # Build thinking object for mode / budget_tokens
+        thinking: dict[str, Any] = {}
+        if mode:
+            thinking["type"] = mode
+        if "budget_tokens" in ir_reasoning:
+            thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
+        if thinking:
+            result["thinking"] = thinking
 
         # mode: "disabled" → skip reasoning_effort
-        if ir_reasoning.get("mode") == "disabled":
+        if mode == "disabled":
             return result
 
         if "effort" in ir_reasoning:
@@ -285,12 +297,6 @@ class OpenAIChatConfigOps(BaseConfigOps):
                 effort = "high"
             result["reasoning_effort"] = effort
 
-        if "budget_tokens" in ir_reasoning:
-            warnings.warn(
-                "OpenAI Chat does not support reasoning budget_tokens, ignored",
-                stacklevel=2,
-            )
-
         return result
 
     @staticmethod
@@ -299,11 +305,11 @@ class OpenAIChatConfigOps(BaseConfigOps):
     ) -> ReasoningConfig:
         """OpenAI Chat reasoning parameters → IR ReasoningConfig.
 
-        Extracts ``reasoning_effort`` from the provider request.
+        Extracts ``reasoning_effort`` and ``thinking`` config from the
+        provider request.
 
         Args:
-            provider_reasoning: Provider request dict (or subset with
-                ``reasoning_effort``).
+            provider_reasoning: Provider request dict.
 
         Returns:
             IR ReasoningConfig.
@@ -316,6 +322,16 @@ class OpenAIChatConfigOps(BaseConfigOps):
         effort = provider_reasoning.get("reasoning_effort")
         if effort:
             result["effort"] = effort
+
+        # DeepSeek/Volcengine thinking extension
+        thinking = provider_reasoning.get("thinking")
+        if isinstance(thinking, dict):
+            thinking_type = thinking.get("type")
+            if thinking_type:
+                result["mode"] = thinking_type
+            budget = thinking.get("budget_tokens")
+            if budget is not None:
+                result["budget_tokens"] = budget
 
         return cast(ReasoningConfig, result)
 
