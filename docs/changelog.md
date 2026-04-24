@@ -6,6 +6,17 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## Unreleased
+
+### Fixed
+
+- **FilePart excluded from `UserContentPart`** ([#160](https://github.com/Oaklight/llm-rosetta/issues/160), [#162](https://github.com/Oaklight/llm-rosetta/pull/162)): `UserContentPart` union type did not include `FilePart`, causing `validate_ir_request()` to reject any user message containing file content (e.g., PDF attachments sent by Claude Code as Anthropic `document` blocks). The bidirectional conversion logic was already implemented for Anthropic (`document`), Google (`inlineData`), and OpenAI Responses (`input_file`) — only the type definition was missing
+
+### Known Issues
+
+- **`google_genai/content_ops.py` imports `httpx` at module level** ([#163](https://github.com/Oaklight/llm-rosetta/issues/163)): `httpx` is only declared as a `[gateway]` optional dependency but is imported unconditionally in the core Google converter, causing `ModuleNotFoundError` when installed without `[gateway]` extra
+- **Google tool schema `required` validation** ([#161](https://github.com/Oaklight/llm-rosetta/issues/161)): Some Anthropic tool schemas have `required` entries referencing properties not defined in the schema, causing Google API to reject with `INVALID_ARGUMENT`
+
 ## v0.5.2 — 2026-04-19
 
 ### Fixed
