@@ -78,13 +78,16 @@ class TestGoogleGenAIContentOps:
 
         ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
         mock_resp = MagicMock()
-        mock_resp.content = b"\x89PNG\r\n"
-        mock_resp.headers = {"content-type": "image/png"}
-        mock_resp.raise_for_status = MagicMock()
+        mock_resp.read.return_value = b"\x89PNG\r\n"
+        mock_resp.headers = MagicMock()
+        mock_resp.headers.get.return_value = "image/png"
+
+        mock_opener = MagicMock()
+        mock_opener.open.return_value = mock_resp
 
         with patch(
-            "llm_rosetta.converters.google_genai.content_ops.httpx.get",
-            return_value=mock_resp,
+            "llm_rosetta.converters.google_genai.content_ops.urllib.request.build_opener",
+            return_value=mock_opener,
         ):
             result = GoogleGenAIContentOps.ir_image_to_p(ir_image)
 
@@ -100,7 +103,7 @@ class TestGoogleGenAIContentOps:
 
         ir_image = ImagePart(type="image", image_url="https://example.com/img.jpg")
         with patch(
-            "llm_rosetta.converters.google_genai.content_ops.httpx.get",
+            "llm_rosetta.converters.google_genai.content_ops.urllib.request.build_opener",
             side_effect=Exception("timeout"),
         ):
             result = GoogleGenAIContentOps.ir_image_to_p(ir_image)

@@ -14,7 +14,7 @@ import mimetypes
 import warnings
 from typing import Any, cast
 
-import httpx
+import urllib.request
 
 from ...types.ir import (
     AudioData,
@@ -117,24 +117,26 @@ class GoogleGenAIContentOps(BaseContentOps):
                 import os
 
                 proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
-                headers = {
-                    "User-Agent": "llm-rosetta/1.0 (image fetch)",
-                }
-                client_kwargs: dict[str, Any] = {
-                    "timeout": 30,
-                    "follow_redirects": True,
-                    "headers": headers,
-                }
+                req = urllib.request.Request(
+                    url,
+                    headers={"User-Agent": "llm-rosetta/1.0 (image fetch)"},
+                )
                 if proxy:
-                    client_kwargs["proxy"] = proxy
-                resp = httpx.get(url, **client_kwargs)
-                resp.raise_for_status()
+                    handler = urllib.request.ProxyHandler(
+                        {"https": proxy, "http": proxy}
+                    )
+                    opener = urllib.request.build_opener(handler)
+                else:
+                    opener = urllib.request.build_opener()
+                resp = opener.open(req, timeout=30)
+                data = resp.read()
+                content_type = resp.headers.get("Content-Type", "")
                 mime = (
-                    resp.headers.get("content-type", "").split(";")[0].strip()
+                    content_type.split(";")[0].strip()
                     or mimetypes.guess_type(url)[0]
                     or "image/jpeg"
                 )
-                b64 = base64.b64encode(resp.content).decode()
+                b64 = base64.b64encode(data).decode()
                 return {"inlineData": {"mimeType": mime, "data": b64}}
             except Exception as exc:
                 logging.getLogger("llm-rosetta").warning(
