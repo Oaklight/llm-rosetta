@@ -180,6 +180,11 @@ def build_provider_info(
 ) -> ProviderInfo:
     """Create a :class:`ProviderInfo` from a provider config dict.
 
+    *provider_type* may be a base converter type (e.g. ``"openai_chat"``)
+    or a registered shim name (e.g. ``"deepseek"``).  When a shim is
+    found, its ``default_base_url`` and ``default_api_key_env`` are used
+    as fallbacks when the config does not specify them.
+
     *cfg* is the dict from the JSONC config, e.g.
     ``{"api_key": "sk-...", "base_url": "https://..."}``
 
@@ -190,7 +195,25 @@ def build_provider_info(
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
     """
-    reg = _PROVIDER_REGISTRY.get(provider_type)
+    import os
+
+    from llm_rosetta.shims import get_shim
+
+    # Resolve through shim registry for defaults
+    shim = get_shim(provider_type)
+    if shim is not None:
+        base_type = shim.base
+        # Apply shim defaults where config is missing
+        if "base_url" not in cfg and shim.default_base_url:
+            cfg = {**cfg, "base_url": shim.default_base_url}
+        if "api_key" not in cfg and shim.default_api_key_env:
+            env_val = os.environ.get(shim.default_api_key_env, "")
+            if env_val:
+                cfg = {**cfg, "api_key": env_val}
+    else:
+        base_type = provider_type
+
+    reg = _PROVIDER_REGISTRY.get(base_type)
 
     if reg:
         auth_fn = reg["auth_header_fn"]
@@ -203,8 +226,19 @@ def build_provider_info(
         stream_tpl = None
         logger.warning(
             "Unknown provider type '%s'; using Bearer auth and generic URL template",
-            provider_type,
+            base_type,
         )
+
+    # Fall back to base-type defaults if still missing
+    if "base_url" not in cfg:
+        default_url = get_default_base_url(base_type)
+        if default_url:
+            cfg = {**cfg, "base_url": default_url}
+    if "api_key" not in cfg:
+        default_env = get_default_api_key_env(base_type)
+        env_val = os.environ.get(default_env, "")
+        if env_val:
+            cfg = {**cfg, "api_key": env_val}
 
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None
