@@ -8,14 +8,34 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
+### 已知问题
+
+- **Google 工具 schema `required` 验证失败**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：部分 Anthropic 工具 schema 的 `required` 条目引用了未定义的属性，导致 Google API 以 `INVALID_ARGUMENT` 拒绝请求
+
+## v0.5.3 — 2026-04-25
+
+### 新增
+
+- **OpenAI Chat 转换器：thinking 配置支持**（[#170](https://github.com/Oaklight/llm-rosetta/pull/170)）：OpenAI Chat 转换器现在处理 IR 请求中的 `reasoning_config`，映射到 OpenAI 的 `reasoning_effort` 参数。支持通过 Chat Completions API 路由时配置 thinking/扩展思考参数
+- **OpenAI Chat 转换器：`reasoning_content` 字段处理**：推理模型（如 o1、o3）的非流式和流式响应现在正确提取 `reasoning_content` 字段并转换为 IR `ReasoningPart`，在跨提供商转换中保留思维链内容
+- **管理面板请求日志显示上游错误体**：当上游提供商返回错误时，响应体现在包含在管理面板的请求日志条目中，无需查看服务器日志即可诊断上游故障
+- **管理面板提供商和模型复制按钮**：管理面板中的提供商和模型条目新增复制/克隆按钮，支持基于现有配置快速创建新条目
+
 ### 修复
 
 - **`UserContentPart` 缺少 `FilePart`**（[#160](https://github.com/Oaklight/llm-rosetta/issues/160)、[#162](https://github.com/Oaklight/llm-rosetta/pull/162)）：`UserContentPart` 联合类型未包含 `FilePart`，导致 `validate_ir_request()` 拒绝所有包含文件内容的用户消息（如 Claude Code 以 Anthropic `document` 块发送的 PDF 附件）。Anthropic（`document`）、Google（`inlineData`）和 OpenAI Responses（`input_file`）的双向转换逻辑已完整实现，仅类型定义缺失
+- **`google_genai/content_ops.py` 无条件导入 `httpx`**（[#163](https://github.com/Oaklight/llm-rosetta/issues/163)）：将 Google GenAI 内容转换器中图片 URL 下载使用的 `httpx` 替换为 `urllib.request`。`httpx` 仅声明为 `[gateway]` 可选依赖，但被无条件导入，导致未安装 `[gateway]` extra 时报 `ModuleNotFoundError`
+- **API Key 管理中 emoji 图标替换为 SVG**：管理面板中 API Key 操作按钮使用的 emoji 字符在不同平台渲染不一致。替换为内联 SVG 图标，并新增 Key 可见性切换按钮
+- **API Key 列布局偏移**：修复 CSS 布局问题，切换 Key 可见性时列宽变化导致相邻按钮位置偏移
+- **Wheel 路径与 extras 括号的 glob 冲突**：CI 安装命令中对 wheel 文件路径加引号，防止文件名包含 `[extras]` 括号语法时被 shell glob 展开
 
-### 已知问题
+### 重构
 
-- **`google_genai/content_ops.py` 在模块顶层导入 `httpx`**（[#163](https://github.com/Oaklight/llm-rosetta/issues/163)）：`httpx` 仅声明为 `[gateway]` 可选依赖，但在核心 Google 转换器中被无条件导入，导致未安装 `[gateway]` extra 时报 `ModuleNotFoundError`
-- **Google 工具 schema `required` 验证失败**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：部分 Anthropic 工具 schema 的 `required` 条目引用了未定义的属性，导致 Google API 以 `INVALID_ARGUMENT` 拒绝请求
+- **SQLite 持久化后端**：将基于 JSONL 的请求日志和基于 JSON 的指标持久化替换为统一的 SQLite 后端。提供更好的写入可靠性、原子操作，并消除日志轮转复杂性。内嵌 zerodep 的 `persistdict`（v0.4.1）作为键值存储层
+
+### CI/构建
+
+- **安装冒烟测试**：新增 CI 冒烟测试，验证 `pip install` 在 `llm-rosetta`（核心）和 `llm-rosetta[gateway]` 两种变体下均能成功安装，及早发现缺失或循环依赖
 
 ## v0.5.2 — 2026-04-19
 
