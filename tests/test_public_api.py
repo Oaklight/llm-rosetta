@@ -40,8 +40,16 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "get_converter_for_provider",
             "convert",
             "ProviderType",
+            # Provider shim layer
+            "ProviderShim",
+            "ModelShim",
+            "register_shim",
+            "unregister_shim",
+            "get_shim",
+            "list_shims",
+            "resolve_base",
         ],
-        "max_count": 16,
+        "max_count": 23,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

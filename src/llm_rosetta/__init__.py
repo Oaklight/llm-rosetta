@@ -21,25 +21,42 @@ from .converters import (
 )
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
+from .shims import (
+    ModelShim,
+    ProviderShim,
+    get_shim,
+    list_shims,
+    register_shim,
+    resolve_base,
+    unregister_shim,
+)
 
 __version__ = "0.5.3"
 
 __all__ = [
-    # 转换器 Converters
+    # Converters
     "BaseConverter",
     "OpenAIChatConverter",
     "AnthropicConverter",
     "GoogleGenAIConverter",
     "GoogleConverter",
     "OpenAIResponsesConverter",
-    # 转换上下文 Conversion context
+    # Conversion context
     "ConversionContext",
     "StreamContext",
-    # 工具定义便利 API Tool definition convenience API
+    # Tool definition convenience API
     "tool_ops",
-    # 自动检测和转换 Auto-detection and conversion
+    # Auto-detection and conversion
     "detect_provider",
     "get_converter_for_provider",
     "convert",
     "ProviderType",
+    # Provider shim layer
+    "ProviderShim",
+    "ModelShim",
+    "register_shim",
+    "unregister_shim",
+    "get_shim",
+    "list_shims",
+    "resolve_base",
 ]

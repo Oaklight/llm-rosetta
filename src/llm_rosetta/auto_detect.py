@@ -129,23 +129,27 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     return "openai_chat"
 
 
-def get_converter_for_provider(provider: ProviderType):
-    """根据 provider 类型获取对应的转换器
-    Get the corresponding converter according to provider type
+def get_converter_for_provider(provider: str):
+    """Get the corresponding converter for a provider type or shim name.
+
+    Accepts both base converter types (e.g. ``"openai_chat"``) and
+    registered shim names (e.g. ``"deepseek"``).  Shim names are
+    resolved to their base converter type via the shim registry.
 
     Args:
-        provider: Provider 类型 Provider type
+        provider: Provider type string or registered shim name.
 
     Returns:
-        对应的转换器实例 Corresponding converter instance
+        Corresponding converter instance.
 
     Raises:
-        ValueError: 如果 provider 类型不支持 If provider type is not supported
+        ValueError: If the provider is not a known type or shim name.
     """
     from .converters.anthropic import AnthropicConverter
     from .converters.google_genai import GoogleConverter
     from .converters.openai_chat import OpenAIChatConverter
     from .converters.openai_responses import OpenAIResponsesConverter
+    from .shims import resolve_base
 
     converter_map = {
         "openai_chat": OpenAIChatConverter,
@@ -155,10 +159,16 @@ def get_converter_for_provider(provider: ProviderType):
         "google": GoogleConverter,
     }
 
-    if provider not in converter_map:
-        raise ValueError(f"Unsupported provider: {provider}")
+    # Direct match against base converter types
+    if provider in converter_map:
+        return converter_map[provider]()
 
-    return converter_map[provider]()
+    # Resolve through shim registry
+    base = resolve_base(provider)
+    if base in converter_map:
+        return converter_map[base]()
+
+    raise ValueError(f"Unsupported provider: {provider}")
 
 
 def convert(

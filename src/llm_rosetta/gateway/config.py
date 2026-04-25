@@ -128,11 +128,20 @@ class GatewayConfig:
         }
 
         # Map provider name → API standard type.
-        # If the provider config has a "type" field, use it; otherwise the
-        # provider name itself is treated as the type (backward compatible).
-        self.provider_types: dict[str, ProviderType] = {  # ty: ignore[invalid-assignment]
-            name: cfg.get("type", name) for name, cfg in self._raw_providers.items()
-        }
+        # Resolution order:
+        #   1. "shim" field → resolve via shim registry to base type
+        #   2. "type" field → use directly
+        #   3. provider name itself (backward compatible fallback)
+        from llm_rosetta.shims import resolve_base
+
+        self.provider_types: dict[str, str] = {}
+        for name, cfg in self._raw_providers.items():
+            if "shim" in cfg:
+                self.provider_types[name] = resolve_base(cfg["shim"])
+            elif "type" in cfg:
+                self.provider_types[name] = cfg["type"]
+            else:
+                self.provider_types[name] = name
 
         # Parse models — supports both string and dict formats:
         #   "model": "provider"                     (legacy)
@@ -228,7 +237,7 @@ class GatewayConfig:
         """First configured key (for backward-compat middleware init)."""
         return self.api_keys[0]["key"] if self.api_keys else None
 
-    def resolve_model(self, model: str) -> tuple[ProviderType, ProviderInfo]:
+    def resolve_model(self, model: str) -> tuple[str, ProviderInfo]:
         """Return (provider_type, provider_info) for a model name.
 
         ``provider_type`` is the API standard (e.g. ``"openai_chat"``),
