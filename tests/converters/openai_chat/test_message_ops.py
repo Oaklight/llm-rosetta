@@ -321,7 +321,7 @@ class TestOpenAIChatMessageOps:
                 "content": "The answer is 42",
             }
         ]
-        result = self.message_ops.p_messages_to_ir(messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(messages))
         assistant_msg = result[0]
         assert assistant_msg["role"] == "assistant"
         parts = assistant_msg["content"]
@@ -334,7 +334,7 @@ class TestOpenAIChatMessageOps:
     def test_reasoning_content_p_to_ir_no_reasoning(self):
         """Test standard assistant message without reasoning_content."""
         messages = [{"role": "assistant", "content": "Hello"}]
-        result = self.message_ops.p_messages_to_ir(messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(messages))
         parts = result[0]["content"]
         assert len(parts) == 1
         assert parts[0]["type"] == "text"
@@ -377,7 +377,7 @@ class TestOpenAIChatMessageOps:
                 ],
             }
         ]
-        result = self.message_ops.p_messages_to_ir(messages)
+        result = cast(list[Any], self.message_ops.p_messages_to_ir(messages))
         parts = result[0]["content"]
         # reasoning first, then tool call (no text since content is empty)
         assert parts[0]["type"] == "reasoning"
