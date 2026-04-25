@@ -68,6 +68,7 @@ plugins:
           - guide/api-layers.md
           - guide/api-standards.md
           - guide/reasoning.md
+          - guide/shims.md
           - guide/compatibility.md
         网关:
           - gateway/index.md
@@ -87,6 +88,7 @@ plugins:
           - api/converters.md
           - api/types.md
           - api/tool-ops.md
+          - api/shims.md
           - api/utils.md
         路线图:
           - roadmap.md
@@ -142,6 +144,7 @@ nav:
       - API 分层: guide/api-layers.md
       - API 标准: guide/api-standards.md
       - 推理 / 思考参数: guide/reasoning.md
+      - 提供商 Shim: guide/shims.md
       - 提供商兼容性: guide/compatibility.md
   - 网关:
       - gateway/index.md
@@ -161,6 +164,7 @@ nav:
       - 转换器: api/converters.md
       - IR 类型: api/types.md
       - Tool Ops: api/tool-ops.md
+      - Shims: api/shims.md
       - 工具函数: api/utils.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md
