@@ -48,8 +48,16 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "get_shim",
             "list_shims",
             "resolve_base",
+            # Transforms
+            "Transform",
+            "Transformable",
+            "apply_transforms",
+            "resolve_transforms",
+            "strip_fields",
+            "rename_field",
+            "set_defaults",
         ],
-        "max_count": 23,
+        "max_count": 30,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

@@ -13,6 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
+from .transforms import Transform
+
 
 # ---------------------------------------------------------------------------
 # Data classes
@@ -26,15 +28,24 @@ class ModelShim:
     Nested within a :class:`ProviderShim` to express that every model
     belongs to exactly one provider.
 
+    Transforms on a ``ModelShim`` are merged with the parent
+    ``ProviderShim``'s transforms via :func:`~.transforms.resolve_transforms`
+    (provider first, model after).
+
     Attributes:
         pattern: Glob pattern to match model names (e.g. ``"o3-*"``).
         capabilities: Set of capability tags this model supports
             (e.g. ``{"reasoning", "tools", "vision"}``).
+        from_transforms: Transforms applied when data comes FROM this
+            model's provider (normalise dialect → standard).
+        to_transforms: Transforms applied when data goes TO this
+            model's provider (standard → dialect).
     """
 
     pattern: str
     capabilities: frozenset[str] = field(default_factory=frozenset)
-    # hooks: reserved for #173 (declarative transform mechanism)
+    from_transforms: tuple[Transform, ...] = ()
+    to_transforms: tuple[Transform, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -52,6 +63,10 @@ class ProviderShim:
             API key (e.g. ``"DEEPSEEK_API_KEY"``).
         models: Tuple of :class:`ModelShim` entries that provide
             model-specific capability metadata.
+        from_transforms: Transforms applied when data comes FROM this
+            provider (normalise dialect → standard).
+        to_transforms: Transforms applied when data goes TO this
+            provider (standard → dialect).
     """
 
     name: str
@@ -59,7 +74,8 @@ class ProviderShim:
     default_base_url: str | None = None
     default_api_key_env: str | None = None
     models: tuple[ModelShim, ...] = ()
-    # hooks: reserved for #173
+    from_transforms: tuple[Transform, ...] = ()
+    to_transforms: tuple[Transform, ...] = ()
 
     def get_model_shim(self, model: str) -> ModelShim | None:
         """Return the first :class:`ModelShim` whose pattern matches *model*.
