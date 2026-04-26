@@ -173,9 +173,10 @@ def get_converter_for_provider(provider: str):
 
 def convert(
     source_body: dict[str, Any],
-    target_provider: ProviderType,
-    source_provider: ProviderType | None = None,
+    target_provider: ProviderType | str,
+    source_provider: ProviderType | str | None = None,
     *,
+    model: str | None = None,
     force_conversion: bool = False,
 ) -> dict[str, Any]:
     """Auto-detect source provider and convert to target provider format.
@@ -183,11 +184,18 @@ def convert(
     This is a convenience function that auto-detects the source format and
     performs conversion through the IR (Intermediate Representation).
 
+    When *source_provider* or *target_provider* is a registered shim name
+    (e.g. ``"deepseek"``), the shim's transforms are applied around the
+    base converter.  If *model* is also provided, model-level transforms
+    are merged with the provider-level ones via
+    :func:`~llm_rosetta.shims.resolve_transforms`.
+
     Args:
         source_body: Source provider request body.
-        target_provider: Target provider type.
-        source_provider: Optional source provider type.  Auto-detected from
-            *source_body* when not provided.
+        target_provider: Target provider type or registered shim name.
+        source_provider: Optional source provider type or shim name.
+            Auto-detected from *source_body* when not provided.
+        model: Optional model name for model-level transform lookup.
         force_conversion: When ``True``, always run the full conversion
             pipeline (source -> IR -> target) even when source and target
             providers are the same.  This normalises parameter names (e.g.
@@ -207,10 +215,16 @@ def convert(
         >>> anthropic_body = {"messages": [...]}
         >>> openai_body = convert(anthropic_body, "openai_chat", source_provider="anthropic")
 
+        >>> # With shim transforms
+        >>> body = convert(req, "anthropic", source_provider="deepseek", model="deepseek-r1")
+
         >>> # Force normalisation even for same-provider passthrough
         >>> body = {"messages": [...], "max_tokens": 256}
         >>> normalised = convert(body, "openai_chat", force_conversion=True)
     """
+    from .shims import get_shim
+    from .shims.transforms import apply_transforms, resolve_transforms
+
     # Detect source provider
     if source_provider is None:
         source_provider = detect_provider(source_body)
@@ -223,19 +237,39 @@ def convert(
     if source_provider == target_provider and not force_conversion:
         return source_body
 
-    # 获取转换器 Get converter
+    # --- Resolve shims and transforms ---
+    source_shim = get_shim(source_provider)
+    target_shim = get_shim(target_provider)
+
+    source_model_shim = (
+        source_shim.get_model_shim(model) if source_shim and model else None
+    )
+    target_model_shim = (
+        target_shim.get_model_shim(model) if target_shim and model else None
+    )
+
+    # Merge provider + model transforms (provider first, model after)
+    if source_shim:
+        source_from_t, _ = resolve_transforms(source_shim, source_model_shim)
+    else:
+        source_from_t = ()
+
+    if target_shim:
+        _, target_to_t = resolve_transforms(target_shim, target_model_shim)
+    else:
+        target_to_t = ()
+
+    # --- Apply source from_transforms ---
+    body = apply_transforms(source_from_t, source_body)
+
+    # --- Core conversion: source → IR → target ---
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
-    # 执行转换: source -> IR -> target Perform conversion: source -> IR -> target
-    ir_request = source_converter.request_from_provider(source_body)
+    ir_request = source_converter.request_from_provider(body)
+    target_body, _warnings = target_converter.request_to_provider(ir_request)
 
-    # 转换到目标格式 Convert to target format
-    target_body, warnings = target_converter.request_to_provider(ir_request)
-
-    # 如果有警告，可以选择记录或返回 If there are warnings, can choose to log or return
-    if warnings:
-        # 可以添加到结果中或记录日志
-        pass
+    # --- Apply target to_transforms ---
+    target_body = apply_transforms(target_to_t, target_body)
 
     return target_body

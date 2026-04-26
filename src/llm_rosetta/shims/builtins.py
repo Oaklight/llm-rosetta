@@ -7,6 +7,7 @@ provider shims into the global registry.
 from __future__ import annotations
 
 from .provider_shim import ModelShim, ProviderShim, register_shim
+from .transforms import strip_fields
 
 # ---------------------------------------------------------------------------
 # Reusable model shim tuples
@@ -75,6 +76,7 @@ VOLCENGINE = ProviderShim(
     base="openai_chat",
     default_base_url=None,
     default_api_key_env="VOLCENGINE_API_KEY",
+    to_transforms=(strip_fields("logprobs", "top_logprobs"),),
 )
 
 # ---------------------------------------------------------------------------
