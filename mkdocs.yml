@@ -56,10 +56,9 @@ plugins:
       sections:
         Home:
           - index.md
-        Getting Started:
+        Guide:
           - getting-started/installation.md
           - getting-started/quickstart.md
-        Guide:
           - guide/concepts.md
           - guide/converters.md
           - guide/ir-types.md
@@ -70,6 +69,9 @@ plugins:
           - guide/reasoning.md
           - guide/shims.md
           - guide/compatibility.md
+          - examples/index.md
+          - examples/cross-provider.md
+          - examples/tool-calling.md
         Gateway:
           - gateway/index.md
           - gateway/configuration.md
@@ -79,10 +81,6 @@ plugins:
           - gateway/validation.md
           - gateway/validation-cli.md
           - gateway/validation-sdk.md
-        Examples:
-          - examples/index.md
-          - examples/cross-provider.md
-          - examples/tool-calling.md
         API Reference:
           - api/index.md
           - api/converters.md
@@ -132,10 +130,9 @@ extra:
 
 nav:
   - Home: index.md
-  - Getting Started:
+  - Guide:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
-  - Guide:
       - Core Concepts: guide/concepts.md
       - Using Converters: guide/converters.md
       - IR Types: guide/ir-types.md
@@ -146,6 +143,10 @@ nav:
       - Reasoning / Thinking: guide/reasoning.md
       - Provider Shims: guide/shims.md
       - Provider Compatibility: guide/compatibility.md
+      - Examples:
+          - examples/index.md
+          - Cross-Provider Conversation: examples/cross-provider.md
+          - Tool Calling: examples/tool-calling.md
   - Gateway:
       - gateway/index.md
       - Configuration: gateway/configuration.md
@@ -155,10 +156,6 @@ nav:
       - Validation: gateway/validation.md
       - CLI Cross-Format Testing: gateway/validation-cli.md
       - SDK & Integration Tests: gateway/validation-sdk.md
-  - Examples:
-      - examples/index.md
-      - Cross-Provider Conversation: examples/cross-provider.md
-      - Tool Calling: examples/tool-calling.md
   - API Reference:
       - api/index.md
       - Converters: api/converters.md
