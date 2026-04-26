@@ -56,10 +56,9 @@ plugins:
       sections:
         首页:
           - index.md
-        快速上手:
+        指南:
           - getting-started/installation.md
           - getting-started/quickstart.md
-        指南:
           - guide/concepts.md
           - guide/converters.md
           - guide/ir-types.md
@@ -70,6 +69,9 @@ plugins:
           - guide/reasoning.md
           - guide/shims.md
           - guide/compatibility.md
+          - examples/index.md
+          - examples/cross-provider.md
+          - examples/tool-calling.md
         网关:
           - gateway/index.md
           - gateway/configuration.md
@@ -79,10 +81,6 @@ plugins:
           - gateway/validation.md
           - gateway/validation-cli.md
           - gateway/validation-sdk.md
-        示例:
-          - examples/index.md
-          - examples/cross-provider.md
-          - examples/tool-calling.md
         API 参考:
           - api/index.md
           - api/converters.md
@@ -132,10 +130,9 @@ extra:
 
 nav:
   - 首页: index.md
-  - 快速上手:
+  - 指南:
       - 安装: getting-started/installation.md
       - 快速开始: getting-started/quickstart.md
-  - 指南:
       - 核心概念: guide/concepts.md
       - 使用转换器: guide/converters.md
       - IR 类型: guide/ir-types.md
@@ -146,6 +143,10 @@ nav:
       - 推理 / 思考参数: guide/reasoning.md
       - 提供商 Shim: guide/shims.md
       - 提供商兼容性: guide/compatibility.md
+      - 示例:
+          - examples/index.md
+          - 跨提供商对话: examples/cross-provider.md
+          - 工具调用: examples/tool-calling.md
   - 网关:
       - gateway/index.md
       - 配置: gateway/configuration.md
@@ -155,10 +156,6 @@ nav:
       - 验证报告: gateway/validation.md
       - CLI 跨格式测试: gateway/validation-cli.md
       - SDK 与集成测试: gateway/validation-sdk.md
-  - 示例:
-      - examples/index.md
-      - 跨提供商对话: examples/cross-provider.md
-      - 工具调用: examples/tool-calling.md
   - API 参考:
       - api/index.md
       - 转换器: api/converters.md
