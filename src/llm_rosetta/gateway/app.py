@@ -6,7 +6,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
@@ -66,7 +66,8 @@ async def _proxy_handler(
 
     # Resolve target provider
     try:
-        target_provider, provider_info = _config.resolve_model(model)
+        target_provider_str, provider_info = _config.resolve_model(model)
+        target_provider = cast(ProviderType, target_provider_str)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
         return error_response_for_source(
