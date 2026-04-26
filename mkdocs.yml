@@ -1,7 +1,7 @@
 site_name: LLM-Rosetta
 site_description: LLM-Rosetta - LLM 提供商之间的统一消息格式转换库
 site_author: Peng Ding
-site_url: https://llm-rosetta.readthedocs.io/zh-cn/
+site_url: https://llm-rosetta.readthedocs.io/zh-cn/latest
 repo_name: Oaklight/llm-rosetta
 repo_url: https://github.com/Oaklight/llm-rosetta
 copyright: Copyright &copy; 2024 Peng Ding
