@@ -100,6 +100,32 @@ class TestOpenAIResponsesToolOps:
         assert result["description"] == "Search"
         assert result["required_parameters"] == ["query"]
 
+    def test_p_tool_definition_to_ir_codex_custom_apply_patch(self):
+        """Codex ``"custom"`` tools (e.g. apply_patch) downgrade to IR function.
+
+        Regression test for the IR validation gap introduced in v0.3.0:
+        the IR ToolDefinition.type Literal only accepts ``"function"`` and
+        ``"mcp"``, so the source converter must coerce provider ``"custom"``
+        tools to ``"function"`` rather than carrying the provider type into
+        IR.  See ``types/ir/tools.py`` for the converter contract.
+        """
+        provider_tool = {
+            "type": "custom",
+            "name": "apply_patch",
+            "description": "Apply a unified-diff style patch.",
+            "format": {
+                "type": "grammar",
+                "syntax": "lark",
+                "definition": "start: ...",
+            },
+        }
+        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        assert result["type"] == "function"
+        assert result["name"] == "apply_patch"
+        assert result["description"] == "Apply a unified-diff style patch."
+        # provider_type is preserved in metadata for diagnostics.
+        assert result["metadata"]["provider_type"] == "custom"
+
     def test_tool_definition_round_trip(self):
         """Test tool definition round-trip."""
         ir_tool = cast(
