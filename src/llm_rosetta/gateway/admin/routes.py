@@ -1,4 +1,4 @@
-"""Starlette route handlers for the admin panel API."""
+"""Route handlers for the admin panel API."""
 
 from __future__ import annotations
 
@@ -8,9 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from starlette.requests import Request
-from starlette.responses import HTMLResponse, JSONResponse, Response
-from starlette.routing import Route
+from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ..config import GatewayConfig, load_config, load_config_raw, write_config
 from ..providers import known_provider_types
@@ -27,6 +25,14 @@ _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
 # ---------------------------------------------------------------------------
 
 
+def _qp(request: Any, key: str, default: str | None = None) -> str | None:
+    """Extract a single query param value (Starlette-compatible convenience)."""
+    vals = request.query_params.get(key)
+    if vals:
+        return vals[0]
+    return default
+
+
 def _mask_api_key(value: str) -> str:
     """Mask a literal API key, leaving env-var placeholders intact."""
     if _ENV_VAR_RE.match(value):
@@ -36,23 +42,18 @@ def _mask_api_key(value: str) -> str:
     return value[:4] + "***" + value[-4:]
 
 
-def _get_config_path(request: Request) -> str | None:
-    return getattr(request.app.state, "config_path", None)
+def _get_config_path(request: Any) -> str | None:
+    return getattr(request.app, "config_path", None)
 
 
-def _reload_gateway_config(request: Request, config_path: str) -> GatewayConfig:
-    """Re-read config from disk, rebuild GatewayConfig, swap into app state.
-
-    Also refreshes the auth middleware's key set so new/deleted keys take
-    effect immediately.  The import of ``app._config`` is deferred to
-    avoid circular imports.
-    """
+def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
+    """Re-read config from disk, rebuild GatewayConfig, swap into app state."""
     import llm_rosetta.gateway.app as _app_mod
 
     raw = load_config(config_path)
     new_config = GatewayConfig(raw)
     _app_mod._config = new_config
-    request.app.state.gateway_config = new_config
+    request.app.gateway_config = new_config
 
     _sync_auth_middleware(request.app, new_config)
 
@@ -60,16 +61,11 @@ def _reload_gateway_config(request: Request, config_path: str) -> GatewayConfig:
 
 
 def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
-    """Walk the ASGI middleware chain and update the auth middleware keys."""
-    from ..auth import GatewayAuthMiddleware
-
-    layer: Any = app.middleware_stack
-    while layer is not None:
-        if isinstance(layer, GatewayAuthMiddleware):
-            layer._key_set = config.api_key_set
-            layer._labels = dict(config.api_key_labels)
-            break
-        layer = getattr(layer, "app", None)
+    """Update the auth hook's state for hot-reload."""
+    auth_state = getattr(app, "auth_state", None)
+    if auth_state is not None:
+        auth_state.key_set = config.api_key_set
+        auth_state.labels = dict(config.api_key_labels)
 
 
 def _build_provider_entry(
@@ -105,10 +101,7 @@ def _build_provider_entry(
 def _handle_provider_rename(
     data: dict[str, Any], rename_from: str, name: str
 ) -> Response | None:
-    """Handle provider rename: remove old entry, update model refs.
-
-    Returns a JSONResponse on error, or None on success.
-    """
+    """Handle provider rename: remove old entry, update model refs."""
     providers = data.get("providers", {})
     if rename_from not in providers:
         return JSONResponse(
@@ -135,13 +128,15 @@ def _handle_provider_rename(
 # ---------------------------------------------------------------------------
 
 
-async def serve_admin_html(request: Request) -> Response:
+async def serve_admin_html(request: Any) -> Response:
     """Serve the admin panel SPA."""
     global _admin_html
     if _admin_html is None:
         _admin_html = load_admin_html()
-    return HTMLResponse(
-        _admin_html,
+    return Response(
+        body=_admin_html,
+        status_code=200,
+        content_type="text/html; charset=utf-8",
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
@@ -151,7 +146,7 @@ async def serve_admin_html(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def get_config(request: Request) -> Response:
+async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -207,7 +202,7 @@ async def get_config(request: Request) -> Response:
     )
 
 
-async def put_provider(request: Request) -> Response:
+async def put_provider(request: Any) -> Response:
     """Add or update a provider entry."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -216,7 +211,7 @@ async def put_provider(request: Request) -> Response:
     name = request.path_params["name"]
 
     try:
-        body = await request.json()
+        body = request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -275,7 +270,7 @@ async def put_provider(request: Request) -> Response:
     )
 
 
-async def delete_provider(request: Request) -> Response:
+async def delete_provider(request: Any) -> Response:
     """Remove a provider entry."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -337,7 +332,7 @@ async def delete_provider(request: Request) -> Response:
     )
 
 
-async def toggle_provider(request: Request) -> Response:
+async def toggle_provider(request: Any) -> Response:
     """Toggle a provider's enabled/disabled state."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -386,7 +381,7 @@ async def toggle_provider(request: Request) -> Response:
     return JSONResponse({"ok": True, "provider": name, "enabled": new_enabled})
 
 
-async def put_model(request: Request) -> Response:
+async def put_model(request: Any) -> Response:
     """Add or update a model routing entry."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -395,7 +390,7 @@ async def put_model(request: Request) -> Response:
     name = request.path_params["name"]
 
     try:
-        body = await request.json()
+        body = request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -468,7 +463,7 @@ async def put_model(request: Request) -> Response:
     )
 
 
-async def delete_model(request: Request) -> Response:
+async def delete_model(request: Any) -> Response:
     """Remove a model routing entry."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -515,14 +510,14 @@ async def delete_model(request: Request) -> Response:
     )
 
 
-async def put_server_settings(request: Request) -> Response:
+async def put_server_settings(request: Any) -> Response:
     """Update server settings (e.g. global proxy)."""
     config_path = _get_config_path(request)
     if not config_path:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
-        body = await request.json()
+        body = request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -563,7 +558,7 @@ async def put_server_settings(request: Request) -> Response:
     return JSONResponse({"ok": True, "server": data.get("server", {})})
 
 
-async def reload_config(request: Request) -> Response:
+async def reload_config(request: Any) -> Response:
     """Force hot-reload of the config from disk."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -588,10 +583,10 @@ async def reload_config(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def get_metrics(request: Request) -> Response:
+async def get_metrics(request: Any) -> Response:
     """Return a full metrics snapshot."""
-    metrics = request.app.state.metrics
-    seconds = int(request.query_params.get("seconds", "60"))
+    metrics = request.app.metrics
+    seconds = int(_qp(request, "seconds", "60"))
     seconds = max(1, min(seconds, 300))
     return JSONResponse(metrics.snapshot(series_seconds=seconds))
 
@@ -601,14 +596,14 @@ async def get_metrics(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def get_requests(request: Request) -> Response:
+async def get_requests(request: Any) -> Response:
     """Return paginated, filtered request log entries."""
-    log = request.app.state.request_log
-    limit = int(request.query_params.get("limit", "50"))
-    offset = int(request.query_params.get("offset", "0"))
-    model = request.query_params.get("model")
-    provider = request.query_params.get("provider")
-    status = request.query_params.get("status")
+    log = request.app.request_log
+    limit = int(_qp(request, "limit", "50"))
+    offset = int(_qp(request, "offset", "0"))
+    model = _qp(request, "model")
+    provider = _qp(request, "provider")
+    status = _qp(request, "status")
 
     entries, total = log.get_entries(
         limit=limit, offset=offset, model=model, provider=provider, status=status
@@ -616,14 +611,14 @@ async def get_requests(request: Request) -> Response:
     return JSONResponse({"entries": entries, "total": total})
 
 
-async def clear_requests(request: Request) -> Response:
+async def clear_requests(request: Any) -> Response:
     """Clear the request log."""
-    log = request.app.state.request_log
+    log = request.app.request_log
     log.clear()
     return JSONResponse({"ok": True})
 
 
-async def get_provider_key(request: Request) -> Response:
+async def get_provider_key(request: Any) -> Response:
     """Return the raw (unmasked) API key for a single provider."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -648,7 +643,7 @@ async def get_provider_key(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def network_diagnostics(request: Request) -> Response:
+async def network_diagnostics(request: Any) -> Response:
     """Run basic network diagnostics: IP geolocation and Google connectivity.
 
     Uses the gateway's configured global proxy (if any) so the diagnostics
@@ -657,7 +652,7 @@ async def network_diagnostics(request: Request) -> Response:
     import httpx
 
     # Resolve the global proxy from current gateway config
-    gw_config: GatewayConfig | None = getattr(request.app.state, "gateway_config", None)
+    gw_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
     proxy_url = gw_config.proxy if gw_config else None
 
     client_kwargs: dict[str, Any] = {"timeout": 15}
@@ -707,7 +702,7 @@ async def network_diagnostics(request: Request) -> Response:
 # ---------------------------------------------------------------------------
 
 
-async def get_api_keys(request: Request) -> Response:
+async def get_api_keys(request: Any) -> Response:
     """List all gateway API keys (values masked)."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -735,14 +730,14 @@ async def get_api_keys(request: Request) -> Response:
     return JSONResponse({"keys": masked})
 
 
-async def create_api_key(request: Request) -> Response:
+async def create_api_key(request: Any) -> Response:
     """Create a new gateway API key."""
     config_path = _get_config_path(request)
     if not config_path:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
-        body = await request.json()
+        body = request.json()
     except Exception:
         body = {}
 
@@ -796,7 +791,7 @@ async def create_api_key(request: Request) -> Response:
     return JSONResponse({"ok": True, "key": entry})
 
 
-async def update_api_key(request: Request) -> Response:
+async def update_api_key(request: Any) -> Response:
     """Update an API key's label."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -805,7 +800,7 @@ async def update_api_key(request: Request) -> Response:
     key_id = request.path_params["key_id"]
 
     try:
-        body = await request.json()
+        body = request.json()
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
@@ -849,7 +844,7 @@ async def update_api_key(request: Request) -> Response:
     return JSONResponse({"ok": True, "id": key_id, "label": target["label"]})
 
 
-async def delete_api_key(request: Request) -> Response:
+async def delete_api_key(request: Any) -> Response:
     """Delete a gateway API key."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -891,7 +886,7 @@ async def delete_api_key(request: Request) -> Response:
     return JSONResponse({"ok": True, "deleted": key_id})
 
 
-async def reveal_api_key(request: Request) -> Response:
+async def reveal_api_key(request: Any) -> Response:
     """Return the raw (unmasked) API key value."""
     config_path = _get_config_path(request)
     if not config_path:
@@ -912,68 +907,49 @@ async def reveal_api_key(request: Request) -> Response:
     return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
 
-async def get_internal_token(request: Request) -> Response:
+async def get_internal_token(request: Any) -> Response:
     """Return the ephemeral internal token for admin panel test requests."""
-    token = getattr(request.app.state, "internal_token", None)
+    token = getattr(request.app, "internal_token", None)
     if not token:
         return JSONResponse({"error": "No internal token available"}, status_code=500)
     return JSONResponse({"token": token})
 
 
 # ---------------------------------------------------------------------------
-# Route table
+# Route registration
 # ---------------------------------------------------------------------------
 
-admin_routes: list[Route] = [
+
+def register_admin_routes(app: Any) -> None:
+    """Register all admin panel routes on the httpserver App."""
     # HTML
-    Route("/admin", serve_admin_html, methods=["GET"]),
-    Route("/admin/", serve_admin_html, methods=["GET"]),
+    app.route("/admin", methods=["GET"])(serve_admin_html)
+    app.route("/admin/", methods=["GET"])(serve_admin_html)
     # Config CRUD
-    Route("/admin/api/config", get_config, methods=["GET"]),
-    Route(
-        "/admin/api/config/providers/{name}",
-        put_provider,
-        methods=["PUT"],
-    ),
-    Route(
-        "/admin/api/config/providers/{name}",
-        delete_provider,
-        methods=["DELETE"],
-    ),
-    Route(
-        "/admin/api/config/providers/{name}/toggle",
-        toggle_provider,
-        methods=["POST"],
-    ),
-    Route(
-        "/admin/api/config/providers/{name}/key",
-        get_provider_key,
-        methods=["GET"],
-    ),
-    Route(
-        "/admin/api/config/models/{name:path}",
-        put_model,
-        methods=["PUT"],
-    ),
-    Route(
-        "/admin/api/config/models/{name:path}",
-        delete_model,
-        methods=["DELETE"],
-    ),
-    Route("/admin/api/config/server", put_server_settings, methods=["PUT"]),
-    Route("/admin/api/config/reload", reload_config, methods=["POST"]),
+    app.route("/admin/api/config", methods=["GET"])(get_config)
+    app.route("/admin/api/config/providers/<name>", methods=["PUT"])(put_provider)
+    app.route("/admin/api/config/providers/<name>", methods=["DELETE"])(delete_provider)
+    app.route("/admin/api/config/providers/<name>/toggle", methods=["POST"])(
+        toggle_provider
+    )
+    app.route("/admin/api/config/providers/<name>/key", methods=["GET"])(
+        get_provider_key
+    )
+    app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(put_model)
+    app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(delete_model)
+    app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
+    app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
     # Metrics
-    Route("/admin/api/metrics", get_metrics, methods=["GET"]),
+    app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
     # Request log
-    Route("/admin/api/requests", get_requests, methods=["GET"]),
-    Route("/admin/api/requests", clear_requests, methods=["DELETE"]),
+    app.route("/admin/api/requests", methods=["GET"])(get_requests)
+    app.route("/admin/api/requests", methods=["DELETE"])(clear_requests)
     # Network diagnostics
-    Route("/admin/api/diagnostics/network", network_diagnostics, methods=["GET"]),
+    app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     # API key management
-    Route("/admin/api/keys", get_api_keys, methods=["GET"]),
-    Route("/admin/api/keys", create_api_key, methods=["POST"]),
-    Route("/admin/api/keys/{key_id}", update_api_key, methods=["PUT"]),
-    Route("/admin/api/keys/{key_id}", delete_api_key, methods=["DELETE"]),
-    Route("/admin/api/keys/{key_id}/reveal", reveal_api_key, methods=["GET"]),
-    Route("/admin/api/internal-token", get_internal_token, methods=["GET"]),
-]
+    app.route("/admin/api/keys", methods=["GET"])(get_api_keys)
+    app.route("/admin/api/keys", methods=["POST"])(create_api_key)
+    app.route("/admin/api/keys/<key_id>", methods=["PUT"])(update_api_key)
+    app.route("/admin/api/keys/<key_id>", methods=["DELETE"])(delete_api_key)
+    app.route("/admin/api/keys/<key_id>/reveal", methods=["GET"])(reveal_api_key)
+    app.route("/admin/api/internal-token", methods=["GET"])(get_internal_token)
