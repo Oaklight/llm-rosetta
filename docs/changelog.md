@@ -8,9 +8,13 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
+### 新增
+
+- **恢复 SOCKS5 代理支持**：将内嵌的 `httpclient` 从 zerodep v0.3.1 更新至 v0.4.0，包含完整的 SOCKS5 代理支持（RFC 1928/1929，支持用户名/密码认证）。`--proxy socks5://...` CLI 参数和配置文件中的 `"proxy": "socks5://..."` 现可用于所有上游请求
+
 ### 重构
 
-- **零依赖网关**（[#178](https://github.com/Oaklight/llm-rosetta/pull/178)）：将 Starlette + uvicorn + httpx 替换为内嵌的 zerodep `httpserver` 和 `httpclient` 模块。`[gateway]` extra 现在无外部运行时依赖。SOCKS 代理支持暂时不可用（跟踪：[zerodep#72](https://github.com/Oaklight/zerodep/issues/72)）；HTTP 代理正常工作
+- **零依赖网关**（[#178](https://github.com/Oaklight/llm-rosetta/pull/178)）：将 Starlette + uvicorn + httpx 替换为内嵌的 zerodep `httpserver` 和 `httpclient` 模块。`[gateway]` extra 现在无外部运行时依赖
 
 ### 已知问题
 

@@ -73,6 +73,19 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 }
 ```
 
+同时支持 HTTP 和 SOCKS5 代理：
+
+```jsonc
+// HTTP 代理
+"proxy": "http://proxy.example.com:8080"
+
+// SOCKS5 代理（无认证）
+"proxy": "socks5://proxy.example.com:1080"
+
+// SOCKS5 代理（用户名/密码认证）
+"proxy": "socks5://username:password@proxy.example.com:1080"
+```
+
 CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
 
 ## 模型路由
