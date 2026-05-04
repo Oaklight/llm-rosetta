@@ -73,6 +73,19 @@ A global proxy can be set in the `server` section and applies to all providers u
 }
 ```
 
+Both HTTP and SOCKS5 proxies are supported:
+
+```jsonc
+// HTTP proxy
+"proxy": "http://proxy.example.com:8080"
+
+// SOCKS5 proxy (no auth)
+"proxy": "socks5://proxy.example.com:1080"
+
+// SOCKS5 proxy (with username/password)
+"proxy": "socks5://username:password@proxy.example.com:1080"
+```
+
 The CLI `--proxy` flag overrides the config-level proxy for all providers.
 
 ## Model Routing
