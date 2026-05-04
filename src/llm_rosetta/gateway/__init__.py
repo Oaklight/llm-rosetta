@@ -1,9 +1,5 @@
 """llm-rosetta Gateway — HTTP proxy/translator between LLM provider formats.
 
-Requires the ``gateway`` extra to be installed::
-
-    pip install "llm-rosetta[gateway]"
-
 Usage::
 
     # CLI entry point (after pip install)
@@ -19,25 +15,12 @@ Usage::
     app = create_app(GatewayConfig(raw))
 """
 
-_INSTALL_MSG = (
-    "llm-rosetta gateway requires extra dependencies.\n"
-    "Install them with:  pip install 'llm-rosetta[gateway]'"
-)
+# httpserver and httpclient are vendored in _vendor/ — no external deps needed.
 
-_missing: list[str] = []
-for _pkg in ("httpx",):
-    try:
-        __import__(_pkg)
-    except ImportError:
-        _missing.append(_pkg)
-
-if _missing:
-    raise ImportError(f"{_INSTALL_MSG}\nMissing packages: {', '.join(_missing)}")
-
-from .app import create_app  # noqa: E402
-from .cli import main  # noqa: E402
-from .config import GatewayConfig, discover_config, load_config  # noqa: E402
-from .proxy import ProviderMetadataStore  # noqa: E402
+from .app import create_app
+from .cli import main
+from .config import GatewayConfig, discover_config, load_config
+from .proxy import ProviderMetadataStore
 
 __all__ = [
     "ProviderMetadataStore",
