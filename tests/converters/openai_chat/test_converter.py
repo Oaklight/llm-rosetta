@@ -218,7 +218,7 @@ class TestOpenAIChatConverter:
         assert result["object"] == "response"
         assert result["model"] == "gpt-4o"
         assert len(result["choices"]) == 1
-        assert list(result["choices"][0]["message"]["content"])[0]["text"] == "Hello!"
+        assert list(result["choices"][0]["message"]["content"])[0]["text"] == "Hello!"  # type: ignore
         assert result["choices"][0]["finish_reason"]["reason"] == "stop"
         assert result["usage"]["prompt_tokens"] == 10
         assert result["system_fingerprint"] == "fp_abc"

@@ -221,7 +221,7 @@ class TestGoogleGenAIConverter:
         assert ir_request["model"] == "gemini-2.0-flash"
         messages = list(ir_request["messages"])
         assert len(messages) == 1
-        assert list(messages[0]["content"])[0]["text"] == "Hello"
+        assert list(messages[0]["content"])[0]["text"] == "Hello"  # type: ignore
 
     def test_request_from_provider_with_system_instruction_string(self):
         """Test request from provider with string system instruction."""
