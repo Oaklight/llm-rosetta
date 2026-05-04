@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
-from starlette.responses import JSONResponse, Response, StreamingResponse
+from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
@@ -420,9 +420,9 @@ async def handle_non_streaming(
             endpoint=str(target_provider),
         )
         return Response(
-            content=upstream_resp.content,
+            body=upstream_resp.content,
             status_code=upstream_resp.status_code,
-            media_type="application/json",
+            content_type="application/json",
         )
 
     # 6. Target response -> IR
@@ -650,5 +650,5 @@ async def handle_streaming(
             store=store,
             model=model,
         ),
-        media_type="text/event-stream",
+        content_type="text/event-stream",
     )
