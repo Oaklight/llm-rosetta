@@ -481,7 +481,9 @@ def _parse_sse_data(line: str) -> Any:
 async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
     """Read an error response from upstream and format it as an SSE data line."""
     raw = await upstream_resp.aread()
-    error_text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+    error_text = (
+        raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
+    )
     log_upstream_error(
         upstream_resp.status_code,
         error_text,
