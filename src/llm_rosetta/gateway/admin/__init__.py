@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .metrics import MetricsCollector
 from .persistence import PersistenceManager
 from .request_log import RequestLog
 
 if TYPE_CHECKING:
-    from starlette.applications import Starlette
-
     from ..config import GatewayConfig
 
 __all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"]
@@ -21,14 +19,14 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 
 def setup_admin(
-    app: Starlette,
+    app: Any,
     config: GatewayConfig,
     config_path: str | None,
 ) -> None:
     """Initialize admin panel state on the app.
 
-    Routes are added separately in ``create_app`` *before* the Starlette
-    instance is constructed so that its Router compiles them properly.
+    Routes are registered separately via ``register_admin_routes`` before
+    calling this function.
     """
     metrics = MetricsCollector()
 
@@ -50,8 +48,8 @@ def setup_admin(
     # Request log delegates to persistence when available
     request_log = RequestLog(persistence=persistence)
 
-    app.state.metrics = metrics
-    app.state.request_log = request_log
-    app.state.persistence = persistence
-    app.state.gateway_config = config
-    app.state.config_path = config_path
+    app.metrics = metrics
+    app.request_log = request_log
+    app.persistence = persistence
+    app.gateway_config = config
+    app.config_path = config_path
