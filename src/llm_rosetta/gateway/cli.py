@@ -10,7 +10,7 @@ import subprocess
 import sys
 from typing import Any
 
-import uvicorn
+import asyncio
 
 from llm_rosetta import __version__
 
@@ -357,9 +357,10 @@ def main() -> None:
         logger.info("Request/response body logging enabled")
 
     app = create_app(config, config_path=config_path)
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="debug" if verbose else args.log_level,
-    )
+
+    from .app import run_gateway
+
+    try:
+        asyncio.run(run_gateway(app, host, port))
+    except KeyboardInterrupt:
+        pass
