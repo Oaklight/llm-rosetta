@@ -25,7 +25,7 @@ _INSTALL_MSG = (
 )
 
 _missing: list[str] = []
-for _pkg in ("starlette", "uvicorn", "httpx"):
+for _pkg in ("httpx",):
     try:
         __import__(_pkg)
     except ImportError:
