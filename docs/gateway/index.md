@@ -18,7 +18,7 @@ Client (Google format) ──→ Gateway ──→ Any provider
 pip install "llm-rosetta[gateway]"
 ```
 
-This installs the gateway dependencies: [Starlette](https://www.starlette.io/), [uvicorn](https://www.uvicorn.org/), and [httpx](https://www.python-httpx.org/).
+The gateway has **zero external runtime dependencies** — it uses vendored [zerodep](https://github.com/Oaklight/zerodep) `httpserver` and `httpclient` modules (stdlib-only, single-file).
 
 ## Quick Start
 
