@@ -77,9 +77,11 @@ python-version = "3.10"
 
 [tool.ty.src]
 include = ["src", "tests"]
+exclude = ["src/llm_rosetta/_vendor"]
 
 [tool.ruff]
 target-version = "py310"
+exclude = ["src/llm_rosetta/_vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "UP", "C901"]
