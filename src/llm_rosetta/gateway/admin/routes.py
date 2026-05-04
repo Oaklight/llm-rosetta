@@ -649,13 +649,13 @@ async def network_diagnostics(request: Any) -> Response:
     Uses the gateway's configured global proxy (if any) so the diagnostics
     reflect the actual outbound path of API requests.
     """
-    import httpx
+    from llm_rosetta._vendor.httpclient import AsyncClient as HttpClient
 
     # Resolve the global proxy from current gateway config
     gw_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
     proxy_url = gw_config.proxy if gw_config else None
 
-    client_kwargs: dict[str, Any] = {"timeout": 15}
+    client_kwargs: dict[str, Any] = {"timeout": 15.0}
     if proxy_url:
         client_kwargs["proxy"] = proxy_url
 
@@ -665,7 +665,7 @@ async def network_diagnostics(request: Any) -> Response:
 
     # IP geolocation via ip-api.com (no key required, JSON by default)
     try:
-        async with httpx.AsyncClient(**client_kwargs) as client:
+        async with HttpClient(**client_kwargs) as client:
             resp = await client.get(
                 "http://ip-api.com/json/?fields=query,country,city,isp"
             )
@@ -685,7 +685,7 @@ async def network_diagnostics(request: Any) -> Response:
 
     # Google connectivity
     try:
-        async with httpx.AsyncClient(**client_kwargs) as client:
+        async with HttpClient(**client_kwargs) as client:
             resp = await client.get("https://www.google.com/generate_204")
             results["google"] = {
                 "ok": resp.status_code == 204,
