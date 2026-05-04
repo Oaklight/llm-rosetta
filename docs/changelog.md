@@ -8,6 +8,10 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
+### 重构
+
+- **零依赖网关**（[#178](https://github.com/Oaklight/llm-rosetta/pull/178)）：将 Starlette + uvicorn + httpx 替换为内嵌的 zerodep `httpserver` 和 `httpclient` 模块。`[gateway]` extra 现在无外部运行时依赖。SOCKS 代理支持暂时不可用（跟踪：[zerodep#72](https://github.com/Oaklight/zerodep/issues/72)）；HTTP 代理正常工作
+
 ### 已知问题
 
 - **Google 工具 schema `required` 验证失败**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：部分 Anthropic 工具 schema 的 `required` 条目引用了未定义的属性，导致 Google API 以 `INVALID_ARGUMENT` 拒绝请求

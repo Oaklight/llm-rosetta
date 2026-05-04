@@ -18,7 +18,7 @@ LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供商 AP
 pip install "llm-rosetta[gateway]"
 ```
 
-这会安装网关依赖：[Starlette](https://www.starlette.io/)、[uvicorn](https://www.uvicorn.org/) 和 [httpx](https://www.python-httpx.org/)。
+网关 **无外部运行时依赖** — 使用内嵌的 [zerodep](https://github.com/Oaklight/zerodep) `httpserver` 和 `httpclient` 模块（仅依赖标准库，单文件）。
 
 ## 快速开始
 
