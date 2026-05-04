@@ -1,22 +1,15 @@
-"""llm-rosetta Gateway — ASGI application and route handlers."""
+"""llm-rosetta Gateway — HTTP application and route handlers."""
 
 from __future__ import annotations
 
 import asyncio
 import time
-from contextlib import asynccontextmanager
-from collections.abc import AsyncGenerator
 from typing import Any
 
-from starlette.applications import Starlette
-from starlette.middleware import Middleware
-from starlette.middleware.cors import CORSMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-from starlette.routing import Route
-
+from llm_rosetta._vendor.httpserver import App, JSONResponse, Response
 from llm_rosetta.auto_detect import ProviderType
 
+from .auth import AuthState, api_key_label_var, create_auth_hook
 from .config import GatewayConfig
 from .logging import get_logger
 from .proxy import (
@@ -40,7 +33,7 @@ _config: GatewayConfig | None = None
 
 
 async def _proxy_handler(
-    request: Request,
+    request: Any,
     source_provider: ProviderType,
     model_override: str | None = None,
     force_stream: bool = False,
@@ -49,7 +42,7 @@ async def _proxy_handler(
     assert _config is not None
 
     try:
-        body: dict[str, Any] = await request.json()
+        body: dict[str, Any] = request.json()
     except Exception:
         return error_response_for_source(source_provider, 400, "Invalid JSON body")
 
@@ -86,7 +79,7 @@ async def _proxy_handler(
         is_stream,
     )
 
-    store: ProviderMetadataStore = request.app.state.metadata_store
+    store: ProviderMetadataStore = request.app.metadata_store
 
     # Forward OpenResponses-Version header to upstream if present
     extra_headers: dict[str, str] | None = None
@@ -95,8 +88,8 @@ async def _proxy_handler(
         extra_headers = {"OpenResponses-Version": or_version}
 
     # --- Metrics instrumentation ---
-    metrics = getattr(request.app.state, "metrics", None)
-    request_log = getattr(request.app.state, "request_log", None)
+    metrics = getattr(request.app, "metrics", None)
+    request_log = getattr(request.app, "request_log", None)
     t0 = time.monotonic()
     status_code = 500
     error_detail: str | None = None
@@ -149,7 +142,7 @@ async def _proxy_handler(
         if request_log is not None:
             from .admin.request_log import RequestLogEntry
 
-            api_key_label = getattr(request.state, "api_key_label", None)
+            api_key_label = api_key_label_var.get()
             request_log.add(
                 RequestLogEntry.create(
                     model=model,
@@ -167,20 +160,19 @@ async def _proxy_handler(
 # --- Endpoint handlers ---
 
 
-async def handle_openai_chat(request: Request) -> Response:
+async def handle_openai_chat(request: Any) -> Response:
     return await _proxy_handler(request, source_provider="openai_chat")
 
 
-async def handle_anthropic(request: Request) -> Response:
+async def handle_anthropic(request: Any) -> Response:
     return await _proxy_handler(request, source_provider="anthropic")
 
 
-async def handle_openai_responses(request: Request) -> Response:
+async def handle_openai_responses(request: Any) -> Response:
     return await _proxy_handler(request, source_provider="openai_responses")
 
 
-async def handle_google_genai(request: Request) -> Response:
-    model_path = request.path_params["model_path"]
+async def handle_google_genai(request: Any, model_path: str = "") -> Response:
     if model_path.endswith(":streamGenerateContent"):
         model = model_path.removesuffix(":streamGenerateContent")
         return await _proxy_handler(
@@ -196,13 +188,13 @@ async def handle_google_genai(request: Request) -> Response:
         )
     else:
         return Response(
+            body='{"error": "Unknown Google GenAI method"}',
             status_code=404,
-            content='{"error": "Unknown Google GenAI method"}',
-            media_type="application/json",
+            content_type="application/json",
         )
 
 
-async def handle_list_models(request: Request) -> Response:
+async def handle_list_models(request: Any) -> Response:
     """List configured models in a format compatible with OpenAI and Anthropic SDKs."""
     assert _config is not None
     models = sorted(_config.models.keys())
@@ -229,7 +221,7 @@ async def handle_list_models(request: Request) -> Response:
     )
 
 
-async def handle_list_models_google(request: Request) -> Response:
+async def handle_list_models_google(request: Any) -> Response:
     """List configured models in Google GenAI SDK format."""
     assert _config is not None
     models_list = [
@@ -246,7 +238,7 @@ async def handle_list_models_google(request: Request) -> Response:
     return JSONResponse({"models": models_list})
 
 
-async def handle_health(request: Request) -> Response:
+async def handle_health(request: Any) -> Response:
     assert _config is not None
     return JSONResponse(
         {
@@ -264,18 +256,14 @@ async def handle_health(request: Request) -> Response:
 _FLUSH_METRICS_INTERVAL = 30  # seconds
 
 
-async def _periodic_flush(app: Starlette) -> None:
-    """Periodically flush metrics counters to disk.
-
-    Request log entries are written to SQLite immediately by
-    :class:`RequestLog`, so only metrics need periodic flushing.
-    """
+async def _periodic_flush(app: App) -> None:
+    """Periodically flush metrics counters to disk."""
     while True:
         await asyncio.sleep(_FLUSH_METRICS_INTERVAL)
-        persistence = getattr(app.state, "persistence", None)
+        persistence = getattr(app, "persistence", None)
         if persistence is None:
             continue
-        metrics = getattr(app.state, "metrics", None)
+        metrics = getattr(app, "metrics", None)
         if metrics is not None:
             try:
                 persistence.save_metrics(metrics.export_counters())
@@ -283,13 +271,13 @@ async def _periodic_flush(app: Starlette) -> None:
                 logger.warning("Failed to flush metrics: %s", exc)
 
 
-def _flush_now(app: Starlette) -> None:
+def _flush_now(app: App) -> None:
     """Final synchronous flush on shutdown."""
-    persistence = getattr(app.state, "persistence", None)
+    persistence = getattr(app, "persistence", None)
     if persistence is None:
         return
 
-    metrics = getattr(app.state, "metrics", None)
+    metrics = getattr(app, "metrics", None)
     if metrics is not None:
         try:
             persistence.save_metrics(metrics.export_counters())
@@ -305,8 +293,8 @@ def _flush_now(app: Starlette) -> None:
 # ---------------------------------------------------------------------------
 
 
-def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlette:
-    """Create the Starlette ASGI application."""
+def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
+    """Create the httpserver application."""
     global _config
     _config = config
 
@@ -320,64 +308,74 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> Starlet
 
     metadata_store = ProviderMetadataStore()
 
-    routes = [
-        Route("/v1/chat/completions", handle_openai_chat, methods=["POST"]),
-        Route("/v1/messages", handle_anthropic, methods=["POST"]),
-        Route("/v1/responses", handle_openai_responses, methods=["POST"]),
-        Route("/v1/models", handle_list_models, methods=["GET"]),
-        Route("/v1beta/models", handle_list_models_google, methods=["GET"]),
-        Route(
-            "/v1beta/models/{model_path:path}",
-            handle_google_genai,
-            methods=["POST"],
-        ),
-        Route("/health", handle_health, methods=["GET"]),
-    ]
+    app = App(max_body_size=50_000_000, read_timeout=300.0)
 
-    @asynccontextmanager
-    async def lifespan(app: Starlette) -> AsyncGenerator[None, None]:
-        flush_task = asyncio.create_task(_periodic_flush(app))
-        yield
+    # --- Routes ---
+    app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
+    app.route("/v1/messages", methods=["POST"])(handle_anthropic)
+    app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
+    app.route("/v1/models", methods=["GET"])(handle_list_models)
+    app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
+    app.route("/v1beta/models/<path:model_path>", methods=["POST"])(handle_google_genai)
+    app.route("/health", methods=["GET"])(handle_health)
+
+    # --- Auth ---
+    import secrets
+
+    internal_token = f"rsk-internal-{secrets.token_hex(16)}"
+    auth_state = AuthState(config.api_key_set, config.api_key_labels, internal_token)
+    app.before_request(create_auth_hook(auth_state))
+
+    # --- CORS ---
+    @app.after_request
+    async def add_cors_headers(request: Any, response: Any) -> Any:
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        return response
+
+    @app.route("/<path:_path>", methods=["OPTIONS"])
+    async def cors_preflight(request: Any, _path: str = "") -> Response:
+        return Response(body=b"", status_code=204)
+
+    @app.errorhandler(404)
+    async def handle_404(request: Any, exc: Any) -> Response:
+        resp = JSONResponse({"error": "Not Found"}, status_code=404)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+
+    @app.errorhandler(405)
+    async def handle_405(request: Any, exc: Any) -> Response:
+        resp = JSONResponse({"error": "Method Not Allowed"}, status_code=405)
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        return resp
+
+    # --- Admin routes ---
+    from .admin import setup_admin
+    from .admin.routes import register_admin_routes
+
+    register_admin_routes(app)
+
+    # --- App-level state ---
+    app.metadata_store = metadata_store  # type: ignore[attr-defined]
+    app.internal_token = internal_token  # type: ignore[attr-defined]
+    app.auth_state = auth_state  # type: ignore[attr-defined]
+
+    setup_admin(app, config, config_path)
+
+    return app
+
+
+async def run_gateway(app: App, host: str, port: int) -> None:
+    """Start the gateway with lifecycle management."""
+    flush_task = asyncio.create_task(_periodic_flush(app))
+    try:
+        await app._serve(host, port)
+    finally:
         flush_task.cancel()
         try:
             await flush_task
         except asyncio.CancelledError:
             pass
         _flush_now(app)
-        await close_resources(metadata_store=metadata_store)
-
-    import secrets
-
-    from .auth import GatewayAuthMiddleware
-
-    internal_token = f"rsk-internal-{secrets.token_hex(16)}"
-
-    middleware = [
-        Middleware(
-            CORSMiddleware,  # type: ignore[arg-type]
-            allow_origins=["*"],
-            allow_methods=["*"],
-            allow_headers=["*"],
-        ),
-        Middleware(
-            GatewayAuthMiddleware,  # type: ignore[arg-type]
-            api_key_set=config.api_key_set,
-            api_key_labels=config.api_key_labels,
-            internal_token=internal_token,
-        ),
-    ]
-
-    # Append admin panel routes before constructing the app so that
-    # Starlette's Router compiles them into its lookup structures.
-    from .admin import setup_admin
-    from .admin.routes import admin_routes
-
-    routes.extend(admin_routes)
-
-    app = Starlette(routes=routes, lifespan=lifespan, middleware=middleware)
-    app.state.metadata_store = metadata_store
-    app.state.internal_token = internal_token
-
-    setup_admin(app, config, config_path)
-
-    return app
+        await close_resources(metadata_store=app.metadata_store)  # type: ignore[attr-defined]
