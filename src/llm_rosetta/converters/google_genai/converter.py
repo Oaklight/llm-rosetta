@@ -734,7 +734,7 @@ class GoogleGenAIConverter(BaseConverter):
             return self.request_to_provider(cast(IRRequest, ir_input))
 
         # Handle IRInput (message list)
-        ir_input_list = list(ir_input)
+        ir_input_list = list(cast("IRInput", ir_input))
         warnings_list: list[str] = []
 
         # Extract system messages

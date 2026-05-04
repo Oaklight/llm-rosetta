@@ -234,7 +234,7 @@ class TestOpenAIResponsesConverter:
         assert result["object"] == "response"
         assert result["model"] == "gpt-4o"
         assert len(result["choices"]) == 1
-        assert list(result["choices"][0]["message"]["content"])[0]["text"] == (
+        assert list(result["choices"][0]["message"]["content"])[0]["text"] == (  # type: ignore
             "Hello! How can I help?"
         )
         assert result["choices"][0]["finish_reason"]["reason"] == "stop"

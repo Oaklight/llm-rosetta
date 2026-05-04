@@ -696,8 +696,10 @@ class TestSDKCompatibility:
             # Verify it matches our Content TypedDict structure
             content: Content = content_dict
             assert content["role"] == "user"
-            assert len(content["parts"]) == 1
-            assert content["parts"][0]["text"] == "Hello from SDK"
+            parts = content["parts"]
+            assert parts is not None
+            assert len(parts) == 1
+            assert parts[0]["text"] == "Hello from SDK"
 
         except ImportError:
             pytest.skip("Google GenAI SDK not available")
@@ -730,8 +732,12 @@ class TestSDKCompatibility:
             part_dict = sdk_part.model_dump(exclude_none=True)
 
             part: Part = part_dict
-            assert part["function_call"]["name"] == "get_weather"
-            assert part["function_call"]["args"]["location"] == "NYC"
+            func_call = part["function_call"]
+            assert func_call is not None
+            assert func_call["name"] == "get_weather"
+            func_args = func_call["args"]
+            assert func_args is not None
+            assert func_args["location"] == "NYC"
 
         except ImportError:
             pytest.skip("Google GenAI SDK not available")
@@ -777,8 +783,10 @@ class TestSDKCompatibility:
             tool_dict = sdk_tool.model_dump(exclude_none=True)
 
             tool: Tool = tool_dict
-            assert len(tool["function_declarations"]) == 1
-            assert tool["function_declarations"][0]["name"] == "search"
+            func_decls = tool["function_declarations"]
+            assert func_decls is not None
+            assert len(func_decls) == 1
+            assert func_decls[0]["name"] == "search"
 
         except ImportError:
             pytest.skip("Google GenAI SDK not available")
@@ -846,10 +854,18 @@ class TestSDKCompatibility:
             response_dict = sdk_response.model_dump(exclude_none=True)
 
             response: GenerateContentResponse = response_dict
-            assert len(response["candidates"]) == 1
-            assert response["candidates"][0]["finish_reason"] == "STOP"
-            assert response["candidates"][0]["content"]["parts"][0]["text"] == "Hello!"
-            assert response["usage_metadata"]["total_token_count"] == 15
+            candidates = response["candidates"]
+            assert candidates is not None
+            assert len(candidates) == 1
+            assert candidates[0]["finish_reason"] == "STOP"
+            candidate_content = candidates[0]["content"]
+            assert candidate_content is not None
+            candidate_parts = candidate_content["parts"]
+            assert candidate_parts is not None
+            assert candidate_parts[0]["text"] == "Hello!"
+            usage = response["usage_metadata"]
+            assert usage is not None
+            assert usage["total_token_count"] == 15
             assert response["model_version"] == "gemini-2.0-flash-001"
 
         except ImportError:
@@ -878,10 +894,10 @@ class TestSDKCompatibility:
             candidate_dict = sdk_candidate.model_dump(exclude_none=True)
 
             candidate: Candidate = candidate_dict
-            assert len(candidate["safety_ratings"]) == 1
-            assert (
-                candidate["safety_ratings"][0]["category"] == "HARM_CATEGORY_HARASSMENT"
-            )
+            safety_ratings = candidate["safety_ratings"]
+            assert safety_ratings is not None
+            assert len(safety_ratings) == 1
+            assert safety_ratings[0]["category"] == "HARM_CATEGORY_HARASSMENT"
 
         except ImportError:
             pytest.skip("Google GenAI SDK not available")
