@@ -1,8 +1,8 @@
 # /// zerodep
-# version = "0.4.2"
+# version = "0.5.0"
 # deps = []
 # tier = "medium"
-# category = "data"
+# category = "validation"
 # note = "Install/update via `zerodep add validate`"
 # ///
 
@@ -36,6 +36,33 @@ Annotated constraints::
     class Item(TypedDict):
         name: Annotated[str, MinLen(1)]
         price: Annotated[float, Gt(0)]
+
+Field validators (transform + validate)::
+
+    from validate import FieldValidator
+
+    def strip_lower(v: str) -> str:
+        v = v.strip().lower()
+        if not v:
+            raise ValueError("must not be empty")
+        return v
+
+    class User(TypedDict):
+        name: Annotated[str, FieldValidator(strip_lower)]
+
+Model validators (cross-field validation)::
+
+    from validate import model_validator
+
+    class RegisterForm(TypedDict):
+        password: str
+        confirm: str
+
+    @model_validator(RegisterForm)
+    def passwords_match(data: dict) -> dict:
+        if data["password"] != data["confirm"]:
+            raise ValueError("passwords do not match")
+        return data
 """
 
 from __future__ import annotations
@@ -57,12 +84,14 @@ __all__ = [
     "MaxLen",
     "Match",
     "Predicate",
+    "FieldValidator",
     # Error types
     "ErrorDetail",
     "ValidationError",
     # Public API
     "validate",
     "json_schema",
+    "model_validator",
 ]
 
 # ── Constraint Annotations ──
@@ -210,8 +239,72 @@ class Predicate:
         return self.description
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class FieldValidator:
+    """Custom validator that can transform the field value.
+
+    Unlike ``Predicate`` (which returns bool), the function receives the
+    validated value and returns a (possibly transformed) value.  Raise
+    ``ValueError`` or ``AssertionError`` to signal failure.
+
+    Args:
+        fn: A callable ``(value) -> value``.  Raise on failure.
+        description: Human-readable description for error messages.
+    """
+
+    fn: Callable[[Any], Any]
+    description: str = "custom validator"
+
+    def validate(self, value: Any) -> Any:
+        return self.fn(value)
+
+    def schema_kw(self) -> dict[str, Any]:
+        return {}
+
+    def __str__(self) -> str:
+        return self.description
+
+
 # Constraint base types for isinstance checks
-_CONSTRAINT_TYPES = (Gt, Ge, Lt, Le, MinLen, MaxLen, Match, Predicate)
+_CONSTRAINT_TYPES = (Gt, Ge, Lt, Le, MinLen, MaxLen, Match, Predicate, FieldValidator)
+
+
+# ── Model Validator Registry ──
+
+_MODEL_VALIDATORS: dict[type, list[Callable]] = {}
+
+
+def model_validator(tp: type) -> Callable[[Callable], Callable]:
+    """Register a model-level validator for a TypedDict or dataclass type.
+
+    The validator receives the full data dict after all field validation
+    passes.  It should return the (possibly modified) dict, or raise
+    ``ValueError`` / ``AssertionError`` on failure.
+
+    Args:
+        tp: The TypedDict or dataclass type to attach the validator to.
+
+    Returns:
+        A decorator that registers the function and returns it unchanged.
+
+    Example::
+
+        class RegisterForm(TypedDict):
+            password: str
+            confirm: str
+
+        @model_validator(RegisterForm)
+        def passwords_match(data: dict) -> dict:
+            if data["password"] != data["confirm"]:
+                raise ValueError("passwords do not match")
+            return data
+    """
+
+    def decorator(fn: Callable) -> Callable:
+        _MODEL_VALIDATORS.setdefault(tp, []).append(fn)
+        return fn
+
+    return decorator
 
 
 # ── Error Types ──
@@ -485,7 +578,19 @@ def _validate_annotated(
     value = _validate(value, base, path, errors, coerce)
     if len(errors) == err_count_before:
         for c in constraints:
-            if not c.check(value):
+            if isinstance(c, FieldValidator):
+                try:
+                    value = c.validate(value)
+                except (ValueError, AssertionError) as e:
+                    errors.append(
+                        ErrorDetail(
+                            path=path or "$",
+                            expected=str(c),
+                            actual=repr(value),
+                            message=f"Validator '{c}' failed for value {value!r} at '{path or '$'}': {e}",
+                        )
+                    )
+            elif not c.check(value):
                 errors.append(
                     ErrorDetail(
                         path=path or "$",
@@ -613,6 +718,8 @@ def _validate_struct_fields(
         )
         return value
 
+    err_before = len(errors)
+
     for name, (field_tp, required) in fields.items():
         if required and name not in value:
             errors.append(
@@ -628,6 +735,24 @@ def _validate_struct_fields(
         if name in fields:
             field_tp, _ = fields[name]
             _validate(val, field_tp, _join_path(path, name), errors, coerce)
+
+    # Run model validators only if no field-level errors were added
+    validators = _MODEL_VALIDATORS.get(tp)
+    if validators and len(errors) == err_before:
+        for validator in validators:
+            try:
+                result = validator(value)
+                if result is not None:
+                    value = result
+            except (ValueError, AssertionError) as e:
+                errors.append(
+                    ErrorDetail(
+                        path=path or "$",
+                        expected=f"{tp.__name__} model validation",
+                        actual=str(e),
+                        message=f"Model validator failed for {tp.__name__} at '{path or '$'}': {e}",
+                    )
+                )
 
     return value
 

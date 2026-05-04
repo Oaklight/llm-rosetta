@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.1"
+# version = "0.4.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -44,7 +44,9 @@ import http.client
 import json as _json
 import logging
 import os
+import socket
 import ssl
+import struct
 import threading
 import time
 import warnings
@@ -66,6 +68,7 @@ __all__ = [
     "TooManyRedirects",
     "HttpConnectionError",
     "HttpTimeoutError",
+    "Socks5Error",
     # Response classes
     "Response",
     "StreamingResponse",
@@ -166,6 +169,10 @@ class HttpTimeoutError(HttpClientError):
 # Backward-compatible aliases (deprecated: prefer HttpConnectionError/HttpTimeoutError)
 ConnectionError = HttpConnectionError  # noqa: A001
 TimeoutError = HttpTimeoutError  # noqa: A001
+
+
+class Socks5Error(HttpConnectionError):
+    """Raised on SOCKS5 proxy handshake failures."""
 
 
 # ── Data Models (Response) ──
@@ -1013,7 +1020,9 @@ def _parse_proxy(proxy: str) -> tuple[str, int, str | None, str | None]:
     """
     parsed = urlparse(proxy)
     hostname = parsed.hostname or ""
-    port = parsed.port or 8080
+    scheme = (parsed.scheme or "").lower()
+    default_port = 1080 if scheme.startswith("socks") else 8080
+    port = parsed.port or default_port
     username = parsed.username or None
     password = parsed.password or None
     return hostname, port, username, password
@@ -1031,6 +1040,205 @@ def _proxy_auth_header(username: str, password: str) -> str:
     """
     credentials = f"{username}:{password}".encode()
     return "Basic " + base64.b64encode(credentials).decode()
+
+
+# -- SOCKS5 helpers --
+
+_SOCKS5_VER = 0x05
+_SOCKS5_AUTH_VER = 0x01
+_SOCKS5_CMD_CONNECT = 0x01
+_SOCKS5_ATYPE_IPV4 = 0x01
+_SOCKS5_ATYPE_DOMAIN = 0x03
+_SOCKS5_ATYPE_IPV6 = 0x04
+_SOCKS5_METHOD_NO_AUTH = 0x00
+_SOCKS5_METHOD_USERPASS = 0x02
+_SOCKS5_METHOD_NO_ACCEPTABLE = 0xFF
+
+_SOCKS5_ERRORS: dict[int, str] = {
+    0x01: "general SOCKS server failure",
+    0x02: "connection not allowed by ruleset",
+    0x03: "network unreachable",
+    0x04: "host unreachable",
+    0x05: "connection refused by destination",
+    0x06: "TTL expired",
+    0x07: "command not supported",
+    0x08: "address type not supported",
+}
+
+
+def _is_socks_proxy(proxy: str | None) -> bool:
+    """Return True if proxy URL uses the socks5:// scheme."""
+    return proxy is not None and proxy.lower().startswith("socks5://")
+
+
+def _socks5_recv_exact(sock: socket.socket, n: int) -> bytes:
+    """Read exactly *n* bytes from *sock*, raising on premature close."""
+    data = b""
+    while len(data) < n:
+        chunk = sock.recv(n - len(data))
+        if not chunk:
+            raise Socks5Error("SOCKS5 proxy closed connection unexpectedly")
+        data += chunk
+    return data
+
+
+def _socks5_handshake_sync(
+    sock: socket.socket,
+    host: str,
+    port: int,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
+    """Perform the SOCKS5 handshake (RFC 1928 + RFC 1929) over *sock*."""
+    # Phase 1: method negotiation
+    if username and password:
+        sock.sendall(
+            struct.pack("BBB", _SOCKS5_VER, 2, _SOCKS5_METHOD_NO_AUTH)
+            + struct.pack("B", _SOCKS5_METHOD_USERPASS)
+        )
+    else:
+        sock.sendall(struct.pack("BBB", _SOCKS5_VER, 1, _SOCKS5_METHOD_NO_AUTH))
+
+    ver, method = struct.unpack("BB", _socks5_recv_exact(sock, 2))
+    if ver != _SOCKS5_VER:
+        raise Socks5Error(f"Unexpected SOCKS version: {ver}")
+    if method == _SOCKS5_METHOD_NO_ACCEPTABLE:
+        raise Socks5Error("SOCKS5 proxy: no acceptable authentication method")
+
+    # Phase 2: username/password auth (RFC 1929)
+    if method == _SOCKS5_METHOD_USERPASS:
+        if not username or not password:
+            raise Socks5Error(
+                "SOCKS5 proxy requires authentication but no credentials provided"
+            )
+        uname = username.encode()
+        passwd = password.encode()
+        sock.sendall(
+            struct.pack("BB", _SOCKS5_AUTH_VER, len(uname))
+            + uname
+            + struct.pack("B", len(passwd))
+            + passwd
+        )
+        auth_ver, status = struct.unpack("BB", _socks5_recv_exact(sock, 2))
+        if status != 0x00:
+            raise Socks5Error("SOCKS5 authentication failed")
+
+    # Phase 3: connect request
+    host_bytes = host.encode()
+    if len(host_bytes) > 255:
+        raise Socks5Error(f"SOCKS5 target hostname too long: {len(host_bytes)} bytes")
+    sock.sendall(
+        struct.pack(
+            "BBBB", _SOCKS5_VER, _SOCKS5_CMD_CONNECT, 0x00, _SOCKS5_ATYPE_DOMAIN
+        )
+        + struct.pack("B", len(host_bytes))
+        + host_bytes
+        + struct.pack("!H", port)
+    )
+
+    # Parse reply
+    ver, reply, _rsv, atype = struct.unpack("BBBB", _socks5_recv_exact(sock, 4))
+    if reply != 0x00:
+        msg = _SOCKS5_ERRORS.get(reply, f"unknown error 0x{reply:02x}")
+        raise Socks5Error(f"SOCKS5 connect failed: {msg}")
+
+    # Consume bind address
+    if atype == _SOCKS5_ATYPE_IPV4:
+        _socks5_recv_exact(sock, 4)
+    elif atype == _SOCKS5_ATYPE_IPV6:
+        _socks5_recv_exact(sock, 16)
+    elif atype == _SOCKS5_ATYPE_DOMAIN:
+        addr_len = struct.unpack("B", _socks5_recv_exact(sock, 1))[0]
+        _socks5_recv_exact(sock, addr_len)
+    # Consume bind port
+    _socks5_recv_exact(sock, 2)
+
+
+async def _socks5_handshake_async(
+    reader: asyncio.StreamReader,
+    writer: asyncio.StreamWriter,
+    host: str,
+    port: int,
+    timeout: float,
+    username: str | None = None,
+    password: str | None = None,
+) -> None:
+    """Perform the SOCKS5 handshake (RFC 1928 + RFC 1929) asynchronously."""
+    try:
+        # Phase 1: method negotiation
+        if username and password:
+            writer.write(
+                struct.pack("BBB", _SOCKS5_VER, 2, _SOCKS5_METHOD_NO_AUTH)
+                + struct.pack("B", _SOCKS5_METHOD_USERPASS)
+            )
+        else:
+            writer.write(struct.pack("BBB", _SOCKS5_VER, 1, _SOCKS5_METHOD_NO_AUTH))
+        await asyncio.wait_for(writer.drain(), timeout=timeout)
+
+        data = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+        ver, method = struct.unpack("BB", data)
+        if ver != _SOCKS5_VER:
+            raise Socks5Error(f"Unexpected SOCKS version: {ver}")
+        if method == _SOCKS5_METHOD_NO_ACCEPTABLE:
+            raise Socks5Error("SOCKS5 proxy: no acceptable authentication method")
+
+        # Phase 2: username/password auth (RFC 1929)
+        if method == _SOCKS5_METHOD_USERPASS:
+            if not username or not password:
+                raise Socks5Error(
+                    "SOCKS5 proxy requires authentication but no credentials provided"
+                )
+            uname = username.encode()
+            passwd = password.encode()
+            writer.write(
+                struct.pack("BB", _SOCKS5_AUTH_VER, len(uname))
+                + uname
+                + struct.pack("B", len(passwd))
+                + passwd
+            )
+            await asyncio.wait_for(writer.drain(), timeout=timeout)
+            data = await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+            _auth_ver, status = struct.unpack("BB", data)
+            if status != 0x00:
+                raise Socks5Error("SOCKS5 authentication failed")
+
+        # Phase 3: connect request
+        host_bytes = host.encode()
+        if len(host_bytes) > 255:
+            raise Socks5Error(
+                f"SOCKS5 target hostname too long: {len(host_bytes)} bytes"
+            )
+        writer.write(
+            struct.pack(
+                "BBBB", _SOCKS5_VER, _SOCKS5_CMD_CONNECT, 0x00, _SOCKS5_ATYPE_DOMAIN
+            )
+            + struct.pack("B", len(host_bytes))
+            + host_bytes
+            + struct.pack("!H", port)
+        )
+        await asyncio.wait_for(writer.drain(), timeout=timeout)
+
+        # Parse reply
+        data = await asyncio.wait_for(reader.readexactly(4), timeout=timeout)
+        ver, reply, _rsv, atype = struct.unpack("BBBB", data)
+        if reply != 0x00:
+            msg = _SOCKS5_ERRORS.get(reply, f"unknown error 0x{reply:02x}")
+            raise Socks5Error(f"SOCKS5 connect failed: {msg}")
+
+        # Consume bind address
+        if atype == _SOCKS5_ATYPE_IPV4:
+            await asyncio.wait_for(reader.readexactly(4), timeout=timeout)
+        elif atype == _SOCKS5_ATYPE_IPV6:
+            await asyncio.wait_for(reader.readexactly(16), timeout=timeout)
+        elif atype == _SOCKS5_ATYPE_DOMAIN:
+            data = await asyncio.wait_for(reader.readexactly(1), timeout=timeout)
+            addr_len = struct.unpack("B", data)[0]
+            await asyncio.wait_for(reader.readexactly(addr_len), timeout=timeout)
+        # Consume bind port
+        await asyncio.wait_for(reader.readexactly(2), timeout=timeout)
+
+    except asyncio.IncompleteReadError as exc:
+        raise Socks5Error("SOCKS5 proxy closed connection unexpectedly") from exc
 
 
 # -- URL helpers --
@@ -1222,6 +1430,40 @@ def _sync_connect_via_proxy(
     return conn, path
 
 
+def _sync_connect_via_socks5(
+    host: str,
+    port: int,
+    path: str,
+    is_https: bool,
+    timeout: float,
+    verify: bool,
+    proxy: str,
+) -> tuple[http.client.HTTPConnection, str]:
+    """Establish a sync connection through a SOCKS5 proxy.
+
+    Creates a SOCKS5 tunnel to the target, optionally wrapping with TLS.
+
+    Returns:
+        (connection, request_path).
+    """
+    proxy_host, proxy_port, proxy_user, proxy_pass = _parse_proxy(proxy)
+    sock = socket.create_connection((proxy_host, proxy_port), timeout=timeout)
+    try:
+        _socks5_handshake_sync(sock, host, port, proxy_user, proxy_pass)
+    except Exception:
+        sock.close()
+        raise
+
+    if is_https:
+        ctx = _make_ssl_context(verify)
+        sock = ctx.wrap_socket(sock, server_hostname=host)
+        conn = http.client.HTTPSConnection(host, port, timeout=timeout, context=ctx)
+    else:
+        conn = http.client.HTTPConnection(host, port, timeout=timeout)
+    conn.sock = sock
+    return conn, path
+
+
 def _sync_acquire_connection(
     host: str,
     port: int,
@@ -1240,6 +1482,10 @@ def _sync_acquire_connection(
         (connection, request_path).
     """
     if proxy:
+        if _is_socks_proxy(proxy):
+            return _sync_connect_via_socks5(
+                host, port, path, is_https, timeout, verify, proxy
+            )
         return _sync_connect_via_proxy(
             host, port, path, is_https, timeout, verify, proxy, req_headers, url
         )
@@ -1624,6 +1870,48 @@ async def _async_connect_via_proxy_tunnel(
     return proxy_reader, proxy_writer
 
 
+async def _async_connect_via_socks5(
+    host: str,
+    port: int,
+    timeout: float,
+    verify: bool,
+    is_https: bool,
+    proxy: str,
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    """Open a SOCKS5 tunnel and optionally upgrade to TLS.
+
+    Returns:
+        (reader, writer) with TLS already established if target is HTTPS.
+    """
+    proxy_host, proxy_port, proxy_user, proxy_pass = _parse_proxy(proxy)
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(proxy_host, proxy_port),
+        timeout=timeout,
+    )
+    try:
+        await _socks5_handshake_async(
+            reader, writer, host, port, timeout, proxy_user, proxy_pass
+        )
+    except Exception:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except Exception:
+            pass
+        raise
+
+    if is_https:
+        ctx = _make_ssl_context(verify)
+        loop = asyncio.get_event_loop()
+        transport = writer.transport
+        new_transport = await loop.start_tls(
+            transport, transport.get_protocol(), ctx, server_hostname=host
+        )
+        writer._transport = new_transport  # type: ignore[attr-defined]
+
+    return reader, writer
+
+
 async def _async_acquire_connection(
     host: str,
     port: int,
@@ -1645,6 +1933,11 @@ async def _async_acquire_connection(
     """
     try:
         if proxy:
+            if _is_socks_proxy(proxy):
+                reader, writer = await _async_connect_via_socks5(
+                    host, port, timeout, verify, is_https, proxy
+                )
+                return reader, writer, path
             if not is_https:
                 proxy_host, proxy_port, proxy_user, proxy_pass = _parse_proxy(proxy)
                 reader, writer = await asyncio.wait_for(
