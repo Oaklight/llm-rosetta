@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
+from llm_rosetta._vendor.httpclient import AsyncClient, HttpClientError
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
@@ -213,14 +213,14 @@ def extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str | 
 # HTTP client pool
 # ---------------------------------------------------------------------------
 
-# Shared httpx clients keyed by proxy URL (None = direct connection)
-_http_clients: dict[str | None, httpx.AsyncClient] = {}
+# Shared HTTP clients keyed by proxy URL (None = direct connection)
+_http_clients: dict[str | None, AsyncClient] = {}
 
 
-def get_client(proxy_url: str | None = None) -> httpx.AsyncClient:
-    """Get or create an ``httpx.AsyncClient`` for the given proxy URL."""
+def get_client(proxy_url: str | None = None) -> AsyncClient:
+    """Get or create an ``AsyncClient`` for the given proxy URL."""
     if proxy_url not in _http_clients:
-        _http_clients[proxy_url] = httpx.AsyncClient(
+        _http_clients[proxy_url] = AsyncClient(
             timeout=300.0,
             proxy=proxy_url,
         )
@@ -407,7 +407,7 @@ async def handle_non_streaming(
     client = get_client(provider_info.proxy_url)
     try:
         upstream_resp = await client.post(url, json=upstream_body, headers=headers)
-    except httpx.HTTPError as exc:
+    except HttpClientError as exc:
         return error_response_for_source(
             source_provider, 502, f"Upstream request failed: {exc}"
         )
@@ -480,8 +480,8 @@ def _parse_sse_data(line: str) -> Any:
 
 async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
     """Read an error response from upstream and format it as an SSE data line."""
-    await upstream_resp.aread()
-    error_text = upstream_resp.text
+    raw = await upstream_resp.aread()
+    error_text = raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
     log_upstream_error(
         upstream_resp.status_code,
         error_text,
@@ -525,9 +525,10 @@ async def _stream_event_generator(
     t0 = time.monotonic()
 
     client = get_client(provider_info.proxy_url)
-    async with client.stream(
-        "POST", url, json=upstream_body, headers=headers
-    ) as upstream_resp:
+    upstream_resp = await client.post(
+        url, json=upstream_body, headers=headers, stream=True
+    )
+    async with upstream_resp:
         if upstream_resp.status_code >= 400:
             error_sse = await _format_upstream_error(
                 upstream_resp, str(target_provider)
