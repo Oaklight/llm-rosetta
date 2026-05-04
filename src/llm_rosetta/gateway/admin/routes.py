@@ -6,7 +6,7 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, overload
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
@@ -25,8 +25,16 @@ _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
 # ---------------------------------------------------------------------------
 
 
+@overload
+def _qp(request: Any, key: str) -> str | None: ...
+
+
+@overload
+def _qp(request: Any, key: str, default: str) -> str: ...
+
+
 def _qp(request: Any, key: str, default: str | None = None) -> str | None:
-    """Extract a single query param value (Starlette-compatible convenience)."""
+    """Extract a single query param value (httpserver convenience)."""
     vals = request.query_params.get(key)
     if vals:
         return vals[0]
@@ -649,7 +657,10 @@ async def network_diagnostics(request: Any) -> Response:
     Uses the gateway's configured global proxy (if any) so the diagnostics
     reflect the actual outbound path of API requests.
     """
-    from llm_rosetta._vendor.httpclient import AsyncClient as HttpClient
+    from llm_rosetta._vendor.httpclient import (
+        AsyncClient as HttpClient,
+        Response as HttpResponse,
+    )
 
     # Resolve the global proxy from current gateway config
     gw_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
@@ -669,6 +680,7 @@ async def network_diagnostics(request: Any) -> Response:
             resp = await client.get(
                 "http://ip-api.com/json/?fields=query,country,city,isp"
             )
+            assert isinstance(resp, HttpResponse)
             if resp.status_code == 200:
                 data = resp.json()
                 results["ip"] = {

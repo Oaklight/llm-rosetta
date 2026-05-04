@@ -18,7 +18,12 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import AsyncClient, HttpClientError
+from llm_rosetta._vendor.httpclient import (
+    AsyncClient,
+    HttpClientError,
+    Response as HttpResponse,
+    StreamingResponse as HttpStreamingResponse,
+)
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
@@ -411,6 +416,7 @@ async def handle_non_streaming(
         return error_response_for_source(
             source_provider, 502, f"Upstream request failed: {exc}"
         )
+    assert isinstance(upstream_resp, HttpResponse)
 
     # 5. Pass through upstream errors
     if upstream_resp.status_code >= 400:
@@ -530,6 +536,7 @@ async def _stream_event_generator(
     upstream_resp = await client.post(
         url, json=upstream_body, headers=headers, stream=True
     )
+    assert isinstance(upstream_resp, HttpStreamingResponse)
     async with upstream_resp:
         if upstream_resp.status_code >= 400:
             error_sse = await _format_upstream_error(
@@ -587,7 +594,7 @@ async def handle_streaming(
     *,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> Response:
+) -> Response | StreamingResponse:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
     source_converter = get_converter_for_provider(source_provider)
