@@ -47,7 +47,7 @@ class TestModelShim:
     def test_frozen(self):
         m = ModelShim("gpt-*")
         with pytest.raises(AttributeError):
-            m.pattern = "other"  # type: ignore[misc]
+            m.pattern = "other"  # type: ignore
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +82,7 @@ class TestProviderShim:
     def test_frozen(self):
         s = ProviderShim(name="test", base="openai_chat")
         with pytest.raises(AttributeError):
-            s.name = "other"  # type: ignore[misc]
+            s.name = "other"  # type: ignore
 
     def test_get_model_shim_match(self):
         s = ProviderShim(

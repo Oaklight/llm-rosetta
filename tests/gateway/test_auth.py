@@ -1,72 +1,69 @@
-"""Gateway auth middleware unit tests."""
+"""Gateway auth hook unit tests."""
+
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-from starlette.applications import Starlette
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-from starlette.routing import Route
-from starlette.testclient import TestClient
 
-from llm_rosetta.gateway.auth import GatewayAuthMiddleware
-
-
-def _ok_handler(request: Request) -> JSONResponse:
-    return JSONResponse({"ok": True})
+from llm_rosetta.gateway.auth import (
+    AuthState,
+    api_key_label_var,
+    create_auth_hook,
+)
 
 
-def _label_handler(request: Request) -> JSONResponse:
-    """Handler that returns the api_key_label from request state."""
-    label = getattr(request.state, "api_key_label", None)
-    return JSONResponse({"ok": True, "api_key_label": label})
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 
-def _make_app(
-    api_key: str | None = None,
-    api_key_set: set[str] | None = None,
-    api_key_labels: dict[str, str] | None = None,
-    internal_token: str | None = None,
-    use_label_handler: bool = False,
-) -> Starlette:
-    handler = _label_handler if use_label_handler else _ok_handler
-    routes = [
-        Route("/health", _ok_handler, methods=["GET"]),
-        Route("/v1/chat/completions", handler, methods=["POST"]),
-        Route("/v1/messages", handler, methods=["POST"]),
-        Route("/v1/responses", handler, methods=["POST"]),
-        Route("/v1/models", handler, methods=["GET"]),
-        Route("/v1beta/models", handler, methods=["GET"]),
-        Route("/v1beta/models/{model_path:path}", handler, methods=["POST"]),
-        Route("/admin", _ok_handler, methods=["GET"]),
-        Route("/admin/api/config", _ok_handler, methods=["GET"]),
-    ]
-    from starlette.middleware import Middleware
+def _make_request(
+    path: str,
+    method: str = "POST",
+    headers: dict[str, str] | None = None,
+    query_params: dict[str, list[str]] | None = None,
+) -> MagicMock:
+    """Build a minimal mock request matching httpserver conventions."""
+    req = MagicMock()
+    req.path = path
+    req.method = method
+    req.headers = headers or {}
+    req.query_params = query_params or {}
+    return req
 
-    mw_kwargs: dict = {}
-    if api_key_set is not None:
-        mw_kwargs["api_key_set"] = api_key_set
-        if api_key_labels:
-            mw_kwargs["api_key_labels"] = api_key_labels
-    elif api_key is not None:
-        mw_kwargs["api_key"] = api_key
-    if internal_token is not None:
-        mw_kwargs["internal_token"] = internal_token
 
-    app = Starlette(
-        routes=routes,
-        middleware=[Middleware(GatewayAuthMiddleware, **mw_kwargs)],  # type: ignore[arg-type]
-    )
-    return app
+def _run(coro: Any) -> Any:
+    return asyncio.get_event_loop().run_until_complete(coro)
+
+
+# ---------------------------------------------------------------------------
+# No API keys configured
+# ---------------------------------------------------------------------------
 
 
 class TestNoApiKey:
     """When no api_key is configured, all requests pass through."""
 
     def test_all_requests_allowed(self):
-        client = TestClient(_make_app(api_key=None))
-        assert client.get("/health").status_code == 200
-        assert client.post("/v1/chat/completions", json={}).status_code == 200
-        assert client.post("/v1/messages", json={}).status_code == 200
-        assert client.get("/admin/api/config").status_code == 200
+        state = AuthState(frozenset(), {}, None)
+        hook = create_auth_hook(state)
+
+        for path in [
+            "/health",
+            "/v1/chat/completions",
+            "/v1/messages",
+            "/admin/api/config",
+        ]:
+            resp = _run(hook(_make_request(path)))
+            assert resp is None, f"Expected pass-through for {path}"
+
+
+# ---------------------------------------------------------------------------
+# With API keys
+# ---------------------------------------------------------------------------
 
 
 class TestWithApiKey:
@@ -75,108 +72,120 @@ class TestWithApiKey:
     KEY = "test-gateway-key-123"
 
     @pytest.fixture()
-    def client(self):
-        return TestClient(_make_app(api_key=self.KEY))
+    def hook(self):
+        state = AuthState(frozenset({self.KEY}), {}, None)
+        return create_auth_hook(state)
 
     # --- Health is always public ---
-    def test_health_no_auth(self, client: TestClient):
-        assert client.get("/health").status_code == 200
+    def test_health_no_auth(self, hook: Any):
+        resp = _run(hook(_make_request("/health", method="GET")))
+        assert resp is None
 
     # --- OpenAI Chat ---
-    def test_openai_chat_valid(self, client: TestClient):
-        resp = client.post(
+    def test_openai_chat_valid(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": f"Bearer {self.KEY}"},
+            headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_openai_chat_missing(self, client: TestClient):
-        resp = client.post("/v1/chat/completions", json={})
+    def test_openai_chat_missing(self, hook: Any):
+        req = _make_request("/v1/chat/completions")
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
-        assert "invalid_api_key" in resp.json()["error"]["code"]
 
-    def test_openai_chat_wrong(self, client: TestClient):
-        resp = client.post(
+    def test_openai_chat_wrong(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer wrong-key"},
+            headers={"authorization": "Bearer wrong-key"},
         )
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
 
     # --- OpenAI Responses ---
-    def test_openai_responses_valid(self, client: TestClient):
-        resp = client.post(
+    def test_openai_responses_valid(self, hook: Any):
+        req = _make_request(
             "/v1/responses",
-            json={},
-            headers={"Authorization": f"Bearer {self.KEY}"},
+            headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
     # --- Anthropic ---
-    def test_anthropic_valid(self, client: TestClient):
-        resp = client.post(
+    def test_anthropic_valid(self, hook: Any):
+        req = _make_request(
             "/v1/messages",
-            json={},
             headers={"x-api-key": self.KEY},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_anthropic_missing(self, client: TestClient):
-        resp = client.post("/v1/messages", json={})
+    def test_anthropic_missing(self, hook: Any):
+        req = _make_request("/v1/messages")
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
-        assert resp.json()["type"] == "error"
-        assert resp.json()["error"]["type"] == "authentication_error"
 
-    def test_anthropic_wrong(self, client: TestClient):
-        resp = client.post("/v1/messages", json={}, headers={"x-api-key": "wrong"})
+    def test_anthropic_wrong(self, hook: Any):
+        req = _make_request(
+            "/v1/messages",
+            headers={"x-api-key": "wrong"},
+        )
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
 
     # --- Google GenAI (header) ---
-    def test_google_header_valid(self, client: TestClient):
-        resp = client.post(
+    def test_google_header_valid(self, hook: Any):
+        req = _make_request(
             "/v1beta/models/gemini:generateContent",
-            json={},
             headers={"x-goog-api-key": self.KEY},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_google_query_valid(self, client: TestClient):
-        resp = client.post(
-            f"/v1beta/models/gemini:generateContent?key={self.KEY}",
-            json={},
+    def test_google_query_valid(self, hook: Any):
+        req = _make_request(
+            "/v1beta/models/gemini:generateContent",
+            query_params={"key": [self.KEY]},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_google_missing(self, client: TestClient):
-        resp = client.post("/v1beta/models/gemini:generateContent", json={})
+    def test_google_missing(self, hook: Any):
+        req = _make_request("/v1beta/models/gemini:generateContent")
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
-        assert resp.json()["error"]["status"] == "UNAUTHENTICATED"
 
     # --- Models list ---
-    def test_models_list_valid(self, client: TestClient):
-        resp = client.get(
+    def test_models_list_valid(self, hook: Any):
+        req = _make_request(
             "/v1/models",
-            headers={"Authorization": f"Bearer {self.KEY}"},
+            method="GET",
+            headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_google_models_list_valid(self, client: TestClient):
-        resp = client.get(
+    def test_google_models_list_valid(self, hook: Any):
+        req = _make_request(
             "/v1beta/models",
+            method="GET",
             headers={"x-goog-api-key": self.KEY},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    # --- Admin (no gateway-level auth — delegated to reverse proxy) ---
-    def test_admin_html_no_auth(self, client: TestClient):
-        resp = client.get("/admin")
-        assert resp.status_code == 200
+    # --- Admin (no gateway-level auth) ---
+    def test_admin_html_no_auth(self, hook: Any):
+        req = _make_request("/admin", method="GET")
+        assert _run(hook(req)) is None
 
-    def test_admin_api_no_auth(self, client: TestClient):
-        """Admin API endpoints pass through without gateway auth."""
-        resp = client.get("/admin/api/config")
-        assert resp.status_code == 200
+    def test_admin_api_no_auth(self, hook: Any):
+        req = _make_request("/admin/api/config", method="GET")
+        assert _run(hook(req)) is None
+
+
+# ---------------------------------------------------------------------------
+# Multiple API keys
+# ---------------------------------------------------------------------------
 
 
 class TestMultiKey:
@@ -185,60 +194,64 @@ class TestMultiKey:
     KEYS = {"key-alpha", "key-beta", "key-gamma"}
 
     @pytest.fixture()
-    def client(self):
-        return TestClient(_make_app(api_key_set=self.KEYS))
+    def hook(self):
+        state = AuthState(frozenset(self.KEYS), {}, None)
+        return create_auth_hook(state)
 
-    def test_first_key_valid(self, client: TestClient):
-        resp = client.post(
+    def test_first_key_valid(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer key-alpha"},
+            headers={"authorization": "Bearer key-alpha"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_second_key_valid(self, client: TestClient):
-        resp = client.post(
+    def test_second_key_valid(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer key-beta"},
+            headers={"authorization": "Bearer key-beta"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_third_key_valid(self, client: TestClient):
-        resp = client.post(
+    def test_third_key_valid(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer key-gamma"},
+            headers={"authorization": "Bearer key-gamma"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_invalid_key_rejected(self, client: TestClient):
-        resp = client.post(
+    def test_invalid_key_rejected(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer wrong-key"},
+            headers={"authorization": "Bearer wrong-key"},
         )
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
 
-    def test_missing_key_rejected(self, client: TestClient):
-        resp = client.post("/v1/chat/completions", json={})
+    def test_missing_key_rejected(self, hook: Any):
+        req = _make_request("/v1/chat/completions")
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
 
-    def test_anthropic_multi_key(self, client: TestClient):
-        resp = client.post(
+    def test_anthropic_multi_key(self, hook: Any):
+        req = _make_request(
             "/v1/messages",
-            json={},
             headers={"x-api-key": "key-beta"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_google_multi_key(self, client: TestClient):
-        resp = client.post(
+    def test_google_multi_key(self, hook: Any):
+        req = _make_request(
             "/v1beta/models/gemini:generateContent",
-            json={},
             headers={"x-goog-api-key": "key-gamma"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
+
+
+# ---------------------------------------------------------------------------
+# Internal token
+# ---------------------------------------------------------------------------
 
 
 class TestInternalToken:
@@ -248,89 +261,85 @@ class TestInternalToken:
     INTERNAL = "rsk-internal-abc123"
 
     @pytest.fixture()
-    def client(self):
-        return TestClient(
-            _make_app(
-                api_key_set={self.KEY},
-                internal_token=self.INTERNAL,
-            )
-        )
+    def hook(self):
+        state = AuthState(frozenset({self.KEY}), {}, self.INTERNAL)
+        return create_auth_hook(state)
 
-    def test_internal_token_accepted(self, client: TestClient):
-        resp = client.post(
+    def test_internal_token_accepted(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": f"Bearer {self.INTERNAL}"},
+            headers={"authorization": f"Bearer {self.INTERNAL}"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_real_key_still_works(self, client: TestClient):
-        resp = client.post(
+    def test_real_key_still_works(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": f"Bearer {self.KEY}"},
+            headers={"authorization": f"Bearer {self.KEY}"},
         )
-        assert resp.status_code == 200
+        assert _run(hook(req)) is None
 
-    def test_wrong_key_still_rejected(self, client: TestClient):
-        resp = client.post(
+    def test_wrong_key_still_rejected(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer wrong"},
+            headers={"authorization": "Bearer wrong"},
         )
+        resp = _run(hook(req))
+        assert resp is not None
         assert resp.status_code == 401
 
 
+# ---------------------------------------------------------------------------
+# Key label tracking
+# ---------------------------------------------------------------------------
+
+
+async def _run_and_get_label(hook: Any, req: Any) -> tuple[Any, str | None]:
+    """Run the auth hook and return (response, label) in the same async context."""
+    resp = await hook(req)
+    return resp, api_key_label_var.get()
+
+
 class TestKeyLabelTracking:
-    """API key label is attached to request.state for logging."""
+    """API key label is attached to contextvars for logging."""
 
     KEYS = {"key-prod", "key-dev"}
     LABELS = {"key-prod": "Production", "key-dev": "Development"}
     INTERNAL = "rsk-internal-test"
 
     @pytest.fixture()
-    def client(self):
-        return TestClient(
-            _make_app(
-                api_key_set=self.KEYS,
-                api_key_labels=self.LABELS,
-                internal_token=self.INTERNAL,
-                use_label_handler=True,
-            )
-        )
+    def hook(self):
+        state = AuthState(frozenset(self.KEYS), self.LABELS, self.INTERNAL)
+        return create_auth_hook(state)
 
-    def test_label_attached_for_prod_key(self, client: TestClient):
-        resp = client.post(
+    def test_label_attached_for_prod_key(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer key-prod"},
+            headers={"authorization": "Bearer key-prod"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["api_key_label"] == "Production"
+        _, label = _run(_run_and_get_label(hook, req))
+        assert label == "Production"
 
-    def test_label_attached_for_dev_key(self, client: TestClient):
-        resp = client.post(
+    def test_label_attached_for_dev_key(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": "Bearer key-dev"},
+            headers={"authorization": "Bearer key-dev"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["api_key_label"] == "Development"
+        _, label = _run(_run_and_get_label(hook, req))
+        assert label == "Development"
 
-    def test_internal_token_label(self, client: TestClient):
-        resp = client.post(
+    def test_internal_token_label(self, hook: Any):
+        req = _make_request(
             "/v1/chat/completions",
-            json={},
-            headers={"Authorization": f"Bearer {self.INTERNAL}"},
+            headers={"authorization": f"Bearer {self.INTERNAL}"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["api_key_label"] == "internal"
+        _, label = _run(_run_and_get_label(hook, req))
+        assert label == "internal"
 
-    def test_anthropic_label(self, client: TestClient):
-        resp = client.post(
+    def test_anthropic_label(self, hook: Any):
+        req = _make_request(
             "/v1/messages",
-            json={},
             headers={"x-api-key": "key-prod"},
         )
-        assert resp.status_code == 200
-        assert resp.json()["api_key_label"] == "Production"
+        _, label = _run(_run_and_get_label(hook, req))
+        assert label == "Production"

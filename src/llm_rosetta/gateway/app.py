@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, cast
 
-from llm_rosetta._vendor.httpserver import App, JSONResponse, Response
+from llm_rosetta._vendor.httpserver import (
+    App,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 from llm_rosetta.auto_detect import ProviderType
 
 from .auth import AuthState, api_key_label_var, create_auth_hook
@@ -37,7 +42,7 @@ async def _proxy_handler(
     source_provider: ProviderType,
     model_override: str | None = None,
     force_stream: bool = False,
-) -> Response:
+) -> Response | StreamingResponse:
     """Shared handler for all proxy endpoints."""
     assert _config is not None
 
@@ -59,7 +64,8 @@ async def _proxy_handler(
 
     # Resolve target provider
     try:
-        target_provider, provider_info = _config.resolve_model(model)
+        target_provider_str, provider_info = _config.resolve_model(model)
+        target_provider = cast(ProviderType, target_provider_str)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
         return error_response_for_source(
@@ -160,19 +166,21 @@ async def _proxy_handler(
 # --- Endpoint handlers ---
 
 
-async def handle_openai_chat(request: Any) -> Response:
+async def handle_openai_chat(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="openai_chat")
 
 
-async def handle_anthropic(request: Any) -> Response:
+async def handle_anthropic(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="anthropic")
 
 
-async def handle_openai_responses(request: Any) -> Response:
+async def handle_openai_responses(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="openai_responses")
 
 
-async def handle_google_genai(request: Any, model_path: str = "") -> Response:
+async def handle_google_genai(
+    request: Any, model_path: str = ""
+) -> Response | StreamingResponse:
     if model_path.endswith(":streamGenerateContent"):
         model = model_path.removesuffix(":streamGenerateContent")
         return await _proxy_handler(
@@ -357,9 +365,9 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     register_admin_routes(app)
 
     # --- App-level state ---
-    app.metadata_store = metadata_store  # type: ignore[attr-defined]
-    app.internal_token = internal_token  # type: ignore[attr-defined]
-    app.auth_state = auth_state  # type: ignore[attr-defined]
+    app.metadata_store = metadata_store  # type: ignore
+    app.internal_token = internal_token  # type: ignore
+    app.auth_state = auth_state  # type: ignore
 
     setup_admin(app, config, config_path)
 
@@ -378,4 +386,4 @@ async def run_gateway(app: App, host: str, port: int) -> None:
         except asyncio.CancelledError:
             pass
         _flush_now(app)
-        await close_resources(metadata_store=app.metadata_store)  # type: ignore[attr-defined]
+        await close_resources(metadata_store=app.metadata_store)  # type: ignore
