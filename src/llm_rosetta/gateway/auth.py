@@ -1,4 +1,4 @@
-"""Gateway API key authentication middleware.
+"""Gateway API key authentication — before-request hook.
 
 Validates incoming requests against the gateway's configured API keys,
 extracting credentials in the format native to each API standard:
@@ -13,12 +13,15 @@ configured, all requests pass through (backward compatible).
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import contextvars
+from typing import Any
 
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-from starlette.types import ASGIApp, Receive, Scope, Send
+from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
+# Per-request API key label — set by auth hook, read by proxy handler.
+api_key_label_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "api_key_label", default=None
+)
 
 # Paths that never require authentication
 _PUBLIC_PATHS = frozenset({"/health"})
@@ -32,9 +35,9 @@ _ROUTE_EXTRACTORS: list[tuple[str, str]] = [
 ]
 
 
-def _extract_key(request: Request) -> str | None:
+def _extract_key(request: Any) -> str | None:
     """Extract API key from the request using the appropriate strategy."""
-    path = request.url.path
+    path = request.path
 
     strategy = "openai"  # default fallback
     for prefix, strat in _ROUTE_EXTRACTORS:
@@ -46,7 +49,11 @@ def _extract_key(request: Request) -> str | None:
         return request.headers.get("x-api-key")
     elif strategy == "google":
         # Google uses x-goog-api-key header or ?key= query param
-        return request.headers.get("x-goog-api-key") or request.query_params.get("key")
+        google_key = request.headers.get("x-goog-api-key")
+        if google_key:
+            return google_key
+        vals = request.query_params.get("key")
+        return vals[0] if vals else None
     else:
         # OpenAI-style Bearer token
         auth = request.headers.get("authorization", "")
@@ -95,61 +102,57 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
         )
 
 
-class GatewayAuthMiddleware:
-    """Starlette ASGI middleware for gateway API key authentication."""
+class AuthState:
+    """Mutable state container for auth hook — allows hot-reload from admin."""
 
     def __init__(
         self,
-        app: ASGIApp,
-        *,
-        api_key: str | None = None,
-        api_key_set: Iterable[str] | None = None,
-        api_key_labels: dict[str, str] | None = None,
-        internal_token: str | None = None,
+        key_set: frozenset[str],
+        labels: dict[str, str],
+        internal_token: str | None,
     ) -> None:
-        self.app = app
-        # Accept either multi-key set or legacy single key
-        if api_key_set is not None:
-            self._key_set: frozenset[str] = frozenset(api_key_set)
-        elif api_key:
-            self._key_set = frozenset({api_key})
-        else:
-            self._key_set = frozenset()
-        self._labels: dict[str, str] = dict(api_key_labels or {})
-        self._internal_token: str | None = internal_token
+        self.key_set = key_set
+        self.labels = labels
+        self.internal_token = internal_token
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not self._key_set:
-            await self.app(scope, receive, send)
-            return
 
-        request = Request(scope)
-        path = request.url.path
+def create_auth_hook(auth_state: AuthState) -> Any:
+    """Return a before-request hook that validates API keys.
+
+    The hook reads from ``auth_state`` which can be mutated by the admin
+    panel's hot-reload logic.
+    """
+
+    async def auth_hook(request: Any) -> Response | None:
+        # Reset per-request label
+        api_key_label_var.set(None)
+
+        if not auth_state.key_set:
+            return None  # no keys configured → pass through
+
+        path = request.path
 
         # Public paths skip auth
         if path in _PUBLIC_PATHS:
-            await self.app(scope, receive, send)
-            return
+            return None
 
         # Admin panel: no gateway-level auth — delegate to reverse proxy
         if path.startswith("/admin"):
-            await self.app(scope, receive, send)
-            return
+            return None
 
         # API paths: extract key using format-appropriate strategy
         key = _extract_key(request)
 
         # Check internal token first (admin panel test requests)
-        if key and self._internal_token and key == self._internal_token:
-            scope.setdefault("state", {})["api_key_label"] = "internal"
-            await self.app(scope, receive, send)
-            return
+        if key and auth_state.internal_token and key == auth_state.internal_token:
+            api_key_label_var.set("internal")
+            return None
 
-        if key not in self._key_set:
-            response = _error_for_path(path, 401, "Invalid or missing API key")
-            await response(scope, receive, send)
-            return
+        if key not in auth_state.key_set:
+            return _error_for_path(path, 401, "Invalid or missing API key")
 
         # Attach key label for request logging
-        scope.setdefault("state", {})["api_key_label"] = self._labels.get(key, "")
-        await self.app(scope, receive, send)
+        api_key_label_var.set(auth_state.labels.get(key, ""))
+        return None
+
+    return auth_hook
