@@ -195,7 +195,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Handles both flat format (Responses API native) and nested format
         (with ``function`` key).  Non-function tool types without a ``name``
         field (e.g. ``web_search``) are stored as passthrough so they can be
-        round-tripped without modification.
+        round-tripped without modification.  Named non-function tools (e.g.
+        Codex ``"custom"`` ``apply_patch``) are downgraded to IR
+        ``type: "function"`` so the request passes IR validation; this
+        mirrors the existing downgrade in ``openai_chat/tool_ops.py``.  The
+        original provider type is retained in ``metadata["provider_type"]``
+        for diagnostics.
 
         Args:
             provider_tool: OpenAI Responses tool definition dict.
@@ -203,6 +208,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             IR ToolDefinition.
         """
+        # IR ToolDefinition.type is restricted to Literal["function", "mcp"];
+        # see types/ir/tools.py.
+        _IR_ALLOWED_TYPES = {"function", "mcp"}
+
         # Handle nested format ({"type": "function", "function": {...}})
         if "function" in provider_tool and isinstance(provider_tool["function"], dict):
             func = provider_tool["function"]
@@ -215,30 +224,38 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             tool_type = provider_tool.get("type", "function")
             # Non-function tools without a name (e.g. web_search) should be
-            # stored as passthrough to avoid lossy conversion.
+            # stored as passthrough to avoid lossy conversion.  IR ``type``
+            # is forced to "function" to satisfy IR validation;
+            # ``ir_tool_definition_to_p`` checks ``_passthrough`` first and
+            # restores the original payload on the outbound leg.
             if tool_type != "function" and "name" not in provider_tool:
                 result = {
-                    "type": tool_type,
+                    "type": "function",
                     "name": tool_type,
                     "description": "",
                     "parameters": {},
                     "_passthrough": dict(provider_tool),
                 }
-                result["metadata"] = {}
+                result["metadata"] = {"provider_type": tool_type}
                 result["required_parameters"] = []
                 return cast(ToolDefinition, result)
 
-            # Flat format (Responses API native)
-            # Custom tools use "schema" instead of "parameters"
+            # Flat format (Responses API native).
+            # Custom tools use "schema" instead of "parameters".
             params = provider_tool.get("parameters", {})
             if tool_type != "function" and not params:
                 params = provider_tool.get("schema", {})
+            # Downgrade unknown provider tool types (e.g. Codex "custom") to
+            # IR "function" so the request passes IR validation.
+            ir_type = tool_type if tool_type in _IR_ALLOWED_TYPES else "function"
             result = {
-                "type": tool_type,
+                "type": ir_type,
                 "name": provider_tool.get("name", ""),
                 "description": provider_tool.get("description", ""),
                 "parameters": params,
             }
+            if ir_type != tool_type:
+                result["_downgraded_from"] = tool_type
 
         # Extract required_parameters from JSON Schema if available
         parameters = result.get("parameters", {})
@@ -247,7 +264,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             result["required_parameters"] = []
 
-        result["metadata"] = {}
+        downgraded_from = result.pop("_downgraded_from", None)
+        result["metadata"] = (
+            {"provider_type": downgraded_from} if downgraded_from else {}
+        )
         return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
