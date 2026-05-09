@@ -27,6 +27,18 @@ class ToolDefinition(TypedDict):
     - OpenAI Responses: {"type": "function", "name": "...", ...}
     - Anthropic: {"name": "...", "description": "...", "input_schema": {...}}
     - Google: {"function_declarations": [{"name": "...", ...}]}
+
+    Source converter contract:
+    Provider tool types that fall outside the ``type`` Literal below
+    (e.g. OpenAI Responses' ``"custom"`` hosted tools, or unnamed hosted
+    tools like ``"web_search"``) MUST be coerced to ``"function"`` at the
+    provider→IR boundary so that runtime IR validation
+    (``validate_ir_request``) accepts the result.  Provider-specific
+    information may be retained in ``metadata`` (e.g.
+    ``{"provider_type": "custom"}``) or in the ``_passthrough`` extension
+    for round-tripping.  Target converters' downgrade fallbacks (e.g.
+    ``openai_chat/tool_ops.py``) are defensive only — IR is guaranteed
+    valid by validation.
     """
 
     type: Literal[
