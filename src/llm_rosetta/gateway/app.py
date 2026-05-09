@@ -68,7 +68,7 @@ async def _proxy_handler(
         target_provider_str, provider_info, target_shim_name, upstream_model = (
             _config.resolve_model(model)
         )
-        target_provider = cast(ProviderType, target_provider_str)
+        target_provider: ProviderType = cast(ProviderType, target_provider_str)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
         return error_response_for_source(
