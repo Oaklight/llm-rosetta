@@ -1684,11 +1684,6 @@ function updateFetchCount() {
   const btn = document.getElementById('fetchAddBtn');
   btn.disabled = !hasChanges;
   btn.textContent = t('btn.applyChanges');
-  updatePrefixPreview();
-}
-
-function updatePrefixPreview() {
-  updateFetchCount();
 }
 
 async function bulkAddFetchedModels() {
