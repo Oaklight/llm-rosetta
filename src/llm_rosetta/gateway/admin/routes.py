@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets
 import uuid
 from datetime import datetime, timezone
 from typing import Any, overload
 
+from llm_rosetta._vendor.httpclient import AsyncClient
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta.shims import list_shims
@@ -15,6 +17,8 @@ from llm_rosetta.shims import list_shims
 from ..config import GatewayConfig, load_config, load_config_raw, write_config
 from ..providers import known_provider_types
 from .static import load_admin_html
+
+logger = logging.getLogger("llm-rosetta-gateway")
 
 # Cached HTML — loaded once on first request.
 _admin_html: str | None = None
@@ -940,6 +944,183 @@ async def get_internal_token(request: Any) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Fetch upstream models
+# ---------------------------------------------------------------------------
+
+
+def _get_gateway_config(request: Any) -> GatewayConfig | None:
+    """Return the live GatewayConfig from the app module."""
+    import llm_rosetta.gateway.app as _app_mod
+
+    return _app_mod._config
+
+
+async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
+    """Fetch the model list from an upstream provider's /v1/models endpoint."""
+    provider_name = request.path_params["name"]
+    config = _get_gateway_config(request)
+    if config is None:
+        return JSONResponse({"error": "Gateway config not loaded"}, status_code=500)
+
+    if provider_name not in config.providers:
+        return JSONResponse(
+            {"error": f"Provider '{provider_name}' not found"}, status_code=404
+        )
+
+    pinfo = config.providers[provider_name]
+    ptype = config.provider_types.get(provider_name, "unknown")
+
+    # Build the models listing URL based on provider type
+    if ptype == "google":
+        models_url = f"{pinfo.base_url}/v1beta/models"
+    elif ptype == "anthropic":
+        models_url = f"{pinfo.base_url}/v1/models"
+    else:
+        # OpenAI-compatible (openai_chat, openai_responses, etc.)
+        models_url = f"{pinfo.base_url}/models"
+
+    headers = pinfo.auth_headers()
+
+    try:
+        client = AsyncClient(timeout=30.0, proxy=pinfo.proxy_url)
+        resp = await client.get(models_url, headers=headers)
+        await client.aclose()
+    except Exception as exc:
+        logger.warning("Failed to fetch models from %s: %s", provider_name, exc)
+        return JSONResponse(
+            {"error": f"Failed to connect to upstream: {exc}"}, status_code=502
+        )
+
+    if resp.status_code >= 400:
+        logger.warning(
+            "Upstream %s returned %d for model listing", provider_name, resp.status_code
+        )
+        return JSONResponse(
+            {
+                "error": (
+                    f"Upstream returned HTTP {resp.status_code}. "
+                    "This provider may not support model listing."
+                ),
+            },
+            status_code=502,
+        )
+
+    try:
+        body = resp.json()
+    except Exception:
+        return JSONResponse(
+            {"error": "Upstream returned non-JSON response"},
+            status_code=502,
+        )
+
+    # Normalize response — different providers return different formats
+    model_ids: list[str] = []
+    if ptype == "google":
+        # Google: {"models": [{"name": "models/gemini-...", ...}]}
+        for m in body.get("models", []):
+            name = m.get("name", "")
+            if name.startswith("models/"):
+                name = name[len("models/") :]
+            model_ids.append(name)
+    elif ptype == "anthropic":
+        # Anthropic: {"data": [{"id": "claude-...", ...}]}
+        for m in body.get("data", []):
+            model_ids.append(m.get("id", ""))
+    else:
+        # OpenAI-compatible: {"data": [{"id": "gpt-...", ...}]}
+        for m in body.get("data", []):
+            model_ids.append(m.get("id", ""))
+
+    model_ids = [m for m in model_ids if m]
+    model_ids.sort()
+
+    return JSONResponse(
+        {
+            "provider": provider_name,
+            "api_standard": ptype,
+            "models": model_ids,
+        }
+    )
+
+
+async def bulk_add_models(request: Any) -> Response:
+    """Bulk-add multiple models for a given provider."""
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    provider = body.get("provider")
+    models_to_add: list[str] = body.get("models", [])
+    prefix = body.get("prefix", "")
+    capabilities = body.get("capabilities", ["text", "vision", "tools"])
+
+    if not provider or not models_to_add:
+        return JSONResponse(
+            {"error": "'provider' and 'models' are required"}, status_code=400
+        )
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    # Validate provider exists
+    providers = data.get("providers", {})
+    if provider not in providers:
+        return JSONResponse(
+            {"error": f"Provider '{provider}' not found"}, status_code=400
+        )
+
+    models_section = data.setdefault("models", {})
+    added: list[str] = []
+    skipped: list[str] = []
+
+    for model_id in models_to_add:
+        display_name = f"{prefix}{model_id}" if prefix else model_id
+        if display_name in models_section:
+            skipped.append(display_name)
+            continue
+        models_section[display_name] = {
+            "provider": provider,
+            "capabilities": capabilities,
+        }
+        added.append(display_name)
+
+    if not added:
+        return JSONResponse(
+            {
+                "ok": True,
+                "added": [],
+                "skipped": skipped,
+                "message": "All models already exist",
+            }
+        )
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    new_config = _reload_gateway_config(request, config_path)
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "added": added,
+            "skipped": skipped,
+            "models": dict(new_config.models),
+        }
+    )
+
+
+# ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
 
@@ -961,6 +1142,10 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(put_model)
     app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(delete_model)
+    app.route("/admin/api/config/providers/<name>/models", methods=["GET"])(
+        fetch_upstream_models
+    )
+    app.route("/admin/api/config/models", methods=["POST"])(bulk_add_models)
     app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
     # Metrics

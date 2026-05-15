@@ -293,10 +293,26 @@ th.sortable::after { content:'';display:inline-block;margin-left:4px;opacity:.4;
 th.sortable.asc::after { content:'\25B2';opacity:.8; }
 th.sortable.desc::after { content:'\25BC';opacity:.8; }
 
-/* Model search */
-.model-search { display:flex;align-items:center;gap:8px;margin-bottom:8px; }
-.model-search input { flex:1;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
-.model-count { font-size:12px;color:var(--text-dim); }
+/* Model search & filter */
+.model-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
+.model-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
+.model-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
+
+/* Fetch models modal */
+.fetch-models-list { max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin:8px 0; }
+.fetch-models-list label { display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--border);font-size:13px;font-family:var(--mono);cursor:pointer; }
+.fetch-models-list label:hover { background:var(--hover); }
+.fetch-models-list label:last-child { border-bottom:none; }
+.fetch-models-list input[type="checkbox"] { flex-shrink:0; }
+.fetch-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
+.fetch-toolbar input { flex:1;min-width:120px;max-width:200px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.fetch-toolbar .btn { flex-shrink:0; }
+.fetch-count { font-size:12px;color:var(--text-dim); }
+.prefix-group { display:flex;align-items:center;gap:8px;margin:8px 0; }
+.prefix-group label { font-size:13px;white-space:nowrap; }
+.prefix-group input { flex:1;max-width:240px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.prefix-preview { font-size:12px;color:var(--text-dim);margin:4px 0 8px 0;font-family:var(--mono); }
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -376,9 +392,15 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.models">Model Routing</h2>
-        <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="openFetchModelsModal()" data-i18n="btn.fetchModels">&#x2B07; Fetch from Provider</button>
+          <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
+        </div>
       </div>
-      <div class="model-search">
+      <div class="model-toolbar">
+        <select id="modelProviderFilter" onchange="renderModels()">
+          <option value="" data-i18n="filter.allProviders">All Providers</option>
+        </select>
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
         <span class="model-count" id="modelCount"></span>
       </div>
@@ -520,6 +542,39 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('modelModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveModel()" data-i18n="btn.save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Fetch Models Modal -->
+<div class="modal-overlay" id="fetchModelsModal">
+  <div class="modal modal-wide">
+    <h3 data-i18n="modal.fetchModels">Fetch Models from Provider</h3>
+    <div class="form-group">
+      <label data-i18n="label.selectProvider">Select Provider</label>
+      <select id="fetchProvider" onchange="doFetchModels()"></select>
+    </div>
+    <div id="fetchModelsContent" style="display:none">
+      <div class="fetch-toolbar">
+        <input id="fetchModelSearch" placeholder="Filter models..." oninput="filterFetchedModels()">
+        <button class="btn btn-sm" onclick="toggleAllFetched(true)" data-i18n="btn.selectAll">Select All</button>
+        <button class="btn btn-sm" onclick="toggleAllFetched(false)" data-i18n="btn.deselectAll">Deselect All</button>
+        <span class="fetch-count" id="fetchCount"></span>
+      </div>
+      <div class="fetch-models-list" id="fetchModelsList"></div>
+      <div class="prefix-group">
+        <label data-i18n="label.modelPrefix">Prefix:</label>
+        <input id="fetchPrefix" placeholder="e.g. myprefix/" oninput="updatePrefixPreview()">
+      </div>
+      <div class="prefix-preview" id="prefixPreview"></div>
+    </div>
+    <div id="fetchModelsLoading" style="display:none;text-align:center;padding:20px;color:var(--text-dim)">
+      Loading models...
+    </div>
+    <div id="fetchModelsError" style="display:none;color:var(--danger);padding:8px 0;font-size:13px"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('fetchModelsModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" id="fetchAddBtn" onclick="bulkAddFetchedModels()" disabled data-i18n="btn.addSelected">Add Selected</button>
     </div>
   </div>
 </div>
@@ -717,6 +772,17 @@ const I18N = {
     'toast.copied':'Copied to clipboard',
     'confirm.deleteKey':"Delete API key '{label}'?",
     'filter.allKeys':'All Keys',
+    'btn.fetchModels':'\u2B07 Fetch from Provider',
+    'btn.selectAll':'Select All', 'btn.deselectAll':'Deselect All',
+    'btn.addSelected':'Add Selected',
+    'modal.fetchModels':'Fetch Models from Provider',
+    'label.selectProvider':'Select Provider',
+    'label.modelPrefix':'Prefix:',
+    'fetch.loading':'Fetching models...',
+    'fetch.count':'{checked} / {total} selected',
+    'fetch.noModels':'No models found from this provider.',
+    'toast.modelsAdded':'{count} model(s) added',
+    'toast.modelsAllExist':'All selected models already exist',
   },
   zh: {
     'tab.providers':'\u670d\u52a1\u5546', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
@@ -787,6 +853,17 @@ const I18N = {
     'toast.copied':'\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
     'confirm.deleteKey':"\u786e\u5b9a\u5220\u9664 API \u5bc6\u94a5 '{label}'\uff1f",
     'filter.allKeys':'\u5168\u90e8\u5bc6\u94a5',
+    'btn.fetchModels':'\u2B07 \u4ece\u670d\u52a1\u5546\u83b7\u53d6',
+    'btn.selectAll':'\u5168\u9009', 'btn.deselectAll':'\u5168\u4e0d\u9009',
+    'btn.addSelected':'\u6dfb\u52a0\u5df2\u9009',
+    'modal.fetchModels':'\u4ece\u670d\u52a1\u5546\u83b7\u53d6\u6a21\u578b',
+    'label.selectProvider':'\u9009\u62e9\u670d\u52a1\u5546',
+    'label.modelPrefix':'\u524d\u7f00\uff1a',
+    'fetch.loading':'\u6b63\u5728\u83b7\u53d6\u6a21\u578b...',
+    'fetch.count':'{checked} / {total} \u5df2\u9009',
+    'fetch.noModels':'\u672a\u4ece\u8be5\u670d\u52a1\u5546\u627e\u5230\u6a21\u578b\u3002',
+    'toast.modelsAdded':'\u5df2\u6dfb\u52a0 {count} \u4e2a\u6a21\u578b',
+    'toast.modelsAllExist':'\u6240\u6709\u5df2\u9009\u6a21\u578b\u5747\u5df2\u5b58\u5728',
   },
 };
 
@@ -1073,6 +1150,16 @@ function renderModels() {
   const models = configData.models || {};
   const totalCount = Object.keys(models).length;
 
+  // Populate provider filter dropdown (preserve selection)
+  const provFilter = document.getElementById('modelProviderFilter');
+  const prevProv = provFilter.value;
+  const provSet = new Set();
+  for (const [, info] of Object.entries(models)) {
+    provSet.add(typeof info === 'string' ? info : info.provider);
+  }
+  provFilter.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
+    [...provSet].sort().map(p => `<option value="${esc(p)}"${p === prevProv ? ' selected' : ''}>${esc(p)}</option>`).join('');
+
   // Update sort header indicators
   document.getElementById('sortName').className = 'sortable' + (_modelSortKey === 'name' ? ` ${_modelSortDir}` : '');
   document.getElementById('sortProvider').className = 'sortable' + (_modelSortKey === 'provider' ? ` ${_modelSortDir}` : '');
@@ -1083,12 +1170,16 @@ function renderModels() {
     return;
   }
 
-  // Filter by search query (partial match on model name and provider)
+  // Filter by provider dropdown and search query
+  const selectedProv = provFilter.value;
   const query = (document.getElementById('modelSearch').value || '').trim().toLowerCase();
   let entries = Object.entries(models).map(([name, info]) => {
     const prov = typeof info === 'string' ? info : info.provider;
     return {name, prov, info};
   });
+  if (selectedProv) {
+    entries = entries.filter(e => e.prov === selectedProv);
+  }
   if (query) {
     entries = entries.filter(e => e.name.toLowerCase().includes(query) || e.prov.toLowerCase().includes(query));
   }
@@ -1103,11 +1194,7 @@ function renderModels() {
 
   // Update count
   const countEl = document.getElementById('modelCount');
-  if (query || entries.length !== totalCount) {
-    countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
-  } else {
-    countEl.textContent = t('model.count', {shown: totalCount, total: totalCount});
-  }
+  countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
 
   if (entries.length === 0) {
     tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
@@ -1236,6 +1323,157 @@ function editModel(name, provider) {
   const info = configData.models[name];
   const caps = (typeof info === 'object' && info.capabilities) ? info.capabilities : ['text'];
   openModelModal(name, provider, caps);
+}
+
+// ===================== Fetch Models from Provider =====================
+let _fetchedModels = [];  // raw model IDs from upstream
+let _fetchProvider = '';  // currently selected provider
+
+function openFetchModelsModal() {
+  // Populate provider dropdown
+  const sel = document.getElementById('fetchProvider');
+  sel.innerHTML = `<option value="">${t('label.selectOne')}</option>`;
+  if (configData) {
+    for (const [name, cfg] of Object.entries(configData.providers)) {
+      if (cfg.enabled === false) continue;
+      sel.innerHTML += `<option value="${esc(name)}">${esc(name)}</option>`;
+    }
+  }
+  // Reset state
+  _fetchedModels = [];
+  _fetchProvider = '';
+  document.getElementById('fetchModelsContent').style.display = 'none';
+  document.getElementById('fetchModelsLoading').style.display = 'none';
+  document.getElementById('fetchModelsError').style.display = 'none';
+  document.getElementById('fetchPrefix').value = '';
+  document.getElementById('fetchModelSearch').value = '';
+  document.getElementById('prefixPreview').textContent = '';
+  document.getElementById('fetchAddBtn').disabled = true;
+  document.getElementById('fetchModelsModal').classList.add('open');
+}
+
+async function doFetchModels() {
+  const provider = document.getElementById('fetchProvider').value;
+  if (!provider) {
+    document.getElementById('fetchModelsContent').style.display = 'none';
+    return;
+  }
+  _fetchProvider = provider;
+  document.getElementById('fetchModelsContent').style.display = 'none';
+  document.getElementById('fetchModelsError').style.display = 'none';
+  document.getElementById('fetchModelsLoading').style.display = 'block';
+
+  try {
+    const data = await api.get(`/admin/api/config/providers/${encodeURIComponent(provider)}/models`);
+    _fetchedModels = data.models || [];
+    document.getElementById('fetchModelsLoading').style.display = 'none';
+    if (_fetchedModels.length === 0) {
+      document.getElementById('fetchModelsError').textContent = t('fetch.noModels');
+      document.getElementById('fetchModelsError').style.display = 'block';
+      return;
+    }
+    document.getElementById('fetchModelsContent').style.display = 'block';
+    renderFetchedModels();
+  } catch (e) {
+    document.getElementById('fetchModelsLoading').style.display = 'none';
+    document.getElementById('fetchModelsError').textContent = e.message || String(e);
+    document.getElementById('fetchModelsError').style.display = 'block';
+  }
+}
+
+function renderFetchedModels() {
+  const list = document.getElementById('fetchModelsList');
+  const query = (document.getElementById('fetchModelSearch').value || '').trim().toLowerCase();
+  const existingModels = configData.models || {};
+  const prefix = document.getElementById('fetchPrefix').value || '';
+
+  let models = _fetchedModels;
+  if (query) {
+    models = models.filter(m => m.toLowerCase().includes(query));
+  }
+
+  list.innerHTML = models.map(m => {
+    const displayName = prefix ? prefix + m : m;
+    const exists = displayName in existingModels;
+    return `<label${exists ? ' style="opacity:0.5"' : ''}>
+      <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' disabled title="Already exists"' : ''}>
+      <span>${esc(m)}</span>${exists ? ' <span style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
+    </label>`;
+  }).join('');
+
+  updateFetchCount();
+}
+
+function filterFetchedModels() {
+  renderFetchedModels();
+}
+
+function toggleAllFetched(checked) {
+  const boxes = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:not(:disabled)');
+  boxes.forEach(cb => cb.checked = checked);
+  updateFetchCount();
+}
+
+function updateFetchCount() {
+  const all = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:not(:disabled)');
+  const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
+  document.getElementById('fetchCount').textContent = t('fetch.count', {checked: checked.length, total: all.length});
+  document.getElementById('fetchAddBtn').disabled = checked.length === 0;
+  updatePrefixPreview();
+}
+
+function updatePrefixPreview() {
+  const prefix = document.getElementById('fetchPrefix').value || '';
+  const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
+  const el = document.getElementById('prefixPreview');
+  if (checked.length === 0 || !prefix) {
+    el.textContent = '';
+    return;
+  }
+  // Show first 3 as preview
+  const names = [...checked].slice(0, 3).map(cb => prefix + cb.value);
+  el.textContent = names.join(', ') + (checked.length > 3 ? ', ...' : '');
+
+  // Re-render to update "exists" state based on new prefix
+  renderFetchedModels();
+}
+
+async function bulkAddFetchedModels() {
+  const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
+  if (checked.length === 0) return;
+
+  const models = [...checked].map(cb => cb.value);
+  const prefix = document.getElementById('fetchPrefix').value || '';
+
+  const btn = document.getElementById('fetchAddBtn');
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const res = await api.post('/admin/api/config/models', {
+      provider: _fetchProvider,
+      models: models,
+      prefix: prefix,
+      capabilities: ['text', 'vision', 'tools'],
+    });
+    if (res.ok) {
+      const added = res.added || [];
+      if (added.length > 0) {
+        showToast(t('toast.modelsAdded', {count: added.length}));
+      } else {
+        showToast(t('toast.modelsAllExist'));
+      }
+      closeModal('fetchModelsModal');
+      loadConfig();
+    } else {
+      showToast(res.error || 'Failed', 'error');
+    }
+  } catch (e) {
+    showToast(String(e), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = t('btn.addSelected');
+  }
 }
 
 // ===================== API Keys Tab =====================
