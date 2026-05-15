@@ -274,12 +274,8 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    api_key = body.get("api_key")
-    base_url = body.get("base_url")
-    if not api_key or not base_url:
-        return JSONResponse(
-            {"error": "Both 'api_key' and 'base_url' are required"}, status_code=400
-        )
+    api_key = body.get("api_key", "")
+    base_url = body.get("base_url", "")
 
     try:
         data = load_config_raw(config_path)
@@ -288,6 +284,16 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
 
     existing_providers = data.get("providers", {})
     resolve_name = body.get("rename_from", name) or name
+
+    # When api_key is omitted/empty and we're editing, keep the existing key
+    if not api_key and resolve_name in existing_providers:
+        api_key = existing_providers[resolve_name].get("api_key", "")
+
+    if not api_key or not base_url:
+        return JSONResponse(
+            {"error": "Both 'api_key' and 'base_url' are required"}, status_code=400
+        )
+
     provider_entry = _build_provider_entry(
         body, api_key, base_url, existing_providers, resolve_name
     )

@@ -776,7 +776,7 @@ const I18N = {
     'label.providerName':'Provider Name', 'label.providerType':'Provider Type',
     'label.selectOne':'— select —',
     'label.baseUrl':'Base URL',
-    'label.apiKey':'API Key (or ${ENV_VAR} placeholder)',
+    'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
@@ -865,7 +865,7 @@ const I18N = {
     'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0', 'label.providerType':'\u670d\u52a1\u5546\u7c7b\u578b',
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
     'label.baseUrl':'Base URL',
-    'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09',
+    'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u5546', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u5546',
@@ -1165,17 +1165,18 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
 
   document.getElementById('provBaseUrl').value = baseUrl || '';
   const keyInput = document.getElementById('provApiKey');
-  keyInput.value = apiKey || '';
   keyInput.type = 'password';
+  keyInput.readOnly = false;
   // Hide eye/copy buttons when credential visibility is off
   document.getElementById('provKeyToggleBtn').style.display = _credentialVisible ? '' : 'none';
   document.getElementById('provKeyCopyBtn').style.display = _credentialVisible ? '' : 'none';
   if (!_credentialVisible) {
-    keyInput.placeholder = '••••••••';
-    keyInput.readOnly = !!name; // read-only when editing, writable when creating
+    // Don't reveal even masked key; leave empty so user can type a new one
+    keyInput.value = '';
+    keyInput.placeholder = name ? t('label.keyUnchangedHint', 'Leave blank to keep current key') : '${OPENAI_API_KEY}';
   } else {
+    keyInput.value = apiKey || '';
     keyInput.placeholder = '${OPENAI_API_KEY}';
-    keyInput.readOnly = false;
   }
   document.getElementById('provProxy').value = proxy || '';
   document.getElementById('providerModal').classList.add('open');
@@ -1438,8 +1439,9 @@ async function saveProvider() {
   const apiKey = document.getElementById('provApiKey').value.trim();
   const proxy = document.getElementById('provProxy').value.trim();
   if (!name || !provType) { showToast(t('error.fieldsRequired'), 'error'); return; }
-  if (!baseUrl && !apiKey) { /* allow empty for shim defaults */ }
-  const body = {type: provType, api_key: apiKey, base_url: baseUrl, proxy};
+  const body = {type: provType, base_url: baseUrl, proxy};
+  // When api_key is empty and we're editing, omit it so backend keeps the original
+  if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
   if (_editingProviderName && _editingProviderName !== name) {
     body.rename_from = _editingProviderName;
