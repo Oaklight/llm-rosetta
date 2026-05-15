@@ -36,7 +36,6 @@ classifiers = [
 ]
 dependencies = [
     'typing_extensions>=4.0.0; python_version < "3.11"',
-    "PyYAML>=6.0",
 ]
 
 [project.optional-dependencies]

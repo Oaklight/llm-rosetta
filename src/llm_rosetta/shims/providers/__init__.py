@@ -12,7 +12,7 @@ import importlib.util
 import logging
 from pathlib import Path
 
-import yaml
+from llm_rosetta._vendor.yaml import load as yaml_load
 
 from ..provider_shim import ProviderShim, register_shim
 
@@ -51,7 +51,7 @@ def load_providers() -> list[ProviderShim]:
         if not d.is_dir() or not yaml_path.exists():
             continue
         with open(yaml_path, encoding="utf-8") as f:
-            cfg = yaml.safe_load(f)
+            cfg = yaml_load(f.read())
         if not isinstance(cfg, dict) or "name" not in cfg or "base" not in cfg:
             logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
             continue
