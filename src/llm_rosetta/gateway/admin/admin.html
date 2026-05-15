@@ -18,6 +18,7 @@
   --red: #cf222e;
   --orange: #bf8700;
   --blue: #0969da;
+  --purple: #8250df;
   --radius: 8px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
@@ -205,6 +206,7 @@ canvas { width: 100%; height: 160px; }
 .badge-cap-vision { background: rgba(245,158,11,0.12); color: var(--orange); }
 .badge-cap-tools { background: rgba(59,130,246,0.12); color: var(--blue); }
 .badge-cap-embed { background: rgba(16,185,129,0.12); color: var(--green); }
+.badge-cap-reasoning { background: rgba(168,85,247,0.12); color: var(--purple); }
 
 /* Checkbox group */
 .checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; }
@@ -539,6 +541,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
         <label><input type="checkbox" id="capVision" checked onchange="onCapChange()"> vision</label>
         <label><input type="checkbox" id="capTools" checked onchange="onCapChange()"> tools</label>
         <label><input type="checkbox" id="capEmbedding" onchange="onCapChange()"> embedding</label>
+        <label><input type="checkbox" id="capReasoning" onchange="onCapChange()"> reasoning</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -733,7 +736,7 @@ const I18N = {
     'filter.allModels':'All Models', 'filter.allProviders':'All Providers',
     'filter.allStatus':'All Status', 'filter.ok':'OK (2xx/3xx)', 'filter.error':'Error (4xx/5xx)',
     'test.text':'Simple Text', 'test.stream':'Stream',
-    'test.tools':'Function Call', 'test.vision':'Image Understanding', 'test.embedding':'Embedding',
+    'test.tools':'Function Call', 'test.vision':'Image Understanding', 'test.embedding':'Embedding', 'test.reasoning':'Reasoning',
     'empty.providers':'No providers configured.', 'empty.models':'No models configured.',
     'empty.logs':'No requests logged yet', 'empty.data':'No data yet',
     'toast.serverSaved':'Server settings saved',
@@ -814,7 +817,7 @@ const I18N = {
     'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u5546',
     'filter.allStatus':'\u5168\u90e8\u72b6\u6001', 'filter.ok':'\u6b63\u5e38 (2xx/3xx)', 'filter.error':'\u9519\u8bef (4xx/5xx)',
     'test.text':'\u7b80\u5355\u6587\u672c', 'test.stream':'\u6d41\u5f0f',
-    'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3', 'test.embedding':'Embedding',
+    'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3', 'test.embedding':'Embedding', 'test.reasoning':'\u63a8\u7406',
     'empty.providers':'\u6682\u65e0\u670d\u52a1\u5546\u914d\u7f6e\u3002', 'empty.models':'\u6682\u65e0\u6a21\u578b\u914d\u7f6e\u3002',
     'empty.logs':'\u6682\u65e0\u8bf7\u6c42\u8bb0\u5f55', 'empty.data':'\u6682\u65e0\u6570\u636e',
     'toast.serverSaved':'\u670d\u52a1\u5668\u8bbe\u7f6e\u5df2\u4fdd\u5b58',
@@ -902,7 +905,7 @@ function applyI18n() {
 }
 
 // ===================== State =====================
-let currentTab = 'providers';
+let currentTab = localStorage.getItem('llm-rosetta-tab') || 'providers';
 let configData = null;
 let keysData = null;
 let internalToken = null;
@@ -1054,6 +1057,7 @@ function openModelModal(model, provider, capabilities) {
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('capEmbedding').checked = caps.includes('embedding');
+  document.getElementById('capReasoning').checked = caps.includes('reasoning');
   onCapChange();
   document.getElementById('modelModal').classList.add('open');
 }
@@ -1062,14 +1066,17 @@ function onCapChange() {
   const emb = document.getElementById('capEmbedding');
   const vis = document.getElementById('capVision');
   const tools = document.getElementById('capTools');
+  const reas = document.getElementById('capReasoning');
   if (emb.checked) {
     vis.checked = false; vis.disabled = true;
     tools.checked = false; tools.disabled = true;
+    reas.checked = false; reas.disabled = true;
   } else {
     vis.disabled = false;
     tools.disabled = false;
+    reas.disabled = false;
   }
-  if (vis.checked || tools.checked) {
+  if (vis.checked || tools.checked || reas.checked) {
     emb.disabled = true;
   } else {
     emb.disabled = false;
@@ -1233,11 +1240,12 @@ function renderModels() {
     const provDisabled = disabledProviders.has(prov);
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const capBadges = caps.map(c => {
-      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : 'badge-cap';
+      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : c === 'reasoning' ? 'badge-cap-reasoning' : 'badge-cap';
       return `<span class="badge ${cls}">${esc(c)}</span>`;
     }).join('');
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
+    const hasReasoning = caps.includes('reasoning');
     const isEmbedding = caps.includes('embedding');
     return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
       <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code> ${capBadges}</td>
@@ -1251,6 +1259,7 @@ function renderModels() {
             <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">${t('test.stream')}</div>
             <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">${t('test.tools')}</div>
             <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
+            <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${esc(name)}','reasoning')` : ''}">${t('test.reasoning')}</div>
           </div>
         </div>`}
         <button class="btn btn-sm" onclick="copyModelEntry('${esc(name)}')">${t('btn.copy')}</button>
@@ -1326,6 +1335,7 @@ async function saveModel() {
   if (document.getElementById('capVision').checked) capabilities.push('vision');
   if (document.getElementById('capTools').checked) capabilities.push('tools');
   if (document.getElementById('capEmbedding').checked) capabilities.push('embedding');
+  if (document.getElementById('capReasoning').checked) capabilities.push('reasoning');
   const body = {provider, capabilities};
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {
@@ -1800,6 +1810,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     const id = tab.dataset.tab;
     document.getElementById('tab-' + id).classList.add('active');
     currentTab = id;
+    localStorage.setItem('llm-rosetta-tab', id);
     stopTimers();
     if (id === 'dashboard') { loadMetrics(); dashboardTimer = setInterval(loadMetrics, 3000); }
     if (id === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
@@ -1807,6 +1818,12 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (id === 'keys') { loadKeys(); }
   });
 });
+
+// Restore saved tab on page load
+if (currentTab !== 'providers') {
+  const savedTab = document.querySelector(`.tab[data-tab="${currentTab}"]`);
+  if (savedTab) savedTab.click();
+}
 
 function stopTimers() {
   if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
@@ -1841,7 +1858,7 @@ const TEST_IMAGE_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 function getTestLabel(type) { return t('test.' + type); }
 
 function buildTestPayload(model, type) {
-  const base = {model, max_tokens: 256, reasoning_effort: 'low'};
+  const base = {model, max_tokens: 256};
   switch(type) {
     case 'text':
       return {...base, messages:[{role:'user', content:'Say "Hello! The gateway test is working." and nothing else.'}]};
@@ -1863,6 +1880,8 @@ function buildTestPayload(model, type) {
           {type:'image_url', image_url:{url: TEST_IMAGE_URL}}
         ]}]
       };
+    case 'reasoning':
+      return {...base, reasoning_effort: 'low', messages:[{role:'user', content:'What is 15 * 37? Show your reasoning briefly.'}]};
     case 'embedding':
       return {model, input: 'Hello, world!'};
   }
