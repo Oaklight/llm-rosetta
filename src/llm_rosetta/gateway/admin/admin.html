@@ -121,6 +121,10 @@ tr:hover td { background: var(--bg-hover); }
 .provider-card.disabled { opacity: 0.5; }
 .provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+.provider-card .provider-logo { width: 16px; height: 16px; vertical-align: middle; margin-right: 4px; }
+.type-logo-wrapper { display: flex; align-items: center; gap: 8px; }
+.type-logo-wrapper select { flex: 1; }
+.type-logo-wrapper .type-logo-preview { width: 20px; height: 20px; flex-shrink: 0; }
 .toggle { position:relative;display:inline-block;width:36px;height:20px; }
 .toggle input { opacity:0;width:0;height:0; }
 .toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:20px;transition:.2s; }
@@ -465,7 +469,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     </div>
     <div class="form-group">
       <label data-i18n="label.providerType">Provider Type</label>
-      <select id="provType"></select>
+      <div class="type-logo-wrapper">
+        <img id="provTypeLogo" class="type-logo-preview" src="" alt="" style="display:none">
+        <select id="provType"></select>
+      </div>
     </div>
     <div class="form-group">
       <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
@@ -907,9 +914,19 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     typeSel.appendChild(opt);
   }
 
+  // Update the logo preview beside the dropdown
+  function _updateTypeLogo() {
+    const logo = document.getElementById('provTypeLogo');
+    const s = shimMap[typeSel.value];
+    if (s && s.logo) { logo.src = s.logo; logo.style.display = ''; }
+    else { logo.src = ''; logo.style.display = 'none'; }
+  }
+  _updateTypeLogo();
+
   // Auto-fill base URL and API key placeholder when selecting a type
   const _initialType = provType || '';
   typeSel.onchange = () => {
+    _updateTypeLogo();
     const s = shimMap[typeSel.value];
     if (!s) return;
     const urlInput = document.getElementById('provBaseUrl');
@@ -1008,18 +1025,24 @@ function renderProviders() {
     grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
     return;
   }
+  const shimLogo = Object.fromEntries(
+    (configData.registered_shims || []).map(s => [s.name, s.logo])
+  );
   grid.innerHTML = Object.entries(providers).map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
+    const typeName = cfg.type || name;
+    const logo = shimLogo[typeName];
+    const logoHtml = logo ? `<img class="provider-logo" src="${esc(logo)}" alt="">` : '';
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}">
       <div class="card-header">
-        <div class="name">${esc(name)}</div>
+        <div class="name">${logoHtml}${esc(name)}</div>
         <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleProvider('${esc(name)}')">
           <span class="slider"></span>
         </label>
       </div>
-      <div class="field">Type: <code>${esc(cfg.type || name)}</code></div>
+      <div class="field">Type: <code>${esc(typeName)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
       <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
