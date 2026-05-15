@@ -536,9 +536,9 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <label data-i18n="label.capabilities">Capabilities</label>
       <div class="checkbox-group">
         <label><input type="checkbox" id="capText" checked disabled> text</label>
-        <label><input type="checkbox" id="capVision" checked> vision</label>
-        <label><input type="checkbox" id="capTools" checked> tools</label>
-        <label><input type="checkbox" id="capEmbedding"> embedding</label>
+        <label><input type="checkbox" id="capVision" checked onchange="onCapChange()"> vision</label>
+        <label><input type="checkbox" id="capTools" checked onchange="onCapChange()"> tools</label>
+        <label><input type="checkbox" id="capEmbedding" onchange="onCapChange()"> embedding</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -733,7 +733,7 @@ const I18N = {
     'filter.allModels':'All Models', 'filter.allProviders':'All Providers',
     'filter.allStatus':'All Status', 'filter.ok':'OK (2xx/3xx)', 'filter.error':'Error (4xx/5xx)',
     'test.text':'Simple Text', 'test.stream':'Stream',
-    'test.tools':'Function Call', 'test.vision':'Image Understanding',
+    'test.tools':'Function Call', 'test.vision':'Image Understanding', 'test.embedding':'Embedding',
     'empty.providers':'No providers configured.', 'empty.models':'No models configured.',
     'empty.logs':'No requests logged yet', 'empty.data':'No data yet',
     'toast.serverSaved':'Server settings saved',
@@ -814,7 +814,7 @@ const I18N = {
     'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u5546',
     'filter.allStatus':'\u5168\u90e8\u72b6\u6001', 'filter.ok':'\u6b63\u5e38 (2xx/3xx)', 'filter.error':'\u9519\u8bef (4xx/5xx)',
     'test.text':'\u7b80\u5355\u6587\u672c', 'test.stream':'\u6d41\u5f0f',
-    'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3',
+    'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3', 'test.embedding':'Embedding',
     'empty.providers':'\u6682\u65e0\u670d\u52a1\u5546\u914d\u7f6e\u3002', 'empty.models':'\u6682\u65e0\u6a21\u578b\u914d\u7f6e\u3002',
     'empty.logs':'\u6682\u65e0\u8bf7\u6c42\u8bb0\u5f55', 'empty.data':'\u6682\u65e0\u6570\u636e',
     'toast.serverSaved':'\u670d\u52a1\u5668\u8bbe\u7f6e\u5df2\u4fdd\u5b58',
@@ -1054,7 +1054,26 @@ function openModelModal(model, provider, capabilities) {
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('capEmbedding').checked = caps.includes('embedding');
+  onCapChange();
   document.getElementById('modelModal').classList.add('open');
+}
+
+function onCapChange() {
+  const emb = document.getElementById('capEmbedding');
+  const vis = document.getElementById('capVision');
+  const tools = document.getElementById('capTools');
+  if (emb.checked) {
+    vis.checked = false; vis.disabled = true;
+    tools.checked = false; tools.disabled = true;
+  } else {
+    vis.disabled = false;
+    tools.disabled = false;
+  }
+  if (vis.checked || tools.checked) {
+    emb.disabled = true;
+  } else {
+    emb.disabled = false;
+  }
 }
 
 // ===================== Config Tab =====================
@@ -1219,11 +1238,12 @@ function renderModels() {
     }).join('');
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
+    const isEmbedding = caps.includes('embedding');
     return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
       <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code> ${capBadges}</td>
       <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
-        <div class="test-group">
+        ${isEmbedding ? `<button class="btn btn-sm btn-test" style="border-radius:var(--radius);color:var(--orange);font-weight:600" onclick="runTest('${esc(name)}','embedding')">${t('btn.test')}</button>` : `<div class="test-group">
           <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
@@ -1232,7 +1252,7 @@ function renderModels() {
             <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">${t('test.tools')}</div>
             <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
           </div>
-        </div>
+        </div>`}
         <button class="btn btn-sm" onclick="copyModelEntry('${esc(name)}')">${t('btn.copy')}</button>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">${t('btn.delete')}</button>
@@ -1843,6 +1863,8 @@ function buildTestPayload(model, type) {
           {type:'image_url', image_url:{url: TEST_IMAGE_URL}}
         ]}]
       };
+    case 'embedding':
+      return {model, input: 'Hello, world!'};
   }
 }
 
@@ -1898,7 +1920,34 @@ async function runTest(model, type) {
 
   const t0 = performance.now();
 
-  if (type === 'stream') {
+  if (type === 'embedding') {
+    // Embedding test — POST to /v1/embeddings
+    output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
+    try {
+      const testHeaders = {'Content-Type':'application/json'};
+      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
+      const res = await fetch('/v1/embeddings', {
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
+      });
+      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+      const body = await res.json();
+      resDetails.style.display = '';
+      resBody.textContent = JSON.stringify(body, null, 2);
+      if (!res.ok) {
+        output.textContent = `Error ${res.status}: ${body.error?.message || JSON.stringify(body.error || body)}`;
+        meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
+        return;
+      }
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
+      if (body.usage) {
+        meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in</div>`;
+      }
+      const dim = body.data?.[0]?.embedding?.length;
+      output.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
+    } catch(e) {
+      output.textContent = `Network error: ${e.message}`;
+    }
+  } else if (type === 'stream') {
     output.classList.add('streaming');
     output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
     try {
