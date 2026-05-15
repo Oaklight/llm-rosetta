@@ -1,11 +1,14 @@
-"""Provider and model shim definitions with a global registry.
+"""Provider shim definitions with a global registry.
 
 A **ProviderShim** is a lightweight identity card that declares which API
-standard (converter) a provider uses, along with connection defaults.
+standard (converter) a provider uses, along with connection defaults and
+optional transforms to bridge schema differences.
 
-A **ModelShim** describes model-level capabilities and constraints.  It is
-always nested within a ``ProviderShim`` — a model inherently belongs to a
-provider.
+.. deprecated::
+    ``ModelShim`` and the ``models`` / ``get_model_shim()`` members of
+    ``ProviderShim`` are retained for backward compatibility but are no
+    longer used by the gateway.  Model-to-provider routing is handled
+    by the gateway config; capability metadata will be addressed by #72.
 """
 
 from __future__ import annotations
@@ -25,12 +28,10 @@ from .transforms import Transform
 class ModelShim:
     """Model-level capabilities and constraints.
 
-    Nested within a :class:`ProviderShim` to express that every model
-    belongs to exactly one provider.
-
-    Transforms on a ``ModelShim`` are merged with the parent
-    ``ProviderShim``'s transforms via :func:`~.transforms.resolve_transforms`
-    (provider first, model after).
+    .. deprecated::
+        Model-to-provider routing is handled by the gateway config.
+        Capability metadata will be addressed by #72.  This class is
+        retained for backward compatibility only.
 
     Attributes:
         pattern: Glob pattern to match model names (e.g. ``"o3-*"``).

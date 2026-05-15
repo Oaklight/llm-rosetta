@@ -1,0 +1,4 @@
+name: deepseek
+base: openai_chat
+default_base_url: https://api.deepseek.com
+default_api_key_env: DEEPSEEK_API_KEY

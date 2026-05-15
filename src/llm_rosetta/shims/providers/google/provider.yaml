@@ -1,0 +1,4 @@
+name: google
+base: google
+default_base_url: https://generativelanguage.googleapis.com
+default_api_key_env: GOOGLE_API_KEY

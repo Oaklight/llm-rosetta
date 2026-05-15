@@ -34,7 +34,10 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = ['typing_extensions>=4.0.0; python_version < "3.11"']
+dependencies = [
+    'typing_extensions>=4.0.0; python_version < "3.11"',
+    "PyYAML>=6.0",
+]
 
 [project.optional-dependencies]
 openai = ["openai"]
@@ -66,7 +69,7 @@ llm-rosetta-gateway = "llm_rosetta.gateway:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llm_rosetta" = ["py.typed"]
+"llm_rosetta" = ["py.typed", "shims/providers/*/provider.yaml"]
 "llm_rosetta.gateway.admin" = ["admin.html"]
 
 [tool.setuptools.dynamic]

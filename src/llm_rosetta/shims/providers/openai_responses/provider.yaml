@@ -1,0 +1,4 @@
+name: openai_responses
+base: openai_responses
+default_base_url: https://api.openai.com/v1
+default_api_key_env: OPENAI_API_KEY

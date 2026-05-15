@@ -468,6 +468,11 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <select id="provType"></select>
     </div>
     <div class="form-group">
+      <label data-i18n="label.providerShim">Provider Shim</label>
+      <select id="provShim"></select>
+      <small style="color:var(--text-secondary);margin-top:2px;display:block" data-i18n="hint.shimExclusive">Mutually exclusive with API Standard — selecting one clears the other.</small>
+    </div>
+    <div class="form-group">
       <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
       <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
     </div>
@@ -652,6 +657,8 @@ const I18N = {
     'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.clearLog':'Clear Log',
     'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
     'label.providerName':'Provider Name', 'label.apiStandard':'API Standard',
+    'label.providerShim':'Provider Shim', 'label.selectOne':'— select —',
+    'hint.shimExclusive':'Mutually exclusive with API Standard — selecting one clears the other.',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
@@ -721,6 +728,8 @@ const I18N = {
     'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.clearLog':'\u6e05\u9664\u65e5\u5fd7',
     'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
     'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0', 'label.apiStandard':'API \u6807\u51c6',
+    'label.providerShim':'Provider Shim', 'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
+    'hint.shimExclusive':'\u4e0e API \u6807\u51c6\u4e92\u65a5 \u2014 \u9009\u62e9\u5176\u4e00\u4f1a\u6e05\u9664\u53e6\u4e00\u4e2a\u3002',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
@@ -891,16 +900,42 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('providerModalTitle').textContent = name ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
   document.getElementById('provName').readOnly = false;
-  // Populate API Standard dropdown
-  const typeSel = document.getElementById('provType');
-  typeSel.innerHTML = '';
+
   const knownTypes = (configData && configData.known_provider_types) || [];
+  const registeredShims = (configData && configData.registered_shims) || [];
+  // Determine which shim names are NOT already a core type
+  const shimOnlyNames = registeredShims.filter(s => !knownTypes.includes(s.name));
+
+  // Check if provType matches a shim name (not a core type)
+  const isShim = shimOnlyNames.some(s => s.name === provType);
+
+  // Populate API Standard dropdown (core converter types)
+  const typeSel = document.getElementById('provType');
+  typeSel.innerHTML = '<option value="">' + t('label.selectOne', '— select —') + '</option>';
   for (const pt of knownTypes) {
     const opt = document.createElement('option');
     opt.value = pt; opt.textContent = pt;
-    if (pt === provType) opt.selected = true;
+    if (!isShim && pt === provType) opt.selected = true;
     typeSel.appendChild(opt);
   }
+
+  // Populate Provider Shim dropdown
+  const shimSel = document.getElementById('provShim');
+  shimSel.innerHTML = '<option value="">' + t('label.selectOne', '— select —') + '</option>';
+  for (const s of shimOnlyNames) {
+    const opt = document.createElement('option');
+    opt.value = s.name; opt.textContent = `${s.name} (→ ${s.base})`;
+    if (isShim && s.name === provType) opt.selected = true;
+    shimSel.appendChild(opt);
+  }
+
+  // Mutual exclusion: selecting one clears the other
+  typeSel.onchange = () => { if (typeSel.value) shimSel.value = ''; };
+  shimSel.onchange = () => { if (shimSel.value) typeSel.value = ''; };
+
+  // If editing with a shim selected, clear the type dropdown
+  if (isShim) typeSel.value = '';
+
   document.getElementById('provBaseUrl').value = baseUrl || '';
   const keyInput = document.getElementById('provApiKey');
   keyInput.value = apiKey || '';
@@ -1110,11 +1145,14 @@ function renderModels() {
 
 async function saveProvider() {
   const name = document.getElementById('provName').value.trim();
-  const provType = document.getElementById('provType').value;
+  const coreType = document.getElementById('provType').value;
+  const shimName = document.getElementById('provShim').value;
+  const provType = shimName || coreType;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
   const apiKey = document.getElementById('provApiKey').value.trim();
   const proxy = document.getElementById('provProxy').value.trim();
-  if (!name || !baseUrl || !apiKey) { showToast(t('error.fieldsRequired'), 'error'); return; }
+  if (!name || !provType) { showToast(t('error.fieldsRequired'), 'error'); return; }
+  if (!baseUrl && !apiKey) { /* allow empty for shim defaults */ }
   const body = {type: provType, api_key: apiKey, base_url: baseUrl, proxy};
   // If editing and name changed, include rename_from so backend updates model references
   if (_editingProviderName && _editingProviderName !== name) {

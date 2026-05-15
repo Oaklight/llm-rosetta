@@ -29,7 +29,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResp
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.shims import get_shim, resolve_transforms
+from llm_rosetta.shims import get_shim
 from llm_rosetta.shims.transforms import Transform, apply_transforms
 
 
@@ -357,13 +357,13 @@ _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
 def _resolve_target_transforms(
     shim_name: str | None,
-    model: str,
+    model: str | None = None,
 ) -> tuple[tuple[Transform, ...], tuple[Transform, ...]]:
     """Look up target-side transforms from the shim registry.
 
     Args:
         shim_name: Registered shim name (e.g. ``"volcengine"``), or ``None``.
-        model: Model name for model-level transform lookup.
+        model: Unused, kept for API compatibility.
 
     Returns:
         ``(from_transforms, to_transforms)`` ready for ``apply_transforms``.
@@ -374,8 +374,7 @@ def _resolve_target_transforms(
     shim = get_shim(shim_name)
     if shim is None:
         return _EMPTY_TRANSFORMS, _EMPTY_TRANSFORMS
-    model_shim = shim.get_model_shim(model) if model else None
-    return resolve_transforms(shim, model_shim)
+    return shim.from_transforms, shim.to_transforms
 
 
 # ---------------------------------------------------------------------------

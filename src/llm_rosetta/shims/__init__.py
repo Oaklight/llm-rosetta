@@ -23,8 +23,10 @@ from .transforms import (
     strip_fields,
 )
 
-# Importing builtins triggers auto-registration of built-in shims.
-from . import builtins as _builtins  # noqa: F401
+# Scan provider directories and register shims from YAML + transforms.py.
+from .providers import load_providers as _load_providers
+
+_load_providers()
 
 __all__ = [
     "ModelShim",

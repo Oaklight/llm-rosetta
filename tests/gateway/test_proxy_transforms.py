@@ -99,18 +99,19 @@ class TestResolveTargetTransforms:
         assert "top_logprobs" not in result
         assert result["model"] == "test"
 
-    def test_shim_with_model_transforms(self, shim_with_model_transforms):
+    def test_shim_provider_level_only(self, shim_with_model_transforms):
+        """Model-level transforms are no longer merged; only provider-level."""
         from_t, to_t = _resolve_target_transforms("custom_provider", "special-v1")
-        # Provider from_transforms + no model from_transforms
-        assert len(from_t) == 1
-        # Provider to_transforms + model to_transforms
-        assert len(to_t) == 2
-
-    def test_shim_model_no_match(self, shim_with_model_transforms):
-        from_t, to_t = _resolve_target_transforms("custom_provider", "regular-model")
-        # Only provider-level transforms
+        # Only provider-level transforms (model shim lookup removed)
         assert len(from_t) == 1
         assert len(to_t) == 1
+
+    def test_shim_same_regardless_of_model(self, shim_with_model_transforms):
+        """Transforms are the same no matter which model name is passed."""
+        from_t1, to_t1 = _resolve_target_transforms("custom_provider", "special-v1")
+        from_t2, to_t2 = _resolve_target_transforms("custom_provider", "regular-model")
+        assert from_t1 == from_t2
+        assert to_t1 == to_t2
 
 
 # ---------------------------------------------------------------------------

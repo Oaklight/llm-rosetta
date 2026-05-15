@@ -10,6 +10,8 @@ from typing import Any, overload
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
+from llm_rosetta.shims import list_shims
+
 from ..config import GatewayConfig, load_config, load_config_raw, write_config
 from ..providers import known_provider_types
 from .static import load_admin_html
@@ -206,6 +208,9 @@ async def get_config(request: Any) -> Response:
             "models": models_normalized,
             "server": server,
             "known_provider_types": known_provider_types(),
+            "registered_shims": [
+                {"name": s.name, "base": s.base} for s in list_shims()
+            ],
         }
     )
 
