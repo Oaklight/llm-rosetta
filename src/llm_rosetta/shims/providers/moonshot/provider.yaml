@@ -1,0 +1,5 @@
+name: moonshot
+base: openai_chat
+default_base_url: https://api.moonshot.cn/v1
+default_api_key_env: MOONSHOT_API_KEY
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/moonshot.svg

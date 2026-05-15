@@ -83,22 +83,38 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all built-in shims."""
+        """Verify the real providers/ directory loads all 11 built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
-        assert names >= {
+        assert names == {
             "openai",
             "openai_responses",
             "anthropic",
             "google",
             "deepseek",
+            "minimax",
+            "moonshot",
+            "qwen",
             "volcengine",
+            "xai",
+            "zhipu",
         }
 
     def test_all_registered_after_load(self):
         """After load_providers, all shims are queryable via get_shim."""
         load_providers()
-        for name in ("openai", "anthropic", "google", "deepseek", "volcengine"):
+        for name in (
+            "openai",
+            "anthropic",
+            "google",
+            "deepseek",
+            "volcengine",
+            "xai",
+            "qwen",
+            "moonshot",
+            "minimax",
+            "zhipu",
+        ):
             shim = get_shim(name)
             assert shim is not None
             assert shim.name == name
@@ -125,7 +141,12 @@ class TestLoadProviders:
             "anthropic": "anthropic",
             "google": "google",
             "deepseek": "openai_chat",
+            "minimax": "openai_chat",
+            "moonshot": "openai_chat",
+            "qwen": "openai_chat",
             "volcengine": "openai_chat",
+            "xai": "openai_chat",
+            "zhipu": "openai_chat",
         }
         for name, base in expected.items():
             shim = get_shim(name)
