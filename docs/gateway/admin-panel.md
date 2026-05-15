@@ -20,10 +20,10 @@ Set a global proxy URL that applies to all providers unless overridden per-provi
 
 ### Providers
 
-Each provider card shows its name, API standard type, base URL, masked API key, and optional proxy. You can:
+Each provider card shows its name, API standard type (or shim name), base URL, masked API key, optional proxy, and provider logo. When a provider uses a [shim](../guide/shims.md), any active transforms (e.g. `strip_fields("logprobs")`) are also displayed on the card. You can:
 
 - **Add** a new provider with the "+ Add Provider" button
-- **Edit** an existing provider (name, type, base URL, API key, proxy)
+- **Edit** an existing provider (name, type/shim, base URL, API key, proxy)
 - **Rename** a provider — all model references are updated automatically
 - **Delete** a provider
 
