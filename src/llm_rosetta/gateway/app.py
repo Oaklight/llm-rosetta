@@ -210,18 +210,24 @@ async def handle_list_models(request: Any) -> Response:
     """List configured models in a format compatible with OpenAI and Anthropic SDKs."""
     assert _config is not None
     models = sorted(_config.models.keys())
-    data = [
-        {
-            "id": name,
-            "object": "model",
-            "created": 0,
-            "owned_by": _config.models[name],
-            "type": "model",
-            "display_name": name,
-            "created_at": "1970-01-01T00:00:00Z",
-        }
-        for name in models
-    ]
+    data = []
+    for name in models:
+        provider_name = _config.models[name]
+        api_standard = _config.provider_types.get(provider_name, "unknown")
+        capabilities = _config.model_capabilities.get(name, ["text"])
+        data.append(
+            {
+                "id": name,
+                "object": "model",
+                "created": 0,
+                "owned_by": provider_name,
+                "api_standard": api_standard,
+                "capabilities": capabilities,
+                "type": "model",
+                "display_name": name,
+                "created_at": "1970-01-01T00:00:00Z",
+            }
+        )
     return JSONResponse(
         {
             "object": "list",
