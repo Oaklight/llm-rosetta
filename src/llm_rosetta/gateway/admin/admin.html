@@ -607,9 +607,8 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <div class="fetch-models-list" id="fetchModelsList"></div>
       <div class="prefix-group">
         <label data-i18n="label.modelPrefix">Prefix:</label>
-        <input id="fetchPrefix" placeholder="e.g. myprefix/" oninput="updatePrefixPreview()">
+        <input id="fetchPrefix" placeholder="e.g. myprefix/">
       </div>
-      <div class="prefix-preview" id="prefixPreview"></div>
     </div>
     <div id="fetchModelsLoading" style="display:none;text-align:center;padding:20px;color:var(--text-dim)">
       Loading models...
@@ -1606,7 +1605,6 @@ function openFetchModelsModal() {
   document.getElementById('fetchModelsError').style.display = 'none';
   document.getElementById('fetchPrefix').value = '';
   document.getElementById('fetchModelSearch').value = '';
-  document.getElementById('prefixPreview').textContent = '';
   document.getElementById('fetchAddBtn').disabled = true;
   document.getElementById('fetchModelsModal').classList.add('open');
 }
@@ -1688,35 +1686,6 @@ function updateFetchCount() {
 }
 
 function updatePrefixPreview() {
-  const prefix = document.getElementById('fetchPrefix').value || '';
-  const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
-  const el = document.getElementById('prefixPreview');
-  if (checked.length === 0 || !prefix) {
-    el.textContent = '';
-    return;
-  }
-  // Show first 3 as preview
-  const names = [...checked].slice(0, 3).map(cb => prefix + cb.value);
-  el.textContent = names.join(', ') + (checked.length > 3 ? ', ...' : '');
-
-  // Update "exists" labels in-place without re-rendering (preserves check state)
-  const existingModels = configData.models || {};
-  document.querySelectorAll('#fetchModelsList input[type="checkbox"]').forEach(cb => {
-    const displayName = prefix ? prefix + cb.value : cb.value;
-    const exists = displayName in existingModels;
-    const label = cb.closest('label');
-    const existsSpan = label.querySelector('.exists-tag');
-    if (exists) {
-      label.style.opacity = '0.6';
-      cb.dataset.exists = 'true';
-      if (!cb.checked) cb.checked = true;
-      if (!existsSpan) label.insertAdjacentHTML('beforeend', ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>');
-    } else {
-      label.style.opacity = '';
-      delete cb.dataset.exists;
-      if (existsSpan) existsSpan.remove();
-    }
-  });
   updateFetchCount();
 }
 
