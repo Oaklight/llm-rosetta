@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, overload
 
-from llm_rosetta._vendor.httpclient import AsyncClient
+from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from llm_rosetta.shims import list_shims
@@ -983,7 +983,9 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
 
     try:
         client = AsyncClient(timeout=30.0, proxy=pinfo.proxy_url)
-        resp = await client.get(models_url, headers=headers)
+        raw_resp = await client.get(models_url, headers=headers)
+        assert isinstance(raw_resp, HttpResponse), "Expected non-streaming response"
+        resp: HttpResponse = raw_resp
         await client.aclose()
     except Exception as exc:
         logger.warning("Failed to fetch models from %s: %s", provider_name, exc)
