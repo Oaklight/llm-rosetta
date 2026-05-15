@@ -569,6 +569,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <select id="modelProvider"></select>
     </div>
     <div class="form-group">
+      <label data-i18n="label.upstreamModel">Upstream Model <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="modelUpstream" placeholder="e.g. claudeopus45 (leave blank if same as model name)">
+    </div>
+    <div class="form-group">
       <label data-i18n="label.capabilities">Capabilities</label>
       <div class="checkbox-group">
         <label><input type="checkbox" id="capText" checked onchange="onCapChange()"> text</label>
@@ -775,7 +779,7 @@ const I18N = {
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
-    'label.modelName':'Model Name', 'label.provider':'Provider', 'label.capabilities':'Capabilities',
+    'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
     'modal.addModel':'Add Model', 'modal.editModel':'Edit Model',
     'col.model':'Model', 'col.provider':'Provider', 'col.time':'Time',
@@ -864,7 +868,7 @@ const I18N = {
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
-    'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.capabilities':'\u80fd\u529b',
+    'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u5546', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u5546',
     'modal.addModel':'\u6dfb\u52a0\u6a21\u578b', 'modal.editModel':'\u7f16\u8f91\u6a21\u578b',
     'col.model':'\u6a21\u578b', 'col.provider':'\u670d\u52a1\u5546', 'col.time':'\u65f6\u95f4',
@@ -1184,10 +1188,11 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   }
 }
 
-function openModelModal(model, provider, capabilities) {
+function openModelModal(model, provider, capabilities, upstreamModel) {
   document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').dataset.originalName = model || '';
+  document.getElementById('modelUpstream').value = upstreamModel || '';
   // Populate provider dropdown from config
   const sel = document.getElementById('modelProvider');
   sel.innerHTML = '';
@@ -1399,8 +1404,10 @@ function renderModels() {
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
     const isEmbedding = caps.includes('embedding');
+    const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
+    const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
     return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
-      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code> ${capBadges}</td>
+      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag} ${capBadges}</td>
       <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         ${isEmbedding ? `<button class="btn btn-sm btn-test" style="border-radius:var(--radius);color:var(--orange);font-weight:600" onclick="runTest('${esc(name)}','embedding')">${t('btn.test')}</button>` : `<div class="test-group">
@@ -1552,6 +1559,8 @@ async function saveModel() {
   if (document.getElementById('capEmbedding').checked) capabilities.push('embedding');
   if (document.getElementById('capReasoning').checked) capabilities.push('reasoning');
   const body = {provider, capabilities};
+  const upstreamModel = document.getElementById('modelUpstream').value.trim();
+  if (upstreamModel) body.upstream_model = upstreamModel;
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {
     body.rename_from = originalName;
@@ -1571,7 +1580,8 @@ async function deleteModel(name) {
 function editModel(name, provider) {
   const info = configData.models[name];
   const caps = (typeof info === 'object' && info.capabilities) ? info.capabilities : ['text'];
-  openModelModal(name, provider, caps);
+  const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
+  openModelModal(name, provider, caps, upstream);
 }
 
 // ===================== Fetch Models from Provider =====================

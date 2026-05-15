@@ -31,6 +31,10 @@ class ProviderShim:
         default_api_key_env: Default environment variable name for the
             API key (e.g. ``"DEEPSEEK_API_KEY"``).
         logo: URL to the provider's logo image (SVG preferred).
+        model_id_field: JSON field name to use as model identifier when
+            fetching the upstream model list.  Defaults to ``"id"``
+            when ``None``.  Useful for providers like Argo that place
+            the actual model identifier in a non-standard field.
         from_transforms: Transforms applied when data comes FROM this
             provider (normalise dialect → standard).
         to_transforms: Transforms applied when data goes TO this
@@ -42,6 +46,7 @@ class ProviderShim:
     default_base_url: str | None = None
     default_api_key_env: str | None = None
     logo: str | None = None
+    model_id_field: str | None = None
     from_transforms: tuple[Transform, ...] = ()
     to_transforms: tuple[Transform, ...] = ()
 

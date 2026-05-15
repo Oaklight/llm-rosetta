@@ -150,10 +150,12 @@ class GatewayConfig:
         # Parse models — supports both string and dict formats:
         #   "model": "provider"                     (legacy)
         #   "model": {"provider": "p", "capabilities": ["text", "vision"]}
+        #   "model": {"provider": "p", "upstream_model": "actual_model_name"}
         # Models referencing disabled providers are silently skipped.
         raw_models = raw.get("models", {})
         self.models: dict[str, ProviderType] = {}
         self.model_capabilities: dict[str, list[str]] = {}
+        self.model_upstream_names: dict[str, str] = {}
         for name, value in raw_models.items():
             if isinstance(value, str):
                 provider_name = value
@@ -174,6 +176,9 @@ class GatewayConfig:
                 self.model_capabilities[name] = value.get(
                     "capabilities", list(self.DEFAULT_CAPABILITIES)
                 )
+                upstream = value.get("upstream_model")
+                if upstream:
+                    self.model_upstream_names[name] = upstream
 
         _server = raw.get("server", {})
         self.host: str = _server.get("host", "0.0.0.0")
@@ -243,8 +248,10 @@ class GatewayConfig:
         """First configured key (for backward-compat middleware init)."""
         return self.api_keys[0]["key"] if self.api_keys else None
 
-    def resolve_model(self, model: str) -> tuple[str, ProviderInfo, str | None]:
-        """Return (provider_type, provider_info, shim_name) for a model name.
+    def resolve_model(
+        self, model: str
+    ) -> tuple[str, ProviderInfo, str | None, str | None]:
+        """Return (provider_type, provider_info, shim_name, upstream_model).
 
         ``provider_type`` is the API standard (e.g. ``"openai_chat"``),
         resolved from the provider's ``type`` field or its name as fallback.
@@ -252,9 +259,15 @@ class GatewayConfig:
         ``shim_name`` is the original shim/type identifier before base
         resolution (e.g. ``"volcengine"``), used for transform lookup.
 
+        ``upstream_model`` is the actual model identifier to send to the
+        upstream provider, or ``None`` when the gateway model name is used
+        as-is.  This enables model aliasing — e.g. gateway name
+        ``"argo:claude-opus-4.5"`` mapping to upstream ``"claudeopus45"``.
+
         Raises KeyError if the model is not in the routing table.
         """
         provider_name = self.models[model]
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
-        return provider_type, self.providers[provider_name], shim_name
+        upstream_model = self.model_upstream_names.get(model)
+        return provider_type, self.providers[provider_name], shim_name, upstream_model

@@ -83,10 +83,12 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 12 built-in shims."""
+        """Verify the real providers/ directory loads all 14 built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
         assert names == {
+            "argo_anthropic",
+            "argo_openai_chat",
             "openai",
             "openai_responses",
             "openrouter",
@@ -266,10 +268,15 @@ class TestLoadProviders:
                 f"{name}: expected base={base!r}, got {shim.base!r}"
             )
 
+    # Shims that intentionally have no public logo
+    _LOGO_EXEMPT = {"argo_anthropic", "argo_openai_chat"}
+
     def test_all_shims_have_logos(self):
-        """Every built-in shim should have a logo URL set."""
+        """Every built-in shim (except exempted ones) should have a logo URL."""
         shims = load_providers()
         for shim in shims:
+            if shim.name in self._LOGO_EXEMPT:
+                continue
             assert shim.logo is not None, f"Shim {shim.name!r} missing logo"
             assert shim.logo.startswith("https://"), (
                 f"Shim {shim.name!r} logo should be an HTTPS URL"

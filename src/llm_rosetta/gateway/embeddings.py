@@ -65,7 +65,7 @@ async def handle_embeddings(
 
     # --- Resolve provider ---
     try:
-        _, provider_info, _ = config.resolve_model(model)
+        _, provider_info, _, _ = config.resolve_model(model)
     except KeyError:
         configured = ", ".join(sorted(config.models.keys()))
         return JSONResponse(

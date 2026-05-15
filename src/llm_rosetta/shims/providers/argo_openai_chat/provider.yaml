@@ -1,0 +1,4 @@
+name: argo_openai_chat
+base: openai_chat
+default_base_url: https://apps.inside.anl.gov/argoapi/
+model_id_field: internal_id

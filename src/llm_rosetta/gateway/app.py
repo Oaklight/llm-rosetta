@@ -65,8 +65,8 @@ async def _proxy_handler(
 
     # Resolve target provider
     try:
-        target_provider_str, provider_info, target_shim_name = _config.resolve_model(
-            model
+        target_provider_str, provider_info, target_shim_name, upstream_model = (
+            _config.resolve_model(model)
         )
         target_provider = cast(ProviderType, target_provider_str)
     except KeyError:
@@ -77,14 +77,21 @@ async def _proxy_handler(
             f"Unknown model: '{model}'. Configured models: {configured}",
         )
 
+    # Model alias: replace the model name in the request body with the
+    # actual upstream identifier so the converter and upstream provider
+    # both see the correct name.
+    if upstream_model:
+        body["model"] = upstream_model
+
     # Determine streaming
     is_stream = force_stream or detect_stream_request(source_provider, body)
 
+    model_label = f"{model} (upstream={upstream_model})" if upstream_model else model
     logger.info(
         "%s -> %s | model=%s stream=%s",
         source_provider,
         target_provider,
-        model,
+        model_label,
         is_stream,
     )
 

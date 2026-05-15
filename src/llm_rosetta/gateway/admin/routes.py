@@ -220,10 +220,13 @@ async def get_config(request: Any) -> Response:
         if isinstance(value, str):
             models_normalized[name] = {"provider": value, "capabilities": ["text"]}
         elif isinstance(value, dict):
-            models_normalized[name] = {
+            entry = {
                 "provider": value.get("provider", ""),
                 "capabilities": value.get("capabilities", ["text"]),
             }
+            if value.get("upstream_model"):
+                entry["upstream_model"] = value["upstream_model"]
+            models_normalized[name] = entry
 
     # Mask api_keys in server section for the response
     server = dict(raw.get("server", {}))
@@ -494,10 +497,14 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
             )
         del models[rename_from]
 
-    data.setdefault("models", {})[name] = {
+    model_entry: dict[str, Any] = {
         "provider": provider,
         "capabilities": capabilities,
     }
+    upstream_model = body.get("upstream_model")
+    if upstream_model:
+        model_entry["upstream_model"] = upstream_model
+    data.setdefault("models", {})[name] = model_entry
 
     try:
         write_config(config_path, data)
@@ -1067,6 +1074,13 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             status_code=502,
         )
 
+    # Resolve model_id_field from shim (e.g. Argo uses "internal_id")
+    from llm_rosetta.shims import get_shim
+
+    shim_name = config.provider_shim_names.get(provider_name)
+    shim = get_shim(shim_name) if shim_name else None
+    id_field = shim.model_id_field if shim and shim.model_id_field else None
+
     # Normalize response — different providers return different formats
     model_ids: list[str] = []
     if ptype == "google":
@@ -1075,17 +1089,21 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             name = m.get("name", "")
             if name.startswith("models/"):
                 name = name[len("models/") :]
+            if id_field:
+                name = m.get(id_field, name)
             model_ids.append(name)
     elif ptype == "anthropic":
         # Anthropic: {"data": [{"id": "claude-...", ...}]}
         for m in body.get("data", []):
-            model_ids.append(m.get("id", ""))
+            model_ids.append(
+                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
+            )
     else:
         # OpenAI-compatible: {"data": [{"id": "gpt-...", ...}]}
-        # Prefer internal_id over id when available (e.g. Argo uses
-        # display names in id but the actual model identifier in internal_id)
         for m in body.get("data", []):
-            model_ids.append(m.get("internal_id") or m.get("id", ""))
+            model_ids.append(
+                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
+            )
 
     model_ids = [m for m in model_ids if m]
     model_ids.sort()
@@ -1141,10 +1159,16 @@ async def bulk_add_models(request: Any) -> Response:
         if display_name in models_section:
             skipped.append(display_name)
             continue
-        models_section[display_name] = {
+        entry: dict[str, Any] = {
             "provider": provider,
             "capabilities": capabilities,
         }
+        # When a prefix is used, the gateway name differs from the
+        # upstream model id — store the original as upstream_model so the
+        # proxy handler can substitute it before forwarding.
+        if prefix:
+            entry["upstream_model"] = model_id
+        models_section[display_name] = entry
         added.append(display_name)
 
     if not added:

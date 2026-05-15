@@ -63,6 +63,7 @@ def load_providers() -> list[ProviderShim]:
             default_base_url=cfg.get("default_base_url"),
             default_api_key_env=cfg.get("default_api_key_env"),
             logo=cfg.get("logo"),
+            model_id_field=cfg.get("model_id_field"),
             from_transforms=from_t,
             to_transforms=to_t,
         )
