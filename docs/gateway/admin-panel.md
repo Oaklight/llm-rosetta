@@ -31,25 +31,42 @@ When editing, API keys are shown as a password field with a visibility toggle an
 
 ### Model Routing
 
-Below the providers section, a model routing table lists all configured models with their target provider and capabilities (text, vision, tools). You can:
+Below the providers section, a model routing table lists all configured models with their target provider and capabilities. You can:
 
-- **Search** models by name using the search box
+- **Search** models by name or **filter** by provider using the dropdown
 - **Sort** by model name or provider by clicking column headers
 - **Add** a new model with provider assignment
+- **Fetch from Provider** — query the upstream `/v1/models` endpoint, browse available models with checkboxes, and bulk-add with optional prefix
 - **Edit** model capabilities inline
 - **Delete** a model routing entry
-- **Test** a model directly from the admin panel (text, vision, streaming, or tool calling)
+- **Test** a model directly from the admin panel
+
+### Model Capabilities
+
+Each model can declare capabilities that determine available test types and are returned in the `/v1/models` response:
+
+| Capability | Description | Badge Color |
+|------------|-------------|-------------|
+| `text` | Text generation | Blue |
+| `vision` | Image comprehension | Green |
+| `tools` | Function/tool calling | Orange |
+| `embedding` | Text embeddings (mutually exclusive with vision/tools) | Teal |
+| `reasoning` | Extended thinking / chain-of-thought (mutually exclusive with embedding) | Purple |
 
 ### Model Testing
 
-Click the **Test** button on any model row to run a quick test. The test dropdown offers:
+Click the **Test** button on any model row to run a quick test. The available test types depend on the model's declared capabilities:
 
-| Test Type | Description |
-|-----------|-------------|
-| Text | Simple text query |
-| Vision | Image comprehension (embedded test image) |
-| Stream | Streaming text response |
-| Tools | Function calling with a weather tool |
+| Test Type | Description | Requires |
+|-----------|-------------|----------|
+| Text | Simple text query | `text` |
+| Vision | Image comprehension (embedded test image) | `vision` |
+| Stream | Streaming text response | `text` |
+| Tools | Function calling with a weather tool | `tools` |
+| Embedding | POST to `/v1/embeddings`, displays dimension count | `embedding` |
+| Reasoning | Text query with `reasoning_effort: "low"` | `reasoning` |
+
+Embedding models show a single Test button (no dropdown) since only one test type applies.
 
 Test results show the extracted model reply in the main output area, with collapsible sections for the raw request payload, raw response body, and (for vision tests) the test image preview.
 

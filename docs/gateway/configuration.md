@@ -137,7 +137,7 @@ Models can optionally declare capabilities using the dict format:
 }
 ```
 
-Available capabilities: `text`, `vision`, `tools`. If not specified, defaults to `["text"]`.
+Available capabilities: `text`, `vision`, `tools`, `embedding`, `reasoning`. If not specified, defaults to `["text"]`. Note that `embedding` is mutually exclusive with `vision`/`tools`, and `reasoning` is mutually exclusive with `embedding`.
 
 Capabilities are displayed in the [admin panel](admin-panel.md) and can be edited there.
 

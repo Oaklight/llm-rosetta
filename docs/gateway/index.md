@@ -99,9 +99,10 @@ curl http://localhost:8765/v1/messages \
 | `POST /v1/chat/completions` | OpenAI Chat | Drop-in for OpenAI SDK |
 | `POST /v1/messages` | Anthropic | Drop-in for Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | Drop-in for OpenAI Responses SDK |
+| `POST /v1/embeddings` | OpenAI Embeddings | Passthrough to upstream (no IR conversion) |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | Drop-in for Google REST API |
 | `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI (streaming) | Drop-in for Google streaming |
-| `GET /v1/models` | OpenAI / Anthropic | List configured models (compatible with both SDKs) |
+| `GET /v1/models` | OpenAI / Anthropic | List configured models with `api_standard` and `capabilities` |
 | `GET /v1beta/models` | Google GenAI | List configured models (Google SDK format) |
 | `GET /health` | — | Health check |
 | `GET /admin/` | — | [Admin panel](admin-panel.md) (web UI) |
