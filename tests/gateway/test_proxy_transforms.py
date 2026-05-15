@@ -136,7 +136,7 @@ class TestNonStreamingTransforms:
         captured_body = {}
 
         async def mock_post(url, json=None, headers=None, **kwargs):
-            captured_body.update(json)
+            captured_body.update(json or {})
             return _make_mock_response(
                 200,
                 {
@@ -180,7 +180,7 @@ class TestNonStreamingTransforms:
         captured_body = {}
 
         async def mock_post(url, json=None, headers=None, **kwargs):
-            captured_body.update(json)
+            captured_body.update(json or {})
             return _make_mock_response(
                 200,
                 {
