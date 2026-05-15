@@ -22,8 +22,32 @@ title: 配置
 
 可用类型：`openai_chat`、`openai_responses`、`anthropic`、`google`。
 
+### 使用 Shim
+
+除了 `type`，还可以使用 `shim` 字段引用已注册的提供商 shim。Shim 是一个轻量级身份卡片，声明了提供商使用的基础 API 标准、连接默认值和字段级转换规则。
+
+```jsonc
+"providers": {
+  "my-deepseek":   { "shim": "deepseek",   "api_key": "${DEEPSEEK_API_KEY}" },
+  "my-volcengine": { "shim": "volcengine",  "api_key": "${VOLCENGINE_API_KEY}", "base_url": "https://ark.cn-beijing.volces.com/api/v3" }
+}
+```
+
+指定 `shim` 时：
+
+- **基础类型**会自动解析（如 `deepseek` → `openai_chat`）
+- 如果配置中未设置，会从 shim 填充默认的 **`base_url`** 和 **`api_key` 环境变量**
+- 请求/响应转换时会应用**字段级转换**（如 Volcengine 的 shim 会剥离其 API 不支持的 `logprobs` 和 `top_logprobs` 字段）
+
+内置 shim：`openai`、`openai_responses`、`anthropic`、`google`、`deepseek`、`volcengine`。
+
+也可以通过 `register_shim()` 以编程方式注册自定义 shim。
+
+!!! tip "解析优先级"
+    提供商类型解析顺序为：`shim` → `type` → 提供商名称（兜底）。
+
 !!! note "向后兼容"
-    如果省略 `type`，提供商名称本身将用作类型。这意味着使用旧格式（提供商名称为 `openai_chat`、`anthropic` 等）的配置无需修改即可继续使用。
+    如果 `shim` 和 `type` 都省略，提供商名称本身将用作类型。这意味着使用旧格式（提供商名称为 `openai_chat`、`anthropic` 等）的配置无需修改即可继续使用。
 
 ### 启用 / 禁用提供商
 
@@ -171,12 +195,16 @@ API Key 也支持 `${ENV_VAR}` 替换：
     "openai-prod":    { "type": "openai_chat",      "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
     "openai-resp":    { "type": "openai_responses",  "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
     "anthropic-prod": { "type": "anthropic",         "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
-    "google-prod":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" }
+    "google-prod":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" },
+    // 基于 Shim 的提供商 — base_url 和 transforms 自动解析
+    "deepseek":       { "shim": "deepseek",          "api_key": "${DEEPSEEK_API_KEY}" },
+    "volcengine":     { "shim": "volcengine",         "api_key": "${VOLCENGINE_API_KEY}", "base_url": "https://ark.cn-beijing.volces.com/api/v3" }
   },
   "models": {
     "gpt-4o":                     { "provider": "openai-prod",    "capabilities": ["text", "vision", "tools"] },
     "claude-sonnet-4-20250514":   { "provider": "anthropic-prod", "capabilities": ["text", "vision", "tools"] },
-    "gemini-2.0-flash":           { "provider": "google-prod",    "capabilities": ["text", "tools"] }
+    "gemini-2.0-flash":           { "provider": "google-prod",    "capabilities": ["text", "tools"] },
+    "deepseek-r1":                { "provider": "deepseek",       "capabilities": ["text", "tools"] }
   },
   "server": {
     "host": "0.0.0.0",
