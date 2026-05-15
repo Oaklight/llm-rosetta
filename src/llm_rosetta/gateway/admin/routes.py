@@ -1082,8 +1082,10 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             model_ids.append(m.get("id", ""))
     else:
         # OpenAI-compatible: {"data": [{"id": "gpt-...", ...}]}
+        # Prefer internal_id over id when available (e.g. Argo uses
+        # display names in id but the actual model identifier in internal_id)
         for m in body.get("data", []):
-            model_ids.append(m.get("id", ""))
+            model_ids.append(m.get("internal_id") or m.get("id", ""))
 
     model_ids = [m for m in model_ids if m]
     model_ids.sort()

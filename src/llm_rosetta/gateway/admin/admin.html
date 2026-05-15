@@ -1646,7 +1646,7 @@ function renderFetchedModels() {
     const exists = displayName in existingModels;
     return `<label${exists ? ' style="opacity:0.6"' : ''}>
       <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' checked data-exists="true"' : ''}>
-      <span>${esc(m)}</span>${exists ? ' <span style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
+      <span>${esc(m)}</span>${exists ? ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
     </label>`;
   }).join('');
 
@@ -1689,8 +1689,25 @@ function updatePrefixPreview() {
   const names = [...checked].slice(0, 3).map(cb => prefix + cb.value);
   el.textContent = names.join(', ') + (checked.length > 3 ? ', ...' : '');
 
-  // Re-render to update "exists" state based on new prefix
-  renderFetchedModels();
+  // Update "exists" labels in-place without re-rendering (preserves check state)
+  const existingModels = configData.models || {};
+  document.querySelectorAll('#fetchModelsList input[type="checkbox"]').forEach(cb => {
+    const displayName = prefix ? prefix + cb.value : cb.value;
+    const exists = displayName in existingModels;
+    const label = cb.closest('label');
+    const existsSpan = label.querySelector('.exists-tag');
+    if (exists) {
+      label.style.opacity = '0.6';
+      cb.dataset.exists = 'true';
+      if (!cb.checked) cb.checked = true;
+      if (!existsSpan) label.insertAdjacentHTML('beforeend', ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>');
+    } else {
+      label.style.opacity = '';
+      delete cb.dataset.exists;
+      if (existsSpan) existsSpan.remove();
+    }
+  });
+  updateFetchCount();
 }
 
 async function bulkAddFetchedModels() {
