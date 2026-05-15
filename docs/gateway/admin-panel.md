@@ -20,10 +20,10 @@ title: 管理面板
 
 ### 提供商管理
 
-每个提供商卡片显示名称、API 标准类型、Base URL、脱敏后的 API Key 以及可选代理。支持以下操作：
+每个提供商卡片显示名称、API 标准类型、Base URL、脱敏后的 API Key、可选代理，以及**提供商 Logo**（如果在提供商 shim 中声明）。当提供商配置的 shim 包含 `to_transforms` 或 `from_transforms` 时，活跃的转换规则会显示在卡片上。支持以下操作：
 
 - **添加**新提供商（"+ Add Provider" 按钮）
-- **编辑**现有提供商（名称、类型、Base URL、API Key、代理）
+- **编辑**现有提供商（名称、类型/shim、Base URL、API Key、代理）
 - **重命名**提供商——所有关联模型引用自动更新
 - **删除**提供商
 

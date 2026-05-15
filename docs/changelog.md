@@ -10,11 +10,21 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ### 新增
 
+- **声明式 YAML 提供商 Shim 目录**：Shim 现在以 `provider.yaml` + 可选 `transforms.py` 文件定义在 `shims/providers/<name>/` 下，导入时自动发现并注册
+- **提供商字段转换机制**：三个可组合的原语 —— `strip_fields()`、`rename_field()`、`set_defaults()` —— 处理提供商 API 方言与其基础标准之间的字段级差异
+- **7 个新内置提供商 shim**：xAI (Grok)、Qwen（通义千问/DashScope）、Moonshot（月之暗面/Kimi）、MiniMax、Zhipu（智谱 GLM）、OpenRouter、火山引擎 —— 各自附带提供商特定的转换规则
+- **网关代理应用 Shim 转换规则**：网关请求/响应管线现在对出站请求应用 `to_transforms`，对入站响应和流式 chunk 应用 `from_transforms`
+- **管理面板显示提供商 Logo**：提供商 shim 可声明 `logo` URL（SVG），在管理面板提供商卡片中显示
 - **恢复 SOCKS5 代理支持**：将内嵌的 `httpclient` 从 zerodep v0.3.1 更新至 v0.4.0，包含完整的 SOCKS5 代理支持（RFC 1928/1929，支持用户名/密码认证）。`--proxy socks5://...` CLI 参数和配置文件中的 `"proxy": "socks5://..."` 现可用于所有上游请求
 
 ### 变更
 
+- **Shim 系统重构为声明式 YAML**：将编程式 `builtins.py` 替换为基于目录的系统（`shims/providers/*/provider.yaml` + `transforms.py`）。添加新提供商现在只需 YAML + 可选 Python，无需修改核心代码
 - **内嵌 `validate` 更新至 zerodep v0.5.0**：新增 `FieldValidator` 和 `model_validator`，支持字段级别的转换+校验管道
+
+### 移除
+
+- **`ModelShim` 类已移除**：模型级元数据已移除，改为更简洁的仅提供商级 shim。`ProviderShim` 数据类不再包含 `models` 字段
 
 ### 重构
 

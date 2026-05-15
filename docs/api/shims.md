@@ -4,7 +4,7 @@ title: Shims
 
 # Shims API
 
-::: llm_rosetta.shims.provider_shim.ModelShim
+## Provider Shim
 
 ::: llm_rosetta.shims.provider_shim.ProviderShim
 
@@ -17,3 +17,15 @@ title: Shims
 ::: llm_rosetta.shims.provider_shim.list_shims
 
 ::: llm_rosetta.shims.provider_shim.resolve_base
+
+## Transforms
+
+::: llm_rosetta.shims.transforms.Transform
+
+::: llm_rosetta.shims.transforms.apply_transforms
+
+::: llm_rosetta.shims.transforms.strip_fields
+
+::: llm_rosetta.shims.transforms.rename_field
+
+::: llm_rosetta.shims.transforms.set_defaults
