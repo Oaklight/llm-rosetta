@@ -179,6 +179,8 @@ class GatewayConfig:
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)
         self.proxy: str | None = _server.get("proxy")
+        self.credential_visible: bool = _server.get("credential_visible", True)
+        self.admin_password: str | None = _server.get("admin_password")
 
         # Multi-key auth: server.api_keys takes precedence over server.api_key
         self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])

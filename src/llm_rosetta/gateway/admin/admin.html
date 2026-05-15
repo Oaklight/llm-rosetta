@@ -317,6 +317,28 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .prefix-group input { flex:1;max-width:240px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
 .prefix-preview { font-size:12px;color:var(--text-dim);margin:4px 0 8px 0;font-family:var(--mono); }
 
+/* Login overlay */
+.login-overlay {
+  position:fixed;inset:0;background:var(--bg);z-index:9999;
+  display:flex;align-items:center;justify-content:center;
+}
+.login-box {
+  background:var(--bg-card);border:1px solid var(--border);border-radius:8px;
+  padding:32px;width:320px;text-align:center;
+}
+.login-box h2 { margin:0 0 6px;font-size:18px; }
+.login-box .login-subtitle { color:var(--text-dim);font-size:13px;margin-bottom:20px; }
+.login-box input {
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius);
+  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;
+}
+.login-box .login-error { color:#cf222e;font-size:12px;margin-top:8px;min-height:16px; }
+.login-box button {
+  margin-top:16px;width:100%;padding:10px;border:none;border-radius:var(--radius);
+  background:var(--accent);color:#fff;font-size:14px;cursor:pointer;
+}
+.login-box button:hover { background:var(--accent-hover); }
+
 /* Responsive */
 @media (max-width: 768px) {
   .chart-row { grid-template-columns: 1fr; }
@@ -326,6 +348,18 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 </style>
 </head>
 <body>
+
+<!-- Login overlay (shown when admin_password is configured) -->
+<div class="login-overlay" id="loginOverlay" style="display:none">
+  <div class="login-box">
+    <h2>llm-rosetta <span style="font-weight:400;color:var(--text-dim)">gateway</span></h2>
+    <div class="login-subtitle" data-i18n="login.subtitle">Admin panel is password-protected</div>
+    <input id="loginPassword" type="password" placeholder="Password" autofocus
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-error" id="loginError"></div>
+    <button onclick="doLogin()" data-i18n="login.btn">Login</button>
+  </div>
+</div>
 
 <div class="header">
   <div>
@@ -507,8 +541,8 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <label data-i18n="label.apiKey">API Key (or ${ENV_VAR} placeholder)</label>
       <div style="display:flex;gap:4px;align-items:center">
         <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1">
-        <button type="button" class="key-btn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        <button type="button" class="key-btn" title="Copy" onclick="copyModalKey()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       </div>
     </div>
     <div class="form-group">
@@ -537,7 +571,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     <div class="form-group">
       <label data-i18n="label.capabilities">Capabilities</label>
       <div class="checkbox-group">
-        <label><input type="checkbox" id="capText" checked disabled> text</label>
+        <label><input type="checkbox" id="capText" checked onchange="onCapChange()"> text</label>
         <label><input type="checkbox" id="capVision" checked onchange="onCapChange()"> vision</label>
         <label><input type="checkbox" id="capTools" checked onchange="onCapChange()"> tools</label>
         <label><input type="checkbox" id="capEmbedding" onchange="onCapChange()"> embedding</label>
@@ -576,10 +610,28 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     <div id="fetchModelsLoading" style="display:none;text-align:center;padding:20px;color:var(--text-dim)">
       Loading models...
     </div>
-    <div id="fetchModelsError" style="display:none;color:var(--danger);padding:8px 0;font-size:13px"></div>
+    <div id="fetchModelsError" style="display:none;color:#cf222e;padding:8px 0;font-size:13px"></div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('fetchModelsModal')" data-i18n="btn.cancel">Cancel</button>
-      <button class="btn btn-primary" id="fetchAddBtn" onclick="bulkAddFetchedModels()" disabled data-i18n="btn.addSelected">Add Selected</button>
+      <button class="btn btn-primary" id="fetchAddBtn" onclick="bulkAddFetchedModels()" disabled data-i18n="btn.applyChanges">Apply Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal-overlay" id="deleteConfirmModal">
+  <div class="modal">
+    <h3 data-i18n="confirm.deleteProviderTitle">Delete Provider</h3>
+    <p id="deleteConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
+    <div id="deleteAffectedModels" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;max-height:120px;overflow-y:auto"></div>
+    <div class="form-group">
+      <input id="deleteConfirmInput" autocomplete="off" spellcheck="false"
+        oninput="onDeleteConfirmInput()" style="font-family:monospace">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('deleteConfirmModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn" id="deleteConfirmBtn" onclick="onDeleteConfirmClick()" disabled
+        style="background:#ccc;color:#888;cursor:not-allowed" data-i18n="btn.delete">Delete</button>
     </div>
   </div>
 </div>
@@ -747,6 +799,9 @@ const I18N = {
     'toast.modelDeleted':"Model '{name}' deleted",
     'toast.logCleared':'Logs cleared',
     'confirm.deleteProvider':"Delete provider '{name}'?",
+    'confirm.deleteProviderTitle':'Delete Provider',
+    'confirm.typeToConfirm':"To confirm, type {name} below",
+    'confirm.cascadeWarning':'{count} model(s) will also be deleted:',
     'confirm.deleteModel':"Delete model '{name}'?",
     'confirm.clearLogs':'Clear all request logs?',
     'error.fieldsRequired':'Name, Base URL, and API Key are required',
@@ -787,7 +842,12 @@ const I18N = {
     'fetch.count':'{checked} / {total} selected',
     'fetch.noModels':'No models found from this provider.',
     'toast.modelsAdded':'{count} model(s) added',
+    'toast.modelsRemoved':'{count} model(s) removed',
     'toast.modelsAllExist':'All selected models already exist',
+    'btn.applyChanges':'Apply Changes',
+    'login.subtitle':'Admin panel is password-protected',
+    'login.btn':'Login',
+    'login.error':'Invalid password',
   },
   zh: {
     'tab.providers':'\u670d\u52a1\u5546', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
@@ -828,6 +888,9 @@ const I18N = {
     'toast.modelDeleted':"\u6a21\u578b '{name}' \u5df2\u5220\u9664",
     'toast.logCleared':'\u65e5\u5fd7\u5df2\u6e05\u9664',
     'confirm.deleteProvider':"\u786e\u5b9a\u5220\u9664\u670d\u52a1\u5546 '{name}'\uff1f",
+    'confirm.deleteProviderTitle':'\u5220\u9664\u670d\u52a1\u5546',
+    'confirm.typeToConfirm':"\u8bf7\u8f93\u5165 {name} \u4ee5\u786e\u8ba4\u5220\u9664",
+    'confirm.cascadeWarning':'\u4ee5\u4e0b {count} \u4e2a\u6a21\u578b\u4e5f\u5c06\u88ab\u5220\u9664\uff1a',
     'confirm.deleteModel':"\u786e\u5b9a\u5220\u9664\u6a21\u578b '{name}'\uff1f",
     'confirm.clearLogs':'\u786e\u5b9a\u6e05\u9664\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\uff1f',
     'error.fieldsRequired':'\u540d\u79f0\u3001Base URL \u548c API Key \u4e3a\u5fc5\u586b\u9879',
@@ -868,7 +931,12 @@ const I18N = {
     'fetch.count':'{checked} / {total} \u5df2\u9009',
     'fetch.noModels':'\u672a\u4ece\u8be5\u670d\u52a1\u5546\u627e\u5230\u6a21\u578b\u3002',
     'toast.modelsAdded':'\u5df2\u6dfb\u52a0 {count} \u4e2a\u6a21\u578b',
+    'toast.modelsRemoved':'\u5df2\u79fb\u9664 {count} \u4e2a\u6a21\u578b',
     'toast.modelsAllExist':'\u6240\u6709\u5df2\u9009\u6a21\u578b\u5747\u5df2\u5b58\u5728',
+    'btn.applyChanges':'\u5e94\u7528\u66f4\u6539',
+    'login.subtitle':'Admin \u9762\u677f\u5df2\u542f\u7528\u5bc6\u7801\u4fdd\u62a4',
+    'login.btn':'\u767b\u5f55',
+    'login.error':'\u5bc6\u7801\u9519\u8bef',
   },
 };
 
@@ -907,37 +975,107 @@ function applyI18n() {
 // ===================== State =====================
 let currentTab = localStorage.getItem('llm-rosetta-tab') || 'providers';
 let configData = null;
+let _credentialVisible = true;
 let keysData = null;
 let internalToken = null;
 let logOffset = 0;
 const LOG_LIMIT = 30;
 let dashboardTimer = null;
 let logTimer = null;
+const expandedLogRows = new Set();  // track expanded error detail rows by timestamp
 
 // Apply saved theme now that state vars are declared
 setTheme(currentTheme);
 
 // ===================== API =====================
+function _adminHeaders(extra) {
+  const h = extra ? {...extra} : {};
+  const token = sessionStorage.getItem('admin_token');
+  if (token) h['X-Admin-Token'] = token;
+  return h;
+}
+
 const api = {
   async get(url) {
-    const r = await fetch(url);
+    const r = await fetch(url, {headers: _adminHeaders()});
+    if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
     return r.json();
   },
   async put(url, body) {
-    const r = await fetch(url, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body)});
+    if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
     return r.json();
   },
   async del(url) {
-    const r = await fetch(url, {method:'DELETE'});
+    const r = await fetch(url, {method:'DELETE', headers: _adminHeaders()});
+    if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
     return r.json();
   },
   async post(url, body) {
-    const opts = {method:'POST'};
-    if (body !== undefined) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(body); }
+    const h = body !== undefined ? _adminHeaders({'Content-Type':'application/json'}) : _adminHeaders();
+    const opts = {method:'POST', headers: h};
+    if (body !== undefined) opts.body = JSON.stringify(body);
     const r = await fetch(url, opts);
+    if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
     return r.json();
   }
 };
+
+function showLoginOverlay() {
+  sessionStorage.removeItem('admin_token');
+  document.getElementById('loginOverlay').style.display = 'flex';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
+  document.getElementById('loginPassword').focus();
+}
+
+async function doLogin() {
+  const pw = document.getElementById('loginPassword').value;
+  if (!pw) return;
+  try {
+    const r = await fetch('/admin/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({password: pw}),
+    });
+    const data = await r.json();
+    if (r.ok && data.token) {
+      sessionStorage.setItem('admin_token', data.token);
+      document.getElementById('loginOverlay').style.display = 'none';
+      initApp();
+    } else {
+      document.getElementById('loginError').textContent = t('login.error');
+    }
+  } catch(e) {
+    document.getElementById('loginError').textContent = String(e);
+  }
+}
+
+async function checkAuthAndInit() {
+  try {
+    const r = await fetch('/admin/api/auth-check');
+    const data = await r.json();
+    if (data.requires_auth) {
+      // Check if we have a valid stored token
+      const token = sessionStorage.getItem('admin_token');
+      if (token) {
+        // Verify token by trying to load config
+        const test = await fetch('/admin/api/config', {headers: {'X-Admin-Token': token}});
+        if (test.status === 401) {
+          showLoginOverlay();
+          return;
+        }
+      } else {
+        showLoginOverlay();
+        return;
+      }
+    }
+    initApp();
+  } catch(e) {
+    console.error('Auth check failed:', e);
+    initApp(); // fallback: try to load anyway
+  }
+}
 
 // ===================== Copy Helper =====================
 async function copyText(text, toastMsg) {
@@ -1006,19 +1144,18 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   _updateTypeLogo();
 
   // Auto-fill base URL and API key placeholder when selecting a type
-  const _initialType = provType || '';
+  let _prevShimUrl = (shimMap[provType || ''] || {}).default_base_url || '';
   typeSel.onchange = () => {
     _updateTypeLogo();
     const s = shimMap[typeSel.value];
     if (!s) return;
     const urlInput = document.getElementById('provBaseUrl');
-    // When the type actually changed, replace base URL with the new shim's default
-    // (user can still manually edit it afterwards)
-    if (s.default_base_url && typeSel.value !== _initialType) {
-      urlInput.value = s.default_base_url;
-    } else if (!urlInput.value && s.default_base_url) {
+    const cur = urlInput.value.trim();
+    // Only auto-fill when the field is empty or still matches the previous shim's default
+    if (s.default_base_url && (!cur || cur === _prevShimUrl)) {
       urlInput.value = s.default_base_url;
     }
+    _prevShimUrl = s.default_base_url || '';
     const keyInput = document.getElementById('provApiKey');
     if (!keyInput.value && s.default_api_key_env) keyInput.value = '${' + s.default_api_key_env + '}';
   };
@@ -1027,10 +1164,20 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   const keyInput = document.getElementById('provApiKey');
   keyInput.value = apiKey || '';
   keyInput.type = 'password';
+  // Hide eye/copy buttons when credential visibility is off
+  document.getElementById('provKeyToggleBtn').style.display = _credentialVisible ? '' : 'none';
+  document.getElementById('provKeyCopyBtn').style.display = _credentialVisible ? '' : 'none';
+  if (!_credentialVisible) {
+    keyInput.placeholder = '••••••••';
+    keyInput.readOnly = !!name; // read-only when editing, writable when creating
+  } else {
+    keyInput.placeholder = '${OPENAI_API_KEY}';
+    keyInput.readOnly = false;
+  }
   document.getElementById('provProxy').value = proxy || '';
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
-  if (name) {
+  if (name && _credentialVisible) {
     api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
       if (res.api_key) keyInput.value = res.api_key;
     }).catch(() => {});
@@ -1054,6 +1201,7 @@ function openModelModal(model, provider, capabilities) {
   }
   // Set capability checkboxes (default all enabled for new models)
   const caps = capabilities || ['text', 'vision', 'tools'];
+  document.getElementById('capText').checked = caps.includes('text');
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('capEmbedding').checked = caps.includes('embedding');
@@ -1063,20 +1211,23 @@ function openModelModal(model, provider, capabilities) {
 }
 
 function onCapChange() {
+  const txt = document.getElementById('capText');
   const emb = document.getElementById('capEmbedding');
   const vis = document.getElementById('capVision');
   const tools = document.getElementById('capTools');
   const reas = document.getElementById('capReasoning');
   if (emb.checked) {
+    txt.checked = false; txt.disabled = true;
     vis.checked = false; vis.disabled = true;
     tools.checked = false; tools.disabled = true;
     reas.checked = false; reas.disabled = true;
   } else {
+    txt.disabled = false;
     vis.disabled = false;
     tools.disabled = false;
     reas.disabled = false;
   }
-  if (vis.checked || tools.checked || reas.checked) {
+  if (txt.checked || vis.checked || tools.checked || reas.checked) {
     emb.disabled = true;
   } else {
     emb.disabled = false;
@@ -1087,6 +1238,7 @@ function onCapChange() {
 async function loadConfig() {
   try {
     configData = await api.get('/admin/api/config');
+    _credentialVisible = configData.credential_visible !== false;
     document.getElementById('configPath').textContent = configData.config_path || '';
     document.getElementById('globalProxy').value = (configData.server && configData.server.proxy) || '';
     renderProviders();
@@ -1150,7 +1302,7 @@ function renderProviders() {
       </div>
       <div class="field">Type: <code>${esc(typeName)}</code></div>
       <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-      <div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>
+      ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
         <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.copy')}</button>
@@ -1291,11 +1443,73 @@ async function saveProvider() {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
-async function deleteProvider(name) {
-  if (!confirm(t('confirm.deleteProvider',{name}))) return;
-  const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}`);
-  if (res.ok) { showToast(t('toast.providerDeleted',{name})); loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+let _pendingDeleteProvider = '';
+
+function deleteProvider(name) {
+  _pendingDeleteProvider = name;
+  document.getElementById('deleteConfirmMsg').innerHTML = t('confirm.typeToConfirm', {name: '<strong>' + esc(name) + '</strong>'});
+  document.getElementById('deleteConfirmInput').value = '';
+  document.getElementById('deleteConfirmBtn').disabled = true;
+  // Reset button style
+  const btn = document.getElementById('deleteConfirmBtn');
+  btn.style.background = '#ccc'; btn.style.color = '#888'; btn.style.cursor = 'not-allowed';
+  // Show affected models if any
+  const affected = Object.entries(configData.models || {})
+    .filter(([, v]) => (typeof v === 'object' ? v.provider : v) === name)
+    .map(([m]) => m);
+  const el = document.getElementById('deleteAffectedModels');
+  if (affected.length > 0) {
+    el.innerHTML = `<div style="color:#cf222e;font-weight:600;margin-bottom:4px">${t('confirm.cascadeWarning', {count: affected.length})}</div>`
+      + affected.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join('');
+    el.style.display = 'block';
+  } else {
+    el.style.display = 'none';
+  }
+  document.getElementById('deleteConfirmModal').classList.add('open');
+  document.getElementById('deleteConfirmInput').focus();
+}
+
+function onDeleteConfirmInput() {
+  const btn = document.getElementById('deleteConfirmBtn');
+  const matched = document.getElementById('deleteConfirmInput').value === _pendingDeleteProvider;
+  btn.disabled = !matched;
+  if (matched) {
+    btn.style.background = '#cf222e';
+    btn.style.color = '#fff';
+    btn.style.cursor = 'pointer';
+  } else {
+    btn.style.background = '#ccc';
+    btn.style.color = '#888';
+    btn.style.cursor = 'not-allowed';
+  }
+}
+
+function onDeleteConfirmClick() {
+  const btn = document.getElementById('deleteConfirmBtn');
+  if (btn.disabled) {
+    const input = document.getElementById('deleteConfirmInput');
+    input.style.outline = '2px solid #cf222e';
+    input.focus();
+    setTimeout(() => { input.style.outline = ''; }, 1200);
+    return;
+  }
+  confirmDeleteProvider();
+}
+
+async function confirmDeleteProvider() {
+  const name = _pendingDeleteProvider;
+  if (!name) return;
+  const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}?cascade=true`);
+  closeModal('deleteConfirmModal');
+  if (res.ok) {
+    const cascaded = res.cascade_deleted_models || [];
+    if (cascaded.length > 0) {
+      showToast(t('toast.providerDeleted',{name}) + ` (+${cascaded.length} models)`);
+    } else {
+      showToast(t('toast.providerDeleted',{name}));
+    }
+    loadConfig();
+  } else { showToast(res.error || 'Failed', 'error'); }
 }
 
 async function toggleProvider(name) {
@@ -1331,7 +1545,8 @@ async function saveModel() {
   const name = document.getElementById('modelName').value.trim();
   const provider = document.getElementById('modelProvider').value;
   if (!name || !provider) { showToast(t('error.modelRequired'), 'error'); return; }
-  const capabilities = ['text'];
+  const capabilities = [];
+  if (document.getElementById('capText').checked) capabilities.push('text');
   if (document.getElementById('capVision').checked) capabilities.push('vision');
   if (document.getElementById('capTools').checked) capabilities.push('tools');
   if (document.getElementById('capEmbedding').checked) capabilities.push('embedding');
@@ -1429,8 +1644,8 @@ function renderFetchedModels() {
   list.innerHTML = models.map(m => {
     const displayName = prefix ? prefix + m : m;
     const exists = displayName in existingModels;
-    return `<label${exists ? ' style="opacity:0.5"' : ''}>
-      <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' disabled title="Already exists"' : ''}>
+    return `<label${exists ? ' style="opacity:0.6"' : ''}>
+      <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' checked data-exists="true"' : ''}>
       <span>${esc(m)}</span>${exists ? ' <span style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
     </label>`;
   }).join('');
@@ -1443,16 +1658,22 @@ function filterFetchedModels() {
 }
 
 function toggleAllFetched(checked) {
-  const boxes = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:not(:disabled)');
+  const boxes = document.querySelectorAll('#fetchModelsList input[type="checkbox"]');
   boxes.forEach(cb => cb.checked = checked);
   updateFetchCount();
 }
 
 function updateFetchCount() {
-  const all = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:not(:disabled)');
+  const all = document.querySelectorAll('#fetchModelsList input[type="checkbox"]');
   const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
+  // Check if there are any changes: unchecked exists or checked non-exists
+  const uncheckedExists = document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-exists="true"]:not(:checked)');
+  const checkedNew = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"])');
+  const hasChanges = uncheckedExists.length > 0 || checkedNew.length > 0;
   document.getElementById('fetchCount').textContent = t('fetch.count', {checked: checked.length, total: all.length});
-  document.getElementById('fetchAddBtn').disabled = checked.length === 0;
+  const btn = document.getElementById('fetchAddBtn');
+  btn.disabled = !hasChanges;
+  btn.textContent = t('btn.applyChanges');
   updatePrefixPreview();
 }
 
@@ -1473,40 +1694,59 @@ function updatePrefixPreview() {
 }
 
 async function bulkAddFetchedModels() {
-  const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
-  if (checked.length === 0) return;
-
-  const models = [...checked].map(cb => cb.value);
   const prefix = document.getElementById('fetchPrefix').value || '';
-
   const btn = document.getElementById('fetchAddBtn');
   btn.disabled = true;
   btn.textContent = '...';
 
   try {
-    const res = await api.post('/admin/api/config/models', {
-      provider: _fetchProvider,
-      models: models,
-      prefix: prefix,
-      capabilities: ['text', 'vision', 'tools'],
+    // Models to add: checked and not already existing
+    const toAdd = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"])')].map(cb => cb.value);
+    // Models to remove: unchecked but marked as existing
+    const toRemove = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-exists="true"]:not(:checked)')].map(cb => {
+      return prefix ? prefix + cb.value : cb.value;
     });
-    if (res.ok) {
-      const added = res.added || [];
-      if (added.length > 0) {
-        showToast(t('toast.modelsAdded', {count: added.length}));
+
+    let addedCount = 0;
+    let removedCount = 0;
+
+    // Add new models
+    if (toAdd.length > 0) {
+      const res = await api.post('/admin/api/config/models', {
+        provider: _fetchProvider,
+        models: toAdd,
+        prefix: prefix,
+        capabilities: ['text', 'vision', 'tools'],
+      });
+      if (res.ok) {
+        addedCount = (res.added || []).length;
       } else {
-        showToast(t('toast.modelsAllExist'));
+        showToast(res.error || 'Failed to add models', 'error');
       }
-      closeModal('fetchModelsModal');
-      loadConfig();
-    } else {
-      showToast(res.error || 'Failed', 'error');
     }
+
+    // Remove deselected existing models
+    for (const name of toRemove) {
+      const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
+      if (res.ok) removedCount++;
+    }
+
+    // Show result
+    const msgs = [];
+    if (addedCount > 0) msgs.push(t('toast.modelsAdded', {count: addedCount}));
+    if (removedCount > 0) msgs.push(t('toast.modelsRemoved', {count: removedCount}));
+    if (msgs.length > 0) {
+      showToast(msgs.join(', '));
+    } else {
+      showToast(t('toast.modelsAllExist'));
+    }
+    closeModal('fetchModelsModal');
+    loadConfig();
   } catch (e) {
     showToast(String(e), 'error');
   } finally {
     btn.disabled = false;
-    btn.textContent = t('btn.addSelected');
+    btn.textContent = t('btn.applyChanges');
   }
 }
 
@@ -1533,10 +1773,10 @@ function renderKeys() {
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
       <td style="width:40%"><div class="key-cell"><code class="key-masked" data-masked="${esc(k.key)}">${esc(k.key)}</code>
-        <span class="key-actions">
+        ${_credentialVisible ? `<span class="key-actions">
           <button class="key-btn" onclick="toggleKey('${k.id}',this)" title="Toggle visibility"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
           <button class="key-btn" onclick="copyKeyById('${k.id}')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-        </span></div></td>
+        </span>` : ''}</div></td>
       <td>${created}</td>
       <td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}')">${t('btn.delete')}</button></td>
     </tr>`;
@@ -1749,7 +1989,9 @@ function renderLogs(entries, total) {
       const modeBadge = e.is_stream ? '<span class="badge badge-stream">stream</span>' : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
-      const rowStyle = hasError ? ' style="cursor:pointer" onclick="this.nextElementSibling.hidden=!this.nextElementSibling.hidden"' : '';
+      const rowId = e.timestamp + '_' + e.model;
+      const isExpanded = expandedLogRows.has(rowId);
+      const rowStyle = hasError ? ` style="cursor:pointer" onclick="toggleLogRow('${rowId}',this)"` : '';
       const expandHint = hasError ? ' title="Click to expand error"' : '';
       let rows = `<tr${rowStyle}${expandHint}>
         <td>${time}</td>
@@ -1761,7 +2003,7 @@ function renderLogs(entries, total) {
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {
-        rows += `<tr hidden><td colspan="7"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="7"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
       }
       return rows;
     }).join('');
@@ -1775,8 +2017,17 @@ function renderLogs(entries, total) {
   document.getElementById('nextPage').disabled = logOffset + LOG_LIMIT >= total;
 }
 
+function toggleLogRow(rowId, tr) {
+  const detail = tr.nextElementSibling;
+  if (!detail) return;
+  detail.hidden = !detail.hidden;
+  if (detail.hidden) expandedLogRows.delete(rowId);
+  else expandedLogRows.add(rowId);
+}
+
 function changePage(dir) {
   logOffset = Math.max(0, logOffset + dir * LOG_LIMIT);
+  expandedLogRows.clear();
   loadLogs();
 }
 
@@ -1784,6 +2035,7 @@ async function clearLogs() {
   if (!confirm(t('confirm.clearLogs'))) return;
   await api.del('/admin/api/requests');
   logOffset = 0;
+  expandedLogRows.clear();
   loadLogs();
   showToast(t('toast.logCleared'));
 }
@@ -1831,9 +2083,9 @@ function stopTimers() {
 }
 
 // Filter change handlers
-document.getElementById('filterModel').addEventListener('change', () => { logOffset = 0; loadLogs(); });
-document.getElementById('filterProvider').addEventListener('change', () => { logOffset = 0; loadLogs(); });
-document.getElementById('filterStatus').addEventListener('change', () => { logOffset = 0; loadLogs(); });
+document.getElementById('filterModel').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
+document.getElementById('filterProvider').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
+document.getElementById('filterStatus').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 
 // Close modal on overlay click
 document.querySelectorAll('.modal-overlay').forEach(m => {
@@ -2069,9 +2321,12 @@ async function runTest(model, type) {
 }
 
 // ===================== Init =====================
-loadConfig();
-api.get('/admin/api/internal-token').then(r => { internalToken = r.token; }).catch(() => {});
+function initApp() {
+  loadConfig();
+  api.get('/admin/api/internal-token').then(r => { internalToken = r.token; }).catch(() => {});
+}
 setLang(currentLang);
+checkAuthAndInit();
 </script>
 </body>
 </html>

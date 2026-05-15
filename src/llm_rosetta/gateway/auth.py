@@ -110,10 +110,23 @@ class AuthState:
         key_set: frozenset[str],
         labels: dict[str, str],
         internal_token: str | None,
+        admin_password: str | None = None,
     ) -> None:
         self.key_set = key_set
         self.labels = labels
         self.internal_token = internal_token
+        self.admin_password = admin_password
+        # Derive admin token from password + internal_token via HMAC
+        self.admin_token: str | None = None
+        if admin_password and internal_token:
+            import hashlib
+            import hmac as _hmac
+
+            self.admin_token = _hmac.new(
+                internal_token.encode(),
+                admin_password.encode(),
+                hashlib.sha256,
+            ).hexdigest()
 
 
 def create_auth_hook(auth_state: AuthState) -> Any:
@@ -127,18 +140,33 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         # Reset per-request label
         api_key_label_var.set(None)
 
-        if not auth_state.key_set:
-            return None  # no keys configured → pass through
-
         path = request.path
 
         # Public paths skip auth
         if path in _PUBLIC_PATHS:
             return None
 
-        # Admin panel: no gateway-level auth — delegate to reverse proxy
+        # Admin panel: password-protect if admin_password is configured
         if path.startswith("/admin"):
+            if not auth_state.admin_password:
+                return None  # no password → pass through
+            # Login and auth-check endpoints are always accessible
+            if path in ("/admin/api/login", "/admin/api/auth-check"):
+                return None
+            # Check X-Admin-Token header
+            admin_token = request.headers.get("x-admin-token", "")
+            if admin_token and admin_token == auth_state.admin_token:
+                return None
+            # Unauthenticated
+            if path.startswith("/admin/api/"):
+                return JSONResponse(
+                    {"error": "Admin authentication required"}, status_code=401
+                )
+            # For HTML page request, still serve — the JS will handle login UI
             return None
+
+        if not auth_state.key_set:
+            return None  # no gateway API keys configured → pass through
 
         # API paths: extract key using format-appropriate strategy
         key = _extract_key(request)

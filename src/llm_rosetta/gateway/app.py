@@ -348,7 +348,12 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     import secrets
 
     internal_token = f"rsk-internal-{secrets.token_hex(16)}"
-    auth_state = AuthState(config.api_key_set, config.api_key_labels, internal_token)
+    auth_state = AuthState(
+        config.api_key_set,
+        config.api_key_labels,
+        internal_token,
+        admin_password=config.admin_password,
+    )
     app.before_request(create_auth_hook(auth_state))
 
     # --- CORS ---

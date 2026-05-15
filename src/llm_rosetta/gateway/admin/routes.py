@@ -156,6 +156,36 @@ async def serve_admin_html(request: Any) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Admin authentication
+# ---------------------------------------------------------------------------
+
+
+async def admin_login(request: Any) -> Response:
+    """Validate admin password and return a session token."""
+    auth_state = request.app.auth_state
+    if not auth_state.admin_password:
+        return JSONResponse({"error": "Admin password not configured"}, status_code=400)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    password = body.get("password", "")
+    if password != auth_state.admin_password:
+        return JSONResponse({"error": "Invalid password"}, status_code=401)
+
+    return JSONResponse({"ok": True, "token": auth_state.admin_token})
+
+
+async def admin_check(request: Any) -> Response:
+    """Check whether admin auth is required (before loading config)."""
+    auth_state = request.app.auth_state
+    requires_auth = bool(auth_state.admin_password)
+    return JSONResponse({"requires_auth": requires_auth})
+
+
+# ---------------------------------------------------------------------------
 # Config API
 # ---------------------------------------------------------------------------
 
@@ -205,12 +235,14 @@ async def get_config(request: Any) -> Response:
             for entry in server["api_keys"]
         ]
 
+    config: GatewayConfig = request.app.gateway_config
     return JSONResponse(
         {
             "config_path": config_path,
             "providers": masked_providers,
             "models": models_normalized,
             "server": server,
+            "credential_visible": config.credential_visible,
             "known_provider_types": known_provider_types(),
             "registered_shims": [
                 {
@@ -318,13 +350,22 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
         for m, p in models.items()
         if (p["provider"] if isinstance(p, dict) else p) == name
     ]
-    if referencing:
+
+    cascade = _qp(request, "cascade") in ("true", "1")
+    if referencing and not cascade:
         return JSONResponse(
             {
                 "error": f"Cannot delete provider '{name}': referenced by models: {referencing}"
             },
             status_code=409,
         )
+
+    # Cascade: remove referencing models first
+    cascade_deleted: list[str] = []
+    if referencing and cascade:
+        for model_name in referencing:
+            del models[model_name]
+            cascade_deleted.append(model_name)
 
     del providers[name]
 
@@ -347,13 +388,14 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
             status_code=500,
         )
 
-    return JSONResponse(
-        {
-            "ok": True,
-            "deleted": name,
-            "providers": list(new_config.providers.keys()),
-        }
-    )
+    result: dict[str, Any] = {
+        "ok": True,
+        "deleted": name,
+        "providers": list(new_config.providers.keys()),
+    }
+    if cascade_deleted:
+        result["cascade_deleted_models"] = cascade_deleted
+    return JSONResponse(result)
 
 
 async def toggle_provider(request: Any, **kwargs: Any) -> Response:
@@ -644,6 +686,11 @@ async def clear_requests(request: Any) -> Response:
 
 async def get_provider_key(request: Any, **kwargs: Any) -> Response:
     """Return the raw (unmasked) API key for a single provider."""
+    config: GatewayConfig = request.app.gateway_config
+    if not config.credential_visible:
+        return JSONResponse(
+            {"error": "Credential visibility is disabled"}, status_code=403
+        )
     config_path = _get_config_path(request)
     if not config_path:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
@@ -916,6 +963,11 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
 
 async def reveal_api_key(request: Any, **kwargs: Any) -> Response:
     """Return the raw (unmasked) API key value."""
+    config: GatewayConfig = request.app.gateway_config
+    if not config.credential_visible:
+        return JSONResponse(
+            {"error": "Credential visibility is disabled"}, status_code=403
+        )
     config_path = _get_config_path(request)
     if not config_path:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
@@ -1132,6 +1184,9 @@ def register_admin_routes(app: Any) -> None:
     # HTML
     app.route("/admin", methods=["GET"])(serve_admin_html)
     app.route("/admin/", methods=["GET"])(serve_admin_html)
+    # Admin auth
+    app.route("/admin/api/login", methods=["POST"])(admin_login)
+    app.route("/admin/api/auth-check", methods=["GET"])(admin_check)
     # Config CRUD
     app.route("/admin/api/config", methods=["GET"])(get_config)
     app.route("/admin/api/config/providers/<name>", methods=["PUT"])(put_provider)
