@@ -204,6 +204,7 @@ canvas { width: 100%; height: 160px; }
 .badge-cap { background: rgba(139,144,165,0.15); color: var(--text-dim); font-size: 10px; padding: 1px 6px; margin-right: 3px; }
 .badge-cap-vision { background: rgba(245,158,11,0.12); color: var(--orange); }
 .badge-cap-tools { background: rgba(59,130,246,0.12); color: var(--blue); }
+.badge-cap-embed { background: rgba(16,185,129,0.12); color: var(--green); }
 
 /* Checkbox group */
 .checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; }
@@ -537,6 +538,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
         <label><input type="checkbox" id="capText" checked disabled> text</label>
         <label><input type="checkbox" id="capVision" checked> vision</label>
         <label><input type="checkbox" id="capTools" checked> tools</label>
+        <label><input type="checkbox" id="capEmbedding"> embedding</label>
       </div>
     </div>
     <div class="modal-actions">
@@ -1051,6 +1053,7 @@ function openModelModal(model, provider, capabilities) {
   const caps = capabilities || ['text', 'vision', 'tools'];
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
+  document.getElementById('capEmbedding').checked = caps.includes('embedding');
   document.getElementById('modelModal').classList.add('open');
 }
 
@@ -1211,7 +1214,7 @@ function renderModels() {
     const provDisabled = disabledProviders.has(prov);
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const capBadges = caps.map(c => {
-      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : 'badge-cap';
+      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : 'badge-cap';
       return `<span class="badge ${cls}">${esc(c)}</span>`;
     }).join('');
     const hasVision = caps.includes('vision');
@@ -1302,6 +1305,7 @@ async function saveModel() {
   const capabilities = ['text'];
   if (document.getElementById('capVision').checked) capabilities.push('vision');
   if (document.getElementById('capTools').checked) capabilities.push('tools');
+  if (document.getElementById('capEmbedding').checked) capabilities.push('embedding');
   const body = {provider, capabilities};
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {

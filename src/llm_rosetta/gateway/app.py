@@ -16,6 +16,7 @@ from llm_rosetta.auto_detect import ProviderType
 
 from .auth import AuthState, api_key_label_var, create_auth_hook
 from .config import GatewayConfig
+from .embeddings import handle_embeddings as _handle_embeddings
 from .logging import get_logger
 from .proxy import (
     ProviderMetadataStore,
@@ -174,6 +175,11 @@ async def handle_openai_chat(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="openai_chat")
 
 
+async def handle_embeddings(request: Any) -> Response:
+    assert _config is not None
+    return await _handle_embeddings(request, _config)
+
+
 async def handle_anthropic(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="anthropic")
 
@@ -330,6 +336,7 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
 
     # --- Routes ---
     app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
+    app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
     app.route("/v1/messages", methods=["POST"])(handle_anthropic)
     app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
     app.route("/v1/models", methods=["GET"])(handle_list_models)
