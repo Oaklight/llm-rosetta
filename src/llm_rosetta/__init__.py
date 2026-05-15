@@ -22,17 +22,14 @@ from .converters import (
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 from .shims import (
-    ModelShim,
     ProviderShim,
     Transform,
-    Transformable,
     apply_transforms,
     get_shim,
     list_shims,
     register_shim,
     rename_field,
     resolve_base,
-    resolve_transforms,
     set_defaults,
     strip_fields,
     unregister_shim,
@@ -60,7 +57,6 @@ __all__ = [
     "ProviderType",
     # Provider shim layer
     "ProviderShim",
-    "ModelShim",
     "register_shim",
     "unregister_shim",
     "get_shim",
@@ -68,9 +64,7 @@ __all__ = [
     "resolve_base",
     # Transforms
     "Transform",
-    "Transformable",
     "apply_transforms",
-    "resolve_transforms",
     "strip_fields",
     "rename_field",
     "set_defaults",

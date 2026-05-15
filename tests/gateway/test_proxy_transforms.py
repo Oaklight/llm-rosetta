@@ -14,7 +14,6 @@ from llm_rosetta.gateway.proxy import (
     ProviderMetadataStore,
 )
 from llm_rosetta.shims.provider_shim import (
-    ModelShim,
     ProviderShim,
     _reset_registry,
     register_shim,
@@ -48,19 +47,13 @@ def volcengine_shim():
 
 
 @pytest.fixture()
-def shim_with_model_transforms():
-    """Register a shim with both provider and model-level transforms."""
+def shim_with_transforms():
+    """Register a shim with provider-level transforms."""
     shim = ProviderShim(
         name="custom_provider",
         base="openai_chat",
         to_transforms=(strip_fields("unsupported_field"),),
         from_transforms=(rename_field("custom_id", "id"),),
-        models=(
-            ModelShim(
-                "special-*",
-                to_transforms=(strip_fields("extra_param"),),
-            ),
-        ),
     )
     register_shim(shim)
     return shim
@@ -99,14 +92,13 @@ class TestResolveTargetTransforms:
         assert "top_logprobs" not in result
         assert result["model"] == "test"
 
-    def test_shim_provider_level_only(self, shim_with_model_transforms):
-        """Model-level transforms are no longer merged; only provider-level."""
+    def test_shim_provider_level_only(self, shim_with_transforms):
+        """Only provider-level transforms are returned."""
         from_t, to_t = _resolve_target_transforms("custom_provider", "special-v1")
-        # Only provider-level transforms (model shim lookup removed)
         assert len(from_t) == 1
         assert len(to_t) == 1
 
-    def test_shim_same_regardless_of_model(self, shim_with_model_transforms):
+    def test_shim_same_regardless_of_model(self, shim_with_transforms):
         """Transforms are the same no matter which model name is passed."""
         from_t1, to_t1 = _resolve_target_transforms("custom_provider", "special-v1")
         from_t2, to_t2 = _resolve_target_transforms("custom_provider", "regular-model")
@@ -226,7 +218,7 @@ class TestNonStreamingTransforms:
         assert "logprobs" in captured_body
         assert "top_logprobs" in captured_body
 
-    def test_from_transforms_on_response(self, shim_with_model_transforms):
+    def test_from_transforms_on_response(self, shim_with_transforms):
         """from_transforms should be applied to the upstream response."""
 
         async def mock_post(url, json=None, headers=None, **kwargs):

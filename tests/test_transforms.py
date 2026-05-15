@@ -5,17 +5,14 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.shims.provider_shim import (
-    ModelShim,
     ProviderShim,
     _reset_registry,
     get_shim,
     register_shim,
 )
 from llm_rosetta.shims.transforms import (
-    Transformable,
     apply_transforms,
     rename_field,
-    resolve_transforms,
     set_defaults,
     strip_fields,
 )
@@ -171,87 +168,7 @@ class TestApplyTransforms:
 
 
 # ---------------------------------------------------------------------------
-# resolve_transforms
-# ---------------------------------------------------------------------------
-
-
-class TestResolveTransforms:
-    def test_provider_only(self):
-        t1 = strip_fields("a")
-        t2 = strip_fields("b")
-        provider = ProviderShim(
-            name="test",
-            base="openai_chat",
-            from_transforms=(t1,),
-            to_transforms=(t2,),
-        )
-        from_t, to_t = resolve_transforms(provider, None)
-        assert from_t == (t1,)
-        assert to_t == (t2,)
-
-    def test_merge_provider_and_model(self):
-        pt = strip_fields("a")
-        mt = strip_fields("b")
-        provider = ProviderShim(name="test", base="openai_chat", from_transforms=(pt,))
-        model = ModelShim("test-*", from_transforms=(mt,))
-        from_t, to_t = resolve_transforms(provider, model)
-        # provider first, model after
-        assert from_t == (pt, mt)
-        assert to_t == ()
-
-    def test_merge_both_directions(self):
-        p_from = strip_fields("a")
-        p_to = strip_fields("b")
-        m_from = rename_field("x", "y")
-        m_to = set_defaults(z=1)
-        provider = ProviderShim(
-            name="test",
-            base="openai_chat",
-            from_transforms=(p_from,),
-            to_transforms=(p_to,),
-        )
-        model = ModelShim(
-            "test-*",
-            from_transforms=(m_from,),
-            to_transforms=(m_to,),
-        )
-        from_t, to_t = resolve_transforms(provider, model)
-        assert from_t == (p_from, m_from)
-        assert to_t == (p_to, m_to)
-
-    def test_model_empty_transforms(self):
-        pt = strip_fields("a")
-        provider = ProviderShim(name="test", base="openai_chat", from_transforms=(pt,))
-        model = ModelShim("test-*")  # no transforms
-        from_t, to_t = resolve_transforms(provider, model)
-        assert from_t == (pt,)
-        assert to_t == ()
-
-    def test_provider_empty_transforms(self):
-        mt = strip_fields("b")
-        provider = ProviderShim(name="test", base="openai_chat")
-        model = ModelShim("test-*", from_transforms=(mt,))
-        from_t, _ = resolve_transforms(provider, model)
-        assert from_t == (mt,)
-
-
-# ---------------------------------------------------------------------------
-# Transformable protocol
-# ---------------------------------------------------------------------------
-
-
-class TestTransformable:
-    def test_provider_shim_is_transformable(self):
-        s = ProviderShim(name="test", base="openai_chat")
-        assert isinstance(s, Transformable)
-
-    def test_model_shim_is_transformable(self):
-        m = ModelShim("test-*")
-        assert isinstance(m, Transformable)
-
-
-# ---------------------------------------------------------------------------
-# ProviderShim / ModelShim with transforms
+# ProviderShim with transforms
 # ---------------------------------------------------------------------------
 
 
@@ -268,21 +185,10 @@ class TestShimWithTransforms:
         assert s.from_transforms == (t1,)
         assert s.to_transforms == (t2,)
 
-    def test_model_shim_stores_transforms(self):
-        t = set_defaults(x=1)
-        m = ModelShim("test-*", from_transforms=(t,))
-        assert m.from_transforms == (t,)
-        assert m.to_transforms == ()
-
     def test_provider_shim_default_empty(self):
         s = ProviderShim(name="test", base="openai_chat")
         assert s.from_transforms == ()
         assert s.to_transforms == ()
-
-    def test_model_shim_default_empty(self):
-        m = ModelShim("test-*")
-        assert m.from_transforms == ()
-        assert m.to_transforms == ()
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +199,9 @@ class TestShimWithTransforms:
 class TestBuiltinTransforms:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.builtins import _register_builtins
+        from llm_rosetta.shims.providers import load_providers
 
-        _register_builtins()
+        load_providers()
 
     def test_volcengine_has_to_transforms(self):
         shim = get_shim("volcengine")
@@ -320,13 +226,12 @@ class TestBuiltinTransforms:
 class TestConvertWithTransforms:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.builtins import _register_builtins
+        from llm_rosetta.shims.providers import load_providers
 
-        _register_builtins()
+        load_providers()
 
     def test_convert_applies_source_from_transforms(self):
         """Source shim's from_transforms should normalise before conversion."""
-        # Register a custom shim with a from_transform
         custom = ProviderShim(
             name="custom-oai",
             base="openai_chat",
@@ -340,13 +245,11 @@ class TestConvertWithTransforms:
             "custom_field": "gpt-4",
             "messages": [{"role": "user", "content": "hello"}],
         }
-        # Convert to anthropic — the rename should happen before converter reads it
         result = convert(body, "anthropic", source_provider="custom-oai")
         assert "model" in result
 
     def test_convert_applies_target_to_transforms(self):
         """Target shim's to_transforms should adapt after conversion."""
-        # Register a custom target shim that strips a field
         custom = ProviderShim(
             name="custom-target",
             base="openai_chat",
@@ -363,33 +266,6 @@ class TestConvertWithTransforms:
         result = convert(body, "custom-target", source_provider="openai_chat")
         assert "logprobs" not in result
 
-    def test_convert_with_model_transforms(self):
-        """Model-level transforms should be merged with provider transforms."""
-        model_t = set_defaults(extra="added_by_model")
-        custom = ProviderShim(
-            name="custom-model-test",
-            base="openai_chat",
-            to_transforms=(strip_fields("logprobs"),),
-            models=(ModelShim("test-model-*", to_transforms=(model_t,)),),
-        )
-        register_shim(custom)
-
-        from llm_rosetta import convert
-
-        body = {
-            "model": "test",
-            "messages": [{"role": "user", "content": "hello"}],
-        }
-        result = convert(
-            body,
-            "custom-model-test",
-            source_provider="openai_chat",
-            model="test-model-1",
-        )
-        # Provider transform strips logprobs, model transform adds extra
-        assert "logprobs" not in result
-        assert result.get("extra") == "added_by_model"
-
     def test_convert_without_shim_still_works(self):
         """Base type conversion without shim should work as before."""
         from llm_rosetta import convert
@@ -402,13 +278,12 @@ class TestConvertWithTransforms:
         assert "messages" in result
 
     def test_convert_idempotent_transforms(self):
-        """Duplicate transforms between provider and model should be harmless."""
+        """Duplicate transforms should be harmless."""
         t = strip_fields("logprobs")
         custom = ProviderShim(
             name="idem-test",
             base="openai_chat",
-            to_transforms=(t,),
-            models=(ModelShim("test-*", to_transforms=(t,)),),
+            to_transforms=(t, t),
         )
         register_shim(custom)
 
@@ -423,6 +298,5 @@ class TestConvertWithTransforms:
             body,
             "idem-test",
             source_provider="openai_chat",
-            model="test-model",
         )
         assert "logprobs" not in result

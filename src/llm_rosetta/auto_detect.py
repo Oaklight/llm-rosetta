@@ -186,16 +186,14 @@ def convert(
 
     When *source_provider* or *target_provider* is a registered shim name
     (e.g. ``"deepseek"``), the shim's transforms are applied around the
-    base converter.  If *model* is also provided, model-level transforms
-    are merged with the provider-level ones via
-    :func:`~llm_rosetta.shims.resolve_transforms`.
+    base converter.
 
     Args:
         source_body: Source provider request body.
         target_provider: Target provider type or registered shim name.
         source_provider: Optional source provider type or shim name.
             Auto-detected from *source_body* when not provided.
-        model: Optional model name for model-level transform lookup.
+        model: Optional model name (currently unused, reserved for future use).
         force_conversion: When ``True``, always run the full conversion
             pipeline (source -> IR -> target) even when source and target
             providers are the same.  This normalises parameter names (e.g.
@@ -223,7 +221,7 @@ def convert(
         >>> normalised = convert(body, "openai_chat", force_conversion=True)
     """
     from .shims import get_shim
-    from .shims.transforms import apply_transforms, resolve_transforms
+    from .shims.transforms import apply_transforms
 
     # Detect source provider
     if source_provider is None:
@@ -241,23 +239,8 @@ def convert(
     source_shim = get_shim(source_provider)
     target_shim = get_shim(target_provider)
 
-    source_model_shim = (
-        source_shim.get_model_shim(model) if source_shim and model else None
-    )
-    target_model_shim = (
-        target_shim.get_model_shim(model) if target_shim and model else None
-    )
-
-    # Merge provider + model transforms (provider first, model after)
-    if source_shim:
-        source_from_t, _ = resolve_transforms(source_shim, source_model_shim)
-    else:
-        source_from_t = ()
-
-    if target_shim:
-        _, target_to_t = resolve_transforms(target_shim, target_model_shim)
-    else:
-        target_to_t = ()
+    source_from_t = source_shim.from_transforms if source_shim else ()
+    target_to_t = target_shim.to_transforms if target_shim else ()
 
     # --- Apply source from_transforms ---
     body = apply_transforms(source_from_t, source_body)

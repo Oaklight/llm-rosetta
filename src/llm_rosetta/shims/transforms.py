@@ -1,26 +1,23 @@
-"""Transform primitives for the provider/model shim layer.
+"""Transform primitives for the provider shim layer.
 
 A **Transform** is a pure data transformation: ``dict → dict``.  Transforms
 bridge the gap between a real provider's API dialect and the "ideal" standard
 that the corresponding base converter expects.
 
 Transforms are NOT a replacement for converter functionality — they handle
-provider/model-specific field-level quirks (rename, strip, inject defaults),
+provider-specific field-level quirks (rename, strip, inject defaults),
 while converters handle semantic API-standard translation.
 
 Design principles:
 
 * **Idempotent**: applying the same transform twice should be harmless.
-* **Non-overlapping**: provider-level and model-level transforms should
-  operate on different fields by convention.
-* **Merge by concatenation**: ``resolve_transforms`` merges provider + model
-  transforms.  Provider transforms run first (broad dialect normalisation),
-  model transforms run after (model-specific adjustments).
+* **Non-overlapping**: transforms should operate on different fields by
+  convention.
 """
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable
+from typing import Any
 from collections.abc import Callable
 
 # ---------------------------------------------------------------------------
@@ -30,19 +27,6 @@ from collections.abc import Callable
 Transform = Callable[[dict[str, Any]], dict[str, Any]]
 """A pure data transformation: receives a provider body dict and returns
 a (possibly mutated) body dict."""
-
-
-# ---------------------------------------------------------------------------
-# Protocol
-# ---------------------------------------------------------------------------
-
-
-@runtime_checkable
-class Transformable(Protocol):
-    """Shared interface satisfied by both ``ProviderShim`` and ``ModelShim``."""
-
-    from_transforms: tuple[Transform, ...]
-    to_transforms: tuple[Transform, ...]
 
 
 # ---------------------------------------------------------------------------
@@ -123,23 +107,3 @@ def apply_transforms(
     for t in transforms:
         body = t(body)
     return body
-
-
-def resolve_transforms(
-    provider: Transformable,
-    model: Transformable | None,
-) -> tuple[tuple[Transform, ...], tuple[Transform, ...]]:
-    """Merge provider and model transforms by concatenation.
-
-    Provider transforms run first (broad dialect normalisation), model
-    transforms run after (model-specific adjustments).
-
-    Returns:
-        ``(from_transforms, to_transforms)`` ready for ``apply_transforms``.
-    """
-    if model is None:
-        return provider.from_transforms, provider.to_transforms
-    return (
-        provider.from_transforms + model.from_transforms,
-        provider.to_transforms + model.to_transforms,
-    )

@@ -209,7 +209,7 @@ async def get_config(request: Any) -> Response:
             "server": server,
             "known_provider_types": known_provider_types(),
             "registered_shims": [
-                {"name": s.name, "base": s.base} for s in list_shims()
+                {"name": s.name, "base": s.base, "logo": s.logo} for s in list_shims()
             ],
         }
     )

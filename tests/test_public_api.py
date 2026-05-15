@@ -42,7 +42,6 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ProviderType",
             # Provider shim layer
             "ProviderShim",
-            "ModelShim",
             "register_shim",
             "unregister_shim",
             "get_shim",
@@ -50,9 +49,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_base",
             # Transforms
             "Transform",
-            "Transformable",
             "apply_transforms",
-            "resolve_transforms",
             "strip_fields",
             "rename_field",
             "set_defaults",

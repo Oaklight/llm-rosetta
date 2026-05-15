@@ -1,11 +1,10 @@
-"""Provider shim layer — identity cards for LLM providers and models.
+"""Provider shim layer — identity cards for LLM providers.
 
 Importing this package automatically registers the built-in shims
 (OpenAI, Anthropic, Google, DeepSeek, Volcengine, etc.).
 """
 
 from .provider_shim import (
-    ModelShim,
     ProviderShim,
     get_shim,
     list_shims,
@@ -15,10 +14,8 @@ from .provider_shim import (
 )
 from .transforms import (
     Transform,
-    Transformable,
     apply_transforms,
     rename_field,
-    resolve_transforms,
     set_defaults,
     strip_fields,
 )
@@ -29,18 +26,16 @@ from .providers import load_providers as _load_providers
 _load_providers()
 
 __all__ = [
-    "ModelShim",
     "ProviderShim",
-    "Transform",
-    "Transformable",
-    "apply_transforms",
+    "register_shim",
+    "unregister_shim",
     "get_shim",
     "list_shims",
-    "register_shim",
-    "rename_field",
     "resolve_base",
-    "resolve_transforms",
-    "set_defaults",
+    # Transforms
+    "Transform",
+    "apply_transforms",
     "strip_fields",
-    "unregister_shim",
+    "rename_field",
+    "set_defaults",
 ]

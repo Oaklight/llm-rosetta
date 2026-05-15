@@ -2,3 +2,4 @@ name: google
 base: google
 default_base_url: https://generativelanguage.googleapis.com
 default_api_key_env: GOOGLE_API_KEY
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg

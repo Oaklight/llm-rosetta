@@ -3,18 +3,11 @@
 A **ProviderShim** is a lightweight identity card that declares which API
 standard (converter) a provider uses, along with connection defaults and
 optional transforms to bridge schema differences.
-
-.. deprecated::
-    ``ModelShim`` and the ``models`` / ``get_model_shim()`` members of
-    ``ProviderShim`` are retained for backward compatibility but are no
-    longer used by the gateway.  Model-to-provider routing is handled
-    by the gateway config; capability metadata will be addressed by #72.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from fnmatch import fnmatch
+from dataclasses import dataclass
 
 from .transforms import Transform
 
@@ -25,33 +18,8 @@ from .transforms import Transform
 
 
 @dataclass(frozen=True)
-class ModelShim:
-    """Model-level capabilities and constraints.
-
-    .. deprecated::
-        Model-to-provider routing is handled by the gateway config.
-        Capability metadata will be addressed by #72.  This class is
-        retained for backward compatibility only.
-
-    Attributes:
-        pattern: Glob pattern to match model names (e.g. ``"o3-*"``).
-        capabilities: Set of capability tags this model supports
-            (e.g. ``{"reasoning", "tools", "vision"}``).
-        from_transforms: Transforms applied when data comes FROM this
-            model's provider (normalise dialect → standard).
-        to_transforms: Transforms applied when data goes TO this
-            model's provider (standard → dialect).
-    """
-
-    pattern: str
-    capabilities: frozenset[str] = field(default_factory=frozenset)
-    from_transforms: tuple[Transform, ...] = ()
-    to_transforms: tuple[Transform, ...] = ()
-
-
-@dataclass(frozen=True)
 class ProviderShim:
-    """Provider identity card with optional nested model overrides.
+    """Provider identity card with optional transforms.
 
     Attributes:
         name: Canonical provider identifier (e.g. ``"deepseek"``).
@@ -62,8 +30,7 @@ class ProviderShim:
             when the provider config does not specify ``base_url``.
         default_api_key_env: Default environment variable name for the
             API key (e.g. ``"DEEPSEEK_API_KEY"``).
-        models: Tuple of :class:`ModelShim` entries that provide
-            model-specific capability metadata.
+        logo: URL to the provider's logo image (SVG preferred).
         from_transforms: Transforms applied when data comes FROM this
             provider (normalise dialect → standard).
         to_transforms: Transforms applied when data goes TO this
@@ -74,20 +41,9 @@ class ProviderShim:
     base: str
     default_base_url: str | None = None
     default_api_key_env: str | None = None
-    models: tuple[ModelShim, ...] = ()
+    logo: str | None = None
     from_transforms: tuple[Transform, ...] = ()
     to_transforms: tuple[Transform, ...] = ()
-
-    def get_model_shim(self, model: str) -> ModelShim | None:
-        """Return the first :class:`ModelShim` whose pattern matches *model*.
-
-        Uses :func:`fnmatch.fnmatch` for glob-style matching.  Returns
-        ``None`` if no nested model shim matches.
-        """
-        for m in self.models:
-            if fnmatch(model, m.pattern):
-                return m
-        return None
 
 
 # ---------------------------------------------------------------------------

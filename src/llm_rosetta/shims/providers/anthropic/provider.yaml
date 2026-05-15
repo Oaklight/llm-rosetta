@@ -2,3 +2,4 @@ name: anthropic
 base: anthropic
 default_base_url: https://api.anthropic.com
 default_api_key_env: ANTHROPIC_API_KEY
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg

@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.shims.provider_shim import (
-    ModelShim,
     ProviderShim,
     _reset_registry,
     get_shim,
@@ -30,27 +29,6 @@ def _clean_registry():
 
 
 # ---------------------------------------------------------------------------
-# ModelShim
-# ---------------------------------------------------------------------------
-
-
-class TestModelShim:
-    def test_creation_defaults(self):
-        m = ModelShim("gpt-*")
-        assert m.pattern == "gpt-*"
-        assert m.capabilities == frozenset()
-
-    def test_creation_with_capabilities(self):
-        m = ModelShim("o3-*", frozenset({"reasoning", "tools"}))
-        assert m.capabilities == {"reasoning", "tools"}
-
-    def test_frozen(self):
-        m = ModelShim("gpt-*")
-        with pytest.raises(AttributeError):
-            m.pattern = "other"  # type: ignore
-
-
-# ---------------------------------------------------------------------------
 # ProviderShim
 # ---------------------------------------------------------------------------
 
@@ -62,69 +40,23 @@ class TestProviderShim:
         assert s.base == "openai_chat"
         assert s.default_base_url is None
         assert s.default_api_key_env is None
-        assert s.models == ()
+        assert s.logo is None
 
     def test_creation_full(self):
-        models = (
-            ModelShim("o3-*", frozenset({"reasoning"})),
-            ModelShim("gpt-*", frozenset({"tools"})),
-        )
         s = ProviderShim(
             name="openai",
             base="openai_chat",
             default_base_url="https://api.openai.com/v1",
             default_api_key_env="OPENAI_API_KEY",
-            models=models,
+            logo="https://example.com/openai.svg",
         )
         assert s.default_base_url == "https://api.openai.com/v1"
-        assert len(s.models) == 2
+        assert s.logo == "https://example.com/openai.svg"
 
     def test_frozen(self):
         s = ProviderShim(name="test", base="openai_chat")
         with pytest.raises(AttributeError):
             s.name = "other"  # type: ignore
-
-    def test_get_model_shim_match(self):
-        s = ProviderShim(
-            name="openai",
-            base="openai_chat",
-            models=(
-                ModelShim("o3-*", frozenset({"reasoning", "tools"})),
-                ModelShim("gpt-*", frozenset({"tools"})),
-            ),
-        )
-        m = s.get_model_shim("o3-mini")
-        assert m is not None
-        assert "reasoning" in m.capabilities
-
-        m2 = s.get_model_shim("gpt-4o")
-        assert m2 is not None
-        assert m2.capabilities == {"tools"}
-
-    def test_get_model_shim_no_match(self):
-        s = ProviderShim(
-            name="openai",
-            base="openai_chat",
-            models=(ModelShim("gpt-*", frozenset({"tools"})),),
-        )
-        assert s.get_model_shim("claude-3") is None
-
-    def test_get_model_shim_first_match_wins(self):
-        s = ProviderShim(
-            name="test",
-            base="openai_chat",
-            models=(
-                ModelShim("o3-*", frozenset({"reasoning"})),
-                ModelShim("o3-mini*", frozenset({"tools"})),
-            ),
-        )
-        m = s.get_model_shim("o3-mini")
-        assert m is not None
-        assert m.capabilities == {"reasoning"}  # first match
-
-    def test_get_model_shim_empty_models(self):
-        s = ProviderShim(name="test", base="openai_chat")
-        assert s.get_model_shim("anything") is None
 
 
 # ---------------------------------------------------------------------------
@@ -196,17 +128,17 @@ class TestResolveBase:
 
 
 # ---------------------------------------------------------------------------
-# Built-in shims
+# Built-in shims (loaded from providers/ directory)
 # ---------------------------------------------------------------------------
 
 
 class TestBuiltinShims:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        """Re-register builtins for this test class."""
-        from llm_rosetta.shims.builtins import _register_builtins
+        """Load provider shims from the YAML directory."""
+        from llm_rosetta.shims.providers import load_providers
 
-        _register_builtins()
+        load_providers()
 
     def test_official_providers_registered(self):
         for name in ("openai", "openai_responses", "anthropic", "google"):
@@ -238,35 +170,6 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "google"
 
-    def test_openai_has_nested_models(self):
-        shim = get_shim("openai")
-        assert shim is not None
-        assert len(shim.models) > 0
-        # o3 should have reasoning capability
-        m = shim.get_model_shim("o3-mini")
-        assert m is not None
-        assert "reasoning" in m.capabilities
-
-    def test_deepseek_has_nested_models(self):
-        shim = get_shim("deepseek")
-        assert shim is not None
-        m = shim.get_model_shim("deepseek-v4-flash")
-        assert m is not None
-        assert "reasoning" in m.capabilities
-        assert "tools" in m.capabilities
-
-    def test_google_model_capabilities(self):
-        shim = get_shim("google")
-        assert shim is not None
-        # gemini-2.5-pro should have reasoning
-        m = shim.get_model_shim("gemini-2.5-pro")
-        assert m is not None
-        assert "reasoning" in m.capabilities
-        # gemini-2.0-flash should NOT have reasoning
-        m2 = shim.get_model_shim("gemini-2.0-flash")
-        assert m2 is not None
-        assert "reasoning" not in m2.capabilities
-
 
 # ---------------------------------------------------------------------------
 # Integration: shim → converter
@@ -276,9 +179,9 @@ class TestBuiltinShims:
 class TestShimConverterIntegration:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.builtins import _register_builtins
+        from llm_rosetta.shims.providers import load_providers
 
-        _register_builtins()
+        load_providers()
 
     def test_deepseek_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider

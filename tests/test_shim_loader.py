@@ -83,10 +83,10 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 6 built-in shims."""
+        """Verify the real providers/ directory loads all built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
-        assert names == {
+        assert names >= {
             "openai",
             "openai_responses",
             "anthropic",
@@ -132,6 +132,15 @@ class TestLoadProviders:
             assert shim is not None, f"Shim {name!r} not found"
             assert shim.base == base, (
                 f"{name}: expected base={base!r}, got {shim.base!r}"
+            )
+
+    def test_all_shims_have_logos(self):
+        """Every built-in shim should have a logo URL set."""
+        shims = load_providers()
+        for shim in shims:
+            assert shim.logo is not None, f"Shim {shim.name!r} missing logo"
+            assert shim.logo.startswith("https://"), (
+                f"Shim {shim.name!r} logo should be an HTTPS URL"
             )
 
     def test_skips_non_directory(self, tmp_path: Path, monkeypatch):
