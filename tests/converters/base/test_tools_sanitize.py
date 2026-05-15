@@ -1,6 +1,5 @@
 """Tests for sanitize_schema and _flatten_combination in converters/base/tools.py."""
 
-import pytest
 from llm_rosetta.converters.base.tools import sanitize_schema, _flatten_combination
 
 
