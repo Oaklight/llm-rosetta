@@ -22,8 +22,32 @@ Provider names are user-defined strings (e.g. `"my-openai"`, `"prod-claude"`). T
 
 Available types: `openai_chat`, `openai_responses`, `anthropic`, `google`.
 
+### Using Shims
+
+Instead of `type`, you can use a `shim` field to reference a registered provider shim. A shim is a lightweight identity card that declares which base API standard a provider uses, along with connection defaults and field-level transforms.
+
+```jsonc
+"providers": {
+  "my-deepseek":   { "shim": "deepseek",   "api_key": "${DEEPSEEK_API_KEY}" },
+  "my-volcengine": { "shim": "volcengine",  "api_key": "${VOLCENGINE_API_KEY}", "base_url": "https://ark.cn-beijing.volces.com/api/v3" }
+}
+```
+
+When `shim` is specified:
+
+- The **base type** is resolved automatically (e.g. `deepseek` → `openai_chat`)
+- **Default `base_url`** and **`api_key` env var** are populated from the shim if not set in config
+- **Field-level transforms** are applied during request/response conversion (e.g. Volcengine's shim strips `logprobs` and `top_logprobs` fields that its API does not support)
+
+Built-in shims: `openai`, `openai_responses`, `anthropic`, `google`, `deepseek`, `volcengine`.
+
+You can also register custom shims programmatically via `register_shim()`.
+
+!!! tip "Resolution priority"
+    The provider type resolution order is: `shim` → `type` → provider name (fallback).
+
 !!! note "Backward compatibility"
-    If `type` is omitted, the provider name itself is used as the type. This means configs using the old format (where provider names were `openai_chat`, `anthropic`, etc.) continue to work without changes.
+    If both `shim` and `type` are omitted, the provider name itself is used as the type. This means configs using the old format (where provider names were `openai_chat`, `anthropic`, etc.) continue to work without changes.
 
 ### Enabling / Disabling Providers
 
@@ -171,12 +195,16 @@ These can also be set via environment variables: `LLM_ROSETTA_VERBOSE=1`, `LLM_R
     "openai-prod":    { "type": "openai_chat",      "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
     "openai-resp":    { "type": "openai_responses",  "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
     "anthropic-prod": { "type": "anthropic",         "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
-    "google-prod":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" }
+    "google-prod":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" },
+    // Shim-based providers — base_url and transforms resolved automatically
+    "deepseek":       { "shim": "deepseek",          "api_key": "${DEEPSEEK_API_KEY}" },
+    "volcengine":     { "shim": "volcengine",         "api_key": "${VOLCENGINE_API_KEY}", "base_url": "https://ark.cn-beijing.volces.com/api/v3" }
   },
   "models": {
     "gpt-4o":                     { "provider": "openai-prod",    "capabilities": ["text", "vision", "tools"] },
     "claude-sonnet-4-20250514":   { "provider": "anthropic-prod", "capabilities": ["text", "vision", "tools"] },
-    "gemini-2.0-flash":           { "provider": "google-prod",    "capabilities": ["text", "tools"] }
+    "gemini-2.0-flash":           { "provider": "google-prod",    "capabilities": ["text", "tools"] },
+    "deepseek-r1":                { "provider": "deepseek",       "capabilities": ["text", "tools"] }
   },
   "server": {
     "host": "0.0.0.0",
