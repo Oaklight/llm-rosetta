@@ -137,7 +137,7 @@ CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
 }
 ```
 
-可用能力：`text`、`vision`、`tools`。如未指定，默认为 `["text"]`。
+可用能力：`text`、`vision`、`tools`、`embedding`、`reasoning`。如未指定，默认为 `["text"]`。注意 `embedding` 与 `vision`/`tools` 互斥，`reasoning` 与 `embedding` 互斥。
 
 能力信息显示在[管理面板](admin-panel.md)中，也可在面板中编辑。
 

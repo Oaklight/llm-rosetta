@@ -99,9 +99,10 @@ curl http://localhost:8765/v1/messages \
 | `POST /v1/chat/completions` | OpenAI Chat | 兼容 OpenAI SDK |
 | `POST /v1/messages` | Anthropic | 兼容 Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | 兼容 OpenAI Responses SDK |
+| `POST /v1/embeddings` | OpenAI Embeddings | 直接透传到上游（无 IR 转换） |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | 兼容 Google REST API |
 | `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI（流式） | 兼容 Google 流式 API |
-| `GET /v1/models` | OpenAI / Anthropic | 列出已配置模型（兼容两种 SDK） |
+| `GET /v1/models` | OpenAI / Anthropic | 列出已配置模型，含 `api_standard` 和 `capabilities` |
 | `GET /v1beta/models` | Google GenAI | 列出已配置模型（Google SDK 格式） |
 | `GET /health` | — | 健康检查 |
 | `GET /admin/` | — | [管理面板](admin-panel.md)（Web UI） |

@@ -8,6 +8,27 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
+*暂无变更。*
+
+## v0.6.1 — 2026-05-15
+
+### 新增
+
+- **`/v1/embeddings` 透传端点**：将 embedding 请求直接代理到上游提供商，无需 IR 转换 —— OpenAI embeddings 格式在兼容提供商间通用。包含指标和请求日志记录
+- **`/v1/models` 增强响应**：模型列表现在包含 `api_standard`（如 `"openai_chat"`、`"anthropic"`）和每模型 `capabilities` 字段
+- **管理面板"从提供商获取"功能**：在模型标签页中查询上游 `/v1/models`（或等效端点），浏览可用模型并通过复选框批量添加，支持可选前缀。已存在的模型显示为禁用状态
+- **模型管理增强**：模型标签页新增提供商过滤下拉框和模型名称搜索
+- **Embedding 能力和测试类型**：模型编辑器中新增 `embedding` 能力（与 `vision`/`tools` 互斥）。Embedding 模型获得单独的 Test 按钮，POST 到 `/v1/embeddings` 并显示维度数量
+- **Reasoning 能力和测试类型**：新增 `reasoning` 能力，配有专用测试（发送 `reasoning_effort: "low"`）。与 `embedding` 互斥
+- **管理面板标签页持久化**：活动标签页存储在 `localStorage` 中，页面刷新后保持不变
+
+### 修复
+
+- **SOCKS5 代理测试中缺失事件循环**：当之前的测试关闭了默认事件循环时，使用 `asyncio.new_event_loop()` 作为后备
+- **fetch_upstream_models 中的 httpclient 响应类型断言**：解决 `AsyncClient.get()` 返回类型的 ty 类型检查错误
+
+## v0.6.0 — 2026-05-15
+
 ### 新增
 
 - **声明式 YAML 提供商 Shim 目录**：Shim 现在以 `provider.yaml` + 可选 `transforms.py` 文件定义在 `shims/providers/<name>/` 下，导入时自动发现并注册
@@ -29,6 +50,11 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 ### 重构
 
 - **零依赖网关**（[#178](https://github.com/Oaklight/llm-rosetta/pull/178)）：将 Starlette + uvicorn + httpx 替换为内嵌的 zerodep `httpserver` 和 `httpclient` 模块。`[gateway]` extra 现在无外部运行时依赖
+
+### 修复
+
+- **Schema 扁平化中的深度合并**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：修复 `$ref`/`$defs` 解析以深度合并属性并剥离孤立的 `required` 条目
+- **无条件 usage 回退与 StreamContext 合并**（[#176](https://github.com/Oaklight/llm-rosetta/pull/176)）：防止缺失 usage 数据时的异常，确保 StreamContext 状态正确合并
 
 ### 已知问题
 
