@@ -2083,9 +2083,16 @@ document.getElementById('filterModel').addEventListener('change', () => { logOff
 document.getElementById('filterProvider').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 document.getElementById('filterStatus').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 
-// Close modal on overlay click
+// Close modal on overlay click (delegates to closeModal so abort hooks fire)
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+});
+// Close test modal on Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const testModal = document.getElementById('testModal');
+    if (testModal && testModal.classList.contains('open')) closeModal('testModal');
+  }
 });
 
 // ===================== Helpers =====================
@@ -2204,12 +2211,15 @@ async function runTest(model, type) {
   const t0 = performance.now();
   const signal = _newTestSignal();
 
+  // Shared headers — Connection: close prevents keep-alive so abort()
+  // immediately frees the TCP slot instead of leaving it lingering.
+  const testHeaders = {'Content-Type':'application/json', 'Connection':'close'};
+  if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
+
   if (type === 'embedding') {
     // Embedding test — POST to /v1/embeddings
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     try {
-      const testHeaders = {'Content-Type':'application/json'};
-      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/embeddings', {
         method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
@@ -2235,8 +2245,6 @@ async function runTest(model, type) {
     output.classList.add('streaming');
     output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
     try {
-      const testHeaders = {'Content-Type':'application/json'};
-      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
         method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
@@ -2290,8 +2298,6 @@ async function runTest(model, type) {
     // Non-streaming
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     try {
-      const testHeaders = {'Content-Type':'application/json'};
-      if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
         method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
