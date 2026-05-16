@@ -1038,45 +1038,50 @@ async def _run_test_task(
     endpoint: str,
     payload: dict[str, Any],
     internal_token: str,
-    proxy_url: str | None,
+    proxy_url: str | None,  # noqa: ARG001 — reserved for future use
 ) -> None:
-    """Execute the upstream test request using the gateway's httpx client pool.
+    """Execute an upstream test request via a self-call to the gateway.
 
     Results are stored in ``_test_tasks[task_id]``.  This runs as an
     ``asyncio.Task`` so the admin API handler can return immediately.
+
+    Important: we create a **dedicated** ``AsyncClient`` per task instead
+    of reusing the shared pool from ``proxy.get_client()``.  The shared
+    client serialises non-streaming requests with an ``asyncio.Lock``,
+    which would deadlock when the self-call triggers the proxy handler
+    that itself needs the same lock to call the upstream provider.
     """
-    from ..proxy import get_client
-
     try:
-        client = get_client(proxy_url)
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {internal_token}",
-        }
-
-        # Determine target URL — route to ourselves on localhost.
-        # The app object is not accessible here, so we build the URL from
-        # the well-known gateway bind address stored when the task was
-        # created.
-        base_url = _test_tasks[task_id].get("_base_url", "http://127.0.0.1:28765")
-        url = f"{base_url}{endpoint}"
-
-        resp = await client.post(url, json=payload, headers=headers)
-        assert isinstance(resp, HttpResponse)
-
-        # Try to parse JSON body
+        # Use a per-task client to avoid lock contention / deadlock
+        # with the shared proxy client.
+        client = AsyncClient(timeout=300.0)
         try:
-            body = resp.json()
-        except Exception:
-            body = resp.text
-
-        _test_tasks[task_id].update(
-            {
-                "status": "done",
-                "status_code": resp.status_code,
-                "body": body,
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {internal_token}",
             }
-        )
+
+            base_url = _test_tasks[task_id].get("_base_url", "http://127.0.0.1:28765")
+            url = f"{base_url}{endpoint}"
+
+            resp = await client.post(url, json=payload, headers=headers)
+            assert isinstance(resp, HttpResponse)
+
+            # Try to parse JSON body
+            try:
+                body = resp.json()
+            except Exception:
+                body = resp.text
+
+            _test_tasks[task_id].update(
+                {
+                    "status": "done",
+                    "status_code": resp.status_code,
+                    "body": body,
+                }
+            )
+        finally:
+            await client.aclose()
     except asyncio.CancelledError:
         _test_tasks[task_id]["status"] = "cancelled"
     except Exception as exc:
