@@ -31,7 +31,11 @@ def _normalize_thinking(body: dict[str, Any]) -> dict[str, Any]:
         thinking["type"] = "enabled"
         if "budget_tokens" not in thinking:
             max_tokens = body.get("max_tokens", 16384)
-            thinking["budget_tokens"] = int(max_tokens * _BUDGET_RATIO)
+            budget = max(1024, int(max_tokens * _BUDGET_RATIO))
+            # Ensure budget < max_tokens; bump max_tokens if needed
+            if budget >= max_tokens:
+                body["max_tokens"] = budget + 1024
+            thinking["budget_tokens"] = budget
     return body
 
 

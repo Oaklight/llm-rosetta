@@ -2103,7 +2103,7 @@ const TEST_IMAGE_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 function getTestLabel(type) { return t('test.' + type); }
 
 function buildTestPayload(model, type) {
-  const base = {model, max_tokens: 256};
+  const base = {model, max_tokens: 4096};
   switch(type) {
     case 'text':
       return {...base, messages:[{role:'user', content:'Say "Hello! The gateway test is working." and nothing else.'}]};
