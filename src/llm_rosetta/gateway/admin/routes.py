@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import secrets
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Any, overload
@@ -1009,6 +1011,165 @@ async def get_internal_token(request: Any) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Async model test tasks
+# ---------------------------------------------------------------------------
+
+# In-memory store: task_id → {status, result, asyncio_task, started, ...}
+_test_tasks: dict[str, dict[str, Any]] = {}
+_MAX_TASK_AGE = 300  # seconds — auto-cleanup threshold
+
+
+def _cleanup_stale_tasks() -> None:
+    """Remove tasks older than _MAX_TASK_AGE."""
+    now = time.monotonic()
+    expired = [
+        tid
+        for tid, t in _test_tasks.items()
+        if now - t.get("started", 0) > _MAX_TASK_AGE
+    ]
+    for tid in expired:
+        task = _test_tasks.pop(tid, None)
+        if task and not task.get("_task_obj", asyncio.Future()).done():
+            task["_task_obj"].cancel()
+
+
+async def _run_test_task(
+    task_id: str,
+    endpoint: str,
+    payload: dict[str, Any],
+    internal_token: str,
+    proxy_url: str | None,
+) -> None:
+    """Execute the upstream test request using the gateway's httpx client pool.
+
+    Results are stored in ``_test_tasks[task_id]``.  This runs as an
+    ``asyncio.Task`` so the admin API handler can return immediately.
+    """
+    from ..proxy import get_client
+
+    try:
+        client = get_client(proxy_url)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {internal_token}",
+        }
+
+        # Determine target URL — route to ourselves on localhost.
+        # The app object is not accessible here, so we build the URL from
+        # the well-known gateway bind address stored when the task was
+        # created.
+        base_url = _test_tasks[task_id].get("_base_url", "http://127.0.0.1:28765")
+        url = f"{base_url}{endpoint}"
+
+        resp = await client.post(url, json=payload, headers=headers)
+        assert isinstance(resp, HttpResponse)
+
+        # Try to parse JSON body
+        try:
+            body = resp.json()
+        except Exception:
+            body = resp.text
+
+        _test_tasks[task_id].update(
+            {
+                "status": "done",
+                "status_code": resp.status_code,
+                "body": body,
+            }
+        )
+    except asyncio.CancelledError:
+        _test_tasks[task_id]["status"] = "cancelled"
+    except Exception as exc:
+        _test_tasks[task_id].update(
+            {
+                "status": "error",
+                "error": str(exc),
+            }
+        )
+
+
+async def start_test(request: Any) -> Response:
+    """Start an async model test.  Returns a task_id immediately.
+
+    POST /admin/api/test
+    Body: {endpoint: "/v1/...", payload: {...}}
+    """
+    _cleanup_stale_tasks()
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+
+    endpoint = body.get("endpoint")
+    payload = body.get("payload")
+    if not endpoint or not isinstance(payload, dict):
+        return JSONResponse({"error": "Missing endpoint or payload"}, status_code=400)
+
+    internal_token = getattr(request.app, "internal_token", "")
+    if not internal_token:
+        return JSONResponse({"error": "No internal token available"}, status_code=500)
+
+    # Determine the base URL the gateway is listening on so the test
+    # task can POST back to ourselves.
+    host = getattr(request.app, "_bind_host", "127.0.0.1")
+    port = getattr(request.app, "_bind_port", 28765)
+    # Always use 127.0.0.1 for self-calls — even if bound to 0.0.0.0
+    if host in ("0.0.0.0", "::"):
+        host = "127.0.0.1"
+    base_url = f"http://{host}:{port}"
+
+    task_id = uuid.uuid4().hex[:12]
+    _test_tasks[task_id] = {
+        "status": "pending",
+        "started": time.monotonic(),
+        "_base_url": base_url,
+    }
+
+    # Determine proxy from gateway config
+    gw_config = _get_gateway_config(request)
+    proxy_url = gw_config.proxy if gw_config else None
+
+    asyncio_task = asyncio.create_task(
+        _run_test_task(task_id, endpoint, payload, internal_token, proxy_url)
+    )
+    _test_tasks[task_id]["_task_obj"] = asyncio_task
+
+    return JSONResponse({"task_id": task_id})
+
+
+async def get_test_result(request: Any, task_id: str = "") -> Response:
+    """Poll for a test task result.
+
+    GET /admin/api/test/<task_id>
+    """
+    task = _test_tasks.get(task_id)
+    if not task:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    # Return only serialisable fields (skip _task_obj, _base_url)
+    result: dict[str, Any] = {k: v for k, v in task.items() if not k.startswith("_")}
+    return JSONResponse(result)
+
+
+async def cancel_test(request: Any, task_id: str = "") -> Response:
+    """Cancel a running test task.
+
+    DELETE /admin/api/test/<task_id>
+    """
+    task = _test_tasks.get(task_id)
+    if not task:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+
+    task_obj = task.get("_task_obj")
+    if task_obj and not task_obj.done():
+        task_obj.cancel()
+        task["status"] = "cancelled"
+
+    return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------------------
 # Fetch upstream models
 # ---------------------------------------------------------------------------
 
@@ -1251,3 +1412,7 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/keys/<key_id>", methods=["DELETE"])(delete_api_key)
     app.route("/admin/api/keys/<key_id>/reveal", methods=["GET"])(reveal_api_key)
     app.route("/admin/api/internal-token", methods=["GET"])(get_internal_token)
+    # Async model test
+    app.route("/admin/api/test", methods=["POST"])(start_test)
+    app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
+    app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)

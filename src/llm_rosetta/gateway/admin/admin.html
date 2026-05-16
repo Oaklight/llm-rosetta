@@ -2158,19 +2158,35 @@ function truncatePayloadForDisplay(payload) {
   return str.replace(/(data:[^;]+;base64,)([A-Za-z0-9+/=]{80})[A-Za-z0-9+/=]+/g, '$1$2...[truncated]');
 }
 
-// --- Test request lifecycle (AbortController + timeout) ---
-const _TEST_TIMEOUT_MS = 120_000; // 2 minutes
-let _testAbortCtrl = null;
+// --- Test request lifecycle ---
+// Async task-based testing for non-stream requests.  The browser
+// POSTs to /admin/api/test which returns immediately with a task_id;
+// we then poll /admin/api/test/<id> until done.  This completely
+// avoids the browser connection-pool exhaustion problem because the
+// long-running upstream call lives in the gateway's httpx pool, not
+// in the browser's 6-connection HTTP/1.1 limit.
+const _TEST_TIMEOUT_MS = 120_000;
+let _testAbortCtrl = null;   // AbortController for stream tests
+let _testTaskId = null;       // server-side task id for async tests
+let _testPollTimer = null;    // setInterval id for polling
 
 function _abortPendingTest() {
+  // Cancel browser-side stream fetch
   if (_testAbortCtrl) { _testAbortCtrl.abort(); _testAbortCtrl = null; }
+  // Cancel server-side async task
+  if (_testTaskId) {
+    api.del('/admin/api/test/' + _testTaskId).catch(() => {});
+    _testTaskId = null;
+  }
+  // Stop polling
+  if (_testPollTimer) { clearInterval(_testPollTimer); _testPollTimer = null; }
 }
 
 function _newTestSignal() {
-  _abortPendingTest();                      // cancel previous if any
+  _abortPendingTest();
   _testAbortCtrl = new AbortController();
   const ctrl = _testAbortCtrl;
-  setTimeout(() => ctrl.abort(), _TEST_TIMEOUT_MS);  // auto-timeout
+  setTimeout(() => ctrl.abort(), _TEST_TIMEOUT_MS);
   return ctrl.signal;
 }
 
@@ -2209,133 +2225,160 @@ async function runTest(model, type) {
   reqBody.textContent = truncatePayloadForDisplay(payload);
 
   const t0 = performance.now();
-  const signal = _newTestSignal();
+  _abortPendingTest();  // cancel any previous test
 
-  // Shared headers — Connection: close prevents keep-alive so abort()
-  // immediately frees the TCP slot instead of leaving it lingering.
-  const testHeaders = {'Content-Type':'application/json', 'Connection':'close'};
-  if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
-
-  if (type === 'embedding') {
-    // Embedding test — POST to /v1/embeddings
+  if (type === 'embedding' || (type !== 'stream')) {
+    // --- Async task path (embedding + all non-streaming tests) ---
+    // Browser never holds a long connection; the gateway's httpx pool
+    // handles the upstream call.
+    const endpoint = type === 'embedding' ? '/v1/embeddings' : '/v1/chat/completions';
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     try {
-      const res = await fetch('/v1/embeddings', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
-      });
-      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
-      const body = await res.json();
-      resDetails.style.display = '';
-      resBody.textContent = JSON.stringify(body, null, 2);
-      if (!res.ok) {
-        output.textContent = `Error ${res.status}: ${body.error?.message || JSON.stringify(body.error || body)}`;
-        meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
-        return;
-      }
-      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
-      if (body.usage) {
-        meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in</div>`;
-      }
-      const dim = body.data?.[0]?.embedding?.length;
-      output.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
-    } catch(e) {
-      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
-    }
-  } else if (type === 'stream') {
-    output.classList.add('streaming');
-    output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
-    try {
-      const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        output.className = 'test-output';
-        output.textContent = `Error ${res.status}: ${errText}`;
-        meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
-        resDetails.style.display = '';
-        resBody.textContent = errText;
-        return;
-      }
-      output.textContent = '';
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-      let buffer = '';
-      let rawChunks = [];
-      while(true) {
-        const {done, value} = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, {stream:true});
-        const lines = buffer.split('\n');
-        buffer = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const data = line.slice(6);
-          if (data === '[DONE]') { rawChunks.push('[DONE]'); continue; }
-          rawChunks.push(data);
+      const startResp = await api.post('/admin/api/test', {endpoint, payload});
+      const taskId = startResp.task_id;
+      _testTaskId = taskId;
+
+      // Poll for result
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          clearInterval(_testPollTimer);
+          _testPollTimer = null;
+          reject(new DOMException('Test timed out', 'AbortError'));
+        }, _TEST_TIMEOUT_MS);
+
+        _testPollTimer = setInterval(async () => {
           try {
-            const chunk = JSON.parse(data);
-            const delta = chunk.choices?.[0]?.delta?.content || '';
-            fullText += delta;
-            output.textContent = fullText;
-            output.scrollTop = output.scrollHeight;
-          } catch(e) {}
-        }
-      }
-      output.className = 'test-output';
-      if (!fullText) output.textContent = t('test.emptyResponse');
-      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
-      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">OK (stream)</span></div>`;
-      // Show raw SSE chunks in response details
-      resDetails.style.display = '';
-      resBody.textContent = rawChunks.map(c => c === '[DONE]' ? c : JSON.stringify(JSON.parse(c), null, 2)).join('\n---\n');
-    } catch(e) {
-      output.className = 'test-output';
-      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
-    }
-  } else {
-    // Non-streaming
-    output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
-    try {
-      const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
+            const r = await api.get('/admin/api/test/' + taskId);
+            if (r.status === 'pending') return; // keep polling
+            clearInterval(_testPollTimer);
+            _testPollTimer = null;
+            clearTimeout(timeout);
+            _testTaskId = null;
+
+            if (r.status === 'cancelled') {
+              reject(new DOMException('Request cancelled', 'AbortError'));
+              return;
+            }
+            if (r.status === 'error') {
+              reject(new Error(r.error || 'Unknown error'));
+              return;
+            }
+
+            // --- done ---
+            const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+            const body = r.body;
+            const statusCode = r.status_code || 200;
+
+            resDetails.style.display = '';
+            resBody.textContent = typeof body === 'string' ? body : JSON.stringify(body, null, 2);
+
+            if (statusCode >= 400) {
+              const errMsg = body?.error?.message || JSON.stringify(body?.error || body);
+              output.textContent = `Error ${statusCode}: ${errMsg}`;
+              meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${statusCode}</span></div>`;
+              resolve();
+              return;
+            }
+
+            meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
+
+            if (type === 'embedding') {
+              if (body?.usage) {
+                meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in</div>`;
+              }
+              const dim = body?.data?.[0]?.embedding?.length;
+              output.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
+            } else {
+              // Chat completion result
+              if (body?.usage) {
+                meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in / ${body.usage.completion_tokens || '?'} out</div>`;
+              }
+              const choice = body?.choices?.[0];
+              if (type === 'tools' && choice?.message?.tool_calls) {
+                const tc = choice.message.tool_calls[0];
+                output.textContent = `Tool call: ${tc.function?.name || tc.name || '?'}(${tc.function?.arguments || JSON.stringify(tc.arguments) || '{}'})`;
+                if (choice.message.content) output.textContent += '\n\nContent: ' + choice.message.content;
+              } else {
+                const content = choice?.message?.content;
+                output.textContent = (content != null && content !== '') ? content : t('test.emptyResponse');
+              }
+            }
+            resolve();
+          } catch(pollErr) {
+            // Network error during poll — stop polling
+            clearInterval(_testPollTimer);
+            _testPollTimer = null;
+            clearTimeout(timeout);
+            reject(pollErr);
+          }
+        }, 500);
       });
-      const elapsed = ((performance.now() - t0)/1000).toFixed(2);
-      const body = await res.json();
-
-      // Always show raw response
-      resDetails.style.display = '';
-      resBody.textContent = JSON.stringify(body, null, 2);
-
-      if (!res.ok) {
-        output.textContent = `Error ${res.status}: ${body.error?.message || JSON.stringify(body.error || body)}`;
-        meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
-        return;
-      }
-
-      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
-
-      // Extract usage if present
-      if (body.usage) {
-        meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in / ${body.usage.completion_tokens || '?'} out</div>`;
-      }
-
-      // Display extracted model reply in main output
-      const choice = body.choices?.[0];
-      if (type === 'tools' && choice?.message?.tool_calls) {
-        const tc = choice.message.tool_calls[0];
-        output.textContent = `Tool call: ${tc.function?.name || tc.name || '?'}(${tc.function?.arguments || JSON.stringify(tc.arguments) || '{}'})`;
-        if (choice.message.content) {
-          output.textContent += '\n\nContent: ' + choice.message.content;
-        }
-      } else {
-        const content = choice?.message?.content;
-        output.textContent = (content != null && content !== '') ? content : t('test.emptyResponse');
-      }
     } catch(e) {
-      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
+      if (e.name === 'AbortError') {
+        output.textContent = 'Request aborted (timeout or cancelled)';
+      } else {
+        output.textContent = `Error: ${e.message}`;
+      }
     }
+    return;
+  }
+
+  // --- Stream test: direct browser fetch (SSE needs live connection) ---
+  // type === 'stream' is the only path that reaches here (others return above)
+  const signal = _newTestSignal();
+  const streamHeaders = {'Content-Type':'application/json', 'Connection':'close'};
+  if (internalToken) streamHeaders['Authorization'] = `Bearer ${internalToken}`;
+
+  output.classList.add('streaming');
+  output.innerHTML = `<span class="test-spinner"></span>${t('test.connecting')}`;
+  try {
+    const res = await fetch('/v1/chat/completions', {
+      method:'POST', headers:streamHeaders, body:JSON.stringify(payload), signal
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      output.className = 'test-output';
+      output.textContent = `Error ${res.status}: ${errText}`;
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
+      resDetails.style.display = '';
+      resBody.textContent = errText;
+      return;
+    }
+    output.textContent = '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = '';
+    let buffer = '';
+    let rawChunks = [];
+    while(true) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, {stream:true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6);
+        if (data === '[DONE]') { rawChunks.push('[DONE]'); continue; }
+        rawChunks.push(data);
+        try {
+          const chunk = JSON.parse(data);
+          const delta = chunk.choices?.[0]?.delta?.content || '';
+          fullText += delta;
+          output.textContent = fullText;
+          output.scrollTop = output.scrollHeight;
+        } catch(e) {}
+      }
+    }
+    output.className = 'test-output';
+    if (!fullText) output.textContent = t('test.emptyResponse');
+    const elapsed = ((performance.now() - t0)/1000).toFixed(2);
+    meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">OK (stream)</span></div>`;
+    resDetails.style.display = '';
+    resBody.textContent = rawChunks.map(c => c === '[DONE]' ? c : JSON.stringify(JSON.parse(c), null, 2)).join('\n---\n');
+  } catch(e) {
+    output.className = 'test-output';
+    output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
   }
 }
 

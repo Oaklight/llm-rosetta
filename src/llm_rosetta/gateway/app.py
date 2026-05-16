@@ -405,6 +405,9 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
 
 async def run_gateway(app: App, host: str, port: int) -> None:
     """Start the gateway with lifecycle management."""
+    # Expose bind address so admin test tasks can self-call.
+    app._bind_host = host  # type: ignore[attr-defined]
+    app._bind_port = port  # type: ignore[attr-defined]
     flush_task = asyncio.create_task(_periodic_flush(app))
     try:
         await app._serve(host, port)
