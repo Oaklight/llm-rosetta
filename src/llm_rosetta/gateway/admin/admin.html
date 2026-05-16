@@ -1114,7 +1114,10 @@ function showToast(msg, type='success') {
 }
 
 // ===================== Modal =====================
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'testModal') _abortPendingTest();
+}
 
 let _editingProviderName = null; // original name when editing (for rename)
 
@@ -2148,6 +2151,22 @@ function truncatePayloadForDisplay(payload) {
   return str.replace(/(data:[^;]+;base64,)([A-Za-z0-9+/=]{80})[A-Za-z0-9+/=]+/g, '$1$2...[truncated]');
 }
 
+// --- Test request lifecycle (AbortController + timeout) ---
+const _TEST_TIMEOUT_MS = 120_000; // 2 minutes
+let _testAbortCtrl = null;
+
+function _abortPendingTest() {
+  if (_testAbortCtrl) { _testAbortCtrl.abort(); _testAbortCtrl = null; }
+}
+
+function _newTestSignal() {
+  _abortPendingTest();                      // cancel previous if any
+  _testAbortCtrl = new AbortController();
+  const ctrl = _testAbortCtrl;
+  setTimeout(() => ctrl.abort(), _TEST_TIMEOUT_MS);  // auto-timeout
+  return ctrl.signal;
+}
+
 async function runTest(model, type) {
   // Close any open dropdown
   document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
@@ -2183,6 +2202,7 @@ async function runTest(model, type) {
   reqBody.textContent = truncatePayloadForDisplay(payload);
 
   const t0 = performance.now();
+  const signal = _newTestSignal();
 
   if (type === 'embedding') {
     // Embedding test — POST to /v1/embeddings
@@ -2191,7 +2211,7 @@ async function runTest(model, type) {
       const testHeaders = {'Content-Type':'application/json'};
       if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/embeddings', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
       const elapsed = ((performance.now() - t0)/1000).toFixed(2);
       const body = await res.json();
@@ -2209,7 +2229,7 @@ async function runTest(model, type) {
       const dim = body.data?.[0]?.embedding?.length;
       output.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
     } catch(e) {
-      output.textContent = `Network error: ${e.message}`;
+      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
     }
   } else if (type === 'stream') {
     output.classList.add('streaming');
@@ -2218,7 +2238,7 @@ async function runTest(model, type) {
       const testHeaders = {'Content-Type':'application/json'};
       if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
       if (!res.ok) {
         const errText = await res.text();
@@ -2264,7 +2284,7 @@ async function runTest(model, type) {
       resBody.textContent = rawChunks.map(c => c === '[DONE]' ? c : JSON.stringify(JSON.parse(c), null, 2)).join('\n---\n');
     } catch(e) {
       output.className = 'test-output';
-      output.textContent = `Network error: ${e.message}`;
+      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
     }
   } else {
     // Non-streaming
@@ -2273,7 +2293,7 @@ async function runTest(model, type) {
       const testHeaders = {'Content-Type':'application/json'};
       if (internalToken) testHeaders['Authorization'] = `Bearer ${internalToken}`;
       const res = await fetch('/v1/chat/completions', {
-        method:'POST', headers:testHeaders, body:JSON.stringify(payload)
+        method:'POST', headers:testHeaders, body:JSON.stringify(payload), signal
       });
       const elapsed = ((performance.now() - t0)/1000).toFixed(2);
       const body = await res.json();
@@ -2308,7 +2328,7 @@ async function runTest(model, type) {
         output.textContent = (content != null && content !== '') ? content : t('test.emptyResponse');
       }
     } catch(e) {
-      output.textContent = `Network error: ${e.message}`;
+      output.textContent = e.name === 'AbortError' ? 'Request aborted (timeout or cancelled)' : `Network error: ${e.message}`;
     }
   }
 }
