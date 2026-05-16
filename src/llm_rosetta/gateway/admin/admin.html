@@ -2096,7 +2096,16 @@ document.addEventListener('keydown', e => {
 });
 
 // ===================== Helpers =====================
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+// esc() escapes HTML special chars AND single quotes so the result is
+// safe in both HTML text nodes and single-quoted JS-string attributes
+// such as onclick="fn('${esc(name)}')".
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  // innerHTML escapes &, <, > and " but NOT '.  Replace ' last to avoid
+  // double-encoding the & in the &#39; entity.
+  return d.innerHTML.replace(/'/g, '&#39;');
+}
 
 function formatDuration(seconds) {
   if (seconds < 60) return Math.floor(seconds) + 's';
