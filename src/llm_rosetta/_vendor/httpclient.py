@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.4.0"
+# version = "0.4.1"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -2437,7 +2437,8 @@ async def async_options(url: str, **kwargs: Any) -> Response | StreamingResponse
 class Client:
     """Synchronous HTTP client session with connection pooling.
 
-    Thread-safe: uses a threading.Lock internally.
+    Thread-safe: the underlying connection pool uses its own
+    ``threading.Lock`` to protect shared state.
 
     Usage::
 
@@ -2463,7 +2464,6 @@ class Client:
         self._auth = auth
         self._proxy = proxy
         self._pool = _SyncConnectionPool(pool_size)
-        self._lock = threading.Lock()
 
     def request(
         self,
@@ -2479,10 +2479,7 @@ class Client:
         kwargs.setdefault("proxy", self._proxy)
         kwargs["_pool"] = self._pool
         kwargs["headers"] = _merge_headers(self._base_headers, kwargs.get("headers"))
-        if kwargs.get("stream"):
-            return _sync_request(method, url, **kwargs)
-        with self._lock:
-            return _sync_request(method, url, **kwargs)
+        return _sync_request(method, url, **kwargs)
 
     def get(self, url: str, **kwargs: Any) -> Response | StreamingResponse:
         return self.request("GET", url, **kwargs)
@@ -2519,8 +2516,8 @@ class Client:
 class AsyncClient:
     """Asynchronous HTTP client session with connection pooling.
 
-    Safe to use from a single asyncio task; for concurrent requests
-    from the same client, use asyncio.Lock internally.
+    Safe for concurrent use from multiple asyncio tasks.  The underlying
+    connection pool uses its own ``asyncio.Lock`` to protect shared state.
 
     Usage::
 
@@ -2546,7 +2543,6 @@ class AsyncClient:
         self._auth = auth
         self._proxy = proxy
         self._pool = _AsyncConnectionPool(pool_size)
-        self._lock = asyncio.Lock()
 
     async def request(
         self,
@@ -2562,10 +2558,7 @@ class AsyncClient:
         kwargs.setdefault("proxy", self._proxy)
         kwargs["_pool"] = self._pool
         kwargs["headers"] = _merge_headers(self._base_headers, kwargs.get("headers"))
-        if kwargs.get("stream"):
-            return await _async_request(method, url, **kwargs)
-        async with self._lock:
-            return await _async_request(method, url, **kwargs)
+        return await _async_request(method, url, **kwargs)
 
     async def get(self, url: str, **kwargs: Any) -> Response | StreamingResponse:
         return await self.request("GET", url, **kwargs)
