@@ -10,6 +10,47 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 *暂无变更。*
 
+## v0.6.3 — 2026-05-17
+
+### 新增
+
+- **OpenAI Responses API `custom_tool_call` 全链路支持**：端到端处理 `type: "custom"` 工具类型 —— 请求侧（降级为 IR `type: "function"` 并通过 `_passthrough` 保留原始负载以支持同提供商往返）、响应解析（`custom_tool_call` 项使用纯文本 `input`）、流式传输（`response.custom_tool_call_input.delta/done` 事件）。跨提供商降级时自动合成单字符串参数的 JSON Schema，使 custom tool 在 Anthropic/Google 上仍可使用
+- **IR `ToolCallStartEvent` 新增 `tool_type` 字段**：流式事件现在携带 `tool_type`（"function"、"custom" 等），以便转换器发出正确的提供商特定事件类型
+- **Argo shim 支持 `model_id_field` 和 `upstream_model` 别名**：新增 `argo_openai`、`argo_anthropic`、`argo_google` 提供商 shim，可重写 Argo 代理端点的模型字段名。包含 `argo_anthropic` 的 thinking 规范化转换
+- **异步服务端测试任务**：管理面板测试请求改为后台任务运行，避免慢模型导致浏览器连接池耗尽
+- **管理面板登录限流**：管理面板登录端点增加暴力破解防护
+
+### 修复
+
+- **管理面板存储型 XSS**：修复 `esc()` 辅助函数中单引号未转义的问题，防止通过提供商/模型名称注入
+- **Gateway 流式传输中 `custom_tool_call` 类型丢失**：`OpenAIResponsesStreamContext.from_base()` 现在复制 `_tool_call_types`，修复 IR→提供商流式路径中 custom tool 退化为 `function_call` 事件类型的问题
+- **管理面板 UI 回归**：修复获取模型复选框无限递归、允许在 `credential_visible` 关闭时编辑 API Key、消除前缀实时预览输入延迟、修复获取模型前缀丢失选中状态、关闭模态框时中止测试请求
+- **Reasoning 测试 `max_tokens` 过小**：强制 `budget_tokens >= 1024` 以满足推理能力测试需求
+- **httpclient AsyncClient 序列化锁**：更新内嵌 httpclient 至 v0.4.1，测试自调用使用独立 AsyncClient 避免死锁
+- **ty 类型检查错误**：解决与 ty 0.0.32+ 的兼容性问题
+
+### 变更
+
+- **管理面板路由拆分为子包**：将单体 `routes.py` 重构为 `routes/` 子包，分为 auth、config、keys、observability、testing 等模块
+- **CI 切换至 pre-commit**：代码检查现使用 `pre-commit run --all-files`（ruff + ty）；complexipy 因上游问题暂时挂起
+
+## v0.6.2 — 2026-05-15
+
+### 新增
+
+- **管理面板密码保护**：配置中的 `server.admin_password` 启用管理面板登录覆盖层，使用 HMAC 会话令牌
+- **凭证可见性控制**：`server.credential_visible: false` 在管理面板中隐藏 API Key 的查看/复制功能
+- **提供商级联删除**：删除提供商时展示受影响的模型并级联删除
+
+### 修复
+
+- **Base URL 被覆盖**：切换提供商类型不再覆盖用户已输入的 base URL
+- **请求日志折叠**：展开的错误详情行在自动刷新后保持展开状态
+
+### 变更
+
+- **Python ≥3.11 零依赖**：用内嵌的 zerodep yaml 模块替换 PyYAML
+
 ## v0.6.1 — 2026-05-15
 
 ### 新增
