@@ -57,9 +57,10 @@ plugins:
       sections:
         Home:
           - index.md
-        Guide:
+        Getting Started:
           - getting-started/installation.md
           - getting-started/quickstart.md
+        Library Guide:
           - guide/concepts.md
           - guide/converters.md
           - guide/ir-types.md
@@ -89,6 +90,7 @@ plugins:
           - api/tool-ops.md
           - api/shims.md
           - api/utils.md
+          - api/admin.md
         Roadmap:
           - roadmap.md
         Changelog:
@@ -131,9 +133,10 @@ extra:
 
 nav:
   - Home: index.md
-  - Guide:
+  - Getting Started:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
+  - Library Guide:
       - Core Concepts: guide/concepts.md
       - Using Converters: guide/converters.md
       - IR Types: guide/ir-types.md
@@ -153,10 +156,13 @@ nav:
       - Configuration: gateway/configuration.md
       - CLI Reference: gateway/cli.md
       - CLI Integrations: gateway/cli-integrations.md
-      - Admin Panel: gateway/admin-panel.md
-      - Validation: gateway/validation.md
-      - CLI Cross-Format Testing: gateway/validation-cli.md
-      - SDK & Integration Tests: gateway/validation-sdk.md
+      - Admin:
+          - Admin Panel: gateway/admin-panel.md
+          - Admin API: api/admin.md
+      - Validation:
+          - gateway/validation.md
+          - CLI Cross-Format Testing: gateway/validation-cli.md
+          - SDK & Integration Tests: gateway/validation-sdk.md
   - API Reference:
       - api/index.md
       - Converters: api/converters.md
