@@ -10,6 +10,47 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 *No changes yet.*
 
+## v0.6.3 — 2026-05-17
+
+### Added
+
+- **Full `custom_tool_call` support for OpenAI Responses API**: Handle the `type: "custom"` tool type end-to-end — request ingestion (coerce to IR `type: "function"` with `_passthrough` for round-trip), response parsing (`custom_tool_call` items with plain-text `input`), and streaming (`response.custom_tool_call_input.delta/done` events). Cross-provider degradation synthesizes a single-string-param JSON Schema so custom tools remain usable on Anthropic/Google
+- **`tool_type` field on IR `ToolCallStartEvent`**: Streaming events now carry `tool_type` ("function", "custom", etc.) so converters can emit the correct provider-specific event types
+- **Argo shims with `model_id_field` and `upstream_model` alias**: New `argo_openai`, `argo_anthropic`, `argo_google` provider shims that rewrite the model field name for Argo-proxied endpoints. Includes thinking normalization transform for `argo_anthropic`
+- **Async server-side test tasks**: Admin panel test requests now run in background tasks, preventing browser connection pool exhaustion on slow models
+- **Admin login rate limiting**: Brute-force protection on the admin login endpoint
+
+### Fixed
+
+- **Stored XSS in admin UI**: Escape single quotes in the `esc()` helper to prevent injection via provider/model names
+- **`custom_tool_call` streaming type loss in gateway**: `OpenAIResponsesStreamContext.from_base()` now copies `_tool_call_types`, fixing custom tools falling back to `function_call` event types during IR→provider streaming
+- **Admin UI regressions**: Fix infinite recursion in fetch models checkbox handler, allow API key editing regardless of `credential_visible` setting, remove prefix real-time preview input lag, fix fetch models prefix losing selections, abort test requests on modal close
+- **Reasoning test `max_tokens` too small**: Enforce `budget_tokens >= 1024` for reasoning capability tests
+- **httpclient AsyncClient serialization lock**: Update vendored httpclient to v0.4.1, use per-task AsyncClient for test self-calls to avoid deadlock
+- **ty type-check errors**: Resolve compatibility issues with ty 0.0.32+
+
+### Changed
+
+- **Admin routes split into subpackage**: Refactored monolithic `routes.py` into `routes/` with dedicated modules for auth, config, keys, observability, and testing
+- **CI switched to pre-commit**: Linting now uses `pre-commit run --all-files` (ruff + ty); complexipy suspended pending upstream fix
+
+## v0.6.2 — 2026-05-15
+
+### Added
+
+- **Admin password protection**: `server.admin_password` in config enables a login overlay for the admin panel, using HMAC-based session tokens
+- **Credential visibility control**: `server.credential_visible: false` hides API key viewing/copying across the admin UI
+- **Provider cascade delete**: Deleting a provider now shows affected models and cascade-deletes them
+
+### Fixed
+
+- **Base URL overwrite**: Switching provider type no longer overwrites user-entered base URLs
+- **Request log collapse**: Expanded error detail rows persist across auto-refresh
+
+### Changed
+
+- **Zero-dependency on Python ≥3.11**: Replaced PyYAML with vendored zerodep yaml module
+
 ## v0.6.1 — 2026-05-15
 
 ### Added
