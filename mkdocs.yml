@@ -57,9 +57,10 @@ plugins:
       sections:
         首页:
           - index.md
-        指南:
+        快速入门:
           - getting-started/installation.md
           - getting-started/quickstart.md
+        库指南:
           - guide/concepts.md
           - guide/converters.md
           - guide/ir-types.md
@@ -89,6 +90,7 @@ plugins:
           - api/tool-ops.md
           - api/shims.md
           - api/utils.md
+          - api/admin.md
         路线图:
           - roadmap.md
         更新日志:
@@ -131,9 +133,10 @@ extra:
 
 nav:
   - 首页: index.md
-  - 指南:
+  - 快速入门:
       - 安装: getting-started/installation.md
       - 快速开始: getting-started/quickstart.md
+  - 库指南:
       - 核心概念: guide/concepts.md
       - 使用转换器: guide/converters.md
       - IR 类型: guide/ir-types.md
@@ -153,10 +156,13 @@ nav:
       - 配置: gateway/configuration.md
       - CLI 参考: gateway/cli.md
       - CLI 工具集成: gateway/cli-integrations.md
-      - 管理面板: gateway/admin-panel.md
-      - 验证报告: gateway/validation.md
-      - CLI 跨格式测试: gateway/validation-cli.md
-      - SDK 与集成测试: gateway/validation-sdk.md
+      - 管理:
+          - 管理面板: gateway/admin-panel.md
+          - Admin API: api/admin.md
+      - 验证:
+          - gateway/validation.md
+          - CLI 跨格式测试: gateway/validation-cli.md
+          - SDK 与集成测试: gateway/validation-sdk.md
   - API 参考:
       - api/index.md
       - 转换器: api/converters.md
