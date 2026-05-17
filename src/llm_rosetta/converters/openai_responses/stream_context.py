@@ -62,6 +62,7 @@ class OpenAIResponsesStreamContext(StreamContext):
         ctx._ended = base._ended
         ctx._tool_call_args = base._tool_call_args
         ctx._tool_call_order = base._tool_call_order
+        ctx._tool_call_types = base._tool_call_types
         return ctx
 
     def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
