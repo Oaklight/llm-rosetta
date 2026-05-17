@@ -833,19 +833,21 @@ class OpenAIResponsesConverter(BaseConverter):
         if isinstance(item, dict):
             item_type = item.get("type", "")
 
-            if item_type == "function_call":
+            if item_type in ("function_call", "custom_tool_call"):
                 call_id = item.get("call_id", "")
                 item_id = item.get("id", "")
+                tool_type = "custom" if item_type == "custom_tool_call" else "function"
 
                 # Register tool call in context
                 if context is not None:
-                    context.register_tool_call(call_id, item.get("name", ""))
+                    context.register_tool_call(call_id, item.get("name", ""), tool_type)
                     context.register_tool_call_item(call_id, item_id)
 
                 start_event_tc = ToolCallStartEvent(
                     type="tool_call_start",
                     tool_call_id=call_id,
                     tool_name=item.get("name", ""),
+                    tool_type=tool_type,
                 )
                 output_index = chunk.get("output_index")
                 if output_index is not None:
@@ -908,11 +910,19 @@ class OpenAIResponsesConverter(BaseConverter):
         # so it can be included in the response.completed output array.
         # Message-level done is a no-op (content_part.done handles it).
         item = chunk.get("item", {})
-        if isinstance(item, dict) and item.get("type") == "function_call":
+        if not isinstance(item, dict):
+            return
+        item_type = item.get("type", "")
+        if item_type == "function_call":
             if context is not None:
                 call_id = item.get("call_id", "")
                 if call_id:
                     context.set_tool_call_args(call_id, item.get("arguments", ""))
+        elif item_type == "custom_tool_call":
+            if context is not None:
+                call_id = item.get("call_id", "")
+                if call_id:
+                    context.set_tool_call_args(call_id, item.get("input", ""))
 
     def _handle_function_call_args_delta_from_p(
         self,
@@ -948,6 +958,42 @@ class OpenAIResponsesConverter(BaseConverter):
         # Store final arguments in context
         if context is not None and call_id:
             context.set_tool_call_args(call_id, arguments)
+
+    def _handle_custom_tool_call_input_delta_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle custom_tool_call_input.delta — same as function_call args delta."""
+        delta_text = chunk.get("delta", "")
+        call_id = resolve_call_id(chunk, context)
+        delta_event = ToolCallDeltaEvent(
+            type="tool_call_delta",
+            tool_call_id=call_id,
+            arguments_delta=delta_text,
+        )
+        output_index = chunk.get("output_index")
+        if output_index is not None:
+            delta_event["tool_call_index"] = output_index
+
+        # Accumulate input in context
+        if context is not None and call_id:
+            context.append_tool_call_args(call_id, delta_text)
+
+        events.append(delta_event)
+
+    def _handle_custom_tool_call_input_done_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Handle custom_tool_call_input.done — store final input text."""
+        call_id = resolve_call_id(chunk, context)
+        input_text = chunk.get("input", "")
+        if context is not None and call_id:
+            context.set_tool_call_args(call_id, input_text)
 
     def _handle_response_completed_from_p(
         self,
@@ -1034,6 +1080,8 @@ class OpenAIResponsesConverter(BaseConverter):
         ResponsesEventType.OUTPUT_ITEM_DONE: "_handle_output_item_done_from_p",
         ResponsesEventType.FUNCTION_CALL_ARGS_DELTA: "_handle_function_call_args_delta_from_p",
         ResponsesEventType.FUNCTION_CALL_ARGS_DONE: "_handle_function_call_args_done_from_p",
+        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA: "_handle_custom_tool_call_input_delta_from_p",
+        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE: "_handle_custom_tool_call_input_done_from_p",
         ResponsesEventType.RESPONSE_COMPLETED: "_handle_response_completed_from_p",
         ResponsesEventType.RESPONSE_FAILED: "_handle_response_failed_from_p",
     }
@@ -1275,26 +1323,40 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> dict[str, Any]:
         call_id = event["tool_call_id"]
         tool_name = event["tool_name"]
+        tool_type = event.get("tool_type", "function")
         item_id = call_id
 
         # Register in context for later done events
         if context is not None and call_id:
-            context.register_tool_call(call_id, tool_name)
+            context.register_tool_call(call_id, tool_name, tool_type)
             context.register_tool_call_item(call_id, item_id)
 
         tc_index = event.get("tool_call_index")
         output_index = tc_index if tc_index is not None else 0
-        result: dict[str, Any] = {
-            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-            "output_index": output_index,
-            "item": {
+
+        if tool_type == "custom":
+            item: dict[str, Any] = {
+                "id": item_id,
+                "type": "custom_tool_call",
+                "call_id": call_id,
+                "name": tool_name,
+                "input": "",
+                "status": "in_progress",
+            }
+        else:
+            item = {
                 "id": item_id,
                 "type": "function_call",
                 "call_id": call_id,
                 "name": tool_name,
                 "arguments": "",
                 "status": "in_progress",
-            },
+            }
+
+        result: dict[str, Any] = {
+            "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+            "output_index": output_index,
+            "item": item,
         }
         return result
 
@@ -1326,8 +1388,21 @@ class OpenAIResponsesConverter(BaseConverter):
             item_id = call_id
 
         output_index = tc_index if tc_index is not None else 0
+
+        # Determine event type based on tool type (custom vs function)
+        tool_type = (
+            context.get_tool_type(call_id)
+            if context is not None and call_id
+            else "function"
+        )
+        event_type = (
+            ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA
+            if tool_type == "custom"
+            else ResponsesEventType.FUNCTION_CALL_ARGS_DELTA
+        )
+
         result: dict[str, Any] = {
-            "type": ResponsesEventType.FUNCTION_CALL_ARGS_DELTA,
+            "type": event_type,
             "item_id": item_id,
             "output_index": output_index,
             "delta": delta,
@@ -1429,16 +1504,30 @@ class OpenAIResponsesConverter(BaseConverter):
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             tc_item_id = context.get_tool_call_item_id(call_id) or call_id
-            output.append(
-                {
-                    "id": tc_item_id,
-                    "type": "function_call",
-                    "call_id": call_id,
-                    "name": tool_name,
-                    "arguments": arguments,
-                    "status": "completed",
-                }
-            )
+            tool_type = context.get_tool_type(call_id)
+
+            if tool_type == "custom":
+                output.append(
+                    {
+                        "id": tc_item_id,
+                        "type": "custom_tool_call",
+                        "call_id": call_id,
+                        "name": tool_name,
+                        "input": arguments,
+                        "status": "completed",
+                    }
+                )
+            else:
+                output.append(
+                    {
+                        "id": tc_item_id,
+                        "type": "function_call",
+                        "call_id": call_id,
+                        "name": tool_name,
+                        "arguments": arguments,
+                        "status": "completed",
+                    }
+                )
         return output
 
     @staticmethod
@@ -1552,32 +1641,60 @@ class OpenAIResponsesConverter(BaseConverter):
             arguments = context._tool_call_args.get(call_id, "")
             item_id = context.get_tool_call_item_id(call_id) or call_id
             output_index = tc_idx + (1 if context.output_item_emitted else 0)
+            tool_type = context.get_tool_type(call_id)
 
-            # response.function_call_arguments.done
-            results.append(
-                {
-                    "type": ResponsesEventType.FUNCTION_CALL_ARGS_DONE,
-                    "item_id": item_id,
-                    "output_index": output_index,
-                    "arguments": arguments,
-                }
-            )
+            if tool_type == "custom":
+                # response.custom_tool_call_input.done
+                results.append(
+                    {
+                        "type": ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE,
+                        "item_id": item_id,
+                        "output_index": output_index,
+                        "input": arguments,
+                    }
+                )
 
-            # response.output_item.done for the function_call
-            results.append(
-                {
-                    "type": ResponsesEventType.OUTPUT_ITEM_DONE,
-                    "output_index": output_index,
-                    "item": {
-                        "id": item_id,
-                        "type": "function_call",
-                        "call_id": call_id,
-                        "name": tool_name,
+                # response.output_item.done for the custom_tool_call
+                results.append(
+                    {
+                        "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                        "output_index": output_index,
+                        "item": {
+                            "id": item_id,
+                            "type": "custom_tool_call",
+                            "call_id": call_id,
+                            "name": tool_name,
+                            "input": arguments,
+                            "status": "completed",
+                        },
+                    }
+                )
+            else:
+                # response.function_call_arguments.done
+                results.append(
+                    {
+                        "type": ResponsesEventType.FUNCTION_CALL_ARGS_DONE,
+                        "item_id": item_id,
+                        "output_index": output_index,
                         "arguments": arguments,
-                        "status": "completed",
-                    },
-                }
-            )
+                    }
+                )
+
+                # response.output_item.done for the function_call
+                results.append(
+                    {
+                        "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                        "output_index": output_index,
+                        "item": {
+                            "id": item_id,
+                            "type": "function_call",
+                            "call_id": call_id,
+                            "name": tool_name,
+                            "arguments": arguments,
+                            "status": "completed",
+                        },
+                    }
+                )
 
     def _handle_usage_to_p(
         self,

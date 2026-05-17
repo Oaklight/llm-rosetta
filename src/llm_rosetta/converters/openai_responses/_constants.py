@@ -24,6 +24,8 @@ class ResponsesEventType:
     REASONING_SUMMARY_TEXT_DELTA = "response.reasoning_summary_text.delta"
     FUNCTION_CALL_ARGS_DELTA = "response.function_call_arguments.delta"
     FUNCTION_CALL_ARGS_DONE = "response.function_call_arguments.done"
+    CUSTOM_TOOL_CALL_INPUT_DELTA = "response.custom_tool_call_input.delta"
+    CUSTOM_TOOL_CALL_INPUT_DONE = "response.custom_tool_call_input.done"
 
 
 # --- Status <-> Reason mappings ---

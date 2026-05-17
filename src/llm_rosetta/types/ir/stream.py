@@ -128,6 +128,7 @@ class ToolCallStartEvent(TypedDict):
     type: Required[Literal["tool_call_start"]]
     tool_call_id: Required[str]
     tool_name: Required[str]
+    tool_type: NotRequired[str]  # "function" (default), "custom", etc.
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
     provider_metadata: NotRequired[dict[str, Any]]

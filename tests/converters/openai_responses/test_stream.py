@@ -1313,3 +1313,302 @@ class TestStreamResponseToProviderWithContext:
         assert end_result["response"]["usage"]["input_tokens"] == 50
         assert end_result["response"]["usage"]["output_tokens"] == 25
         assert end_result["response"]["usage"]["total_tokens"] == 75
+
+
+class TestCustomToolCallStreaming:
+    """Tests for custom_tool_call streaming events."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    # --- From provider ---
+
+    def test_custom_tool_call_output_item_added(self):
+        """response.output_item.added with custom_tool_call produces ToolCallStartEvent."""
+        ctx = OpenAIResponsesStreamContext()
+        event = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": "ctc_001",
+                "type": "custom_tool_call",
+                "call_id": "call_custom_1",
+                "name": "my_tool",
+                "input": "",
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_start"
+        assert events[0]["tool_call_id"] == "call_custom_1"
+        assert events[0]["tool_name"] == "my_tool"
+        assert events[0]["tool_type"] == "custom"
+        assert events[0]["tool_call_index"] == 0
+        # Context should register the custom tool type
+        assert ctx.get_tool_name("call_custom_1") == "my_tool"
+        assert ctx.get_tool_type("call_custom_1") == "custom"
+        assert ctx.get_tool_call_item_id("call_custom_1") == "ctc_001"
+
+    def test_custom_tool_call_input_delta(self):
+        """response.custom_tool_call_input.delta produces ToolCallDeltaEvent."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        event = {
+            "type": "response.custom_tool_call_input.delta",
+            "call_id": "call_custom_1",
+            "delta": "hello ",
+            "output_index": 0,
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "tool_call_delta"
+        assert events[0]["tool_call_id"] == "call_custom_1"
+        assert events[0]["arguments_delta"] == "hello "
+        assert ctx.get_tool_call_args("call_custom_1") == "hello "
+
+    def test_custom_tool_call_input_done(self):
+        """response.custom_tool_call_input.done stores final input in context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        ctx.append_tool_call_args("call_custom_1", "hello ")
+        event = {
+            "type": "response.custom_tool_call_input.done",
+            "call_id": "call_custom_1",
+            "input": "hello world",
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        # Done event produces no IR events
+        assert len(events) == 0
+        # But the final input is stored in context
+        assert ctx.get_tool_call_args("call_custom_1") == "hello world"
+
+    def test_custom_tool_call_output_item_done(self):
+        """response.output_item.done with custom_tool_call stores input in context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        event = {
+            "type": "response.output_item.done",
+            "item": {
+                "type": "custom_tool_call",
+                "call_id": "call_custom_1",
+                "name": "my_tool",
+                "input": "final input text",
+            },
+        }
+        self.converter.stream_response_from_provider(event, context=ctx)
+        assert ctx.get_tool_call_args("call_custom_1") == "final input text"
+
+    # --- To provider ---
+
+    def test_tool_call_start_custom_to_p(self):
+        """ToolCallStartEvent with tool_type='custom' → custom_tool_call item."""
+        ctx = OpenAIResponsesStreamContext()
+        event = cast(
+            ToolCallStartEvent,
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "call_custom_1",
+                "tool_name": "my_tool",
+                "tool_type": "custom",
+                "tool_call_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "response.output_item.added"
+        assert result["item"]["type"] == "custom_tool_call"
+        assert result["item"]["call_id"] == "call_custom_1"
+        assert result["item"]["name"] == "my_tool"
+        assert result["item"]["input"] == ""
+        assert result["item"]["status"] == "in_progress"
+        # Context should have registered the custom type
+        assert ctx.get_tool_type("call_custom_1") == "custom"
+
+    def test_tool_call_delta_custom_to_p(self):
+        """ToolCallDeltaEvent for custom tool → custom_tool_call_input.delta."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        ctx.register_tool_call_item("call_custom_1", "call_custom_1")
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_custom_1",
+                "arguments_delta": "hello ",
+                "tool_call_index": 0,
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "response.custom_tool_call_input.delta"
+        assert result["delta"] == "hello "
+
+    def test_tool_call_delta_function_to_p(self):
+        """ToolCallDeltaEvent for function tool → function_call_arguments.delta."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_fn_1", "get_weather", "function")
+        ctx.register_tool_call_item("call_fn_1", "call_fn_1")
+        event = cast(
+            ToolCallDeltaEvent,
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "call_fn_1",
+                "arguments_delta": '{"city":',
+            },
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["type"] == "response.function_call_arguments.delta"
+
+    def test_finish_with_custom_tool_call(self):
+        """FinishEvent emits custom_tool_call done events and output items."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.mark_started()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        ctx.register_tool_call_item("call_custom_1", "ctc_001")
+        ctx.set_tool_call_args("call_custom_1", "hello world")
+
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+        )
+        results = cast(
+            list[dict[str, Any]],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+
+        # Should have custom_tool_call_input.done and output_item.done
+        done_events = [
+            r
+            for r in results
+            if r.get("type") == "response.custom_tool_call_input.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["input"] == "hello world"
+        assert done_events[0]["item_id"] == "ctc_001"
+
+        item_done_events = [
+            r for r in results if r.get("type") == "response.output_item.done"
+        ]
+        assert len(item_done_events) == 1
+        assert item_done_events[0]["item"]["type"] == "custom_tool_call"
+        assert item_done_events[0]["item"]["input"] == "hello world"
+        assert item_done_events[0]["item"]["name"] == "my_tool"
+        assert item_done_events[0]["item"]["status"] == "completed"
+
+        # Deferred response should have custom_tool_call output
+        assert ctx.pending_response is not None
+        output = ctx.pending_response["output"]
+        assert len(output) == 1
+        assert output[0]["type"] == "custom_tool_call"
+        assert output[0]["input"] == "hello world"
+
+    def test_finish_with_mixed_tool_calls(self):
+        """FinishEvent with both function and custom tool calls emits correct types."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.mark_started()
+        ctx.register_tool_call("call_fn_1", "get_weather", "function")
+        ctx.register_tool_call_item("call_fn_1", "fc_001")
+        ctx.set_tool_call_args("call_fn_1", '{"city": "NYC"}')
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        ctx.register_tool_call_item("call_custom_1", "ctc_001")
+        ctx.set_tool_call_args("call_custom_1", "do something")
+
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+        )
+        results = cast(
+            list[dict[str, Any]],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+
+        # Function call done events
+        fn_done = [
+            r
+            for r in results
+            if r.get("type") == "response.function_call_arguments.done"
+        ]
+        assert len(fn_done) == 1
+        assert fn_done[0]["arguments"] == '{"city": "NYC"}'
+
+        # Custom tool call done events
+        custom_done = [
+            r
+            for r in results
+            if r.get("type") == "response.custom_tool_call_input.done"
+        ]
+        assert len(custom_done) == 1
+        assert custom_done[0]["input"] == "do something"
+
+        # Output items
+        item_done = [r for r in results if r.get("type") == "response.output_item.done"]
+        assert len(item_done) == 2
+        assert item_done[0]["item"]["type"] == "function_call"
+        assert item_done[1]["item"]["type"] == "custom_tool_call"
+
+    # --- Round-trip ---
+
+    def test_custom_tool_call_stream_round_trip(self):
+        """Custom tool call round-trips through streaming: provider → IR → provider."""
+        ctx_from = OpenAIResponsesStreamContext()
+        ctx_to = OpenAIResponsesStreamContext()
+
+        # 1. output_item.added
+        added_event = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "id": "ctc_001",
+                "type": "custom_tool_call",
+                "call_id": "call_custom_1",
+                "name": "my_tool",
+                "input": "",
+            },
+        }
+        ir_events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(added_event, context=ctx_from),
+        )
+        assert len(ir_events) == 1
+        restored = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(ir_events[0], context=ctx_to),
+        )
+        assert restored["item"]["type"] == "custom_tool_call"
+        assert restored["item"]["name"] == "my_tool"
+        assert restored["item"]["input"] == ""
+
+        # 2. custom_tool_call_input.delta
+        delta_event = {
+            "type": "response.custom_tool_call_input.delta",
+            "call_id": "call_custom_1",
+            "delta": "search query",
+            "output_index": 0,
+        }
+        ir_events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(delta_event, context=ctx_from),
+        )
+        assert len(ir_events) == 1
+        restored = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(ir_events[0], context=ctx_to),
+        )
+        assert restored["type"] == "response.custom_tool_call_input.delta"
+        assert restored["delta"] == "search query"
