@@ -313,6 +313,39 @@ class TestOpenAIResponsesConverter:
         assert tc["tool_name"] == "get_weather"
         assert tc["tool_call_id"] == "call_1"
 
+    def test_response_from_provider_with_custom_tool_call(self):
+        """End-to-end: a ``custom_tool_call`` response item is converted to IR.
+
+        The model returns a ``custom_tool_call`` with plain text ``input``
+        (not JSON ``arguments``).  The converter should produce a valid IR
+        ToolCallPart with ``tool_type="custom"``.
+        """
+        provider_response = {
+            "id": "resp_custom",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-5.4",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "custom_tool_call",
+                    "call_id": "call_patch",
+                    "name": "apply_patch",
+                    "input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new",
+                }
+            ],
+        }
+        result = self.converter.response_from_provider(provider_response)
+        choice = result["choices"][0]
+        tc = list(choice["message"]["content"])[0]
+        assert tc["type"] == "tool_call"
+        assert tc["tool_name"] == "apply_patch"
+        assert tc["tool_call_id"] == "call_patch"
+        assert tc["tool_type"] == "custom"
+        assert tc["tool_input"] == {
+            "input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"
+        }
+
     def test_response_from_provider_with_reasoning(self):
         """Test response with reasoning content."""
         provider_response = {

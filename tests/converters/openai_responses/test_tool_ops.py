@@ -44,8 +44,15 @@ class TestOpenAIResponsesToolOps:
         assert result["parameters"]["type"] == "object"
         assert result["strict"] is False
 
-    def test_ir_tool_definition_to_p_non_function(self):
-        """Test non-function tool type → custom wrapper."""
+    def test_ir_tool_definition_to_p_non_function_without_passthrough(self):
+        """Non-function IR tools without _passthrough emit as function.
+
+        After #177, all non-function provider tools entering IR carry
+        ``_passthrough`` and are returned as-is.  An IR tool with a
+        non-function type but no ``_passthrough`` is technically impossible
+        (IR validation rejects it), but the converter defensively emits
+        it as ``type: "function"``.
+        """
         ir_tool = cast(
             ToolDefinition,
             {
@@ -58,7 +65,7 @@ class TestOpenAIResponsesToolOps:
             },
         )
         result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
-        assert result["type"] == "custom"
+        assert result["type"] == "function"
         assert result["name"] == "search"
 
     def test_p_tool_definition_to_ir_flat(self):
@@ -122,7 +129,15 @@ class TestOpenAIResponsesToolOps:
         result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
         assert result["type"] == "function"
         assert result["name"] == "apply_patch"
-        assert result["description"] == "Apply a unified-diff style patch."
+        # Description is enriched with format hint for cross-provider.
+        assert "Apply a unified-diff style patch." in result["description"]
+        assert "[Output format: grammar, syntax: lark]" in result["description"]
+        # Synthesized parameters for cross-provider degradation.
+        params = result["parameters"]
+        assert params["type"] == "object"
+        assert "input" in params["properties"]
+        assert params["properties"]["input"]["type"] == "string"
+        assert result["required_parameters"] == ["input"]
         # provider_type is preserved in metadata for diagnostics.
         assert result["metadata"]["provider_type"] == "custom"
         assert cast(Any, result)["_passthrough"] == provider_tool
@@ -395,6 +410,93 @@ class TestOpenAIResponsesToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
+
+    # ==================== Custom Tool Call ====================
+
+    def test_ir_tool_call_to_p_custom(self):
+        """Test IR ToolCallPart with tool_type="custom" → custom_tool_call."""
+        ir_tc = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_custom1",
+            tool_name="apply_patch",
+            tool_input={"input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"},
+            tool_type="custom",
+        )
+        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        assert result["type"] == "custom_tool_call"
+        assert result["call_id"] == "call_custom1"
+        assert result["name"] == "apply_patch"
+        # Single "input" key is unwrapped to plain text.
+        assert result["input"] == "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"
+
+    def test_ir_tool_call_to_p_custom_multi_keys(self):
+        """Custom tool call with multi-key dict JSON-serializes the full dict."""
+        ir_tc = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_custom2",
+            tool_name="multi_tool",
+            tool_input={"a": 1, "b": 2},
+            tool_type="custom",
+        )
+        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        assert result["type"] == "custom_tool_call"
+        assert json.loads(result["input"]) == {"a": 1, "b": 2}
+
+    def test_p_tool_call_to_ir_custom_tool_call(self):
+        """Test custom_tool_call with plain text input → IR ToolCallPart."""
+        provider_tc = {
+            "type": "custom_tool_call",
+            "call_id": "call_custom3",
+            "name": "apply_patch",
+            "input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new",
+        }
+        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert result["type"] == "tool_call"
+        assert result["tool_call_id"] == "call_custom3"
+        assert result["tool_name"] == "apply_patch"
+        assert result["tool_type"] == "custom"
+        # Plain text input is wrapped as {"input": str}.
+        assert result["tool_input"] == {
+            "input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"
+        }
+
+    def test_p_tool_call_to_ir_custom_tool_call_json_input(self):
+        """Custom tool call with valid JSON input parses to dict."""
+        provider_tc = {
+            "type": "custom_tool_call",
+            "call_id": "call_custom4",
+            "name": "json_tool",
+            "input": '{"key": "value", "count": 42}',
+        }
+        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert result["tool_input"] == {"key": "value", "count": 42}
+        assert result["tool_type"] == "custom"
+
+    def test_p_tool_call_to_ir_custom_tool_call_empty_input(self):
+        """Custom tool call with empty input returns empty dict."""
+        provider_tc = {
+            "type": "custom_tool_call",
+            "call_id": "call_custom5",
+            "name": "empty_tool",
+            "input": "",
+        }
+        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert result["tool_input"] == {}
+
+    def test_custom_tool_call_round_trip(self):
+        """Test custom_tool_call round-trip: provider → IR → provider."""
+        original = {
+            "type": "custom_tool_call",
+            "call_id": "call_rt_custom",
+            "name": "apply_patch",
+            "input": "--- patch content ---",
+        }
+        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(original)
+        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        assert restored["type"] == "custom_tool_call"
+        assert restored["call_id"] == original["call_id"]
+        assert restored["name"] == original["name"]
+        assert restored["input"] == original["input"]
 
     # ==================== Tool Result ====================
 

@@ -162,31 +162,20 @@ class OpenAIResponsesToolOps(BaseToolOps):
         if passthrough is not None:
             return dict(passthrough)
 
-        if ir_tool.get("type", "function") == "function":
-            parameters = ir_tool.get("parameters", {})
-            if isinstance(parameters, dict):
-                parameters = sanitize_schema(parameters)
-            result: dict[str, Any] = {
-                "type": "function",
-                "name": ir_tool["name"],
-                "description": ir_tool.get("description", ""),
-                "parameters": parameters,
-                "strict": False,
-            }
-            return result
-
-        # Non-function tool types (e.g. Codex apply_patch with type="custom"):
-        # preserve the original name so the client can match tool_call
-        # responses back to the tool definition.
-        raw_schema = ir_tool.get("parameters", {})
-        return {
-            "type": "custom",
+        # After #177, all non-function tools entering IR are coerced to
+        # type="function" and carry _passthrough (handled above).  Only
+        # genuine function tools reach here.
+        parameters = ir_tool.get("parameters", {})
+        if isinstance(parameters, dict):
+            parameters = sanitize_schema(parameters)
+        result: dict[str, Any] = {
+            "type": "function",
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
-            "schema": sanitize_schema(raw_schema)
-            if isinstance(raw_schema, dict)
-            else raw_schema,
+            "parameters": parameters,
+            "strict": False,
         }
+        return result
 
     @staticmethod
     def p_tool_definition_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
@@ -229,15 +218,45 @@ class OpenAIResponsesToolOps(BaseToolOps):
             # satisfy validation; ``ir_tool_definition_to_p`` restores the
             # original payload on the outbound leg.
             if tool_type != "function" and tool_type not in _IR_ALLOWED_TYPES:
+                # Synthesize a minimal JSON Schema for cross-provider
+                # degradation so other providers see "a function that
+                # accepts one text input" instead of an empty schema.
+                synth_params: dict[str, Any] = {}
+                if provider_tool.get("name"):
+                    synth_params = {
+                        "type": "object",
+                        "properties": {
+                            "input": {
+                                "type": "string",
+                                "description": "Free-form text input",
+                            }
+                        },
+                        "required": ["input"],
+                    }
+                # Append format constraint info to description so
+                # cross-provider models get a hint about the expected
+                # output shape (best-effort, not enforced).
+                desc = provider_tool.get("description", "")
+                fmt = provider_tool.get("format")
+                if fmt:
+                    fmt_type = fmt.get("type", "unknown")
+                    fmt_syntax = fmt.get("syntax", "")
+                    hint = f"[Output format: {fmt_type}"
+                    if fmt_syntax:
+                        hint += f", syntax: {fmt_syntax}"
+                    hint += "]"
+                    desc = f"{desc}\n\n{hint}" if desc else hint
                 result = {
                     "type": "function",
                     "name": provider_tool.get("name", tool_type),
-                    "description": provider_tool.get("description", ""),
-                    "parameters": {},
+                    "description": desc,
+                    "parameters": synth_params,
                     "_passthrough": dict(provider_tool),
                 }
                 result["metadata"] = {"provider_type": tool_type}
-                result["required_parameters"] = []
+                result["required_parameters"] = (
+                    synth_params.get("required", []) if synth_params else []
+                )
                 return cast(ToolDefinition, result)
 
             # Flat format (Responses API native).
@@ -414,6 +433,24 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "arguments": arguments,
                 "status": "completed",
             }
+        elif tool_type == "custom":
+            # Custom tool calls use plain text 'input' instead of JSON
+            # 'arguments'.  If tool_input has a single "input" key, unwrap
+            # it to plain text; otherwise JSON-serialize the dict.
+            if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
+                input_str = str(tool_input["input"])
+            else:
+                input_str = (
+                    json.dumps(tool_input)
+                    if isinstance(tool_input, dict)
+                    else str(tool_input)
+                )
+            return {
+                "type": "custom_tool_call",
+                "call_id": tool_call_id,
+                "name": tool_name,
+                "input": input_str,
+            }
         elif tool_type == "web_search":
             return {
                 "type": "function_web_search",
@@ -530,6 +567,28 @@ class OpenAIResponsesToolOps(BaseToolOps):
                     "tool_input": tool_input,
                     "tool_type": tool_type_map.get(item_type, "function"),
                 },
+            )
+        elif item_type == "custom_tool_call":
+            # custom_tool_call uses plain text 'input' instead of JSON
+            # 'arguments'.  Wrap as {"input": str} for IR compatibility
+            # (tool_input must be dict).  If the input happens to be valid
+            # JSON, parse it so cross-provider converters can inspect fields.
+            input_str = provider_tool_call.get("input", "")
+            try:
+                parsed_input = json.loads(input_str) if input_str else {}
+            except (json.JSONDecodeError, TypeError):
+                parsed_input = {"input": input_str}
+            # Ensure tool_input is always a dict
+            if not isinstance(parsed_input, dict):
+                parsed_input = {"input": parsed_input}
+            return ToolCallPart(
+                type="tool_call",
+                tool_call_id=provider_tool_call.get(
+                    "call_id", provider_tool_call.get("id", "")
+                ),
+                tool_name=provider_tool_call.get("name", ""),
+                tool_input=parsed_input,
+                tool_type="custom",
             )
         else:
             raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")

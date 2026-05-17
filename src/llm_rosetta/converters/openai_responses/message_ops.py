@@ -321,6 +321,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
     _TOOL_CALL_TYPES = frozenset(
         {
             "function_call",
+            "custom_tool_call",
             "mcp_call",
             "shell_call",
             "computer_call",

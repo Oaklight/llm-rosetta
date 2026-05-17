@@ -117,6 +117,7 @@ class ToolCallPart(TypedDict):
         Literal[
             "function",
             "mcp",
+            "custom",
             "web_search",
             "code_interpreter",
             "file_search",
