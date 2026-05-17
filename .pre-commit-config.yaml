@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty check
+        description: Type check with ty.
+        entry: ty check
+        language: system
+        pass_filenames: false
+        require_serial: true
+        types: [python]
+
+      - id: complexipy
+        name: complexipy (complexity check)
+        entry: complexipy src/
+        language: system
+        pass_filenames: false
+        always_run: true

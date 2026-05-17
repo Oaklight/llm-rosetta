@@ -114,6 +114,7 @@ examples/                    # Usage examples
 ```bash
 conda activate llm-rosetta
 pip install -e ".[all]"
+pre-commit install
 ```
 
 Run `make help` for all targets. Key ones:
@@ -128,15 +129,16 @@ make build-docker  # Build gateway Docker image
 ```
 
 Tooling config (ruff, ty, complexipy) lives in `pyproject.toml`.
+Pre-commit hooks (`.pre-commit-config.yaml`) run ruff, ty, and complexipy;
+CI uses `pre-commit/action@v3.0.1` in a dedicated `lint` job.
 
 ## Definition of done
 
-1. `make lint` and `make test` exit 0
-2. `ruff check --fix && ruff format` applied to changed files
-3. New code has tests in `tests/`
-4. Google-style docstrings on public APIs; comments in English
-5. No manual edits to `_vendor/` — update upstream, re-vendor
-6. Python ≥ 3.10 compatibility
+1. `pre-commit run --all-files` and `make test` exit 0
+2. New code has tests in `tests/`
+3. Google-style docstrings on public APIs; comments in English
+4. No manual edits to `_vendor/` — update upstream, re-vendor
+5. Python ≥ 3.10 compatibility
 
 ## Workflow
 
