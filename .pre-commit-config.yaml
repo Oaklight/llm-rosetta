@@ -19,7 +19,7 @@ repos:
 
       - id: complexipy
         name: complexipy (complexity check)
-        entry: complexipy src/
+        entry: complexipy src/ -e "_vendor" -e "_vendor"
         language: system
         pass_filenames: false
         always_run: true
