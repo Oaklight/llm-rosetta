@@ -101,3 +101,104 @@ tool_msg = create_tool_result_message(tool_call["id"], result)
 | OpenAI Chat | Emulated | Dual encoding: `json.dumps()` + synthetic user message with visual content |
 
 For OpenAI Chat, the converter automatically handles the dual encoding — no special code needed from the caller.
+
+## Custom Tool Calls (OpenAI Responses API)
+
+The OpenAI Responses API supports a `"type": "custom"` tool variant, used by some extensions and integrations. llm-rosetta handles these end-to-end: ingestion, streaming, and cross-provider forwarding.
+
+### Request
+
+Define a custom tool by setting `"type": "custom"` in the tool object:
+
+```json
+{
+    "type": "custom",
+    "name": "my_custom_tool",
+    "description": "A custom extension tool",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"}
+        },
+        "required": ["query"]
+    }
+}
+```
+
+In Python with the Responses API converter:
+
+```python
+from llm_rosetta import OpenAIResponsesConverter
+
+conv = OpenAIResponsesConverter()
+
+ir_request = {
+    "model": "gpt-4o",
+    "input": [
+        {"role": "user", "content": [{"type": "input_text", "text": "Run my custom tool."}]}
+    ],
+    "tools": [
+        {
+            "type": "custom",
+            "name": "my_custom_tool",
+            "description": "A custom extension tool",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+                "required": ["query"],
+            },
+        }
+    ],
+}
+
+responses_req, _ = conv.request_to_provider(ir_request)
+```
+
+### Response
+
+When the model invokes a custom tool, the output contains a `custom_tool_call` item. Unlike `function_call`, the `input` field is **plain text**, not JSON:
+
+```json
+{
+    "type": "custom_tool_call",
+    "id": "ctc_abc123",
+    "name": "my_custom_tool",
+    "input": "Run query: find all active users"
+}
+```
+
+llm-rosetta normalises this into the IR as a `type: "function"` tool call with a `_passthrough` marker, preserving enough information to reconstruct the original `custom_tool_call` format on the way back out.
+
+### Streaming
+
+Streaming custom tool call inputs uses two dedicated events that work identically to their `function_call` counterparts:
+
+| Event | Description |
+|-------|-------------|
+| `response.custom_tool_call_input.delta` | Incremental chunk of the plain-text `input` field |
+| `response.custom_tool_call_input.done` | Final assembled `input` value |
+
+No extra handling is required — the streaming converter accumulates deltas and emits them through the same IR streaming interface as regular function calls.
+
+### Cross-provider behavior
+
+Anthropic and Google do not have a native `"custom"` tool type. When llm-rosetta forwards a request containing custom tools to either of these providers, it synthesizes a standard function tool with a single string parameter (`input`) so the tool remains callable:
+
+```json
+{
+    "type": "function",
+    "function": {
+        "name": "my_custom_tool",
+        "description": "A custom extension tool",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "input": {"type": "string"}
+            },
+            "required": ["input"]
+        }
+    }
+}
+```
+
+On the return path, the synthesized function call result is converted back into a `custom_tool_call` output item before it reaches the original client — the round-trip is transparent to both the upstream provider and the downstream consumer.

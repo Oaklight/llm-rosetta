@@ -71,7 +71,7 @@ At import time, `shims/__init__.py` scans all provider directories and registers
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 13 built-in provider shims:
+LLM-Rosetta ships with 14 built-in provider shims:
 
 | Name | Base | Default Base URL | API Key Env | Transforms |
 |------|------|-----------------|-------------|------------|
@@ -87,6 +87,45 @@ LLM-Rosetta ships with 13 built-in provider shims:
 | `minimax` | `openai_chat` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop` |
 | `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
 | `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
+| `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
+| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi/` | — | thinking normalization, OpenAI response normalization |
+
+## Argo Shims
+
+`argo_openai_chat` and `argo_anthropic` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
+
+Both shims share a common characteristic: the model identifier is sent as `internal_id` in the request body instead of the standard `model` field. This is handled transparently by `model_id_field` in the shim declaration.
+
+### `argo_openai_chat`
+
+A straightforward OpenAI-compatible shim. The only non-standard behaviour is the `internal_id` field substitution — no other transforms are needed.
+
+### `argo_anthropic`
+
+This shim has two additional transforms to handle Argo's quirks:
+
+- **`to_transforms` — thinking normalization**: Argo's `/v1/messages` endpoint only accepts `"enabled"` or `"disabled"` for the `thinking.type` field. If a request contains `thinking.type = "adaptive"` (which is valid in the standard Anthropic API), this transform rewrites it to `"enabled"` before the request is forwarded.
+
+- **`from_transforms` — OpenAI response normalization**: Argo may return an OpenAI Chat Completions response body from its `/v1/messages` endpoint. This transform detects that case and converts the response to Anthropic Messages format before the `anthropic` converter sees it, so the rest of the pipeline behaves normally.
+
+### Configuration
+
+The `default_base_url` is institution-specific. Override it in your gateway config:
+
+```jsonc
+{
+  "providers": {
+    "argo": {
+      "shim": "argo_anthropic",
+      "base_url": "https://your-argo-instance.example.com/",
+      "api_key": "${ARGO_API_KEY}"
+    }
+  }
+}
+```
+
+!!! note
+    If you do not set `base_url`, the shim falls back to `https://apps.inside.anl.gov/argoapi/`, which is only reachable from within the ANL network.
 
 ## Transforms
 

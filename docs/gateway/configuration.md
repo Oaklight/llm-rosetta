@@ -170,9 +170,43 @@ The API key also supports `${ENV_VAR}` substitution:
 ```
 
 !!! note "Admin panel"
-    The admin panel (`/admin/*`) does **not** require the gateway API key. If you need to protect the admin panel, use a reverse proxy (e.g. Caddy with `basicauth`, Nginx with `auth_basic`).
+    The admin panel (`/admin/*`) does **not** require the gateway API key. You can protect it with the built-in `admin_password` option (see below), or use a reverse proxy (e.g. Caddy with `basicauth`, Nginx with `auth_basic`).
 
 When no `api_key` is configured, all requests pass through without authentication (backward compatible).
+
+## Admin Panel Security
+
+### `admin_password`
+
+Optional. When set, the admin panel (`/admin/*`) requires a password login before granting access. Sessions are tracked with HMAC-based tokens, so no external session store is needed.
+
+Supports `${ENV_VAR}` substitution:
+
+```jsonc
+{
+  "server": {
+    "admin_password": "${ADMIN_PASSWORD}"
+  }
+}
+```
+
+!!! tip
+    If you expose the gateway publicly, setting `admin_password` is strongly recommended to prevent unauthorized access to provider configuration and request logs.
+
+### `credential_visible`
+
+Boolean, default `true`. When set to `false`, API key values are hidden across the admin UI — the copy and view controls are disabled. This is useful when the gateway is shared among multiple users and you want to prevent API keys from being read directly from the panel.
+
+```jsonc
+{
+  "server": {
+    "credential_visible": false
+  }
+}
+```
+
+!!! note
+    This setting controls UI visibility only. The keys are still used by the gateway for upstream requests; they are simply not surfaced in the admin interface.
 
 ## Debug Options
 
@@ -209,7 +243,9 @@ These can also be set via environment variables: `LLM_ROSETTA_VERBOSE=1`, `LLM_R
   "server": {
     "host": "0.0.0.0",
     "port": 8765,
-    "api_key": "${GATEWAY_API_KEY}"
+    "api_key": "${GATEWAY_API_KEY}",
+    "admin_password": "${ADMIN_PASSWORD}",
+    "credential_visible": false
   }
 }
 ```
