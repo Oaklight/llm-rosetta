@@ -170,9 +170,43 @@ API Key 也支持 `${ENV_VAR}` 替换：
 ```
 
 !!! note "管理面板"
-    管理面板（`/admin/*`）**不需要**网关 API Key。如需保护管理面板，请使用反向代理（如 Caddy 的 `basicauth`、Nginx 的 `auth_basic`）。
+    管理面板（`/admin/*`）**不需要**网关 API Key。可以使用内置的 `admin_password` 选项保护（见下文），也可以通过反向代理实现（如 Caddy 的 `basicauth`、Nginx 的 `auth_basic`）。
 
 未配置 `api_key` 时，所有请求无需认证直接通过（向后兼容）。
+
+## 管理面板安全
+
+### `admin_password`
+
+可选。设置后，访问管理面板（`/admin/*`）前需要密码登录。会话通过 HMAC token 追踪，无需外部 session 存储。
+
+支持 `${ENV_VAR}` 替换：
+
+```jsonc
+{
+  "server": {
+    "admin_password": "${ADMIN_PASSWORD}"
+  }
+}
+```
+
+!!! tip
+    如果网关对公网开放，强烈建议设置 `admin_password`，防止未授权访问提供商配置和请求日志。
+
+### `credential_visible`
+
+布尔值，默认 `true`。设为 `false` 后，管理界面中所有 API 密钥的值将被隐藏——复制和查看控件均会禁用。适用于网关被多个用户共用、不希望密钥从面板中直接读取的场景。
+
+```jsonc
+{
+  "server": {
+    "credential_visible": false
+  }
+}
+```
+
+!!! note
+    此设置仅控制界面可见性。密钥仍会被网关用于上游请求，只是不在管理界面中展示。
 
 ## 调试选项
 
@@ -209,7 +243,9 @@ API Key 也支持 `${ENV_VAR}` 替换：
   "server": {
     "host": "0.0.0.0",
     "port": 8765,
-    "api_key": "${GATEWAY_API_KEY}"
+    "api_key": "${GATEWAY_API_KEY}",
+    "admin_password": "${ADMIN_PASSWORD}",
+    "credential_visible": false
   }
 }
 ```

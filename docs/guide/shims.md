@@ -71,7 +71,7 @@ from_transforms = ()
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 13 个提供商 shim：
+LLM-Rosetta 内置 14 个提供商 shim：
 
 | 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|---------|--------------|-----------------|---------|
@@ -87,6 +87,45 @@ LLM-Rosetta 内置 13 个提供商 shim：
 | `minimax` | `openai_chat` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop` |
 | `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、`presence_penalty`、`frequency_penalty`、`logprobs`、`top_logprobs`、`logit_bias`、`seed` |
 | `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
+| `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
+| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi/` | — | thinking 归一化、OpenAI 响应格式归一化 |
+
+## Argo Shim
+
+`argo_openai_chat` 和 `argo_anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供商统一暴露在单一端点之后。
+
+这两个 shim 有一个共同特点：模型标识符通过请求体中的 `internal_id` 字段传递，而非标准的 `model` 字段。这一行为由 shim 声明中的 `model_id_field` 透明处理，无需手动干预。
+
+### `argo_openai_chat`
+
+一个直接的 OpenAI 兼容 shim，唯一的非标准行为是将模型字段替换为 `internal_id`，不需要其他 transform。
+
+### `argo_anthropic`
+
+该 shim 额外附带两个 transform，用于处理 Argo 的特殊行为：
+
+- **`to_transforms` —— thinking 归一化**：Argo 的 `/v1/messages` 端点只接受 `"enabled"` 或 `"disabled"` 作为 `thinking.type` 的值。如果请求中包含 `thinking.type = "adaptive"`（这在标准 Anthropic API 中是合法值），该 transform 会在转发前将其改写为 `"enabled"`。
+
+- **`from_transforms` —— OpenAI 响应格式归一化**：Argo 可能从其 `/v1/messages` 端点返回 OpenAI Chat Completions 格式的响应体。该 transform 会检测这种情况，并在 `anthropic` 转换器处理之前将响应转换为 Anthropic Messages 格式，从而保证后续管线正常运行。
+
+### 配置
+
+`default_base_url` 因机构而异，建议在网关配置中覆盖：
+
+```jsonc
+{
+  "providers": {
+    "argo": {
+      "shim": "argo_anthropic",
+      "base_url": "https://your-argo-instance.example.com/",
+      "api_key": "${ARGO_API_KEY}"
+    }
+  }
+}
+```
+
+!!! note
+    如果未设置 `base_url`，shim 会回退到 `https://apps.inside.anl.gov/argoapi/`，该地址仅在 ANL 内网可达。
 
 ## 转换规则（Transforms）
 
