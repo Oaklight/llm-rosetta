@@ -1,7 +1,7 @@
 """Tests for argo_anthropic shim transforms.
 
-Covers both the request-side ``_normalize_thinking`` and the response-side
-``_normalize_openai_response`` transforms.
+Covers both the request-side ``_normalize_thinking`` (to_transform) and the
+response-side ``_normalize_openai_response`` (from_transform).
 """
 
 from __future__ import annotations
@@ -20,14 +20,17 @@ from llm_rosetta.shims.providers.argo_anthropic.transforms import (
 
 
 class TestNormalizeThinking:
+    # --- pass-through cases ---
+
     def test_no_thinking_passthrough(self):
-        body: dict = {"model": "claudeopus46", "max_tokens": 1024}
+        body: dict = {"model": "claudehaiku45", "max_tokens": 1024}
         result = _normalize_thinking(body)
         assert result is body
         assert "thinking" not in result
 
     def test_enabled_unchanged(self):
         body: dict = {
+            "model": "claudehaiku45",
             "max_tokens": 1024,
             "thinking": {"type": "enabled", "budget_tokens": 512},
         }
@@ -35,41 +38,131 @@ class TestNormalizeThinking:
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 512
 
-    def test_adaptive_converted_to_enabled(self):
-        body: dict = {"max_tokens": 2048, "thinking": {"type": "adaptive"}}
+    def test_disabled_unchanged(self):
+        body: dict = {"model": "claudehaiku45", "thinking": {"type": "disabled"}}
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "disabled"
+
+    def test_non_dict_thinking_passthrough(self):
+        body: dict = {"thinking": "enabled"}
+        result = _normalize_thinking(body)
+        assert result["thinking"] == "enabled"
+
+    # --- adaptive models: pass through unchanged ---
+
+    def test_adaptive_model_claudeopus47_passthrough(self):
+        """claudeopus47 requires adaptive — transform must not touch it."""
+        body: dict = {
+            "model": "claudeopus47",
+            "max_tokens": 2048,
+            "thinking": {"type": "adaptive"},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "adaptive"
+        assert "budget_tokens" not in result["thinking"]
+
+    def test_adaptive_model_with_budget_tokens_passthrough(self):
+        """Even if budget_tokens is already set, adaptive models pass through."""
+        body: dict = {
+            "model": "claudeopus47",
+            "max_tokens": 4096,
+            "thinking": {"type": "adaptive", "budget_tokens": 999},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "adaptive"
+        assert result["thinking"]["budget_tokens"] == 999
+
+    # --- non-adaptive models: convert adaptive → enabled ---
+
+    def test_adaptive_converted_to_enabled_for_haiku(self):
+        """claudehaiku45 rejects adaptive — must be converted to enabled."""
+        body: dict = {
+            "model": "claudehaiku45",
+            "max_tokens": 2048,
+            "thinking": {"type": "adaptive"},
+        }
         result = _normalize_thinking(body)
         assert result["thinking"]["type"] == "enabled"
         assert "budget_tokens" in result["thinking"]
         # budget = max(1024, int(2048 * 0.8)) = 1638
         assert result["thinking"]["budget_tokens"] == 1638
 
-    def test_adaptive_budget_less_than_max_tokens(self):
-        body: dict = {"max_tokens": 2000, "thinking": {"type": "adaptive"}}
+    def test_adaptive_converted_for_opus46(self):
+        """claudeopus46 is not in the adaptive allowlist — converts to enabled."""
+        body: dict = {
+            "model": "claudeopus46",
+            "max_tokens": 4096,
+            "thinking": {"type": "adaptive"},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "enabled"
+
+    def test_adaptive_converted_for_no_model_field(self):
+        """Missing model field — safe default: convert adaptive → enabled."""
+        body: dict = {"max_tokens": 2048, "thinking": {"type": "adaptive"}}
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "enabled"
+
+    def test_budget_less_than_max_tokens_invariant(self):
+        body: dict = {
+            "model": "claudehaiku45",
+            "max_tokens": 2000,
+            "thinking": {"type": "adaptive"},
+        }
         result = _normalize_thinking(body)
         budget = result["thinking"]["budget_tokens"]
         assert budget < result["max_tokens"], "budget_tokens must be < max_tokens"
 
-    def test_adaptive_small_max_tokens_bumps_max_tokens(self):
-        """When max_tokens is very small, max_tokens is bumped to keep invariant."""
-        body: dict = {"max_tokens": 100, "thinking": {"type": "adaptive"}}
+    def test_small_max_tokens_bumps_max_tokens(self):
+        """When max_tokens is too small, max_tokens is bumped to keep invariant."""
+        body: dict = {
+            "model": "claudehaiku45",
+            "max_tokens": 100,
+            "thinking": {"type": "adaptive"},
+        }
         result = _normalize_thinking(body)
         budget = result["thinking"]["budget_tokens"]
         assert budget >= 1024
         assert budget < result["max_tokens"]
 
-    def test_adaptive_existing_budget_tokens_preserved(self):
+    def test_existing_budget_tokens_preserved(self):
         """If budget_tokens is already set, do not overwrite it."""
         body: dict = {
+            "model": "claudehaiku45",
             "max_tokens": 4096,
             "thinking": {"type": "adaptive", "budget_tokens": 999},
         }
         result = _normalize_thinking(body)
         assert result["thinking"]["budget_tokens"] == 999
 
-    def test_non_dict_thinking_passthrough(self):
-        body: dict = {"thinking": "enabled"}
+    # --- regression: real error patterns from lambda5 ---
+
+    def test_haiku_adaptive_rejected_in_production(self):
+        """Regression: haiku sent adaptive → Argo 400. Must convert to enabled."""
+        # Reproduces the 2026-05-15/16 errors: "Input tag 'adaptive' found
+        # using 'type' does not match any of the expected tags: 'disabled', 'enabled'"
+        body: dict = {
+            "model": "claudehaiku45",
+            "max_tokens": 1024,
+            "thinking": {"type": "adaptive"},
+        }
         result = _normalize_thinking(body)
-        assert result["thinking"] == "enabled"
+        assert result["thinking"]["type"] == "enabled"
+        budget = result["thinking"]["budget_tokens"]
+        assert budget >= 1024
+        assert result["max_tokens"] > budget
+
+    def test_opus47_enabled_rejected_in_production(self):
+        """Regression: opus47 received enabled → Argo 400. Must stay adaptive."""
+        # Reproduces the 2026-05-16 error: "'thinking.type.enabled' is not
+        # supported for this model. Use 'thinking.type.adaptive'."
+        body: dict = {
+            "model": "claudeopus47",
+            "max_tokens": 8192,
+            "thinking": {"type": "adaptive"},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "adaptive"
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +188,6 @@ class TestNormalizeOpenAIResponse:
         assert result is body
 
     def test_type_message_passthrough(self):
-        """Responses with 'type: message' are returned unchanged."""
         body = {"type": "message", "role": "assistant"}
         result = _normalize_openai_response(body)
         assert result is body
@@ -123,7 +215,6 @@ class TestNormalizeOpenAIResponse:
     # --- conversion cases ---
 
     def test_plain_text_response(self):
-        """Simple OpenAI Chat format with text content is converted correctly."""
         body = {
             "id": "chatcmpl-001",
             "object": "chat.completion",
@@ -145,10 +236,8 @@ class TestNormalizeOpenAIResponse:
         assert result["stop_reason"] == "end_turn"
         assert result["usage"]["input_tokens"] == 10
         assert result["usage"]["output_tokens"] == 4
-        # OpenAI-specific keys should be gone
         assert "choices" not in result
         assert "object" not in result
-        # Non-format keys preserved
         assert result["id"] == "chatcmpl-001"
         assert result["model"] == "claudeopus46"
 
@@ -236,7 +325,6 @@ class TestNormalizeOpenAIResponse:
         assert block["input"] == tool_input
 
     def test_tool_calls_with_bad_json_arguments(self):
-        """Malformed tool arguments fall back to empty dict."""
         body = {
             "choices": [
                 {
@@ -300,7 +388,6 @@ class TestNormalizeOpenAIResponse:
         assert result["usage"] == {"input_tokens": 0, "output_tokens": 0}
 
     def test_original_body_not_mutated(self):
-        """The original body dict should not be mutated."""
         body = {
             "id": "chatcmpl-x",
             "choices": [
@@ -312,8 +399,52 @@ class TestNormalizeOpenAIResponse:
         }
         original_choices = body["choices"]
         _normalize_openai_response(body)
-        # Original still has choices
         assert body["choices"] is original_choices
+
+    def test_real_argo_claudeopus46_response_round_trip(self):
+        """Regression: claudeopus46 returned OpenAI format → 502 on lambda5.
+
+        After normalization the Anthropic converter must parse it successfully.
+        """
+        body = {
+            "id": "chatcmpl-argo46",
+            "object": "chat.completion",
+            "created": 1779058858,
+            "model": "claudeopus46",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello! How can I assist you?",
+                        "tool_calls": None,
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 13,
+                "completion_tokens": 9,
+                "total_tokens": 22,
+            },
+        }
+        result = _normalize_openai_response(body)
+
+        assert result["type"] == "message"
+        assert result["role"] == "assistant"
+        assert result["content"] == [
+            {"type": "text", "text": "Hello! How can I assist you?"}
+        ]
+        assert result["stop_reason"] == "end_turn"
+
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        conv = AnthropicConverter()
+        ir = conv.response_from_provider(result)
+        choices = ir.get("choices", [])
+        assert choices
+        parts = choices[0].get("message", {}).get("content", [])
+        assert any(p.get("type") == "text" for p in parts)
 
     def test_real_argo_claudeopus46_response(self):
         """Reproduce the exact format seen in the lambda5 502 errors.
