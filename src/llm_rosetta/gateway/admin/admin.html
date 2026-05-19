@@ -354,10 +354,14 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   <div class="login-box">
     <h2>llm-rosetta <span style="font-weight:400;color:var(--text-dim)">gateway</span></h2>
     <div class="login-subtitle" data-i18n="login.subtitle">Admin panel is password-protected</div>
-    <input id="loginPassword" type="password" placeholder="Password" autofocus
-      onkeydown="if(event.key==='Enter')doLogin()">
-    <div class="login-error" id="loginError"></div>
-    <button onclick="doLogin()" data-i18n="login.btn">Login</button>
+    <form id="loginForm" autocomplete="on" onsubmit="doLogin();return false;">
+      <input type="text" name="username" autocomplete="username"
+        value="admin" style="display:none" aria-hidden="true">
+      <input id="loginPassword" type="password" name="password"
+        autocomplete="current-password" placeholder="Password" autofocus>
+      <div class="login-error" id="loginError"></div>
+      <button type="submit" data-i18n="login.btn">Login</button>
+    </form>
   </div>
 </div>
 
@@ -380,6 +384,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <option value="en">EN</option>
       <option value="zh">中文</option>
     </select>
+    <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
   </div>
 </div>
 
@@ -851,8 +856,10 @@ const I18N = {
     'login.subtitle':'Admin panel is password-protected',
     'login.btn':'Login',
     'login.error':'Invalid password',
+    'btn.logout':'Logout',
   },
   zh: {
+    'btn.logout':'\u9000\u51fa\u767b\u5f55',
     'tab.providers':'\u670d\u52a1\u5546', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
     'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
     'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u5546', 'section.models':'\u6a21\u578b\u8def\u7531',
@@ -993,7 +1000,7 @@ setTheme(currentTheme);
 // ===================== API =====================
 function _adminHeaders(extra) {
   const h = extra ? {...extra} : {};
-  const token = sessionStorage.getItem('admin_token');
+  const token = localStorage.getItem('admin_token');
   if (token) h['X-Admin-Token'] = token;
   return h;
 }
@@ -1024,8 +1031,36 @@ const api = {
   }
 };
 
+// ===================== Inactivity auto-logout =====================
+const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+let _inactivityTimer = null;
+
+function _resetInactivityTimer() {
+  if (_inactivityTimer) clearTimeout(_inactivityTimer);
+  _inactivityTimer = setTimeout(() => doLogout(), INACTIVITY_TIMEOUT_MS);
+}
+
+function _startInactivityTracking() {
+  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+    document.addEventListener(evt, _resetInactivityTimer, { passive: true });
+  });
+  _resetInactivityTimer();
+}
+
+function _stopInactivityTracking() {
+  if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
+}
+
+function doLogout() {
+  localStorage.removeItem('admin_token');
+  _stopInactivityTracking();
+  const btn = document.getElementById('logoutBtn');
+  if (btn) btn.style.display = 'none';
+  showLoginOverlay();
+}
+
 function showLoginOverlay() {
-  sessionStorage.removeItem('admin_token');
+  localStorage.removeItem('admin_token');
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').textContent = '';
@@ -1043,8 +1078,11 @@ async function doLogin() {
     });
     const data = await r.json();
     if (r.ok && data.token) {
-      sessionStorage.setItem('admin_token', data.token);
+      localStorage.setItem('admin_token', data.token);
       document.getElementById('loginOverlay').style.display = 'none';
+      const btn = document.getElementById('logoutBtn');
+      if (btn) btn.style.display = '';
+      _startInactivityTracking();
       initApp();
     } else {
       document.getElementById('loginError').textContent = t('login.error');
@@ -1060,7 +1098,7 @@ async function checkAuthAndInit() {
     const data = await r.json();
     if (data.requires_auth) {
       // Check if we have a valid stored token
-      const token = sessionStorage.getItem('admin_token');
+      const token = localStorage.getItem('admin_token');
       if (token) {
         // Verify token by trying to load config
         const test = await fetch('/admin/api/config', {headers: {'X-Admin-Token': token}});
@@ -1068,6 +1106,9 @@ async function checkAuthAndInit() {
           showLoginOverlay();
           return;
         }
+        const btn = document.getElementById('logoutBtn');
+        if (btn) btn.style.display = '';
+        _startInactivityTracking();
       } else {
         showLoginOverlay();
         return;
@@ -2122,7 +2163,7 @@ const TEST_IMAGE_URL = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 function getTestLabel(type) { return t('test.' + type); }
 
 function buildTestPayload(model, type) {
-  const base = {model, max_tokens: 4096};
+  const base = {model, max_tokens: 256};
   switch(type) {
     case 'text':
       return {...base, messages:[{role:'user', content:'Say "Hello! The gateway test is working." and nothing else.'}]};
