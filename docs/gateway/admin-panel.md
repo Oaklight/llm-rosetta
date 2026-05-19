@@ -140,7 +140,17 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 
 ## 认证
 
-管理面板**不需要**网关 API Key。如果网关暴露在网络中，请使用反向代理保护管理面板：
+管理面板**不需要**网关 API Key。
+
+可在配置文件中设置 `server.admin_password` 启用内置密码保护：
+
+```jsonc
+{ "server": { "admin_password": "${ADMIN_PASSWORD}" } }
+```
+
+详见[配置 — 管理面板安全](configuration.md#管理面板安全)。
+
+也可以通过反向代理保护管理面板：
 
 - **Caddy**：使用 `basicauth` 指令
 - **Nginx**：使用 `auth_basic` 指令
@@ -154,31 +164,26 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 
 ## 数据持久化
 
-指标和请求日志数据会自动持久化到配置文件旁的磁盘目录中：
+指标和请求日志数据持久化到配置文件旁的单个 SQLite 数据库中：
 
 ```
 ~/.config/llm-rosetta-gateway/
     config.jsonc
     data/
-        metrics.json              # 累计计数器
-        request_log.jsonl         # 近期请求记录（JSONL 格式）
-        request_log.1.jsonl.gz    # 轮转备份
-        request_log.2.jsonl.gz    # 更早的备份
+        gateway.db    # SQLite 数据库 — 请求日志 + 指标（WAL 模式）
 ```
 
 ### 工作原理
 
-- **请求日志**条目每 10 秒刷新到 `request_log.jsonl`
-- **指标计数器**每 30 秒保存到 `metrics.json`（原子写入）
-- **关闭时**执行最终刷新，确保数据不丢失
+- **请求日志**条目在每次请求时直接写入 `gateway.db`
+- **指标计数器**在每次更新后保存到 `gateway.db`
 - **启动时**加载持久化数据——指标和日志在重启后恢复
+- **WAL 模式**确保写入崩溃安全，同时不阻塞读取
 
-### 日志轮转
+### 数据保留
 
-当 `request_log.jsonl` 超过 2 MB 时：
+最多保留 **5,000** 条请求日志。超出上限时，最旧的条目会自动删除。
 
-1. 现有备份依次后移（`.1.jsonl.gz` -> `.2.jsonl.gz`，以此类推）
-2. 当前日志压缩为 `.1.jsonl.gz`
-3. 日志文件被清空
+### 历史数据迁移
 
-最多保留 3 个压缩备份。所有操作使用 Python 标准库（`gzip`、`json`、`os`），跨平台兼容。
+首次启动时，如果数据目录中存在旧版的 `request_log.jsonl` 或 `metrics.json` 文件，会自动导入 `gateway.db` 并重命名为 `*.migrated`。
