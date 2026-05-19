@@ -140,7 +140,17 @@ Theme selection is stored in `localStorage` and persists across browser sessions
 
 ## Authentication
 
-The admin panel does **not** require the gateway API key. If your gateway is exposed to a network, protect the admin panel using a reverse proxy:
+The admin panel does **not** require the gateway API key.
+
+Set `server.admin_password` in your config to enable built-in password protection for the admin panel:
+
+```jsonc
+{ "server": { "admin_password": "${ADMIN_PASSWORD}" } }
+```
+
+See [Configuration — Admin Panel Security](configuration.md#admin-panel-security) for details.
+
+Alternatively, protect the admin panel using a reverse proxy:
 
 - **Caddy**: Use `basicauth` directive
 - **Nginx**: Use `auth_basic` directive
@@ -154,31 +164,26 @@ The admin panel supports English and Chinese (中文). Switch languages using th
 
 ## Data Persistence
 
-Metrics and request log data are automatically persisted to disk alongside the config file:
+Metrics and request log data are persisted in a single SQLite database alongside the config file:
 
 ```
 ~/.config/llm-rosetta-gateway/
     config.jsonc
     data/
-        metrics.json              # cumulative counters
-        request_log.jsonl         # recent requests (JSONL)
-        request_log.1.jsonl.gz    # rotated backup
-        request_log.2.jsonl.gz    # older backup
+        gateway.db    # SQLite database — request log + metrics (WAL mode)
 ```
 
 ### How it works
 
-- **Request log** entries are flushed to `request_log.jsonl` every 10 seconds
-- **Metrics counters** are saved to `metrics.json` every 30 seconds (atomic write)
-- On **shutdown**, a final flush ensures no data is lost
+- **Request log** entries are written directly to `gateway.db` on each request
+- **Metrics counters** are saved to `gateway.db` after each update
 - On **startup**, persisted data is loaded back — metrics and logs survive restarts
+- **WAL mode** ensures crash-safe writes without blocking reads
 
-### Log rotation
+### Retention
 
-When `request_log.jsonl` exceeds 2 MB:
+Up to **5,000** request log entries are retained. When the limit is reached, the oldest entries are automatically pruned.
 
-1. Existing backups shift up (`.1.jsonl.gz` -> `.2.jsonl.gz`, etc.)
-2. Current log is compressed to `.1.jsonl.gz`
-3. Log file is truncated
+### Legacy migration
 
-Maximum 3 compressed backups are kept. All operations use Python's stdlib (`gzip`, `json`, `os`) for cross-platform compatibility.
+On first startup, if `request_log.jsonl` or `metrics.json` exist in the data directory from a previous installation, they are automatically imported into `gateway.db` and renamed to `*.migrated`.
