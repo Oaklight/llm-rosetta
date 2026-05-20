@@ -1007,7 +1007,7 @@ function _adminHeaders(extra) {
 
 const api = {
   async get(url) {
-    const r = await fetch(url, {headers: _adminHeaders()});
+    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
     if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
     return r.json();
   },
@@ -2298,7 +2298,7 @@ async function runTest(model, type) {
 
         _testPollTimer = setInterval(async () => {
           try {
-            const r = await api.get('/admin/api/test/' + taskId);
+            const r = await api.post('/admin/api/test/' + taskId + '/poll');
             if (r.status === 'pending') return; // keep polling
             clearInterval(_testPollTimer);
             _testPollTimer = null;

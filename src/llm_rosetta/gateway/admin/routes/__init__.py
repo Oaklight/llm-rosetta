@@ -105,4 +105,5 @@ def register_admin_routes(app: Any) -> None:
     # Async model test
     app.route("/admin/api/test", methods=["POST"])(start_test)
     app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
+    app.route("/admin/api/test/<task_id>/poll", methods=["POST"])(get_test_result)
     app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)
