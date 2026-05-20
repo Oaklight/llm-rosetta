@@ -31,11 +31,12 @@ a { color: var(--accent); text-decoration: none; }
 .header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 24px; border-bottom: 1px solid var(--border);
+  flex-wrap: wrap; gap: 8px;
 }
-.header h1 { font-size: 18px; font-weight: 600; }
+.header h1 { font-size: 18px; font-weight: 600; white-space: nowrap; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
 .header-right { display: flex; align-items: center; gap: 10px; }
-.header .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
 .header-select {
   padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); cursor: pointer;
@@ -49,6 +50,7 @@ a { color: var(--accent); text-decoration: none; }
 .tab {
   padding: 12px 20px; cursor: pointer; font-size: 14px; color: var(--text-dim);
   border-bottom: 2px solid transparent; transition: all 0.15s;
+  white-space: nowrap; flex-shrink: 0;
 }
 .tab:hover { color: var(--text); }
 .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
@@ -341,9 +343,17 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 
 /* Responsive */
 @media (max-width: 768px) {
+  .header { padding: 12px 16px; }
+  .header h1 { font-size: 16px; }
+  .tabs { padding: 0 12px; }
+  .tab { padding: 10px 14px; font-size: 13px; }
+  .config-path { display: none; }
+  .content { padding: 16px; }
   .chart-row { grid-template-columns: 1fr; }
   .provider-grid { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .section-header { flex-wrap: wrap; gap: 8px; }
 }
 </style>
 </head>
@@ -446,14 +456,14 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
         <span class="model-count" id="modelCount"></span>
       </div>
-      <table>
+      <div class="table-scroll"><table>
         <thead><tr>
           <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model">Model</th>
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider">Provider</th>
           <th></th>
         </tr></thead>
         <tbody id="modelTable"></tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 
@@ -465,7 +475,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
         <button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
       </div>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</p>
-      <table>
+      <div class="table-scroll"><table>
         <thead><tr>
           <th data-i18n="col.label">Label</th>
           <th data-i18n="col.key">Key</th>
@@ -473,7 +483,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
           <th></th>
         </tr></thead>
         <tbody id="keysTable"></tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 
@@ -492,10 +502,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     </div>
     <div class="section">
       <h2 style="margin-bottom:12px" data-i18n="section.breakdown">Per-Provider Breakdown</h2>
-      <table>
+      <div class="table-scroll"><table>
         <thead><tr><th data-i18n="col.provider">Provider</th><th data-i18n="col.requests">Requests</th></tr></thead>
         <tbody id="providerBreakdown"></tbody>
-      </table>
+      </table></div>
     </div>
   </div>
 
@@ -511,10 +521,10 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       </select>
       <button class="btn btn-danger btn-sm" onclick="clearLogs()" data-i18n="btn.clearLog">Clear Log</button>
     </div>
-    <table>
+    <div class="table-scroll"><table>
       <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
       <tbody id="logTable"></tbody>
-    </table>
+    </table></div>
     <div class="pagination">
       <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)" data-i18n="btn.prev">Prev</button>
       <span class="info" id="pageInfo"></span>
