@@ -159,7 +159,7 @@ async def get_test_result(request: Any, task_id: str = "") -> Response:
 
     # Return only serialisable fields (skip _task_obj, _base_url)
     result: dict[str, Any] = {k: v for k, v in task.items() if not k.startswith("_")}
-    return JSONResponse(result, headers={"Cache-Control": "no-store"})
+    return JSONResponse(result)
 
 
 async def cancel_test(request: Any, task_id: str = "") -> Response:

@@ -369,6 +369,12 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
         response.headers["Access-Control-Allow-Origin"] = "*"
         response.headers["Access-Control-Allow-Methods"] = "*"
         response.headers["Access-Control-Allow-Headers"] = "*"
+        # Prevent reverse-proxy caching of admin API responses (e.g. Caddy/Souin).
+        # Uses the full directive set that Souin recognises as NO-STORE-DIRECTIVE.
+        if request.path.startswith("/admin/api/"):
+            response.headers.setdefault(
+                "Cache-Control", "no-cache, no-store, must-revalidate"
+            )
         return response
 
     @app.route("/<path:_path>", methods=["OPTIONS"])
