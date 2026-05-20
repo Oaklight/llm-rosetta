@@ -10,6 +10,34 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 *暂无变更。*
 
+## v0.6.4 — 2026-05-20
+
+### 新增
+
+- **Tinyleaf 风格设置弹窗**：用轻量居中弹窗替换旧的模态对话框——点击遮罩或按 Escape 关闭，主题和语言使用下拉选择即时生效，底部 About 区域含版本号和项目链接（GitHub、PyPI、Docker Hub、Docs）
+- **轻量 Host IP 检测端点**：`GET /admin/api/diagnostics/host-ip` 仅读取 `/proc/net/route`（微秒级，无网络调用）；页面加载时自动更新代理 URL 占位符为正确的 Docker 宿主机 IP
+- **管理面板登录持久化**：登录状态存储在 `localStorage`，30 分钟无操作自动登出，顶部退出按钮，密码管理器兼容（标准 `<form>`、`autocomplete` 属性）
+- **行内删除确认**：模型、API 密钥和请求日志的两步确认替代原生 `confirm()` 对话框
+- **测试弹窗改进**：取消按钮带计时器、图表空状态提示、克隆按钮
+- **移动端响应式**：Header 自动换行、Tab 和表格可水平滚动
+
+### 修复
+
+- **Argo Anthropic 响应归一化**：检测并转换 Argo `/v1/messages` 端点返回的 OpenAI Chat 格式响应为 Anthropic Messages 格式
+- **Argo Anthropic 模型感知 thinking**：`_normalize_thinking` 区分需要 `adaptive`（如 `claudeopus47`）和需要转换为 `enabled` 的模型
+- **行内确认 i18n 和 onclick 恢复**：补充缺失的 `confirm.sure`/`confirm.yes` 翻译；确认超时回退后恢复原始 onclick 处理函数
+- **反向代理缓存**：所有 admin API 响应添加 `Cache-Control: no-cache, no-store, must-revalidate`；测试轮询改用 POST
+- **登录遮罩循环**：防止登录遮罩关闭密码管理器的自动填充弹窗
+- **C901 复杂度**：从 `fetch_upstream_models` 提取 `_format_connection_error` 辅助函数
+
+### 安全
+
+- **管理面板登录限流**：5 次失败后触发 5 分钟 IP 锁定
+
+### 变更
+
+- **设置界面精简**：主题缩减为浅色/深色；主题和语言选择器从 Header 下拉框移入设置弹窗
+
 ## v0.6.3 — 2026-05-17
 
 ### 新增
