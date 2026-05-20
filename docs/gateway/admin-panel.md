@@ -25,6 +25,7 @@ Each provider card shows its name, API standard type (or shim name), base URL, m
 - **Add** a new provider with the "+ Add Provider" button
 - **Edit** an existing provider (name, type/shim, base URL, API key, proxy)
 - **Rename** a provider — all model references are updated automatically
+- **Clone** a provider — opens the Add Provider modal pre-filled with the source provider's settings as a template
 - **Delete** a provider
 
 When editing, API keys are shown as a password field with a visibility toggle and copy button. Masked keys displayed on cards are never written back to the config file.
@@ -68,7 +69,16 @@ Click the **Test** button on any model row to run a quick test. The available te
 
 Embedding models show a single Test button (no dropdown) since only one test type applies.
 
+While a test is pending, a **Cancel** button is visible so you can abort the request. A live elapsed timer is displayed alongside the status (e.g. "Sending request... 5s") to give immediate feedback on long-running completions. Test payloads use `max_tokens=256` for fast completion.
+
 Test results show the extracted model reply in the main output area, with collapsible sections for the raw request payload, raw response body, and (for vision tests) the test image preview.
+
+### Delete Confirmations
+
+Destructive operations use two different confirmation patterns depending on severity:
+
+- **Provider delete** — opens a type-to-confirm modal that warns about cascade effects (all associated models will be removed).
+- **Model delete**, **API key delete**, and **Clear Log** — use an inline two-step confirmation: the button changes to "Sure? Yes" and automatically reverts after 3 seconds if not confirmed.
 
 ## Dashboard
 
@@ -89,6 +99,8 @@ Two rolling 60-second charts show:
 
 - **Throughput (req/s)** — request rate over time
 - **Latency (ms)** — average response time per second
+
+When there is no traffic yet, charts display a "No data yet" message instead of rendering a flat line.
 
 ### Per-Provider Breakdown
 
@@ -200,3 +212,7 @@ On first startup, if `request_log.jsonl` or `metrics.json` exist in the data dir
 The admin panel sets `Cache-Control: no-cache, no-store, must-revalidate` on all `/admin/api/*` responses. This prevents aggressive reverse proxy caches (e.g. Caddy with the Souin plugin) from serving stale dashboard metrics or request log data.
 
 Model test polling also uses POST requests instead of GET, which avoids being cached by intermediaries.
+
+## Mobile / Responsive
+
+The admin panel is responsive — the header, tab bar, and content layout adapt to narrow screens. Data tables scroll horizontally on mobile devices so no columns are clipped.
