@@ -1071,7 +1071,13 @@ function doLogout() {
 
 function showLoginOverlay() {
   localStorage.removeItem('admin_token');
-  document.getElementById('loginOverlay').style.display = 'flex';
+  // Stop background polling timers to prevent repeated 401 → showLoginOverlay loops
+  if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
+  if (logTimer) { clearInterval(logTimer); logTimer = null; }
+  const overlay = document.getElementById('loginOverlay');
+  // Don't re-clear fields if already showing (would dismiss password manager popup)
+  if (overlay.style.display === 'flex') return;
+  overlay.style.display = 'flex';
   document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').textContent = '';
   document.getElementById('loginPassword').focus();
