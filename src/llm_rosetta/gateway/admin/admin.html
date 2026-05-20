@@ -519,7 +519,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
         <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
         <option value="error" data-i18n="filter.error">Error (4xx/5xx)</option>
       </select>
-      <button class="btn btn-danger btn-sm" onclick="clearLogs()" data-i18n="btn.clearLog">Clear Log</button>
+      <button class="btn btn-danger btn-sm" onclick="clearLogs(this)" data-i18n="btn.clearLog">Clear Log</button>
     </div>
     <div class="table-scroll"><table>
       <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
@@ -1477,7 +1477,7 @@ function renderModels() {
         </div>`}
         <button class="btn btn-sm" onclick="copyModelEntry('${esc(name)}')">${t('btn.copy')}</button>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}')">${t('btn.delete')}</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</button>
       </td>
     </tr>`;
   }).join('');
@@ -1625,8 +1625,23 @@ async function saveModel() {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
-async function deleteModel(name) {
-  if (!confirm(t('confirm.deleteModel',{name}))) return;
+
+// Inline two-step delete confirmation — replaces native confirm()
+function inlineConfirm(btn, action) {
+  if (btn.dataset.confirming) return;
+  btn.dataset.confirming = '1';
+  const orig = btn.innerHTML;
+  const origClass = btn.className;
+  btn.innerHTML = `${t('confirm.sure')} <span style="text-decoration:underline;cursor:pointer" onclick="event.stopPropagation()">${t('confirm.yes')}</span>`;
+  btn.className = btn.className.replace('btn-danger', 'btn-warning');
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  const revert = () => { btn.innerHTML = orig; btn.className = origClass; btn.style.minWidth = ''; delete btn.dataset.confirming; };
+  const timer = setTimeout(revert, 3000);
+  btn.querySelector('span').onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); action(); };
+  btn.onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); };
+}
+
+async function _doDeleteModel(name) {
   const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
   if (res.ok) { showToast(t('toast.modelDeleted',{name})); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
@@ -1825,7 +1840,7 @@ function renderKeys() {
           <button class="key-btn" onclick="copyKeyById('${k.id}')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
         </span>` : ''}</div></td>
       <td>${created}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}')">${t('btn.delete')}</button></td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('');
 }
@@ -1864,8 +1879,7 @@ async function copyCreatedKey() {
   }
 }
 
-async function deleteKey(id, label) {
-  if (!confirm(t('confirm.deleteKey', {label}))) return;
+async function _doDeleteKey(id, label) {
   const res = await api.del(`/admin/api/keys/${encodeURIComponent(id)}`);
   if (res.ok) { showToast(t('toast.keyDeleted')); loadKeys(); }
   else { showToast(res.error || 'Failed', 'error'); }
@@ -2084,8 +2098,23 @@ function changePage(dir) {
   loadLogs();
 }
 
-async function clearLogs() {
-  if (!confirm(t('confirm.clearLogs'))) return;
+
+function deleteModel(name, btn) {
+  if (!btn) { _doDeleteModel(name); return; }
+  inlineConfirm(btn, () => _doDeleteModel(name));
+}
+
+function deleteKey(id, label, btn) {
+  if (!btn) { _doDeleteKey(id, label); return; }
+  inlineConfirm(btn, () => _doDeleteKey(id, label));
+}
+
+function clearLogs(btn) {
+  if (!btn) { _doClearLogs(); return; }
+  inlineConfirm(btn, () => _doClearLogs());
+}
+
+async function _doClearLogs() {
   await api.del('/admin/api/requests');
   logOffset = 0;
   expandedLogRows.clear();
