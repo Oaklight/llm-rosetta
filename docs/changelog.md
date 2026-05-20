@@ -10,6 +10,34 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 *No changes yet.*
 
+## v0.6.4 — 2026-05-20
+
+### Added
+
+- **Tinyleaf-style settings popup**: Replace the modal-overlay settings dialog with a lightweight centered popup — click outside or press Escape to dismiss, theme and language via `<select>` dropdowns with instant apply, About section with version and project links (GitHub, PyPI, Docker Hub, Docs)
+- **Lightweight host IP detection endpoint**: `GET /admin/api/diagnostics/host-ip` reads `/proc/net/route` only (microsecond-level, no network calls); proxy URL placeholders auto-update with the correct Docker host IP on page load
+- **Admin login persistence**: Login state stored in `localStorage` with 30-minute inactivity auto-logout, logout button in header, password manager compatibility (proper `<form>`, `autocomplete` attributes)
+- **Inline delete confirmation**: Two-step confirm for models, API keys, and request logs replaces native `confirm()` dialogs
+- **Test modal improvements**: Cancel button with elapsed timer, chart empty state message, Clone button for providers/models
+- **Mobile responsiveness**: Responsive header with wrapping, horizontally scrollable tabs and tables
+
+### Fixed
+
+- **Argo Anthropic response normalization**: Detect and convert OpenAI Chat Completions format responses from Argo's `/v1/messages` endpoint to Anthropic Messages format
+- **Argo Anthropic model-aware thinking**: `_normalize_thinking` now distinguishes models requiring `adaptive` (e.g. `claudeopus47`) from those needing `enabled` conversion
+- **Inline confirm i18n and onclick restore**: Add missing `confirm.sure`/`confirm.yes` translation keys; restore original `onclick` handler after confirmation reverts
+- **Reverse proxy caching**: Add `Cache-Control: no-cache, no-store, must-revalidate` on all admin API responses; switch test polling to POST
+- **Login overlay loop**: Prevent login overlay from dismissing password manager autofill popups
+- **C901 complexity**: Extract `_format_connection_error` helper from `fetch_upstream_models`
+
+### Security
+
+- **Admin login rate limiting**: 5 failed attempts trigger a 5-minute IP lockout
+
+### Changed
+
+- **Settings UI simplified**: Themes reduced to Light/Dark; theme and language selectors moved from header dropdowns into the settings popup
+
 ## v0.6.3 — 2026-05-17
 
 ### Added
