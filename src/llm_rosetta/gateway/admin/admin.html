@@ -37,14 +37,40 @@ a { color: var(--accent); text-decoration: none; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
 .header-right { display: flex; align-items: center; gap: 10px; }
 .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
-.theme-toggle { display: flex; gap: 8px; }
-.theme-btn {
-  flex: 1; padding: 8px 16px; border: 1px solid var(--border);
-  border-radius: var(--radius); background: var(--bg); color: var(--text);
-  cursor: pointer; font-size: 13px; text-align: center; transition: all 0.15s;
+/* Settings popup (tinyleaf-style centered modal) */
+.settings-popup {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.5); z-index: 200;
+  align-items: center; justify-content: center;
 }
-.theme-btn:hover { background: var(--bg-hover); }
-.theme-btn.active { border-color: var(--accent); background: var(--bg-hover); color: var(--accent); font-weight: 600; }
+.settings-popup.open { display: flex; }
+.settings-popup-panel {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  min-width: 340px; max-width: 440px; padding: 24px;
+}
+.settings-popup-panel h3 { margin-bottom: 16px; font-size: 16px; font-weight: 600; }
+.settings-popup-item {
+  padding: 8px 0; font-size: 13px;
+  display: flex; align-items: center; gap: 12px;
+}
+.settings-popup-item label {
+  font-size: 12px; color: var(--text-dim);
+  white-space: nowrap; min-width: 80px;
+}
+.settings-popup-item select {
+  flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+}
+.settings-divider { border-top: 1px solid var(--border); margin: 6px 0; }
+.about-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 14px; font-size: 13px; color: var(--text);
+  text-decoration: none; border: 1px solid var(--border);
+  border-radius: 6px; transition: background 0.15s, border-color 0.15s;
+}
+.about-link:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
 .header-select {
   padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); cursor: pointer;
@@ -528,29 +554,34 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   </div>
 </div>
 
-<!-- Settings Modal -->
-<div class="modal-overlay" id="settingsModal">
-  <div class="modal">
+<!-- Settings Popup (tinyleaf-style) -->
+<div class="settings-popup" id="settingsPopup" onclick="this.classList.remove('open')">
+  <div class="settings-popup-panel" onclick="event.stopPropagation()">
     <h3 data-i18n="modal.settings">Settings</h3>
-    <div class="form-group">
+    <div class="settings-popup-item">
       <label data-i18n="label.theme">Theme</label>
-      <div class="theme-toggle" id="themeToggle">
-        <button class="theme-btn" data-theme="light" onclick="setTheme('light')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> <span data-i18n="theme.light">Light</span></button>
-        <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> <span data-i18n="theme.dark">Dark</span></button>
-      </div>
+      <select id="settingsThemeSelect" onchange="setTheme(this.value)">
+        <option value="light" data-i18n="theme.light">Light</option>
+        <option value="dark" data-i18n="theme.dark">Dark</option>
+      </select>
     </div>
-    <div class="form-group">
+    <div class="settings-popup-item">
       <label data-i18n="label.language">Language</label>
-      <div class="theme-toggle" id="langToggle">
-        <button class="theme-btn" data-lang="en" onclick="setLang('en')">English</button>
-        <button class="theme-btn" data-lang="zh" onclick="setLang('zh')">&#x4E2D;&#x6587;</button>
+      <select id="settingsLangSelect" onchange="setLang(this.value)">
+        <option value="en">English</option>
+        <option value="zh">中文</option>
+      </select>
+    </div>
+    <div class="settings-divider"></div>
+    <div style="text-align:center;padding:4px 0 2px">
+      <div style="font-size:15px;font-weight:600;margin-bottom:2px">llm-rosetta</div>
+      <div id="settingsVersion" style="font-size:11px;color:var(--text-dim);margin-bottom:8px"></div>
+      <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+        <a href="https://github.com/Oaklight/llm-rosetta" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.38c.6.12.83-.26.83-.57L9 20.86c-3.37.73-4.08-1.63-4.08-1.63-.55-1.4-1.34-1.77-1.34-1.77-1.1-.75.08-.73.08-.73 1.21.08 1.85 1.24 1.85 1.24 1.08 1.85 2.83 1.32 3.52 1 .1-.78.42-1.32.76-1.62-2.69-.3-5.52-1.34-5.52-5.98 0-1.32.47-2.4 1.24-3.24-.12-.3-.54-1.54.12-3.2 0 0 1.01-.33 3.3 1.24a11.5 11.5 0 0 1 6.02 0c2.3-1.57 3.3-1.24 3.3-1.24.66 1.66.24 2.9.12 3.2a4.65 4.65 0 0 1 1.24 3.24c0 4.65-2.83 5.67-5.53 5.97.43.37.82 1.1.82 2.22l-.01 3.29c0 .31.22.69.83.57A12 12 0 0 0 12 .3"/></svg> GitHub</a>
+        <a href="https://pypi.org/project/llm-rosetta/" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M11.9 1.1 5.1 4v5.3l6.8-2.9 6.8 2.9V4zm.2 6.5L5.3 10.5v5.3l6.8-2.9 6.8 2.9v-5.3zM5.3 17v3l6.8 2.9 6.8-2.9v-3l-6.8 2.9z"/></svg> PyPI</a>
+        <a href="https://hub.docker.com/r/oaklight/llm-rosetta-gateway" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M13.98 11.08h2.12a.19.19 0 0 0 .19-.19V9.01a.19.19 0 0 0-.19-.19h-2.12a.19.19 0 0 0-.18.19v1.88c0 .1.08.19.18.19m-2.95-5.43h2.12a.19.19 0 0 0 .18-.19V3.58a.19.19 0 0 0-.18-.19h-2.12a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m0 2.71h2.12a.19.19 0 0 0 .18-.19V6.29a.19.19 0 0 0-.18-.19h-2.12a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m-2.93 0h2.12a.19.19 0 0 0 .19-.19V6.29a.19.19 0 0 0-.19-.19H8.1a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m-2.96 0h2.11a.19.19 0 0 0 .19-.19V6.29a.19.19 0 0 0-.19-.19H5.14a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m5.89 2.72h2.12a.19.19 0 0 0 .18-.19V9.01a.19.19 0 0 0-.18-.19h-2.12a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m-2.93 0h2.12a.19.19 0 0 0 .19-.19V9.01a.19.19 0 0 0-.19-.19H8.1a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m-2.96 0h2.11a.19.19 0 0 0 .19-.19V9.01a.19.19 0 0 0-.19-.19H5.14a.19.19 0 0 0-.19.19v1.88c0 .1.09.19.19.19m-2.92 0h2.12a.19.19 0 0 0 .19-.19V9.01a.19.19 0 0 0-.19-.19H2.22a.19.19 0 0 0-.19.19v1.88c0 .1.08.19.19.19M23.7 11.65a5.4 5.4 0 0 0-2.76-1.83 4.85 4.85 0 0 0-1.34-2.86c-.58-.62-1.34-1-2.22-1.16l-.2-.03a.28.28 0 0 0-.27.18c-.11.24-.67 1.6-.14 3.06-.57-.5-1.36-.78-2.15-.78H2.22c-.67 0-1.22.49-1.3 1.13A12.46 12.46 0 0 0 .75 12c0 3.39 1.1 6.08 3.26 7.98C5.85 21.7 8.42 22.7 11.6 22.7h.6c4.14-.14 7.58-1.7 9.43-5.22a.27.27 0 0 0-.12-.37 4.84 4.84 0 0 0 2.35-3.61.27.27 0 0 0-.16-.28v.43z"/></svg> Docker</a>
+        <a href="https://llm-rosetta.readthedocs.io" target="_blank" rel="noopener" class="about-link"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg> Docs</a>
       </div>
-    </div>
-    <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim)">
-      llm-rosetta gateway <span id="settingsVersion"></span>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeModal('settingsModal')" data-i18n="btn.close">Close</button>
     </div>
   </div>
 </div>
@@ -763,10 +794,9 @@ function setTheme(name) {
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
   currentTheme = name;
   localStorage.setItem('llm-rosetta-theme', name);
-  // Update settings modal toggle if open
-  document.querySelectorAll('#themeToggle .theme-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.theme === name);
-  });
+  // Sync settings popup dropdown if open
+  const ts = document.getElementById('settingsThemeSelect');
+  if (ts) ts.value = name;
   // Redraw charts if on dashboard tab
   if (currentTab === 'dashboard') loadMetrics();
 }
@@ -974,10 +1004,9 @@ function t(key, params) {
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem('llm-rosetta-lang', lang);
-  // Update settings modal toggle if open
-  document.querySelectorAll('#langToggle .theme-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.lang === lang);
-  });
+  // Sync settings popup dropdown if open
+  const ls = document.getElementById('settingsLangSelect');
+  if (ls) ls.value = lang;
   applyI18n();
 }
 
@@ -1077,18 +1106,16 @@ function doLogout() {
 }
 
 function openSettings() {
-  // Highlight active theme & lang
-  document.querySelectorAll('#themeToggle .theme-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.theme === currentTheme);
-  });
-  document.querySelectorAll('#langToggle .theme-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.lang === currentLang);
-  });
+  const popup = document.getElementById('settingsPopup');
+  // Sync dropdowns with current state
+  const ts = document.getElementById('settingsThemeSelect');
+  if (ts) ts.value = currentTheme;
+  const ls = document.getElementById('settingsLangSelect');
+  if (ls) ls.value = currentLang;
   // Show version
   const ver = document.getElementById('settingsVersion');
   if (ver) ver.textContent = configData?.version ? 'v' + configData.version : '';
-  document.getElementById('settingsModal').classList.add('open');
-  applyI18n();
+  popup.classList.toggle('open');
 }
 
 function showLoginOverlay() {
@@ -2213,9 +2240,10 @@ document.getElementById('filterStatus').addEventListener('change', () => { logOf
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
 });
-// Close test modal on Escape key
+// Close popups/modals on Escape key
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
+    document.getElementById('settingsPopup').classList.remove('open');
     const testModal = document.getElementById('testModal');
     if (testModal && testModal.classList.contains('open')) closeModal('testModal');
   }
