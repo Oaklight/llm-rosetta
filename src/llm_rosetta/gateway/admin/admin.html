@@ -1358,6 +1358,16 @@ async function loadConfig() {
     document.getElementById('globalProxy').value = (configData.server && configData.server.proxy) || '';
     renderProviders();
     renderModels();
+    // Detect host IP in background (for proxy placeholder hints)
+    if (!window._detectedHostIp) {
+      api.get('/admin/api/diagnostics/network').then(data => {
+        if (data.host && data.host.ok) {
+          window._detectedHostIp = data.host.ip;
+          const hint = `e.g. http://${data.host.ip}:7890`;
+          document.getElementById('globalProxy').placeholder = hint;
+        }
+      }).catch(() => {});
+    }
   } catch(e) {
     console.error('Failed to load config:', e);
   }
