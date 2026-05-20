@@ -37,7 +37,10 @@ Below the providers section, a model routing table lists all configured models w
 - **Search** models by name or **filter** by provider using the dropdown
 - **Sort** by model name or provider by clicking column headers
 - **Add** a new model with provider assignment
-- **Fetch from Provider** — query the upstream `/v1/models` endpoint, browse available models with checkboxes, and bulk-add with optional prefix
+- **Fetch from Provider** — query the upstream `/v1/models` endpoint, browse available models with checkboxes, and bulk-add with optional prefix. Error responses show actionable diagnostics:
+    - **Connection refused** — the upstream service is not running or a firewall is blocking the connection
+    - **Timeout** — the upstream host is not reachable from the gateway container
+    - **DNS failure** — the Base URL hostname cannot be resolved
 - **Edit** model capabilities inline
 - **Delete** a model routing entry
 - **Test** a model directly from the admin panel
@@ -105,6 +108,16 @@ When there is no traffic yet, charts display a "No data yet" message instead of 
 ### Per-Provider Breakdown
 
 A table showing request counts grouped by target provider, useful for identifying traffic distribution.
+
+### Network Diagnostics
+
+The dashboard includes a Network Diagnostics section that checks connectivity from the gateway process. Three items are displayed:
+
+| Item | Description |
+|------|-------------|
+| **IP Location** | The gateway's outgoing public IP and geolocation, detected via an external lookup service |
+| **Host IP** | The Docker host's gateway IP (e.g. `172.29.0.1`), detected from the container's default route via `/proc/net/route`. Useful for reaching services running on the host machine. Only shown when running inside a container. |
+| **Google** | Basic connectivity check to `google.com` |
 
 ## Request Log
 
@@ -206,6 +219,29 @@ Up to **5,000** request log entries are retained. When the limit is reached, the
 ### Legacy migration
 
 On first startup, if `request_log.jsonl` or `metrics.json` exist in the data directory from a previous installation, they are automatically imported into `gateway.db` and renamed to `*.migrated`.
+
+## Accessing Host Services from Docker
+
+When the gateway runs inside a Docker container and needs to reach a service on the host machine (e.g. another API proxy listening on `localhost:44501`), you cannot use `127.0.0.1` as the Base URL — that refers to the container itself.
+
+Instead, use the **Host IP** shown in the Dashboard's Network Diagnostics section. This is the Docker bridge gateway address (typically `172.x.0.1`) and is automatically detected from the container's default route. The provider proxy URL placeholder in the admin panel dynamically shows this detected IP so you can copy it directly.
+
+### Firewall configuration (ufw)
+
+If the host runs `ufw`, Docker container traffic is blocked by default even though the container and host share a bridge network. You need to explicitly allow the Docker subnet:
+
+```bash
+# Find the container's subnet
+docker network inspect <network_name> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
+
+# Allow it through ufw (use /16 so the rule survives container IP changes)
+sudo ufw allow from 172.29.0.0/16 comment 'llm-rosetta docker'
+```
+
+!!! tip
+    Use a `/16` subnet rule rather than a single IP address. Container IPs change on every recreate, but the subnet stays the same.
+
+If the firewall is blocking traffic, "Fetch from Provider" and model tests will show timeout errors. Check the Network Diagnostics Host IP and add the corresponding ufw rule to resolve it.
 
 ## Caching / Reverse Proxy
 
