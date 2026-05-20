@@ -825,7 +825,7 @@ const I18N = {
     'error.fieldsRequired':'Name, Base URL, and API Key are required',
     'error.modelRequired':'All fields are required',
     'page.info':'Page {current} / {total} ({count} total)',
-    'test.connecting':'Connecting...', 'test.sending':'Sending request...', 'test.rawRequest':'Raw Request', 'test.rawResponse':'Raw Response', 'test.testImage':'Test Image',
+    'test.connecting':'Connecting...', 'test.cancel':'Cancel', 'test.sending':'Sending request...', 'test.rawRequest':'Raw Request', 'test.rawResponse':'Raw Response', 'test.testImage':'Test Image',
     'test.emptyResponse':'(empty response)',
     'hint.docker':'In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.',
     'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
@@ -833,7 +833,7 @@ const I18N = {
     'label.searchModels':'Search models...',
     'model.count':'{shown} / {total} models',
     'section.apiKeys':'API Keys',
-    'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy',
+    'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
     'col.label':'Label', 'col.key':'Key', 'col.created':'Created',
     'col.apiKey':'API Key',
     'modal.generateKey':'Generate API Key',
@@ -1364,7 +1364,7 @@ function renderProviders() {
       ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
       ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
       <div class="actions">
-        <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.copy')}</button>
+        <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
       </div>
@@ -1990,7 +1990,13 @@ function drawChart(canvasId, series, key, unit) {
   ctx.fillText('-30s', padL + chartW/2, h - 4);
   ctx.fillText('now', padL + chartW, h - 4);
 
-  if (values.length === 0) return;
+  if (values.length === 0 || Math.max(...values) === 0) {
+    ctx.fillStyle = dimColor;
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(t('empty.data'), padL + chartW/2, padT + chartH/2);
+    return;
+  }
 
   // Line
   ctx.strokeStyle = accentColor;
@@ -2293,6 +2299,15 @@ async function runTest(model, type) {
     // handles the upstream call.
     const endpoint = type === 'embedding' ? '/v1/embeddings' : '/v1/chat/completions';
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
+    // Show Cancel button and live elapsed timer
+    const cancelBtn = document.getElementById('testCancelBtn');
+    if (cancelBtn) cancelBtn.style.display = '';
+    let _elapsedSec = 0;
+    const _elapsedTimer = setInterval(() => {
+      _elapsedSec++;
+      output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')} ${_elapsedSec}s`;
+    }, 1000);
+    const _stopElapsed = () => { clearInterval(_elapsedTimer); if (cancelBtn) cancelBtn.style.display = 'none'; };
     try {
       const startResp = await api.post('/admin/api/test', {endpoint, payload});
       const taskId = startResp.task_id;
@@ -2303,6 +2318,7 @@ async function runTest(model, type) {
         const timeout = setTimeout(() => {
           clearInterval(_testPollTimer);
           _testPollTimer = null;
+          _stopElapsed();
           reject(new DOMException('Test timed out', 'AbortError'));
         }, _TEST_TIMEOUT_MS);
 
@@ -2316,15 +2332,18 @@ async function runTest(model, type) {
             _testTaskId = null;
 
             if (r.status === 'cancelled') {
+              _stopElapsed();
               reject(new DOMException('Request cancelled', 'AbortError'));
               return;
             }
             if (r.status === 'error') {
+              _stopElapsed();
               reject(new Error(r.error || 'Unknown error'));
               return;
             }
 
             // --- done ---
+            _stopElapsed();
             const elapsed = ((performance.now() - t0)/1000).toFixed(2);
             const body = r.body;
             const statusCode = r.status_code || 200;
@@ -2365,6 +2384,7 @@ async function runTest(model, type) {
             }
             resolve();
           } catch(pollErr) {
+            _stopElapsed();
             // Network error during poll — stop polling
             clearInterval(_testPollTimer);
             _testPollTimer = null;
