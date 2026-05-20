@@ -528,16 +528,32 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     headers = pinfo.auth_headers()
 
     try:
-        client = AsyncClient(timeout=30.0, proxy=pinfo.proxy_url)
+        client = AsyncClient(timeout=10.0, proxy=pinfo.proxy_url)
         raw_resp = await client.get(models_url, headers=headers)
         assert isinstance(raw_resp, HttpResponse), "Expected non-streaming response"
         resp: HttpResponse = raw_resp
         await client.aclose()
     except Exception as exc:
         logger.warning("Failed to fetch models from %s: %s", provider_name, exc)
-        return JSONResponse(
-            {"error": f"Failed to connect to upstream: {exc}"}, status_code=502
-        )
+        err_str = str(exc)
+        # Provide user-friendly error messages for common connection issues
+        if "Connection refused" in err_str or "Errno 111" in err_str:
+            msg = (
+                f"Connection refused at {models_url}. "
+                "Check that the service is running and the port is correct. "
+                "If running in Docker, ensure the host firewall (e.g. ufw) "
+                "allows connections from the Docker bridge network."
+            )
+        elif "timed out" in err_str.lower():
+            msg = (
+                f"Connection to {models_url} timed out. "
+                "Check that the host/port is reachable from this container."
+            )
+        elif "Name or service not known" in err_str or "getaddrinfo" in err_str:
+            msg = f"Cannot resolve hostname in {models_url}. Check the Base URL."
+        else:
+            msg = f"Failed to connect to upstream: {err_str}"
+        return JSONResponse({"error": msg})  # 200 so reverse proxies don't intercept
 
     if resp.status_code >= 400:
         logger.warning(
@@ -550,7 +566,6 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
                     "This provider may not support model listing."
                 ),
             },
-            status_code=502,
         )
 
     try:
@@ -558,7 +573,6 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     except Exception:
         return JSONResponse(
             {"error": "Upstream returned non-JSON response"},
-            status_code=502,
         )
 
     # Resolve model_id_field from shim (e.g. Argo uses "internal_id")

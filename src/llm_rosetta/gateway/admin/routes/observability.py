@@ -108,6 +108,24 @@ async def network_diagnostics(request: Any) -> Response:
     except Exception as exc:
         results["ip"] = {"ok": False, "error": str(exc)}
 
+    # Host IP detection (Docker gateway — for accessing host services)
+    try:
+        with open("/proc/net/route") as f:
+            for line in f:
+                fields = line.strip().split()
+                if fields[1] == "00000000":  # default route
+                    gw = int(fields[2], 16)
+                    host_ip = (
+                        f"{gw & 0xFF}.{(gw >> 8) & 0xFF}"
+                        f".{(gw >> 16) & 0xFF}.{(gw >> 24) & 0xFF}"
+                    )
+                    results["host"] = {"ok": True, "ip": host_ip}
+                    break
+            else:
+                results["host"] = {"ok": False, "error": "No default route"}
+    except Exception as exc:
+        results["host"] = {"ok": False, "error": str(exc)}
+
     # Google connectivity
     try:
         async with AsyncClient(**client_kwargs) as client:

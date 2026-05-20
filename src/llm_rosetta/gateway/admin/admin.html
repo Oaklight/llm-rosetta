@@ -828,7 +828,7 @@ const I18N = {
     'test.connecting':'Connecting...', 'test.cancel':'Cancel', 'test.sending':'Sending request...', 'test.rawRequest':'Raw Request', 'test.rawResponse':'Raw Response', 'test.testImage':'Test Image',
     'test.emptyResponse':'(empty response)',
     'hint.docker':'In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.',
-    'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
+    'diag.host':'Host IP', 'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
     'diag.testing':'testing...', 'diag.unknown':'unknown', 'diag.direct':'direct, no proxy',
     'label.searchModels':'Search models...',
     'model.count':'{shown} / {total} models',
@@ -1019,7 +1019,10 @@ const api = {
   async get(url) {
     const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
     if (r.status === 401) { showLoginOverlay(); throw new Error('Unauthorized'); }
-    return r.json();
+    const data = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(data?.error || (r.status === 504 ? 'Request timed out — the upstream service may be unreachable' : `HTTP ${r.status}`));
+    if (data === null) throw new Error('Invalid JSON response');
+    return data;
   },
   async put(url, body) {
     const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body)});
@@ -1239,6 +1242,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     keyInput.placeholder = '${OPENAI_API_KEY}';
   }
   document.getElementById('provProxy').value = proxy || '';
+  if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
   if (name && _credentialVisible) {
@@ -1324,17 +1328,22 @@ async function runNetDiag() {
   const el = document.getElementById('netDiagResults');
   el.innerHTML = `
     <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.ip')}: ${t('diag.testing')}</span>
+    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.host')}: ${t('diag.testing')}</span>
     <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.google')}: ${t('diag.testing')}</span>`;
   try {
     const data = await api.get('/admin/api/diagnostics/network');
     const ipInfo = data.ip || {};
+    const hostInfo = data.host || {};
     const googleInfo = data.google || {};
+    // Store detected host IP for provider form hints
+    if (hostInfo.ok) window._detectedHostIp = hostInfo.ip;
     const proxyText = data.proxy ? `(via ${esc(data.proxy)})` : `(${t('diag.direct')})`;
     const ipText = ipInfo.ok ? `${ipInfo.ip} (${ipInfo.city}, ${ipInfo.country})` : (ipInfo.error || t('diag.unknown'));
     const googleText = googleInfo.ok ? 'OK' : (googleInfo.error || 'unreachable');
     el.innerHTML = `
       <span class="diag-item" style="color:var(--text-dim);font-size:11px">${proxyText}</span>
       <span class="diag-item"><span class="diag-dot ${ipInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.ip')}: ${esc(ipText)}</span>
+      <span class="diag-item"><span class="diag-dot ${hostInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.host')}: ${hostInfo.ok ? esc(hostInfo.ip) : esc(hostInfo.error || t('diag.unknown'))}</span>
       <span class="diag-item"><span class="diag-dot ${googleInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.google')}: ${esc(googleText)}</span>`;
   } catch(e) {
     el.innerHTML = `<span class="diag-item"><span class="diag-dot fail"></span>Error: ${esc(String(e))}</span>`;
@@ -1699,8 +1708,13 @@ async function doFetchModels() {
 
   try {
     const data = await api.get(`/admin/api/config/providers/${encodeURIComponent(provider)}/models`);
-    _fetchedModels = data.models || [];
     document.getElementById('fetchModelsLoading').style.display = 'none';
+    if (data.error) {
+      document.getElementById('fetchModelsError').textContent = data.error;
+      document.getElementById('fetchModelsError').style.display = 'block';
+      return;
+    }
+    _fetchedModels = data.models || [];
     if (_fetchedModels.length === 0) {
       document.getElementById('fetchModelsError').textContent = t('fetch.noModels');
       document.getElementById('fetchModelsError').style.display = 'block';
