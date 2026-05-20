@@ -150,6 +150,13 @@ Set `server.admin_password` in your config to enable built-in password protectio
 
 See [Configuration — Admin Panel Security](configuration.md#admin-panel-security) for details.
 
+When password protection is enabled:
+
+- The login token is stored in `localStorage`, so your session survives browser restarts — not just the current tab.
+- A **Logout** button appears in the top-right corner to end your session manually.
+- Sessions automatically expire after **30 minutes of inactivity**. Mouse movement, keyboard input, scrolling, and clicks all count as activity.
+- The login form uses standard HTML form semantics, so browser password managers can save and autofill credentials.
+
 Alternatively, protect the admin panel using a reverse proxy:
 
 - **Caddy**: Use `basicauth` directive
@@ -187,3 +194,9 @@ Up to **5,000** request log entries are retained. When the limit is reached, the
 ### Legacy migration
 
 On first startup, if `request_log.jsonl` or `metrics.json` exist in the data directory from a previous installation, they are automatically imported into `gateway.db` and renamed to `*.migrated`.
+
+## Caching / Reverse Proxy
+
+The admin panel sets `Cache-Control: no-cache, no-store, must-revalidate` on all `/admin/api/*` responses. This prevents aggressive reverse proxy caches (e.g. Caddy with the Souin plugin) from serving stale dashboard metrics or request log data.
+
+Model test polling also uses POST requests instead of GET, which avoids being cached by intermediaries.
