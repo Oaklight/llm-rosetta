@@ -864,6 +864,8 @@ const I18N = {
     'login.btn':'Login',
     'login.error':'Invalid password',
     'btn.logout':'Logout',
+    'confirm.sure':'Sure?',
+    'confirm.yes':'Yes',
   },
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
@@ -954,6 +956,8 @@ const I18N = {
     'login.subtitle':'Admin \u9762\u677f\u5df2\u542f\u7528\u5bc6\u7801\u4fdd\u62a4',
     'login.btn':'\u767b\u5f55',
     'login.error':'\u5bc6\u7801\u9519\u8bef',
+    'confirm.sure':'\u786e\u5b9a\uff1f',
+    'confirm.yes':'\u662f',
   },
 };
 
@@ -1662,10 +1666,11 @@ function inlineConfirm(btn, action) {
   btn.dataset.confirming = '1';
   const orig = btn.innerHTML;
   const origClass = btn.className;
-  btn.innerHTML = `${t('confirm.sure')} <span style="text-decoration:underline;cursor:pointer" onclick="event.stopPropagation()">${t('confirm.yes')}</span>`;
+  const origOnclick = btn.onclick;
+  btn.innerHTML = `${t('confirm.sure')} <span style="text-decoration:underline;cursor:pointer">${t('confirm.yes')}</span>`;
   btn.className = btn.className.replace('btn-danger', 'btn-warning');
   btn.style.minWidth = btn.offsetWidth + 'px';
-  const revert = () => { btn.innerHTML = orig; btn.className = origClass; btn.style.minWidth = ''; delete btn.dataset.confirming; };
+  const revert = () => { btn.innerHTML = orig; btn.className = origClass; btn.style.minWidth = ''; btn.onclick = origOnclick; delete btn.dataset.confirming; };
   const timer = setTimeout(revert, 3000);
   btn.querySelector('span').onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); action(); };
   btn.onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); };
