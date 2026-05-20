@@ -34,6 +34,7 @@ def _get_version() -> str:
     """Return the llm-rosetta package version."""
     try:
         from llm_rosetta import __version__
+
         return __version__
     except Exception:
         return "unknown"
@@ -509,6 +510,26 @@ async def reload_config(request: Any) -> Response:
     )
 
 
+def _format_connection_error(exc: Exception, url: str) -> str:
+    """Return a user-friendly message for common upstream connection errors."""
+    err_str = str(exc)
+    if "Connection refused" in err_str or "Errno 111" in err_str:
+        return (
+            f"Connection refused at {url}. "
+            "Check that the service is running and the port is correct. "
+            "If running in Docker, ensure the host firewall (e.g. ufw) "
+            "allows connections from the Docker bridge network."
+        )
+    if "timed out" in err_str.lower():
+        return (
+            f"Connection to {url} timed out. "
+            "Check that the host/port is reachable from this container."
+        )
+    if "Name or service not known" in err_str or "getaddrinfo" in err_str:
+        return f"Cannot resolve hostname in {url}. Check the Base URL."
+    return f"Failed to connect to upstream: {err_str}"
+
+
 async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     """Fetch the model list from an upstream provider's /v1/models endpoint."""
     from llm_rosetta.shims import get_shim
@@ -545,24 +566,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
         await client.aclose()
     except Exception as exc:
         logger.warning("Failed to fetch models from %s: %s", provider_name, exc)
-        err_str = str(exc)
-        # Provide user-friendly error messages for common connection issues
-        if "Connection refused" in err_str or "Errno 111" in err_str:
-            msg = (
-                f"Connection refused at {models_url}. "
-                "Check that the service is running and the port is correct. "
-                "If running in Docker, ensure the host firewall (e.g. ufw) "
-                "allows connections from the Docker bridge network."
-            )
-        elif "timed out" in err_str.lower():
-            msg = (
-                f"Connection to {models_url} timed out. "
-                "Check that the host/port is reachable from this container."
-            )
-        elif "Name or service not known" in err_str or "getaddrinfo" in err_str:
-            msg = f"Cannot resolve hostname in {models_url}. Check the Base URL."
-        else:
-            msg = f"Failed to connect to upstream: {err_str}"
+        msg = _format_connection_error(exc, models_url)
         return JSONResponse({"error": msg})  # 200 so reverse proxies don't intercept
 
     if resp.status_code >= 400:
