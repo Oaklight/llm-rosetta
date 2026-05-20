@@ -30,6 +30,15 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
     return _app_mod._config
 
 
+def _get_version() -> str:
+    """Return the llm-rosetta package version."""
+    try:
+        from llm_rosetta import __version__
+        return __version__
+    except Exception:
+        return "unknown"
+
+
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
@@ -86,6 +95,7 @@ async def get_config(request: Any) -> Response:
             "models": models_normalized,
             "server": server,
             "credential_visible": config.credential_visible,
+            "version": _get_version(),
             "known_provider_types": known_provider_types(),
             "registered_shims": [
                 {

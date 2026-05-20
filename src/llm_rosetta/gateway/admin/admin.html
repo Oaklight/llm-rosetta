@@ -37,6 +37,14 @@ a { color: var(--accent); text-decoration: none; }
 .header h1 span { color: var(--text-dim); font-weight: 400; }
 .header-right { display: flex; align-items: center; gap: 10px; }
 .config-path { font-size: 12px; color: var(--text-dim); font-family: var(--mono); }
+.theme-toggle { display: flex; gap: 8px; }
+.theme-btn {
+  flex: 1; padding: 8px 16px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--bg); color: var(--text);
+  cursor: pointer; font-size: 13px; text-align: center; transition: all 0.15s;
+}
+.theme-btn:hover { background: var(--bg-hover); }
+.theme-btn.active { border-color: var(--accent); background: var(--bg-hover); color: var(--accent); font-weight: 600; }
 .header-select {
   padding: 4px 8px; font-size: 12px; background: var(--bg-card); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); cursor: pointer;
@@ -380,20 +388,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
     <h1>llm-rosetta <span>gateway admin</span></h1>
   </div>
   <div class="header-right">
-    <select id="themeSwitcher" class="header-select" onchange="setTheme(this.value)">
-      <option value="light">Light</option>
-      <option value="indigo">Indigo Dark</option>
-      <option value="dracula">Dracula</option>
-      <option value="nord">Nord</option>
-      <option value="solarized">Solarized</option>
-      <option value="osaka-jade">Osaka Jade</option>
-      <option value="one-dark">One Dark</option>
-      <option value="rosepine">Rosé Pine</option>
-    </select>
-    <select id="langSwitcher" class="header-select" onchange="setLang(this.value)">
-      <option value="en">EN</option>
-      <option value="zh">中文</option>
-    </select>
+    <button class="btn btn-sm" onclick="openSettings()" data-i18n-title="modal.settings" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
   </div>
 </div>
@@ -529,6 +524,33 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
       <button class="btn btn-sm" id="prevPage" onclick="changePage(-1)" data-i18n="btn.prev">Prev</button>
       <span class="info" id="pageInfo"></span>
       <button class="btn btn-sm" id="nextPage" onclick="changePage(1)" data-i18n="btn.next">Next</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h3 data-i18n="modal.settings">Settings</h3>
+    <div class="form-group">
+      <label data-i18n="label.theme">Theme</label>
+      <div class="theme-toggle" id="themeToggle">
+        <button class="theme-btn" data-theme="light" onclick="setTheme('light')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> <span data-i18n="theme.light">Light</span></button>
+        <button class="theme-btn" data-theme="dark" onclick="setTheme('dark')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> <span data-i18n="theme.dark">Dark</span></button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.language">Language</label>
+      <div class="theme-toggle" id="langToggle">
+        <button class="theme-btn" data-lang="en" onclick="setLang('en')">English</button>
+        <button class="theme-btn" data-lang="zh" onclick="setLang('zh')">&#x4E2D;&#x6587;</button>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding-top:14px;border-top:1px solid var(--border);font-size:12px;color:var(--text-dim)">
+      llm-rosetta gateway <span id="settingsVersion"></span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('settingsModal')" data-i18n="btn.close">Close</button>
     </div>
   </div>
 </div>
@@ -718,58 +740,33 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 <script>
 // ===================== Themes =====================
 const THEMES = {
-  indigo: {
-    '--bg':'#0f1117','--bg-card':'#1a1d27','--bg-hover':'#242838','--border':'#2d3148',
-    '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
-    '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6',
-  },
-  dracula: {
-    '--bg':'#282a36','--bg-card':'#2d2f3d','--bg-hover':'#383a4a','--border':'#44475a',
-    '--text':'#f8f8f2','--text-dim':'#6272a4','--accent':'#bd93f9','--accent-hover':'#caa8fc',
-    '--green':'#50fa7b','--red':'#ff5555','--orange':'#ffb86c','--blue':'#8be9fd',
-  },
-  nord: {
-    '--bg':'#2e3440','--bg-card':'#3b4252','--bg-hover':'#434c5e','--border':'#4c566a',
-    '--text':'#eceff4','--text-dim':'#81a1c1','--accent':'#88c0d0','--accent-hover':'#8fbcbb',
-    '--green':'#a3be8c','--red':'#bf616a','--orange':'#d08770','--blue':'#5e81ac',
-  },
   light: {
     '--bg':'#ffffff','--bg-card':'#f6f8fa','--bg-hover':'#eef1f5','--border':'#d1d9e0',
     '--text':'#1f2328','--text-dim':'#656d76','--accent':'#0969da','--accent-hover':'#0550ae',
     '--green':'#1a7f37','--red':'#cf222e','--orange':'#bf8700','--blue':'#0969da',
   },
-  solarized: {
-    '--bg':'#002b36','--bg-card':'#073642','--bg-hover':'#0a4050','--border':'#586e75',
-    '--text':'#fdf6e3','--text-dim':'#839496','--accent':'#b58900','--accent-hover':'#cb9a09',
-    '--green':'#859900','--red':'#dc322f','--orange':'#cb4b16','--blue':'#268bd2',
-  },
-  'osaka-jade': {
-    '--bg':'#1a1f1e','--bg-card':'#222928','--bg-hover':'#2c3432','--border':'#3a4542',
-    '--text':'#d4ddd6','--text-dim':'#7a9486','--accent':'#5cba8c','--accent-hover':'#74d4a4',
-    '--green':'#5cba8c','--red':'#e06c6c','--orange':'#d4a24c','--blue':'#5c9aba',
-  },
-  'one-dark': {
-    '--bg':'#282c34','--bg-card':'#2c313c','--bg-hover':'#353b48','--border':'#3e4452',
-    '--text':'#abb2bf','--text-dim':'#636d83','--accent':'#61afef','--accent-hover':'#80bfff',
-    '--green':'#98c379','--red':'#e06c75','--orange':'#d19a66','--blue':'#61afef',
-  },
-  rosepine: {
-    '--bg':'#191724','--bg-card':'#1f1d2e','--bg-hover':'#26233a','--border':'#403d52',
-    '--text':'#e0def4','--text-dim':'#908caa','--accent':'#c4a7e7','--accent-hover':'#d4bff7',
-    '--green':'#9ccfd8','--red':'#eb6f92','--orange':'#f6c177','--blue':'#31748f',
+  dark: {
+    '--bg':'#0f1117','--bg-card':'#1a1d27','--bg-hover':'#242838','--border':'#2d3148',
+    '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
+    '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6',
   },
 };
 
 let currentTheme = localStorage.getItem('llm-rosetta-theme') || 'light';
 
 function setTheme(name) {
+  // Backward compat: map old theme names to light/dark
+  if (!THEMES[name]) name = (name === 'light') ? 'light' : 'dark';
   const vars = THEMES[name];
   if (!vars) return;
   const root = document.documentElement;
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
   currentTheme = name;
   localStorage.setItem('llm-rosetta-theme', name);
-  document.getElementById('themeSwitcher').value = name;
+  // Update settings modal toggle if open
+  document.querySelectorAll('#themeToggle .theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.theme === name);
+  });
   // Redraw charts if on dashboard tab
   if (currentTab === 'dashboard') loadMetrics();
 }
@@ -784,7 +781,7 @@ const I18N = {
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL',
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
-    'btn.save':'Save', 'btn.cancel':'Cancel', 'btn.close':'Close',
+    'btn.save':'Save', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
     'btn.addProvider':'+ Add Provider', 'btn.addModel':'+ Add Model',
     'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.clearLog':'Clear Log',
     'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
@@ -973,7 +970,10 @@ function t(key, params) {
 function setLang(lang) {
   currentLang = lang;
   localStorage.setItem('llm-rosetta-lang', lang);
-  document.getElementById('langSwitcher').value = lang;
+  // Update settings modal toggle if open
+  document.querySelectorAll('#langToggle .theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === lang);
+  });
   applyI18n();
 }
 
@@ -1070,6 +1070,21 @@ function doLogout() {
   const btn = document.getElementById('logoutBtn');
   if (btn) btn.style.display = 'none';
   showLoginOverlay();
+}
+
+function openSettings() {
+  // Highlight active theme & lang
+  document.querySelectorAll('#themeToggle .theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.theme === currentTheme);
+  });
+  document.querySelectorAll('#langToggle .theme-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === currentLang);
+  });
+  // Show version
+  const ver = document.getElementById('settingsVersion');
+  if (ver) ver.textContent = configData?.version ? 'v' + configData.version : '';
+  document.getElementById('settingsModal').classList.add('open');
+  applyI18n();
 }
 
 function showLoginOverlay() {
