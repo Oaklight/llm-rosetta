@@ -50,6 +50,7 @@ from .keys import (
 )
 from .observability import (
     clear_requests,
+    get_host_ip,
     get_metrics,
     get_provider_key,
     get_requests,
@@ -95,6 +96,7 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/requests", methods=["DELETE"])(clear_requests)
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
+    app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
     # API key management
     app.route("/admin/api/keys", methods=["GET"])(get_api_keys)
     app.route("/admin/api/keys", methods=["POST"])(create_api_key)

@@ -11,6 +11,31 @@ from ...config import GatewayConfig
 from ._shared import _qp
 
 
+def _detect_host_ip() -> dict[str, Any]:
+    """Detect the Docker host IP from the default gateway in /proc/net/route.
+
+    This is a synchronous, microsecond-level operation that reads a
+    single procfs file — safe to call on every page load.
+
+    Returns:
+        Dict with ``ok``, ``ip`` (on success) or ``error`` (on failure).
+    """
+    try:
+        with open("/proc/net/route") as f:
+            for line in f:
+                fields = line.strip().split()
+                if fields[1] == "00000000":  # default route
+                    gw = int(fields[2], 16)
+                    host_ip = (
+                        f"{gw & 0xFF}.{(gw >> 8) & 0xFF}"
+                        f".{(gw >> 16) & 0xFF}.{(gw >> 24) & 0xFF}"
+                    )
+                    return {"ok": True, "ip": host_ip}
+        return {"ok": False, "error": "No default route"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 async def get_metrics(request: Any) -> Response:
     """Return a full metrics snapshot."""
     metrics = request.app.metrics
@@ -108,23 +133,7 @@ async def network_diagnostics(request: Any) -> Response:
     except Exception as exc:
         results["ip"] = {"ok": False, "error": str(exc)}
 
-    # Host IP detection (Docker gateway — for accessing host services)
-    try:
-        with open("/proc/net/route") as f:
-            for line in f:
-                fields = line.strip().split()
-                if fields[1] == "00000000":  # default route
-                    gw = int(fields[2], 16)
-                    host_ip = (
-                        f"{gw & 0xFF}.{(gw >> 8) & 0xFF}"
-                        f".{(gw >> 16) & 0xFF}.{(gw >> 24) & 0xFF}"
-                    )
-                    results["host"] = {"ok": True, "ip": host_ip}
-                    break
-            else:
-                results["host"] = {"ok": False, "error": "No default route"}
-    except Exception as exc:
-        results["host"] = {"ok": False, "error": str(exc)}
+    results["host"] = _detect_host_ip()
 
     # Google connectivity
     try:
@@ -138,3 +147,8 @@ async def network_diagnostics(request: Any) -> Response:
         results["google"] = {"ok": False, "error": str(exc)}
 
     return JSONResponse(results)
+
+
+async def get_host_ip(request: Any) -> Response:
+    """Return the detected Docker host IP (lightweight, no network calls)."""
+    return JSONResponse(_detect_host_ip())
