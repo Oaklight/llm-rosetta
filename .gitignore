@@ -213,7 +213,6 @@ __marimo__/
 # Worktrees and local directories
 docs_en/
 docs_zh/
-reference/
 
 # AI coding agents
 .claude/
