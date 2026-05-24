@@ -205,7 +205,7 @@ class MockMessageOps(BaseMessageOps):
 
             ir_messages.append(ir_msg)
 
-        return ir_messages
+        return ir_messages  # ty: ignore[invalid-return-type]
 
 
 class MockToolOps(BaseToolOps):

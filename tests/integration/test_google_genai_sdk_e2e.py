@@ -174,7 +174,7 @@ def build_sdk_config(provider_req):
             )
         )
 
-    return types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+    return types.GenerateContentConfig(**config_kwargs) if config_kwargs else None  # ty: ignore[invalid-argument-type]
 
 
 def build_sdk_contents(provider_req):
