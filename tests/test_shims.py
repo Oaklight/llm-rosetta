@@ -216,3 +216,45 @@ class TestShimConverterIntegration:
 
         with pytest.raises(ValueError, match="Unsupported provider"):
             get_converter_for_provider("totally_unknown")
+
+
+# ---------------------------------------------------------------------------
+# Grouped provider directories (e.g. argo/anthropic/, argo/openai_chat/)
+# ---------------------------------------------------------------------------
+
+
+class TestGroupedProviders:
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        """Load provider shims from the YAML directory."""
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    def test_grouped_providers_registered(self):
+        """Shims under a group folder register with their YAML name."""
+        for name in ("argo_anthropic", "argo_openai_chat"):
+            shim = get_shim(name)
+            assert shim is not None, f"Grouped shim '{name}' not registered"
+
+    def test_grouped_provider_base_types(self):
+        """Grouped shims resolve to the correct base converter."""
+        anth = get_shim("argo_anthropic")
+        oai = get_shim("argo_openai_chat")
+        assert anth is not None and anth.base == "anthropic"
+        assert oai is not None and oai.base == "openai_chat"
+
+    def test_grouped_provider_transforms_loaded(self):
+        """Grouped shims have their transforms.py imported."""
+        anth = get_shim("argo_anthropic")
+        assert anth is not None
+        # argo_anthropic has to_transforms and from_transforms
+        assert len(anth.to_transforms) > 0
+        assert len(anth.from_transforms) > 0
+
+    def test_mixed_flat_and_grouped(self):
+        """Flat shims and grouped shims coexist in the registry."""
+        flat_names = ("openai", "anthropic", "deepseek", "google")
+        grouped_names = ("argo_anthropic", "argo_openai_chat")
+        for name in (*flat_names, *grouped_names):
+            assert get_shim(name) is not None, f"Shim '{name}' not found"

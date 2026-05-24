@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from llm_rosetta.shims.providers.argo_anthropic.transforms import (
+from llm_rosetta.shims.providers.argo.anthropic.transforms import (
     _normalize_openai_response,
     _normalize_thinking,
 )
