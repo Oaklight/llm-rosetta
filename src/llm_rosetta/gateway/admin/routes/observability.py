@@ -36,12 +36,43 @@ def _detect_host_ip() -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
+def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
+    """Build the persistence sub-block for the metrics snapshot.
+
+    Returns a dict with on-disk byte sizes and per-class entry counts
+    plus retention caps, or ``None`` when persistence is not configured
+    (e.g. in tests without a config file).
+    """
+    if persistence is None:
+        return None
+    try:
+        sizes = persistence.db_file_sizes()
+        return {
+            **sizes,
+            "log_entries": persistence.count_log_entries(),
+            "log_success_entries": persistence.count_success_entries(),
+            "log_error_entries": persistence.count_error_entries(),
+            "log_max_success": persistence.success_max,
+            "log_max_error": persistence.error_max,
+        }
+    except Exception:
+        # Persistence introspection is purely informational; never let
+        # it block the metrics endpoint.
+        return None
+
+
 async def get_metrics(request: Any) -> Response:
     """Return a full metrics snapshot."""
     metrics = request.app.metrics
     seconds = int(_qp(request, "seconds", "60"))
     seconds = max(1, min(seconds, 300))
-    return JSONResponse(metrics.snapshot(series_seconds=seconds))
+    snap = metrics.snapshot(series_seconds=seconds)
+
+    persistence_snap = _persistence_snapshot(getattr(request.app, "persistence", None))
+    if persistence_snap is not None:
+        snap["persistence"] = persistence_snap
+
+    return JSONResponse(snap)
 
 
 async def get_requests(request: Any) -> Response:

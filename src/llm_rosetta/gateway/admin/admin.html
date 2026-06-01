@@ -389,6 +389,32 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .section-header { flex-wrap: wrap; gap: 8px; }
 }
+
+/* DB status footer */
+.db-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  padding: 4px 12px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  user-select: none;
+}
+.db-footer .seg { display: inline-flex; gap: 4px; }
+.db-footer .k { opacity: 0.7; }
+.db-footer .v { font-weight: 500; color: var(--text); }
+.db-footer .v.warn { color: var(--orange); }
+.db-footer .v.crit { color: var(--red); }
+.db-footer.hidden { display: none; }
+body { padding-bottom: 26px; }
 </style>
 </head>
 <body>
@@ -2008,6 +2034,40 @@ async function loadMetrics() {
   drawChart('chartThroughput', data.series, 'count', 'req/s');
   drawChart('chartLatency', data.series, 'avg_ms', 'ms');
   renderProviderBreakdown(data);
+  renderPersistence(data.persistence);
+}
+
+// Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
+function fmtBytes(n) {
+  if (!Number.isFinite(n) || n < 0) return '–';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' K';
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' M';
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + ' G';
+}
+
+// Render the persistent DB status footer.  Hidden when the metrics
+// snapshot lacks a persistence block (no config file, in-memory only).
+function renderPersistence(p) {
+  const el = document.getElementById('dbFooter');
+  if (!el) return;
+  if (!p) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+
+  const successCap = p.log_max_success || 0;
+  const errorCap = p.log_max_error || 0;
+  const successN = p.log_success_entries || 0;
+  const errorN = p.log_error_entries || 0;
+  const successPct = successCap > 0 ? Math.round((successN / successCap) * 100) : 0;
+  const errorPct = errorCap > 0 ? Math.round((errorN / errorCap) * 100) : 0;
+  const pctClass = (pct) => pct >= 95 ? 'crit' : (pct >= 75 ? 'warn' : '');
+
+  el.innerHTML = `
+    <span class="seg"><span class="k">DB</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
+    <span class="seg"><span class="k">ok</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
+    <span class="seg"><span class="k">err</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
+    <span class="seg"><span class="k">WAL</span><span class="v">${fmtBytes(p.wal_bytes)}</span></span>
+  `;
 }
 
 function renderStats(d) {
@@ -2577,5 +2637,6 @@ function initApp() {
 setLang(currentLang);
 checkAuthAndInit();
 </script>
+<div class="db-footer hidden" id="dbFooter" title="Gateway persistence status"></div>
 </body>
 </html>

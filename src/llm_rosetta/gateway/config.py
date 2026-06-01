@@ -187,6 +187,10 @@ class GatewayConfig:
         self.credential_visible: bool = _server.get("credential_visible", True)
         self.admin_password: str | None = _server.get("admin_password")
 
+        # Request-log retention knobs (consumed by setup_admin).  Kept as
+        # a raw dict here so admin layer owns the resolution policy.
+        self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
+
         # Multi-key auth: server.api_keys takes precedence over server.api_key
         self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
         if not self.api_keys and _server.get("api_key"):

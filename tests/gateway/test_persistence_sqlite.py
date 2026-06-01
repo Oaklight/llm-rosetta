@@ -4,7 +4,13 @@ import gzip
 import json
 import time
 
-from llm_rosetta.gateway.admin.persistence import PersistenceManager
+import pytest
+
+from llm_rosetta.gateway.admin.persistence import (
+    DEFAULT_ERROR_MAX,
+    DEFAULT_SUCCESS_MAX,
+    PersistenceManager,
+)
 from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
 
 
@@ -169,13 +175,108 @@ class TestPersistenceManagerRequestLog:
         pm.close()
 
     def test_prune(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), max_entries=10)
-        # Insert 15 entries in batches to trigger prune
+        # Legacy max_entries=N caps successes only; emits DeprecationWarning.
+        with pytest.warns(DeprecationWarning):
+            pm = PersistenceManager(str(tmp_path), max_entries=10)
+        # Insert 150 successful entries in batches to trigger prune.
         for batch in range(3):
             entries = [_make_entry_dict(model=f"m-{batch}-{i}") for i in range(50)]
             pm.insert_log_entries(entries)
 
-        assert pm.count_log_entries() <= 10
+        assert pm.count_success_entries() <= 10
+        pm.close()
+
+
+class TestPersistenceManagerRetention:
+    """Dual-threshold prune: success and error caps are independent."""
+
+    def test_defaults(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        assert pm.success_max == DEFAULT_SUCCESS_MAX
+        assert pm.error_max == DEFAULT_ERROR_MAX
+        pm.close()
+
+    def test_explicit_caps(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path), success_max=123, error_max=45)
+        assert pm.success_max == 123
+        assert pm.error_max == 45
+        pm.close()
+
+    def test_legacy_max_entries_maps_to_success(self, tmp_path):
+        with pytest.warns(DeprecationWarning, match="success_max"):
+            pm = PersistenceManager(str(tmp_path), max_entries=77)
+        assert pm.success_max == 77
+        assert pm.error_max == DEFAULT_ERROR_MAX
+        pm.close()
+
+    def test_legacy_does_not_override_explicit_success_max(self, tmp_path):
+        with pytest.warns(DeprecationWarning):
+            pm = PersistenceManager(str(tmp_path), success_max=200, max_entries=77)
+        # Explicit success_max wins over legacy alias.
+        assert pm.success_max == 200
+        pm.close()
+
+    def test_errors_not_evicted_by_success_flood(self, tmp_path):
+        # Tiny success cap, generous error cap: a flood of successes must
+        # not evict the rare error rows.
+        pm = PersistenceManager(str(tmp_path), success_max=20, error_max=10)
+
+        err_entries = [_make_entry_dict(status=500, model=f"e-{i}") for i in range(5)]
+        pm.insert_log_entries(err_entries)
+
+        for batch in range(2):
+            ok_entries = [_make_entry_dict(model=f"ok-{batch}-{i}") for i in range(100)]
+            pm.insert_log_entries(ok_entries)
+
+        assert pm.count_success_entries() <= 20
+        assert pm.count_error_entries() == 5
+        pm.close()
+
+    def test_error_cap_pruned_independently(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path), success_max=1000, error_max=10)
+        # 150 errors, batched to trigger periodic prune at 100.
+        for batch in range(3):
+            entries = [
+                _make_entry_dict(status=500, model=f"e-{batch}-{i}") for i in range(50)
+            ]
+            pm.insert_log_entries(entries)
+
+        assert pm.count_error_entries() <= 10
+        assert pm.count_success_entries() == 0
+        pm.close()
+
+    def test_count_success_and_error_separately(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.insert_log_entries(
+            [
+                _make_entry_dict(status=200),
+                _make_entry_dict(status=201),
+                _make_entry_dict(status=404),
+                _make_entry_dict(status=500),
+                _make_entry_dict(status=502),
+            ]
+        )
+        assert pm.count_log_entries() == 5
+        assert pm.count_success_entries() == 2
+        assert pm.count_error_entries() == 3
+        pm.close()
+
+
+class TestPersistenceManagerSizes:
+    def test_db_file_sizes_keys(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        sizes = pm.db_file_sizes()
+        assert set(sizes.keys()) == {"db_bytes", "wal_bytes", "shm_bytes"}
+        assert all(isinstance(v, int) for v in sizes.values())
+        pm.close()
+
+    def test_db_file_sizes_nonzero_after_insert(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.insert_log_entries([_make_entry_dict(model=f"m-{i}") for i in range(50)])
+        sizes = pm.db_file_sizes()
+        # Main db file always exists after init; WAL is created on first write.
+        assert sizes["db_bytes"] > 0
+        assert sizes["wal_bytes"] >= 0
         pm.close()
 
     def test_bool_roundtrip(self, tmp_path):
