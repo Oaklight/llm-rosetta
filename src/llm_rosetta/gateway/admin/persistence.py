@@ -12,6 +12,7 @@ import json
 import logging
 import sqlite3
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -136,7 +137,7 @@ class PersistenceManager:
             )
             self._conn.commit()
 
-    def backfill_provider_names(self, model_to_provider: dict[str, str]) -> int:
+    def backfill_provider_names(self, model_to_provider: Mapping[str, str]) -> int:
         """Backfill target_provider_name for old entries using the model→provider mapping.
 
         Only updates rows where target_provider_name is NULL and the
