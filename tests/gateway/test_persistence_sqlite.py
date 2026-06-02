@@ -314,6 +314,7 @@ class TestPersistenceManagerSizes:
         results, _ = pm.query_log_entries()
         assert "error_detail" not in results[0]
         assert "api_key_label" not in results[0]
+        assert "client_ip" not in results[0]
         pm.close()
 
 

@@ -570,7 +570,7 @@ body { padding-bottom: 26px; }
       <button class="btn btn-danger btn-sm" onclick="clearLogs(this)" data-i18n="btn.clearLog">Clear Log</button>
     </div>
     <div class="table-scroll"><table>
-      <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
+      <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.clientIp">Client IP</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
       <tbody id="logTable"></tbody>
     </table></div>
     <div class="pagination">
@@ -889,7 +889,7 @@ const I18N = {
     'section.apiKeys':'API Keys',
     'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
     'col.label':'Label', 'col.key':'Key', 'col.created':'Created',
-    'col.apiKey':'API Key',
+    'col.apiKey':'API Key', 'col.clientIp':'Client IP',
     'modal.generateKey':'Generate API Key',
     'modal.keyCreated':'Key Created',
     'label.keyLabel':'Label (optional)',
@@ -986,7 +986,7 @@ const I18N = {
     'section.apiKeys':'API \u5bc6\u94a5',
     'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
     'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4',
-    'col.apiKey':'API \u5bc6\u94a5',
+    'col.apiKey':'API \u5bc6\u94a5', 'col.clientIp':'\u5ba2\u6237\u7aef IP',
     'modal.generateKey':'\u751f\u6210 API \u5bc6\u94a5',
     'modal.keyCreated':'\u5bc6\u94a5\u5df2\u521b\u5efa',
     'label.keyLabel':'\u6807\u7b7e\uff08\u53ef\u9009\uff09',
@@ -2202,7 +2202,7 @@ function resolveProviderName(apiType) {
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="7" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map(e => {
       const time = new Date(e.timestamp).toLocaleTimeString();
@@ -2214,17 +2214,19 @@ function renderLogs(entries, total) {
       const isExpanded = expandedLogRows.has(rowId);
       const rowStyle = hasError ? ` style="cursor:pointer" onclick="toggleLogRow('${rowId}',this)"` : '';
       const expandHint = hasError ? ' title="Click to expand error"' : '';
+      const clientIp = e.client_ip || '—';
       let rows = `<tr${rowStyle}${expandHint}>
         <td>${time}</td>
         <td><code>${esc(e.model)}</code></td>
         <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}</td>
         <td>${modeBadge}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
+        <td style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
         <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span></td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {
-        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="7"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="8"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
       }
       return rows;
     }).join('');

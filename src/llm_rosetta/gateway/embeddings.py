@@ -143,8 +143,10 @@ async def handle_embeddings(
             )
         if request_log is not None:
             from .admin.request_log import RequestLogEntry
+            from .app import _extract_client_ip
 
             api_key_label = api_key_label_var.get()
+            client_ip = _extract_client_ip(request)
             request_log.add(
                 RequestLogEntry.create(
                     model=model,
@@ -156,5 +158,6 @@ async def handle_embeddings(
                     duration_ms=duration_ms,
                     error_detail=error_detail,
                     api_key_label=api_key_label,
+                    client_ip=client_ip,
                 )
             )

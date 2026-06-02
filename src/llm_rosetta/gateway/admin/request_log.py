@@ -31,6 +31,7 @@ class RequestLogEntry:
     error_detail: str | None = None
     api_key_label: str | None = None
     target_provider_name: str | None = None
+    client_ip: str | None = None
 
     @classmethod
     def create(
@@ -45,6 +46,7 @@ class RequestLogEntry:
         error_detail: str | None = None,
         api_key_label: str | None = None,
         target_provider_name: str | None = None,
+        client_ip: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -59,6 +61,7 @@ class RequestLogEntry:
             error_detail=error_detail,
             api_key_label=api_key_label,
             target_provider_name=target_provider_name,
+            client_ip=client_ip,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -79,6 +82,8 @@ class RequestLogEntry:
             d["api_key_label"] = self.api_key_label
         if self.target_provider_name is not None:
             d["target_provider_name"] = self.target_provider_name
+        if self.client_ip is not None:
+            d["client_ip"] = self.client_ip
         return d
 
 

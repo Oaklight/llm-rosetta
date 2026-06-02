@@ -30,6 +30,26 @@ from .proxy import (
 
 logger = get_logger()
 
+
+def _extract_client_ip(request: Any) -> str | None:
+    """Extract the client IP from the request.
+
+    Checks ``X-Forwarded-For`` and ``X-Real-IP`` headers first (set by
+    reverse proxies), then falls back to the TCP peer address.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # X-Forwarded-For may contain a chain: "client, proxy1, proxy2"
+        return forwarded.split(",")[0].strip()
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    addr = getattr(request, "client_addr", None)
+    if addr and isinstance(addr, (tuple, list)) and addr[0]:
+        return str(addr[0])
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
@@ -165,6 +185,7 @@ async def _proxy_handler(
             from .admin.request_log import RequestLogEntry
 
             api_key_label = api_key_label_var.get()
+            client_ip = _extract_client_ip(request)
             request_log.add(
                 RequestLogEntry.create(
                     model=model,
@@ -176,6 +197,7 @@ async def _proxy_handler(
                     duration_ms=duration_ms,
                     error_detail=error_detail,
                     api_key_label=api_key_label,
+                    client_ip=client_ip,
                 )
             )
 
@@ -275,14 +297,7 @@ async def handle_list_models_google(request: Any) -> Response:
 
 
 async def handle_health(request: Any) -> Response:
-    assert _config is not None
-    return JSONResponse(
-        {
-            "status": "ok",
-            "providers": list(_config.providers.keys()),
-            "models": list(_config.models.keys()),
-        }
-    )
+    return JSONResponse({"status": "ok"})
 
 
 # ---------------------------------------------------------------------------

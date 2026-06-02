@@ -114,7 +114,8 @@ class PersistenceManager:
                 duration_ms     REAL NOT NULL,
                 error_detail    TEXT,
                 api_key_label   TEXT,
-                target_provider_name TEXT
+                target_provider_name TEXT,
+                client_ip       TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_rl_timestamp
                 ON request_log(timestamp DESC);
@@ -125,16 +126,18 @@ class PersistenceManager:
                 value TEXT NOT NULL
             );
         """)
-        self._migrate_add_target_provider_name()
+        self._migrate_add_columns()
 
-    def _migrate_add_target_provider_name(self) -> None:
-        """Add target_provider_name column if missing (upgrade from older schema)."""
+    def _migrate_add_columns(self) -> None:
+        """Add nullable columns missing from older schema versions."""
         cursor = self._conn.execute("PRAGMA table_info(request_log)")
         columns = {row[1] for row in cursor.fetchall()}
-        if "target_provider_name" not in columns:
-            self._conn.execute(
-                "ALTER TABLE request_log ADD COLUMN target_provider_name TEXT"
-            )
+        added = False
+        for col in ("target_provider_name", "client_ip"):
+            if col not in columns:
+                self._conn.execute(f"ALTER TABLE request_log ADD COLUMN {col} TEXT")
+                added = True
+        if added:
             self._conn.commit()
 
     def backfill_provider_names(self, model_to_provider: Mapping[str, str]) -> int:
@@ -180,6 +183,7 @@ class PersistenceManager:
         "error_detail",
         "api_key_label",
         "target_provider_name",
+        "client_ip",
     ]
 
     def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -190,8 +194,8 @@ class PersistenceManager:
             "INSERT OR IGNORE INTO request_log "
             "(id, timestamp, model, source_provider, target_provider, "
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
-            "target_provider_name) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "target_provider_name, client_ip) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -205,6 +209,7 @@ class PersistenceManager:
                     e.get("error_detail"),
                     e.get("api_key_label"),
                     e.get("target_provider_name"),
+                    e.get("client_ip"),
                 )
                 for e in entries
             ],
@@ -415,7 +420,7 @@ class PersistenceManager:
         for col, val in zip(cls._LOG_COLUMNS, row):
             if col == "is_stream":
                 d[col] = bool(val)
-            elif col in ("error_detail", "api_key_label") and val is None:
+            elif col in ("error_detail", "api_key_label", "client_ip") and val is None:
                 continue  # omit None optional fields (match old behavior)
             else:
                 d[col] = val
