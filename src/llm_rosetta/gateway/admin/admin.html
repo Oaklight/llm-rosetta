@@ -922,6 +922,8 @@ const I18N = {
     'login.error':'Invalid password',
     'btn.logout':'Logout',
     'label.systemTime':'System Time',
+    'footer.title':'Gateway persistence status',
+    'footer.db':'DB', 'footer.ok':'ok', 'footer.err':'err',
     'confirm.sure':'Sure?',
     'confirm.yes':'Yes',
   },
@@ -974,15 +976,15 @@ const I18N = {
     'error.fieldsRequired':'\u540d\u79f0\u3001Base URL \u548c API Key \u4e3a\u5fc5\u586b\u9879',
     'error.modelRequired':'\u6240\u6709\u5b57\u6bb5\u4e3a\u5fc5\u586b\u9879',
     'page.info':'\u7b2c {current} / {total} \u9875\uff08\u5171 {count} \u6761\uff09',
-    'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...', 'test.rawRequest':'\u539f\u59cb\u8bf7\u6c42', 'test.rawResponse':'\u539f\u59cb\u54cd\u5e94', 'test.testImage':'\u6d4b\u8bd5\u56fe\u7247',
+    'test.connecting':'\u8fde\u63a5\u4e2d...', 'test.cancel':'\u53d6\u6d88', 'test.sending':'\u53d1\u9001\u8bf7\u6c42\u4e2d...', 'test.rawRequest':'\u539f\u59cb\u8bf7\u6c42', 'test.rawResponse':'\u539f\u59cb\u54cd\u5e94', 'test.testImage':'\u6d4b\u8bd5\u56fe\u7247',
     'test.emptyResponse':'\uff08\u7a7a\u54cd\u5e94\uff09',
     'hint.docker':'\u5728 Docker \u4e2d\uff0c"localhost" \u6307\u7684\u662f\u5bb9\u5668\u81ea\u8eab\u3002\u8981\u8bbf\u95ee\u5bbf\u4e3b\u673a\uff0c\u8bf7\u4f7f\u7528 "host.docker.internal"\uff08macOS/Windows\uff09\u6216 "172.17.0.1"\uff08Linux\uff09\u3002',
-    'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
+    'diag.host':'\u4e3b\u673a IP', 'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
     'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
     'label.searchModels':'\u641c\u7d22\u6a21\u578b...',
     'model.count':'{shown} / {total} \u4e2a\u6a21\u578b',
     'section.apiKeys':'API \u5bc6\u94a5',
-    'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236',
+    'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
     'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4',
     'col.apiKey':'API \u5bc6\u94a5',
     'modal.generateKey':'\u751f\u6210 API \u5bc6\u94a5',
@@ -1016,6 +1018,8 @@ const I18N = {
     'login.btn':'\u767b\u5f55',
     'login.error':'\u5bc6\u7801\u9519\u8bef',
     'label.systemTime':'\u7cfb\u7edf\u65f6\u95f4',
+    'footer.title':'\u7f51\u5173\u6301\u4e45\u5316\u72b6\u6001',
+    'footer.db':'DB', 'footer.ok':'\u6b63\u5e38', 'footer.err':'\u9519\u8bef',
     'confirm.sure':'\u786e\u5b9a\uff1f',
     'confirm.yes':'\u662f',
   },
@@ -2065,10 +2069,11 @@ function renderPersistence(p) {
   const errorPct = errorCap > 0 ? Math.round((errorN / errorCap) * 100) : 0;
   const pctClass = (pct) => pct >= 95 ? 'crit' : (pct >= 75 ? 'warn' : '');
 
+  el.title = t('footer.title');
   el.innerHTML = `
-    <span class="seg"><span class="k">DB</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
-    <span class="seg"><span class="k">ok</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
-    <span class="seg"><span class="k">err</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
+    <span class="seg"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
+    <span class="seg"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
+    <span class="seg"><span class="k">${t('footer.err')}</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
     <span class="seg"><span class="k">WAL</span><span class="v">${fmtBytes(p.wal_bytes)}</span></span>
   `;
 }
@@ -2652,6 +2657,6 @@ function initApp() {
 setLang(currentLang);
 checkAuthAndInit();
 </script>
-<div class="db-footer hidden" id="dbFooter" title="Gateway persistence status"></div>
+<div class="db-footer hidden" id="dbFooter"></div>
 </body>
 </html>
