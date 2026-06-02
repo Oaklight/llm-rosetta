@@ -440,7 +440,7 @@ body { padding-bottom: 26px; }
     <h1>llm-rosetta <span>gateway admin</span></h1>
   </div>
   <div class="header-right">
-    <span style="font-size:12px;color:var(--text-dim);margin-right:8px"><span style="margin-right:4px">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></span>
+    <span style="font-size:12px;color:var(--text-dim);margin-right:8px"><span style="margin-right:4px" data-i18n="label.systemTime">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></span>
     <button class="btn btn-sm" onclick="openSettings()" data-i18n-title="modal.settings" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
   </div>
@@ -921,6 +921,7 @@ const I18N = {
     'login.btn':'Login',
     'login.error':'Invalid password',
     'btn.logout':'Logout',
+    'label.systemTime':'System Time',
     'confirm.sure':'Sure?',
     'confirm.yes':'Yes',
   },
@@ -1014,6 +1015,7 @@ const I18N = {
     'login.subtitle':'Admin \u9762\u677f\u5df2\u542f\u7528\u5bc6\u7801\u4fdd\u62a4',
     'login.btn':'\u767b\u5f55',
     'login.error':'\u5bc6\u7801\u9519\u8bef',
+    'label.systemTime':'\u7cfb\u7edf\u65f6\u95f4',
     'confirm.sure':'\u786e\u5b9a\uff1f',
     'confirm.yes':'\u662f',
   },
