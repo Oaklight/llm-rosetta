@@ -254,8 +254,8 @@ class GatewayConfig:
 
     def resolve_model(
         self, model: str
-    ) -> tuple[str, ProviderInfo, str | None, str | None]:
-        """Return (provider_type, provider_info, shim_name, upstream_model).
+    ) -> tuple[str, ProviderInfo, str | None, str | None, str]:
+        """Return (provider_type, provider_info, shim_name, upstream_model, provider_name).
 
         ``provider_type`` is the API standard (e.g. ``"openai_chat"``),
         resolved from the provider's ``type`` field or its name as fallback.
@@ -268,10 +268,20 @@ class GatewayConfig:
         as-is.  This enables model aliasing — e.g. gateway name
         ``"argo:claude-opus-4.5"`` mapping to upstream ``"claudeopus45"``.
 
+        ``provider_name`` is the user-configured provider name (e.g.
+        ``"deepseek"``, ``"my-openai"``), used for admin UI filtering
+        and display.
+
         Raises KeyError if the model is not in the routing table.
         """
         provider_name = self.models[model]
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
         upstream_model = self.model_upstream_names.get(model)
-        return provider_type, self.providers[provider_name], shim_name, upstream_model
+        return (
+            provider_type,
+            self.providers[provider_name],
+            shim_name,
+            upstream_model,
+            provider_name,
+        )

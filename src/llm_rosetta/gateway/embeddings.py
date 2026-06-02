@@ -65,7 +65,7 @@ async def handle_embeddings(
 
     # --- Resolve provider ---
     try:
-        _, provider_info, _, _ = config.resolve_model(model)
+        _, provider_info, _, _, provider_name = config.resolve_model(model)
     except KeyError:
         configured = ", ".join(sorted(config.models.keys()))
         return JSONResponse(
@@ -150,6 +150,7 @@ async def handle_embeddings(
                     model=model,
                     source_provider="openai_chat",
                     target_provider=provider_type,
+                    target_provider_name=provider_name,
                     is_stream=False,
                     status_code=status_code,
                     duration_ms=duration_ms,

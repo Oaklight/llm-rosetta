@@ -65,9 +65,13 @@ async def _proxy_handler(
 
     # Resolve target provider
     try:
-        target_provider_str, provider_info, target_shim_name, upstream_model = (
-            _config.resolve_model(model)
-        )
+        (
+            target_provider_str,
+            provider_info,
+            target_shim_name,
+            upstream_model,
+            provider_name,
+        ) = _config.resolve_model(model)
         target_provider: ProviderType = cast(ProviderType, target_provider_str)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
@@ -166,6 +170,7 @@ async def _proxy_handler(
                     model=model,
                     source_provider=source_provider,
                     target_provider=target_provider,
+                    target_provider_name=provider_name,
                     is_stream=is_stream,
                     status_code=status_code,
                     duration_ms=duration_ms,

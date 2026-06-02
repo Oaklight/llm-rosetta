@@ -112,7 +112,8 @@ class PersistenceManager:
                 status_code     INTEGER NOT NULL,
                 duration_ms     REAL NOT NULL,
                 error_detail    TEXT,
-                api_key_label   TEXT
+                api_key_label   TEXT,
+                target_provider_name TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_rl_timestamp
                 ON request_log(timestamp DESC);
@@ -123,6 +124,44 @@ class PersistenceManager:
                 value TEXT NOT NULL
             );
         """)
+        self._migrate_add_target_provider_name()
+
+    def _migrate_add_target_provider_name(self) -> None:
+        """Add target_provider_name column if missing (upgrade from older schema)."""
+        cursor = self._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "target_provider_name" not in columns:
+            self._conn.execute(
+                "ALTER TABLE request_log ADD COLUMN target_provider_name TEXT"
+            )
+            self._conn.commit()
+
+    def backfill_provider_names(self, model_to_provider: dict[str, str]) -> int:
+        """Backfill target_provider_name for old entries using the model→provider mapping.
+
+        Only updates rows where target_provider_name is NULL and the
+        model exists in the current config.
+
+        Args:
+            model_to_provider: Mapping from model name to provider name
+                (e.g. ``{"argo:claude-opus-4.6": "Argo Claude"}``).
+
+        Returns:
+            Number of rows updated.
+        """
+        if not model_to_provider:
+            return 0
+        total = 0
+        for model_name, provider_name in model_to_provider.items():
+            cursor = self._conn.execute(
+                "UPDATE request_log SET target_provider_name = ? "
+                "WHERE model = ? AND target_provider_name IS NULL",
+                (provider_name, model_name),
+            )
+            total += cursor.rowcount
+        if total:
+            self._conn.commit()
+        return total
 
     # ------------------------------------------------------------------
     # Request log
@@ -139,6 +178,7 @@ class PersistenceManager:
         "duration_ms",
         "error_detail",
         "api_key_label",
+        "target_provider_name",
     ]
 
     def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -148,8 +188,9 @@ class PersistenceManager:
         self._conn.executemany(
             "INSERT OR IGNORE INTO request_log "
             "(id, timestamp, model, source_provider, target_provider, "
-            "is_stream, status_code, duration_ms, error_detail, api_key_label) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "is_stream, status_code, duration_ms, error_detail, api_key_label, "
+            "target_provider_name) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -162,6 +203,7 @@ class PersistenceManager:
                     e["duration_ms"],
                     e.get("error_detail"),
                     e.get("api_key_label"),
+                    e.get("target_provider_name"),
                 )
                 for e in entries
             ],
@@ -199,8 +241,8 @@ class PersistenceManager:
             where_clauses.append("model = ?")
             params.append(model)
         if provider:
-            where_clauses.append("target_provider = ?")
-            params.append(provider)
+            where_clauses.append("(target_provider_name = ? OR target_provider = ?)")
+            params.extend([provider, provider])
         if status == "ok":
             where_clauses.append("status_code < 400")
         elif status == "error":

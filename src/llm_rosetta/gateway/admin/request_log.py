@@ -30,6 +30,7 @@ class RequestLogEntry:
     duration_ms: float
     error_detail: str | None = None
     api_key_label: str | None = None
+    target_provider_name: str | None = None
 
     @classmethod
     def create(
@@ -43,6 +44,7 @@ class RequestLogEntry:
         duration_ms: float,
         error_detail: str | None = None,
         api_key_label: str | None = None,
+        target_provider_name: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -56,6 +58,7 @@ class RequestLogEntry:
             duration_ms=round(duration_ms, 2),
             error_detail=error_detail,
             api_key_label=api_key_label,
+            target_provider_name=target_provider_name,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -74,6 +77,8 @@ class RequestLogEntry:
             d["error_detail"] = self.error_detail
         if self.api_key_label is not None:
             d["api_key_label"] = self.api_key_label
+        if self.target_provider_name is not None:
+            d["target_provider_name"] = self.target_provider_name
         return d
 
 
@@ -127,7 +132,11 @@ class RequestLog:
         if model:
             filtered = [e for e in filtered if e.model == model]
         if provider:
-            filtered = [e for e in filtered if e.target_provider == provider]
+            filtered = [
+                e
+                for e in filtered
+                if e.target_provider_name == provider or e.target_provider == provider
+            ]
         if status == "ok":
             filtered = [e for e in filtered if e.status_code < 400]
         elif status == "error":

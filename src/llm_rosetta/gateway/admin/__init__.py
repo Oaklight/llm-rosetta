@@ -88,6 +88,16 @@ def setup_admin(
                 metrics.total_requests,
             )
 
+    # Backfill target_provider_name for legacy log entries
+    if persistence is not None:
+        model_to_provider = {model: config.models[model] for model in config.models}
+        backfilled = persistence.backfill_provider_names(model_to_provider)
+        if backfilled:
+            logger.info(
+                "Backfilled target_provider_name for %d log entries",
+                backfilled,
+            )
+
     # Request log delegates to persistence when available
     request_log = RequestLog(persistence=persistence)
 
