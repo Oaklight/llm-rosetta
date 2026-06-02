@@ -84,8 +84,40 @@ async def get_requests(request: Any) -> Response:
     provider = _qp(request, "provider")
     status = _qp(request, "status")
 
+    # Resolve provider name → provider type so the query can match old
+    # entries that only have target_provider (the API type) without a
+    # target_provider_name backfill.  Use the raw config so that even
+    # disabled providers (missing API key, etc.) are resolvable.
+    provider_type: str | None = None
+    if provider:
+        config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+        if config is not None:
+            provider_type = config.provider_types.get(provider)
+        if provider_type is None:
+            # Fallback: read from raw config file (covers disabled providers)
+            from ._shared import _get_config_path
+            from ...config import load_config_raw
+
+            config_path = _get_config_path(request)
+            if config_path:
+                try:
+                    raw = load_config_raw(config_path)
+                    raw_prov = raw.get("providers", {}).get(provider, {})
+                    raw_type = raw_prov.get("type") or raw_prov.get("shim")
+                    if raw_type:
+                        from llm_rosetta.shims import resolve_base
+
+                        provider_type = resolve_base(raw_type)
+                except Exception:
+                    pass
+
     entries, total = log.get_entries(
-        limit=limit, offset=offset, model=model, provider=provider, status=status
+        limit=limit,
+        offset=offset,
+        model=model,
+        provider=provider,
+        provider_type=provider_type,
+        status=status,
     )
     return JSONResponse({"entries": entries, "total": total})
 

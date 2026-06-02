@@ -2190,6 +2190,15 @@ async function loadLogs() {
   renderLogs(data.entries, data.total);
 }
 
+// Reverse-lookup: provider API type → display name from config
+function resolveProviderName(apiType) {
+  if (!configData) return apiType;
+  for (const [name, cfg] of Object.entries(configData.providers || {})) {
+    if (cfg.type === apiType) return name;
+  }
+  return apiType;
+}
+
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
@@ -2208,7 +2217,7 @@ function renderLogs(entries, total) {
       let rows = `<tr${rowStyle}${expandHint}>
         <td>${time}</td>
         <td><code>${esc(e.model)}</code></td>
-        <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || e.target_provider)}</td>
+        <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}</td>
         <td>${modeBadge}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span></td>

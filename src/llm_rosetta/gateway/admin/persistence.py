@@ -227,9 +227,17 @@ class PersistenceManager:
         offset: int = 0,
         model: str | None = None,
         provider: str | None = None,
+        provider_type: str | None = None,
         status: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Query request log with optional filters, newest first.
+
+        Args:
+            provider: Provider display name (e.g. ``"Gemini"``).
+            provider_type: Resolved API type for *provider* (e.g.
+                ``"google"``).  Enables matching legacy rows that only
+                have ``target_provider`` (the API type) without a
+                ``target_provider_name`` backfill.
 
         Returns:
             A ``(entries, total)`` tuple.
@@ -241,8 +249,20 @@ class PersistenceManager:
             where_clauses.append("model = ?")
             params.append(model)
         if provider:
-            where_clauses.append("(target_provider_name = ? OR target_provider = ?)")
-            params.extend([provider, provider])
+            if provider_type and provider_type != provider:
+                # Match by name, OR fall back to API type only for legacy
+                # rows that have no target_provider_name (avoids cross-
+                # contamination when multiple providers share a base type).
+                where_clauses.append(
+                    "(target_provider_name = ? OR target_provider = ? "
+                    "OR (target_provider_name IS NULL AND target_provider = ?))"
+                )
+                params.extend([provider, provider, provider_type])
+            else:
+                where_clauses.append(
+                    "(target_provider_name = ? OR target_provider = ?)"
+                )
+                params.extend([provider, provider])
         if status == "ok":
             where_clauses.append("status_code < 400")
         elif status == "error":

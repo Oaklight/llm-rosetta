@@ -115,15 +115,25 @@ class RequestLog:
         offset: int = 0,
         model: str | None = None,
         provider: str | None = None,
+        provider_type: str | None = None,
         status: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
-        """Return filtered entries (newest-first) and total count."""
+        """Return filtered entries (newest-first) and total count.
+
+        Args:
+            provider: Provider display name (e.g. ``"Gemini"``).
+            provider_type: Resolved API type for *provider* (e.g.
+                ``"google"``).  When supplied the filter also matches
+                legacy entries whose ``target_provider`` stores the API
+                type but have no ``target_provider_name`` backfill.
+        """
         if self._persistence is not None:
             return self._persistence.query_log_entries(
                 limit=limit,
                 offset=offset,
                 model=model,
                 provider=provider,
+                provider_type=provider_type,
                 status=status,
             )
 
@@ -135,7 +145,13 @@ class RequestLog:
             filtered = [
                 e
                 for e in filtered
-                if e.target_provider_name == provider or e.target_provider == provider
+                if e.target_provider_name == provider
+                or e.target_provider == provider
+                or (
+                    provider_type
+                    and e.target_provider_name is None
+                    and e.target_provider == provider_type
+                )
             ]
         if status == "ok":
             filtered = [e for e in filtered if e.status_code < 400]
