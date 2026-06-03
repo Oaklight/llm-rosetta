@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.4.1"
+# version = "0.4.2"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -2230,7 +2230,8 @@ def _prepare_body(
 
     Priority: json > files > data.
     When files is provided and data is a dict, data fields are included
-    as text parts in the multipart body.
+    as text parts in the multipart body. When data is a dict without files,
+    it is URL-encoded as application/x-www-form-urlencoded.
 
     Returns:
         (body_bytes, content_type) tuple.
@@ -2240,6 +2241,8 @@ def _prepare_body(
     if files is not None:
         form_data = data if isinstance(data, dict) else None
         return _encode_multipart(form_data, files)
+    if isinstance(data, dict):
+        return urlencode(data).encode("utf-8"), "application/x-www-form-urlencoded"
     if isinstance(data, str):
         return data.encode("utf-8"), "application/x-www-form-urlencoded"
     if isinstance(data, bytes):
