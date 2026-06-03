@@ -10,6 +10,28 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 *No changes yet.*
 
+## v0.6.5 — 2026-06-02
+
+### Added
+
+- **API key label filter** — new dropdown on the Request Log tab to filter entries by API key name
+- **Client IP logging** — extracts client IP from `X-Forwarded-For` / `X-Real-IP` / TCP peer address and displays it in a new "Client IP" column on the Request Log tab
+- **System clock** — live-updating clock in the admin header for correlating log timestamps with current time
+- **Dual-threshold log retention** — success and error request log entries are pruned independently; errors get their own cap (`error_max`) so rare failures are not evicted by a flood of successful traffic
+- **DB sizing footer** — admin panel footer shows on-disk database size, entry counts per class, and retention caps
+
+### Fixed
+
+- **Provider filter** — filter now correctly matches entries by provider display name, with three-tier fallback (`target_provider_name` → `target_provider` → API type for legacy NULL rows) to handle backfill gaps and disabled providers
+- **`/health` info leak** — endpoint no longer exposes the full provider and model list to unauthenticated callers; now returns only `{"status": "ok"}`
+- **i18n completeness** — added missing Chinese translations for footer stats, system time label, filter options, and Client IP column header
+
+### Changed
+
+- **Shim directory layout** — provider shims now support grouped subdirectories (e.g. `argo/anthropic/`, `argo/openai_chat/`)
+- **Schema migration** — `_migrate_add_columns()` is now generic, adding any missing nullable columns in a single pass
+- **CI** — switched to pre-commit for lint/type checks, pinned ty version
+
 ## v0.6.4 — 2026-05-20
 
 ### Added
