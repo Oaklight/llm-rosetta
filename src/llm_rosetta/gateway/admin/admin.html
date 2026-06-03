@@ -567,6 +567,7 @@ body { padding-bottom: 26px; }
         <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
         <option value="error" data-i18n="filter.error">Error (4xx/5xx)</option>
       </select>
+      <select id="filterApiKey"><option value="" data-i18n="filter.allKeys">All Keys</option></select>
       <button class="btn btn-danger btn-sm" onclick="clearLogs(this)" data-i18n="btn.clearLog">Clear Log</button>
     </div>
     <div class="table-scroll"><table>
@@ -1927,6 +1928,7 @@ async function loadKeys() {
   try {
     keysData = await api.get('/admin/api/keys');
     renderKeys();
+    updateKeyFilterOptions();
   } catch(e) {
     console.error('Failed to load keys:', e);
   }
@@ -2181,10 +2183,12 @@ async function loadLogs() {
   const model = document.getElementById('filterModel').value;
   const provider = document.getElementById('filterProvider').value;
   const status = document.getElementById('filterStatus').value;
+  const apiKey = document.getElementById('filterApiKey').value;
   let url = `/admin/api/requests?limit=${LOG_LIMIT}&offset=${logOffset}`;
   if (model) url += `&model=${encodeURIComponent(model)}`;
   if (provider) url += `&provider=${encodeURIComponent(provider)}`;
   if (status) url += `&status=${encodeURIComponent(status)}`;
+  if (apiKey) url += `&api_key_label=${encodeURIComponent(apiKey)}`;
 
   const data = await api.get(url);
   renderLogs(data.entries, data.total);
@@ -2289,6 +2293,16 @@ function updateFilterOptions() {
   mSel.innerHTML = `<option value="">${t('filter.allModels')}</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   pSel.innerHTML = `<option value="">${t('filter.allProviders')}</option>` + providers.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
   mSel.value = mVal; pSel.value = pVal;
+  updateKeyFilterOptions();
+}
+
+function updateKeyFilterOptions() {
+  const kSel = document.getElementById('filterApiKey');
+  const kVal = kSel.value;
+  const keys = (keysData && keysData.keys) || [];
+  const labels = [...new Set(keys.map(k => k.label).filter(Boolean))].sort();
+  kSel.innerHTML = `<option value="">${t('filter.allKeys')}</option>` + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+  kSel.value = kVal;
 }
 
 // ===================== Tabs =====================
@@ -2324,6 +2338,7 @@ function stopTimers() {
 document.getElementById('filterModel').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 document.getElementById('filterProvider').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 document.getElementById('filterStatus').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
+document.getElementById('filterApiKey').addEventListener('change', () => { logOffset = 0; expandedLogRows.clear(); loadLogs(); });
 
 // Close modal on overlay click (delegates to closeModal so abort hooks fire)
 document.querySelectorAll('.modal-overlay').forEach(m => {

@@ -235,6 +235,7 @@ class PersistenceManager:
         provider: str | None = None,
         provider_type: str | None = None,
         status: str | None = None,
+        api_key_label: str | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Query request log with optional filters, newest first.
 
@@ -273,6 +274,9 @@ class PersistenceManager:
             where_clauses.append("status_code < 400")
         elif status == "error":
             where_clauses.append("status_code >= 400")
+        if api_key_label:
+            where_clauses.append("api_key_label = ?")
+            params.append(api_key_label)
 
         where_sql = ""
         if where_clauses:

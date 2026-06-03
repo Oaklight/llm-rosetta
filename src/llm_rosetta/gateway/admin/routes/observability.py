@@ -83,6 +83,7 @@ async def get_requests(request: Any) -> Response:
     model = _qp(request, "model")
     provider = _qp(request, "provider")
     status = _qp(request, "status")
+    api_key_label = _qp(request, "api_key_label")
 
     # Resolve provider name → provider type so the query can match old
     # entries that only have target_provider (the API type) without a
@@ -118,6 +119,7 @@ async def get_requests(request: Any) -> Response:
         provider=provider,
         provider_type=provider_type,
         status=status,
+        api_key_label=api_key_label,
     )
     return JSONResponse({"entries": entries, "total": total})
 

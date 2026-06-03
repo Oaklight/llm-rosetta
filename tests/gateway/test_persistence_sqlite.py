@@ -22,6 +22,7 @@ def _make_entry_dict(
     status: int = 200,
     provider: str = "openai_chat",
     error_detail: str | None = None,
+    api_key_label: str | None = None,
 ) -> dict:
     e = RequestLogEntry.create(
         model=model,
@@ -31,6 +32,7 @@ def _make_entry_dict(
         status_code=status,
         duration_ms=10.0,
         error_detail=error_detail,
+        api_key_label=api_key_label,
     )
     return e.to_dict()
 
@@ -133,6 +135,25 @@ class TestPersistenceManagerRequestLog:
 
         err_results, err_total = pm.query_log_entries(status="error")
         assert err_total == 2
+        pm.close()
+
+    def test_filter_by_api_key_label(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.insert_log_entries(
+            [
+                _make_entry_dict(api_key_label="alice"),
+                _make_entry_dict(api_key_label="bob"),
+                _make_entry_dict(api_key_label="alice"),
+                _make_entry_dict(),  # no label
+            ]
+        )
+
+        results, total = pm.query_log_entries(api_key_label="alice")
+        assert total == 2
+        assert all(r["api_key_label"] == "alice" for r in results)
+
+        results, total = pm.query_log_entries(api_key_label="bob")
+        assert total == 1
         pm.close()
 
     def test_pagination(self, tmp_path):
