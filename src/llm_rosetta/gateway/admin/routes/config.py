@@ -602,17 +602,9 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             name = m.get("name", "")
             if name.startswith("models/"):
                 name = name[len("models/") :]
-            if id_field:
-                name = m.get(id_field, name)
-            model_ids.append(name)
-    elif ptype == "anthropic":
-        # Anthropic: {"data": [{"id": "claude-...", ...}]}
-        for m in body.get("data", []):
-            model_ids.append(
-                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
-            )
+            model_ids.append(m.get(id_field, name) if id_field else name)
     else:
-        # OpenAI-compatible: {"data": [{"id": "gpt-...", ...}]}
+        # Anthropic & OpenAI-compatible: {"data": [{"id": "...", ...}]}
         for m in body.get("data", []):
             model_ids.append(
                 m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")

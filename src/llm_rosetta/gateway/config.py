@@ -127,58 +127,13 @@ class GatewayConfig:
             if cfg.get("enabled", True) is not False
         }
 
-        # Map provider name → API standard type.
-        # Resolution order:
-        #   1. "shim" field → resolve via shim registry to base type
-        #   2. "type" field → use directly
-        #   3. provider name itself (backward compatible fallback)
-        from llm_rosetta.shims import resolve_base
+        self.provider_types, self.provider_shim_names = self._resolve_provider_types(
+            self._raw_providers
+        )
 
-        self.provider_types: dict[str, str] = {}
-        self.provider_shim_names: dict[str, str | None] = {}
-        for name, cfg in self._raw_providers.items():
-            if "shim" in cfg:
-                self.provider_types[name] = resolve_base(cfg["shim"])
-                self.provider_shim_names[name] = cfg["shim"]
-            elif "type" in cfg:
-                self.provider_types[name] = resolve_base(cfg["type"])
-                self.provider_shim_names[name] = cfg["type"]
-            else:
-                self.provider_types[name] = name
-                self.provider_shim_names[name] = name
-
-        # Parse models — supports both string and dict formats:
-        #   "model": "provider"                     (legacy)
-        #   "model": {"provider": "p", "capabilities": ["text", "vision"]}
-        #   "model": {"provider": "p", "upstream_model": "actual_model_name"}
-        # Models referencing disabled providers are silently skipped.
-        raw_models = raw.get("models", {})
-        self.models: dict[str, ProviderType] = {}
-        self.model_capabilities: dict[str, list[str]] = {}
-        self.model_upstream_names: dict[str, str] = {}
-        for name, value in raw_models.items():
-            if isinstance(value, str):
-                provider_name = value
-            elif isinstance(value, dict):
-                provider_name = value["provider"]
-            else:
-                raise ValueError(f"config: invalid model entry for '{name}'")
-
-            if provider_name not in self._raw_providers:
-                # Skip models whose provider is disabled or missing
-                # (validation below only checks enabled providers)
-                continue
-
-            self.models[name] = provider_name
-            if isinstance(value, str):
-                self.model_capabilities[name] = list(self.DEFAULT_CAPABILITIES)
-            else:
-                self.model_capabilities[name] = value.get(
-                    "capabilities", list(self.DEFAULT_CAPABILITIES)
-                )
-                upstream = value.get("upstream_model")
-                if upstream:
-                    self.model_upstream_names[name] = upstream
+        self.models, self.model_capabilities, self.model_upstream_names = (
+            self._parse_models(raw.get("models", {}), self._raw_providers)
+        )
 
         _server = raw.get("server", {})
         self.host: str = _server.get("host", "0.0.0.0")
@@ -246,6 +201,80 @@ class GatewayConfig:
                 raise ValueError(
                     f"config: model '{model}' references unknown provider '{provider}'"
                 )
+
+    @staticmethod
+    def _resolve_provider_types(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> tuple[dict[str, str], dict[str, str | None]]:
+        """Resolve each provider's API standard type via shim registry.
+
+        Resolution order per provider:
+          1. ``shim`` field → resolve via shim registry
+          2. ``type`` field → resolve via shim registry
+          3. provider name itself (backward-compatible fallback)
+
+        Returns:
+            Tuple of (provider_types, provider_shim_names).
+        """
+        from llm_rosetta.shims import resolve_base
+
+        provider_types: dict[str, str] = {}
+        provider_shim_names: dict[str, str | None] = {}
+        for name, cfg in raw_providers.items():
+            if "shim" in cfg:
+                provider_types[name] = resolve_base(cfg["shim"])
+                provider_shim_names[name] = cfg["shim"]
+            elif "type" in cfg:
+                provider_types[name] = resolve_base(cfg["type"])
+                provider_shim_names[name] = cfg["type"]
+            else:
+                provider_types[name] = name
+                provider_shim_names[name] = name
+        return provider_types, provider_shim_names
+
+    @classmethod
+    def _parse_models(
+        cls,
+        raw_models: dict[str, Any],
+        raw_providers: dict[str, dict[str, str]],
+    ) -> tuple[dict[str, ProviderType], dict[str, list[str]], dict[str, str]]:
+        """Parse model routing entries from config.
+
+        Supports both string and dict formats:
+          - ``"model": "provider"`` (legacy)
+          - ``"model": {"provider": "p", "capabilities": [...]}``
+          - ``"model": {"provider": "p", "upstream_model": "actual_name"}``
+
+        Models referencing disabled/missing providers are silently skipped.
+
+        Returns:
+            Tuple of (models, model_capabilities, model_upstream_names).
+        """
+        models: dict[str, ProviderType] = {}
+        model_capabilities: dict[str, list[str]] = {}
+        model_upstream_names: dict[str, str] = {}
+        for name, value in raw_models.items():
+            if isinstance(value, str):
+                provider_name = value
+            elif isinstance(value, dict):
+                provider_name = value["provider"]
+            else:
+                raise ValueError(f"config: invalid model entry for '{name}'")
+
+            if provider_name not in raw_providers:
+                continue
+
+            models[name] = provider_name
+            if isinstance(value, str):
+                model_capabilities[name] = list(cls.DEFAULT_CAPABILITIES)
+            else:
+                model_capabilities[name] = value.get(
+                    "capabilities", list(cls.DEFAULT_CAPABILITIES)
+                )
+                upstream = value.get("upstream_model")
+                if upstream:
+                    model_upstream_names[name] = upstream
+        return models, model_capabilities, model_upstream_names
 
     @property
     def api_key(self) -> str | None:
