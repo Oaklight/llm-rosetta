@@ -8,7 +8,16 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## 未发布
 
-*暂无变更。*
+### 新增
+
+- **管理面板状态栏请求总数**：页脚首段显示生命周期请求计数器，支持千位分隔符本地化格式；每个段落悬浮提示（中/英）说明各指标含义
+- **内嵌 httpclient URL 编码表单数据**：`httpclient` v0.4.2 —— 当 `data` 为字典且无文件时，自动编码为 `application/x-www-form-urlencoded`
+
+### 变更
+
+- **Schema 清理模块拆分**：JSON Schema 清理逻辑从 `converters/base/tools.py` 拆分到独立的 `converters/base/schema.py` 模块，职责更清晰
+- **圈复杂度降低**：降低工具操作（跨转换器复用 `extract_part_ids`/`log_orphan_warnings`）、网关认证（`check_admin_auth`）、流式代理（`process_stream_chunk`）、配置解析、日志和管理路由的认知复杂度
+- **complexipy 阈值**：`max-complexity-allowed` 从 15 提升至 25；添加 `complexipy-pre-commit` 钩子定义（已注释）以备后续启用
 
 ## v0.6.5 — 2026-06-02
 
