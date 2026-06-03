@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## Unreleased
 
+*No changes yet.*
+
+## v0.6.6 — 2026-06-03
+
 ### Added
 
 - **Admin status bar total requests**: Lifetime request counter shown as the first footer segment with locale-aware thousand separators; per-segment hover tooltips (en/zh) explain each metric
@@ -18,6 +22,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Schema sanitization module split**: JSON Schema sanitization extracted from `converters/base/tools.py` into its own `converters/base/schema.py` module for clearer separation of concerns
 - **Cyclomatic complexity reduction**: Reduced cognitive complexity across tool ops (cross-converter `extract_part_ids`/`log_orphan_warnings` reuse), gateway auth (`check_admin_auth`), proxy streaming (`process_stream_chunk`), config parsing, logging, and admin routes
 - **complexipy threshold**: Raised `max-complexity-allowed` from 15 to 25; added `complexipy-pre-commit` hook definition (commented out) for future enablement
+
+### Fixed
+
+- **Admin footer i18n**: Status bar footer now re-renders on language switch instead of requiring a page refresh
+- **Docker non-semver build**: `make build-docker V=dev-test` no longer fails — non-semver `V` values fall back to installing from local wheel instead of `pip install ==<version>`
 
 ## v0.6.5 — 2026-06-02
 
