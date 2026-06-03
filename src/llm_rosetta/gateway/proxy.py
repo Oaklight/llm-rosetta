@@ -547,7 +547,7 @@ async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
     return f"data: {error_msg}\n\n"
 
 
-def _process_stream_chunk(
+def process_stream_chunk(
     chunk: dict[str, Any],
     *,
     target_converter: Any,
@@ -634,7 +634,7 @@ async def _stream_event_generator(
                 continue
 
             chunk_count += 1
-            for sse_line in _process_stream_chunk(
+            for sse_line in process_stream_chunk(
                 chunk,
                 target_converter=target_converter,
                 source_converter=source_converter,

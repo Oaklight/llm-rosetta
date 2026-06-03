@@ -102,7 +102,7 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
         )
 
 
-def _check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
+def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
     """Authenticate admin panel requests.
 
     Returns ``None`` to allow the request, or a 401 response to block it.
@@ -177,7 +177,7 @@ def create_auth_hook(auth_state: AuthState) -> Any:
 
         # Admin panel auth is a separate concern from API key auth
         if path.startswith("/admin"):
-            return _check_admin_auth(request, auth_state)
+            return check_admin_auth(request, auth_state)
 
         if not auth_state.key_set:
             return None  # no gateway API keys configured → pass through
