@@ -24,7 +24,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import sanitize_schema
+from ..base.tools import log_orphan_warnings, sanitize_schema
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +43,13 @@ def _collect_openai_tool_ids(
     known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for msg in messages:
-        if msg.get("role") == "assistant":
-            tool_calls = msg.get("tool_calls")
-            if tool_calls and isinstance(tool_calls, list):
-                for tc in tool_calls:
-                    tc_id = tc.get("id")
-                    if tc_id:
-                        known_call_ids.add(tc_id)
-        elif msg.get("role") == "tool":
-            tc_id = msg.get("tool_call_id")
-            if tc_id:
-                answered_ids.add(tc_id)
+        role = msg.get("role")
+        if role == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                if isinstance(tc, dict) and tc.get("id"):
+                    known_call_ids.add(tc["id"])
+        elif role == "tool" and msg.get("tool_call_id"):
+            answered_ids.add(msg["tool_call_id"])
     return known_call_ids, answered_ids
 
 
@@ -92,58 +88,37 @@ def fix_orphaned_tool_calls(
     Returns:
         A new messages list with orphaned tool_calls/results fixed.
     """
-    # --- Pass 1: collect known tool_call_ids and answered ids ---
     known_call_ids, answered_ids = _collect_openai_tool_ids(messages)
 
-    # Fast path: nothing to fix
     if not known_call_ids and not answered_ids:
         return messages
 
-    # --- Pass 2: walk messages, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
     orphaned_call_ids: list[str] = []
     orphaned_result_ids: list[str] = []
 
     for msg in messages:
-        # Remove orphaned tool results (result without preceding tool_call)
-        if msg.get("role") == "tool":
+        role = msg.get("role")
+
+        # Remove orphaned tool results
+        if role == "tool":
             tc_id = msg.get("tool_call_id")
             if tc_id and tc_id not in known_call_ids:
                 orphaned_result_ids.append(tc_id)
-                continue  # skip this message
+                continue
         patched.append(msg)
 
         # Inject synthetic results for orphaned tool_calls
-        if msg.get("role") != "assistant":
-            continue
-        tool_calls = msg.get("tool_calls")
-        if not tool_calls or not isinstance(tool_calls, list):
-            continue
-        for tc in tool_calls:
-            tc_id = tc.get("id")
-            if tc_id and tc_id not in answered_ids:
-                orphaned_call_ids.append(tc_id)
-                patched.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tc_id,
-                        "content": placeholder,
-                    }
-                )
+        if role == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                tc_id = tc.get("id") if isinstance(tc, dict) else None
+                if tc_id and tc_id not in answered_ids:
+                    orphaned_call_ids.append(tc_id)
+                    patched.append(
+                        {"role": "tool", "tool_call_id": tc_id, "content": placeholder}
+                    )
 
-    if orphaned_call_ids:
-        logger.warning(
-            "Fixed %d orphaned tool_call(s) by injecting synthetic results: %s",
-            len(orphaned_call_ids),
-            ", ".join(orphaned_call_ids),
-        )
-    if orphaned_result_ids:
-        logger.warning(
-            "Removed %d orphaned tool_result(s) with no matching tool_call: %s",
-            len(orphaned_result_ids),
-            ", ".join(orphaned_result_ids),
-        )
-
+    log_orphan_warnings(logger, orphaned_call_ids, orphaned_result_ids)
     return patched
 
 

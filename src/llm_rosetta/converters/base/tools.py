@@ -160,6 +160,48 @@ def _resolve_ref(ref: str, defs: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {}
 
 
+def _collect_defs(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Collect ``$defs``/``definitions`` maps from a top-level schema."""
+    defs: dict[str, dict[str, Any]] = {}
+    for key in _DEFS_KEYS:
+        d = schema.get(key)
+        if isinstance(d, dict):
+            defs.update(d)
+    return defs
+
+
+def _sanitize_value(
+    value: Any,
+    defs: dict[str, dict[str, Any]],
+    extra_strip_keys: set[str] | None,
+) -> Any:
+    """Recursively sanitize a single schema value (dict, list, or passthrough)."""
+    if isinstance(value, dict):
+        return sanitize_schema(value, defs, extra_strip_keys)
+    if isinstance(value, list):
+        return [
+            sanitize_schema(item, defs, extra_strip_keys)
+            if isinstance(item, dict)
+            else item
+            for item in value
+        ]
+    return value
+
+
+def _strip_orphaned_required(result: dict[str, Any]) -> None:
+    """Remove ``required`` entries that reference non-existent properties."""
+    if "required" not in result or "properties" not in result:
+        return
+    props = result["properties"]
+    if not isinstance(props, dict) or not isinstance(result["required"], list):
+        return
+    valid = [r for r in result["required"] if r in props]
+    if valid:
+        result["required"] = valid
+    else:
+        del result["required"]
+
+
 def sanitize_schema(
     schema: dict[str, Any],
     defs: dict[str, dict[str, Any]] | None = None,
@@ -183,64 +225,90 @@ def sanitize_schema(
     Returns:
         A new dict with unsupported keys removed at every level.
     """
-    # On first call, collect $defs/definitions for $ref resolution.
     if defs is None:
-        defs = {}
-        for key in _DEFS_KEYS:
-            d = schema.get(key)
-            if isinstance(d, dict):
-                defs.update(d)
-
-    strip_keys = UNSUPPORTED_SCHEMA_KEYS | (extra_strip_keys or set())
+        defs = _collect_defs(schema)
 
     # Resolve $ref: inline the referenced definition (merge siblings).
     ref = schema.get("$ref")
     if isinstance(ref, str) and defs:
         resolved = _resolve_ref(ref, defs)
         if resolved:
-            # Siblings of $ref (e.g. description) are kept; $ref itself is
-            # replaced by the resolved definition's content.
             merged = {k: v for k, v in schema.items() if k != "$ref"}
             _deep_merge_schema(merged, resolved)
             return sanitize_schema(merged, defs, extra_strip_keys)
 
+    strip_keys = UNSUPPORTED_SCHEMA_KEYS | (extra_strip_keys or set())
     result: dict[str, Any] = {}
     for key, value in schema.items():
-        if key in strip_keys or key in _DEFS_KEYS:
+        if key in strip_keys or key in _DEFS_KEYS or key == "$ref":
             continue
-        if key == "$ref":
-            # Unresolvable $ref — drop it to avoid upstream rejection.
-            continue
-        if isinstance(value, dict):
-            result[key] = sanitize_schema(value, defs, extra_strip_keys)
-        elif isinstance(value, list):
-            result[key] = [
-                sanitize_schema(item, defs, extra_strip_keys)
-                if isinstance(item, dict)
-                else item
-                for item in value
-            ]
-        else:
-            result[key] = value
+        result[key] = _sanitize_value(value, defs, extra_strip_keys)
 
     # Flatten combination keywords (anyOf/oneOf/allOf) into simple types.
     if result.keys() & {"anyOf", "oneOf", "allOf"}:
         result = _flatten_combination(result)
 
-    # Strip orphaned required entries that reference non-existent properties.
-    if "required" in result and "properties" in result:
-        props = result["properties"]
-        if isinstance(props, dict) and isinstance(result["required"], list):
-            valid = [r for r in result["required"] if r in props]
-            if valid:
-                result["required"] = valid
-            else:
-                del result["required"]
-
+    _strip_orphaned_required(result)
     return result
 
 
 # ==================== Orphaned Tool Call Fix (IR level) ====================
+
+
+def extract_part_ids(parts: Sequence[Any], part_type: str, id_key: str) -> set[str]:
+    """Extract IDs from content parts/items matching a given type.
+
+    Generic helper reused across IR, Anthropic, and OpenAI Responses
+    orphaned-tool-call fixers.
+
+    Args:
+        parts: List of dicts (content parts, blocks, or flat items).
+        part_type: Value of the ``type`` key to match.
+        id_key: Key whose value is collected as an ID.
+
+    Returns:
+        Set of extracted ID strings.
+    """
+    return {
+        part[id_key]
+        for part in parts
+        if isinstance(part, dict) and part.get("type") == part_type and part.get(id_key)
+    }
+
+
+def log_orphan_warnings(
+    log: logging.Logger,
+    call_ids: Sequence[str],
+    result_ids: Sequence[str],
+    call_label: str = "tool_call",
+    result_label: str = "tool_result",
+) -> None:
+    """Log warnings for orphaned tool calls and results.
+
+    Shared by all per-format ``fix_orphaned_tool_calls`` functions.
+
+    Args:
+        log: Logger instance to emit warnings on.
+        call_ids: IDs of orphaned calls that were patched.
+        result_ids: IDs of orphaned results that were removed.
+        call_label: Human-readable label for call items (e.g. "tool_use").
+        result_label: Human-readable label for result items.
+    """
+    if call_ids:
+        log.warning(
+            "Fixed %d orphaned %s(s) by injecting synthetic results: %s",
+            len(call_ids),
+            call_label,
+            ", ".join(call_ids),
+        )
+    if result_ids:
+        log.warning(
+            "Removed %d orphaned %s(s) with no matching %s: %s",
+            len(result_ids),
+            result_label,
+            call_label,
+            ", ".join(result_ids),
+        )
 
 
 def _collect_ir_tool_ids(
@@ -250,18 +318,12 @@ def _collect_ir_tool_ids(
     known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for msg in messages:
-        if msg.get("role") == "assistant":
-            for part in msg.get("content", []):
-                if isinstance(part, dict) and part.get("type") == "tool_call":
-                    tc_id = part.get("tool_call_id")
-                    if tc_id:
-                        known_call_ids.add(tc_id)
-        elif msg.get("role") == "tool":
-            for part in msg.get("content", []):
-                if isinstance(part, dict) and part.get("type") == "tool_result":
-                    tc_id = part.get("tool_call_id")
-                    if tc_id:
-                        answered_ids.add(tc_id)
+        content = msg.get("content", [])
+        role = msg.get("role")
+        if role == "assistant":
+            known_call_ids |= extract_part_ids(content, "tool_call", "tool_call_id")
+        elif role == "tool":
+            answered_ids |= extract_part_ids(content, "tool_result", "tool_call_id")
     return known_call_ids, answered_ids
 
 
@@ -311,39 +373,29 @@ def fix_orphaned_tool_calls_ir(
     if not known_call_ids and not answered_ids:
         return msg_list
 
-    # --- Walk messages, inject/remove as needed ---
     patched: list[Message] = []
     orphaned_call_ids: list[str] = []
     orphaned_result_ids: list[str] = []
 
     for msg in msg_list:
+        role = msg.get("role")
+        content = msg.get("content", [])
+
         # Remove orphaned tool results (result without preceding tool_call)
-        if msg.get("role") == "tool":
-            content = msg.get("content", [])
-            # Check if ALL tool_result parts in this message are orphaned
-            result_ids_in_msg = []
-            for part in content:
-                if isinstance(part, dict) and part.get("type") == "tool_result":
-                    tc_id = part.get("tool_call_id")
-                    if tc_id:
-                        result_ids_in_msg.append(tc_id)
-            if result_ids_in_msg and all(
-                rid not in known_call_ids for rid in result_ids_in_msg
-            ):
-                orphaned_result_ids.extend(result_ids_in_msg)
-                continue  # skip this message entirely
+        if role == "tool":
+            result_ids = extract_part_ids(content, "tool_result", "tool_call_id")
+            if result_ids and result_ids.isdisjoint(known_call_ids):
+                orphaned_result_ids.extend(result_ids)
+                continue
 
         patched.append(msg)
 
         # Inject synthetic results for orphaned tool_calls
-        if msg.get("role") != "assistant":
-            continue
-        content = msg.get("content", [])
-        for part in content:
-            if not isinstance(part, dict) or part.get("type") != "tool_call":
-                continue
-            tc_id = part.get("tool_call_id")
-            if tc_id and tc_id not in answered_ids:
+        if role == "assistant":
+            unanswered = (
+                extract_part_ids(content, "tool_call", "tool_call_id") - answered_ids
+            )
+            for tc_id in unanswered:
                 orphaned_call_ids.append(tc_id)
                 patched.append(
                     {
@@ -358,19 +410,7 @@ def fix_orphaned_tool_calls_ir(
                     }
                 )
 
-    if orphaned_call_ids:
-        logger.warning(
-            "Fixed %d orphaned tool_call(s) by injecting synthetic results: %s",
-            len(orphaned_call_ids),
-            ", ".join(orphaned_call_ids),
-        )
-    if orphaned_result_ids:
-        logger.warning(
-            "Removed %d orphaned tool_result(s) with no matching tool_call: %s",
-            len(orphaned_result_ids),
-            ", ".join(orphaned_result_ids),
-        )
-
+    log_orphan_warnings(logger, orphaned_call_ids, orphaned_result_ids)
     return patched
 
 

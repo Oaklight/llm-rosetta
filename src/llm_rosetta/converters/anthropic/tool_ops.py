@@ -28,7 +28,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import sanitize_schema
+from ..base.tools import extract_part_ids, log_orphan_warnings, sanitize_schema
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +46,8 @@ def _collect_anthropic_tool_ids(
         content = msg.get("content", [])
         if not isinstance(content, list):
             continue
-        for block in content:
-            if not isinstance(block, dict):
-                continue
-            if block.get("type") == "tool_use":
-                use_id = block.get("id")
-                if use_id:
-                    known_use_ids.add(use_id)
-            elif block.get("type") == "tool_result":
-                use_id = block.get("tool_use_id")
-                if use_id:
-                    answered_ids.add(use_id)
+        known_use_ids |= extract_part_ids(content, "tool_use", "id")
+        answered_ids |= extract_part_ids(content, "tool_result", "tool_use_id")
     return known_use_ids, answered_ids
 
 
@@ -97,11 +88,9 @@ def fix_orphaned_tool_calls(
     """
     known_use_ids, answered_ids = _collect_anthropic_tool_ids(messages)
 
-    # Fast path: nothing to fix
     if not known_use_ids and not answered_ids:
         return messages
 
-    # --- Walk messages, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
     orphaned_use_ids: list[str] = []
     orphaned_result_ids: list[str] = []
@@ -110,61 +99,46 @@ def fix_orphaned_tool_calls(
         msg_role = msg.get("role")
         content = msg.get("content", [])
 
+        # Filter orphaned tool_result blocks from user messages
         if msg_role == "user" and isinstance(content, list):
-            # Filter out orphaned tool_result blocks
-            filtered_content: list[Any] = []
-            for block in content:
-                if (
-                    isinstance(block, dict)
-                    and block.get("type") == "tool_result"
-                    and block.get("tool_use_id") not in known_use_ids
-                ):
-                    orphaned_result_ids.append(block.get("tool_use_id", "?"))
-                    continue
-                filtered_content.append(block)
-            if filtered_content != content:
-                if not filtered_content:
-                    # All content was orphaned results; skip this message
-                    continue
-                msg = {**msg, "content": filtered_content}
+            orphaned = (
+                extract_part_ids(content, "tool_result", "tool_use_id") - known_use_ids
+            )
+            if orphaned:
+                orphaned_result_ids.extend(orphaned)
+                filtered = [
+                    b
+                    for b in content
+                    if not (isinstance(b, dict) and b.get("tool_use_id") in orphaned)
+                ]
+                if not filtered:
+                    continue  # entire message was orphaned
+                msg = {**msg, "content": filtered}
 
         patched.append(msg)
 
+        # Inject synthetic results for orphaned tool_use in assistant messages
         if msg_role == "assistant" and isinstance(content, list):
-            # Collect orphaned tool_use ids in this assistant message
-            pending_ids: list[str] = []
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "tool_use":
-                    use_id = block.get("id")
-                    if use_id and use_id not in answered_ids:
-                        pending_ids.append(use_id)
-
-            if pending_ids:
-                orphaned_use_ids.extend(pending_ids)
-                # Inject synthetic tool_result blocks in a user message
-                synthetic_results = [
+            unanswered = extract_part_ids(content, "tool_use", "id") - answered_ids
+            if unanswered:
+                orphaned_use_ids.extend(unanswered)
+                patched.append(
                     {
-                        "type": "tool_result",
-                        "tool_use_id": uid,
-                        "content": placeholder,
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": uid,
+                                "content": placeholder,
+                            }
+                            for uid in unanswered
+                        ],
                     }
-                    for uid in pending_ids
-                ]
-                patched.append({"role": "user", "content": synthetic_results})
+                )
 
-    if orphaned_use_ids:
-        logger.warning(
-            "Fixed %d orphaned tool_use(s) by injecting synthetic results: %s",
-            len(orphaned_use_ids),
-            ", ".join(orphaned_use_ids),
-        )
-    if orphaned_result_ids:
-        logger.warning(
-            "Removed %d orphaned tool_result(s) with no matching tool_use: %s",
-            len(orphaned_result_ids),
-            ", ".join(orphaned_result_ids),
-        )
-
+    log_orphan_warnings(
+        logger, orphaned_use_ids, orphaned_result_ids, "tool_use", "tool_result"
+    )
     return patched
 
 

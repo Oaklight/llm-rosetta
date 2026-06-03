@@ -28,7 +28,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import sanitize_schema
+from ..base.tools import extract_part_ids, log_orphan_warnings, sanitize_schema
 
 logger = logging.getLogger(__name__)
 
@@ -70,43 +70,33 @@ def fix_orphaned_tool_calls(
     Returns:
         A new items list with orphaned function_calls/outputs fixed.
     """
-    # --- Pass 1: collect known call_ids and answered ids ---
-    known_call_ids: set[str] = set()
-    answered_ids: set[str] = set()
-    for item in items:
-        if item.get("type") == "function_call":
-            call_id = item.get("call_id")
-            if call_id:
-                known_call_ids.add(call_id)
-        elif item.get("type") == "function_call_output":
-            call_id = item.get("call_id")
-            if call_id:
-                answered_ids.add(call_id)
+    known_call_ids = extract_part_ids(items, "function_call", "call_id")
+    answered_ids = extract_part_ids(items, "function_call_output", "call_id")
 
-    # Fast path: nothing to fix
     if not known_call_ids and not answered_ids:
         return items
 
-    # --- Pass 2: walk items, inject/remove as needed ---
     patched: list[dict[str, Any]] = []
     orphaned_call_ids: list[str] = []
     orphaned_output_ids: list[str] = []
 
     for item in items:
-        # Remove orphaned outputs (output without preceding function_call)
-        if item.get("type") == "function_call_output":
-            call_id = item.get("call_id")
-            if call_id and call_id not in known_call_ids:
-                orphaned_output_ids.append(call_id)
-                continue  # skip this item
+        itype = item.get("type")
+        call_id = item.get("call_id")
+
+        # Remove orphaned outputs
+        if (
+            itype == "function_call_output"
+            and call_id
+            and call_id not in known_call_ids
+        ):
+            orphaned_output_ids.append(call_id)
+            continue
 
         patched.append(item)
 
         # Inject synthetic outputs for orphaned function_calls
-        if item.get("type") != "function_call":
-            continue
-        call_id = item.get("call_id")
-        if call_id and call_id not in answered_ids:
+        if itype == "function_call" and call_id and call_id not in answered_ids:
             orphaned_call_ids.append(call_id)
             patched.append(
                 {
@@ -116,19 +106,13 @@ def fix_orphaned_tool_calls(
                 }
             )
 
-    if orphaned_call_ids:
-        logger.warning(
-            "Fixed %d orphaned function_call(s) by injecting synthetic outputs: %s",
-            len(orphaned_call_ids),
-            ", ".join(orphaned_call_ids),
-        )
-    if orphaned_output_ids:
-        logger.warning(
-            "Removed %d orphaned function_call_output(s) with no matching call: %s",
-            len(orphaned_output_ids),
-            ", ".join(orphaned_output_ids),
-        )
-
+    log_orphan_warnings(
+        logger,
+        orphaned_call_ids,
+        orphaned_output_ids,
+        "function_call",
+        "function_call_output",
+    )
     return patched
 
 
