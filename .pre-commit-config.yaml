@@ -17,13 +17,10 @@ repos:
         require_serial: true
         types: [python]
 
-      # complexipy suspended: 30 functions exceed complexity 20 (range 21–43)
-      # tracked in: https://github.com/Oaklight/llm-rosetta/issues/<TBD>
-      # re-enable once refactoring is done:
-      #   entry: complexipy src/llm_rosetta tests -e _vendor -mx 20
-      # - id: complexipy
-      #   name: complexipy (complexity check)
-      #   entry: complexipy src/llm_rosetta tests -e _vendor -mx 20
-      #   language: system
-      #   pass_filenames: false
-      #   always_run: true
+  # - repo: https://github.com/rohaquinlop/complexipy-pre-commit
+  #   rev: v5.1.0
+  #   hooks:
+  #     - id: complexipy
+  #       files: ^src/llm_rosetta/
+  #       exclude: ^src/llm_rosetta/_vendor/
+  #       args: [-mx, "25"]

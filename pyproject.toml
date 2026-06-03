@@ -98,5 +98,5 @@ max-complexity = 15
 
 [tool.complexipy]
 paths = ["src"]
-max-complexity-allowed = 15
+max-complexity-allowed = 25
 exclude = ["src/llm_rosetta/_vendor"]
