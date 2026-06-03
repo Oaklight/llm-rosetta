@@ -547,6 +547,43 @@ async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
     return f"data: {error_msg}\n\n"
 
 
+def _process_stream_chunk(
+    chunk: dict[str, Any],
+    *,
+    target_converter: Any,
+    source_converter: Any,
+    from_ctx: Any,
+    to_ctx: Any,
+    store: ProviderMetadataStore,
+    format_sse: Any,
+    target_from_transforms: tuple[Transform, ...],
+) -> list[str]:
+    """Convert one upstream chunk through the full pipeline to source SSE strings.
+
+    Handles: shim transforms → upstream→IR conversion → metadata bridging
+    → IR→source conversion → SSE formatting.
+    """
+    if target_from_transforms:
+        chunk = apply_transforms(target_from_transforms, chunk)
+
+    ir_events = target_converter.stream_response_from_provider(chunk, context=from_ctx)
+
+    if "_response_extras" in from_ctx.metadata:
+        to_ctx.metadata["_response_extras"] = from_ctx.metadata["_response_extras"]
+
+    result: list[str] = []
+    for ir_event in ir_events:
+        store.cache_from_stream_event(ir_event)
+        source_chunks = source_converter.stream_response_to_provider(
+            ir_event, context=to_ctx
+        )
+        if isinstance(source_chunks, list):
+            result.extend(format_sse(sc) for sc in source_chunks if sc)
+        elif source_chunks:
+            result.append(format_sse(source_chunks))
+    return result
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -597,31 +634,17 @@ async def _stream_event_generator(
                 continue
 
             chunk_count += 1
-
-            # Apply target shim from_transforms to normalise chunk dialect
-            if target_from_transforms:
-                chunk = apply_transforms(target_from_transforms, chunk)
-
-            ir_events = target_converter.stream_response_from_provider(
-                chunk, context=from_ctx
-            )
-
-            if "_response_extras" in from_ctx.metadata:
-                to_ctx.metadata["_response_extras"] = from_ctx.metadata[
-                    "_response_extras"
-                ]
-
-            for ir_event in ir_events:
-                store.cache_from_stream_event(ir_event)
-                source_chunks = source_converter.stream_response_to_provider(
-                    ir_event, context=to_ctx
-                )
-                if isinstance(source_chunks, list):
-                    for sc in source_chunks:
-                        if sc:
-                            yield format_sse(sc)
-                elif source_chunks:
-                    yield format_sse(source_chunks)
+            for sse_line in _process_stream_chunk(
+                chunk,
+                target_converter=target_converter,
+                source_converter=source_converter,
+                from_ctx=from_ctx,
+                to_ctx=to_ctx,
+                store=store,
+                format_sse=format_sse,
+                target_from_transforms=target_from_transforms,
+            ):
+                yield sse_line
 
     if source_provider == "openai_chat":
         yield _format_sse_openai_chat_done()

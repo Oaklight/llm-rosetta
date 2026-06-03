@@ -102,6 +102,35 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
         )
 
 
+def _check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
+    """Authenticate admin panel requests.
+
+    Returns ``None`` to allow the request, or a 401 response to block it.
+    Unauthenticated HTML page requests are allowed through so the JS
+    login UI can render.
+    """
+    if not auth_state.admin_password:
+        return None  # no password configured → pass through
+
+    path = request.path
+
+    # Login and auth-check endpoints are always accessible
+    if path in ("/admin/api/login", "/admin/api/auth-check"):
+        return None
+
+    # Check X-Admin-Token header
+    admin_token = request.headers.get("x-admin-token", "")
+    if admin_token and admin_token == auth_state.admin_token:
+        return None
+
+    # Block unauthenticated API calls
+    if path.startswith("/admin/api/"):
+        return JSONResponse({"error": "Admin authentication required"}, status_code=401)
+
+    # HTML page requests pass through — JS handles login UI
+    return None
+
+
 class AuthState:
     """Mutable state container for auth hook — allows hot-reload from admin."""
 
@@ -146,24 +175,9 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if path in _PUBLIC_PATHS:
             return None
 
-        # Admin panel: password-protect if admin_password is configured
+        # Admin panel auth is a separate concern from API key auth
         if path.startswith("/admin"):
-            if not auth_state.admin_password:
-                return None  # no password → pass through
-            # Login and auth-check endpoints are always accessible
-            if path in ("/admin/api/login", "/admin/api/auth-check"):
-                return None
-            # Check X-Admin-Token header
-            admin_token = request.headers.get("x-admin-token", "")
-            if admin_token and admin_token == auth_state.admin_token:
-                return None
-            # Unauthenticated
-            if path.startswith("/admin/api/"):
-                return JSONResponse(
-                    {"error": "Admin authentication required"}, status_code=401
-                )
-            # For HTML page request, still serve — the JS will handle login UI
-            return None
+            return _check_admin_auth(request, auth_state)
 
         if not auth_state.key_set:
             return None  # no gateway API keys configured → pass through

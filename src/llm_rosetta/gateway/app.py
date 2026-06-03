@@ -31,6 +31,52 @@ from .proxy import (
 logger = get_logger()
 
 
+def _record_telemetry(
+    request: Any,
+    *,
+    model: str,
+    source_provider: ProviderType,
+    target_provider: ProviderType,
+    provider_name: str,
+    is_stream: bool,
+    status_code: int,
+    duration_ms: float,
+    error_detail: str | None,
+) -> None:
+    """Record metrics and request log entry after a proxy call completes."""
+    metrics = getattr(request.app, "metrics", None)
+    if is_stream and metrics:
+        metrics.active_streams -= 1
+    if metrics:
+        metrics.record_request(
+            model=model,
+            source=source_provider,
+            target=target_provider,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            is_stream=is_stream,
+        )
+
+    request_log = getattr(request.app, "request_log", None)
+    if request_log is not None:
+        from .admin.request_log import RequestLogEntry
+
+        request_log.add(
+            RequestLogEntry.create(
+                model=model,
+                source_provider=source_provider,
+                target_provider=target_provider,
+                target_provider_name=provider_name,
+                is_stream=is_stream,
+                status_code=status_code,
+                duration_ms=duration_ms,
+                error_detail=error_detail,
+                api_key_label=api_key_label_var.get(),
+                client_ip=_extract_client_ip(request),
+            )
+        )
+
+
 def _extract_client_ip(request: Any) -> str | None:
     """Extract the client IP from the request.
 
@@ -128,37 +174,27 @@ async def _proxy_handler(
         extra_headers = {"OpenResponses-Version": or_version}
 
     # --- Metrics instrumentation ---
-    metrics = getattr(request.app, "metrics", None)
-    request_log = getattr(request.app, "request_log", None)
+    if is_stream:
+        metrics = getattr(request.app, "metrics", None)
+        if metrics:
+            metrics.active_streams += 1
+
     t0 = time.monotonic()
     status_code = 500
     error_detail: str | None = None
 
     try:
-        if is_stream:
-            if metrics:
-                metrics.active_streams += 1
-            response = await handle_streaming(
-                source_provider,
-                target_provider,
-                provider_info,
-                body,
-                model,
-                metadata_store=store,
-                extra_headers=extra_headers,
-                target_shim_name=target_shim_name,
-            )
-        else:
-            response = await handle_non_streaming(
-                source_provider,
-                target_provider,
-                provider_info,
-                body,
-                model,
-                metadata_store=store,
-                extra_headers=extra_headers,
-                target_shim_name=target_shim_name,
-            )
+        handler = handle_streaming if is_stream else handle_non_streaming
+        response = await handler(
+            source_provider,
+            target_provider,
+            provider_info,
+            body,
+            model,
+            metadata_store=store,
+            extra_headers=extra_headers,
+            target_shim_name=target_shim_name,
+        )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
             body_bytes = response.body
@@ -169,37 +205,17 @@ async def _proxy_handler(
         error_detail = str(exc)
         raise
     finally:
-        duration_ms = (time.monotonic() - t0) * 1000
-        if is_stream and metrics:
-            metrics.active_streams -= 1
-        if metrics:
-            metrics.record_request(
-                model=model,
-                source=source_provider,
-                target=target_provider,
-                status_code=status_code,
-                duration_ms=duration_ms,
-                is_stream=is_stream,
-            )
-        if request_log is not None:
-            from .admin.request_log import RequestLogEntry
-
-            api_key_label = api_key_label_var.get()
-            client_ip = _extract_client_ip(request)
-            request_log.add(
-                RequestLogEntry.create(
-                    model=model,
-                    source_provider=source_provider,
-                    target_provider=target_provider,
-                    target_provider_name=provider_name,
-                    is_stream=is_stream,
-                    status_code=status_code,
-                    duration_ms=duration_ms,
-                    error_detail=error_detail,
-                    api_key_label=api_key_label,
-                    client_ip=client_ip,
-                )
-            )
+        _record_telemetry(
+            request,
+            model=model,
+            source_provider=source_provider,
+            target_provider=target_provider,
+            provider_name=provider_name,
+            is_stream=is_stream,
+            status_code=status_code,
+            duration_ms=(time.monotonic() - t0) * 1000,
+            error_detail=error_detail,
+        )
 
 
 # --- Endpoint handlers ---
