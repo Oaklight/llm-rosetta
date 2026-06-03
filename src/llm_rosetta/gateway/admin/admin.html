@@ -923,8 +923,12 @@ const I18N = {
     'login.error':'Invalid password',
     'btn.logout':'Logout',
     'label.systemTime':'System Time',
-    'footer.title':'Gateway persistence status',
-    'footer.db':'DB', 'footer.ok':'ok', 'footer.err':'err',
+    'footer.db':'DB', 'footer.ok':'ok', 'footer.err':'err', 'footer.req':'Req',
+    'footer.tip.req':'Total requests since server start (lifetime counter, never reset by log clearing)',
+    'footer.tip.ok':'Logged success entries / retention cap (status < 400)',
+    'footer.tip.err':'Logged error entries / retention cap (status \u2265 400)',
+    'footer.tip.db':'SQLite database file size',
+    'footer.tip.wal':'SQLite write-ahead log size',
     'confirm.sure':'Sure?',
     'confirm.yes':'Yes',
   },
@@ -1019,8 +1023,12 @@ const I18N = {
     'login.btn':'\u767b\u5f55',
     'login.error':'\u5bc6\u7801\u9519\u8bef',
     'label.systemTime':'\u7cfb\u7edf\u65f6\u95f4',
-    'footer.title':'\u7f51\u5173\u6301\u4e45\u5316\u72b6\u6001',
-    'footer.db':'DB', 'footer.ok':'\u6b63\u5e38', 'footer.err':'\u9519\u8bef',
+    'footer.db':'DB', 'footer.ok':'\u6b63\u5e38', 'footer.err':'\u9519\u8bef', 'footer.req':'\u8bf7\u6c42',
+    'footer.tip.req':'\u670d\u52a1\u542f\u52a8\u4ee5\u6765\u7684\u603b\u8bf7\u6c42\u6570\uff08\u7d2f\u8ba1\u8ba1\u6570\u5668\uff0c\u6e05\u9664\u65e5\u5fd7\u4e0d\u4f1a\u91cd\u7f6e\uff09',
+    'footer.tip.ok':'\u5df2\u8bb0\u5f55\u7684\u6210\u529f\u6761\u76ee / \u4fdd\u7559\u4e0a\u9650\uff08\u72b6\u6001\u7801 < 400\uff09',
+    'footer.tip.err':'\u5df2\u8bb0\u5f55\u7684\u9519\u8bef\u6761\u76ee / \u4fdd\u7559\u4e0a\u9650\uff08\u72b6\u6001\u7801 \u2265 400\uff09',
+    'footer.tip.db':'SQLite \u6570\u636e\u5e93\u6587\u4ef6\u5927\u5c0f',
+    'footer.tip.wal':'SQLite \u9884\u5199\u65e5\u5fd7\u6587\u4ef6\u5927\u5c0f',
     'confirm.sure':'\u786e\u5b9a\uff1f',
     'confirm.yes':'\u662f',
   },
@@ -2043,7 +2051,7 @@ async function loadMetrics() {
   drawChart('chartThroughput', data.series, 'count', 'req/s');
   drawChart('chartLatency', data.series, 'avg_ms', 'ms');
   renderProviderBreakdown(data);
-  renderPersistence(data.persistence);
+  renderPersistence(data.persistence, data.total_requests);
 }
 
 // Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
@@ -2057,7 +2065,8 @@ function fmtBytes(n) {
 
 // Render the persistent DB status footer.  Hidden when the metrics
 // snapshot lacks a persistence block (no config file, in-memory only).
-function renderPersistence(p) {
+// totalReq is the MetricsCollector total_requests counter (lifetime).
+function renderPersistence(p, totalReq) {
   const el = document.getElementById('dbFooter');
   if (!el) return;
   if (!p) { el.classList.add('hidden'); return; }
@@ -2070,13 +2079,14 @@ function renderPersistence(p) {
   const successPct = successCap > 0 ? Math.round((successN / successCap) * 100) : 0;
   const errorPct = errorCap > 0 ? Math.round((errorN / errorCap) * 100) : 0;
   const pctClass = (pct) => pct >= 95 ? 'crit' : (pct >= 75 ? 'warn' : '');
+  const fmtN = (n) => Number.isFinite(n) ? n.toLocaleString() : '–';
 
-  el.title = t('footer.title');
   el.innerHTML = `
-    <span class="seg"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
-    <span class="seg"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
-    <span class="seg"><span class="k">${t('footer.err')}</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
-    <span class="seg"><span class="k">WAL</span><span class="v">${fmtBytes(p.wal_bytes)}</span></span>
+    <span class="seg" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
+    <span class="seg" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
+    <span class="seg" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
+    <span class="seg" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
+    <span class="seg" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytes(p.wal_bytes)}</span></span>
   `;
 }
 
@@ -2669,7 +2679,7 @@ function initApp() {
   api.get('/admin/api/internal-token').then(r => { internalToken = r.token; }).catch(() => {});
   // Always load the DB footer regardless of the active tab
   api.get('/admin/api/metrics?seconds=1').then(data => {
-    renderPersistence(data.persistence);
+    renderPersistence(data.persistence, data.total_requests);
   }).catch(() => {});
 }
 // ===================== System Clock =====================
