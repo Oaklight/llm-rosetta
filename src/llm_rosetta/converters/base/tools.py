@@ -160,16 +160,6 @@ def _resolve_ref(ref: str, defs: dict[str, dict[str, Any]]) -> dict[str, Any]:
     return {}
 
 
-def _collect_defs(schema: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Collect ``$defs``/``definitions`` maps from a top-level schema."""
-    defs: dict[str, dict[str, Any]] = {}
-    for key in _DEFS_KEYS:
-        d = schema.get(key)
-        if isinstance(d, dict):
-            defs.update(d)
-    return defs
-
-
 def _sanitize_value(
     value: Any,
     defs: dict[str, dict[str, Any]],
@@ -226,7 +216,11 @@ def sanitize_schema(
         A new dict with unsupported keys removed at every level.
     """
     if defs is None:
-        defs = _collect_defs(schema)
+        defs = {}
+        for key in _DEFS_KEYS:
+            d = schema.get(key)
+            if isinstance(d, dict):
+                defs.update(d)
 
     # Resolve $ref: inline the referenced definition (merge siblings).
     ref = schema.get("$ref")

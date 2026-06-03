@@ -261,33 +261,6 @@ def _sanitize_content_part(
             part["text"] = truncate_string(text, max_content_length)
 
 
-def _sanitize_messages(
-    messages: list[Any],
-    *,
-    max_base64_length: int,
-    max_content_length: int,
-) -> None:
-    """Truncate message content in-place for logging.
-
-    Handles both string content (direct truncation) and structured
-    content parts (delegated to ``_sanitize_content_part``).
-    """
-    for message in messages:
-        if not isinstance(message, dict) or "content" not in message:
-            continue
-        content = message["content"]
-        if isinstance(content, str) and len(content) > max_content_length:
-            message["content"] = truncate_string(content, max_content_length)
-        elif isinstance(content, list):
-            for part in content:
-                if isinstance(part, dict):
-                    _sanitize_content_part(
-                        part,
-                        max_base64_length=max_base64_length,
-                        max_content_length=max_content_length,
-                    )
-
-
 def sanitize_request_data(
     data: dict[str, Any],
     *,
@@ -301,11 +274,20 @@ def sanitize_request_data(
     sanitized = copy.deepcopy(data)
 
     if truncate_messages and isinstance(sanitized.get("messages"), list):
-        _sanitize_messages(
-            sanitized["messages"],
-            max_base64_length=max_base64_length,
-            max_content_length=max_content_length,
-        )
+        for message in sanitized["messages"]:
+            if not isinstance(message, dict) or "content" not in message:
+                continue
+            content = message["content"]
+            if isinstance(content, str) and len(content) > max_content_length:
+                message["content"] = truncate_string(content, max_content_length)
+            elif isinstance(content, list):
+                for part in content:
+                    if isinstance(part, dict):
+                        _sanitize_content_part(
+                            part,
+                            max_base64_length=max_base64_length,
+                            max_content_length=max_content_length,
+                        )
 
     if truncate_tools and isinstance(sanitized.get("tools"), list):
         tool_count = len(sanitized["tools"])
