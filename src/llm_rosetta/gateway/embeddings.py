@@ -65,7 +65,7 @@ async def handle_embeddings(
 
     # --- Resolve provider ---
     try:
-        _, provider_info, _, _, provider_name = config.resolve_model(model)
+        _, provider_info, _, upstream_model, provider_name = config.resolve_model(model)
     except KeyError:
         configured = ", ".join(sorted(config.models.keys()))
         return JSONResponse(
@@ -77,6 +77,11 @@ async def handle_embeddings(
             },
             status_code=404,
         )
+
+    # Model alias: replace the model name in the request body with the
+    # actual upstream identifier so the upstream provider sees the correct name.
+    if upstream_model:
+        body["model"] = upstream_model
 
     # --- Build upstream URL ---
     base_url = provider_info.base_url
