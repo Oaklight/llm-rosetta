@@ -568,7 +568,7 @@ body { padding-bottom: 26px; }
         <option value="error" data-i18n="filter.error">Error (4xx/5xx)</option>
       </select>
       <select id="filterApiKey"><option value="" data-i18n="filter.allKeys">All Keys</option></select>
-      <button class="btn btn-danger btn-sm" onclick="clearLogs(this)" data-i18n="btn.clearLog">Clear Log</button>
+      <button class="btn btn-sm" onclick="resetLogFilters()" data-i18n="btn.resetFilters">Reset Filters</button>
     </div>
     <div class="table-scroll"><table>
       <thead><tr><th data-i18n="col.time">Time</th><th data-i18n="col.model">Model</th><th data-i18n="col.sourceTarget">Source &rarr; Target</th><th data-i18n="col.mode">Mode</th><th data-i18n="col.apiKey">API Key</th><th data-i18n="col.clientIp">Client IP</th><th data-i18n="col.status">Status</th><th data-i18n="col.duration">Duration</th></tr></thead>
@@ -841,7 +841,7 @@ const I18N = {
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
     'btn.save':'Save', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
     'btn.addProvider':'+ Add Provider', 'btn.addModel':'+ Add Model',
-    'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.clearLog':'Clear Log',
+    'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.resetFilters':'Reset Filters',
     'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
     'label.providerName':'Provider Name', 'label.providerType':'Provider Type',
     'label.selectOne':'— select —',
@@ -870,13 +870,11 @@ const I18N = {
     'provider.enabled':'Enabled', 'provider.disabled':'Disabled',
     'toast.modelSaved':"Model '{name}' saved",
     'toast.modelDeleted':"Model '{name}' deleted",
-    'toast.logCleared':'Logs cleared',
     'confirm.deleteProvider':"Delete provider '{name}'?",
     'confirm.deleteProviderTitle':'Delete Provider',
     'confirm.typeToConfirm':"To confirm, type {name} below",
     'confirm.cascadeWarning':'{count} model(s) will also be deleted:',
     'confirm.deleteModel':"Delete model '{name}'?",
-    'confirm.clearLogs':'Clear all request logs?',
     'error.fieldsRequired':'Name, Base URL, and API Key are required',
     'error.modelRequired':'All fields are required',
     'page.info':'Page {current} / {total} ({count} total)',
@@ -942,7 +940,7 @@ const I18N = {
     'modal.settings':'\u8bbe\u7f6e', 'label.theme':'\u4e3b\u9898', 'label.language':'\u8bed\u8a00', 'theme.light':'\u6d45\u8272', 'theme.dark':'\u6df1\u8272',
     'btn.save':'\u4fdd\u5b58', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
     'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u5546', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
-    'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.clearLog':'\u6e05\u9664\u65e5\u5fd7',
+    'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.resetFilters':'\u91cd\u7f6e\u8fc7\u6ee4\u5668',
     'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
     'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0', 'label.providerType':'\u670d\u52a1\u5546\u7c7b\u578b',
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
@@ -971,13 +969,11 @@ const I18N = {
     'provider.enabled':'\u5df2\u542f\u7528', 'provider.disabled':'\u5df2\u7981\u7528',
     'toast.modelSaved':"\u6a21\u578b '{name}' \u5df2\u4fdd\u5b58",
     'toast.modelDeleted':"\u6a21\u578b '{name}' \u5df2\u5220\u9664",
-    'toast.logCleared':'\u65e5\u5fd7\u5df2\u6e05\u9664',
     'confirm.deleteProvider':"\u786e\u5b9a\u5220\u9664\u670d\u52a1\u5546 '{name}'\uff1f",
     'confirm.deleteProviderTitle':'\u5220\u9664\u670d\u52a1\u5546',
     'confirm.typeToConfirm':"\u8bf7\u8f93\u5165 {name} \u4ee5\u786e\u8ba4\u5220\u9664",
     'confirm.cascadeWarning':'\u4ee5\u4e0b {count} \u4e2a\u6a21\u578b\u4e5f\u5c06\u88ab\u5220\u9664\uff1a',
     'confirm.deleteModel':"\u786e\u5b9a\u5220\u9664\u6a21\u578b '{name}'\uff1f",
-    'confirm.clearLogs':'\u786e\u5b9a\u6e05\u9664\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\uff1f',
     'error.fieldsRequired':'\u540d\u79f0\u3001Base URL \u548c API Key \u4e3a\u5fc5\u586b\u9879',
     'error.modelRequired':'\u6240\u6709\u5b57\u6bb5\u4e3a\u5fc5\u586b\u9879',
     'page.info':'\u7b2c {current} / {total} \u9875\uff08\u5171 {count} \u6761\uff09',
@@ -1075,6 +1071,7 @@ let currentTab = localStorage.getItem('llm-rosetta-tab') || 'providers';
 let configData = null;
 let _credentialVisible = true;
 let keysData = null;
+let logKeyLabels = [];
 let internalToken = null;
 let logOffset = 0;
 const LOG_LIMIT = 30;
@@ -1944,6 +1941,16 @@ async function loadKeys() {
   }
 }
 
+async function loadLogKeyLabels() {
+  try {
+    const data = await api.get('/admin/api/requests/key-labels');
+    logKeyLabels = data.labels || [];
+    updateKeyFilterOptions();
+  } catch(e) {
+    console.error('Failed to load log key labels:', e);
+  }
+}
+
 function renderKeys() {
   const tbody = document.getElementById('keysTable');
   const keys = (keysData && keysData.keys) || [];
@@ -2288,17 +2295,14 @@ function deleteKey(id, label, btn) {
   inlineConfirm(btn, () => _doDeleteKey(id, label));
 }
 
-function clearLogs(btn) {
-  if (!btn) { _doClearLogs(); return; }
-  inlineConfirm(btn, () => _doClearLogs());
-}
-
-async function _doClearLogs() {
-  await api.del('/admin/api/requests');
+function resetLogFilters() {
+  document.getElementById('filterModel').value = '';
+  document.getElementById('filterProvider').value = '';
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterApiKey').value = '';
   logOffset = 0;
   expandedLogRows.clear();
   loadLogs();
-  showToast(t('toast.logCleared'));
 }
 
 function updateFilterOptions() {
@@ -2319,7 +2323,7 @@ function updateKeyFilterOptions() {
   const kSel = document.getElementById('filterApiKey');
   const kVal = kSel.value;
   const keys = (keysData && keysData.keys) || [];
-  const labels = [...new Set(keys.map(k => k.label).filter(Boolean))].sort();
+  const labels = [...new Set([...keys.map(k => k.label), ...logKeyLabels].filter(Boolean))].sort();
   kSel.innerHTML = `<option value="">${t('filter.allKeys')}</option>` + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   kSel.value = kVal;
 }
@@ -2694,6 +2698,8 @@ async function runTest(model, type) {
 // ===================== Init =====================
 function initApp() {
   loadConfig();
+  loadKeys();
+  loadLogKeyLabels();
   api.get('/admin/api/internal-token').then(r => { internalToken = r.token; }).catch(() => {});
   // Always load the DB footer regardless of the active tab
   api.get('/admin/api/metrics?seconds=1').then(data => {

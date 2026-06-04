@@ -305,6 +305,15 @@ class PersistenceManager:
             return None
         return self._row_to_dict(row)
 
+    def get_api_key_labels(self) -> list[str]:
+        """Return distinct API key labels seen in request logs."""
+        rows = self._conn.execute(
+            "SELECT DISTINCT api_key_label FROM request_log "
+            "WHERE api_key_label IS NOT NULL AND api_key_label != '' "
+            "ORDER BY api_key_label"
+        ).fetchall()
+        return [row[0] for row in rows]
+
     def count_log_entries(self) -> int:
         """Return the total number of log entries."""
         row = self._conn.execute("SELECT COUNT(*) FROM request_log").fetchone()

@@ -75,6 +75,12 @@ async def get_metrics(request: Any) -> Response:
     return JSONResponse(snap)
 
 
+async def get_request_key_labels(request: Any) -> Response:
+    """Return API key labels seen in request logs."""
+    log = request.app.request_log
+    return JSONResponse({"labels": log.get_api_key_labels()})
+
+
 async def get_requests(request: Any) -> Response:
     """Return paginated, filtered request log entries."""
     log = request.app.request_log

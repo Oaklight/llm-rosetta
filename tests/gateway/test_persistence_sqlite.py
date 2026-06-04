@@ -156,6 +156,20 @@ class TestPersistenceManagerRequestLog:
         assert total == 1
         pm.close()
 
+    def test_get_api_key_labels(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.insert_log_entries(
+            [
+                _make_entry_dict(api_key_label="bob"),
+                _make_entry_dict(api_key_label="alice"),
+                _make_entry_dict(api_key_label="bob"),
+                _make_entry_dict(),
+            ]
+        )
+
+        assert pm.get_api_key_labels() == ["alice", "bob"]
+        pm.close()
+
     def test_pagination(self, tmp_path):
         pm = PersistenceManager(str(tmp_path))
         entries = [_make_entry_dict(model=f"m-{i}") for i in range(20)]

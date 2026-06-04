@@ -180,6 +180,12 @@ class RequestLog:
                 return e.to_dict()
         return None
 
+    def get_api_key_labels(self) -> list[str]:
+        """Return distinct API key labels seen in request logs."""
+        if self._persistence is not None:
+            return self._persistence.get_api_key_labels()
+        return sorted({e.api_key_label for e in self._entries if e.api_key_label})
+
     def load_entries(self, entries: list[dict[str, Any]]) -> None:
         """Bulk-load entries (in-memory fallback only)."""
         for d in entries:

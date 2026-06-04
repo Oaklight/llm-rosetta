@@ -37,7 +37,13 @@ class TestRequestLogEntry:
 
 
 class TestRequestLog:
-    def _make_entry(self, model="gpt-4o", status=200, provider="openai_chat"):
+    def _make_entry(
+        self,
+        model="gpt-4o",
+        status=200,
+        provider="openai_chat",
+        api_key_label=None,
+    ):
         return RequestLogEntry.create(
             model=model,
             source_provider="openai_chat",
@@ -45,6 +51,7 @@ class TestRequestLog:
             is_stream=False,
             status_code=status,
             duration_ms=10.0,
+            api_key_label=api_key_label,
         )
 
     def test_add_and_get(self):
@@ -129,6 +136,14 @@ class TestRequestLog:
     def test_get_entry_not_found(self):
         log = RequestLog()
         assert log.get_entry("nonexistent") is None
+
+    def test_get_api_key_labels(self):
+        log = RequestLog()
+        log.add(self._make_entry(api_key_label="bob"))
+        log.add(self._make_entry(api_key_label="alice"))
+        log.add(self._make_entry(api_key_label="bob"))
+        log.add(self._make_entry())
+        assert log.get_api_key_labels() == ["alice", "bob"]
 
     def test_clear(self):
         log = RequestLog()
