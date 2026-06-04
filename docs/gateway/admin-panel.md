@@ -228,18 +228,18 @@ Embedding 模型显示单一的 Test 按钮（无下拉菜单），因为只有�
 
 ### 防火墙配置（ufw）
 
-如果宿主机运行了 `ufw`，即使容器和宿主机共享桥接网络，Docker 容器的流量默认也会被阻止。需要显式允许 Docker 子网：
+如果宿主机运行了 `ufw`，即使容器和宿主机共享桥接网络，Docker 容器的流量默认也会被阻止。需要显式允许 Docker 子网。
+
+推荐的做法是用一条规则放行整个 Docker 私有地址段（`172.16.0.0/12`）。这涵盖了所有 Docker 网络——默认 bridge、compose 创建的网络，以及未来新建的任何网络——无需逐个网络添加规则：
 
 ```bash
-# 查找容器所在子网
-docker network inspect <network_name> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
-
-# 通过 ufw 允许该子网（使用 /16 以避免容器 IP 变更导致规则失效）
-sudo ufw allow from 172.29.0.0/16 comment 'llm-rosetta docker'
+sudo ufw allow from 172.16.0.0/12 comment 'Docker all subnets'
 ```
 
-!!! tip
-    建议使用 `/16` 子网规则，而非单个 IP 地址。容器 IP 在每次重建时可能变化，但子网保持不变。
+这是安全的，因为 `172.16.0.0/12` 是 [RFC 1918](https://datatracker.ietf.org/doc/html/rfc1918) 私有地址段，不会在公网上路由。只有运行在同一宿主机上的容器才能使用这些地址。
+
+!!! warning "为什么按网络添加规则不可靠"
+    Docker 动态分配子网。如果只放行某个特定的 `/16`（如 `172.29.0.0/16`），用 `docker run` 而非 `docker compose` 启动的容器可能会分配到不同的子网（如 `172.17.0.0/16`），从而无法访问宿主机服务。使用 `/12` 规则可以彻底避免这个问题。
 
 如果防火墙阻止了流量，"从提供商获取"和模型测试会显示超时错误。检查网络诊断中的 Host IP 并添加相应的 ufw 规则即可解决。
 
