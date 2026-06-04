@@ -2455,6 +2455,7 @@ const _TEST_TIMEOUT_MS = 120_000;
 let _testAbortCtrl = null;   // AbortController for stream tests
 let _testTaskId = null;       // server-side task id for async tests
 let _testPollTimer = null;    // setInterval id for polling
+let _testElapsedTimer = null; // setInterval id for elapsed-time display
 
 function _abortPendingTest() {
   // Cancel browser-side stream fetch
@@ -2466,6 +2467,8 @@ function _abortPendingTest() {
   }
   // Stop polling
   if (_testPollTimer) { clearInterval(_testPollTimer); _testPollTimer = null; }
+  // Stop elapsed timer from previous test
+  if (_testElapsedTimer) { clearInterval(_testElapsedTimer); _testElapsedTimer = null; }
 }
 
 function _newTestSignal() {
@@ -2523,11 +2526,12 @@ async function runTest(model, type) {
     const cancelBtn = document.getElementById('testCancelBtn');
     if (cancelBtn) cancelBtn.style.display = '';
     let _elapsedSec = 0;
-    const _elapsedTimer = setInterval(() => {
+    if (_testElapsedTimer) clearInterval(_testElapsedTimer);
+    _testElapsedTimer = setInterval(() => {
       _elapsedSec++;
       output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')} ${_elapsedSec}s`;
     }, 1000);
-    const _stopElapsed = () => { clearInterval(_elapsedTimer); if (cancelBtn) cancelBtn.style.display = 'none'; };
+    const _stopElapsed = () => { clearInterval(_testElapsedTimer); _testElapsedTimer = null; if (cancelBtn) cancelBtn.style.display = 'none'; };
     try {
       const startResp = await api.post('/admin/api/test', {endpoint, payload});
       const taskId = startResp.task_id;
@@ -2539,6 +2543,11 @@ async function runTest(model, type) {
           clearInterval(_testPollTimer);
           _testPollTimer = null;
           _stopElapsed();
+          // Cancel the server-side task on timeout
+          if (_testTaskId) {
+            api.del('/admin/api/test/' + _testTaskId).catch(() => {});
+            _testTaskId = null;
+          }
           reject(new DOMException('Test timed out', 'AbortError'));
         }, _TEST_TIMEOUT_MS);
 

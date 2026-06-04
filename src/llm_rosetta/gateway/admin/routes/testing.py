@@ -15,6 +15,7 @@ from ...config import GatewayConfig
 # In-memory store: task_id → {status, result, asyncio_task, started, ...}
 _test_tasks: dict[str, dict[str, Any]] = {}
 _MAX_TASK_AGE = 300  # seconds — auto-cleanup threshold
+_TASK_TIMEOUT = 120  # seconds — per-task execution timeout
 
 
 def _cleanup_stale_tasks() -> None:
@@ -52,7 +53,7 @@ async def _run_test_task(
     try:
         # Use a per-task client to avoid lock contention / deadlock
         # with the shared proxy client.
-        client = AsyncClient(timeout=300.0)
+        client = AsyncClient(timeout=float(_TASK_TIMEOUT))
         try:
             headers = {
                 "Content-Type": "application/json",
@@ -62,7 +63,12 @@ async def _run_test_task(
             base_url = _test_tasks[task_id].get("_base_url", "http://127.0.0.1:28765")
             url = f"{base_url}{endpoint}"
 
-            resp = await client.post(url, json=payload, headers=headers)
+            # Enforce per-task timeout so hung upstream calls don't
+            # linger for the full _MAX_TASK_AGE cleanup window.
+            resp = await asyncio.wait_for(
+                client.post(url, json=payload, headers=headers),
+                timeout=_TASK_TIMEOUT,
+            )
             assert isinstance(resp, HttpResponse)
 
             # Try to parse JSON body
@@ -82,6 +88,13 @@ async def _run_test_task(
             await client.aclose()
     except asyncio.CancelledError:
         _test_tasks[task_id]["status"] = "cancelled"
+    except asyncio.TimeoutError:
+        _test_tasks[task_id].update(
+            {
+                "status": "error",
+                "error": f"Test timed out after {_TASK_TIMEOUT}s",
+            }
+        )
     except Exception as exc:
         _test_tasks[task_id].update(
             {
