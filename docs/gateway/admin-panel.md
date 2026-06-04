@@ -228,18 +228,18 @@ Instead, use the **Host IP** shown in the Dashboard's Network Diagnostics sectio
 
 ### Firewall configuration (ufw)
 
-If the host runs `ufw`, Docker container traffic is blocked by default even though the container and host share a bridge network. You need to explicitly allow the Docker subnet:
+If the host runs `ufw`, Docker container traffic is blocked by default even though the container and host share a bridge network. You need to explicitly allow the Docker subnet.
+
+The recommended approach is to allow the entire Docker private address range (`172.16.0.0/12`) in one rule. This covers all Docker networks — default bridge, compose-created networks, and any future networks — so you never have to add per-network rules:
 
 ```bash
-# Find the container's subnet
-docker network inspect <network_name> --format '{{range .IPAM.Config}}{{.Subnet}}{{end}}'
-
-# Allow it through ufw (use /16 so the rule survives container IP changes)
-sudo ufw allow from 172.29.0.0/16 comment 'llm-rosetta docker'
+sudo ufw allow from 172.16.0.0/12 comment 'Docker all subnets'
 ```
 
-!!! tip
-    Use a `/16` subnet rule rather than a single IP address. Container IPs change on every recreate, but the subnet stays the same.
+This is safe because `172.16.0.0/12` is an [RFC 1918](https://datatracker.ietf.org/doc/html/rfc1918) private address range that is not routable on the public internet. Only containers running on the same host can use these addresses.
+
+!!! warning "Why per-network rules are fragile"
+    Docker assigns subnets dynamically. If you only allow a specific `/16` (e.g. `172.29.0.0/16`), a container started with `docker run` instead of `docker compose` may land on a different subnet (e.g. `172.17.0.0/16`) and lose access to host services. The `/12` rule avoids this entirely.
 
 If the firewall is blocking traffic, "Fetch from Provider" and model tests will show timeout errors. Check the Network Diagnostics Host IP and add the corresponding ufw rule to resolve it.
 
