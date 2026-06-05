@@ -50,7 +50,7 @@ dev = [
     "pre-commit>=4.0.0",
     "complexipy>=5.2.0",
     "ruff>=0.15.0",
-    "ty==0.0.34",
+    "ty==0.0.44",
     "build>=1.2.2.post1",
     "twine>=6.1.0",
 ]
