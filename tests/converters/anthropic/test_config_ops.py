@@ -184,13 +184,12 @@ class TestAnthropicConfigOps:
         assert result["thinking"]["type"] == "adaptive"
         assert result["output_config"]["effort"] == "high"
 
-    def test_ir_reasoning_config_effort_max(self):
-        """Test 'max' effort is normalised to ultra → xhigh via shim."""
+    def test_ir_reasoning_config_effort_ultra(self):
+        """Test 'ultra' IR effort → xhigh via shim effort_map."""
         result = AnthropicConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "max"})
+            cast(ReasoningConfig, {"effort": "ultra"})
         )
         assert result["thinking"]["type"] == "adaptive"
-        # max → IR ultra → Anthropic xhigh via shim effort_map
         assert result["output_config"]["effort"] == "xhigh"
 
     def test_ir_reasoning_config_effort_minimal_downgrade(self):

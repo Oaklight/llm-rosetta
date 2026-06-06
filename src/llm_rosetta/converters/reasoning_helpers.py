@@ -20,7 +20,7 @@ reach the converters:
 from __future__ import annotations
 
 import warnings
-from typing import Any
+from typing import Any, cast
 
 from ..shims.provider_shim import ReasoningCapability
 from ..types.ir.configs import ReasoningConfig
@@ -97,19 +97,18 @@ def normalize_reasoning_input(
 
     Returns a **new** dict; the original is not mutated.
     """
-    result: dict[str, Any] = dict(ir_reasoning)
+    result: dict[str, Any] = {**ir_reasoning}
     effort = result.get("effort")
 
     if effort == "none":
         # ``none`` means disabled, not an effort level.
         result["mode"] = "disabled"
         del result["effort"]
-        return result  # type: ignore[return-value]
 
-    if effort is not None and effort in _EFFORT_TO_ULTRA:
+    elif effort is not None and effort in _EFFORT_TO_ULTRA:
         result["effort"] = "ultra"
 
-    return result  # type: ignore[return-value]
+    return cast(ReasoningConfig, result)
 
 
 # ── Main helper ────────────────────────────────────────────────────────────

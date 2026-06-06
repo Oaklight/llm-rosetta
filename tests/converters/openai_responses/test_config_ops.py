@@ -302,10 +302,10 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"]["effort"] == "minimal"
 
-    def test_ir_reasoning_config_max(self):
-        """Test 'max' effort normalised to ultra → 'high' via shim."""
+    def test_ir_reasoning_config_ultra(self):
+        """Test 'ultra' IR effort → 'high' via shim effort_map."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "max"})
+            cast(ReasoningConfig, {"effort": "ultra"})
         )
         assert result["reasoning"]["effort"] == "high"
 
