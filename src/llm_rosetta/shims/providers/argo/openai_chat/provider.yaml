@@ -2,3 +2,14 @@ name: argo_openai_chat
 base: openai_chat
 default_base_url: https://apps.inside.anl.gov/argoapi/
 model_id_field: internal_id
+reasoning:
+  disabled: omit
+  effort_field: reasoning_effort
+  max_effort: high
+  effort_map:
+    minimal: minimal
+    low: low
+    medium: medium
+    high: high
+    xhigh: high
+    max: high

@@ -252,6 +252,16 @@ class TestGroupedProviders:
         assert len(anth.to_transforms) > 0
         assert len(anth.from_transforms) > 0
 
+    def test_grouped_provider_reasoning_configs_loaded(self):
+        """Grouped shims load reasoning capability configs."""
+        anth = get_shim("argo_anthropic")
+        oai = get_shim("argo_openai_chat")
+        assert anth is not None and anth.reasoning is not None
+        assert oai is not None and oai.reasoning is not None
+        assert anth.reasoning.effort_field == "output_config.effort"
+        assert anth.reasoning.effort_map["xhigh"] == "xhigh"
+        assert oai.reasoning.max_effort == "high"
+
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
         flat_names = ("openai", "anthropic", "deepseek", "google")
