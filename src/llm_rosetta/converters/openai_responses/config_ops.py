@@ -22,6 +22,7 @@ from ...types.ir.configs import (
     StreamConfig,
 )
 from ..base import BaseConfigOps
+from ..reasoning_helpers import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
 class OpenAIResponsesConfigOps(BaseConfigOps):
@@ -237,14 +238,8 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
         """IR ReasoningConfig → OpenAI Responses reasoning parameters.
 
-        Responses API uses a ``reasoning`` object with ``type`` and ``effort``.
-
-        Mapping:
-        - ``mode`` → ``reasoning.type`` ("enabled"/"disabled";
-          "auto" maps to "enabled" as OpenAI has no auto concept)
-        - ``effort`` → ``reasoning.effort``
-          (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
-        - ``budget_tokens`` → not supported (warning)
+        Delegates to the shared shim-driven helper.  A ``reasoning_cap``
+        kwarg overrides the built-in default.
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -252,43 +247,10 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI Responses request fields to merge.
         """
-        result: dict[str, Any] = {}
-        reasoning_p: dict[str, Any] = {}
-
-        mode = ir_reasoning.get("mode")
-        if mode in ("enabled", "auto"):
-            reasoning_p["type"] = "enabled"
-        elif mode == "disabled":
-            reasoning_p["type"] = "disabled"
-
-        if "effort" in ir_reasoning:
-            effort = ir_reasoning["effort"]
-            if effort == "minimal":
-                warnings.warn(
-                    "OpenAI Responses API does not support 'minimal' effort, "
-                    "downgrading to 'low'",
-                    stacklevel=2,
-                )
-                effort = "low"
-            elif effort == "max":
-                warnings.warn(
-                    "OpenAI Responses API does not support 'max' effort, "
-                    "downgrading to 'high'",
-                    stacklevel=2,
-                )
-                effort = "high"
-            reasoning_p["effort"] = effort
-
-        if reasoning_p:
-            result["reasoning"] = reasoning_p
-
-        if "budget_tokens" in ir_reasoning:
-            warnings.warn(
-                "OpenAI Responses API does not support reasoning budget_tokens, ignored",
-                stacklevel=2,
-            )
-
-        return result
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_responses"])
+        return apply_reasoning_config(
+            ir_reasoning, cap, converter_type="openai_responses",
+        )
 
     @staticmethod
     def p_reasoning_config_to_ir(
@@ -320,7 +282,13 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             result["mode"] = "disabled"
 
         if "effort" in reasoning:
-            result["effort"] = reasoning["effort"]
+            effort = reasoning["effort"]
+            if effort == "none":
+                result["mode"] = "disabled"
+            elif effort in ("xhigh", "max"):
+                result["effort"] = "ultra"
+            else:
+                result["effort"] = effort
 
         return cast(ReasoningConfig, result)
 

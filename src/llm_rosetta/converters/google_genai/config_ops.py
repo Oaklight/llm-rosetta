@@ -24,6 +24,7 @@ from ...types.ir.configs import (
     StreamConfig,
 )
 from ..base import BaseConfigOps
+from ..reasoning_helpers import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
 class GoogleGenAIConfigOps(BaseConfigOps):
@@ -261,13 +262,8 @@ class GoogleGenAIConfigOps(BaseConfigOps):
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
         """IR ReasoningConfig → Google GenAI reasoning parameters.
 
-        Mapping:
-        - ``mode: "disabled"`` → ``thinking_config.thinking_budget = 0``
-        - ``mode: "auto"`` (no budget) → ``thinking_config.thinking_budget = -1``
-        - ``mode: "enabled"`` → uses provided ``budget_tokens``
-        - ``effort`` → ``thinking_config.thinking_level``
-          (``"max"`` downgraded to ``"high"`` with warning)
-        - ``budget_tokens`` → ``thinking_config.thinking_budget``
+        Delegates to the shared shim-driven helper.  A ``reasoning_cap``
+        kwarg overrides the built-in default.
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -275,32 +271,10 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         Returns:
             Dict of Google config fields to merge (may be empty).
         """
-        result: dict[str, Any] = {}
-        thinking_config: dict[str, Any] = {}
-
-        mode = ir_reasoning.get("mode")
-        if mode == "disabled":
-            thinking_config["thinking_budget"] = 0
-        elif mode == "auto" and "budget_tokens" not in ir_reasoning:
-            thinking_config["thinking_budget"] = -1
-
-        if "effort" in ir_reasoning:
-            effort = ir_reasoning["effort"]
-            if effort == "max":
-                warnings.warn(
-                    "Google GenAI does not support 'max' effort, downgrading to 'high'",
-                    stacklevel=2,
-                )
-                effort = "high"
-            thinking_config["thinking_level"] = effort
-
-        if "budget_tokens" in ir_reasoning:
-            thinking_config["thinking_budget"] = ir_reasoning["budget_tokens"]
-
-        if thinking_config:
-            result["thinking_config"] = thinking_config
-
-        return result
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["google"])
+        return apply_reasoning_config(
+            ir_reasoning, cap, converter_type="google",
+        )
 
     @staticmethod
     def p_reasoning_config_to_ir(

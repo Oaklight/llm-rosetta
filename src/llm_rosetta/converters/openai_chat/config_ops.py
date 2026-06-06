@@ -17,6 +17,7 @@ from ...types.ir.configs import (
     StreamConfig,
 )
 from ..base import BaseConfigOps
+from ..reasoning_helpers import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
 class OpenAIChatConfigOps(BaseConfigOps):
@@ -250,13 +251,8 @@ class OpenAIChatConfigOps(BaseConfigOps):
     def ir_reasoning_config_to_p(ir_reasoning: ReasoningConfig, **kwargs: Any) -> dict:
         """IR ReasoningConfig → OpenAI Chat reasoning parameters.
 
-        Mapping:
-        - ``effort`` → ``reasoning_effort``
-          (``"minimal"`` → ``"low"``, ``"max"`` → ``"high"`` with warning)
-        - ``mode`` → ``thinking.type`` (DeepSeek/Volcengine extension)
-        - ``budget_tokens`` → ``thinking.budget_tokens``
-        - ``mode: "disabled"`` → skip ``reasoning_effort``, emit
-          ``thinking.type = "disabled"``
+        Delegates to the shared shim-driven helper.  A ``reasoning_cap``
+        kwarg overrides the built-in default.
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -264,40 +260,10 @@ class OpenAIChatConfigOps(BaseConfigOps):
         Returns:
             Dict of OpenAI request fields to merge.
         """
-        result: dict[str, Any] = {}
-        mode = ir_reasoning.get("mode")
-
-        # Build thinking object for mode / budget_tokens
-        thinking: dict[str, Any] = {}
-        if mode:
-            thinking["type"] = mode
-        if "budget_tokens" in ir_reasoning:
-            thinking["budget_tokens"] = ir_reasoning["budget_tokens"]
-        if thinking:
-            result["thinking"] = thinking
-
-        # mode: "disabled" → skip reasoning_effort
-        if mode == "disabled":
-            return result
-
-        if "effort" in ir_reasoning:
-            effort = ir_reasoning["effort"]
-            if effort == "minimal":
-                warnings.warn(
-                    "OpenAI Chat does not support 'minimal' effort, "
-                    "downgrading to 'low'",
-                    stacklevel=2,
-                )
-                effort = "low"
-            elif effort == "max":
-                warnings.warn(
-                    "OpenAI Chat does not support 'max' effort, downgrading to 'high'",
-                    stacklevel=2,
-                )
-                effort = "high"
-            result["reasoning_effort"] = effort
-
-        return result
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_chat"])
+        return apply_reasoning_config(
+            ir_reasoning, cap, converter_type="openai_chat",
+        )
 
     @staticmethod
     def p_reasoning_config_to_ir(
@@ -321,7 +287,12 @@ class OpenAIChatConfigOps(BaseConfigOps):
 
         effort = provider_reasoning.get("reasoning_effort")
         if effort:
-            result["effort"] = effort
+            if effort == "none":
+                result["mode"] = "disabled"
+            elif effort in ("xhigh", "max"):
+                result["effort"] = "ultra"
+            else:
+                result["effort"] = effort
 
         # DeepSeek/Volcengine thinking extension
         thinking = provider_reasoning.get("thinking")

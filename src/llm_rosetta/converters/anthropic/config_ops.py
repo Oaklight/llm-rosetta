@@ -25,6 +25,7 @@ from ...types.ir.configs import (
     StreamConfig,
 )
 from ..base import BaseConfigOps
+from ..reasoning_helpers import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
 class AnthropicConfigOps(BaseConfigOps):
@@ -237,10 +238,8 @@ class AnthropicConfigOps(BaseConfigOps):
           → ``thinking.type = "enabled"`` + ``thinking.budget_tokens``
         - ``mode: "enabled"`` without ``budget_tokens``
           → falls back to ``"adaptive"`` with warning
-        - ``mode: "disabled"`` → ``thinking.type = "disabled"``
-        - ``budget_tokens`` alone → ``thinking.type = "enabled"``
-        - ``effort`` → ``output_config.effort`` (top-level, NOT ``thinking.effort``)
-          (``"minimal"`` downgraded to ``"low"`` with warning)
+        Delegates to the shared shim-driven helper.  A ``reasoning_cap``
+        kwarg overrides the built-in default.
 
         Args:
             ir_reasoning: IR reasoning config.
@@ -249,51 +248,10 @@ class AnthropicConfigOps(BaseConfigOps):
             Dict of Anthropic request fields to merge (``thinking`` and/or
             ``output_config``).
         """
-        result: dict[str, Any] = {}
-        mode = ir_reasoning.get("mode")
-        effort = ir_reasoning.get("effort")
-        budget_tokens = ir_reasoning.get("budget_tokens")
-
-        # Determine thinking type from mode
-        if mode == "disabled":
-            result["thinking"] = {"type": "disabled"}
-            return result  # effort/budget irrelevant when disabled
-
-        if mode == "enabled":
-            if budget_tokens is not None:
-                result["thinking"] = {
-                    "type": "enabled",
-                    "budget_tokens": budget_tokens,
-                }
-            else:
-                # "enabled" requires budget_tokens; fall back to adaptive
-                warnings.warn(
-                    "Anthropic 'enabled' thinking requires budget_tokens, "
-                    "falling back to 'adaptive'",
-                    stacklevel=2,
-                )
-                result["thinking"] = {"type": "adaptive"}
-        elif mode == "auto" or effort is not None:
-            # auto mode, or effort without explicit mode → adaptive
-            thinking: dict[str, Any] = {"type": "adaptive"}
-            if budget_tokens is not None:
-                thinking["budget_tokens"] = budget_tokens
-            result["thinking"] = thinking
-        elif budget_tokens is not None:
-            # budget_tokens without mode or effort → "enabled"
-            result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
-
-        # effort → output_config.effort (separate top-level field)
-        if effort is not None:
-            if effort == "minimal":
-                warnings.warn(
-                    "Anthropic does not support 'minimal' effort, downgrading to 'low'",
-                    stacklevel=2,
-                )
-                effort = "low"
-            result["output_config"] = {"effort": effort}
-
-        return result
+        cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["anthropic"])
+        return apply_reasoning_config(
+            ir_reasoning, cap, converter_type="anthropic",
+        )
 
     @staticmethod
     def p_reasoning_config_to_ir(
@@ -335,7 +293,10 @@ class AnthropicConfigOps(BaseConfigOps):
         if isinstance(output_config, dict):
             effort = output_config.get("effort")
             if effort is not None:
-                result["effort"] = effort
+                if effort in ("xhigh", "max"):
+                    result["effort"] = "ultra"
+                else:
+                    result["effort"] = effort
 
         return cast(ReasoningConfig, result)
 
