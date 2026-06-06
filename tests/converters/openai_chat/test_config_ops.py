@@ -158,16 +158,14 @@ class TestOpenAIChatConfigOps:
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "high"})
         assert result["reasoning_effort"] == "high"
 
-    def test_ir_reasoning_config_minimal_warning(self):
-        """Test 'minimal' effort downgraded to 'low' with warning."""
-        with pytest.warns(UserWarning, match="minimal"):
-            result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "minimal"})
-        assert result["reasoning_effort"] == "low"
+    def test_ir_reasoning_config_minimal(self):
+        """Test 'minimal' effort maps to 'minimal' via shim."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "minimal"})
+        assert result["reasoning_effort"] == "minimal"
 
-    def test_ir_reasoning_config_max_warning(self):
-        """Test 'max' effort downgraded to 'high' with warning."""
-        with pytest.warns(UserWarning, match="max"):
-            result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
+    def test_ir_reasoning_config_max(self):
+        """Test 'max' effort normalised to ultra → 'high' via shim."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
         assert result["reasoning_effort"] == "high"
 
     def test_ir_reasoning_config_budget_tokens(self):
@@ -176,12 +174,12 @@ class TestOpenAIChatConfigOps:
         assert result["thinking"]["budget_tokens"] == 1000
 
     def test_ir_reasoning_config_mode_disabled(self):
-        """Test mode: disabled skips reasoning_effort, emits thinking."""
+        """Test mode: disabled → omit (OpenAI shim strategy)."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "disabled", "effort": "high"}
         )
-        assert "reasoning_effort" not in result
-        assert result["thinking"]["type"] == "disabled"
+        # OpenAI disabled strategy is 'omit' → empty result
+        assert result == {}
 
     def test_ir_reasoning_config_mode_enabled(self):
         """Test mode: enabled → thinking.type = enabled."""

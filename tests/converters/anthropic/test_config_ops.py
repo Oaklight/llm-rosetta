@@ -185,19 +185,20 @@ class TestAnthropicConfigOps:
         assert result["output_config"]["effort"] == "high"
 
     def test_ir_reasoning_config_effort_max(self):
-        """Test 'max' effort maps directly to output_config."""
+        """Test 'max' effort is normalised to ultra → xhigh via shim."""
         result = AnthropicConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "max"})
         )
         assert result["thinking"]["type"] == "adaptive"
-        assert result["output_config"]["effort"] == "max"
+        # max → IR ultra → Anthropic xhigh via shim effort_map
+        assert result["output_config"]["effort"] == "xhigh"
 
-    def test_ir_reasoning_config_effort_minimal_warning(self):
-        """Test 'minimal' effort downgraded to 'low' with warning."""
-        with pytest.warns(UserWarning, match="minimal"):
-            result = AnthropicConfigOps.ir_reasoning_config_to_p(
-                cast(ReasoningConfig, {"effort": "minimal"})
-            )
+    def test_ir_reasoning_config_effort_minimal_downgrade(self):
+        """Test 'minimal' effort maps to 'low' via shim config."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "minimal"})
+        )
+        # minimal → low via shim effort_map (no warning, declarative mapping)
         assert result["output_config"]["effort"] == "low"
 
     def test_ir_reasoning_config_effort_with_budget(self):

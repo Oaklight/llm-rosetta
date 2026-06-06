@@ -250,35 +250,28 @@ class TestGoogleGenAIConfigOps:
         )
         assert result["thinking_config"]["thinking_budget"] == 4096
 
-    def test_ir_reasoning_config_effort(self):
-        """Test effort → thinking_level."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "high"})
-        )
-        assert result["thinking_config"]["thinking_level"] == "high"
-
-    def test_ir_reasoning_config_effort_minimal(self):
-        """Test 'minimal' effort maps directly to Google."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "minimal"})
-        )
-        assert result["thinking_config"]["thinking_level"] == "minimal"
-
-    def test_ir_reasoning_config_effort_max_warning(self):
-        """Test 'max' effort downgraded to 'high' with warning."""
-        with pytest.warns(UserWarning, match="max"):
+    def test_ir_reasoning_config_effort_skipped(self):
+        """Test effort is skipped for Google (thinkingLevel not supported)."""
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
             result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-                cast(ReasoningConfig, {"effort": "max"})
+                cast(ReasoningConfig, {"effort": "high"})
             )
-        assert result["thinking_config"]["thinking_level"] == "high"
+        # Google shim has effort_field=none and empty effort_map,
+        # so effort is silently dropped.
+        assert result == {}
 
     def test_ir_reasoning_config_effort_with_budget(self):
-        """Test effort + budget_tokens combined."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "medium", "budget_tokens": 4096})
-        )
-        assert result["thinking_config"]["thinking_level"] == "medium"
+        """Test effort skipped but budget_tokens still passed."""
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"effort": "medium", "budget_tokens": 4096})
+            )
         assert result["thinking_config"]["thinking_budget"] == 4096
+        assert "thinking_level" not in result.get("thinking_config", {})
 
     def test_ir_reasoning_config_empty(self):
         """Test empty reasoning config → empty result."""
@@ -302,12 +295,16 @@ class TestGoogleGenAIConfigOps:
         assert result["thinking_config"]["thinking_budget"] == -1
 
     def test_ir_reasoning_config_mode_auto_with_effort(self):
-        """Test mode: auto + effort → thinking_budget: -1 + thinking_level."""
-        result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
-        )
+        """Test mode: auto + effort → thinking_budget: -1 (effort skipped)."""
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
+                cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
+            )
         assert result["thinking_config"]["thinking_budget"] == -1
-        assert result["thinking_config"]["thinking_level"] == "high"
+        # effort is skipped for Google (no thinking_level support)
+        assert "thinking_level" not in result["thinking_config"]
 
     def test_ir_reasoning_config_mode_enabled_with_budget(self):
         """Test mode: enabled + budget → uses budget_tokens."""
@@ -361,11 +358,15 @@ class TestGoogleGenAIConfigOps:
         assert restored["budget_tokens"] == 2048
 
     def test_reasoning_config_effort_round_trip(self):
-        """Test effort round-trip."""
-        original = cast(ReasoningConfig, {"effort": "high"})
-        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        """Effort is not round-trippable for Google (thinkingLevel unsupported)."""
+        import warnings as _w
+        with _w.catch_warnings():
+            _w.simplefilter("ignore")
+            original = cast(ReasoningConfig, {"effort": "high"})
+            provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        # Google shim drops effort → empty output → no effort restored
         restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
-        assert restored["effort"] == "high"
+        assert "effort" not in restored
 
     def test_reasoning_config_roundtrip_auto(self):
         """Test round-trip: auto → thinking_budget: -1 → auto."""

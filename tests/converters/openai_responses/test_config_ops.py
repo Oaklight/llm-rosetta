@@ -288,26 +288,25 @@ class TestOpenAIResponsesConfigOps:
         assert result["reasoning"]["effort"] == "high"
 
     def test_ir_reasoning_config_disabled_mode(self):
-        """Test mode: disabled maps to reasoning.type: disabled."""
+        """Test mode: disabled → omit (OpenAI Responses shim strategy)."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "disabled"})
         )
-        assert result["reasoning"]["type"] == "disabled"
+        # OpenAI disabled strategy is 'omit' → empty result
+        assert result == {}
 
-    def test_ir_reasoning_config_minimal_warning(self):
-        """Test 'minimal' effort downgraded to 'low' with warning."""
-        with pytest.warns(UserWarning, match="minimal"):
-            result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-                cast(ReasoningConfig, {"effort": "minimal"})
-            )
-        assert result["reasoning"]["effort"] == "low"
+    def test_ir_reasoning_config_minimal(self):
+        """Test 'minimal' effort maps to 'minimal' via shim."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "minimal"})
+        )
+        assert result["reasoning"]["effort"] == "minimal"
 
-    def test_ir_reasoning_config_max_warning(self):
-        """Test 'max' effort downgraded to 'high' with warning."""
-        with pytest.warns(UserWarning, match="max"):
-            result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-                cast(ReasoningConfig, {"effort": "max"})
-            )
+    def test_ir_reasoning_config_max(self):
+        """Test 'max' effort normalised to ultra → 'high' via shim."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "max"})
+        )
         assert result["reasoning"]["effort"] == "high"
 
     def test_ir_reasoning_config_budget_warning(self):
