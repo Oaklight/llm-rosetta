@@ -364,6 +364,35 @@ class TestConvert:
         # messages should survive the round-trip
         assert result["messages"][0]["content"] == "Hello"
 
+    def test_convert_uses_target_shim_reasoning_config(self):
+        """Registered target shim reasoning config applies in convert()."""
+        openai_body = {
+            "messages": [{"role": "user", "content": "Hello"}],
+            "reasoning_effort": "none",
+        }
+
+        result = convert(openai_body, "deepseek", source_provider="openai_chat")
+
+        assert result["thinking"] == {"type": "disabled"}
+        assert "reasoning_effort" not in result
+
+    def test_convert_responses_uses_nested_reasoning_effort(self):
+        """Responses conversion emits official nested reasoning.effort field."""
+        responses_body = {
+            "input": "Hello",
+            "reasoning": {"effort": "xhigh"},
+        }
+
+        result = convert(
+            responses_body,
+            "openai_responses",
+            source_provider="openai_responses",
+            force_conversion=True,
+        )
+
+        assert result["reasoning"] == {"effort": "high"}
+        assert "reasoning_effort" not in result
+
     def test_convert_with_tools(self):
         """测试带工具定义的转换"""
         openai_body = {

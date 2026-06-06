@@ -220,6 +220,7 @@ def convert(
         >>> body = {"messages": [...], "max_tokens": 256}
         >>> normalised = convert(body, "openai_chat", force_conversion=True)
     """
+    from .converters.base.context import ConversionContext
     from .shims import get_shim
     from .shims.transforms import apply_transforms
 
@@ -249,8 +250,14 @@ def convert(
     source_converter = get_converter_for_provider(source_provider)
     target_converter = get_converter_for_provider(target_provider)
 
-    ir_request = source_converter.request_from_provider(body)
-    target_body, _warnings = target_converter.request_to_provider(ir_request)
+    ctx = ConversionContext()
+    if target_shim is not None and target_shim.reasoning is not None:
+        ctx.options["reasoning_cap"] = target_shim.reasoning
+
+    ir_request = source_converter.request_from_provider(body, context=ctx)
+    target_body, _warnings = target_converter.request_to_provider(
+        ir_request, context=ctx
+    )
 
     # --- Apply target to_transforms ---
     target_body = apply_transforms(target_to_t, target_body)

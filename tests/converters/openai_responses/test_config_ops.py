@@ -336,6 +336,13 @@ class TestOpenAIResponsesConfigOps:
         result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir({"effort": "low"})
         assert result["effort"] == "low"
 
+    def test_p_reasoning_config_to_ir_ignores_top_level_reasoning_effort(self):
+        """Responses API does not support top-level reasoning_effort."""
+        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+            {"reasoning_effort": "xhigh"}
+        )
+        assert result == {}
+
     def test_p_reasoning_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
         result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir("not a dict")

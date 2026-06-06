@@ -362,8 +362,3 @@ class ResponseCreateParams(TypedDict, total=False):
 
     prediction: dict[str, Any]
     """Prediction configuration."""
-
-    reasoning_effort: Literal[
-        "none", "minimal", "low", "medium", "high", "xhigh", "max"
-    ]
-    """Reasoning effort level."""
