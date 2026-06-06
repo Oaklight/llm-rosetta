@@ -83,8 +83,13 @@ DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
 # External values that map to ``ultra`` in the IR effort ladder.
 _EFFORT_TO_ULTRA = frozenset({"xhigh", "max"})
 
-# The canonical IR effort levels.
-_IR_EFFORT_LEVELS = frozenset({"minimal", "low", "medium", "high", "ultra"})
+_EFFORT_RANK: dict[str, int] = {
+    "minimal": 0,
+    "low": 1,
+    "medium": 2,
+    "high": 3,
+    "ultra": 4,
+}
 
 
 def normalize_reasoning_input(
@@ -155,6 +160,7 @@ def apply_reasoning_config(
 
     # 3. Effort mapping.
     if effort is not None:
+        effort = _cap_effort(effort, cap)
         provider_effort = cap.effort_map.get(effort)
         if provider_effort is None:
             warnings.warn(
@@ -176,6 +182,19 @@ def apply_reasoning_config(
         _apply_google_extras(ir, result, mode, budget_tokens)
 
     return result
+
+
+# ── Effort capping ──────────────────────────────────────────────────────────
+
+
+def _cap_effort(effort: str, cap: ReasoningCapability) -> str:
+    if cap.max_effort is None:
+        return effort
+    effort_rank = _EFFORT_RANK.get(effort)
+    max_rank = _EFFORT_RANK.get(cap.max_effort)
+    if effort_rank is None or max_rank is None or effort_rank <= max_rank:
+        return effort
+    return cap.max_effort
 
 
 # ── Disabled serialisation ─────────────────────────────────────────────────

@@ -85,6 +85,7 @@ def _load_single_provider(
         reasoning_cap = ReasoningCapability(
             disabled=reasoning_cfg.get("disabled", "omit"),
             effort_field=reasoning_cfg.get("effort_field", "reasoning_effort"),
+            max_effort=reasoning_cfg.get("max_effort"),
             effort_map=reasoning_cfg.get("effort_map", {}),
         )
 

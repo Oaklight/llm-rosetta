@@ -277,6 +277,26 @@ class TestCustomShim:
         )
         assert result["reasoning_effort"] == "medium"
 
+    def test_custom_max_effort_caps_before_mapping(self):
+        custom = ReasoningCapability(
+            disabled="omit",
+            effort_field="reasoning_effort",
+            max_effort="high",
+            effort_map={
+                "minimal": "minimal",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "ultra": "xhigh",
+            },
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "ultra"}),
+            custom,
+            converter_type="openai_chat",
+        )
+        assert result["reasoning_effort"] == "high"
+
     def test_custom_thinking_budget_zero_disabled(self):
         custom = ReasoningCapability(
             disabled="thinking_budget_zero",

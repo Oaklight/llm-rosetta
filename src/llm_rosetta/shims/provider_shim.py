@@ -29,6 +29,9 @@ EffortField = Literal[
     "none",  # Provider has no effort field
 ]
 
+#: Normalised IR effort ladder level.
+EffortLevel = Literal["minimal", "low", "medium", "high", "ultra"]
+
 #: Mapping from normalised IR effort levels to provider-specific values.
 #: Any IR level absent from the map is unsupported and will be warned/skipped.
 EffortMap = dict[str, str]  # e.g. {"minimal": "low", "ultra": "high"}
@@ -41,11 +44,13 @@ class ReasoningCapability:
     Attributes:
         disabled: How to serialise ``mode: disabled``.
         effort_field: Where the provider expects the effort value.
+        max_effort: Highest normalised effort this shim should emit.
         effort_map: Map from normalised IR effort to provider effort string.
     """
 
     disabled: DisabledStrategy = "omit"
     effort_field: EffortField = "reasoning_effort"
+    max_effort: EffortLevel | None = None
     effort_map: EffortMap = field(
         default_factory=lambda: {
             "minimal": "low",
