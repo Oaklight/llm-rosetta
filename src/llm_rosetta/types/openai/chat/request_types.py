@@ -131,7 +131,7 @@ ChatCompletionToolChoiceOptionParam = Union[
 # Generation Control Types
 # ============================================================================
 
-ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh"]
+ReasoningEffort = Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
 
 
 # ============================================================================

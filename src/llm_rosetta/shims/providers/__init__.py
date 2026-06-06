@@ -20,7 +20,7 @@ from pathlib import Path
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
-from ..provider_shim import ProviderShim, register_shim
+from ..provider_shim import ProviderShim, ReasoningCapability, register_shim
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +77,17 @@ def _load_single_provider(
         return None
 
     from_t, to_t = _load_transforms(provider_dir, group=group)
+
+    # Parse optional reasoning capability config from YAML.
+    reasoning_cfg = cfg.get("reasoning")
+    reasoning_cap: ReasoningCapability | None = None
+    if isinstance(reasoning_cfg, dict):
+        reasoning_cap = ReasoningCapability(
+            disabled=reasoning_cfg.get("disabled", "omit"),
+            effort_field=reasoning_cfg.get("effort_field", "reasoning_effort"),
+            effort_map=reasoning_cfg.get("effort_map", {}),
+        )
+
     shim = ProviderShim(
         name=cfg["name"],
         base=cfg["base"],
@@ -86,6 +97,7 @@ def _load_single_provider(
         model_id_field=cfg.get("model_id_field"),
         from_transforms=from_t,
         to_transforms=to_t,
+        reasoning=reasoning_cap,
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

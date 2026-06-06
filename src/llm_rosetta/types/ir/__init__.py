@@ -35,6 +35,7 @@ from .configs import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,
+    ReasoningEffortLevel,
     ResponseFormatConfig,
     StreamConfig,
 )
@@ -215,6 +216,7 @@ __all__ = [
     "ResponseFormatConfig",
     "StreamConfig",
     "ReasoningConfig",
+    "ReasoningEffortLevel",
     "CacheConfig",
     # ========== 请求类型 Request types ==========
     "IRRequest",

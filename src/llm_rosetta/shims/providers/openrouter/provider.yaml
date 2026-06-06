@@ -3,3 +3,12 @@ base: openai_chat
 default_base_url: https://openrouter.ai/api/v1
 default_api_key_env: OPENROUTER_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg
+reasoning:
+  disabled: omit
+  effort_field: reasoning_effort
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    ultra: high

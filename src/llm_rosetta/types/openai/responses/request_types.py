@@ -154,8 +154,16 @@ class Reasoning(TypedDict, total=False):
     Reference: openai.types.responses.response_create_params.Reasoning
     """
 
+    type: Literal["enabled", "disabled"]
+    """Reasoning type: enabled or disabled."""
+
+    effort: Literal[
+        "none", "minimal", "low", "medium", "high", "xhigh", "max"
+    ]
+    """Reasoning effort level."""
+
     enabled: bool
-    """Whether reasoning is enabled."""
+    """Whether reasoning is enabled (legacy field)."""
 
     max_tokens: int
     """Maximum number of tokens for reasoning."""
@@ -357,5 +365,7 @@ class ResponseCreateParams(TypedDict, total=False):
     prediction: dict[str, Any]
     """Prediction configuration."""
 
-    reasoning_effort: Literal["low", "medium", "high"]
+    reasoning_effort: Literal[
+        "none", "minimal", "low", "medium", "high", "xhigh", "max"
+    ]
     """Reasoning effort level."""

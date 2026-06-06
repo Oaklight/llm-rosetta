@@ -3,3 +3,12 @@ base: openai_responses
 default_base_url: https://api.openai.com/v1
 default_api_key_env: OPENAI_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
+reasoning:
+  disabled: omit
+  effort_field: reasoning.effort
+  effort_map:
+    minimal: minimal
+    low: low
+    medium: medium
+    high: high
+    ultra: high

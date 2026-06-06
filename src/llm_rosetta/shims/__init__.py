@@ -6,6 +6,7 @@ Importing this package automatically registers the built-in shims
 
 from .provider_shim import (
     ProviderShim,
+    ReasoningCapability,
     get_shim,
     list_shims,
     register_shim,
@@ -27,6 +28,7 @@ _load_providers()
 
 __all__ = [
     "ProviderShim",
+    "ReasoningCapability",
     "register_shim",
     "unregister_shim",
     "get_shim",

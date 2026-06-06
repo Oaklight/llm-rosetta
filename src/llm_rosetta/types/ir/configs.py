@@ -21,6 +21,12 @@ Contains various configuration parameters for controlling model generation behav
 
 from typing import Any, Literal, TypedDict
 
+# Normalised IR effort levels — the canonical ladder used internally.
+# External values are normalised into this set before reaching converters:
+#   xhigh, max → ultra
+#   none → mode: disabled (NOT an effort level)
+ReasoningEffortLevel = Literal["minimal", "low", "medium", "high", "ultra"]
+
 # ============================================================================
 # 生成控制配置 Generation control configuration
 # ============================================================================
@@ -128,9 +134,7 @@ class ReasoningConfig(TypedDict, total=False):
     """
 
     mode: Literal["auto", "enabled", "disabled"]
-    effort: Literal[
-        "minimal", "low", "medium", "high", "max"
-    ]  # Reasoning effort level across providers
+    effort: ReasoningEffortLevel  # Reasoning effort level (normalised)
     budget_tokens: int  # Max tokens for reasoning — Anthropic/Google: budget_tokens
 
 
@@ -192,6 +196,7 @@ __all__ = [
     "GenerationConfig",
     # 推理配置 Reasoning configuration
     "ReasoningConfig",
+    "ReasoningEffortLevel",
     # 流式输出配置 Streaming configuration
     "StreamConfig",
     # 响应格式配置 Response format configuration

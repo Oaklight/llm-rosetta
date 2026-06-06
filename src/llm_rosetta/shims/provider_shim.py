@@ -7,9 +7,52 @@ optional transforms to bridge schema differences.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Literal
 
 from .transforms import Transform
+
+
+# ---------------------------------------------------------------------------
+# Reasoning capability config
+# ---------------------------------------------------------------------------
+
+#: How a provider handles "reasoning disabled".
+DisabledStrategy = Literal["omit", "thinking_disabled", "thinking_budget_zero"]
+
+#: Where the provider expects the effort value to be serialised.
+EffortField = Literal[
+    "reasoning_effort",       # OpenAI Chat top-level
+    "reasoning.effort",       # OpenAI Responses nested
+    "output_config.effort",   # Anthropic
+    "thinking_level",         # Google thinking_config.thinking_level
+    "none",                   # Provider has no effort field
+]
+
+#: Mapping from normalised IR effort levels to provider-specific values.
+#: Any IR level absent from the map is unsupported and will be warned/skipped.
+EffortMap = dict[str, str]  # e.g. {"minimal": "low", "ultra": "high"}
+
+
+@dataclass(frozen=True)
+class ReasoningCapability:
+    """Declares how a provider handles reasoning effort and disabled state.
+
+    Attributes:
+        disabled: How to serialise ``mode: disabled``.
+        effort_field: Where the provider expects the effort value.
+        effort_map: Map from normalised IR effort to provider effort string.
+    """
+
+    disabled: DisabledStrategy = "omit"
+    effort_field: EffortField = "reasoning_effort"
+    effort_map: EffortMap = field(default_factory=lambda: {
+        "minimal": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "ultra": "high",
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -39,6 +82,8 @@ class ProviderShim:
             provider (normalise dialect → standard).
         to_transforms: Transforms applied when data goes TO this
             provider (standard → dialect).
+        reasoning: Reasoning capability config for this provider.
+            When ``None``, the converter uses its built-in default.
     """
 
     name: str
@@ -49,6 +94,7 @@ class ProviderShim:
     model_id_field: str | None = None
     from_transforms: tuple[Transform, ...] = ()
     to_transforms: tuple[Transform, ...] = ()
+    reasoning: ReasoningCapability | None = None
 
 
 # ---------------------------------------------------------------------------

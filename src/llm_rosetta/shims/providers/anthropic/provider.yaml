@@ -3,3 +3,12 @@ base: anthropic
 default_base_url: https://api.anthropic.com
 default_api_key_env: ANTHROPIC_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg
+reasoning:
+  disabled: thinking_disabled
+  effort_field: output_config.effort
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    ultra: xhigh
