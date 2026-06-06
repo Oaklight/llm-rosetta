@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.auto_detect import convert, detect_provider, get_converter_for_provider
+from llm_rosetta.shims.providers import load_providers
 
 
 class TestDetectProvider:
@@ -280,6 +281,11 @@ class TestGetConverterForProvider:
 
 class TestConvert:
     """测试自动转换功能"""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_shims(self):
+        """Ensure provider shims are loaded (may be cleared by other tests)."""
+        load_providers()
 
     def test_convert_openai_to_google(self):
         """测试从 OpenAI Chat 转换到 Google"""
