@@ -273,7 +273,9 @@ class GoogleGenAIConfigOps(BaseConfigOps):
         """
         cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["google"])
         return apply_reasoning_config(
-            ir_reasoning, cap, converter_type="google",
+            ir_reasoning,
+            cap,
+            converter_type="google",
         )
 
     @staticmethod

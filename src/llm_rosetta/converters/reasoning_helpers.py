@@ -114,6 +114,7 @@ def normalize_reasoning_input(
 
 # ── Main helper ────────────────────────────────────────────────────────────
 
+
 def apply_reasoning_config(
     ir_reasoning: ReasoningConfig,
     cap: ReasoningCapability,
@@ -180,6 +181,7 @@ def apply_reasoning_config(
 
 # ── Disabled serialisation ─────────────────────────────────────────────────
 
+
 def _serialize_disabled(cap: ReasoningCapability) -> dict[str, Any]:
     """Serialize disabled state according to the shim strategy."""
     if cap.disabled == "omit":
@@ -192,6 +194,7 @@ def _serialize_disabled(cap: ReasoningCapability) -> dict[str, Any]:
 
 
 # ── Effort serialisation ──────────────────────────────────────────────────
+
 
 def _serialize_effort(
     effort_field: str,
@@ -226,6 +229,7 @@ def _serialize_effort(
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
     """One-level deep merge of *source* into *target* (mutates target)."""
     for k, v in source.items():
@@ -236,6 +240,7 @@ def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
 
 
 # ── Converter-specific pass-through extras ─────────────────────────────────
+
 
 def _apply_openai_chat_extras(
     ir: ReasoningConfig,

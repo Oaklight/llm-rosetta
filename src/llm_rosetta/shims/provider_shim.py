@@ -22,11 +22,11 @@ DisabledStrategy = Literal["omit", "thinking_disabled", "thinking_budget_zero"]
 
 #: Where the provider expects the effort value to be serialised.
 EffortField = Literal[
-    "reasoning_effort",       # OpenAI Chat top-level
-    "reasoning.effort",       # OpenAI Responses nested
-    "output_config.effort",   # Anthropic
-    "thinking_level",         # Google thinking_config.thinking_level
-    "none",                   # Provider has no effort field
+    "reasoning_effort",  # OpenAI Chat top-level
+    "reasoning.effort",  # OpenAI Responses nested
+    "output_config.effort",  # Anthropic
+    "thinking_level",  # Google thinking_config.thinking_level
+    "none",  # Provider has no effort field
 ]
 
 #: Mapping from normalised IR effort levels to provider-specific values.
@@ -46,13 +46,15 @@ class ReasoningCapability:
 
     disabled: DisabledStrategy = "omit"
     effort_field: EffortField = "reasoning_effort"
-    effort_map: EffortMap = field(default_factory=lambda: {
-        "minimal": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "ultra": "high",
-    })
+    effort_map: EffortMap = field(
+        default_factory=lambda: {
+            "minimal": "low",
+            "low": "low",
+            "medium": "medium",
+            "high": "high",
+            "ultra": "high",
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -253,6 +253,7 @@ class TestGoogleGenAIConfigOps:
     def test_ir_reasoning_config_effort_skipped(self):
         """Test effort is skipped for Google (thinkingLevel not supported)."""
         import warnings as _w
+
         with _w.catch_warnings():
             _w.simplefilter("ignore")
             result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
@@ -265,6 +266,7 @@ class TestGoogleGenAIConfigOps:
     def test_ir_reasoning_config_effort_with_budget(self):
         """Test effort skipped but budget_tokens still passed."""
         import warnings as _w
+
         with _w.catch_warnings():
             _w.simplefilter("ignore")
             result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
@@ -297,6 +299,7 @@ class TestGoogleGenAIConfigOps:
     def test_ir_reasoning_config_mode_auto_with_effort(self):
         """Test mode: auto + effort → thinking_budget: -1 (effort skipped)."""
         import warnings as _w
+
         with _w.catch_warnings():
             _w.simplefilter("ignore")
             result = GoogleGenAIConfigOps.ir_reasoning_config_to_p(
@@ -360,6 +363,7 @@ class TestGoogleGenAIConfigOps:
     def test_reasoning_config_effort_round_trip(self):
         """Effort is not round-trippable for Google (thinkingLevel unsupported)."""
         import warnings as _w
+
         with _w.catch_warnings():
             _w.simplefilter("ignore")
             original = cast(ReasoningConfig, {"effort": "high"})

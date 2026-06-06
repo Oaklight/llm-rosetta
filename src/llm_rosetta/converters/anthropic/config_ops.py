@@ -250,7 +250,9 @@ class AnthropicConfigOps(BaseConfigOps):
         """
         cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["anthropic"])
         return apply_reasoning_config(
-            ir_reasoning, cap, converter_type="anthropic",
+            ir_reasoning,
+            cap,
+            converter_type="anthropic",
         )
 
     @staticmethod

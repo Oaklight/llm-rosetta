@@ -249,7 +249,9 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         """
         cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_responses"])
         return apply_reasoning_config(
-            ir_reasoning, cap, converter_type="openai_responses",
+            ir_reasoning,
+            cap,
+            converter_type="openai_responses",
         )
 
     @staticmethod

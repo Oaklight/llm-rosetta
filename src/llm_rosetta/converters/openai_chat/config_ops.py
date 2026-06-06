@@ -262,7 +262,9 @@ class OpenAIChatConfigOps(BaseConfigOps):
         """
         cap = kwargs.get("reasoning_cap", DEFAULT_REASONING_CAPS["openai_chat"])
         return apply_reasoning_config(
-            ir_reasoning, cap, converter_type="openai_chat",
+            ir_reasoning,
+            cap,
+            converter_type="openai_chat",
         )
 
     @staticmethod

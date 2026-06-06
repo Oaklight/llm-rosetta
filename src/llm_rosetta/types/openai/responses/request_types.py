@@ -157,9 +157,7 @@ class Reasoning(TypedDict, total=False):
     type: Literal["enabled", "disabled"]
     """Reasoning type: enabled or disabled."""
 
-    effort: Literal[
-        "none", "minimal", "low", "medium", "high", "xhigh", "max"
-    ]
+    effort: Literal["none", "minimal", "low", "medium", "high", "xhigh", "max"]
     """Reasoning effort level."""
 
     enabled: bool
