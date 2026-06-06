@@ -9,4 +9,5 @@ reasoning:
     low: low
     medium: medium
     high: high
-    ultra: high
+    xhigh: high
+    max: high

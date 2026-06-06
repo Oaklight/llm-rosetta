@@ -6,10 +6,11 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openro
 reasoning:
   disabled: omit
   effort_field: reasoning_effort
-  max_effort: high
+  max_effort: xhigh
   effort_map:
     minimal: low
     low: low
     medium: medium
     high: high
-    ultra: high
+    xhigh: xhigh
+    max: max

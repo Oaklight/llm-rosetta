@@ -11,4 +11,5 @@ reasoning:
     low: low
     medium: medium
     high: high
-    ultra: xhigh
+    xhigh: xhigh
+    max: max

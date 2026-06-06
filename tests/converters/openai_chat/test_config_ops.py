@@ -163,9 +163,14 @@ class TestOpenAIChatConfigOps:
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "minimal"})
         assert result["reasoning_effort"] == "minimal"
 
-    def test_ir_reasoning_config_ultra(self):
-        """Test 'ultra' IR effort → 'high' via shim effort_map."""
-        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "ultra"})
+    def test_ir_reasoning_config_xhigh(self):
+        """Test 'xhigh' IR effort → 'high' via shim effort_map."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "xhigh"})
+        assert result["reasoning_effort"] == "high"
+
+    def test_ir_reasoning_config_max(self):
+        """Test 'max' IR effort → 'high' via shim effort_map."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
         assert result["reasoning_effort"] == "high"
 
     def test_ir_reasoning_config_budget_tokens(self):

@@ -295,10 +295,7 @@ class AnthropicConfigOps(BaseConfigOps):
         if isinstance(output_config, dict):
             effort = output_config.get("effort")
             if effort is not None:
-                if effort in ("xhigh", "max"):
-                    result["effort"] = "ultra"
-                else:
-                    result["effort"] = effort
+                result["effort"] = effort
 
         return cast(ReasoningConfig, result)
 

@@ -30,11 +30,11 @@ EffortField = Literal[
 ]
 
 #: Normalised IR effort ladder level.
-EffortLevel = Literal["minimal", "low", "medium", "high", "ultra"]
+EffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 
 #: Mapping from normalised IR effort levels to provider-specific values.
 #: Any IR level absent from the map is unsupported and will be warned/skipped.
-EffortMap = dict[str, str]  # e.g. {"minimal": "low", "ultra": "high"}
+EffortMap = dict[str, str]  # e.g. {"minimal": "low", "max": "high"}
 
 
 @dataclass(frozen=True)
@@ -57,7 +57,8 @@ class ReasoningCapability:
             "low": "low",
             "medium": "medium",
             "high": "high",
-            "ultra": "high",
+            "xhigh": "high",
+            "max": "high",
         }
     )
 

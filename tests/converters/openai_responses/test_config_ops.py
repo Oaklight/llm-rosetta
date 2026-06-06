@@ -302,10 +302,17 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"]["effort"] == "minimal"
 
-    def test_ir_reasoning_config_ultra(self):
-        """Test 'ultra' IR effort → 'high' via shim effort_map."""
+    def test_ir_reasoning_config_xhigh(self):
+        """Test 'xhigh' IR effort → 'high' via shim effort_map."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
-            cast(ReasoningConfig, {"effort": "ultra"})
+            cast(ReasoningConfig, {"effort": "xhigh"})
+        )
+        assert result["reasoning"]["effort"] == "high"
+
+    def test_ir_reasoning_config_max(self):
+        """Test 'max' IR effort → 'high' via shim effort_map."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "max"})
         )
         assert result["reasoning"]["effort"] == "high"
 

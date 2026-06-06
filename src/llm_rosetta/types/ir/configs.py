@@ -22,10 +22,8 @@ Contains various configuration parameters for controlling model generation behav
 from typing import Any, Literal, TypedDict
 
 # Normalised IR effort levels — the canonical ladder used internally.
-# External values are normalised into this set before reaching converters:
-#   xhigh, max → ultra
-#   none → mode: disabled (NOT an effort level)
-ReasoningEffortLevel = Literal["minimal", "low", "medium", "high", "ultra"]
+# External "none" maps to mode: disabled, not an effort level.
+ReasoningEffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 
 # ============================================================================
 # 生成控制配置 Generation control configuration

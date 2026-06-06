@@ -287,8 +287,6 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             effort = reasoning["effort"]
             if effort == "none":
                 result["mode"] = "disabled"
-            elif effort in ("xhigh", "max"):
-                result["effort"] = "ultra"
             else:
                 result["effort"] = effort
 

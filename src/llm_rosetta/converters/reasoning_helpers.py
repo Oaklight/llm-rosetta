@@ -12,9 +12,8 @@ External input values are normalised to the IR effort ladder before they
 reach the converters:
 
 - ``none`` → ``mode: disabled`` (NOT ``effort: none``)
-- ``xhigh``, ``max`` → ``effort: ultra``
-- All other values pass through if they are part of the canonical set
-  ``{minimal, low, medium, high, ultra}``.
+- Effort values pass through if they are part of the canonical set
+  ``{minimal, low, medium, high, xhigh, max}``.
 """
 
 from __future__ import annotations
@@ -36,7 +35,8 @@ _DEFAULT_OPENAI_CHAT = ReasoningCapability(
         "low": "low",
         "medium": "medium",
         "high": "high",
-        "ultra": "high",
+        "xhigh": "high",
+        "max": "high",
     },
 )
 
@@ -48,7 +48,8 @@ _DEFAULT_OPENAI_RESPONSES = ReasoningCapability(
         "low": "low",
         "medium": "medium",
         "high": "high",
-        "ultra": "high",
+        "xhigh": "high",
+        "max": "high",
     },
 )
 
@@ -60,7 +61,8 @@ _DEFAULT_ANTHROPIC = ReasoningCapability(
         "low": "low",
         "medium": "medium",
         "high": "high",
-        "ultra": "xhigh",
+        "xhigh": "xhigh",
+        "max": "max",
     },
 )
 
@@ -80,15 +82,13 @@ DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
 
 # ── Input normalisation ────────────────────────────────────────────────────
 
-# External values that map to ``ultra`` in the IR effort ladder.
-_EFFORT_TO_ULTRA = frozenset({"xhigh", "max"})
-
 _EFFORT_RANK: dict[str, int] = {
     "minimal": 0,
     "low": 1,
     "medium": 2,
     "high": 3,
-    "ultra": 4,
+    "xhigh": 4,
+    "max": 5,
 }
 
 
@@ -98,7 +98,6 @@ def normalize_reasoning_input(
     """Normalise external effort values into the canonical IR ladder.
 
     - ``none`` → ``mode: disabled``, effort removed.
-    - ``xhigh`` / ``max`` → ``effort: ultra``.
 
     Returns a **new** dict; the original is not mutated.
     """
@@ -109,9 +108,6 @@ def normalize_reasoning_input(
         # ``none`` means disabled, not an effort level.
         result["mode"] = "disabled"
         del result["effort"]
-
-    elif effort is not None and effort in _EFFORT_TO_ULTRA:
-        result["effort"] = "ultra"
 
     return cast(ReasoningConfig, result)
 
@@ -130,7 +126,7 @@ def apply_reasoning_config(
     This is the single function each converter's ``ir_reasoning_config_to_p``
     should delegate to.  It handles:
 
-    1. **Input normalisation** (``none`` → disabled, ``xhigh``/``max`` → ``ultra``).
+    1. **Input normalisation** (``none`` → disabled).
     2. **Disabled serialisation** according to ``cap.disabled``.
     3. **Effort mapping** via ``cap.effort_map`` and ``cap.effort_field``.
     4. **Pass-through** of ``mode`` and ``budget_tokens`` for converters

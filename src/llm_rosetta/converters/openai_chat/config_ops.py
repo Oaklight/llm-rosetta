@@ -291,8 +291,6 @@ class OpenAIChatConfigOps(BaseConfigOps):
         if effort:
             if effort == "none":
                 result["mode"] = "disabled"
-            elif effort in ("xhigh", "max"):
-                result["effort"] = "ultra"
             else:
                 result["effort"] = effort
 

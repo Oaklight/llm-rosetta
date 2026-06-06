@@ -1,9 +1,9 @@
 """Tests for shim-driven reasoning helpers — covers #244 scenarios.
 
 Test matrix:
-- Input normalisation: none → disabled, xhigh/max → ultra
-- OpenAI (Chat+Responses): disabled → omit, effort mapping via shim
-- Anthropic: disabled → thinking_disabled, minimal → low, ultra → xhigh
+- Input normalisation: none → disabled, effort values pass through
+- OpenAI (Chat+Responses): disabled → omit, xhigh/max capped to high
+- Anthropic: disabled → thinking_disabled, minimal → low, xhigh/max pass through
 - Google: disabled → thinkingBudget=0, effort skipped (no thinkingLevel)
 - DeepSeek/Volcengine-style: disabled → thinking_disabled
 - Custom shim override
@@ -35,26 +35,11 @@ class TestNormalizeReasoningInput:
         assert result["mode"] == "disabled"
         assert "effort" not in result
 
-    def test_xhigh_becomes_ultra(self):
-        """effort='xhigh' → effort='ultra'."""
-        result = normalize_reasoning_input(cast(ReasoningConfig, {"effort": "xhigh"}))
-        assert result["effort"] == "ultra"
-
-    def test_max_becomes_ultra(self):
-        """effort='max' → effort='ultra'."""
-        result = normalize_reasoning_input(cast(ReasoningConfig, {"effort": "max"}))
-        assert result["effort"] == "ultra"
-
-    def test_standard_values_pass_through(self):
-        """Standard IR values pass through unchanged."""
-        for level in ("minimal", "low", "medium", "high"):
+    def test_effort_values_pass_through(self):
+        """Standard IR effort values pass through unchanged."""
+        for level in ("minimal", "low", "medium", "high", "xhigh", "max"):
             result = normalize_reasoning_input(cast(ReasoningConfig, {"effort": level}))
             assert result["effort"] == level
-
-    def test_ultra_passes_through(self):
-        """'ultra' is already canonical, passes through."""
-        result = normalize_reasoning_input(cast(ReasoningConfig, {"effort": "ultra"}))
-        assert result["effort"] == "ultra"
 
     def test_none_preserves_other_fields(self):
         """none → disabled preserves budget_tokens."""
@@ -81,7 +66,7 @@ class TestNormalizeReasoningInput:
 
 
 class TestOpenAIChatShim:
-    """OpenAI Chat: disabled → omit, minimal → minimal, ultra → high."""
+    """OpenAI Chat: disabled → omit, xhigh/max → high."""
 
     cap = DEFAULT_REASONING_CAPS["openai_chat"]
 
@@ -109,9 +94,17 @@ class TestOpenAIChatShim:
         )
         assert result["reasoning_effort"] == "minimal"
 
-    def test_effort_ultra_maps_to_high(self):
+    def test_effort_xhigh_maps_to_high(self):
         result = apply_reasoning_config(
-            cast(ReasoningConfig, {"effort": "ultra"}),
+            cast(ReasoningConfig, {"effort": "xhigh"}),
+            self.cap,
+            converter_type="openai_chat",
+        )
+        assert result["reasoning_effort"] == "high"
+
+    def test_effort_max_maps_to_high(self):
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "max"}),
             self.cap,
             converter_type="openai_chat",
         )
@@ -142,9 +135,17 @@ class TestOpenAIResponsesShim:
         )
         assert result["reasoning"]["effort"] == "medium"
 
-    def test_ultra_maps_to_high(self):
+    def test_xhigh_maps_to_high(self):
         result = apply_reasoning_config(
-            cast(ReasoningConfig, {"effort": "ultra"}),
+            cast(ReasoningConfig, {"effort": "xhigh"}),
+            self.cap,
+            converter_type="openai_responses",
+        )
+        assert result["reasoning"]["effort"] == "high"
+
+    def test_max_maps_to_high(self):
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "max"}),
             self.cap,
             converter_type="openai_responses",
         )
@@ -155,7 +156,7 @@ class TestOpenAIResponsesShim:
 
 
 class TestAnthropicShim:
-    """Anthropic: disabled → thinking_disabled, minimal → low, ultra → xhigh."""
+    """Anthropic: disabled → thinking_disabled, xhigh/max pass through."""
 
     cap = DEFAULT_REASONING_CAPS["anthropic"]
 
@@ -175,13 +176,21 @@ class TestAnthropicShim:
         )
         assert result["output_config"]["effort"] == "low"
 
-    def test_ultra_maps_to_xhigh(self):
+    def test_xhigh_passes_through(self):
         result = apply_reasoning_config(
-            cast(ReasoningConfig, {"effort": "ultra"}),
+            cast(ReasoningConfig, {"effort": "xhigh"}),
             self.cap,
             converter_type="anthropic",
         )
         assert result["output_config"]["effort"] == "xhigh"
+
+    def test_max_passes_through(self):
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "max"}),
+            self.cap,
+            converter_type="anthropic",
+        )
+        assert result["output_config"]["effort"] == "max"
 
     def test_high_passes_through(self):
         result = apply_reasoning_config(
@@ -267,11 +276,12 @@ class TestCustomShim:
                 "low": "low",
                 "medium": "medium",
                 "high": "high",
-                "ultra": "medium",  # unusual but valid
+                "xhigh": "medium",  # unusual but valid
+                "max": "low",
             },
         )
         result = apply_reasoning_config(
-            cast(ReasoningConfig, {"effort": "ultra"}),
+            cast(ReasoningConfig, {"effort": "xhigh"}),
             custom,
             converter_type="openai_chat",
         )
@@ -287,11 +297,12 @@ class TestCustomShim:
                 "low": "low",
                 "medium": "medium",
                 "high": "high",
-                "ultra": "xhigh",
+                "xhigh": "xhigh",
+                "max": "max",
             },
         )
         result = apply_reasoning_config(
-            cast(ReasoningConfig, {"effort": "ultra"}),
+            cast(ReasoningConfig, {"effort": "max"}),
             custom,
             converter_type="openai_chat",
         )
