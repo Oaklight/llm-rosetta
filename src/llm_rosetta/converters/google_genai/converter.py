@@ -274,7 +274,14 @@ class GoogleGenAIConverter(BaseConverter):
         # Reasoning config
         reasoning = ir_request.get("reasoning")
         if reasoning:
-            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(reasoning)
+            rc_kw = (
+                {"reasoning_cap": ctx.options["reasoning_cap"]}
+                if ctx and "reasoning_cap" in ctx.options
+                else {}
+            )
+            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
+                reasoning, **rc_kw
+            )
             config.update(reasoning_fields)
 
         # Stream config

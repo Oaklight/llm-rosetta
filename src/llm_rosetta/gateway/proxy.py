@@ -377,6 +377,19 @@ def _resolve_target_transforms(
     return shim.from_transforms, shim.to_transforms
 
 
+def _inject_shim_reasoning(ctx: ConversionContext, shim_name: str | None) -> None:
+    """Inject the shim's reasoning capability config into *ctx*.
+
+    If the shim has a ``reasoning`` config, it is stored in
+    ``ctx.options["reasoning_cap"]`` so converters can pick it up.
+    """
+    if shim_name is None:
+        return
+    shim = get_shim(shim_name)
+    if shim is not None and shim.reasoning is not None:
+        ctx.options["reasoning_cap"] = shim.reasoning
+
+
 # ---------------------------------------------------------------------------
 # Core proxy handlers
 # ---------------------------------------------------------------------------
@@ -406,6 +419,9 @@ async def handle_non_streaming(
     ctx.options["metadata_mode"] = "preserve"
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
+
+    # Inject shim reasoning capability so converters use it
+    _inject_shim_reasoning(ctx, target_shim_name)
 
     # 1. Source -> IR
     try:
@@ -680,6 +696,9 @@ async def handle_streaming(
     ctx.options["metadata_mode"] = "preserve"
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
+
+    # Inject shim reasoning capability so converters use it
+    _inject_shim_reasoning(ctx, target_shim_name)
 
     # 1. Source -> IR
     try:

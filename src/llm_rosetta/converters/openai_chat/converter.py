@@ -126,7 +126,12 @@ class OpenAIChatConverter(BaseConverter):
         # 9. Reasoning config
         reasoning = ir_request.get("reasoning")
         if reasoning:
-            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(reasoning)
+            rc_kwargs: dict[str, Any] = {}
+            if ctx and "reasoning_cap" in ctx.options:
+                rc_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
+            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
+                reasoning, **rc_kwargs
+            )
             result.update(reasoning_fields)
 
         # 10. Cache config
