@@ -260,7 +260,7 @@ class TestGroupedProviders:
         assert oai is not None and oai.reasoning is not None
         assert anth.reasoning.effort_field == "output_config.effort"
         assert anth.reasoning.effort_map["xhigh"] == "xhigh"
-        assert oai.reasoning.max_effort == "high"
+        assert oai.reasoning.effort_map["max"] == "max"
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
