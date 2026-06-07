@@ -5,8 +5,8 @@ Request-side (to_transforms)
 ``_normalize_thinking`` converts the ``thinking`` block so that Argo accepts it:
 
 - Models backed by the **new Vertex AI endpoint** (e.g. ``claudeopus47``) require
-  ``thinking.type = "adaptive"`` and reject ``"enabled"``.  For these, the block
-  is passed through unchanged.
+  ``thinking.type = "adaptive"`` and reject ``"enabled"``.  For these,
+  ``"enabled"`` is converted to ``"adaptive"``, and other types pass through.
 
 - All other models (e.g. ``claudehaiku45``) only accept ``"enabled"`` /
   ``"disabled"`` and reject ``"adaptive"``.  For these, ``"adaptive"`` is
@@ -64,7 +64,8 @@ def _normalize_thinking(body: dict[str, Any]) -> dict[str, Any]:
     """Normalize the thinking block for Argo compatibility.
 
     For models that require ``adaptive`` (see ``_ADAPTIVE_THINKING_MODELS``),
-    the block is returned unchanged.  For all other models, ``"adaptive"`` is
+    ``"enabled"`` is converted to ``"adaptive"`` because their Vertex AI-backed
+    endpoint rejects ``"enabled"``.  For all other models, ``"adaptive"`` is
     converted to ``"enabled"`` with a ``budget_tokens`` value that satisfies
     Argo's constraint ``max_tokens > budget_tokens >= 1024``.
 
@@ -77,12 +78,17 @@ def _normalize_thinking(body: dict[str, Any]) -> dict[str, Any]:
     thinking = body.get("thinking")
     if not isinstance(thinking, dict):
         return body
-    if thinking.get("type") != "adaptive":
+
+    thinking_type = thinking.get("type")
+    model = body.get("model", "")
+
+    # Models that require adaptive: convert enabled → adaptive.
+    if model in _ADAPTIVE_THINKING_MODELS:
+        if thinking_type == "enabled":
+            thinking["type"] = "adaptive"
         return body
 
-    # Models that natively support adaptive — pass through unchanged.
-    model = body.get("model", "")
-    if model in _ADAPTIVE_THINKING_MODELS:
+    if thinking_type != "adaptive":
         return body
 
     # Convert adaptive → enabled for models that only accept enabled/disabled.

@@ -153,16 +153,38 @@ class TestNormalizeThinking:
         assert result["max_tokens"] > budget
 
     def test_opus47_enabled_rejected_in_production(self):
-        """Regression: opus47 received enabled → Argo 400. Must stay adaptive."""
-        # Reproduces the 2026-05-16 error: "'thinking.type.enabled' is not
-        # supported for this model. Use 'thinking.type.adaptive'."
+        """Regression: opus47 received enabled → Argo 400. Must convert to adaptive."""
+        # Reproduces the 2026-06-07 error (#254): Claude CLI sends
+        # thinking.type=enabled, but Argo's Vertex endpoint for opus47 only
+        # accepts adaptive.
         body: dict = {
             "model": "claudeopus47",
             "max_tokens": 8192,
-            "thinking": {"type": "adaptive"},
+            "thinking": {"type": "enabled", "budget_tokens": 4096},
         }
         result = _normalize_thinking(body)
         assert result["thinking"]["type"] == "adaptive"
+        # budget_tokens should be preserved through the conversion
+        assert result["thinking"]["budget_tokens"] == 4096
+
+    def test_opus47_enabled_without_budget_converted(self):
+        """enabled without budget_tokens is also converted to adaptive."""
+        body: dict = {
+            "model": "claudeopus47",
+            "max_tokens": 8192,
+            "thinking": {"type": "enabled"},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "adaptive"
+
+    def test_opus47_disabled_unchanged(self):
+        """disabled should pass through even for adaptive-only models."""
+        body: dict = {
+            "model": "claudeopus47",
+            "thinking": {"type": "disabled"},
+        }
+        result = _normalize_thinking(body)
+        assert result["thinking"]["type"] == "disabled"
 
 
 # ---------------------------------------------------------------------------
