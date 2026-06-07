@@ -10,7 +10,7 @@ nested messages. The converter handles this structural difference.
 """
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
@@ -420,7 +420,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
+            provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -437,7 +437,7 @@ class OpenAIResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Responses API usage."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get("input_tokens") or 0,
@@ -452,10 +452,10 @@ class OpenAIResponsesConverter(BaseConverter):
         if p_output_details:
             if "reasoning_tokens" in p_output_details:
                 usage_info["reasoning_tokens"] = p_output_details["reasoning_tokens"]
-        return usage_info
+        return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Responses API usage dict from IR usage."""
         return {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -1037,7 +1037,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=cast(UsageInfo, self._build_ir_usage(usage)),
+                    usage=self._build_ir_usage(usage),
                 )
             )
 

@@ -16,7 +16,7 @@ Also maintains backward compatibility with the old to_provider/from_provider API
 
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 
@@ -502,7 +502,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
+            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)
 
         return provider_response
 
@@ -529,7 +529,7 @@ class GoogleGenAIConverter(BaseConverter):
                 config["tool_config"] = tc_p
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Google usage metadata."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get(
@@ -576,10 +576,10 @@ class GoogleGenAIConverter(BaseConverter):
                 else candidates_details
             )
 
-        return usage_info
+        return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Google usage metadata dict from IR usage."""
         usage_metadata: dict[str, Any] = {
             "promptTokenCount": ir_usage.get("prompt_tokens") or 0,

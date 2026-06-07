@@ -15,7 +15,7 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
@@ -362,7 +362,7 @@ class AnthropicConverter(BaseConverter):
 
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}
-        provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
+        provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
@@ -403,7 +403,7 @@ class AnthropicConverter(BaseConverter):
                 )
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Anthropic usage."""
         input_tokens = p_usage.get("input_tokens") or 0
         output_tokens = p_usage.get("output_tokens") or 0
@@ -416,10 +416,10 @@ class AnthropicConverter(BaseConverter):
             usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
         if "cache_creation_input_tokens" in p_usage:
             usage_info["cache_creation_tokens"] = p_usage["cache_creation_input_tokens"]
-        return usage_info
+        return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Anthropic usage dict from IR usage."""
         usage: dict[str, Any] = {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -618,22 +618,14 @@ class AnthropicConverter(BaseConverter):
 
         usage = message.get("usage")
         if usage:
-            input_tokens = usage.get("input_tokens") or 0
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": input_tokens,
-                "completion_tokens": 0,
-                "total_tokens": input_tokens,
-            }
-            if "cache_read_input_tokens" in usage:
-                usage_info["cache_read_tokens"] = usage["cache_read_input_tokens"]
-            if "cache_creation_input_tokens" in usage:
-                usage_info["cache_creation_tokens"] = usage[
-                    "cache_creation_input_tokens"
-                ]
+            # message_start.usage reports initial output_tokens (often 1);
+            # zero it out here — the real output count comes from message_delta.
+            start_usage = dict(usage)
+            start_usage["output_tokens"] = 0
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=cast(UsageInfo, usage_info),
+                    usage=self._build_ir_usage(start_usage),
                 )
             )
 
@@ -766,23 +758,10 @@ class AnthropicConverter(BaseConverter):
         # Emit UsageEvent before FinishEvent
         usage = chunk.get("usage")
         if usage:
-            input_tokens = usage.get("input_tokens") or 0
-            output_tokens = usage.get("output_tokens") or 0
-            usage_info: dict[str, Any] = {
-                "prompt_tokens": input_tokens,
-                "completion_tokens": output_tokens,
-                "total_tokens": input_tokens + output_tokens,
-            }
-            if "cache_read_input_tokens" in usage:
-                usage_info["cache_read_tokens"] = usage["cache_read_input_tokens"]
-            if "cache_creation_input_tokens" in usage:
-                usage_info["cache_creation_tokens"] = usage[
-                    "cache_creation_input_tokens"
-                ]
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=cast(UsageInfo, usage_info),
+                    usage=self._build_ir_usage(usage),
                 )
             )
 

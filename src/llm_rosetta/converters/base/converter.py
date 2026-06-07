@@ -6,13 +6,13 @@ Defines the basic interface for converters (abstract base class, functional doma
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir.extensions import ExtensionItem
 from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
-from ...types.ir.response import IRResponse
+from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import IRStreamEvent
 from ...types.ir.validation import validate_ir_request, validate_ir_response
 from .context import ConversionContext, StreamContext
@@ -297,7 +297,7 @@ class BaseConverter(ABC):
 
     @staticmethod
     @abstractmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
         """Convert provider usage dict to IR usage format.
 
         Called by ``response_from_provider`` to normalize provider-specific
@@ -308,7 +308,7 @@ class BaseConverter(ABC):
 
     @staticmethod
     @abstractmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Convert IR usage dict to provider-specific usage format.
 
         Called by ``response_to_provider`` to map IR token usage fields

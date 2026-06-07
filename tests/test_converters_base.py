@@ -10,7 +10,7 @@ Tests for LLM-Rosetta Converters Base Module
 """
 
 from abc import ABC
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Union, cast
 
 import pytest
@@ -53,6 +53,7 @@ from llm_rosetta.types.ir import (
     ToolResultPart,
     UserMessage,
 )
+from llm_rosetta.types.ir.response import UsageInfo
 from llm_rosetta.types.ir.stream import IRStreamEvent
 
 # ============================================================================
@@ -474,12 +475,12 @@ class MockConverter(BaseConverter):
         return {}
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
-        return p_usage
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+        return cast(UsageInfo, p_usage)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
-        return ir_usage
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+        return dict(ir_usage)
 
     def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
         return tools

@@ -6,7 +6,7 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
@@ -148,7 +148,7 @@ class OpenAIChatConverter(BaseConverter):
         return result, ctx.warnings
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from OpenAI Chat usage."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get("prompt_tokens") or 0,
@@ -167,7 +167,7 @@ class OpenAIChatConverter(BaseConverter):
                 usage_info["reasoning_tokens"] = p_completion_details[
                     "reasoning_tokens"
                 ]
-        return usage_info
+        return cast(UsageInfo, usage_info)
 
     def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
         """Convert provider tool definitions to IR."""
@@ -474,7 +474,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)  # ty: ignore[invalid-argument-type]
+            provider_response["usage"] = self._build_provider_usage(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -485,7 +485,7 @@ class OpenAIChatConverter(BaseConverter):
         return provider_response
 
     @staticmethod
-    def _build_provider_usage(ir_usage: dict[str, Any]) -> dict[str, Any]:
+    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build OpenAI Chat usage dict from IR usage."""
         usage: dict[str, Any] = {
             "prompt_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -749,7 +749,7 @@ class OpenAIChatConverter(BaseConverter):
         events.append(
             UsageEvent(
                 type="usage",
-                usage=cast(UsageInfo, self._build_ir_usage(usage)),
+                usage=self._build_ir_usage(usage),
             )
         )
 
@@ -1013,5 +1013,5 @@ class OpenAIChatConverter(BaseConverter):
             return {}
         return {
             "choices": [],
-            "usage": self._build_provider_usage(usage),  # ty: ignore[invalid-argument-type]
+            "usage": self._build_provider_usage(usage),
         }
