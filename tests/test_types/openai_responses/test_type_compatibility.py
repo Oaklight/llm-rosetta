@@ -278,8 +278,7 @@ class TestRequestParams:
             "user": "user_abc",
             "store": True,
             "service_tier": "auto",
-            "reasoning": {"enabled": True, "max_tokens": 500},
-            "reasoning_effort": "high",
+            "reasoning": {"effort": "high", "enabled": True, "max_tokens": 500},
         }
         assert request["instructions"] == "You are a helpful assistant."
         assert request["metadata"]["session"] == "test_123"

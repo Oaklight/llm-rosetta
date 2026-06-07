@@ -14,7 +14,10 @@ class TestBuildProviderInfo:
         info = build_provider_info("argo_openai_chat", {})
 
         assert info.auth_headers() == {"Authorization": "Bearer pding"}
-        assert info.upstream_url("gpt5") == "https://apps.inside.anl.gov/argoapi/v1/chat/completions"
+        assert (
+            info.upstream_url("gpt5")
+            == "https://apps.inside.anl.gov/argoapi/v1/chat/completions"
+        )
 
     def test_argo_anthropic_uses_x_api_key_auth(self, monkeypatch):
         load_providers()
@@ -26,4 +29,7 @@ class TestBuildProviderInfo:
             "x-api-key": "pding",
             "anthropic-version": "2023-06-01",
         }
-        assert info.upstream_url("claudeopus47") == "https://apps.inside.anl.gov/argoapi/v1/messages"
+        assert (
+            info.upstream_url("claudeopus47")
+            == "https://apps.inside.anl.gov/argoapi/v1/messages"
+        )
