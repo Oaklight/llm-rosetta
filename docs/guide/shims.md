@@ -104,7 +104,7 @@ A straightforward OpenAI-compatible shim. The only non-standard behaviour is the
 
 This shim has two additional transforms to handle Argo's quirks:
 
-- **`to_transforms` — thinking normalization**: Argo's `/v1/messages` endpoint only accepts `"enabled"` or `"disabled"` for the `thinking.type` field. If a request contains `thinking.type = "adaptive"` (which is valid in the standard Anthropic API), this transform rewrites it to `"enabled"` before the request is forwarded.
+- **Model-level `thinking_type` override**: Argo's Vertex AI-backed models (e.g. `claudeopus47`) require `thinking.type = "adaptive"` while older models require `"enabled"`. This is handled declaratively via `model_overrides` in the reasoning config — no transform needed. The gateway resolves the upstream model ID (post-alias) and applies the correct `thinking_type` automatically.
 
 - **`from_transforms` — OpenAI response normalization**: Argo may return an OpenAI Chat Completions response body from its `/v1/messages` endpoint. This transform detects that case and converts the response to Anthropic Messages format before the `anthropic` converter sees it, so the rest of the pipeline behaves normally.
 
@@ -136,7 +136,8 @@ Since v0.6.8, provider shims can declare how they handle reasoning effort and di
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `disabled` | `"omit"` \| `"thinking_disabled"` | `"omit"` | How to serialize `mode: "disabled"` — omit the field entirely, or emit a provider-specific disabled marker |
-| `effort_field` | `"reasoning_effort"` \| `"thinking.effort"` \| ... | `"reasoning_effort"` | Where the provider expects the effort value in the request body |
+| `effort_field` | `"reasoning_effort"` \| `"output_config.effort"` \| ... | `"reasoning_effort"` | Where the provider expects the effort value in the request body |
+| `thinking_type` | `"enabled"` \| `"adaptive"` \| `null` | `null` | Force `thinking.type` to this value; `null` means no override |
 | `max_effort` | effort level or `null` | `null` | Highest effort level this shim should emit; higher values are clamped |
 | `effort_map` | `{IR_level: provider_string}` | identity | Mapping from IR effort levels to provider-specific effort strings |
 
@@ -149,7 +150,7 @@ default_base_url: https://api.anthropic.com
 default_api_key_env: ANTHROPIC_API_KEY
 reasoning:
   disabled: thinking_disabled
-  effort_field: thinking.effort
+  effort_field: output_config.effort
   effort_map:
     minimal: low
     low: low
@@ -177,9 +178,26 @@ reasoning:
     max: high
 ```
 
+### Per-Model Overrides (`model_overrides`)
+
+When models under the same provider have different reasoning capabilities, use `model_overrides` to declare per-model config. Each override inherits provider-level defaults for unset fields, keyed by **upstream model ID** (post-alias):
+
+```yaml
+name: argo_anthropic
+base: anthropic
+reasoning:
+  thinking_type: enabled       # default for most models
+  effort_map: { ... }
+  model_overrides:
+    claudeopus47:
+      thinking_type: adaptive  # Vertex AI requires adaptive
+```
+
+The gateway resolves the upstream model ID after alias resolution (e.g. `argo:claude-opus-4.7` → `claudeopus47`) and applies the matching override if found.
+
 ### How It Works
 
-1. The gateway injects the shim's `ReasoningCapability` into `ConversionContext` before conversion
+1. The gateway injects the shim's `ReasoningCapability` into `ConversionContext` before conversion. If the upstream model has a `model_overrides` entry, that override takes precedence
 2. All four converters call the shared `apply_reasoning_config()` helper, which:
     - Looks up the IR effort in the shim's `effort_map`
     - Clamps to `max_effort` if set

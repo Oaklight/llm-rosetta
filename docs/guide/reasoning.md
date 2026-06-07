@@ -343,7 +343,8 @@ Since v0.6.8, effort mapping is **declarative** via provider shims rather than h
 - **`effort_map`** — maps each IR effort level to the provider-specific string (or omits unsupported levels)
 - **`max_effort`** — optional cap; efforts above this are clamped down
 - **`disabled`** — how `mode: "disabled"` is serialized (`"omit"` or `"thinking_disabled"`)
-- **`effort_field`** — where the provider expects the effort value (`"reasoning_effort"`, `"thinking.effort"`, etc.)
+- **`effort_field`** — where the provider expects the effort value (`"reasoning_effort"`, `"output_config.effort"`, etc.)
+- **`thinking_type`** — force `thinking.type` to `"enabled"` or `"adaptive"` (per-model overrides via `model_overrides`)
 
 See the [Provider Shims](shims.md#reasoning-configuration) guide for details on declaring custom reasoning configs.
 
