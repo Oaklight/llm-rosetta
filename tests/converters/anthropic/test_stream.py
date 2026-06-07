@@ -10,6 +10,7 @@ from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
+    IRStreamEvent,
     ReasoningDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
@@ -1397,7 +1398,7 @@ class TestStreamBlockTypeTransition:
         self.converter = AnthropicConverter()
 
     def _run_to_provider(
-        self, events: list[dict[str, Any]]
+        self, events: list[IRStreamEvent]
     ) -> list[dict[str, Any]]:
         """Run a sequence of IR events through to_provider with context."""
         ctx = StreamContext()
@@ -1413,7 +1414,7 @@ class TestStreamBlockTypeTransition:
     def test_reasoning_then_text_emits_block_boundary(self):
         """ReasoningDelta -> TextDelta without block_index gets synthetic
         content_block_stop + content_block_start between them."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {"type": "reasoning_delta", "reasoning": "Let me think..."},
             {"type": "reasoning_delta", "reasoning": " about this."},
@@ -1457,7 +1458,7 @@ class TestStreamBlockTypeTransition:
 
     def test_text_then_reasoning_emits_block_boundary(self):
         """TextDelta -> ReasoningDelta gets proper block transition."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {"type": "text_delta", "text": "Hello "},
             {"type": "reasoning_delta", "reasoning": "Wait, let me reconsider..."},
@@ -1480,7 +1481,7 @@ class TestStreamBlockTypeTransition:
 
     def test_reasoning_then_tool_emits_block_boundary(self):
         """ReasoningDelta -> ToolCallStart gets proper block transition."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {"type": "reasoning_delta", "reasoning": "I need to call a tool..."},
             {
@@ -1513,7 +1514,7 @@ class TestStreamBlockTypeTransition:
 
     def test_text_then_tool_emits_block_boundary(self):
         """TextDelta -> ToolCallStart gets proper block transition."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {"type": "text_delta", "text": "Let me check..."},
             {
@@ -1538,7 +1539,7 @@ class TestStreamBlockTypeTransition:
 
     def test_same_type_consecutive_no_extra_boundary(self):
         """Multiple TextDeltas without block_index don't create extra boundaries."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {"type": "text_delta", "text": "Hello "},
             {"type": "text_delta", "text": "world"},
@@ -1563,7 +1564,7 @@ class TestStreamBlockTypeTransition:
 
     def test_explicit_block_index_bypasses_type_tracking(self):
         """Events with explicit block_index use that index regardless of type."""
-        events: list[dict[str, Any]] = [
+        events: list[IRStreamEvent] = [
             {"type": "stream_start", "response_id": "test-123", "model": "test"},
             {
                 "type": "reasoning_delta",
