@@ -88,7 +88,7 @@ LLM-Rosetta 内置 14 个提供商 shim：
 | `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、`presence_penalty`、`frequency_penalty`、`logprobs`、`top_logprobs`、`logit_bias`、`seed` |
 | `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
-| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi/` | — | thinking 归一化、OpenAI 响应格式归一化 |
+| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi` | — | OpenAI 响应格式归一化 |
 
 ## 推理配置
 
@@ -101,6 +101,7 @@ LLM-Rosetta 内置 14 个提供商 shim：
 | `disabled` | `"omit"` \| `"thinking_disabled"` \| `"thinking_budget_zero"` | `mode: disabled` 时的序列化策略：`omit` 不发送任何参数，`thinking_disabled` 发送 `{"thinking": {"type": "disabled"}}`，`thinking_budget_zero` 发送 `{"thinking_config": {"thinking_budget": 0}}` |
 | `effort_field` | `"reasoning_effort"` \| `"reasoning.effort"` \| `"output_config.effort"` \| `"thinking_level"` \| `"none"` | effort 值在提供商请求中的序列化位置；`"none"` 表示提供商不支持 effort |
 | `max_effort` | `EffortLevel` \| `null` | 最高允许的归一化 effort 级别；超过此值的 effort 会被截断到该级别 |
+| `thinking_type` | `"enabled"` \| `"adaptive"` \| `null` | 强制 `thinking.type` 为该值；`null` 表示不覆盖 |
 | `effort_map` | `dict[str, str]` | 从归一化 IR effort 到提供商特定 effort 字符串的映射 |
 
 ### 配置示例
@@ -138,11 +139,28 @@ LLM-Rosetta 内置 14 个提供商 shim：
         max: high
     ```
 
+### 按模型覆盖（`model_overrides`）
+
+当同一提供商下不同模型有不同推理能力时，使用 `model_overrides` 声明按模型的配置。每个覆盖项继承提供商级默认值，按**上游模型 ID**（别名解析后）为键：
+
+```yaml
+name: argo_anthropic
+base: anthropic
+reasoning:
+  thinking_type: enabled       # 大多数模型的默认值
+  effort_map: { ... }
+  model_overrides:
+    claudeopus47:
+      thinking_type: adaptive  # Vertex AI 要求 adaptive
+```
+
+网关在别名解析后确定上游模型 ID（如 `argo:claude-opus-4.7` → `claudeopus47`），并应用匹配的覆盖配置。
+
 ### 运行机制
 
 当网关代理处理请求时：
 
-1. `_inject_shim_reasoning()` 从目标提供商的 shim 中提取 `ReasoningCapability`，注入转换上下文的 `ctx.options["reasoning_cap"]`
+1. `_inject_shim_reasoning()` 从目标提供商的 shim 中提取 `ReasoningCapability`，注入转换上下文的 `ctx.options["reasoning_cap"]`。如果上游模型有 `model_overrides` 条目，则使用该覆盖配置
 2. 各转换器的 `request_to_provider` 将 `reasoning_cap` 传给 `ir_reasoning_config_to_p`
 3. `ir_reasoning_config_to_p` 委托给 `apply_reasoning_config()`，按 shim 配置执行：
     - 输入归一化（`none` → disabled）
@@ -167,7 +185,7 @@ LLM-Rosetta 内置 14 个提供商 shim：
 
 该 shim 额外附带两个 transform，用于处理 Argo 的特殊行为：
 
-- **`to_transforms` —— thinking 归一化**：Argo 的 `/v1/messages` 端点只接受 `"enabled"` 或 `"disabled"` 作为 `thinking.type` 的值。如果请求中包含 `thinking.type = "adaptive"`（这在标准 Anthropic API 中是合法值），该 transform 会在转发前将其改写为 `"enabled"`。
+- **模型级 `thinking_type` 覆盖**：Argo 的 Vertex AI 后端模型（如 `claudeopus47`）要求 `thinking.type = "adaptive"`，而旧模型要求 `"enabled"`。此差异通过推理配置中的 `model_overrides` 声明式处理，无需 transform。网关在别名解析后自动应用正确的 `thinking_type`。
 
 - **`from_transforms` —— OpenAI 响应格式归一化**：Argo 可能从其 `/v1/messages` 端点返回 OpenAI Chat Completions 格式的响应体。该 transform 会检测这种情况，并在 `anthropic` 转换器处理之前将响应转换为 Anthropic Messages 格式，从而保证后续管线正常运行。
 

@@ -89,7 +89,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 ### 修复
 
 - **Argo Anthropic 响应归一化**：检测并转换 Argo `/v1/messages` 端点返回的 OpenAI Chat 格式响应为 Anthropic Messages 格式
-- **Argo Anthropic 模型感知 thinking**：`_normalize_thinking` 区分需要 `adaptive`（如 `claudeopus47`）和需要转换为 `enabled` 的模型
+- **模型级 `thinking_type` shim 推理配置**（[#254](https://github.com/Oaklight/llm-rosetta/issues/254)、[#256](https://github.com/Oaklight/llm-rosetta/pull/256)）：`ReasoningCapability` 新增 `thinking_type` 字段，`ProviderShim` 新增 `model_reasoning` 按上游模型 ID 覆盖。Argo `claudeopus47 → thinking_type: adaptive` 通过 `model_overrides` 声明。`_normalize_thinking` transform 退役——thinking type 归一化现为声明式
 - **行内确认 i18n 和 onclick 恢复**：补充缺失的 `confirm.sure`/`confirm.yes` 翻译；确认超时回退后恢复原始 onclick 处理函数
 - **反向代理缓存**：所有 admin API 响应添加 `Cache-Control: no-cache, no-store, must-revalidate`；测试轮询改用 POST
 - **登录遮罩循环**：防止登录遮罩关闭密码管理器的自动填充弹窗
