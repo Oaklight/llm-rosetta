@@ -7,7 +7,7 @@ conversion between IR and OpenAI Chat Completions API format.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from ...types.ir import (
     ExtensionItem,
@@ -18,7 +18,7 @@ from ...types.ir import (
     is_tool_call_part,
 )
 from ...types.ir.request import IRRequest
-from ...types.ir.response import IRResponse
+from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -749,11 +749,7 @@ class OpenAIChatConverter(BaseConverter):
         events.append(
             UsageEvent(
                 type="usage",
-                usage={
-                    "prompt_tokens": usage.get("prompt_tokens") or 0,
-                    "completion_tokens": usage.get("completion_tokens") or 0,
-                    "total_tokens": usage.get("total_tokens") or 0,
-                },
+                usage=cast(UsageInfo, self._build_ir_usage(usage)),
             )
         )
 
@@ -866,11 +862,7 @@ class OpenAIChatConverter(BaseConverter):
                     "model": context.model,
                     "created": context.created,
                     "choices": [],
-                    "usage": {
-                        "prompt_tokens": usage.get("prompt_tokens") or 0,
-                        "completion_tokens": usage.get("completion_tokens") or 0,
-                        "total_tokens": usage.get("total_tokens") or 0,
-                    },
+                    "usage": self._build_provider_usage(usage),
                 }
             return {}
         return {
@@ -1021,9 +1013,5 @@ class OpenAIChatConverter(BaseConverter):
             return {}
         return {
             "choices": [],
-            "usage": {
-                "prompt_tokens": usage.get("prompt_tokens") or 0,
-                "completion_tokens": usage.get("completion_tokens") or 0,
-                "total_tokens": usage.get("total_tokens") or 0,
-            },
+            "usage": self._build_provider_usage(usage),  # ty: ignore[invalid-argument-type]
         }

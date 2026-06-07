@@ -16,7 +16,7 @@ Key Anthropic differences from OpenAI:
 
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, cast
 
 from ...types.ir import (
     ExtensionItem,
@@ -26,7 +26,7 @@ from ...types.ir import (
     is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
-from ...types.ir.response import IRResponse
+from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -414,6 +414,8 @@ class AnthropicConverter(BaseConverter):
         }
         if "cache_read_input_tokens" in p_usage:
             usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
+        if "cache_creation_input_tokens" in p_usage:
+            usage_info["cache_creation_tokens"] = p_usage["cache_creation_input_tokens"]
         return usage_info
 
     @staticmethod
@@ -425,6 +427,8 @@ class AnthropicConverter(BaseConverter):
         }
         if "cache_read_tokens" in ir_usage:
             usage["cache_read_input_tokens"] = ir_usage["cache_read_tokens"]
+        if "cache_creation_tokens" in ir_usage:
+            usage["cache_creation_input_tokens"] = ir_usage["cache_creation_tokens"]
         return usage
 
     def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
@@ -614,14 +618,22 @@ class AnthropicConverter(BaseConverter):
 
         usage = message.get("usage")
         if usage:
+            input_tokens = usage.get("input_tokens") or 0
+            usage_info: dict[str, Any] = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": 0,
+                "total_tokens": input_tokens,
+            }
+            if "cache_read_input_tokens" in usage:
+                usage_info["cache_read_tokens"] = usage["cache_read_input_tokens"]
+            if "cache_creation_input_tokens" in usage:
+                usage_info["cache_creation_tokens"] = usage[
+                    "cache_creation_input_tokens"
+                ]
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage={
-                        "prompt_tokens": usage.get("input_tokens") or 0,
-                        "completion_tokens": 0,
-                        "total_tokens": usage.get("input_tokens") or 0,
-                    },
+                    usage=cast(UsageInfo, usage_info),
                 )
             )
 
@@ -756,14 +768,21 @@ class AnthropicConverter(BaseConverter):
         if usage:
             input_tokens = usage.get("input_tokens") or 0
             output_tokens = usage.get("output_tokens") or 0
+            usage_info: dict[str, Any] = {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
+                "total_tokens": input_tokens + output_tokens,
+            }
+            if "cache_read_input_tokens" in usage:
+                usage_info["cache_read_tokens"] = usage["cache_read_input_tokens"]
+            if "cache_creation_input_tokens" in usage:
+                usage_info["cache_creation_tokens"] = usage[
+                    "cache_creation_input_tokens"
+                ]
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage={
-                        "prompt_tokens": input_tokens,
-                        "completion_tokens": output_tokens,
-                        "total_tokens": input_tokens + output_tokens,
-                    },
+                    usage=cast(UsageInfo, usage_info),
                 )
             )
 
@@ -806,6 +825,7 @@ class AnthropicConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → message_start."""
         input_tokens = 0
+        p_usage: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0}
         if context is not None:
             context.response_id = event["response_id"]
             context.model = event["model"]
@@ -813,6 +833,15 @@ class AnthropicConverter(BaseConverter):
             # Use real input_tokens from buffered usage if available
             if context.pending_usage is not None:
                 input_tokens = context.pending_usage.get("prompt_tokens") or 0
+                p_usage["input_tokens"] = input_tokens
+                if "cache_read_tokens" in context.pending_usage:
+                    p_usage["cache_read_input_tokens"] = context.pending_usage[
+                        "cache_read_tokens"
+                    ]
+                if "cache_creation_tokens" in context.pending_usage:
+                    p_usage["cache_creation_input_tokens"] = context.pending_usage[
+                        "cache_creation_tokens"
+                    ]
         return {
             "type": AnthropicEventType.MESSAGE_START,
             "message": {
@@ -822,7 +851,7 @@ class AnthropicConverter(BaseConverter):
                 "model": event["model"],
                 "content": [],
                 "stop_reason": None,
-                "usage": {"input_tokens": input_tokens, "output_tokens": 0},
+                "usage": p_usage,
             },
         }
 

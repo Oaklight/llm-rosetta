@@ -45,6 +45,9 @@ class UsageInfo(TypedDict):
         dict[str, int]
     ]  # 输出详细统计 Output details (如推理Token数 e.g. reasoning token count)
     cache_read_tokens: NotRequired[int]  # 缓存读取Token数 Cache read token count
+    cache_creation_tokens: NotRequired[
+        int
+    ]  # 缓存创建Token数 Cache creation token count (Anthropic)
 
 
 class FinishReason(TypedDict):

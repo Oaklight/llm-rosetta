@@ -21,7 +21,7 @@ from ...types.ir import (
     is_reasoning_part,
 )
 from ...types.ir.request import IRRequest
-from ...types.ir.response import IRResponse
+from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -1037,11 +1037,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage={
-                        "prompt_tokens": usage.get("input_tokens") or 0,
-                        "completion_tokens": usage.get("output_tokens") or 0,
-                        "total_tokens": usage.get("total_tokens") or 0,
-                    },
+                    usage=cast(UsageInfo, self._build_ir_usage(usage)),
                 )
             )
 
@@ -1200,12 +1196,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 context.pending_response = None
                 # Merge any usage that arrived after FinishEvent
                 if context.pending_usage is not None and "usage" not in resp:
-                    resp["usage"] = {
-                        "input_tokens": context.pending_usage.get("prompt_tokens") or 0,
-                        "output_tokens": context.pending_usage.get("completion_tokens")
-                        or 0,
-                        "total_tokens": context.pending_usage.get("total_tokens") or 0,
-                    }
+                    resp["usage"] = self._build_finish_usage(context.pending_usage)
                 return {
                     "type": ResponsesEventType.RESPONSE_COMPLETED,
                     "response": resp,

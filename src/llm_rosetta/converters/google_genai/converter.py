@@ -986,6 +986,12 @@ class GoogleGenAIConverter(BaseConverter):
         if thoughts is not None:
             usage_info["reasoning_tokens"] = thoughts
 
+        cached = usage.get("cached_content_token_count") or usage.get(
+            "cachedContentTokenCount"
+        )
+        if cached is not None:
+            usage_info["cache_read_tokens"] = cached
+
         events.append(
             UsageEvent(
                 type="usage",
@@ -1133,6 +1139,8 @@ class GoogleGenAIConverter(BaseConverter):
             }
             if "reasoning_tokens" in usage:
                 usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+            if "cache_read_tokens" in usage:
+                usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
             finish_chunk["usageMetadata"] = usage_metadata
 
         chunks.append(finish_chunk)
@@ -1161,6 +1169,8 @@ class GoogleGenAIConverter(BaseConverter):
 
         if "reasoning_tokens" in usage:
             usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+        if "cache_read_tokens" in usage:
+            usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
 
         return {"usageMetadata": usage_metadata}
 
