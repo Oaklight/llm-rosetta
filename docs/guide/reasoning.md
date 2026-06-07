@@ -25,9 +25,9 @@ How hard the model should think. Not all providers support the same granularity:
 
 | Provider | Parameter | Accepted Values |
 |----------|-----------|-----------------|
-| **Anthropic** | `thinking.effort` | `"low"`, `"medium"`, `"high"`, `"max"` (requires `type: "adaptive"`) |
+| **Anthropic** | `thinking.effort` | `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` (requires `type: "adaptive"`) |
 | **OpenAI Chat** | `reasoning_effort` | `"low"`, `"medium"`, `"high"` |
-| **OpenAI Responses** | `reasoning.effort` | `"low"`, `"medium"`, `"high"` |
+| **OpenAI Responses** | `reasoning.effort` | `"none"`, `"low"`, `"medium"`, `"high"`, `"xhigh"`, `"max"` (input; normalized by IR) |
 | **Google GenAI** | `thinking_config.thinking_level` | `"minimal"`, `"low"`, `"medium"`, `"high"` |
 
 ### Budget Tokens
@@ -57,8 +57,10 @@ LLM-Rosetta defines a unified `ReasoningConfig` TypedDict with three fields:
 ```python
 class ReasoningConfig(TypedDict, total=False):
     mode: Literal["auto", "enabled", "disabled"]
-    effort: Literal["minimal", "low", "medium", "high", "max"]
+    effort: ReasoningEffortLevel  # See effort ladder below
     budget_tokens: int   # Max tokens for reasoning
+
+ReasoningEffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 ```
 
 All three fields are optional. You can set any combination depending on what you want to control.
@@ -66,8 +68,20 @@ All three fields are optional. You can set any combination depending on what you
 ### Field Semantics
 
 - **`mode`** -- Controls reasoning behavior: `"enabled"` (always on), `"disabled"` (off), or `"auto"` (let the model decide). Omit to let the provider use its default behavior.
-- **`effort`** -- How much effort the model should put into reasoning. This is a cross-cutting concern independent of the mode.
+- **`effort`** -- How much effort the model should put into reasoning. Six levels from `"minimal"` to `"max"`. This is a cross-cutting concern independent of the mode.
 - **`budget_tokens`** -- Hard cap on reasoning token count. Only meaningful for providers that support it (Anthropic, Google).
+
+### Input Normalization
+
+The Responses API accepts non-standard effort values. These are normalized on input:
+
+| Input value | Normalized to |
+|-------------|---------------|
+| `"none"` | `mode: "disabled"` (not an effort level) |
+| `"xhigh"` | `effort: "xhigh"` (first-class IR level) |
+| `"max"` | `effort: "max"` (first-class IR level) |
+
+All other standard values (`"minimal"`, `"low"`, `"medium"`, `"high"`) pass through unchanged.
 
 ## IR-to-Provider Mapping
 
@@ -261,7 +275,7 @@ ir_request: IRRequest = {
 
 ## Effort Level Mapping
 
-The IR supports five effort levels. Not all providers accept every value:
+The IR supports six effort levels. Not all providers accept every value — the shim's `effort_map` controls the mapping:
 
 | IR effort | Anthropic | OpenAI Chat | OpenAI Responses | Google GenAI |
 |-----------|-----------|-------------|------------------|-------------|
@@ -269,15 +283,17 @@ The IR supports five effort levels. Not all providers accept every value:
 | `"low"` | `"low"` | `"low"` | `"low"` | `"low"` |
 | `"medium"` | `"medium"` | `"medium"` | `"medium"` | `"medium"` |
 | `"high"` | `"high"` | `"high"` | `"high"` | `"high"` |
+| `"xhigh"` | `"xhigh"` | `"high"` :material-alert: | `"high"` :material-alert: | `"high"` :material-alert: |
 | `"max"` | `"max"` | `"high"` :material-alert: | `"high"` :material-alert: | `"high"` :material-alert: |
 
-:material-alert: = downgraded with a warning
+:material-alert: = downgraded via shim `effort_map`
 
 !!! warning "Lossy conversions"
     - `"minimal"` is downgraded to `"low"` for Anthropic, OpenAI Chat, and OpenAI Responses (they do not support a "minimal" level).
-    - `"max"` is downgraded to `"high"` for OpenAI Chat, OpenAI Responses, and Google GenAI (they do not support a "max" level).
+    - `"xhigh"` and `"max"` are downgraded to `"high"` for OpenAI Chat, OpenAI Responses, and Google GenAI.
+    - Anthropic supports `"xhigh"` and `"max"` natively.
 
-    In both cases, a `UserWarning` is emitted so callers can detect the degradation.
+    Downgrades are defined declaratively in each shim's `effort_map`. A `max_effort` cap can further limit the highest level emitted.
 
 ## Provider-to-IR Mapping (Reverse)
 
@@ -310,15 +326,26 @@ The IR uses an explicit `mode: "auto" | "enabled" | "disabled"` instead of a boo
 2. **Omission is still valid.** When `mode` is not set, the provider uses its default behavior -- which is automatic reasoning for thinking-capable models. This is distinct from `mode: "auto"`, which explicitly requests adaptive behavior.
 3. **Effort as a cross-cutting concern.** Setting `effort` alone (without `mode`) lets the model decide whether to think while controlling how much effort to use when it does.
 
-### Why effort has 5 levels
+### Why effort has 6 levels
 
-The IR supports `minimal`, `low`, `medium`, `high`, and `max` to be a **superset** of all provider levels:
+The IR supports `minimal`, `low`, `medium`, `high`, `xhigh`, and `max` to be a **superset** of all provider levels:
 
 - Google supports `minimal` but others do not (downgrade to `low`)
-- Anthropic supports `max` but others do not (downgrade to `high`)
+- Anthropic supports `xhigh` and `max` natively; others downgrade to `high`
 - The three middle levels (`low`, `medium`, `high`) are universally supported
 
 This ensures lossless round-trips within a single provider while providing best-effort mapping across providers.
+
+### Shim-driven effort mapping
+
+Since v0.6.8, effort mapping is **declarative** via provider shims rather than hardcoded in converters. Each shim's `ReasoningCapability` declares:
+
+- **`effort_map`** — maps each IR effort level to the provider-specific string (or omits unsupported levels)
+- **`max_effort`** — optional cap; efforts above this are clamped down
+- **`disabled`** — how `mode: "disabled"` is serialized (`"omit"` or `"thinking_disabled"`)
+- **`effort_field`** — where the provider expects the effort value (`"reasoning_effort"`, `"thinking.effort"`, etc.)
+
+See the [Provider Shims](shims.md#reasoning-configuration) guide for details on declaring custom reasoning configs.
 
 ### Budget tokens: Anthropic and Google only
 

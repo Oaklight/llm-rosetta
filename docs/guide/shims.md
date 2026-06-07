@@ -127,6 +127,70 @@ The `default_base_url` is institution-specific. Override it in your gateway conf
 !!! note
     If you do not set `base_url`, the shim falls back to `https://apps.inside.anl.gov/argoapi/`, which is only reachable from within the ANL network.
 
+## Reasoning Configuration
+
+Since v0.6.8, provider shims can declare how they handle reasoning effort and disabled state via the `reasoning` section in `provider.yaml`. This replaces the previously hardcoded effort mapping branches in each converter.
+
+### `ReasoningCapability` Fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `disabled` | `"omit"` \| `"thinking_disabled"` | `"omit"` | How to serialize `mode: "disabled"` — omit the field entirely, or emit a provider-specific disabled marker |
+| `effort_field` | `"reasoning_effort"` \| `"thinking.effort"` \| ... | `"reasoning_effort"` | Where the provider expects the effort value in the request body |
+| `max_effort` | effort level or `null` | `null` | Highest effort level this shim should emit; higher values are clamped |
+| `effort_map` | `{IR_level: provider_string}` | identity | Mapping from IR effort levels to provider-specific effort strings |
+
+### Example: Declaring Reasoning in `provider.yaml`
+
+```yaml
+name: anthropic
+base: anthropic
+default_base_url: https://api.anthropic.com
+default_api_key_env: ANTHROPIC_API_KEY
+reasoning:
+  disabled: thinking_disabled
+  effort_field: thinking.effort
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    xhigh: xhigh
+    max: max
+```
+
+```yaml
+name: openai
+base: openai_chat
+default_base_url: https://api.openai.com/v1
+default_api_key_env: OPENAI_API_KEY
+reasoning:
+  disabled: omit
+  effort_field: reasoning_effort
+  max_effort: high
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    xhigh: high
+    max: high
+```
+
+### How It Works
+
+1. The gateway injects the shim's `ReasoningCapability` into `ConversionContext` before conversion
+2. All four converters call the shared `apply_reasoning_config()` helper, which:
+    - Looks up the IR effort in the shim's `effort_map`
+    - Clamps to `max_effort` if set
+    - Serializes `mode: "disabled"` according to the `disabled` strategy
+    - Places the effort value in the correct field via `effort_field`
+3. Input normalization (`normalize_reasoning_input()`) converts provider-native values like `"none"`, `"xhigh"`, `"max"` to IR-canonical form before conversion begins
+
+If a shim does not declare a `reasoning` section, default behavior is used (effort passed through as-is, disabled → omitted).
+
+For full details on the IR effort ladder and per-provider mapping tables, see [Reasoning / Thinking Parameters](reasoning.md).
+
 ## Transforms
 
 Transforms are pure `dict → dict` functions that bridge the gap between a provider's actual API dialect and the "ideal" standard that the corresponding base converter expects. They handle field-level quirks (strip unsupported fields, rename parameters, inject defaults) — **not** semantic API-standard translation, which is the converter's job.
