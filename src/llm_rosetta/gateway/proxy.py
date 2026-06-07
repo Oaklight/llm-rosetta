@@ -377,17 +377,31 @@ def _resolve_target_transforms(
     return shim.from_transforms, shim.to_transforms
 
 
-def _inject_shim_reasoning(ctx: ConversionContext, shim_name: str | None) -> None:
+def _inject_shim_reasoning(
+    ctx: ConversionContext,
+    shim_name: str | None,
+    model: str | None = None,
+) -> None:
     """Inject the shim's reasoning capability config into *ctx*.
 
     If the shim has a ``reasoning`` config, it is stored in
     ``ctx.options["reasoning_cap"]`` so converters can pick it up.
+
+    When *model* is provided (typically the upstream model ID after alias
+    resolution), per-model overrides from ``shim.model_reasoning`` take
+    precedence over the provider-level config.
     """
     if shim_name is None:
         return
     shim = get_shim(shim_name)
-    if shim is not None and shim.reasoning is not None:
-        ctx.options["reasoning_cap"] = shim.reasoning
+    if shim is None:
+        return
+    cap = shim.reasoning
+    # Model-level override (keyed by upstream model ID)
+    if model and shim.model_reasoning and model in shim.model_reasoning:
+        cap = shim.model_reasoning[model]
+    if cap is not None:
+        ctx.options["reasoning_cap"] = cap
 
 
 # ---------------------------------------------------------------------------
@@ -420,8 +434,9 @@ async def handle_non_streaming(
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
 
-    # Inject shim reasoning capability so converters use it
-    _inject_shim_reasoning(ctx, target_shim_name)
+    # Inject shim reasoning capability so converters use it.
+    # body["model"] is the upstream model ID (post-alias) at this point.
+    _inject_shim_reasoning(ctx, target_shim_name, model=body.get("model"))
 
     # 1. Source -> IR
     try:
@@ -697,8 +712,8 @@ async def handle_streaming(
     if target_provider == "google":
         ctx.options["output_format"] = "rest"
 
-    # Inject shim reasoning capability so converters use it
-    _inject_shim_reasoning(ctx, target_shim_name)
+    # Inject shim reasoning capability so converters use it.
+    _inject_shim_reasoning(ctx, target_shim_name, model=body.get("model"))
 
     # 1. Source -> IR
     try:

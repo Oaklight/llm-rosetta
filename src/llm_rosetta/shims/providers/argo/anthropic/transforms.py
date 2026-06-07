@@ -194,7 +194,7 @@ def _normalize_openai_response(body: dict[str, Any]) -> dict[str, Any]:
 # Transform tuples (consumed by the shim loader)
 # ---------------------------------------------------------------------------
 
-to_transforms = (_NamedTransform(_normalize_thinking, "normalize_thinking()"),)
+to_transforms = ()  # _normalize_thinking retired — handled by shim reasoning config
 from_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )

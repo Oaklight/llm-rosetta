@@ -251,8 +251,14 @@ def convert(
     target_converter = get_converter_for_provider(target_provider)
 
     ctx = ConversionContext()
-    if target_shim is not None and target_shim.reasoning is not None:
-        ctx.options["reasoning_cap"] = target_shim.reasoning
+    if target_shim is not None:
+        cap = target_shim.reasoning
+        # Model-level override (keyed by upstream/body model ID)
+        req_model = body.get("model", "")
+        if target_shim.model_reasoning and req_model in target_shim.model_reasoning:
+            cap = target_shim.model_reasoning[req_model]
+        if cap is not None:
+            ctx.options["reasoning_cap"] = cap
 
     ir_request = source_converter.request_from_provider(body, context=ctx)
     target_body, _warnings = target_converter.request_to_provider(

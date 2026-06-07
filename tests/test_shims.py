@@ -248,8 +248,7 @@ class TestGroupedProviders:
         """Grouped shims have their transforms.py imported."""
         anth = get_shim("argo_anthropic")
         assert anth is not None
-        # argo_anthropic has to_transforms and from_transforms
-        assert len(anth.to_transforms) > 0
+        # argo_anthropic has from_transforms (to_transforms retired)
         assert len(anth.from_transforms) > 0
 
     def test_grouped_provider_reasoning_configs_loaded(self):
@@ -261,6 +260,24 @@ class TestGroupedProviders:
         assert anth.reasoning.effort_field == "output_config.effort"
         assert anth.reasoning.effort_map["xhigh"] == "xhigh"
         assert oai.reasoning.effort_map["max"] == "max"
+
+    def test_argo_anthropic_model_reasoning_overrides(self):
+        """Argo anthropic has model_reasoning for claudeopus47."""
+        anth = get_shim("argo_anthropic")
+        assert anth is not None
+        assert anth.model_reasoning is not None
+        assert "claudeopus47" in anth.model_reasoning
+        override = anth.model_reasoning["claudeopus47"]
+        assert override.thinking_type == "adaptive"
+        # Inherits provider defaults for other fields
+        assert override.effort_field == "output_config.effort"
+        assert override.effort_map["xhigh"] == "xhigh"
+
+    def test_argo_anthropic_provider_thinking_type(self):
+        """Argo anthropic provider-level thinking_type is enabled."""
+        anth = get_shim("argo_anthropic")
+        assert anth is not None and anth.reasoning is not None
+        assert anth.reasoning.thinking_type == "enabled"
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""

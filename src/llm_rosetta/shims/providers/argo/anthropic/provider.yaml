@@ -6,6 +6,7 @@ model_id_field: internal_id
 reasoning:
   disabled: thinking_disabled
   effort_field: output_config.effort
+  thinking_type: enabled
   effort_map:
     minimal: low
     low: low
@@ -13,3 +14,6 @@ reasoning:
     high: high
     xhigh: xhigh
     max: max
+  model_overrides:
+    claudeopus47:
+      thinking_type: adaptive

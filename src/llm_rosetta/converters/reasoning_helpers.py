@@ -173,7 +173,7 @@ def apply_reasoning_config(
     elif converter_type == "openai_responses":
         _apply_openai_responses_extras(ir, result, mode, budget_tokens)
     elif converter_type == "anthropic":
-        _apply_anthropic_extras(ir, result, mode, effort, budget_tokens)
+        _apply_anthropic_extras(ir, result, mode, effort, budget_tokens, cap)
     elif converter_type == "google":
         _apply_google_extras(ir, result, mode, budget_tokens)
 
@@ -297,6 +297,7 @@ def _apply_anthropic_extras(
     mode: str | None,
     effort: str | None,
     budget_tokens: int | None,
+    cap: ReasoningCapability | None = None,
 ) -> None:
     """Anthropic extras: thinking object with type/budget_tokens."""
     if mode == "enabled":
@@ -316,6 +317,17 @@ def _apply_anthropic_extras(
         result["thinking"] = thinking
     elif budget_tokens is not None:
         result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
+
+    # Apply shim thinking_type override if set.
+    if cap is not None and cap.thinking_type is not None and "thinking" in result:
+        current_type = result["thinking"].get("type")
+        if current_type != cap.thinking_type:
+            result["thinking"]["type"] = cap.thinking_type
+            if (
+                cap.thinking_type == "adaptive"
+                and "budget_tokens" in result["thinking"]
+            ):
+                del result["thinking"]["budget_tokens"]
 
 
 def _apply_google_extras(

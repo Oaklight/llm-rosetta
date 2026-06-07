@@ -32,6 +32,9 @@ EffortField = Literal[
 #: Normalised IR effort ladder level.
 EffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 
+#: How the provider expects ``thinking.type`` to be serialised.
+ThinkingType = Literal["enabled", "adaptive"]
+
 #: Mapping from normalised IR effort levels to provider-specific values.
 #: Any IR level absent from the map is unsupported and will be warned/skipped.
 EffortMap = dict[str, str]  # e.g. {"minimal": "low", "max": "high"}
@@ -45,12 +48,14 @@ class ReasoningCapability:
         disabled: How to serialise ``mode: disabled``.
         effort_field: Where the provider expects the effort value.
         max_effort: Highest normalised effort this shim should emit.
+        thinking_type: Force ``thinking.type`` to this value.
         effort_map: Map from normalised IR effort to provider effort string.
     """
 
     disabled: DisabledStrategy = "omit"
     effort_field: EffortField = "reasoning_effort"
     max_effort: EffortLevel | None = None
+    thinking_type: ThinkingType | None = None
     effort_map: EffortMap = field(
         default_factory=lambda: {
             "minimal": "low",
@@ -92,6 +97,9 @@ class ProviderShim:
             provider (standard → dialect).
         reasoning: Reasoning capability config for this provider.
             When ``None``, the converter uses its built-in default.
+        model_reasoning: Per-model reasoning overrides keyed by
+            **upstream model ID** (post-alias).  Each entry inherits
+            from the provider-level ``reasoning`` for unset fields.
     """
 
     name: str
@@ -103,6 +111,7 @@ class ProviderShim:
     from_transforms: tuple[Transform, ...] = ()
     to_transforms: tuple[Transform, ...] = ()
     reasoning: ReasoningCapability | None = None
+    model_reasoning: dict[str, ReasoningCapability] | None = None
 
 
 # ---------------------------------------------------------------------------

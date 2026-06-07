@@ -86,8 +86,29 @@ def _load_single_provider(
             disabled=reasoning_cfg.get("disabled", "omit"),
             effort_field=reasoning_cfg.get("effort_field", "reasoning_effort"),
             max_effort=reasoning_cfg.get("max_effort"),
+            thinking_type=reasoning_cfg.get("thinking_type"),
             effort_map=reasoning_cfg.get("effort_map", {}),
         )
+
+    # Parse per-model reasoning overrides (inherit provider defaults).
+    model_reasoning: dict[str, ReasoningCapability] | None = None
+    if isinstance(reasoning_cfg, dict) and isinstance(
+        reasoning_cfg.get("model_overrides"), dict
+    ):
+        model_reasoning = {}
+        for model_id, overrides in reasoning_cfg["model_overrides"].items():
+            if not isinstance(overrides, dict):
+                continue
+            assert reasoning_cap is not None  # model_overrides requires reasoning
+            model_reasoning[model_id] = ReasoningCapability(
+                disabled=overrides.get("disabled", reasoning_cap.disabled),
+                effort_field=overrides.get("effort_field", reasoning_cap.effort_field),
+                max_effort=overrides.get("max_effort", reasoning_cap.max_effort),
+                thinking_type=overrides.get(
+                    "thinking_type", reasoning_cap.thinking_type
+                ),
+                effort_map=overrides.get("effort_map", reasoning_cap.effort_map),
+            )
 
     shim = ProviderShim(
         name=cfg["name"],
@@ -99,6 +120,7 @@ def _load_single_provider(
         from_transforms=from_t,
         to_transforms=to_t,
         reasoning=reasoning_cap,
+        model_reasoning=model_reasoning,
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

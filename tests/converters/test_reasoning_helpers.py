@@ -308,6 +308,80 @@ class TestCustomShim:
         )
         assert result["reasoning_effort"] == "high"
 
+    def test_thinking_type_adaptive_overrides_enabled(self):
+        """thinking_type=adaptive forces enabled→adaptive and removes budget."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="adaptive",
+            effort_map={
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "xhigh",
+                "max": "max",
+            },
+        )
+        result = apply_reasoning_config(
+            cast(
+                ReasoningConfig,
+                {"mode": "enabled", "budget_tokens": 4096},
+            ),
+            custom,
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["type"] == "adaptive"
+        assert "budget_tokens" not in result["thinking"]
+
+    def test_thinking_type_enabled_overrides_adaptive(self):
+        """thinking_type=enabled forces adaptive→enabled."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "xhigh",
+                "max": "max",
+            },
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+        )
+        # auto normally emits adaptive; thinking_type=enabled overrides
+        assert result["thinking"]["type"] == "enabled"
+
+    def test_thinking_type_none_preserves_original(self):
+        """thinking_type=None does not override."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            effort_map={
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "xhigh",
+                "max": "max",
+            },
+        )
+        result = apply_reasoning_config(
+            cast(
+                ReasoningConfig,
+                {"mode": "enabled", "budget_tokens": 2048},
+            ),
+            custom,
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 2048
+
     def test_custom_thinking_budget_zero_disabled(self):
         custom = ReasoningCapability(
             disabled="thinking_budget_zero",
