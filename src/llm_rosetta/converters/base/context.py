@@ -121,6 +121,7 @@ class StreamContext(ConversionContext):
     model: str = ""
     created: int = 0
     current_block_index: int = -1
+    current_block_type: str | None = None  # "text", "thinking", "tool_use", etc.
 
     # Tool call tracking
     tool_call_id_map: dict[str, str] = field(default_factory=dict)

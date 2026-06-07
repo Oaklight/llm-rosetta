@@ -1382,3 +1382,205 @@ class TestStreamResponseToProviderWithContext:
             self.converter.stream_response_to_provider(event, context=ctx),
         )
         assert result["index"] == 0
+
+
+class TestStreamBlockTypeTransition:
+    """Tests for #250: synthetic block boundary on content-type transition.
+
+    When IR events from providers that don't emit ContentBlock{Start,End}
+    (OpenAI Chat, OpenAI Responses, Google) transition between reasoning
+    and text deltas, the Anthropic to_provider path must synthesize
+    content_block_stop + content_block_start at the boundary.
+    """
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    def _run_to_provider(
+        self, events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Run a sequence of IR events through to_provider with context."""
+        ctx = StreamContext()
+        output: list[dict[str, Any]] = []
+        for event in events:
+            result = self.converter.stream_response_to_provider(event, context=ctx)
+            if isinstance(result, list):
+                output.extend(result)
+            elif result:
+                output.append(result)
+        return output
+
+    def test_reasoning_then_text_emits_block_boundary(self):
+        """ReasoningDelta -> TextDelta without block_index gets synthetic
+        content_block_stop + content_block_start between them."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "reasoning_delta", "reasoning": "Let me think..."},
+            {"type": "reasoning_delta", "reasoning": " about this."},
+            {"type": "text_delta", "text": "The answer is "},
+            {"type": "text_delta", "text": "42."},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        # Find the key events
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+        deltas = [e for e in output if e.get("type") == "content_block_delta"]
+
+        # Should have 2 block starts: thinking (index=0) and text (index=1)
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "text"
+        assert block_starts[1]["index"] == 1
+
+        # Should have a block stop for thinking (index=0) before text starts
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+        # The thinking block stop must come before the text block start
+        stop_pos = output.index(block_stops[0])
+        text_start_pos = output.index(block_starts[1])
+        assert stop_pos < text_start_pos
+
+        # All thinking deltas should have index 0
+        thinking_deltas = [d for d in deltas if d["delta"]["type"] == "thinking_delta"]
+        for d in thinking_deltas:
+            assert d["index"] == 0
+
+        # All text deltas should have index 1
+        text_deltas = [d for d in deltas if d["delta"]["type"] == "text_delta"]
+        for d in text_deltas:
+            assert d["index"] == 1
+
+    def test_text_then_reasoning_emits_block_boundary(self):
+        """TextDelta -> ReasoningDelta gets proper block transition."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Hello "},
+            {"type": "reasoning_delta", "reasoning": "Wait, let me reconsider..."},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "text"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "thinking"
+        assert block_starts[1]["index"] == 1
+
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_reasoning_then_tool_emits_block_boundary(self):
+        """ReasoningDelta -> ToolCallStart gets proper block transition."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "reasoning_delta", "reasoning": "I need to call a tool..."},
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "get_weather",
+            },
+            {
+                "type": "tool_call_delta",
+                "tool_call_id": "toolu_abc",
+                "arguments_delta": '{"city": "NYC"}',
+            },
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "thinking"
+        assert block_starts[0]["index"] == 0
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+        assert block_starts[1]["index"] == 1
+
+        # Thinking block should be closed before tool_use starts
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_text_then_tool_emits_block_boundary(self):
+        """TextDelta -> ToolCallStart gets proper block transition."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Let me check..."},
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "toolu_abc",
+                "tool_name": "search",
+            },
+            {"type": "finish", "finish_reason": {"reason": "tool_calls"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        block_stops = [e for e in output if e.get("type") == "content_block_stop"]
+
+        assert len(block_starts) == 2
+        assert block_starts[0]["content_block"]["type"] == "text"
+        assert block_starts[1]["content_block"]["type"] == "tool_use"
+
+        assert len(block_stops) >= 1
+        assert block_stops[0]["index"] == 0
+
+    def test_same_type_consecutive_no_extra_boundary(self):
+        """Multiple TextDeltas without block_index don't create extra boundaries."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {"type": "text_delta", "text": "Hello "},
+            {"type": "text_delta", "text": "world"},
+            {"type": "text_delta", "text": "!"},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        assert len(block_starts) == 1
+        assert block_starts[0]["content_block"]["type"] == "text"
+
+        text_deltas = [
+            e
+            for e in output
+            if e.get("type") == "content_block_delta"
+            and e["delta"]["type"] == "text_delta"
+        ]
+        assert len(text_deltas) == 3
+        assert all(d["index"] == 0 for d in text_deltas)
+
+    def test_explicit_block_index_bypasses_type_tracking(self):
+        """Events with explicit block_index use that index regardless of type."""
+        events: list[dict[str, Any]] = [
+            {"type": "stream_start", "response_id": "test-123", "model": "test"},
+            {
+                "type": "reasoning_delta",
+                "reasoning": "thinking...",
+                "block_index": 0,
+            },
+            {"type": "text_delta", "text": "hello", "block_index": 1},
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+            {"type": "stream_end"},
+        ]
+        output = self._run_to_provider(events)
+
+        deltas = [e for e in output if e.get("type") == "content_block_delta"]
+        assert len(deltas) == 2
+        assert deltas[0]["index"] == 0
+        assert deltas[1]["index"] == 1
+
+        # No synthetic block starts should be emitted for explicit indexes
+        block_starts = [e for e in output if e.get("type") == "content_block_start"]
+        assert len(block_starts) == 0

@@ -862,6 +862,7 @@ class AnthropicConverter(BaseConverter):
             # instead of auto-incrementing, so subsequent deltas that read
             # context.current_block_index stay in sync.  (#246)
             context.current_block_index = block_index
+            context.current_block_type = block_type
 
         if block_type == "text":
             return {
@@ -884,6 +885,7 @@ class AnthropicConverter(BaseConverter):
         """Handle ContentBlockEndEvent → content_block_stop."""
         if context is not None:
             context.current_block_index = -1
+            context.current_block_type = None
         return {
             "type": AnthropicEventType.CONTENT_BLOCK_STOP,
             "index": event["block_index"],
@@ -907,18 +909,34 @@ class AnthropicConverter(BaseConverter):
             result["index"] = explicit_idx
             if context is not None:
                 context.current_block_index = explicit_idx
+                context.current_block_type = "text"
         elif context is not None:
-            if context.current_block_index < 0:
+            needs_new_block = context.current_block_index < 0 or (
+                context.current_block_type is not None
+                and context.current_block_type != "text"
+            )
+            if needs_new_block:
+                preamble: list[dict[str, Any]] = []
+                # Close previous block if one is open (#250)
+                if context.current_block_index >= 0:
+                    preamble.append(
+                        {
+                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
+                            "index": context.current_block_index,
+                        }
+                    )
                 context.next_block_index()
+                context.current_block_type = "text"
                 result["index"] = context.current_block_index
-                return [
+                preamble.append(
                     {
                         "type": AnthropicEventType.CONTENT_BLOCK_START,
                         "index": context.current_block_index,
                         "content_block": {"type": "text", "text": ""},
-                    },
-                    result,
-                ]
+                    }
+                )
+                preamble.append(result)
+                return preamble
             result["index"] = context.current_block_index
         return result
 
@@ -950,24 +968,40 @@ class AnthropicConverter(BaseConverter):
             rd_result["index"] = explicit_idx
             if context is not None:
                 context.current_block_index = explicit_idx
+                context.current_block_type = "thinking"
         elif context is not None:
-            if context.current_block_index < 0:
+            needs_new_block = context.current_block_index < 0 or (
+                context.current_block_type is not None
+                and context.current_block_type != "thinking"
+            )
+            if needs_new_block:
+                preamble: list[dict[str, Any]] = []
+                # Close previous block if one is open (#250)
+                if context.current_block_index >= 0:
+                    preamble.append(
+                        {
+                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
+                            "index": context.current_block_index,
+                        }
+                    )
                 context.next_block_index()
+                context.current_block_type = "thinking"
                 rd_result["index"] = context.current_block_index
-                return [
+                preamble.append(
                     {
                         "type": AnthropicEventType.CONTENT_BLOCK_START,
                         "index": context.current_block_index,
                         "content_block": {"type": "thinking", "thinking": ""},
-                    },
-                    rd_result,
-                ]
+                    }
+                )
+                preamble.append(rd_result)
+                return preamble
             rd_result["index"] = context.current_block_index
         return rd_result
 
     def _handle_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
-    ) -> dict[str, Any]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle ToolCallStartEvent → content_block_start for tool_use."""
         result: dict[str, Any] = {
             "type": AnthropicEventType.CONTENT_BLOCK_START,
@@ -979,9 +1013,27 @@ class AnthropicConverter(BaseConverter):
             },
         }
         if context is not None:
-            if context.current_block_index < 0:
+            preamble: list[dict[str, Any]] = []
+            # Close previous block if one is open and type is changing (#250)
+            if (
+                context.current_block_index >= 0
+                and context.current_block_type is not None
+                and context.current_block_type != "tool_use"
+            ):
+                preamble.append(
+                    {
+                        "type": AnthropicEventType.CONTENT_BLOCK_STOP,
+                        "index": context.current_block_index,
+                    }
+                )
                 context.next_block_index()
+            elif context.current_block_index < 0:
+                context.next_block_index()
+            context.current_block_type = "tool_use"
             result["index"] = context.current_block_index
+            if preamble:
+                preamble.append(result)
+                return preamble
         return result
 
     def _handle_tool_call_delta_to_p(
@@ -1001,9 +1053,11 @@ class AnthropicConverter(BaseConverter):
             result["index"] = explicit_idx
             if context is not None:
                 context.current_block_index = explicit_idx
+                context.current_block_type = "tool_use"
         elif context is not None:
             if context.current_block_index < 0:
                 context.next_block_index()
+                context.current_block_type = "tool_use"
             result["index"] = context.current_block_index
         return result
 
