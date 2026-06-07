@@ -6,6 +6,26 @@ title: 更新日志
 
 LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
 
+## [Unreleased]
+
+### 新增
+
+- **Shim 驱动的推理配置**（#245）：新增 `ReasoningCapability` 数据类，声明 `disabled` 策略、`effort_field`、`max_effort` 和 `effort_map`；`ProviderShim` 从 `provider.yaml` 的 `reasoning` 段加载配置；共享 `reasoning_helpers.py` 提供 `normalize_reasoning_input()` 和 `apply_reasoning_config()`；各转换器的 `ir_reasoning_config_to_p` 委托给共享 helper，不再硬编码努力级别降级逻辑
+- **扩展 effort 阶梯**（#245）：`ReasoningEffortLevel` 从 5 级扩展到 6 级（新增 `xhigh`）；输入归一化：`none` → `mode: disabled`；`max_effort` 上限可通过 shim YAML 声明
+- **流式 delta 事件携带 `block_index`**（#249）：`TextDeltaEvent`、`ReasoningDeltaEvent`、`ToolCallDeltaEvent` 新增可选 `block_index` 字段；Anthropic from_p 将 chunk `index` 写入 IR delta 事件
+- **`cache_creation_tokens` 用量字段**（#252）：`UsageInfo` TypedDict 新增 `cache_creation_tokens`；Anthropic、OpenAI Chat、OpenAI Responses、Google GenAI 在流式和非流式路径中透传缓存及明细用量字段
+
+### 变更
+
+- **`_build_ir_usage` 返回类型收紧**（#253）：返回类型从 `dict[str, Any]` 收紧为 `UsageInfo`，`_build_provider_usage` 参数类型从 `dict[str, Any]` 放宽为 `Mapping[str, Any]`；移除所有 usage 相关的 `ty: ignore`
+- **Anthropic 流式 usage 去重**（#253）：`message_start` 和 `message_delta` 处理器中重复的 cache 提取逻辑改为复用 `_build_ir_usage()`，净减 21 行重复代码
+
+### 修复
+
+- **流式 block index 失同步**（#249）：修复 Anthropic 流式 thinking block 后 text delta 使用错误 index（0）的问题——`to_p` 优先使用事件上的显式 `block_index`，`ContentBlockStartEvent` 锚定 `current_block_index`，不再通过 `next_block_index()` 自增
+- **跨提供商 block 边界合成**（#251）：从无 content block 的提供商（OpenAI Chat、OpenAI Responses、Google GenAI）转换到 Anthropic 时，在内容类型切换点（reasoning → text、text → tool_call 等）自动合成 `content_block_stop` + `content_block_start` 事件
+- **流式 usage 明细传播**（#252）：修复流式路径中 `cache_read_tokens`、`cache_creation_tokens`、`prompt_tokens_details`、`completion_tokens_details` 未正确传播的问题
+
 ## v0.6.7 — 2026-06-04
 
 ### 修复

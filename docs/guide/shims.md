@@ -90,6 +90,69 @@ LLM-Rosetta 内置 14 个提供商 shim：
 | `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
 | `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi/` | — | thinking 归一化、OpenAI 响应格式归一化 |
 
+## 推理配置
+
+从 v0.6.8 起，shim 可以通过 `provider.yaml` 中的 `reasoning` 段声明推理能力配置。运行时由 `apply_reasoning_config()` 读取该配置，替代了之前硬编码在各转换器中的 effort 降级逻辑。
+
+### ReasoningCapability 字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `disabled` | `"omit"` \| `"thinking_disabled"` \| `"thinking_budget_zero"` | `mode: disabled` 时的序列化策略：`omit` 不发送任何参数，`thinking_disabled` 发送 `{"thinking": {"type": "disabled"}}`，`thinking_budget_zero` 发送 `{"thinking_config": {"thinking_budget": 0}}` |
+| `effort_field` | `"reasoning_effort"` \| `"reasoning.effort"` \| `"output_config.effort"` \| `"thinking_level"` \| `"none"` | effort 值在提供商请求中的序列化位置；`"none"` 表示提供商不支持 effort |
+| `max_effort` | `EffortLevel` \| `null` | 最高允许的归一化 effort 级别；超过此值的 effort 会被截断到该级别 |
+| `effort_map` | `dict[str, str]` | 从归一化 IR effort 到提供商特定 effort 字符串的映射 |
+
+### 配置示例
+
+=== "Anthropic"
+
+    ```yaml
+    # provider.yaml
+    reasoning:
+      disabled: thinking_disabled
+      effort_field: output_config.effort
+      effort_map:
+        minimal: low
+        low: low
+        medium: medium
+        high: high
+        xhigh: xhigh
+        max: max
+    ```
+
+=== "OpenAI"
+
+    ```yaml
+    # provider.yaml
+    reasoning:
+      disabled: omit
+      effort_field: reasoning_effort
+      max_effort: high
+      effort_map:
+        minimal: minimal
+        low: low
+        medium: medium
+        high: high
+        xhigh: high
+        max: high
+    ```
+
+### 运行机制
+
+当网关代理处理请求时：
+
+1. `_inject_shim_reasoning()` 从目标提供商的 shim 中提取 `ReasoningCapability`，注入转换上下文的 `ctx.options["reasoning_cap"]`
+2. 各转换器的 `request_to_provider` 将 `reasoning_cap` 传给 `ir_reasoning_config_to_p`
+3. `ir_reasoning_config_to_p` 委托给 `apply_reasoning_config()`，按 shim 配置执行：
+    - 输入归一化（`none` → disabled）
+    - disabled 序列化（按 `cap.disabled` 策略）
+    - effort 截断（按 `cap.max_effort`）
+    - effort 映射（按 `cap.effort_map`）
+    - 结构化传透（mode、budget_tokens 等提供商特定字段）
+
+没有声明 `reasoning` 段的 shim 使用基础转换器类型的内置默认配置。
+
 ## Argo Shim
 
 `argo_openai_chat` 和 `argo_anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供商统一暴露在单一端点之后。
