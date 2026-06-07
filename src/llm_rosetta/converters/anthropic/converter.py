@@ -671,14 +671,17 @@ class AnthropicConverter(BaseConverter):
         """Handle content_block_delta → TextDeltaEvent, ToolCallDeltaEvent, or ReasoningDeltaEvent."""
         delta = chunk.get("delta", {})
         delta_type = delta.get("type", "")
+        # Preserve provider block index on IR events for lossless round-trip (#246)
+        chunk_block_index: int | None = chunk.get("index")
 
         if delta_type == "text_delta":
-            events.append(
-                TextDeltaEvent(
-                    type="text_delta",
-                    text=delta.get("text", ""),
-                )
+            evt = TextDeltaEvent(
+                type="text_delta",
+                text=delta.get("text", ""),
             )
+            if chunk_block_index is not None:
+                evt["block_index"] = chunk_block_index
+            events.append(evt)
         elif delta_type == "input_json_delta":
             tool_call_id = ""
             if context is not None and context.tool_call_id_map:
@@ -690,6 +693,8 @@ class AnthropicConverter(BaseConverter):
                 tool_call_id=tool_call_id,
                 arguments_delta=partial_json,
             )
+            if chunk_block_index is not None:
+                delta_evt["block_index"] = chunk_block_index
             if (
                 context is not None
                 and tool_call_id
@@ -703,20 +708,22 @@ class AnthropicConverter(BaseConverter):
             if context is not None and tool_call_id:
                 context.append_tool_call_args(tool_call_id, partial_json)
         elif delta_type == "thinking_delta":
-            events.append(
-                ReasoningDeltaEvent(
-                    type="reasoning_delta",
-                    reasoning=delta.get("thinking", ""),
-                )
+            evt_r = ReasoningDeltaEvent(
+                type="reasoning_delta",
+                reasoning=delta.get("thinking", ""),
             )
+            if chunk_block_index is not None:
+                evt_r["block_index"] = chunk_block_index
+            events.append(evt_r)
         elif delta_type == "signature_delta":
-            events.append(
-                ReasoningDeltaEvent(
-                    type="reasoning_delta",
-                    reasoning="",
-                    signature=delta.get("signature", ""),
-                )
+            evt_s = ReasoningDeltaEvent(
+                type="reasoning_delta",
+                reasoning="",
+                signature=delta.get("signature", ""),
             )
+            if chunk_block_index is not None:
+                evt_s["block_index"] = chunk_block_index
+            events.append(evt_s)
 
     def _handle_content_block_stop_from_p(
         self,
@@ -851,7 +858,10 @@ class AnthropicConverter(BaseConverter):
         block_type = event["block_type"]
 
         if context is not None:
-            context.next_block_index()
+            # Anchor context to the explicit block_index from the IR event
+            # instead of auto-incrementing, so subsequent deltas that read
+            # context.current_block_index stay in sync.  (#246)
+            context.current_block_index = block_index
 
         if block_type == "text":
             return {
@@ -890,7 +900,14 @@ class AnthropicConverter(BaseConverter):
                 "text": event["text"],
             },
         }
-        if context is not None:
+        # Prefer explicit block_index from the IR event (#246);
+        # fall back to context for providers that don't emit block indexes.
+        explicit_idx: int | None = event.get("block_index")
+        if explicit_idx is not None:
+            result["index"] = explicit_idx
+            if context is not None:
+                context.current_block_index = explicit_idx
+        elif context is not None:
             if context.current_block_index < 0:
                 context.next_block_index()
                 result["index"] = context.current_block_index
@@ -927,7 +944,13 @@ class AnthropicConverter(BaseConverter):
                     "thinking": event["reasoning"],
                 },
             }
-        if context is not None:
+        # Prefer explicit block_index from the IR event (#246)
+        explicit_idx: int | None = event.get("block_index")
+        if explicit_idx is not None:
+            rd_result["index"] = explicit_idx
+            if context is not None:
+                context.current_block_index = explicit_idx
+        elif context is not None:
             if context.current_block_index < 0:
                 context.next_block_index()
                 rd_result["index"] = context.current_block_index
@@ -972,7 +995,13 @@ class AnthropicConverter(BaseConverter):
                 "partial_json": event["arguments_delta"],
             },
         }
-        if context is not None:
+        # Prefer explicit block_index from the IR event (#246)
+        explicit_idx: int | None = event.get("block_index")
+        if explicit_idx is not None:
+            result["index"] = explicit_idx
+            if context is not None:
+                context.current_block_index = explicit_idx
+        elif context is not None:
             if context.current_block_index < 0:
                 context.next_block_index()
             result["index"] = context.current_block_index

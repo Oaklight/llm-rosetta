@@ -551,6 +551,175 @@ class TestStreamRoundTrip:
         assert msg_delta["delta"]["stop_reason"] == "end_turn"
         assert msg_delta["usage"]["output_tokens"] == 5
 
+    def test_thinking_then_text_block_index_round_trip(self):
+        """Regression test for #246: text deltas must keep index 1 after thinking block.
+
+        Upstream Anthropic emits:
+          thinking block start index 0 → thinking deltas index 0 →
+          signature delta index 0 → thinking stop index 0 →
+          text block start index 1 → text deltas index 1 → text stop index 1
+
+        After IR round-trip, text deltas must remain index 1, not regress
+        to index 0 (which would cause "Content block is not a text block"
+        in Claude CLI).
+        """
+        input_events: list[dict[str, Any]] = [
+            {
+                "type": "message_start",
+                "message": {
+                    "id": "msg_246",
+                    "type": "message",
+                    "role": "assistant",
+                    "model": "claude-opus-4-20250514",
+                    "content": [],
+                    "stop_reason": None,
+                    "usage": {"input_tokens": 50, "output_tokens": 1},
+                },
+            },
+            # Thinking block at index 0
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "Let me think..."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": " about this."},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "signature_delta", "signature": "ErUB"},
+            },
+            {"type": "content_block_stop", "index": 0},
+            # Text block at index 1
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "Llamas are "},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "social animals."},
+            },
+            {"type": "content_block_stop", "index": 1},
+            {
+                "type": "message_delta",
+                "delta": {"stop_reason": "end_turn"},
+                "usage": {"output_tokens": 20},
+            },
+            {"type": "message_stop"},
+        ]
+
+        from_ctx = StreamContext()
+        to_ctx = StreamContext()
+        output_events: list[dict[str, Any]] = []
+
+        for inp in input_events:
+            ir_events = self.converter.stream_response_from_provider(
+                inp, context=from_ctx
+            )
+            for ir_event in ir_events:
+                result = self.converter.stream_response_to_provider(
+                    ir_event, context=to_ctx
+                )
+                if isinstance(result, list):
+                    output_events.extend(e for e in result if e)
+                elif result:
+                    output_events.append(result)
+
+        # Extract all content_block_delta events
+        deltas = [e for e in output_events if e.get("type") == "content_block_delta"]
+
+        # Thinking deltas must be at index 0
+        thinking_deltas = [
+            d
+            for d in deltas
+            if d["delta"]["type"] in ("thinking_delta", "signature_delta")
+        ]
+        for td in thinking_deltas:
+            assert td["index"] == 0, (
+                f"thinking/signature delta should be index 0, got {td['index']}"
+            )
+
+        # Text deltas must be at index 1 (the #246 bug had these at index 0)
+        text_deltas = [d for d in deltas if d["delta"]["type"] == "text_delta"]
+        assert len(text_deltas) == 2, f"expected 2 text deltas, got {len(text_deltas)}"
+        for td in text_deltas:
+            assert td["index"] == 1, (
+                f"text delta should be index 1, got {td['index']} "
+                f"(#246 regression: text delta landed on thinking block)"
+            )
+
+        # Block start/stop indexes must also be consistent
+        starts = [e for e in output_events if e.get("type") == "content_block_start"]
+        stops = [e for e in output_events if e.get("type") == "content_block_stop"]
+        assert starts[0]["index"] == 0  # thinking start
+        assert starts[1]["index"] == 1  # text start
+        assert stops[0]["index"] == 0  # thinking stop
+        assert stops[1]["index"] == 1  # text stop
+
+        # Verify content preserved
+        assert text_deltas[0]["delta"]["text"] == "Llamas are "
+        assert text_deltas[1]["delta"]["text"] == "social animals."
+
+    def test_thinking_then_text_block_index_on_ir_events(self):
+        """Verify from_p copies chunk index onto IR delta events."""
+        chunks = [
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "thinking_delta", "thinking": "hmm"},
+            },
+            {
+                "type": "content_block_delta",
+                "index": 1,
+                "delta": {"type": "text_delta", "text": "answer"},
+            },
+        ]
+        ctx = StreamContext()
+        # Need a block start first to initialize context
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "thinking", "thinking": ""},
+            },
+            context=ctx,
+        )
+        ir_thinking = self.converter.stream_response_from_provider(
+            chunks[0], context=ctx
+        )
+        thinking_evt = cast(ReasoningDeltaEvent, ir_thinking[0])
+        assert thinking_evt["block_index"] == 0
+
+        self.converter.stream_response_from_provider(
+            {"type": "content_block_stop", "index": 0}, context=ctx
+        )
+        self.converter.stream_response_from_provider(
+            {
+                "type": "content_block_start",
+                "index": 1,
+                "content_block": {"type": "text", "text": ""},
+            },
+            context=ctx,
+        )
+        ir_text = self.converter.stream_response_from_provider(chunks[1], context=ctx)
+        text_evt = cast(TextDeltaEvent, ir_text[0])
+        assert text_evt["block_index"] == 1
+
 
 class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""

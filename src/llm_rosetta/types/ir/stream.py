@@ -104,6 +104,7 @@ class TextDeltaEvent(TypedDict):
 
     type: Required[Literal["text_delta"]]
     text: Required[str]
+    block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     choice_index: NotRequired[int]
 
 
@@ -116,6 +117,7 @@ class ReasoningDeltaEvent(TypedDict):
     type: Required[Literal["reasoning_delta"]]
     reasoning: Required[str]  # The reasoning text delta
     signature: NotRequired[str]  # Anthropic thinking signature delta
+    block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     choice_index: NotRequired[int]
 
 
@@ -143,6 +145,7 @@ class ToolCallDeltaEvent(TypedDict):
     type: Required[Literal["tool_call_delta"]]
     tool_call_id: Required[str]
     arguments_delta: Required[str]  # JSON string fragment
+    block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]
 
