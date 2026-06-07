@@ -1397,9 +1397,7 @@ class TestStreamBlockTypeTransition:
     def setup_method(self):
         self.converter = AnthropicConverter()
 
-    def _run_to_provider(
-        self, events: list[IRStreamEvent]
-    ) -> list[dict[str, Any]]:
+    def _run_to_provider(self, events: list[IRStreamEvent]) -> list[dict[str, Any]]:
         """Run a sequence of IR events through to_provider with context."""
         ctx = StreamContext()
         output: list[dict[str, Any]] = []
