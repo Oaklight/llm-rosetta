@@ -45,7 +45,7 @@ class AnthropicContentOps(BaseContentOps):
         """
         result: dict[str, Any] = {"type": "text", "text": ir_text["text"]}
         # Preserve provider_metadata for cross-provider round-trip
-        pm = ir_text.get("provider_metadata")  # type: ignore[typeddict-item]
+        pm = ir_text.get("provider_metadata")
         if pm:
             result["_provider_metadata"] = pm
         return result
