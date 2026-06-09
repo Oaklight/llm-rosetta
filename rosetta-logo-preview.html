@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLM-Rosetta logo preview</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --shadow: color-mix(in srgb, #020617 14%, transparent);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #020617;
+        --fg: #e2e8f0;
+        --muted: #94a3b8;
+        --card: #0f172a;
+        --border: #1e293b;
+        --shadow: color-mix(in srgb, #000 42%, transparent);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, color-mix(in srgb, #3b82f6 13%, transparent), transparent 38%), var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      padding: 40px;
+    }
+    header { max-width: 1180px; margin: 0 auto 28px; }
+    h1 {
+      font-size: clamp(34px, 5vw, 60px);
+      line-height: 0.95;
+      margin: 0 0 12px;
+      letter-spacing: -0.055em;
+    }
+    p { color: var(--muted); font-size: 17px; line-height: 1.55; margin: 0; max-width: 780px; }
+    .grid {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 20px 72px var(--shadow);
+    }
+    .logo-box {
+      display: grid;
+      place-items: center;
+      min-height: 310px;
+      background:
+        linear-gradient(45deg, color-mix(in srgb, var(--fg) 10%, transparent) 25%, transparent 25%),
+        linear-gradient(-45deg, color-mix(in srgb, var(--fg) 10%, transparent) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--fg) 10%, transparent) 75%),
+        linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--fg) 10%, transparent) 75%),
+        linear-gradient(135deg, #facc15, #22d3ee 45%, #a78bfa);
+      background-size: 24px 24px, 24px 24px, 24px 24px, 24px 24px, 100% 100%;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0, 0 0;
+      border-radius: 18px;
+    }
+    .meta { margin-top: 18px; }
+    h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.025em; }
+    .swatches { display: flex; gap: 8px; margin-top: 14px; }
+    .swatch {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, white 45%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, black 18%, transparent);
+    }
+    @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); } }
+    @media (max-width: 680px) { body { padding: 22px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LLM-Rosetta logo explorations</h1>
+    <p>B/D/F material variants using the token-block inscription structure.</p>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Black stele with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneF" x1="84" y1="36" x2="203" y2="242" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#334155"/>
+              <stop offset="0.5" stop-color="#111827"/>
+              <stop offset="1" stop-color="#030712"/>
+            </linearGradient>
+            <clipPath id="shapeF"><path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z"/></clipPath>
+          </defs>
+          <path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z" fill="url(#stoneF)"/>
+          <g clip-path="url(#shapeF)">
+            <g fill="#cbd5e1" opacity="0.82">
+              <rect x="96" y="86" width="42" height="6" rx="3"/>
+              <rect x="146" y="86" width="23" height="6" rx="3"/>
+              <rect x="178" y="86" width="23" height="6" rx="3"/>
+              <rect x="95" y="105" width="24" height="5" rx="2.5"/>
+              <rect x="128" y="105" width="57" height="5" rx="2.5"/>
+              <rect x="96" y="144" width="65" height="6" rx="3"/>
+              <rect x="170" y="144" width="29" height="6" rx="3"/>
+              <rect x="96" y="162" width="38" height="5" rx="2.5"/>
+              <rect x="143" y="162" width="50" height="5" rx="2.5"/>
+              <rect x="98" y="202" width="78" height="6" rx="3"/>
+            </g>
+            <g fill="#60a5fa" opacity="0.92">
+              <rect x="173" y="105" width="19" height="5" rx="2.5"/>
+              <rect x="122" y="162" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>F. Black stele + tokens</h2>
+        <p>Dark artifact surface with tokenized inscription blocks.</p>
+        <div class="swatches"><span class="swatch" style="background:#111827"></span><span class="swatch" style="background:#334155"></span><span class="swatch" style="background:#60a5fa"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Angular outline with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <clipPath id="shapeD"><path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z"/></clipPath>
+          </defs>
+          <path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z" fill="#eff6ff" stroke="#0f172a" stroke-width="7" stroke-linejoin="round"/>
+          <g clip-path="url(#shapeD)">
+            <g fill="#0f172a" opacity="0.88">
+              <rect x="96" y="86" width="42" height="6" rx="3"/>
+              <rect x="146" y="86" width="23" height="6" rx="3"/>
+              <rect x="178" y="86" width="23" height="6" rx="3"/>
+              <rect x="95" y="105" width="24" height="5" rx="2.5"/>
+              <rect x="128" y="105" width="57" height="5" rx="2.5"/>
+              <rect x="96" y="144" width="65" height="6" rx="3"/>
+              <rect x="170" y="144" width="29" height="6" rx="3"/>
+              <rect x="96" y="162" width="38" height="5" rx="2.5"/>
+              <rect x="143" y="162" width="50" height="5" rx="2.5"/>
+              <rect x="98" y="202" width="78" height="6" rx="3"/>
+            </g>
+            <g fill="#2563eb">
+              <rect x="173" y="105" width="19" height="5" rx="2.5"/>
+              <rect x="122" y="162" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>D. Outline + tokens</h2>
+        <p>Clean monochrome shell with token chunks and blue active spans.</p>
+        <div class="swatches"><span class="swatch" style="background:#0f172a"></span><span class="swatch" style="background:#eff6ff"></span><span class="swatch" style="background:#2563eb"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Museum artifact with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneB" x1="76" y1="35" x2="207" y2="248" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#f5f5f4"/>
+              <stop offset="0.48" stop-color="#a8a29e"/>
+              <stop offset="1" stop-color="#57534e"/>
+            </linearGradient>
+            <clipPath id="shapeB"><path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z"/></clipPath>
+          </defs>
+          <path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z" fill="url(#stoneB)"/>
+          <g clip-path="url(#shapeB)">
+            <g fill="#44403c" opacity="0.60">
+              <rect x="96" y="86" width="42" height="6" rx="3"/>
+              <rect x="146" y="86" width="23" height="6" rx="3"/>
+              <rect x="178" y="86" width="23" height="6" rx="3"/>
+              <rect x="95" y="105" width="24" height="5" rx="2.5"/>
+              <rect x="128" y="105" width="57" height="5" rx="2.5"/>
+              <rect x="96" y="144" width="65" height="6" rx="3"/>
+              <rect x="170" y="144" width="29" height="6" rx="3"/>
+              <rect x="96" y="162" width="38" height="5" rx="2.5"/>
+              <rect x="143" y="162" width="50" height="5" rx="2.5"/>
+              <rect x="98" y="202" width="78" height="6" rx="3"/>
+            </g>
+            <g fill="#2563eb" opacity="0.74">
+              <rect x="173" y="105" width="19" height="5" rx="2.5"/>
+              <rect x="122" y="162" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>B. Artifact + tokens</h2>
+        <p>Stone-like material with tokenized marks embedded as engraving.</p>
+        <div class="swatches"><span class="swatch" style="background:#a8a29e"></span><span class="swatch" style="background:#57534e"></span><span class="swatch" style="background:#2563eb"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Black stele wiki silhouette with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneFWiki" x1="66" y1="39" x2="221" y2="238" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#475569"/>
+              <stop offset="0.48" stop-color="#111827"/>
+              <stop offset="1" stop-color="#030712"/>
+            </linearGradient>
+            <clipPath id="shapeFWiki"><path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z"/></clipPath>
+          </defs>
+          <path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z" fill="url(#stoneFWiki)"/>
+          <g clip-path="url(#shapeFWiki)">
+            <g fill="#cbd5e1" opacity="0.82">
+              <rect x="92" y="91" width="44" height="6" rx="3"/>
+              <rect x="144" y="91" width="22" height="6" rx="3"/>
+              <rect x="176" y="91" width="20" height="6" rx="3"/>
+              <rect x="84" y="109" width="31" height="5" rx="2.5"/>
+              <rect x="124" y="109" width="62" height="5" rx="2.5"/>
+              <rect x="80" y="147" width="78" height="6" rx="3"/>
+              <rect x="168" y="147" width="32" height="6" rx="3"/>
+              <rect x="80" y="165" width="42" height="5" rx="2.5"/>
+              <rect x="132" y="165" width="61" height="5" rx="2.5"/>
+              <rect x="81" y="209" width="92" height="6" rx="3"/>
+            </g>
+            <g fill="#60a5fa" opacity="0.92">
+              <rect x="174" y="109" width="18" height="5" rx="2.5"/>
+              <rect x="112" y="165" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>F2. Black stele — wiki silhouette</h2>
+        <p>Darker material with a more artifact-accurate sloped top and flatter base.</p>
+        <div class="swatches"><span class="swatch" style="background:#111827"></span><span class="swatch" style="background:#475569"></span><span class="swatch" style="background:#60a5fa"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Outline wiki silhouette with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <clipPath id="shapeDWiki"><path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z"/></clipPath>
+          </defs>
+          <path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z" fill="#eff6ff" stroke="#0f172a" stroke-width="7" stroke-linejoin="round"/>
+          <g clip-path="url(#shapeDWiki)">
+            <g fill="#0f172a" opacity="0.88">
+              <rect x="92" y="91" width="44" height="6" rx="3"/>
+              <rect x="144" y="91" width="22" height="6" rx="3"/>
+              <rect x="176" y="91" width="20" height="6" rx="3"/>
+              <rect x="84" y="109" width="31" height="5" rx="2.5"/>
+              <rect x="124" y="109" width="62" height="5" rx="2.5"/>
+              <rect x="80" y="147" width="78" height="6" rx="3"/>
+              <rect x="168" y="147" width="32" height="6" rx="3"/>
+              <rect x="80" y="165" width="42" height="5" rx="2.5"/>
+              <rect x="132" y="165" width="61" height="5" rx="2.5"/>
+              <rect x="81" y="209" width="92" height="6" rx="3"/>
+            </g>
+            <g fill="#2563eb">
+              <rect x="174" y="109" width="18" height="5" rx="2.5"/>
+              <rect x="112" y="165" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>D2. Outline — wiki silhouette</h2>
+        <p>The flat icon treatment on a more historically grounded stone outline.</p>
+        <div class="swatches"><span class="swatch" style="background:#0f172a"></span><span class="swatch" style="background:#eff6ff"></span><span class="swatch" style="background:#2563eb"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Museum wiki silhouette with token blocks" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneBWiki" x1="66" y1="39" x2="221" y2="238" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#f5f5f4"/>
+              <stop offset="0.48" stop-color="#a8a29e"/>
+              <stop offset="1" stop-color="#57534e"/>
+            </linearGradient>
+            <clipPath id="shapeBWiki"><path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z"/></clipPath>
+          </defs>
+          <path d="M63 236 62 118 88 88 132 63 168 40 199 48 224 84 225 194 199 226 147 246 82 244z" fill="url(#stoneBWiki)"/>
+          <g clip-path="url(#shapeBWiki)">
+            <g fill="#44403c" opacity="0.60">
+              <rect x="92" y="91" width="44" height="6" rx="3"/>
+              <rect x="144" y="91" width="22" height="6" rx="3"/>
+              <rect x="176" y="91" width="20" height="6" rx="3"/>
+              <rect x="84" y="109" width="31" height="5" rx="2.5"/>
+              <rect x="124" y="109" width="62" height="5" rx="2.5"/>
+              <rect x="80" y="147" width="78" height="6" rx="3"/>
+              <rect x="168" y="147" width="32" height="6" rx="3"/>
+              <rect x="80" y="165" width="42" height="5" rx="2.5"/>
+              <rect x="132" y="165" width="61" height="5" rx="2.5"/>
+              <rect x="81" y="209" width="92" height="6" rx="3"/>
+            </g>
+            <g fill="#2563eb" opacity="0.74">
+              <rect x="174" y="109" width="18" height="5" rx="2.5"/>
+              <rect x="112" y="165" width="13" height="5" rx="2.5"/>
+            </g>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>B2. Artifact — wiki silhouette</h2>
+        <p>Stone material with the more realistic surviving-fragment outline.</p>
+        <div class="swatches"><span class="swatch" style="background:#a8a29e"></span><span class="swatch" style="background:#57534e"></span><span class="swatch" style="background:#2563eb"></span></div>
+      </div>
+    </section>
+
+  </main>
+</body>
+</html>
