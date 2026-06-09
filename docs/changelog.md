@@ -14,6 +14,12 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **扩展 effort 阶梯**（#245）：`ReasoningEffortLevel` 从 5 级扩展到 6 级（新增 `xhigh`）；输入归一化：`none` → `mode: disabled`；`max_effort` 上限可通过 shim YAML 声明
 - **流式 delta 事件携带 `block_index`**（#249）：`TextDeltaEvent`、`ReasoningDeltaEvent`、`ToolCallDeltaEvent` 新增可选 `block_index` 字段；Anthropic from_p 将 chunk `index` 写入 IR delta 事件
 - **`cache_creation_tokens` 用量字段**（#252）：`UsageInfo` TypedDict 新增 `cache_creation_tokens`；Anthropic、OpenAI Chat、OpenAI Responses、Google GenAI 在流式和非流式路径中透传缓存及明细用量字段
+- **模型级 `thinking_type` shim 推理配置**（[#256](https://github.com/Oaklight/llm-rosetta/pull/256)）：`ReasoningCapability` 新增 `thinking_type` 字段，强制出站 `thinking.type` 为 `"enabled"` 或 `"adaptive"`。`ProviderShim` 新增 `model_reasoning`，按上游模型 ID 进行逐模型覆盖（如 Argo `claudeopus47 → thinking_type: adaptive`）。`_normalize_thinking` transform 退役——thinking type 归一化现为声明式 shim YAML 配置
+- **Anthropic `provider_metadata` 支持 tool call / tool result / reasoning 块**（[#257](https://github.com/Oaklight/llm-rosetta/pull/257)）：Anthropic 转换器在 IR→provider 转换时将 `provider_metadata` 序列化为 `_provider_metadata` 附加到 `tool_use`、`tool_result` 和 `thinking` 块上，provider→IR 时读回。修复跨提供商往返中 Google `thought_signature` 丢失的问题（Anthropic 客户端 → Google 上游），此前导致 Gemini 2.5+ 以 400「missing thought_signature」拒绝请求
+- **响应侧 reasoning 无损保留**（[#263](https://github.com/Oaklight/llm-rosetta/pull/263)）：修复多个转换器在响应侧 IR→provider 转换中丢弃推理内容的问题：
+    - **Google GenAI**：`p_reasoning_to_ir` 将 `thoughtSignature` 捕获到 `provider_metadata` 中而非丢弃；`message_ops` 委托给 `content_ops.p_reasoning_to_ir()` 而非内联构造裸 `ReasoningPart`
+    - **Anthropic**：`ir_text_to_p` / `p_text_to_ir` 对 text 块也进行 `_provider_metadata` 往返保留，与 reasoning 块和 tool 块的处理一致
+    - **OpenAI Chat**：`_build_choice_to_provider` 收集 `ReasoningPart` 内容并输出为响应消息的 `reasoning_content` 字段，而非静默丢弃
 
 ### 变更
 
@@ -25,6 +31,8 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **流式 block index 失同步**（#249）：修复 Anthropic 流式 thinking block 后 text delta 使用错误 index（0）的问题——`to_p` 优先使用事件上的显式 `block_index`，`ContentBlockStartEvent` 锚定 `current_block_index`，不再通过 `next_block_index()` 自增
 - **跨提供商 block 边界合成**（#251）：从无 content block 的提供商（OpenAI Chat、OpenAI Responses、Google GenAI）转换到 Anthropic 时，在内容类型切换点（reasoning → text、text → tool_call 等）自动合成 `content_block_stop` + `content_block_start` 事件
 - **流式 usage 明细传播**（#252）：修复流式路径中 `cache_read_tokens`、`cache_creation_tokens`、`prompt_tokens_details`、`completion_tokens_details` 未正确传播的问题
+- **OpenAI Chat `thinking.type=auto` 透传修复**（[#258](https://github.com/Oaklight/llm-rosetta/pull/258)）：IR `mode: "auto"` 不是 OpenAI Chat `thinking.type` 的合法上游值。OpenAI Chat 转换器现在将 `auto` 映射为 `adaptive`，并应用与 Anthropic 路径相同的 shim `thinking_type` 覆盖及 `enabled` → `adaptive` 安全回退逻辑
+- **`thinking_type=enabled` 缺少 `budget_tokens` 时自动回退**：当 shim 声明 `thinking_type: enabled` 但请求中没有 `budget_tokens`（Anthropic 的 `type: "enabled"` 必须提供此字段）时，转换器自动回退为 `type: "adaptive"`，而非生成无效请求体。Anthropic 和 OpenAI Chat 两条转换路径均已应用
 
 ## v0.6.7 — 2026-06-04
 
