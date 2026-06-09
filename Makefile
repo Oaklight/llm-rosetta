@@ -134,6 +134,37 @@ clean-docker:
 	docker rmi $(DOCKER_IMAGE):latest 2>/dev/null || true
 	docker rmi $(DOCKER_IMAGE):$(V) 2>/dev/null || true
 
+# ──────────────────────────────────────────────
+# Dev-test deployment
+# ──────────────────────────────────────────────
+
+SSH_TARGET ?=
+COMPOSE_SERVICE ?= llm-rosetta-gateway-devtest
+
+deploy-dev:
+ifndef SSH_TARGET
+	$(error SSH_TARGET is required. Usage: make deploy-dev SSH_TARGET=cloud.usa2)
+endif
+	@COMMIT=$$(git rev-parse --short HEAD); \
+	DEV_VER="$(VERSION).dev0+g$$COMMIT"; \
+	echo "==> Building dev wheel $$DEV_VER..."; \
+	sed -i "s/__version__ = \"$(VERSION)\"/__version__ = \"$$DEV_VER\"/" src/llm_rosetta/__init__.py; \
+	rm -rf dist build; \
+	conda run -n llm-rosetta python -m build --wheel -q; \
+	git checkout src/llm_rosetta/__init__.py; \
+	WHEEL=$$(ls dist/*.whl | head -1 | xargs basename); \
+	echo "==> Building Docker image from $$WHEEL..."; \
+	docker build -f docker/Dockerfile --build-arg LOCAL_WHEEL=$$WHEEL -t $(DOCKER_IMAGE):dev-test -q .; \
+	echo "==> Deploying to $(SSH_TARGET) via zstd..."; \
+	docker save $(DOCKER_IMAGE):dev-test | zstd -3 | ssh $(SSH_TARGET) \
+		'zstd -d | docker load && \
+		 cd /dockervol/dockge/stacks/llm-rosetta && \
+		 docker compose up -d --force-recreate $(COMPOSE_SERVICE) && \
+		 sleep 3 && \
+		 curl -sS http://127.0.0.1:54982/health && echo && \
+		 docker exec llm-rosetta-$(COMPOSE_SERVICE)-1 python -c "import llm_rosetta; print(llm_rosetta.__version__)"'; \
+	echo "==> Dev-test deployed successfully."
+
 # Help target
 help:
 	@echo "Available targets:"
@@ -177,6 +208,12 @@ help:
 	@echo "  PYPI_MIRROR=<url>        - PyPI mirror URL"
 	@echo "  REGISTRY_MIRROR=<host>   - Docker registry mirror"
 	@echo ""
+	@echo "Deployment:"
+	@echo "  deploy-dev     - Build dev image and deploy to remote dev-test gateway"
+	@echo ""
+	@echo "Usage examples:"
+	@echo "  make deploy-dev SSH_TARGET=cloud.usa2"
+	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean build-docker push-docker clean-docker help
+.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean build-docker push-docker clean-docker deploy-dev help
