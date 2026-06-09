@@ -167,9 +167,13 @@ reasoning:
     - disabled 序列化（按 `cap.disabled` 策略）
     - effort 截断（按 `cap.max_effort`）
     - effort 映射（按 `cap.effort_map`）
+    - `thinking_type` 覆盖（如强制 `enabled` → `adaptive`，用于 Vertex AI 模型）
     - 结构化传透（mode、budget_tokens 等提供商特定字段）
 
 没有声明 `reasoning` 段的 shim 使用基础转换器类型的内置默认配置。
+
+!!! note "安全机制：`thinking_type: enabled` 但缺少 `budget_tokens`"
+    Anthropic 要求 `thinking.type = "enabled"` 时必须提供 `budget_tokens`。如果 `thinking_type: enabled` 覆盖生效但请求中没有 `budget_tokens`，helper 会自动回退到 `"adaptive"` 以避免产出不合法的请求。
 
 ## Argo Shim
 
