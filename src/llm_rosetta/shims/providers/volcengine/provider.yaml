@@ -4,6 +4,7 @@ default_api_key_env: VOLCENGINE_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
 reasoning:
   disabled: thinking_disabled
+  thinking_type: enabled
   effort_map:
     minimal: low
     low: low

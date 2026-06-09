@@ -197,12 +197,12 @@ class TestLoadProviders:
         assert "messages" in result
 
     def test_minimax_has_transforms(self):
-        """MiniMax shim should strip logprobs, top_logprobs, seed, stop."""
+        """MiniMax shim should strip fields + inject reasoning_split."""
         load_providers()
         s = get_shim("minimax")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.to_transforms) == 2  # strip_fields + inject_reasoning_split
+        assert len(s.from_transforms) == 1  # parse_think_tags
         body = {
             "logprobs": True,
             "top_logprobs": 5,
