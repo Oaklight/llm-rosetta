@@ -203,7 +203,11 @@ The gateway resolves the upstream model ID after alias resolution (e.g. `argo:cl
     - Clamps to `max_effort` if set
     - Serializes `mode: "disabled"` according to the `disabled` strategy
     - Places the effort value in the correct field via `effort_field`
+    - Applies `thinking_type` override if set (e.g. forces `enabled` → `adaptive` for Vertex AI models)
 3. Input normalization (`normalize_reasoning_input()`) converts provider-native values like `"none"`, `"xhigh"`, `"max"` to IR-canonical form before conversion begins
+
+!!! note "Safety: `thinking_type: enabled` without `budget_tokens`"
+    Anthropic requires `budget_tokens` when `thinking.type = "enabled"`. If a `thinking_type: enabled` override is applied but the request has no `budget_tokens`, the helper automatically falls back to `"adaptive"` to avoid an invalid payload.
 
 If a shim does not declare a `reasoning` section, default behavior is used (effort passed through as-is, disabled → omitted).
 
