@@ -13,6 +13,7 @@ from ...types.ir import (
     ExtensionItem,
     Message,
     is_citation_part,
+    is_reasoning_part,
     is_refusal_part,
     is_text_part,
     is_tool_call_part,
@@ -213,7 +214,7 @@ class OpenAIChatConverter(BaseConverter):
                     "OpenAI Chat does not support max_tool_calls, ignored"
                 )
 
-    def _build_choice_to_provider(
+    def _build_choice_to_provider(  # noqa: C901
         self, choice: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Build a single OpenAI Chat choice dict from an IR choice."""
@@ -225,6 +226,7 @@ class OpenAIChatConverter(BaseConverter):
 
         content_parts = message.get("content", [])
         text_parts: list[str] = []
+        reasoning_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
         refusal_text: str | None = None
         annotations: list[dict[str, Any]] = []
@@ -232,6 +234,8 @@ class OpenAIChatConverter(BaseConverter):
         for part in content_parts:
             if is_text_part(part):
                 text_parts.append(part["text"])
+            elif is_reasoning_part(part):
+                reasoning_parts.append(part.get("reasoning", ""))
             elif is_tool_call_part(part):
                 tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_refusal_part(part):
@@ -256,6 +260,9 @@ class OpenAIChatConverter(BaseConverter):
 
         if annotations:
             openai_message["annotations"] = annotations
+
+        if reasoning_parts:
+            openai_message["reasoning_content"] = "\n".join(reasoning_parts)
 
         reason = choice.get("finish_reason", {}).get("reason", "stop")
         openai_choice: dict[str, Any] = {
