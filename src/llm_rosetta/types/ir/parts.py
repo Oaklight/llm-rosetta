@@ -141,6 +141,9 @@ class ToolResultPart(TypedDict):
     tool_call_id: Required[str]
     result: Required[Any]  # 可以是字符串、对象等 Can be string, object, etc.
     is_error: NotRequired[bool]  # 是否是错误结果 Whether it is an error result
+    provider_metadata: NotRequired[
+        dict[str, Any]
+    ]  # Provider特定的元数据 Provider-specific metadata
 
 
 # ============================================================================

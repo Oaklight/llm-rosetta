@@ -36,16 +36,23 @@ class TestGoogleAnthropicToolCallRoundTrip:
 
         # Google → IR
         ir = GoogleGenAIToolOps.p_tool_call_to_ir(google_part)
-        assert ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        assert (
+            ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
 
         # IR → Anthropic
         anthropic_block = AnthropicToolOps.ir_tool_call_to_p(ir)
         assert anthropic_block["type"] == "tool_use"
-        assert anthropic_block["_provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        assert (
+            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
+            == self.THOUGHT_SIG
+        )
 
         # Anthropic → IR (simulating client sending it back)
         ir2 = AnthropicToolOps.p_tool_call_to_ir(anthropic_block)
-        assert ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        assert (
+            ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
 
         # IR → Google (outbound to upstream)
         google_out = GoogleGenAIToolOps.ir_tool_call_to_p(ir2)
@@ -133,11 +140,16 @@ class TestGoogleAnthropicReasoningRoundTrip:
         # IR → Anthropic
         anthropic_block = AnthropicContentOps.ir_reasoning_to_p(ir_with_meta)
         assert anthropic_block["type"] == "thinking"
-        assert anthropic_block["_provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        assert (
+            anthropic_block["_provider_metadata"]["google"]["thought_signature"]
+            == self.THOUGHT_SIG
+        )
 
         # Anthropic → IR
         ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic_block)
-        assert ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        assert (
+            ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
+        )
 
         # IR → Google
         google_out = GoogleGenAIContentOps.ir_reasoning_to_p(ir2)
@@ -155,7 +167,10 @@ class TestGoogleAnthropicReasoningRoundTrip:
 
         anthropic = AnthropicContentOps.ir_reasoning_to_p(ir)
         assert anthropic["signature"] == "anthropic-native-sig"
-        assert anthropic["_provider_metadata"]["google"]["thought_signature"] == "google-sig"
+        assert (
+            anthropic["_provider_metadata"]["google"]["thought_signature"]
+            == "google-sig"
+        )
 
         ir2 = AnthropicContentOps.p_reasoning_to_ir(anthropic)
         assert ir2["signature"] == "anthropic-native-sig"
