@@ -235,9 +235,7 @@ class AnthropicContentOps(BaseContentOps):
 
         # Preserve provider_metadata for cross-provider round-trip
         # (e.g. Google thought_signature on reasoning parts)
-        from typing import cast as _cast
-
-        pm = _cast(dict, ir_reasoning).get("provider_metadata")
+        pm = ir_reasoning.get("provider_metadata")
         if pm:
             result["_provider_metadata"] = pm
 
