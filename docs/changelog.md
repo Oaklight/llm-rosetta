@@ -21,6 +21,11 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
     - **Anthropic**：`ir_text_to_p` / `p_text_to_ir` 对 text 块也进行 `_provider_metadata` 往返保留，与 reasoning 块和 tool 块的处理一致
     - **OpenAI Chat**：`_build_choice_to_provider` 收集 `ReasoningPart` 内容并输出为响应消息的 `reasoning_content` 字段，而非静默丢弃
 
+- **提供商特定 reasoning 字段归一化**（[#264](https://github.com/Oaklight/llm-rosetta/pull/264)）：为 MiniMax、OpenRouter、Volcengine 添加 shim transform 和配置以处理 reasoning 字段差异：
+    - **MiniMax**：`thinking_type: adaptive`（拒绝 `enabled`）；`_inject_reasoning_split` to_transform 在请求含 thinking 时自动设置 `reasoning_split: true`；`_parse_think_tags` from_transform 在未启用 reasoning_split 时从 content 中提取 `<think>` 标签作为回退
+    - **OpenRouter**：`_rename_reasoning_field` from_transform 将 `message.reasoning` 重命名为 `message.reasoning_content`（OpenRouter 使用非标准字段名）
+    - **Volcengine**：`thinking_type: enabled`（拒绝 `adaptive`；覆盖 base converter 的 `auto → adaptive` 默认映射）
+
 ### 变更
 
 - **`_build_ir_usage` 返回类型收紧**（#253）：返回类型从 `dict[str, Any]` 收紧为 `UsageInfo`，`_build_provider_usage` 参数类型从 `dict[str, Any]` 放宽为 `Mapping[str, Any]`；移除所有 usage 相关的 `ty: ignore`
