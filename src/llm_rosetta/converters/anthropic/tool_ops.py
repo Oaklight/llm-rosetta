@@ -296,19 +296,26 @@ class AnthropicToolOps(BaseToolOps):
         tool_input = ir_tool_call.get("tool_input", {})
 
         if tool_type == "web_search":
-            return {
+            result = {
                 "type": "server_tool_use",
                 "id": ir_tool_call["tool_call_id"],
                 "name": "web_search",
                 "input": tool_input,
             }
+        else:
+            result = {
+                "type": "tool_use",
+                "id": ir_tool_call["tool_call_id"],
+                "name": ir_tool_call["tool_name"],
+                "input": tool_input,
+            }
 
-        return {
-            "type": "tool_use",
-            "id": ir_tool_call["tool_call_id"],
-            "name": ir_tool_call["tool_name"],
-            "input": tool_input,
-        }
+        # Preserve provider_metadata for cross-provider round-trip
+        # (e.g. Google thought_signature)
+        if "provider_metadata" in ir_tool_call:
+            result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+
+        return result
 
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
@@ -330,13 +337,20 @@ class AnthropicToolOps(BaseToolOps):
         else:
             tool_type = "function"
 
-        return ToolCallPart(
+        part = ToolCallPart(
             type="tool_call",
             tool_call_id=provider_tool_call.get("id", ""),
             tool_name=tool_name,
             tool_input=provider_tool_call.get("input", {}),
             tool_type=tool_type,
         )
+
+        # Read back provider_metadata for cross-provider round-trip
+        pm = provider_tool_call.get("_provider_metadata")
+        if pm:
+            part["provider_metadata"] = pm
+
+        return part
 
     # ==================== Tool Result ====================
 
@@ -373,6 +387,10 @@ class AnthropicToolOps(BaseToolOps):
         if is_error is not None:
             result["is_error"] = is_error
 
+        # Preserve provider_metadata for cross-provider round-trip
+        if "provider_metadata" in ir_tool_result:
+            result["_provider_metadata"] = ir_tool_result["provider_metadata"]
+
         return result
 
     @staticmethod
@@ -391,12 +409,19 @@ class AnthropicToolOps(BaseToolOps):
 
             content = convert_content_blocks_to_ir(content, AnthropicContentOps)
 
-        return ToolResultPart(
+        part = ToolResultPart(
             type="tool_result",
             tool_call_id=provider_tool_result.get("tool_use_id", ""),
             result=content,
             is_error=provider_tool_result.get("is_error", False),
         )
+
+        # Read back provider_metadata for cross-provider round-trip
+        pm = provider_tool_result.get("_provider_metadata")
+        if pm:
+            part["provider_metadata"] = pm
+
+        return part
 
     # ==================== Tool Config ====================
 
