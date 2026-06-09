@@ -169,7 +169,7 @@ def apply_reasoning_config(
 
     # 4. Converter-specific structural pass-through.
     if converter_type == "openai_chat":
-        _apply_openai_chat_extras(ir, result, mode, budget_tokens)
+        _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap)
     elif converter_type == "openai_responses":
         _apply_openai_responses_extras(ir, result, mode, budget_tokens)
     elif converter_type == "anthropic":
@@ -261,15 +261,29 @@ def _apply_openai_chat_extras(
     result: dict[str, Any],
     mode: str | None,
     budget_tokens: int | None,
+    cap: ReasoningCapability | None = None,
 ) -> None:
     """OpenAI Chat extras: thinking object for mode/budget_tokens (DeepSeek ext)."""
     thinking: dict[str, Any] = {}
     if mode:
-        thinking["type"] = mode
+        # IR "auto" is not a valid upstream value; map to "adaptive"
+        # (DeepSeek/Volcengine vocabulary).
+        thinking["type"] = "adaptive" if mode == "auto" else mode
     if budget_tokens is not None:
         thinking["budget_tokens"] = budget_tokens
     if thinking:
         result["thinking"] = thinking
+
+    # Apply shim thinking_type override if set.
+    if cap is not None and cap.thinking_type is not None and "thinking" in result:
+        current_type = result["thinking"].get("type")
+        target_type = cap.thinking_type
+        if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
+            target_type = "adaptive"
+        if current_type != target_type:
+            result["thinking"]["type"] = target_type
+            if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
+                del result["thinking"]["budget_tokens"]
 
 
 def _apply_openai_responses_extras(

@@ -192,12 +192,13 @@ class TestOpenAIChatConfigOps:
         assert result["thinking"]["type"] == "enabled"
 
     def test_ir_reasoning_config_mode_auto_with_effort(self):
-        """Test mode: auto outputs both reasoning_effort and thinking."""
+        """Test mode: auto outputs reasoning_effort and thinking.type=adaptive."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "auto", "effort": "medium"}
         )
         assert result["reasoning_effort"] == "medium"
-        assert result["thinking"]["type"] == "auto"
+        # IR "auto" maps to "adaptive" (DeepSeek/Volcengine vocabulary)
+        assert result["thinking"]["type"] == "adaptive"
 
     def test_ir_reasoning_config_all_fields(self):
         """Test mode + effort + budget_tokens coexistence."""

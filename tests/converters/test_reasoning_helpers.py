@@ -110,6 +110,35 @@ class TestOpenAIChatShim:
         )
         assert result["reasoning_effort"] == "high"
 
+    def test_mode_auto_maps_to_adaptive_not_auto(self):
+        """IR mode 'auto' must never appear as thinking.type — maps to 'adaptive'."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto"}),
+            self.cap,
+            converter_type="openai_chat",
+        )
+        assert result["thinking"]["type"] == "adaptive"
+
+    def test_mode_enabled_with_budget(self):
+        """mode=enabled + budget_tokens → thinking.type=enabled."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "enabled", "budget_tokens": 2048}),
+            self.cap,
+            converter_type="openai_chat",
+        )
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 2048
+
+    def test_mode_auto_with_budget(self):
+        """mode=auto + budget_tokens → adaptive + budget_tokens."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "budget_tokens": 4096}),
+            self.cap,
+            converter_type="openai_chat",
+        )
+        assert result["thinking"]["type"] == "adaptive"
+        assert result["thinking"]["budget_tokens"] == 4096
+
 
 # ── OpenAI Responses shim ─────────────────────────────────────────────────
 
