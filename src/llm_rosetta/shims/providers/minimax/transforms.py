@@ -43,6 +43,7 @@ def _parse_think_tags(body: dict[str, Any]) -> dict[str, Any]:
 
     Fallback for responses where ``reasoning_split`` was not set.
     If ``reasoning_content`` already exists, this is a no-op.
+    Handles multiple ``<think>`` blocks by joining them with newlines.
     """
     choices = body.get("choices")
     if not isinstance(choices, list):
@@ -58,9 +59,9 @@ def _parse_think_tags(body: dict[str, Any]) -> dict[str, Any]:
         content = message.get("content")
         if not isinstance(content, str):
             continue
-        match = _THINK_RE.search(content)
-        if match:
-            message["reasoning_content"] = match.group(1).strip()
+        matches = _THINK_RE.findall(content)
+        if matches:
+            message["reasoning_content"] = "\n".join(m.strip() for m in matches)
             message["content"] = _THINK_RE.sub("", content).strip()
     return body
 
