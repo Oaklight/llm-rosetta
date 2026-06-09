@@ -313,9 +313,16 @@ class GoogleGenAIContentOps(BaseContentOps):
         Returns:
             IR ReasoningPart.
         """
-        return ReasoningPart(
+        result = ReasoningPart(
             type="reasoning", reasoning=provider_reasoning.get("text", "")
         )
+        # Preserve thoughtSignature in provider_metadata (same as text/tool parts)
+        thought_sig = provider_reasoning.get(
+            "thoughtSignature"
+        ) or provider_reasoning.get("thought_signature")
+        if thought_sig:
+            result["provider_metadata"] = {"google": {"thought_signature": thought_sig}}
+        return result
 
     # ==================== Refusal (not natively supported) ====================
 

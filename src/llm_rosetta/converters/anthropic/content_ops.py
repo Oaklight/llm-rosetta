@@ -43,7 +43,12 @@ class AnthropicContentOps(BaseContentOps):
         Returns:
             Anthropic text content dict: ``{"type": "text", "text": "..."}``
         """
-        return {"type": "text", "text": ir_text["text"]}
+        result: dict[str, Any] = {"type": "text", "text": ir_text["text"]}
+        # Preserve provider_metadata for cross-provider round-trip
+        pm = ir_text.get("provider_metadata")  # type: ignore[typeddict-item]
+        if pm:
+            result["_provider_metadata"] = pm
+        return result
 
     @staticmethod
     def p_text_to_ir(provider_text: Any, **kwargs: Any) -> TextPart:
@@ -63,7 +68,12 @@ class AnthropicContentOps(BaseContentOps):
         if isinstance(provider_text, str):
             return TextPart(type="text", text=provider_text)
         if isinstance(provider_text, dict) and provider_text.get("type") == "text":
-            return TextPart(type="text", text=provider_text["text"])
+            result = TextPart(type="text", text=provider_text["text"])
+            # Read back provider_metadata for cross-provider round-trip
+            pm = provider_text.get("_provider_metadata")
+            if pm:
+                result["provider_metadata"] = pm
+            return result
         raise ValueError(f"Cannot convert to TextPart: {provider_text!r}")
 
     # ==================== Image ====================

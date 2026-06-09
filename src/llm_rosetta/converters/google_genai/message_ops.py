@@ -21,7 +21,6 @@ from ...types.ir import (
     ContentPart,
     ExtensionItem,
     Message,
-    ReasoningPart,
     is_audio_part,
     is_extension_item,
     is_file_part,
@@ -325,9 +324,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         for part in parts:
             # Handle reasoning (thoughts)
             if part.get("thought") is True:
-                content_parts.append(
-                    ReasoningPart(type="reasoning", reasoning=part.get("text", ""))
-                )
+                content_parts.append(self.content_ops.p_reasoning_to_ir(part))
                 continue
 
             # Handle function_call and function_response via tool_ops
