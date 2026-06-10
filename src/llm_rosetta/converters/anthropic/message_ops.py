@@ -15,6 +15,7 @@ Key Anthropic differences:
 from collections.abc import Sequence
 from typing import Any, cast
 
+from ...shims.provider_shim import ReasoningCapability
 from ...types.ir import (
     ContentPart,
     ExtensionItem,
@@ -73,6 +74,9 @@ class AnthropicMessageOps(BaseMessageOps):
         """
         messages: list[dict[str, Any]] = []
         warnings: list[str] = []
+        reasoning_cap = kwargs.get("reasoning_cap")
+        if not isinstance(reasoning_cap, ReasoningCapability):
+            reasoning_cap = None
 
         for item in ir_messages:
             if is_message(item):
@@ -81,7 +85,9 @@ class AnthropicMessageOps(BaseMessageOps):
                 if role == "system":
                     # System messages handled at converter level
                     continue
-                converted, msg_warnings = self._ir_message_to_p(msg, **kwargs)
+                converted, msg_warnings = self._ir_message_to_p(
+                    msg, reasoning_cap=reasoning_cap
+                )
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
@@ -96,7 +102,10 @@ class AnthropicMessageOps(BaseMessageOps):
         return messages, warnings
 
     def _ir_message_to_p(
-        self, message: Message, **kwargs: Any
+        self,
+        message: Message,
+        *,
+        reasoning_cap: ReasoningCapability | None = None,
     ) -> tuple[Any, list[str]]:
         """Convert a single IR message to Anthropic format.
 
@@ -115,7 +124,9 @@ class AnthropicMessageOps(BaseMessageOps):
         elif role == "user":
             return self._ir_user_to_p(content, warnings)
         elif role == "assistant":
-            return self._ir_assistant_to_p(content, warnings, **kwargs)
+            return self._ir_assistant_to_p(
+                content, warnings, reasoning_cap=reasoning_cap
+            )
         elif role == "tool":
             return self._ir_tool_to_p(content, warnings)
 
@@ -166,7 +177,11 @@ class AnthropicMessageOps(BaseMessageOps):
         return {"role": "user", "content": anthropic_content}, warnings
 
     def _ir_assistant_to_p(
-        self, content: list, warnings: list[str], **kwargs: Any
+        self,
+        content: list,
+        warnings: list[str],
+        *,
+        reasoning_cap: ReasoningCapability | None = None,
     ) -> tuple[dict[str, Any] | None, list[str]]:
         """Convert IR assistant message content to Anthropic assistant message.
 
@@ -181,9 +196,10 @@ class AnthropicMessageOps(BaseMessageOps):
             elif is_tool_call_part(part):
                 anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_reasoning_part(part):
-                reasoning_cap = kwargs.get("reasoning_cap")
-                unsigned_policy = getattr(
-                    reasoning_cap, "unsigned_reasoning_blocks", "as_is"
+                unsigned_policy = (
+                    reasoning_cap.unsigned_reasoning_blocks
+                    if reasoning_cap is not None
+                    else "as_is"
                 )
                 if unsigned_policy == "preserve" and not part.get("signature"):
                     self._preserve_unsigned_reasoning(part)
