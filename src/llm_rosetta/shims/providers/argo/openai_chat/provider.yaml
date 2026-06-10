@@ -1,4 +1,4 @@
-name: argo_openai_chat
+name: argo--openai_chat
 base: openai_chat
 default_base_url: https://apps.inside.anl.gov/argoapi/v1
 default_api_key_env: ARGO_API_KEY
