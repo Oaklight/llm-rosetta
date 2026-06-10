@@ -1,12 +1,13 @@
-name: volcengine
-base: openai_chat
+name: volcengine--openai_responses
+base: openai_responses
+default_base_url: https://ark.cn-beijing.volces.com/api/v3
 default_api_key_env: VOLCENGINE_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
 reasoning:
-  disabled: thinking_disabled
-  thinking_type: enabled
+  disabled: omit
+  effort_field: reasoning.effort
   effort_map:
-    minimal: low
+    minimal: minimal
     low: low
     medium: medium
     high: high
