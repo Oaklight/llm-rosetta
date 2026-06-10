@@ -5,5 +5,11 @@ default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 reasoning:
   disabled: thinking_disabled
-  effort_field: none
-  effort_map: {}
+  effort_field: reasoning_effort
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    xhigh: xhigh
+    max: max

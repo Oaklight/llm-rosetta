@@ -6,8 +6,9 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcen
 reasoning:
   disabled: thinking_disabled
   thinking_type: enabled
+  max_effort: high
   effort_map:
-    minimal: low
+    minimal: minimal
     low: low
     medium: medium
     high: high
