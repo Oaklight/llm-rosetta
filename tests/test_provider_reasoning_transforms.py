@@ -5,7 +5,7 @@ Covers MiniMax, OpenRouter reasoning field normalization transforms.
 
 from __future__ import annotations
 
-from llm_rosetta.shims.providers.minimax.transforms import (
+from llm_rosetta.shims.providers.minimax.openai_chat.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )
@@ -161,3 +161,105 @@ class TestRenameReasoningField:
         body = {"error": "something"}
         result = _rename_reasoning_field(body)
         assert result == body
+
+
+# ===========================================================================
+# OpenAI Chat: reasoning metadata round-trip
+# ===========================================================================
+
+
+class TestOpenAIChatReasoningMetadataRoundTrip:
+    """Test reasoning_details and encrypted_content survive IR round-trip."""
+
+    def test_reasoning_details_preserved(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        conv = OpenAIChatConverter()
+        resp = {
+            "id": "c1",
+            "object": "chat.completion",
+            "model": "test",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Answer.",
+                        "reasoning_content": "Let me think...",
+                        "reasoning_details": [
+                            {
+                                "type": "reasoning.text",
+                                "text": "Let me think...",
+                                "format": "anthropic-claude-v1",
+                                "index": 0,
+                                "signature": "sig_abc123",
+                            }
+                        ],
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+        ir = conv.response_from_provider(resp)
+        out = conv.response_to_provider(ir)
+        msg = out["choices"][0]["message"]
+        assert msg["reasoning_content"] == "Let me think..."
+        assert "reasoning_details" in msg
+        assert msg["reasoning_details"][0]["signature"] == "sig_abc123"
+
+    def test_encrypted_content_preserved(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        conv = OpenAIChatConverter()
+        resp = {
+            "id": "c2",
+            "object": "chat.completion",
+            "model": "test",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Answer.",
+                        "reasoning_content": "Thinking...",
+                        "encrypted_content": "gAAAAABq_encrypted_data_here",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+        ir = conv.response_from_provider(resp)
+        out = conv.response_to_provider(ir)
+        msg = out["choices"][0]["message"]
+        assert msg["reasoning_content"] == "Thinking..."
+        assert msg["encrypted_content"] == "gAAAAABq_encrypted_data_here"
+
+    def test_no_metadata_when_absent(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        conv = OpenAIChatConverter()
+        resp = {
+            "id": "c3",
+            "object": "chat.completion",
+            "model": "test",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": "Answer.",
+                        "reasoning_content": "Plain reasoning.",
+                    },
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 20, "total_tokens": 30},
+        }
+        ir = conv.response_from_provider(resp)
+        out = conv.response_to_provider(ir)
+        msg = out["choices"][0]["message"]
+        assert msg["reasoning_content"] == "Plain reasoning."
+        assert "reasoning_details" not in msg
+        assert "encrypted_content" not in msg

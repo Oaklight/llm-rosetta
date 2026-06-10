@@ -204,12 +204,12 @@ class TestBuiltinTransforms:
         load_providers()
 
     def test_volcengine_has_to_transforms(self):
-        shim = get_shim("volcengine")
+        shim = get_shim("volcengine--openai_chat")
         assert shim is not None
         assert len(shim.to_transforms) > 0
 
     def test_volcengine_strips_logprobs(self):
-        shim = get_shim("volcengine")
+        shim = get_shim("volcengine--openai_chat")
         assert shim is not None
         body = {"model": "test", "logprobs": True, "top_logprobs": 5, "messages": []}
         result = apply_transforms(shim.to_transforms, body)
@@ -286,7 +286,7 @@ class TestBuiltinTransforms:
         assert result["temperature"] == 0.7
 
     def test_minimax_strips_unsupported(self):
-        shim = get_shim("minimax")
+        shim = get_shim("minimax--openai_chat")
         assert shim is not None
         body = {
             "model": "MiniMax-M2",

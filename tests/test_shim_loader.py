@@ -83,22 +83,24 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 14 built-in shims."""
+        """Verify the real providers/ directory loads all 16 built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
         assert names == {
-            "argo_anthropic",
-            "argo_openai_chat",
+            "argo--anthropic",
+            "argo--openai_chat",
             "openai",
             "openai_responses",
             "openrouter",
             "anthropic",
             "google",
             "deepseek",
-            "minimax",
+            "minimax--openai_chat",
+            "minimax--anthropic",
             "moonshot",
             "qwen",
-            "volcengine",
+            "volcengine--openai_chat",
+            "volcengine--openai_responses",
             "xai",
             "zhipu",
         }
@@ -112,11 +114,13 @@ class TestLoadProviders:
             "anthropic",
             "google",
             "deepseek",
-            "volcengine",
+            "volcengine--openai_chat",
+            "volcengine--openai_responses",
             "xai",
             "qwen",
             "moonshot",
-            "minimax",
+            "minimax--openai_chat",
+            "minimax--anthropic",
             "zhipu",
         ):
             shim = get_shim(name)
@@ -126,7 +130,7 @@ class TestLoadProviders:
     def test_volcengine_has_transforms(self):
         """Volcengine shim should have strip_fields transforms loaded."""
         load_providers()
-        v = get_shim("volcengine")
+        v = get_shim("volcengine--openai_chat")
         assert v is not None
         assert len(v.to_transforms) == 1
         assert len(v.from_transforms) == 0
@@ -199,7 +203,7 @@ class TestLoadProviders:
     def test_minimax_has_transforms(self):
         """MiniMax shim should strip fields + inject reasoning_split."""
         load_providers()
-        s = get_shim("minimax")
+        s = get_shim("minimax--openai_chat")
         assert s is not None
         assert len(s.to_transforms) == 2  # strip_fields + inject_reasoning_split
         assert len(s.from_transforms) == 1  # parse_think_tags
@@ -254,10 +258,12 @@ class TestLoadProviders:
             "anthropic": "anthropic",
             "google": "google",
             "deepseek": "openai_chat",
-            "minimax": "openai_chat",
+            "minimax--openai_chat": "openai_chat",
+            "minimax--anthropic": "anthropic",
             "moonshot": "openai_chat",
             "qwen": "openai_chat",
-            "volcengine": "openai_chat",
+            "volcengine--openai_chat": "openai_chat",
+            "volcengine--openai_responses": "openai_responses",
             "xai": "openai_chat",
             "zhipu": "openai_chat",
         }
@@ -269,7 +275,7 @@ class TestLoadProviders:
             )
 
     # Shims that intentionally have no public logo
-    _LOGO_EXEMPT = {"argo_anthropic", "argo_openai_chat"}
+    _LOGO_EXEMPT = {"argo--anthropic", "argo--openai_chat"}
 
     def test_all_shims_have_logos(self):
         """Every built-in shim (except exempted ones) should have a logo URL."""

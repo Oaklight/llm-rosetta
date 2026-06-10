@@ -11,7 +11,7 @@ class TestBuildProviderInfo:
         load_providers()
         monkeypatch.setenv("ARGO_API_KEY", "pding")
 
-        info = build_provider_info("argo_openai_chat", {})
+        info = build_provider_info("argo--openai_chat", {})
 
         assert info.auth_headers() == {"Authorization": "Bearer pding"}
         assert (
@@ -23,7 +23,7 @@ class TestBuildProviderInfo:
         load_providers()
         monkeypatch.setenv("ARGO_API_KEY", "pding")
 
-        info = build_provider_info("argo_anthropic", {})
+        info = build_provider_info("argo--anthropic", {})
 
         assert info.auth_headers() == {
             "x-api-key": "pding",

@@ -38,7 +38,7 @@ def _clean_registry():
 def volcengine_shim():
     """Register a volcengine-like shim with to_transforms."""
     shim = ProviderShim(
-        name="volcengine",
+        name="volcengine--openai_chat",
         base="openai_chat",
         to_transforms=(strip_fields("logprobs", "top_logprobs"),),
     )
@@ -82,7 +82,7 @@ class TestResolveTargetTransforms:
         assert to_t == ()
 
     def test_shim_with_to_transforms(self, volcengine_shim):
-        from_t, to_t = _resolve_target_transforms("volcengine", "some-model")
+        from_t, to_t = _resolve_target_transforms("volcengine--openai_chat", "some-model")
         assert from_t == ()
         assert len(to_t) == 1
         # Verify the transform actually strips the right fields
@@ -165,7 +165,7 @@ class TestNonStreamingTransforms:
                     },
                     model="test-model",
                     metadata_store=ProviderMetadataStore(),
-                    target_shim_name="volcengine",
+                    target_shim_name="volcengine--openai_chat",
                 )
 
         asyncio.run(run())

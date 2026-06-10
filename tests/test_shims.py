@@ -146,7 +146,14 @@ class TestBuiltinShims:
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
     def test_third_party_providers_registered(self):
-        for name in ("deepseek", "volcengine", "openrouter"):
+        for name in (
+            "deepseek",
+            "volcengine--openai_chat",
+            "volcengine--openai_responses",
+            "openrouter",
+            "minimax--openai_chat",
+            "minimax--anthropic",
+        ):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
@@ -194,7 +201,7 @@ class TestShimConverterIntegration:
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import OpenAIChatConverter
 
-        converter = get_converter_for_provider("volcengine")
+        converter = get_converter_for_provider("volcengine--openai_chat")
         assert isinstance(converter, OpenAIChatConverter)
 
     def test_base_types_still_work(self):
@@ -233,28 +240,28 @@ class TestGroupedProviders:
 
     def test_grouped_providers_registered(self):
         """Shims under a group folder register with their YAML name."""
-        for name in ("argo_anthropic", "argo_openai_chat"):
+        for name in ("argo--anthropic", "argo--openai_chat"):
             shim = get_shim(name)
             assert shim is not None, f"Grouped shim '{name}' not registered"
 
     def test_grouped_provider_base_types(self):
         """Grouped shims resolve to the correct base converter."""
-        anth = get_shim("argo_anthropic")
-        oai = get_shim("argo_openai_chat")
+        anth = get_shim("argo--anthropic")
+        oai = get_shim("argo--openai_chat")
         assert anth is not None and anth.base == "anthropic"
         assert oai is not None and oai.base == "openai_chat"
 
     def test_grouped_provider_transforms_loaded(self):
         """Grouped shims have their transforms.py imported."""
-        anth = get_shim("argo_anthropic")
+        anth = get_shim("argo--anthropic")
         assert anth is not None
         # argo_anthropic has from_transforms (to_transforms retired)
         assert len(anth.from_transforms) > 0
 
     def test_grouped_provider_reasoning_configs_loaded(self):
         """Grouped shims load reasoning capability configs."""
-        anth = get_shim("argo_anthropic")
-        oai = get_shim("argo_openai_chat")
+        anth = get_shim("argo--anthropic")
+        oai = get_shim("argo--openai_chat")
         assert anth is not None and anth.reasoning is not None
         assert oai is not None and oai.reasoning is not None
         assert anth.reasoning.effort_field == "output_config.effort"
@@ -263,7 +270,7 @@ class TestGroupedProviders:
 
     def test_argo_anthropic_model_reasoning_overrides(self):
         """Argo anthropic has model_reasoning for claudeopus47."""
-        anth = get_shim("argo_anthropic")
+        anth = get_shim("argo--anthropic")
         assert anth is not None
         assert anth.model_reasoning is not None
         assert "claudeopus47" in anth.model_reasoning
@@ -275,13 +282,13 @@ class TestGroupedProviders:
 
     def test_argo_anthropic_provider_thinking_type(self):
         """Argo anthropic provider-level thinking_type is enabled."""
-        anth = get_shim("argo_anthropic")
+        anth = get_shim("argo--anthropic")
         assert anth is not None and anth.reasoning is not None
         assert anth.reasoning.thinking_type == "enabled"
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
         flat_names = ("openai", "anthropic", "deepseek", "google")
-        grouped_names = ("argo_anthropic", "argo_openai_chat")
+        grouped_names = ("argo--anthropic", "argo--openai_chat")
         for name in (*flat_names, *grouped_names):
             assert get_shim(name) is not None, f"Shim '{name}' not found"
