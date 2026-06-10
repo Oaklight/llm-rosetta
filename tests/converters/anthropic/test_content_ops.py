@@ -209,6 +209,13 @@ class TestAnthropicContentOps:
         assert result["thinking"] == "thinking..."
         assert result["signature"] == "sig123"
 
+    def test_ir_reasoning_to_p_with_empty_signature(self):
+        """Test empty signature is preserved for validation behavior."""
+        ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
+        ir_reasoning["signature"] = ""
+        result = AnthropicContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result["signature"] == ""
+
     def test_p_reasoning_to_ir(self):
         """Test Anthropic thinking block → IR ReasoningPart."""
         provider = {"type": "thinking", "thinking": "I should use a tool."}
@@ -227,6 +234,12 @@ class TestAnthropicContentOps:
         assert result["type"] == "reasoning"
         assert result["reasoning"] == "thinking..."
         assert result["signature"] == "sig456"
+
+    def test_p_reasoning_to_ir_with_empty_signature(self):
+        """Test empty signature is preserved for downstream policy decisions."""
+        provider = {"type": "thinking", "thinking": "thinking...", "signature": ""}
+        result = AnthropicContentOps.p_reasoning_to_ir(provider)
+        assert result["signature"] == ""
 
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip."""

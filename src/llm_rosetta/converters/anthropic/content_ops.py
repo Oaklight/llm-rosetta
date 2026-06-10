@@ -240,7 +240,7 @@ class AnthropicContentOps(BaseContentOps):
         }
 
         signature = ir_reasoning.get("signature")
-        if signature:
+        if signature is not None:
             result["signature"] = signature
 
         # Preserve provider_metadata for cross-provider round-trip
@@ -267,7 +267,7 @@ class AnthropicContentOps(BaseContentOps):
         )
 
         signature = provider_reasoning.get("signature")
-        if signature:
+        if signature is not None:
             result["signature"] = signature
 
         # Read back provider_metadata for cross-provider round-trip

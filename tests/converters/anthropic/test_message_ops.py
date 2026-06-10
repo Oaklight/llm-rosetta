@@ -7,6 +7,7 @@ from typing import Any, Union, cast
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.anthropic.message_ops import AnthropicMessageOps
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
+from llm_rosetta.shims.provider_shim import ReasoningCapability
 from llm_rosetta.types.ir import Message
 from llm_rosetta.types.ir.extensions import ExtensionItem
 
@@ -204,6 +205,65 @@ class TestAnthropicMessageOps:
         assert msg["content"][0]["type"] == "thinking"
         assert msg["content"][0]["thinking"] == "I need to think."
         assert msg["content"][1]["type"] == "text"
+
+    def test_ir_assistant_preserves_unsigned_reasoning_in_metadata(self):
+        """Test preserve policy keeps unsigned reasoning in IR metadata."""
+        reasoning_part = {"type": "reasoning", "reasoning": "I need to think."}
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        reasoning_part,
+                        {"type": "text", "text": "Here is my answer."},
+                    ],
+                }
+            ],
+        )
+        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        result, warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, reasoning_cap=cap
+        )
+        assert result[0]["content"] == [{"type": "text", "text": "Here is my answer."}]
+        assert reasoning_part["provider_metadata"] == {
+            "anthropic": {
+                "unsigned_reasoning_blocks": [
+                    {
+                        "reasoning": "I need to think.",
+                        "signature": None,
+                        "status": None,
+                    }
+                ]
+            }
+        }
+        assert warnings == [
+            "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
+        ]
+
+    def test_ir_assistant_preserve_policy_keeps_signed_reasoning(self):
+        """Test preserve policy only filters reasoning with no usable signature."""
+        ir_messages = cast(
+            list[Message],
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "reasoning",
+                            "reasoning": "I need to think.",
+                            "signature": "sig_valid",
+                        },
+                    ],
+                }
+            ],
+        )
+        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        result, warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, reasoning_cap=cap
+        )
+        assert result[0]["content"][0]["signature"] == "sig_valid"
+        assert warnings == []
 
     def test_extension_item_system_event(self):
         """Test extension item system_event produces warning."""

@@ -87,6 +87,9 @@ def _load_single_provider(
             effort_field=reasoning_cfg.get("effort_field", "reasoning_effort"),
             max_effort=reasoning_cfg.get("max_effort"),
             thinking_type=reasoning_cfg.get("thinking_type"),
+            unsigned_reasoning_blocks=reasoning_cfg.get(
+                "unsigned_reasoning_blocks", "as_is"
+            ),
             effort_map=reasoning_cfg.get("effort_map", {}),
         )
 
@@ -106,6 +109,10 @@ def _load_single_provider(
                 max_effort=overrides.get("max_effort", reasoning_cap.max_effort),
                 thinking_type=overrides.get(
                     "thinking_type", reasoning_cap.thinking_type
+                ),
+                unsigned_reasoning_blocks=overrides.get(
+                    "unsigned_reasoning_blocks",
+                    reasoning_cap.unsigned_reasoning_blocks,
                 ),
                 effort_map=overrides.get("effort_map", reasoning_cap.effort_map),
             )

@@ -172,6 +172,16 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "anthropic"
 
+    def test_argo_anthropic_preserves_unsigned_reasoning_blocks(self):
+        shim = get_shim("argo--anthropic")
+        assert shim is not None
+        assert shim.reasoning is not None
+        assert shim.reasoning.unsigned_reasoning_blocks == "preserve"
+        assert shim.model_reasoning is not None
+        assert (
+            shim.model_reasoning["claudeopus47"].unsigned_reasoning_blocks == "preserve"
+        )
+
     def test_google_base_type(self):
         shim = get_shim("google")
         assert shim is not None

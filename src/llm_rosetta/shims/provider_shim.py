@@ -35,6 +35,9 @@ EffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 #: How the provider expects ``thinking.type`` to be serialised.
 ThinkingType = Literal["enabled", "adaptive"]
 
+#: How outbound unsigned reasoning blocks are handled.
+UnsignedReasoningBlocks = Literal["as_is", "preserve"]
+
 #: Mapping from normalised IR effort levels to provider-specific values.
 #: Any IR level absent from the map is unsupported and will be warned/skipped.
 EffortMap = dict[str, str]  # e.g. {"minimal": "low", "max": "high"}
@@ -49,6 +52,7 @@ class ReasoningCapability:
         effort_field: Where the provider expects the effort value.
         max_effort: Highest normalised effort this shim should emit.
         thinking_type: Force ``thinking.type`` to this value.
+        unsigned_reasoning_blocks: Policy for outbound unsigned reasoning blocks.
         effort_map: Map from normalised IR effort to provider effort string.
     """
 
@@ -56,6 +60,7 @@ class ReasoningCapability:
     effort_field: EffortField = "reasoning_effort"
     max_effort: EffortLevel | None = None
     thinking_type: ThinkingType | None = None
+    unsigned_reasoning_blocks: UnsignedReasoningBlocks = "as_is"
     effort_map: EffortMap = field(
         default_factory=lambda: {
             "minimal": "low",

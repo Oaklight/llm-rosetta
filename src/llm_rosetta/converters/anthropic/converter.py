@@ -117,7 +117,12 @@ class AnthropicConverter(BaseConverter):
                 if text_parts and "system" not in result:
                     result["system"] = " ".join(text_parts)
 
-        converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
+        message_kwargs: dict[str, Any] = {}
+        if ctx and "reasoning_cap" in ctx.options:
+            message_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
+        converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, **message_kwargs
+        )
         ctx.warnings.extend(msg_warnings)
         result["messages"] = converted_msgs
 

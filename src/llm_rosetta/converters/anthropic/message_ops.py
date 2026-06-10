@@ -19,6 +19,7 @@ from ...types.ir import (
     ContentPart,
     ExtensionItem,
     Message,
+    ReasoningPart,
     TextPart,
     is_audio_part,
     is_citation_part,
@@ -80,7 +81,7 @@ class AnthropicMessageOps(BaseMessageOps):
                 if role == "system":
                     # System messages handled at converter level
                     continue
-                converted, msg_warnings = self._ir_message_to_p(msg)
+                converted, msg_warnings = self._ir_message_to_p(msg, **kwargs)
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
                     messages.extend(converted)
@@ -94,7 +95,9 @@ class AnthropicMessageOps(BaseMessageOps):
 
         return messages, warnings
 
-    def _ir_message_to_p(self, message: Message) -> tuple[Any, list[str]]:
+    def _ir_message_to_p(
+        self, message: Message, **kwargs: Any
+    ) -> tuple[Any, list[str]]:
         """Convert a single IR message to Anthropic format.
 
         Args:
@@ -112,7 +115,7 @@ class AnthropicMessageOps(BaseMessageOps):
         elif role == "user":
             return self._ir_user_to_p(content, warnings)
         elif role == "assistant":
-            return self._ir_assistant_to_p(content, warnings)
+            return self._ir_assistant_to_p(content, warnings, **kwargs)
         elif role == "tool":
             return self._ir_tool_to_p(content, warnings)
 
@@ -163,7 +166,7 @@ class AnthropicMessageOps(BaseMessageOps):
         return {"role": "user", "content": anthropic_content}, warnings
 
     def _ir_assistant_to_p(
-        self, content: list, warnings: list[str]
+        self, content: list, warnings: list[str], **kwargs: Any
     ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR assistant message content to Anthropic assistant message.
 
@@ -178,6 +181,16 @@ class AnthropicMessageOps(BaseMessageOps):
             elif is_tool_call_part(part):
                 anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_reasoning_part(part):
+                reasoning_cap = kwargs.get("reasoning_cap")
+                unsigned_policy = getattr(
+                    reasoning_cap, "unsigned_reasoning_blocks", "as_is"
+                )
+                if unsigned_policy == "preserve" and not part.get("signature"):
+                    self._preserve_unsigned_reasoning(part)
+                    warnings.append(
+                        "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
+                    )
+                    continue
                 anthropic_content.append(self.content_ops.ir_reasoning_to_p(part))
             elif is_refusal_part(part):
                 # Convert refusal to text since Anthropic has no refusal type
@@ -195,6 +208,19 @@ class AnthropicMessageOps(BaseMessageOps):
                 )
 
         return {"role": "assistant", "content": anthropic_content}, warnings
+
+    @staticmethod
+    def _preserve_unsigned_reasoning(part: ReasoningPart) -> None:
+        provider_metadata = part.setdefault("provider_metadata", {})
+        anthropic_meta = provider_metadata.setdefault("anthropic", {})
+        preserved = anthropic_meta.setdefault("unsigned_reasoning_blocks", [])
+        preserved.append(
+            {
+                "reasoning": part.get("reasoning", ""),
+                "signature": part.get("signature"),
+                "status": part.get("status"),
+            }
+        )
 
     def _ir_tool_to_p(
         self, content: list, warnings: list[str]

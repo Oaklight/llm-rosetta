@@ -7,6 +7,7 @@ reasoning:
   disabled: thinking_disabled
   effort_field: output_config.effort
   thinking_type: enabled
+  unsigned_reasoning_blocks: preserve
   effort_map:
     minimal: low
     low: low
