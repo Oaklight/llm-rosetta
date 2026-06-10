@@ -82,7 +82,9 @@ class TestResolveTargetTransforms:
         assert to_t == ()
 
     def test_shim_with_to_transforms(self, volcengine_shim):
-        from_t, to_t = _resolve_target_transforms("volcengine--openai_chat", "some-model")
+        from_t, to_t = _resolve_target_transforms(
+            "volcengine--openai_chat", "some-model"
+        )
         assert from_t == ()
         assert len(to_t) == 1
         # Verify the transform actually strips the right fields
