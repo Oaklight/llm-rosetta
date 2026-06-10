@@ -38,6 +38,7 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 - **流式 usage 明细传播**（#252）：修复流式路径中 `cache_read_tokens`、`cache_creation_tokens`、`prompt_tokens_details`、`completion_tokens_details` 未正确传播的问题
 - **OpenAI Chat `thinking.type=auto` 透传修复**（[#258](https://github.com/Oaklight/llm-rosetta/pull/258)）：IR `mode: "auto"` 不是 OpenAI Chat `thinking.type` 的合法上游值。OpenAI Chat 转换器现在将 `auto` 映射为 `adaptive`，并应用与 Anthropic 路径相同的 shim `thinking_type` 覆盖及 `enabled` → `adaptive` 安全回退逻辑
 - **`thinking_type=enabled` 缺少 `budget_tokens` 时自动回退**：当 shim 声明 `thinking_type: enabled` 但请求中没有 `budget_tokens`（Anthropic 的 `type: "enabled"` 必须提供此字段）时，转换器自动回退为 `type: "adaptive"`，而非生成无效请求体。Anthropic 和 OpenAI Chat 两条转换路径均已应用
+- **Argo 历史消息中的未签名 Anthropic reasoning block**（[#268](https://github.com/Oaklight/llm-rosetta/issues/268), [#269](https://github.com/Oaklight/llm-rosetta/pull/269)）：`ReasoningCapability` 新增 `unsigned_reasoning_blocks: as_is | preserve`。`argo--anthropic` shim 使用 `preserve`，因此历史 assistant `thinking` block 如果没有可用签名，不会继续转发给 Argo 触发 400；对应 reasoning 内容会保存在 `provider_metadata.anthropic.unsigned_reasoning_blocks` 中
 
 ## v0.6.7 — 2026-06-04
 
