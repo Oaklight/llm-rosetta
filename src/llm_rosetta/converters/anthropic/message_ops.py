@@ -167,7 +167,7 @@ class AnthropicMessageOps(BaseMessageOps):
 
     def _ir_assistant_to_p(
         self, content: list, warnings: list[str], **kwargs: Any
-    ) -> tuple[dict[str, Any], list[str]]:
+    ) -> tuple[dict[str, Any] | None, list[str]]:
         """Convert IR assistant message content to Anthropic assistant message.
 
         All content parts become content blocks in the assistant message.
@@ -206,6 +206,12 @@ class AnthropicMessageOps(BaseMessageOps):
                 warnings.append(
                     f"Unsupported content part type in assistant message: {part.get('type')}"
                 )
+
+        if not anthropic_content:
+            warnings.append(
+                "Assistant message has no Anthropic-compatible content, ignored"
+            )
+            return None, warnings
 
         return {"role": "assistant", "content": anthropic_content}, warnings
 

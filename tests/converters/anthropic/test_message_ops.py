@@ -241,6 +241,27 @@ class TestAnthropicMessageOps:
             "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
         ]
 
+    def test_ir_assistant_preserve_policy_skips_empty_message(self):
+        """Test preserve policy skips messages with only unsigned reasoning."""
+        reasoning_part = {"type": "reasoning", "reasoning": "I need to think."}
+        ir_messages = cast(
+            list[Message],
+            [{"role": "assistant", "content": [reasoning_part]}],
+        )
+        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        result, warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, reasoning_cap=cap
+        )
+        assert result == []
+        assert len(warnings) == 2
+        assert warnings[0] == (
+            "Unsigned reasoning content in assistant message not supported by target provider, preserved in metadata"
+        )
+        assert (
+            warnings[1]
+            == "Assistant message has no Anthropic-compatible content, ignored"
+        )
+
     def test_ir_assistant_preserve_policy_keeps_signed_reasoning(self):
         """Test preserve policy only filters reasoning with no usable signature."""
         ir_messages = cast(
