@@ -263,6 +263,15 @@ class OpenAIChatConverter(BaseConverter):
 
         if reasoning_parts:
             openai_message["reasoning_content"] = "\n".join(reasoning_parts)
+            # Restore reasoning_details / encrypted_content from provider_metadata
+            for part in content_parts:
+                if is_reasoning_part(part):
+                    pm = part.get("provider_metadata", {}).get("openai_chat", {})
+                    if "reasoning_details" in pm:
+                        openai_message["reasoning_details"] = pm["reasoning_details"]
+                    if "encrypted_content" in pm:
+                        openai_message["encrypted_content"] = pm["encrypted_content"]
+                    break
 
         reason = choice.get("finish_reason", {}).get("reason", "stop")
         openai_choice: dict[str, Any] = {
