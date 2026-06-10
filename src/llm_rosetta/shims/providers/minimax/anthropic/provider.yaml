@@ -1,0 +1,15 @@
+name: minimax--anthropic
+base: anthropic
+default_base_url: https://api.minimaxi.com/anthropic
+default_api_key_env: MINIMAX_API_KEY
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg
+reasoning:
+  disabled: thinking_disabled
+  effort_field: output_config.effort
+  effort_map:
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    xhigh: xhigh
+    max: max
