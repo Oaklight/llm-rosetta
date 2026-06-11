@@ -81,6 +81,7 @@ plugins:
           - guide/api-layers.md
           - guide/api-standards.md
           - guide/reasoning.md
+          - guide/provider-reasoning.md
           - guide/shims.md
           - guide/compatibility.md
           - examples/index.md
@@ -157,6 +158,7 @@ nav:
       - API 分层: guide/api-layers.md
       - API 标准: guide/api-standards.md
       - 推理 / 思考参数: guide/reasoning.md
+      - 提供商推理行为: guide/provider-reasoning.md
       - 提供商 Shim: guide/shims.md
       - 提供商兼容性: guide/compatibility.md
       - 示例:
