@@ -11,7 +11,12 @@ from llm_rosetta.shims.provider_shim import (
     _reset_registry,
     get_shim,
 )
-from llm_rosetta.shims.providers import load_providers, _load_transforms
+from llm_rosetta.shims.providers import (
+    _load_plugin_shims,
+    _load_transforms,
+    load_providers,
+    load_providers_from_dir,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -319,3 +324,108 @@ class TestLoadProviders:
         shims = load_providers()
         assert len(shims) == 1
         assert shims[0].name == "good"
+
+
+class TestLoadProvidersFromDir:
+    """Tests for the public load_providers_from_dir API."""
+
+    def test_loads_from_arbitrary_path(self, tmp_path: Path):
+        """load_providers_from_dir loads from any directory."""
+        d = tmp_path / "mything"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: mything\nbase: openai_chat\n")
+        shims = load_providers_from_dir(tmp_path)
+        assert any(s.name == "mything" for s in shims)
+
+    def test_plugin_transforms_loaded(self, tmp_path: Path):
+        """Plugin transforms are loaded from arbitrary directories."""
+        d = tmp_path / "myplugin"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: myplugin\nbase: openai_chat\n")
+        (d / "transforms.py").write_text(
+            "from llm_rosetta.shims.transforms import strip_fields\n"
+            'to_transforms = (strip_fields("foo"),)\n'
+        )
+        shims = load_providers_from_dir(tmp_path)
+        s = [s for s in shims if s.name == "myplugin"][0]
+        assert len(s.to_transforms) == 1
+        # Verify the transform works
+        body = {"foo": 1, "bar": 2}
+        result = s.to_transforms[0](body)
+        assert "foo" not in result
+        assert result["bar"] == 2
+
+
+class TestPluginEntryPoints:
+    """Tests for the entry-point plugin loader."""
+
+    def test_invokes_entry_points(self, monkeypatch):
+        """_load_plugin_shims discovers and calls entry points."""
+        calls: list[str] = []
+
+        class FakeEP:
+            name = "fake"
+
+            def load(self):
+                def register():
+                    calls.append("called")
+
+                return register
+
+        class FakeEPs:
+            def select(self, *, group: str):
+                assert group == "llm_rosetta.shim_providers"
+                return [FakeEP()]
+
+        monkeypatch.setattr(
+            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
+        )
+        _load_plugin_shims()
+        assert calls == ["called"]
+
+    def test_collects_returned_shims(self, monkeypatch):
+        """Entry points that return list[ProviderShim] are collected."""
+        from llm_rosetta.shims.provider_shim import ProviderShim
+
+        test_shim = ProviderShim(name="ep-test", base="openai_chat")
+
+        class FakeEP:
+            name = "returner"
+
+            def load(self):
+                def register():
+                    return [test_shim]
+
+                return register
+
+        class FakeEPs:
+            def select(self, *, group: str):
+                return [FakeEP()]
+
+        monkeypatch.setattr(
+            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
+        )
+        result = _load_plugin_shims()
+        assert test_shim in result
+
+    def test_handles_plugin_errors_gracefully(self, monkeypatch):
+        """A failing plugin does not crash the loader."""
+
+        class BadEP:
+            name = "bad"
+
+            def load(self):
+                def register():
+                    raise RuntimeError("plugin broken")
+
+                return register
+
+        class FakeEPs:
+            def select(self, *, group: str):
+                return [BadEP()]
+
+        monkeypatch.setattr(
+            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
+        )
+        result = _load_plugin_shims()
+        assert result == []

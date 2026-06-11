@@ -7,10 +7,9 @@ optional transforms to bridge schema differences.
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Literal
-
-import logging
 
 from .transforms import Transform
 

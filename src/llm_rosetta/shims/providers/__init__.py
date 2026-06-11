@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+from importlib.metadata import entry_points
 from pathlib import Path
 
 from llm_rosetta._vendor.yaml import load as yaml_load
@@ -28,23 +29,25 @@ _PROVIDERS_DIR = Path(__file__).parent
 
 
 def _load_transforms(
-    provider_dir: Path, *, group: str | None = None
+    provider_dir: Path, *, group: str | None = None, _builtin: bool = True
 ) -> tuple[tuple, tuple]:
     """Import transforms.py if present, return (from_transforms, to_transforms).
 
     Args:
         provider_dir: Path to the leaf provider directory.
         group: Name of the parent group folder, if this is a grouped shim.
+        _builtin: Whether this is a built-in provider directory.  Plugin
+            transforms use a separate module namespace to avoid collisions
+            with built-in modules in ``sys.modules``.
     """
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
         return (), ()
+    prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
     if group is not None:
-        module_name = (
-            f"llm_rosetta.shims.providers.{group}.{provider_dir.name}.transforms"
-        )
+        module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
     else:
-        module_name = f"llm_rosetta.shims.providers.{provider_dir.name}.transforms"
+        module_name = f"{prefix}.{provider_dir.name}.transforms"
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
@@ -58,13 +61,14 @@ def _load_transforms(
 
 
 def _load_single_provider(
-    provider_dir: Path, *, group: str | None = None
+    provider_dir: Path, *, group: str | None = None, _builtin: bool = True
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
     Args:
         provider_dir: Directory containing ``provider.yaml``.
         group: Name of the parent group folder (``None`` for top-level shims).
+        _builtin: Whether this is a built-in provider directory.
 
     Returns:
         The registered :class:`ProviderShim`, or ``None`` on failure.
@@ -76,7 +80,7 @@ def _load_single_provider(
         logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
         return None
 
-    from_t, to_t = _load_transforms(provider_dir, group=group)
+    from_t, to_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -143,6 +147,10 @@ def load_providers_from_dir(
     directory.  Downstream packages (e.g. argo-proxy) can call this to
     load their own shim directories alongside the built-in ones.
 
+    Plugin transforms use a separate module namespace
+    (``_llm_rosetta_plugin_shims.*``) to avoid collisions with built-in
+    modules in ``sys.modules``.
+
     Supports two layouts:
 
     * **Flat** — a direct child with ``provider.yaml`` (e.g. ``openai/``).
@@ -158,13 +166,14 @@ def load_providers_from_dir(
     Returns:
         List of registered :class:`ProviderShim` instances.
     """
+    builtin = providers_dir == _PROVIDERS_DIR
     shims: list[ProviderShim] = []
     for d in sorted(providers_dir.iterdir()):
         if not d.is_dir() or d.name.startswith(("_", ".")):
             continue
         yaml_path = d / "provider.yaml"
         if yaml_path.exists():
-            shim = _load_single_provider(d, group=group)
+            shim = _load_single_provider(d, group=group, _builtin=builtin)
             if shim is not None:
                 shims.append(shim)
         else:
@@ -174,7 +183,9 @@ def load_providers_from_dir(
                 if not sub.is_dir() or sub.name.startswith(("_", ".")):
                     continue
                 if (sub / "provider.yaml").exists():
-                    shim = _load_single_provider(sub, group=child_group)
+                    shim = _load_single_provider(
+                        sub, group=child_group, _builtin=builtin
+                    )
                     if shim is not None:
                         shims.append(shim)
     return shims
@@ -188,30 +199,30 @@ def load_providers() -> list[ProviderShim]:
        and calls each one to let plugins register their own shims.
 
     Returns:
-        List of registered :class:`ProviderShim` instances (built-in only;
-        plugin shims register themselves via :func:`register_shim`).
+        Combined list of all registered :class:`ProviderShim` instances
+        (built-in + plugin).
     """
     # 1. Built-in shims
     shims = load_providers_from_dir(_PROVIDERS_DIR)
 
     # 2. Plugin shims via entry points
-    _load_plugin_shims()
+    shims.extend(_load_plugin_shims())
 
     return shims
 
 
-def _load_plugin_shims() -> None:
+def _load_plugin_shims() -> list[ProviderShim]:
     """Discover and invoke ``llm_rosetta.shim_providers`` entry points.
 
     Each entry point should be a callable that registers shims via
-    :func:`register_shim` when called (no arguments).  Errors in
-    individual plugins are logged and do not prevent other plugins
-    from loading.
+    :func:`register_shim` when called (no arguments).  The callable may
+    optionally return a ``list[ProviderShim]`` for inclusion in the
+    combined result of :func:`load_providers`.
+
+    Errors in individual plugins are logged and do not prevent other
+    plugins from loading.
     """
-    try:
-        from importlib.metadata import entry_points
-    except ImportError:
-        return
+    registered: list[ProviderShim] = []
 
     eps = entry_points()
     # Python 3.12+: eps.select(); Python 3.10–3.11: dict-style
@@ -223,9 +234,13 @@ def _load_plugin_shims() -> None:
     for ep in plugin_eps:
         try:
             loader = ep.load()
-            loader()
+            result = loader()
+            if isinstance(result, list):
+                registered.extend(result)
             logger.info("Loaded plugin shims from entry point: %s", ep.name)
         except Exception:
             logger.warning(
                 "Failed to load plugin shim entry point: %s", ep.name, exc_info=True
             )
+
+    return registered
