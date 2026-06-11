@@ -57,7 +57,8 @@ How each provider disables reasoning. The shim `disabled` field controls which s
 | **Anthropic** | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **Google GenAI** | Zero budget | `thinking_budget_zero` | `thinking_config: { thinking_budget: 0 }` |
 | **DeepSeek** | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
-| **Volcengine** | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
+| **Volcengine** (Chat) | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
+| **Volcengine** (Responses) | Omit thinking field | `omit` | No `thinking` / `reasoning` object sent |
 | **MiniMax** (Anthropic) | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **MiniMax** (Chat) | Explicit disable | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **OpenRouter** | Omit | `omit` | No `thinking` object sent |
@@ -196,9 +197,10 @@ reasoning:
 | **anthropic** | `thinking_disabled` | `output_config.effort` | — | — | `as_is` |
 | **google** | `thinking_budget_zero` | `none` | — | — | `as_is` |
 | **deepseek** | `thinking_disabled` | `reasoning_effort` | — | — | `as_is` |
-| **volcengine** (Chat) | `thinking_disabled` | — | `enabled` | `high` | `as_is` |
+| **volcengine** (Chat) | `thinking_disabled` | `reasoning_effort` | `enabled` | `high` | `as_is` |
+| **volcengine** (Responses) | `omit` | `reasoning.effort` | — | — | `as_is` |
 | **minimax** (Anthropic) | `thinking_disabled` | `output_config.effort` | — | — | `as_is` |
-| **minimax** (Chat) | `thinking_disabled` | — | `adaptive` | — | `as_is` |
+| **minimax** (Chat) | `thinking_disabled` | `reasoning_effort` | `adaptive` | — | `as_is` |
 | **openrouter** | `omit` | `reasoning_effort` | — | `xhigh` | `as_is` |
 | **argo** (Anthropic) | `thinking_disabled` | `output_config.effort` | `enabled` | — | `preserve` |
 | **argo** (OpenAI Chat) | `omit` | `reasoning_effort` | — | — | `as_is` |
