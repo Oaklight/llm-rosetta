@@ -10,7 +10,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+import logging
+
 from .transforms import Transform
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +136,14 @@ _BASE_TYPES: frozenset[str] = frozenset(
 
 
 def register_shim(shim: ProviderShim) -> None:
-    """Register (or replace) a :class:`ProviderShim` in the global registry."""
+    """Register (or replace) a :class:`ProviderShim` in the global registry.
+
+    If a shim with the same name is already registered, it is silently
+    replaced and an INFO-level log is emitted.  This allows plugin shims
+    to override built-in defaults without raising errors.
+    """
+    if shim.name in _SHIM_REGISTRY:
+        logger.info("Shim %r overridden (base: %s)", shim.name, shim.base)
     _SHIM_REGISTRY[shim.name] = shim
 
 

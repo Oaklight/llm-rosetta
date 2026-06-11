@@ -134,8 +134,14 @@ def _load_single_provider(
     return shim
 
 
-def load_providers() -> list[ProviderShim]:
-    """Scan subdirectories for provider shims and register them.
+def load_providers_from_dir(
+    providers_dir: Path, *, group: str | None = None
+) -> list[ProviderShim]:
+    """Scan *providers_dir* for provider shims and register them.
+
+    This is the public entry point for loading shims from an arbitrary
+    directory.  Downstream packages (e.g. argo-proxy) can call this to
+    load their own shim directories alongside the built-in ones.
 
     Supports two layouts:
 
@@ -143,26 +149,83 @@ def load_providers() -> list[ProviderShim]:
     * **Grouped** — a child WITHOUT ``provider.yaml`` whose own children
       each contain one (e.g. ``argo/anthropic/``, ``argo/openai_chat/``).
 
+    Args:
+        providers_dir: Root directory to scan for provider subdirectories.
+        group: Optional group name prefix for all shims loaded from this
+            directory.  When ``None``, the directory structure determines
+            grouping automatically.
+
     Returns:
         List of registered :class:`ProviderShim` instances.
     """
     shims: list[ProviderShim] = []
-    for d in sorted(_PROVIDERS_DIR.iterdir()):
+    for d in sorted(providers_dir.iterdir()):
         if not d.is_dir() or d.name.startswith(("_", ".")):
             continue
         yaml_path = d / "provider.yaml"
         if yaml_path.exists():
-            # Leaf shim at top level.
-            shim = _load_single_provider(d)
+            shim = _load_single_provider(d, group=group)
             if shim is not None:
                 shims.append(shim)
         else:
             # Potential group folder — scan children.
+            child_group = f"{group}.{d.name}" if group else d.name
             for sub in sorted(d.iterdir()):
                 if not sub.is_dir() or sub.name.startswith(("_", ".")):
                     continue
                 if (sub / "provider.yaml").exists():
-                    shim = _load_single_provider(sub, group=d.name)
+                    shim = _load_single_provider(sub, group=child_group)
                     if shim is not None:
                         shims.append(shim)
     return shims
+
+
+def load_providers() -> list[ProviderShim]:
+    """Load built-in provider shims and any plugin shims.
+
+    1. Scans the built-in ``providers/`` directory.
+    2. Discovers entry points in the ``llm_rosetta.shim_providers`` group
+       and calls each one to let plugins register their own shims.
+
+    Returns:
+        List of registered :class:`ProviderShim` instances (built-in only;
+        plugin shims register themselves via :func:`register_shim`).
+    """
+    # 1. Built-in shims
+    shims = load_providers_from_dir(_PROVIDERS_DIR)
+
+    # 2. Plugin shims via entry points
+    _load_plugin_shims()
+
+    return shims
+
+
+def _load_plugin_shims() -> None:
+    """Discover and invoke ``llm_rosetta.shim_providers`` entry points.
+
+    Each entry point should be a callable that registers shims via
+    :func:`register_shim` when called (no arguments).  Errors in
+    individual plugins are logged and do not prevent other plugins
+    from loading.
+    """
+    try:
+        from importlib.metadata import entry_points
+    except ImportError:
+        return
+
+    eps = entry_points()
+    # Python 3.12+: eps.select(); Python 3.10–3.11: dict-style
+    if hasattr(eps, "select"):
+        plugin_eps = eps.select(group="llm_rosetta.shim_providers")
+    else:
+        plugin_eps = eps.get("llm_rosetta.shim_providers", [])
+
+    for ep in plugin_eps:
+        try:
+            loader = ep.load()
+            loader()
+            logger.info("Loaded plugin shims from entry point: %s", ep.name)
+        except Exception:
+            logger.warning(
+                "Failed to load plugin shim entry point: %s", ep.name, exc_info=True
+            )

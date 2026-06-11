@@ -23,6 +23,7 @@ from .transforms import (
 
 # Scan provider directories and register shims from YAML + transforms.py.
 from .providers import load_providers as _load_providers
+from .providers import load_providers_from_dir
 
 _load_providers()
 
@@ -40,4 +41,5 @@ __all__ = [
     "strip_fields",
     "rename_field",
     "set_defaults",
+    "load_providers_from_dir",
 ]
