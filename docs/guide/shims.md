@@ -67,11 +67,85 @@ to_transforms = (strip_fields("n", "logit_bias", "seed"),)
 from_transforms = ()
 ```
 
-At import time, `shims/__init__.py` scans all provider directories and registers them automatically.
+At import time, `shims/__init__.py` scans all provider directories and registers them automatically, then discovers any plugin shims via entry points.
+
+## Shim Lifecycle
+
+```mermaid
+flowchart LR
+    subgraph Registration["Registration (startup)"]
+        direction TB
+        A["load_providers()"] --> B["load_providers_from_dir()
+        scan built-in YAML dirs"]
+        A --> C["_load_plugin_shims()
+        scan entry points"]
+        B --> D["register_shim()
+        _SHIM_REGISTRY[name] = shim"]
+        C --> D
+    end
+
+    subgraph Usage["Usage (per request)"]
+        direction TB
+        E["get_shim(name)"] --> F["_SHIM_REGISTRY.get(name)"]
+        F --> G["inject reasoning_cap
+        into ConversionContext"]
+        F --> H["apply to_transforms
+        / from_transforms"]
+    end
+
+    Registration --> Usage
+```
+
+- **Registration** happens once at import time. `load_providers()` scans the built-in `providers/` directory, then discovers `llm_rosetta.shim_providers` entry points to load plugin shims.
+- **Usage** happens per request. `get_shim(name)` looks up the registry; the gateway injects reasoning config and applies transforms around the converter.
+
+## Plugin Shims
+
+Downstream packages can register their own shims without modifying llm-rosetta. Two approaches:
+
+### Entry Point (recommended)
+
+Declare an entry point in your `pyproject.toml`:
+
+```toml
+[project.entry-points."llm_rosetta.shim_providers"]
+my_provider = "my_package.shims:register_shims"
+```
+
+The callable scans a local YAML directory and returns the registered shims:
+
+```python
+# my_package/shims/__init__.py
+from pathlib import Path
+from llm_rosetta.shims import load_providers_from_dir
+
+def register_shims():
+    return load_providers_from_dir(Path(__file__).parent / "providers")
+```
+
+### Conditional Registration
+
+For advanced use cases (environment-specific shims, dynamic config), call `register_shim()` directly:
+
+```python
+import os
+from llm_rosetta.shims import register_shim, ProviderShim
+
+def register_shims():
+    if os.getenv("MY_INTERNAL_PROVIDER"):
+        register_shim(ProviderShim(
+            name="my-internal",
+            base="openai_chat",
+            default_base_url="http://internal:8080/v1",
+        ))
+```
+
+!!! note
+    When a plugin registers a shim with the same name as a built-in, the built-in is silently overridden (INFO log emitted). This is intentional — it allows plugins to customize built-in provider behavior.
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 14 built-in provider shims:
+LLM-Rosetta ships with 16 built-in provider shims:
 
 | Name | Base | Default Base URL | API Key Env | Transforms |
 |------|------|-----------------|-------------|------------|
@@ -80,43 +154,43 @@ LLM-Rosetta ships with 14 built-in provider shims:
 | `anthropic` | `anthropic` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
 | `google` | `google` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `deepseek` | `openai_chat` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed` |
-| `volcengine` | `openai_chat` | — | `VOLCENGINE_API_KEY` | strips `logprobs`, `top_logprobs` |
+| `volcengine--openai_chat` | `openai_chat` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | strips `logprobs`, `top_logprobs` |
+| `volcengine--openai_responses` | `openai_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | — |
 | `xai` | `openai_chat` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
 | `qwen` | `openai_chat` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
 | `moonshot` | `openai_chat` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
-| `minimax` | `openai_chat` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop` |
-| `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, `presence_penalty`, `frequency_penalty`, `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
-| `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
-| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi/` | — | thinking normalization, OpenAI response normalization |
+| `minimax--openai_chat` | `openai_chat` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips + reasoning_split injection |
+| `minimax--anthropic` | `anthropic` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | — |
+| `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
+| `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | renames `reasoning` → `reasoning_content` |
+| `argo--openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `argo--anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI response normalization |
 
 ## Argo Shims
 
-`argo_openai_chat` and `argo_anthropic` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
+`argo--openai_chat` and `argo--anthropic` target the **Argo gateway** — a proxy layer used at certain institutions (such as Argonne National Laboratory) that fronts multiple upstream LLM providers behind a single endpoint.
 
-Both shims share a common characteristic: the model identifier is sent as `internal_id` in the request body instead of the standard `model` field. This is handled transparently by `model_id_field` in the shim declaration.
+Both shims use `model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
 
-### `argo_openai_chat`
+### `argo--openai_chat`
 
-A straightforward OpenAI-compatible shim. The only non-standard behaviour is the `internal_id` field substitution — no other transforms are needed.
+OpenAI-compatible shim with one transform: `max_tokens` → `max_completion_tokens` (newer OpenAI models reject the deprecated name).
 
-### `argo_anthropic`
+### `argo--anthropic`
 
-This shim has two additional transforms to handle Argo's quirks:
-
-- **Model-level `thinking_type` override**: Argo's Vertex AI-backed models (e.g. `claudeopus47`) require `thinking.type = "adaptive"` while older models require `"enabled"`. This is handled declaratively via `model_overrides` in the reasoning config — no transform needed. The gateway resolves the upstream model ID (post-alias) and applies the correct `thinking_type` automatically.
-
-- **`from_transforms` — OpenAI response normalization**: Argo may return an OpenAI Chat Completions response body from its `/v1/messages` endpoint. This transform detects that case and converts the response to Anthropic Messages format before the `anthropic` converter sees it, so the rest of the pipeline behaves normally.
+- **Model-level `thinking_type` override**: `thinking_type: enabled` by default, with `model_overrides` for `claudeopus47: thinking_type: adaptive` (Vertex AI backend). Handled declaratively via reasoning config.
+- **`unsigned_reasoning_blocks: preserve`**: Prior thinking blocks without valid signatures are preserved in metadata instead of being forwarded (avoids Argo 400 errors).
+- **`from_transforms` — OpenAI response normalization**: Argo may return OpenAI Chat format from `/v1/messages`. The transform converts it to Anthropic format before the converter sees it.
 
 ### Configuration
 
-The `default_base_url` is institution-specific. Override it in your gateway config:
+Override the `default_base_url` in your gateway config:
 
 ```jsonc
 {
   "providers": {
     "argo": {
-      "shim": "argo_anthropic",
+      "shim": "argo--anthropic",
       "base_url": "https://your-argo-instance.example.com/",
       "api_key": "${ARGO_API_KEY}"
     }
@@ -125,7 +199,7 @@ The `default_base_url` is institution-specific. Override it in your gateway conf
 ```
 
 !!! note
-    If you do not set `base_url`, the shim falls back to `https://apps.inside.anl.gov/argoapi/`, which is only reachable from within the ANL network.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. Argo shims will be moved to the [argo-proxy](https://github.com/Oaklight/argo-proxy) package as a plugin in a future release.
 
 ## Reasoning Configuration
 
@@ -183,7 +257,7 @@ reasoning:
 When models under the same provider have different reasoning capabilities, use `model_overrides` to declare per-model config. Each override inherits provider-level defaults for unset fields, keyed by **upstream model ID** (post-alias):
 
 ```yaml
-name: argo_anthropic
+name: argo--anthropic
 base: anthropic
 reasoning:
   thinking_type: enabled       # default for most models
