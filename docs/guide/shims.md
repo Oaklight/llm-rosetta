@@ -67,11 +67,85 @@ to_transforms = (strip_fields("n", "logit_bias", "seed"),)
 from_transforms = ()
 ```
 
-导入时，`shims/__init__.py` 自动扫描所有提供商目录并注册。
+导入时，`shims/__init__.py` 自动扫描所有提供商目录并注册，然后发现通过 entry point 声明的插件 shim。
+
+## Shim 生命周期
+
+```mermaid
+flowchart LR
+    subgraph 注册["注册阶段（启动时）"]
+        direction TB
+        A["load_providers()"] --> B["load_providers_from_dir()
+        扫描内置 YAML 目录"]
+        A --> C["_load_plugin_shims()
+        扫描 entry points"]
+        B --> D["register_shim()
+        _SHIM_REGISTRY[name] = shim"]
+        C --> D
+    end
+
+    subgraph 使用["使用阶段（每个请求）"]
+        direction TB
+        E["get_shim(name)"] --> F["_SHIM_REGISTRY.get(name)"]
+        F --> G["注入 reasoning_cap
+        到 ConversionContext"]
+        F --> H["应用 to_transforms
+        / from_transforms"]
+    end
+
+    注册 --> 使用
+```
+
+- **注册阶段**在导入时执行一次。`load_providers()` 扫描内置 `providers/` 目录，然后发现 `llm_rosetta.shim_providers` entry point 以加载插件 shim。
+- **使用阶段**在每个请求中执行。`get_shim(name)` 查询注册表；gateway 注入推理配置并在转换器前后应用 transforms。
+
+## 插件 Shim
+
+下游包可以在不修改 llm-rosetta 的情况下注册自己的 shim。两种方式：
+
+### Entry Point（推荐）
+
+在 `pyproject.toml` 中声明 entry point：
+
+```toml
+[project.entry-points."llm_rosetta.shim_providers"]
+my_provider = "my_package.shims:register_shims"
+```
+
+callable 扫描本地 YAML 目录并返回注册的 shim：
+
+```python
+# my_package/shims/__init__.py
+from pathlib import Path
+from llm_rosetta.shims import load_providers_from_dir
+
+def register_shims():
+    return load_providers_from_dir(Path(__file__).parent / "providers")
+```
+
+### 条件注册
+
+高级场景（按环境注册、动态配置）可以直接调用 `register_shim()`：
+
+```python
+import os
+from llm_rosetta.shims import register_shim, ProviderShim
+
+def register_shims():
+    if os.getenv("MY_INTERNAL_PROVIDER"):
+        register_shim(ProviderShim(
+            name="my-internal",
+            base="openai_chat",
+            default_base_url="http://internal:8080/v1",
+        ))
+```
+
+!!! note
+    当插件注册了与内置同名的 shim 时，内置 shim 会被静默覆盖（输出 INFO 日志）。这是有意设计——允许插件定制内置提供商的行为。
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 14 个提供商 shim：
+LLM-Rosetta 内置 16 个提供商 shim：
 
 | 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|---------|--------------|-----------------|---------|
@@ -80,15 +154,17 @@ LLM-Rosetta 内置 14 个提供商 shim：
 | `anthropic` | `anthropic` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
 | `google` | `google` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `deepseek` | `openai_chat` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | 剥离 `n`、`logit_bias`、`seed` |
-| `volcengine` | `openai_chat` | — | `VOLCENGINE_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
+| `volcengine--openai_chat` | `openai_chat` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
+| `volcengine--openai_responses` | `openai_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `VOLCENGINE_API_KEY` | — |
 | `xai` | `openai_chat` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
 | `qwen` | `openai_chat` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
 | `moonshot` | `openai_chat` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
-| `minimax` | `openai_chat` | `https://api.minimax.chat/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop` |
-| `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、`presence_penalty`、`frequency_penalty`、`logprobs`、`top_logprobs`、`logit_bias`、`seed` |
-| `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `argo_openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/` | — | `model_id_field: internal_id` |
-| `argo_anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi` | — | OpenAI 响应格式归一化 |
+| `minimax--openai_chat` | `openai_chat` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 + reasoning_split 注入 |
+| `minimax--anthropic` | `anthropic` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | — |
+| `zhipu` | `openai_chat` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
+| `openrouter` | `openai_chat` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | 重命名 `reasoning` → `reasoning_content` |
+| `argo--openai_chat` | `openai_chat` | `https://apps.inside.anl.gov/argoapi/v1` | `ARGO_API_KEY` | `max_tokens` → `max_completion_tokens` |
+| `argo--anthropic` | `anthropic` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` | OpenAI 响应格式归一化 |
 
 ## 推理配置
 
@@ -144,7 +220,7 @@ LLM-Rosetta 内置 14 个提供商 shim：
 当同一提供商下不同模型有不同推理能力时，使用 `model_overrides` 声明按模型的配置。每个覆盖项继承提供商级默认值，按**上游模型 ID**（别名解析后）为键：
 
 ```yaml
-name: argo_anthropic
+name: argo--anthropic
 base: anthropic
 reasoning:
   thinking_type: enabled       # 大多数模型的默认值
@@ -177,31 +253,29 @@ reasoning:
 
 ## Argo Shim
 
-`argo_openai_chat` 和 `argo_anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供商统一暴露在单一端点之后。
+`argo--openai_chat` 和 `argo--anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供商统一暴露在单一端点之后。
 
-这两个 shim 有一个共同特点：模型标识符通过请求体中的 `internal_id` 字段传递，而非标准的 `model` 字段。这一行为由 shim 声明中的 `model_id_field` 透明处理，无需手动干预。
+两个 shim 都使用 `model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
 
-### `argo_openai_chat`
+### `argo--openai_chat`
 
-一个直接的 OpenAI 兼容 shim，唯一的非标准行为是将模型字段替换为 `internal_id`，不需要其他 transform。
+OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_tokens`（新版 OpenAI 模型拒绝旧字段名）。
 
-### `argo_anthropic`
+### `argo--anthropic`
 
-该 shim 额外附带两个 transform，用于处理 Argo 的特殊行为：
-
-- **模型级 `thinking_type` 覆盖**：Argo 的 Vertex AI 后端模型（如 `claudeopus47`）要求 `thinking.type = "adaptive"`，而旧模型要求 `"enabled"`。此差异通过推理配置中的 `model_overrides` 声明式处理，无需 transform。网关在别名解析后自动应用正确的 `thinking_type`。
-
-- **`from_transforms` —— OpenAI 响应格式归一化**：Argo 可能从其 `/v1/messages` 端点返回 OpenAI Chat Completions 格式的响应体。该 transform 会检测这种情况，并在 `anthropic` 转换器处理之前将响应转换为 Anthropic Messages 格式，从而保证后续管线正常运行。
+- **模型级 `thinking_type` 覆盖**：默认 `thinking_type: enabled`，通过 `model_overrides` 为 `claudeopus47` 设置 `thinking_type: adaptive`（Vertex AI 后端）。声明式处理。
+- **`unsigned_reasoning_blocks: preserve`**：历史消息中没有有效签名的 thinking block 保存在 metadata 中而非转发（避免 Argo 400 错误）。
+- **`from_transforms` —— OpenAI 响应格式归一化**：Argo 可能从 `/v1/messages` 返回 OpenAI Chat 格式响应，该 transform 在转换器处理前将其归一化为 Anthropic 格式。
 
 ### 配置
 
-`default_base_url` 因机构而异，建议在网关配置中覆盖：
+在网关配置中覆盖 `default_base_url`：
 
 ```jsonc
 {
   "providers": {
     "argo": {
-      "shim": "argo_anthropic",
+      "shim": "argo--anthropic",
       "base_url": "https://your-argo-instance.example.com/",
       "api_key": "${ARGO_API_KEY}"
     }
@@ -210,7 +284,7 @@ reasoning:
 ```
 
 !!! note
-    如果未设置 `base_url`，shim 会回退到 `https://apps.inside.anl.gov/argoapi/`，该地址仅在 ANL 内网可达。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。Argo shim 将在未来版本中作为插件移至 [argo-proxy](https://github.com/Oaklight/argo-proxy) 包。
 
 ## 转换规则（Transforms）
 
