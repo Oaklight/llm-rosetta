@@ -57,7 +57,8 @@ Argo 代理请求到上游提供商，但会进行自己的参数校验。Anthro
 | **Anthropic** | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **Google GenAI** | 零预算 | `thinking_budget_zero` | `thinking_config: { thinking_budget: 0 }` |
 | **DeepSeek** | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
-| **Volcengine** | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
+| **Volcengine**（Chat） | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
+| **Volcengine**（Responses） | 省略 thinking 字段 | `omit` | 不发送 `thinking` / `reasoning` 对象 |
 | **MiniMax**（Anthropic） | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **MiniMax**（Chat） | 显式禁用 | `thinking_disabled` | `thinking: { type: "disabled" }` |
 | **OpenRouter** | 省略 | `omit` | 不发送 `thinking` 对象 |
@@ -196,9 +197,10 @@ reasoning:
 | **anthropic** | `thinking_disabled` | `output_config.effort` | — | — | `as_is` |
 | **google** | `thinking_budget_zero` | `none` | — | — | `as_is` |
 | **deepseek** | `thinking_disabled` | `reasoning_effort` | — | — | `as_is` |
-| **volcengine**（Chat） | `thinking_disabled` | — | `enabled` | `high` | `as_is` |
+| **volcengine**（Chat） | `thinking_disabled` | `reasoning_effort` | `enabled` | `high` | `as_is` |
+| **volcengine**（Responses） | `omit` | `reasoning.effort` | — | — | `as_is` |
 | **minimax**（Anthropic） | `thinking_disabled` | `output_config.effort` | — | — | `as_is` |
-| **minimax**（Chat） | `thinking_disabled` | — | `adaptive` | — | `as_is` |
+| **minimax**（Chat） | `thinking_disabled` | `reasoning_effort` | `adaptive` | — | `as_is` |
 | **openrouter** | `omit` | `reasoning_effort` | — | `xhigh` | `as_is` |
 | **argo**（Anthropic） | `thinking_disabled` | `output_config.effort` | `enabled` | — | `preserve` |
 | **argo**（OpenAI Chat） | `omit` | `reasoning_effort` | — | — | `as_is` |
