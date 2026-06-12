@@ -8,6 +8,12 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## [Unreleased]
 
+### 修复
+
+- **SSE 流式代理兼容性**（[#274](https://github.com/Oaklight/llm-rosetta/issues/274), [#275](https://github.com/Oaklight/llm-rosetta/pull/275)）：更新内嵌 `httpserver` 至 v0.1.1——SSE（`text/event-stream`）流式响应现在使用 `Transfer-Encoding: chunked` 而非裸字节刷写加 `Connection: close`。修复 Go 反向代理（尤其是 NPS 的 `httputil.ReverseProxy`）将 SSE 数据误解析为 chunked encoding 导致 `invalid byte in chunk length` 错误和高并发下间歇性连接失败的问题。上游修复：[Oaklight/zerodep#101](https://github.com/Oaklight/zerodep/pull/101)
+
+## v0.6.8 — 2026-06-11
+
 ### 新增
 
 - **Shim 驱动的推理配置**（#245）：新增 `ReasoningCapability` 数据类，声明 `disabled` 策略、`effort_field`、`max_effort` 和 `effort_map`；`ProviderShim` 从 `provider.yaml` 的 `reasoning` 段加载配置；共享 `reasoning_helpers.py` 提供 `normalize_reasoning_input()` 和 `apply_reasoning_config()`；各转换器的 `ir_reasoning_config_to_p` 委托给共享 helper，不再硬编码努力级别降级逻辑
