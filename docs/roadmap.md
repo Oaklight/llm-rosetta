@@ -8,7 +8,7 @@ This page outlines the current feature status and areas where community contribu
 
 ## Current Status
 
-LLM-Rosetta v0.6.2 supports bidirectional conversion between 5 API standards:
+LLM-Rosetta v0.6.8 supports bidirectional conversion between 5 API standards:
 
 | Provider | Format | Streaming | Tool Calls | Embeddings |
 |----------|--------|:---------:|:----------:|:----------:|
@@ -63,6 +63,18 @@ Replaced Starlette + uvicorn + httpx with vendored zerodep `httpserver` and `htt
 
 Full SOCKS5 proxy support (RFC 1928/1929) via vendored httpclient v0.4.0, including username/password authentication.
 
+### Custom Tool Type in Responses API
+
+!!! success "Status: Done (v0.6.2)"
+
+OpenAI Responses API `custom` tool type (used by Codex CLI's `apply_patch`) is now handled in IR. Custom tools are downgraded to `function` at the source converter boundary with the original payload preserved in `_passthrough`, enabling round-trip fidelity.
+
+### Multi-API-Mode Providers
+
+!!! success "Status: Done (v0.6.8)"
+
+Providers that expose multiple API standards (e.g. OpenRouter with both OpenAI Chat and Anthropic endpoints, Google with native Gemini and OpenAI-compatible mode) are supported via multiple shims per provider. Naming convention: `{provider}_{api_mode}`, with no suffix for the primary mode.
+
 ---
 
 ## Planned Features
@@ -74,12 +86,6 @@ Full SOCKS5 proxy support (RFC 1928/1929) via vendored httpclient v0.4.0, includ
 !!! tip "Status: Planned — [#181](https://github.com/Oaklight/llm-rosetta/issues/181)"
 
 Cross-provider mapping for server-side tool types (`web_search`, `code_execution`, `computer_use`) that exist in some providers but not others.
-
-#### Custom Tool Type in Responses API
-
-!!! tip "Status: Planned — [#182](https://github.com/Oaklight/llm-rosetta/issues/182)"
-
-Handle the OpenAI Responses `custom` tool type in IR, enabling pass-through for provider-specific tool extensions.
 
 #### Reasoning Field Normalization
 
@@ -94,12 +100,6 @@ Normalize `reasoning_content` / thinking fields across OpenAI Chat-compatible pr
 !!! tip "Status: Planned — [#192](https://github.com/Oaklight/llm-rosetta/issues/192)"
 
 Restore `ModelShim` to enable per-model transform rules — different models from the same provider may need different field handling.
-
-#### Multi-API-Mode Providers
-
-!!! note "Status: Open — [#186](https://github.com/Oaklight/llm-rosetta/issues/186)"
-
-Support providers that expose multiple API standards simultaneously (e.g. a provider offering both Chat Completions and Responses endpoints).
 
 ### Gateway
 
@@ -137,15 +137,15 @@ Automatic failover to backup providers when the primary is unavailable, with opt
 
 #### LM Studio
 
-!!! note "Status: Open — [#42](https://github.com/Oaklight/llm-rosetta/issues/42)"
+!!! warning "Status: Deferred — [#42](https://github.com/Oaklight/llm-rosetta/issues/42)"
 
-[LM Studio](https://lmstudio.ai/) provides OpenAI-compatible local inference. Works with the existing `openai_chat` converter via gateway configuration.
+[LM Studio](https://lmstudio.ai/) provides OpenAI-compatible local inference. Works with the existing `openai_chat` converter via gateway configuration. Low priority as it already works without dedicated support.
 
 #### HuggingFace Inference API
 
-!!! note "Status: Open — [#40](https://github.com/Oaklight/llm-rosetta/issues/40)"
+!!! warning "Status: Deferred — [#40](https://github.com/Oaklight/llm-rosetta/issues/40)"
 
-[HuggingFace Inference API](https://huggingface.co/docs/api-inference/) supports multiple model formats. A dedicated converter or shim would enable routing to HuggingFace-hosted models.
+[HuggingFace Inference API](https://huggingface.co/docs/api-inference/) supports multiple model formats. A dedicated converter or shim would enable routing to HuggingFace-hosted models. Deferred pending community interest.
 
 ---
 
