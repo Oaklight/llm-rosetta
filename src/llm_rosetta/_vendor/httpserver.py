@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.1.0"
+# version = "0.1.1"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -299,9 +299,10 @@ class JSONResponse(Response):
 class StreamingResponse:
     """HTTP response streamed from an async generator.
 
-    Writes chunks using ``Transfer-Encoding: chunked`` unless
-    ``content_type`` is ``text/event-stream`` (SSE), in which case raw
-    bytes are flushed directly for maximum compatibility with SSE clients.
+    All streaming responses use ``Transfer-Encoding: chunked`` for
+    maximum compatibility with reverse proxies and intermediaries.
+    SSE (``text/event-stream``) responses additionally set
+    ``Cache-Control: no-cache``.
 
     Args:
         generator: Async iterator yielding ``bytes`` or ``str`` chunks.
@@ -330,9 +331,8 @@ class StreamingResponse:
         is_sse = self.content_type.startswith("text/event-stream")
 
         self.headers["Content-Type"] = self.content_type
-        if not is_sse:
-            self.headers.setdefault("Transfer-Encoding", "chunked")
-        else:
+        self.headers.setdefault("Transfer-Encoding", "chunked")
+        if is_sse:
             self.headers.setdefault("Cache-Control", "no-cache")
         self.headers.setdefault("Date", _http_date())
         self.headers.setdefault("Connection", "close")
@@ -349,16 +349,12 @@ class StreamingResponse:
             async for chunk in self._generator:
                 if isinstance(chunk, str):
                     chunk = chunk.encode("utf-8")
-                if is_sse:
-                    writer.write(chunk)
-                else:
-                    writer.write(f"{len(chunk):x}\r\n".encode("latin-1"))
-                    writer.write(chunk)
-                    writer.write(b"\r\n")
+                writer.write(f"{len(chunk):x}\r\n".encode("latin-1"))
+                writer.write(chunk)
+                writer.write(b"\r\n")
                 await writer.drain()
-            if not is_sse:
-                writer.write(b"0\r\n\r\n")
-                await writer.drain()
+            writer.write(b"0\r\n\r\n")
+            await writer.drain()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
             logger.debug("Client disconnected during streaming")
         finally:
