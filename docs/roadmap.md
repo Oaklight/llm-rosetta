@@ -8,7 +8,7 @@ title: 路线图
 
 ## 当前状态
 
-LLM-Rosetta v0.6.2 支持 5 种 API 标准之间的双向转换：
+LLM-Rosetta v0.6.8 支持 5 种 API 标准之间的双向转换：
 
 | 提供商 | 格式 | 流式 | 工具调用 | Embeddings |
 |-------|------|:----:|:------:|:----------:|
@@ -63,6 +63,18 @@ LLM-Rosetta v0.6.2 支持 5 种 API 标准之间的双向转换：
 
 通过 vendored httpclient v0.4.0 支持完整的 SOCKS5 代理（RFC 1928/1929），包括用户名/密码认证。
 
+### Responses API 自定义工具类型
+
+!!! success "状态：已完成（v0.6.2）"
+
+OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使用）现已在 IR 中处理。自定义工具在源转换器边界降级为 `function`，原始 payload 保存在 `_passthrough` 中，实现往返保真。
+
+### 多 API 模式提供商
+
+!!! success "状态：已完成（v0.6.8）"
+
+支持同时暴露多种 API 标准的提供商（如 OpenRouter 同时提供 OpenAI Chat 和 Anthropic 端点，Google 同时提供原生 Gemini 和 OpenAI 兼容模式）。通过为每个提供商注册多个 shim 实现，命名约定：`{provider}_{api_mode}`，主模式无后缀。
+
 ---
 
 ## 计划中的功能
@@ -74,12 +86,6 @@ LLM-Rosetta v0.6.2 支持 5 种 API 标准之间的双向转换：
 !!! tip "状态：计划中 — [#181](https://github.com/Oaklight/llm-rosetta/issues/181)"
 
 跨提供商映射服务端工具类型（`web_search`、`code_execution`、`computer_use`），这些工具类型在部分提供商中存在但在其他提供商中不存在。
-
-#### Responses API 自定义工具类型
-
-!!! tip "状态：计划中 — [#182](https://github.com/Oaklight/llm-rosetta/issues/182)"
-
-在 IR 中处理 OpenAI Responses 的 `custom` 工具类型，支持提供商特定工具扩展的透传。
 
 #### 推理字段标准化
 
@@ -94,12 +100,6 @@ LLM-Rosetta v0.6.2 支持 5 种 API 标准之间的双向转换：
 !!! tip "状态：计划中 — [#192](https://github.com/Oaklight/llm-rosetta/issues/192)"
 
 恢复 `ModelShim` 以支持每模型的转换规则——同一提供商的不同模型可能需要不同的字段处理。
-
-#### 多 API 模式提供商
-
-!!! note "状态：开放 — [#186](https://github.com/Oaklight/llm-rosetta/issues/186)"
-
-支持同时暴露多种 API 标准的提供商（如同时提供 Chat Completions 和 Responses 端点的提供商）。
 
 ### 网关
 
@@ -137,15 +137,15 @@ LLM-Rosetta v0.6.2 支持 5 种 API 标准之间的双向转换：
 
 #### LM Studio
 
-!!! note "状态：开放 — [#42](https://github.com/Oaklight/llm-rosetta/issues/42)"
+!!! warning "状态：推迟 — [#42](https://github.com/Oaklight/llm-rosetta/issues/42)"
 
-[LM Studio](https://lmstudio.ai/) 提供 OpenAI 兼容的本地推理。通过网关配置使用现有的 `openai_chat` 转换器即可工作。
+[LM Studio](https://lmstudio.ai/) 提供 OpenAI 兼容的本地推理。通过网关配置使用现有的 `openai_chat` 转换器即可工作。因已可通过现有方式使用，优先级较低。
 
 #### HuggingFace Inference API
 
-!!! note "状态：开放 — [#40](https://github.com/Oaklight/llm-rosetta/issues/40)"
+!!! warning "状态：推迟 — [#40](https://github.com/Oaklight/llm-rosetta/issues/40)"
 
-[HuggingFace Inference API](https://huggingface.co/docs/api-inference/) 支持多种模型格式。专用转换器或 shim 将支持通过网关路由到 HuggingFace 托管的模型。
+[HuggingFace Inference API](https://huggingface.co/docs/api-inference/) 支持多种模型格式。专用转换器或 shim 将支持通过网关路由到 HuggingFace 托管的模型。待社区需求确定后推进。
 
 ---
 
