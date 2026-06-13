@@ -8,9 +8,21 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## [Unreleased]
 
+### 新增
+
+- **API 密钥轮换**：新增 `POST /admin/api/keys/<id>/rotate` 端点，生成新密钥值同时保留原 id 和标签。管理面板 API Keys 表格新增"轮换"按钮，带行内确认和新密钥一次性复制弹窗。请求日志不受影响——按标签关联而非密钥值
+- **从服务商获取模型弹窗中的模型类型选择器**：批量添加模型时可选 LLM 或 Embedding。LLM 显示能力复选框（text、vision、tools、reasoning）；Embedding 自动设置 `['embedding']`
+- **添加/编辑模型弹窗中的模型类型选择器**：用相同的 Model Type 单选模式替换旧的 embedding 复选框互斥逻辑
+
+### 变更
+
+- **API 密钥长度升级**：默认生成密钥从 36 字符（`rsk-` + 32 hex）升级到 52 字符（`rsk-` + 48 hex），与 OpenAI 密钥长度一致（192 位熵）
+
 ### 修复
 
 - **SSE 流式代理兼容性**（[#274](https://github.com/Oaklight/llm-rosetta/issues/274), [#275](https://github.com/Oaklight/llm-rosetta/pull/275)）：更新内嵌 `httpserver` 至 v0.1.1——SSE（`text/event-stream`）流式响应现在使用 `Transfer-Encoding: chunked` 而非裸字节刷写加 `Connection: close`。修复 Go 反向代理（尤其是 NPS 的 `httputil.ReverseProxy`）将 SSE 数据误解析为 chunked encoding 导致 `invalid byte in chunk length` 错误和高并发下间歇性连接失败的问题。上游修复：[Oaklight/zerodep#101](https://github.com/Oaklight/zerodep/pull/101)
+- **管理面板登录后活动标签页不加载数据**：`initApp()` 现在在认证成功后触发当前活动标签页的数据加载，修复请求日志标签页登录后显示空白、需要手动切换才能加载的问题
+- **模型类型单选标签大写问题**：为 `.fetch-type-radios label` 添加 `text-transform: none`，防止 `.form-group label` CSS 将 "Embedding" 转为 "EMBEDDING"
 
 ## v0.6.8 — 2026-06-11
 
