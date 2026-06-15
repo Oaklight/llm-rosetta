@@ -42,6 +42,10 @@ class BaseConverter(ABC):
     message_ops_class: type | None = None
     config_ops_class: type | None = None
 
+    # Instance-level ops (set by subclass __init__).
+    # Declared here so the type checker sees them on BaseConverter.
+    tool_ops: Any
+
     # Converter identity tag for cache key namespacing.
     # Subclasses MUST set this to a unique string (e.g. "anthropic").
     _CONVERTER_TAG: str = ""
