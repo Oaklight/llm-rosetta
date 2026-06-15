@@ -473,6 +473,11 @@ class BaseConverter(ABC):
         ``_cache_tools_from_p`` after the full IR request passes
         validation, so only known-good results are cached.
 
+        .. warning::
+            The returned list is a **shared reference** into the cache.
+            Callers **must not** mutate it or any nested dict.  Mutations
+            silently corrupt the cache for all subsequent requests.
+
         Args:
             tools: Provider-format tool definition list.
 
@@ -508,6 +513,11 @@ class BaseConverter(ABC):
         On hit: returns cached provider tool list.
         On miss: calls ``ir_tool_definition_to_p`` per tool, caches the
         result, and returns it.
+
+        .. warning::
+            The returned list is a **shared reference** into the cache.
+            Callers **must not** mutate it or any nested dict.  Mutations
+            silently corrupt the cache for all subsequent requests.
 
         Args:
             ir_tools: IR tool definition list.

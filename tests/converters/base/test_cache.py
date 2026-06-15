@@ -148,6 +148,61 @@ class TestLRUCache:
         assert info["currsize"] == 1
         assert info["maxsize"] == 4
 
+    def test_check_integrity_clean(self):
+        """check_integrity returns empty list when nothing is mutated."""
+        cache = LRUCache(maxsize=4, ttl=None)
+        cache.put(1, [{"name": "foo"}])
+        cache.put(2, [{"name": "bar"}])
+        assert cache.check_integrity() == []
+
+    def test_check_integrity_detects_mutation(self):
+        """check_integrity catches in-place mutation of cached values."""
+        cache = LRUCache(maxsize=4, ttl=None)
+        original = [{"name": "foo", "params": {"type": "object"}}]
+        cache.put(1, original)
+
+        # Mutate the cached value in-place
+        original[0]["name"] = "MUTATED"
+
+        assert cache.check_integrity() == [1]
+
+    def test_check_integrity_detects_deep_mutation(self):
+        """check_integrity catches nested dict mutation."""
+        cache = LRUCache(maxsize=4, ttl=None)
+        data = [{"name": "foo", "params": {"type": "object", "props": {}}}]
+        cache.put(1, data)
+
+        # Mutate deeply
+        data[0]["params"]["props"]["new_key"] = "injected"
+
+        assert cache.check_integrity() == [1]
+
+    def test_verify_mode_evicts_mutated_on_get(self):
+        """With verify=True, get() detects mutation and returns miss."""
+        cache = LRUCache(maxsize=4, ttl=None, verify=True)
+        data = [{"name": "foo"}]
+        cache.put(1, data)
+        assert cache.get(1) == data  # hit
+
+        data[0]["name"] = "MUTATED"
+
+        assert cache.get(1) is _SENTINEL  # self-healed miss
+        assert cache.info()["corruptions"] == 1
+        assert cache.info()["currsize"] == 0
+
+    def test_verify_off_by_default(self):
+        """With default verify=False, get() does not check fingerprint."""
+        cache = LRUCache(maxsize=4, ttl=None)
+        data = [{"name": "foo"}]
+        cache.put(1, data)
+
+        data[0]["name"] = "MUTATED"
+
+        # get() returns the (now-mutated) value without checking
+        result = cache.get(1)
+        assert result[0]["name"] == "MUTATED"
+        assert cache.info()["corruptions"] == 0
+
     def test_no_ttl(self):
         """ttl=None disables expiry — entries live until LRU-evicted."""
         cache = LRUCache(maxsize=4, ttl=None)
@@ -156,7 +211,7 @@ class TestLRUCache:
         assert cache.info()["ttl"] is None
 
     def test_ttl_expiry(self):
-        """Entry should expire after TTL elapses."""
+        """Entry should expire after TTL elapses with no intervening access."""
         cache = LRUCache(maxsize=4, ttl=10.0)
         base_time = 1000.0
         with patch(
@@ -164,14 +219,7 @@ class TestLRUCache:
         ):
             cache.put(1, "a")
 
-        # Before expiry
-        with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
-            return_value=base_time + 9.9,
-        ):
-            assert cache.get(1) == "a"
-
-        # After expiry
+        # No reads in between — jump straight past the deadline
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 10.0,
@@ -204,6 +252,38 @@ class TestLRUCache:
             return_value=base_time + 15.0,
         ):
             assert cache.get(1) == "b"
+
+    def test_get_refreshes_ttl(self):
+        """Reading an entry should refresh its TTL deadline."""
+        cache = LRUCache(maxsize=4, ttl=10.0)
+        base_time = 1000.0
+        with patch(
+            "llm_rosetta.converters.base.cache.time.monotonic",
+            return_value=base_time,
+        ):
+            cache.put(1, "a")  # deadline = 1010
+
+        # Read at t=8 → refreshes deadline to t=18
+        with patch(
+            "llm_rosetta.converters.base.cache.time.monotonic",
+            return_value=base_time + 8.0,
+        ):
+            assert cache.get(1) == "a"
+
+        # At t=15 the original deadline (1010) would have expired,
+        # but the read at t=8 extended it to 1018
+        with patch(
+            "llm_rosetta.converters.base.cache.time.monotonic",
+            return_value=base_time + 15.0,
+        ):
+            assert cache.get(1) == "a"
+
+        # At t=26 it should have expired (last refresh was at t=15 → deadline 1025)
+        with patch(
+            "llm_rosetta.converters.base.cache.time.monotonic",
+            return_value=base_time + 26.0,
+        ):
+            assert cache.get(1) is _SENTINEL
 
     def test_default_ttl(self):
         """Module-level singletons should use DEFAULT_TTL."""
@@ -242,6 +322,7 @@ class TestModuleSingletons:
             assert "hits" in v
             assert "misses" in v
             assert "expirations" in v
+            assert "corruptions" in v
             assert "currsize" in v
             assert "maxsize" in v
             assert "ttl" in v

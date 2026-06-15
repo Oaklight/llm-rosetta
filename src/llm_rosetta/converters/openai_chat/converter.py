@@ -56,6 +56,7 @@ class OpenAIChatConverter(BaseConverter):
     tool_ops_class = OpenAIChatToolOps
     message_ops_class = OpenAIChatMessageOps
     config_ops_class = OpenAIChatConfigOps
+    _CONVERTER_TAG = "openai_chat"
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -201,7 +202,7 @@ class OpenAIChatConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+            result["tools"] = self._get_cached_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
@@ -343,10 +344,11 @@ class OpenAIChatConverter(BaseConverter):
         if system_text:
             ir_request["system_instruction"] = system_text
 
-        # 2. Tools
+        # 2. Tools (with process-level cache)
         tools = provider_request.get("tools")
+        _tools_cached = False
         if tools:
-            ir_request["tools"] = self._convert_tools_from_p(tools)
+            ir_request["tools"], _tools_cached = self._get_cached_tools_from_p(tools)
 
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -396,7 +398,12 @@ class OpenAIChatConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return self._validate_ir_request(ir_request)
+        result = self._validate_ir_request(
+            ir_request, _skip_tools_validation=_tools_cached
+        )
+        if not _tools_cached and tools:
+            self._cache_tools_from_p(tools, result.get("tools", []))
+        return result
 
     def response_from_provider(
         self,

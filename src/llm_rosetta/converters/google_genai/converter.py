@@ -99,6 +99,7 @@ class GoogleGenAIConverter(BaseConverter):
     tool_ops_class = GoogleGenAIToolOps
     message_ops_class = GoogleGenAIMessageOps
     config_ops_class = GoogleGenAIConfigOps
+    _CONVERTER_TAG = "google_genai"
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -348,10 +349,11 @@ class GoogleGenAIConverter(BaseConverter):
         if not isinstance(config, dict):
             config = {}
 
-        # Tools — check SDK config first, then REST top-level
+        # Tools — check SDK config first, then REST top-level (with cache)
         tools = config.get("tools") or provider_request.get("tools")
+        _tools_cached = False
         if tools:
-            ir_request["tools"] = self._convert_tools_from_p(tools)
+            ir_request["tools"], _tools_cached = self._get_cached_tools_from_p(tools)
 
         # Tool choice — check SDK/REST snake_case/camelCase
         tool_config = (
@@ -389,7 +391,12 @@ class GoogleGenAIConverter(BaseConverter):
         if "thinking_config" in config or "thinkingConfig" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
-        return self._validate_ir_request(ir_request)
+        result = self._validate_ir_request(
+            ir_request, _skip_tools_validation=_tools_cached
+        )
+        if not _tools_cached and tools and result.get("tools"):
+            self._cache_tools_from_p(tools, result["tools"])
+        return result
 
     def response_from_provider(
         self,
@@ -520,7 +527,7 @@ class GoogleGenAIConverter(BaseConverter):
         config = result.setdefault("config", {})
         tools = ir_request.get("tools")
         if tools:
-            config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
+            config["tools"] = self._get_cached_tools_to_p(tools)
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
