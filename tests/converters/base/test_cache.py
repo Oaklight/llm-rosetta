@@ -1,4 +1,4 @@
-"""Unit tests for the process-level LRU cache infrastructure."""
+"""Unit tests for the per-entry LRU cache infrastructure."""
 
 from unittest.mock import patch
 
@@ -9,8 +9,12 @@ from llm_rosetta.converters.base.cache import (
     _canonical_json_bytes,
     cache_info,
     clear_all_caches,
+    entry_cache_key,
+    get_cached_tool,
+    is_message_validated,
+    mark_message_validated,
+    put_cached_tool,
     schema_cache_key,
-    tools_cache_key,
 )
 
 
@@ -32,39 +36,39 @@ class TestCanonicalJsonBytes:
 
 
 # ---------------------------------------------------------------------------
-# tools_cache_key
+# entry_cache_key
 # ---------------------------------------------------------------------------
 
 
-class TestToolsCacheKey:
+class TestEntryCacheKey:
     def test_deterministic(self):
-        tools = [{"name": "foo", "type": "function"}]
-        k1 = tools_cache_key("test", tools)
-        k2 = tools_cache_key("test", tools)
+        tool = {"name": "foo", "type": "function"}
+        k1 = entry_cache_key("test:from_p", tool)
+        k2 = entry_cache_key("test:from_p", tool)
         assert k1 == k2
 
     def test_varies_by_tag(self):
-        tools = [{"name": "foo", "type": "function"}]
-        k1 = tools_cache_key("anthropic", tools)
-        k2 = tools_cache_key("openai_chat", tools)
+        tool = {"name": "foo", "type": "function"}
+        k1 = entry_cache_key("anthropic:from_p", tool)
+        k2 = entry_cache_key("openai_chat:from_p", tool)
+        assert k1 != k2
+
+    def test_varies_by_direction(self):
+        tool = {"name": "foo", "type": "function"}
+        k1 = entry_cache_key("anthropic:from_p", tool)
+        k2 = entry_cache_key("anthropic:to_p", tool)
         assert k1 != k2
 
     def test_varies_by_content(self):
-        tools_a = [{"name": "foo", "type": "function"}]
-        tools_b = [{"name": "bar", "type": "function"}]
-        assert tools_cache_key("t", tools_a) != tools_cache_key("t", tools_b)
+        tool_a = {"name": "foo", "type": "function"}
+        tool_b = {"name": "bar", "type": "function"}
+        assert entry_cache_key("t", tool_a) != entry_cache_key("t", tool_b)
 
     def test_order_independent_within_dict(self):
         """Same dict content with different key order → same key."""
-        tools_a = [{"type": "function", "name": "foo"}]
-        tools_b = [{"name": "foo", "type": "function"}]
-        assert tools_cache_key("t", tools_a) == tools_cache_key("t", tools_b)
-
-    def test_list_order_matters(self):
-        """Different tool ordering → different key (tools are ordered)."""
-        a = [{"name": "a"}, {"name": "b"}]
-        b = [{"name": "b"}, {"name": "a"}]
-        assert tools_cache_key("t", a) != tools_cache_key("t", b)
+        tool_a = {"type": "function", "name": "foo"}
+        tool_b = {"name": "foo", "type": "function"}
+        assert entry_cache_key("t", tool_a) == entry_cache_key("t", tool_b)
 
 
 # ---------------------------------------------------------------------------
@@ -160,10 +164,7 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=None)
         original = [{"name": "foo", "params": {"type": "object"}}]
         cache.put(1, original)
-
-        # Mutate the cached value in-place
         original[0]["name"] = "MUTATED"
-
         assert cache.check_integrity() == [1]
 
     def test_check_integrity_detects_deep_mutation(self):
@@ -171,10 +172,7 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=None)
         data = [{"name": "foo", "params": {"type": "object", "props": {}}}]
         cache.put(1, data)
-
-        # Mutate deeply
         data[0]["params"]["props"]["new_key"] = "injected"
-
         assert cache.check_integrity() == [1]
 
     def test_verify_mode_evicts_mutated_on_get(self):
@@ -183,9 +181,7 @@ class TestLRUCache:
         data = [{"name": "foo"}]
         cache.put(1, data)
         assert cache.get(1) == data  # hit
-
         data[0]["name"] = "MUTATED"
-
         assert cache.get(1) is _SENTINEL  # self-healed miss
         assert cache.info()["corruptions"] == 1
         assert cache.info()["currsize"] == 0
@@ -195,10 +191,7 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=None)
         data = [{"name": "foo"}]
         cache.put(1, data)
-
         data[0]["name"] = "MUTATED"
-
-        # get() returns the (now-mutated) value without checking
         result = cache.get(1)
         assert result[0]["name"] == "MUTATED"
         assert cache.info()["corruptions"] == 0
@@ -219,7 +212,6 @@ class TestLRUCache:
         ):
             cache.put(1, "a")
 
-        # No reads in between — jump straight past the deadline
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 10.0,
@@ -238,15 +230,12 @@ class TestLRUCache:
         ):
             cache.put(1, "a")
 
-        # Re-put at t=8 → new deadline = t=18
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 8.0,
         ):
             cache.put(1, "b")
 
-        # At t=15 the original deadline (t=10) would have expired,
-        # but the re-put extended it to t=18
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 15.0,
@@ -261,24 +250,20 @@ class TestLRUCache:
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time,
         ):
-            cache.put(1, "a")  # deadline = 1010
+            cache.put(1, "a")
 
-        # Read at t=8 → refreshes deadline to t=18
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 8.0,
         ):
             assert cache.get(1) == "a"
 
-        # At t=15 the original deadline (1010) would have expired,
-        # but the read at t=8 extended it to 1018
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 15.0,
         ):
             assert cache.get(1) == "a"
 
-        # At t=26 it should have expired (last refresh was at t=15 → deadline 1025)
         with patch(
             "llm_rosetta.converters.base.cache.time.monotonic",
             return_value=base_time + 26.0,
@@ -293,6 +278,66 @@ class TestLRUCache:
 
 
 # ---------------------------------------------------------------------------
+# Per-entry tool helpers
+# ---------------------------------------------------------------------------
+
+
+class TestToolEntryHelpers:
+    def test_get_put_roundtrip(self):
+        clear_all_caches()
+        put_cached_tool(
+            "test:from_p", {"name": "foo"}, {"type": "function", "name": "foo"}
+        )
+        result = get_cached_tool("test:from_p", {"name": "foo"})
+        assert result == {"type": "function", "name": "foo"}
+
+    def test_miss_returns_sentinel(self):
+        clear_all_caches()
+        assert get_cached_tool("test:from_p", {"name": "missing"}) is _SENTINEL
+
+    def test_different_tags_dont_collide(self):
+        clear_all_caches()
+        tool = {"name": "foo"}
+        put_cached_tool("anthropic:from_p", tool, "anthropic_result")
+        put_cached_tool("openai_chat:from_p", tool, "openai_result")
+        assert get_cached_tool("anthropic:from_p", tool) == "anthropic_result"
+        assert get_cached_tool("openai_chat:from_p", tool) == "openai_result"
+
+
+# ---------------------------------------------------------------------------
+# Message validation helpers
+# ---------------------------------------------------------------------------
+
+
+class TestMessageValidationHelpers:
+    def test_not_validated_initially(self):
+        clear_all_caches()
+        msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        assert is_message_validated(msg) is False
+
+    def test_mark_and_check(self):
+        clear_all_caches()
+        msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        mark_message_validated(msg)
+        assert is_message_validated(msg) is True
+
+    def test_different_messages_independent(self):
+        clear_all_caches()
+        msg1 = {"role": "user", "content": [{"type": "text", "text": "hello"}]}
+        msg2 = {"role": "user", "content": [{"type": "text", "text": "world"}]}
+        mark_message_validated(msg1)
+        assert is_message_validated(msg1) is True
+        assert is_message_validated(msg2) is False
+
+    def test_dict_key_order_independent(self):
+        clear_all_caches()
+        msg1 = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        msg2 = {"content": [{"type": "text", "text": "hi"}], "role": "user"}
+        mark_message_validated(msg1)
+        assert is_message_validated(msg2) is True
+
+
+# ---------------------------------------------------------------------------
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
@@ -301,23 +346,23 @@ class TestModuleSingletons:
     def test_clear_all_caches(self):
         from llm_rosetta.converters.base.cache import (
             sanitize_cache,
-            tools_from_p_cache,
-            tools_to_p_cache,
+            tool_entry_cache,
+            validated_msg_cache,
         )
 
-        tools_from_p_cache.put(1, "x")
-        tools_to_p_cache.put(2, "y")
-        sanitize_cache.put(3, "z")
+        tool_entry_cache.put(1, "x")
+        sanitize_cache.put(2, "y")
+        validated_msg_cache.put(3, True)
 
         clear_all_caches()
 
-        assert tools_from_p_cache.get(1) is _SENTINEL
-        assert tools_to_p_cache.get(2) is _SENTINEL
-        assert sanitize_cache.get(3) is _SENTINEL
+        assert tool_entry_cache.get(1) is _SENTINEL
+        assert sanitize_cache.get(2) is _SENTINEL
+        assert validated_msg_cache.get(3) is _SENTINEL
 
     def test_cache_info_structure(self):
         info = cache_info()
-        assert set(info.keys()) == {"tools_from_p", "tools_to_p", "sanitize"}
+        assert set(info.keys()) == {"tool_entry", "sanitize", "validated_msg"}
         for v in info.values():
             assert "hits" in v
             assert "misses" in v

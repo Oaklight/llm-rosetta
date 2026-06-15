@@ -443,24 +443,6 @@ class AnthropicConverter(BaseConverter):
             usage["cache_creation_input_tokens"] = ir_usage["cache_creation_tokens"]
         return usage
 
-    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
-        """Convert provider tool definitions to IR."""
-        ir_tools = []
-        for t in tools:
-            try:
-                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
-            except Exception as e:
-                tool_type = (
-                    t.get("type", "unknown")
-                    if isinstance(t, dict)
-                    else type(t).__name__
-                )
-                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                raise ValueError(
-                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                ) from e
-        return ir_tools
-
     @staticmethod
     def _capture_preserve_metadata(
         provider_response: dict[str, Any],

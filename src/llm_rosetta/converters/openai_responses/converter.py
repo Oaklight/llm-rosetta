@@ -207,12 +207,19 @@ class OpenAIResponsesConverter(BaseConverter):
             ir_request["messages"] = ir_messages
 
         # 3. Tools (with process-level cache)
+        # Filter out disabled tools before caching (external_web_access=False)
         tools = provider_request.get("tools")
         _tools_cached = False
         if tools:
-            ir_tools, _tools_cached = self._get_cached_tools_from_p(tools)
-            if ir_tools:
-                ir_request["tools"] = ir_tools
+            active_tools = [
+                t
+                for t in tools
+                if not (isinstance(t, dict) and t.get("external_web_access") is False)
+            ]
+            if active_tools:
+                ir_tools, _tools_cached = self._get_cached_tools_from_p(active_tools)
+                if ir_tools:
+                    ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
         self._convert_tool_config_from_p(provider_request, ir_request)
@@ -475,26 +482,6 @@ class OpenAIResponsesConverter(BaseConverter):
                 "reasoning_tokens": ir_usage.get("reasoning_tokens", 0),
             },
         }
-
-    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
-        """Convert provider tool definitions to IR, skipping disabled tools."""
-        ir_tools = []
-        for t in tools:
-            if isinstance(t, dict) and t.get("external_web_access") is False:
-                continue
-            try:
-                ir_tools.append(self.tool_ops.p_tool_definition_to_ir(t))
-            except Exception as e:
-                tool_type = (
-                    t.get("type", "unknown")
-                    if isinstance(t, dict)
-                    else type(t).__name__
-                )
-                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                raise ValueError(
-                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                ) from e
-        return ir_tools
 
     def _apply_tool_config(
         self,

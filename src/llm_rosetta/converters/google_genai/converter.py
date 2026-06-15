@@ -634,30 +634,6 @@ class GoogleGenAIConverter(BaseConverter):
                 return " ".join(text_parts)
         return None
 
-    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
-        """Convert provider tool definitions to IR."""
-        ir_tools: list[Any] = []
-        for t in tools:
-            try:
-                result = self.tool_ops.p_tool_definition_to_ir(t)
-            except Exception as e:
-                tool_type = (
-                    t.get("type", "unknown")
-                    if isinstance(t, dict)
-                    else type(t).__name__
-                )
-                tool_name = t.get("name", "unnamed") if isinstance(t, dict) else str(t)
-                raise ValueError(
-                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
-                ) from e
-            if result is None:
-                continue
-            if isinstance(result, list):
-                ir_tools.extend(result)
-            else:
-                ir_tools.append(result)
-        return ir_tools
-
     def messages_to_provider(
         self,
         messages: Sequence[Message | ExtensionItem],

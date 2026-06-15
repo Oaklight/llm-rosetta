@@ -5,7 +5,7 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _clear_tool_conversion_caches():
-    """Ensure each test starts and ends with clean tool conversion caches.
+    """Ensure each test starts and ends with clean conversion caches.
 
     On teardown, verifies that no test mutated a cached value (which
     would silently corrupt the cache in production).  Then clears all
@@ -14,8 +14,8 @@ def _clear_tool_conversion_caches():
     from llm_rosetta.converters.base.cache import (
         clear_all_caches,
         sanitize_cache,
-        tools_from_p_cache,
-        tools_to_p_cache,
+        tool_entry_cache,
+        validated_msg_cache,
     )
 
     clear_all_caches()
@@ -23,9 +23,9 @@ def _clear_tool_conversion_caches():
 
     # Mutation is a code bug — catch it here so it doesn't slip into prod.
     for name, cache in [
-        ("tools_from_p", tools_from_p_cache),
-        ("tools_to_p", tools_to_p_cache),
+        ("tool_entry", tool_entry_cache),
         ("sanitize", sanitize_cache),
+        ("validated_msg", validated_msg_cache),
     ]:
         corrupted = cache.check_integrity()
         if corrupted:

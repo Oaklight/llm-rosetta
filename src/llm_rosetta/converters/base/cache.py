@@ -1,18 +1,24 @@
-"""Process-level LRU caching for tool conversion and schema sanitization.
+"""Process-level LRU caching for tool conversion, schema sanitization,
+and message validation.
 
-Eliminates repeated IR validation and schema sanitization for unchanged
-tool definitions across conversation turns.  All caches are module-level
-singletons (converters are recreated per request, so instance-level
-caching would be useless).
+Uses **per-entry** caching: each tool definition, schema, and message is
+cached individually by content hash.  This enables:
+
+- **Partial hit**: 30/31 tools unchanged → 30 hits + 1 miss
+- **Cross-agent sharing**: two agents sharing 25 tools → 25 shared entries
+- **Sliding context window**: old messages TTL-expire, new ones added,
+  overlapping ones hit cache
+
+All caches are module-level singletons (converters are recreated per
+request, so instance-level caching would be useless).
 
 Thread safety: not needed — the gateway runs a single-threaded async
 event loop.
 
 Mutation safety: cached values are returned **without deep copy**.
 The conversion pipeline is read-only after each stage produces its
-output.  If a future change introduces mutation of cached tool dicts,
-tests will fail due to cross-test pollution (the ``clear_all_caches``
-conftest fixture catches this).
+output.  Use :func:`check_integrity` (called by the test conftest on
+teardown) to catch code bugs that accidentally mutate cached objects.
 """
 
 from __future__ import annotations
@@ -45,26 +51,22 @@ def _canonical_json_bytes(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
 
 
-def tools_cache_key(converter_tag: str, tools: list[Any]) -> int:
-    """Compute a cache key for a tool definition list.
+def entry_cache_key(tag: str, entry: Any) -> int:
+    """Compute a cache key for a single entry (tool, message, schema, etc.).
 
-    The key incorporates the *converter_tag* (so different converters
-    never collide) and the canonical JSON of each tool.  Uses Python's
+    The key incorporates *tag* (so different converters / directions
+    never collide) and the canonical JSON of *entry*.  Uses Python's
     built-in ``hash()`` on bytes — 64-bit SipHash, collision probability
-    ~10⁻¹⁵ at n=128 entries, more than sufficient for a bounded LRU.
+    ~10⁻¹⁵ at n=512 entries, more than sufficient for a bounded LRU.
 
     Args:
-        converter_tag: Converter identifier (e.g. ``"anthropic"``).
-        tools: List of provider or IR tool definition dicts.
+        tag: Namespace string (e.g. ``"anthropic:from_p"``).
+        entry: The dict/object to hash.
 
     Returns:
         Integer hash suitable as an LRU cache key.
     """
-    # Build a single bytes blob: tag + each tool's canonical JSON.
-    parts: list[bytes] = [converter_tag.encode()]
-    for t in tools:
-        parts.append(_canonical_json_bytes(t))
-    return hash(b"\x00".join(parts))
+    return hash(tag.encode() + b"\x00" + _canonical_json_bytes(entry))
 
 
 def schema_cache_key(
@@ -252,27 +254,93 @@ class LRUCache:
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
-tools_from_p_cache = LRUCache(maxsize=16)
-"""Provider→IR tool list cache.  Keyed by (converter_tag, tools_hash)."""
+tool_entry_cache = LRUCache(maxsize=512)
+"""Per-entry tool conversion cache.
 
-tools_to_p_cache = LRUCache(maxsize=16)
-"""IR→Provider tool list cache.  Keyed by (converter_tag, ir_tools_hash)."""
+Keyed by ``(converter_tag:direction, single_tool_json)``.
+Stores individual tool conversion results (provider→IR or IR→provider).
+At ~3KB per tool, 512 entries ≈ 1.5MB max.
+"""
 
-sanitize_cache = LRUCache(maxsize=128)
-"""Individual JSON Schema sanitization cache."""
+sanitize_cache = LRUCache(maxsize=512)
+"""Per-schema sanitization cache.
+
+Keyed by ``(schema_json, extra_strip_keys)``.
+"""
+
+validated_msg_cache = LRUCache(maxsize=4096)
+"""Per-message validation status cache.
+
+Stores ``True`` for messages that have passed IR validation.
+At ~170 bytes per message hash, 4096 entries ≈ negligible memory
+(only the key + True + deadline are stored, not the message content).
+Covers ~18 concurrent 218-message conversations.
+"""
 
 
 def clear_all_caches() -> None:
-    """Clear all tool conversion caches.  Used in test fixtures."""
-    tools_from_p_cache.clear()
-    tools_to_p_cache.clear()
+    """Clear all conversion caches.  Used in test fixtures."""
+    tool_entry_cache.clear()
     sanitize_cache.clear()
+    validated_msg_cache.clear()
 
 
 def cache_info() -> dict[str, dict[str, Any]]:
     """Return statistics for all caches (for diagnostics)."""
     return {
-        "tools_from_p": tools_from_p_cache.info(),
-        "tools_to_p": tools_to_p_cache.info(),
+        "tool_entry": tool_entry_cache.info(),
         "sanitize": sanitize_cache.info(),
+        "validated_msg": validated_msg_cache.info(),
     }
+
+
+# ---------------------------------------------------------------------------
+# Per-entry helper functions
+# ---------------------------------------------------------------------------
+
+
+def get_cached_tool(tag: str, tool: dict[str, Any]) -> Any:
+    """Look up a single tool conversion result.
+
+    Args:
+        tag: Namespace (e.g. ``"anthropic:from_p"``).
+        tool: Single tool definition dict.
+
+    Returns:
+        Cached conversion result, or :data:`_SENTINEL` on miss.
+    """
+    return tool_entry_cache.get(entry_cache_key(tag, tool))
+
+
+def put_cached_tool(tag: str, tool: dict[str, Any], result: Any) -> None:
+    """Cache a single tool conversion result.
+
+    Args:
+        tag: Namespace (e.g. ``"anthropic:from_p"``).
+        tool: Single tool definition dict (used to compute key).
+        result: The conversion result to cache.
+    """
+    tool_entry_cache.put(entry_cache_key(tag, tool), result)
+
+
+def is_message_validated(msg: dict[str, Any]) -> bool:
+    """Check if a message was previously validated.
+
+    Args:
+        msg: A single IR message dict.
+
+    Returns:
+        True if the message content hash is in the validation cache.
+    """
+    key = hash(_canonical_json_bytes(msg))
+    return validated_msg_cache.get(key) is not _SENTINEL
+
+
+def mark_message_validated(msg: dict[str, Any]) -> None:
+    """Record a message as having passed IR validation.
+
+    Args:
+        msg: A single IR message dict.
+    """
+    key = hash(_canonical_json_bytes(msg))
+    validated_msg_cache.put(key, True)

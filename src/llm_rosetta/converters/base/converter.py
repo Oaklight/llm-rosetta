@@ -14,7 +14,11 @@ from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import IRStreamEvent
-from ...types.ir.validation import validate_ir_request, validate_ir_response
+from ...types.ir.validation import (
+    validate_ir_request,
+    validate_ir_response,
+    validate_messages,
+)
 from .context import ConversionContext, StreamContext
 
 
@@ -325,16 +329,42 @@ class BaseConverter(ABC):
         """
         ...
 
-    @abstractmethod
     def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
         """Convert provider tool definitions to IR ToolDefinition list.
 
-        Called by ``request_from_provider`` to normalize the provider's
-        tool schema into IR format.  Implementations should iterate
-        ``tools``, call ``self.tool_ops.p_tool_definition_to_ir()``,
-        and raise ``ValueError`` for unsupported tool types.
+        Default implementation iterates *tools* and calls
+        ``self.tool_ops.p_tool_definition_to_ir()`` for each entry.
+        Handles Google's list/None return transparently.
+
+        .. note::
+            This is the **uncached** fallback.  In normal operation,
+            ``_get_cached_tools_from_p`` calls ``tool_ops`` directly
+            with per-entry caching.  This method is retained for
+            direct use in tests or subclass customisation.
         """
-        ...
+        ir_tools: list[Any] = []
+        for t in tools:
+            try:
+                result = self.tool_ops.p_tool_definition_to_ir(t)
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = (
+                    (t.get("function", {}).get("name") or t.get("name", "unnamed"))
+                    if isinstance(t, dict)
+                    else str(t)
+                )
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+            if isinstance(result, list):
+                ir_tools.extend(result)
+            elif result is not None:
+                ir_tools.append(result)
+        return ir_tools
 
     @abstractmethod
     def _apply_tool_config(
@@ -425,12 +455,19 @@ class BaseConverter(ABC):
     ) -> IRRequest:
         """Validate and return an IRRequest if validate_output is enabled.
 
+        Applies two optimizations via the per-entry cache:
+
+        1. **Tools** (*_skip_tools_validation*): when all tools were
+           cache hits, pop the ``tools`` field before validation (they
+           were validated on the original cache-miss request).
+        2. **Messages**: check each message against the validation
+           cache.  Only validate messages not seen before.  If all
+           messages are cached, pop ``messages`` too.
+
         Args:
             data: Dict built by a concrete converter's request_from_provider.
-            _skip_tools_validation: When True, temporarily remove the
-                ``tools`` field before validation and restore it after.
-                Used when tools were already validated on a prior cache-miss
-                request and are returned from cache.
+            _skip_tools_validation: Skip tools validation (all tools
+                were per-entry cache hits).
 
         Returns:
             The validated IRRequest (same object, typed).
@@ -440,15 +477,55 @@ class BaseConverter(ABC):
         """
         if not self.validate_output:
             return cast(IRRequest, data)
+
+        from .cache import is_message_validated, mark_message_validated
+
+        # --- Message incremental validation ---
+        messages = data.get("messages", [])
+        new_messages: list[Any] | None = None
+        skip_messages = False
+
+        if messages:
+            new_messages = [m for m in messages if not is_message_validated(m)]
+            if not new_messages:
+                # All messages previously validated — skip entirely
+                skip_messages = True
+            elif len(new_messages) < len(messages):
+                # Partial hit — validate only the new ones
+                validate_messages(new_messages)
+                skip_messages = True  # validated separately, skip in main pass
+
+        # --- Pop/replace fields that are already validated ---
+        popped_tools = None
         if _skip_tools_validation and "tools" in data:
-            tools = data.pop("tools")
-            try:
-                result = validate_ir_request(data)
-            finally:
-                data["tools"] = tools
-            result["tools"] = tools  # type: ignore[literal-required]
-            return result
-        return validate_ir_request(data)
+            popped_tools = data.pop("tools")
+
+        # Replace messages with empty list (messages is Required in IRRequest,
+        # so we can't pop it — use [] as a cheap placeholder instead).
+        if skip_messages:
+            data["messages"] = []
+
+        try:
+            result = validate_ir_request(data)
+        finally:
+            # Always restore popped/replaced fields
+            if popped_tools is not None:
+                data["tools"] = popped_tools
+            if skip_messages:
+                data["messages"] = messages
+
+        # Restore into result
+        if popped_tools is not None:
+            result["tools"] = popped_tools  # type: ignore[literal-required]
+        if skip_messages:
+            result["messages"] = messages  # type: ignore[literal-required]
+
+        # Mark newly validated messages
+        if new_messages:
+            for msg in new_messages:
+                mark_message_validated(msg)
+
+        return result
 
     def _validate_ir_response(self, data: dict[str, Any]) -> IRResponse:
         """Validate and return an IRResponse if validate_output is enabled.
@@ -466,62 +543,100 @@ class BaseConverter(ABC):
             return validate_ir_response(data)
         return cast(IRResponse, data)
 
-    # ==================== Tool conversion caching ====================
+    # ==================== Per-entry conversion caching ====================
 
     def _get_cached_tools_from_p(self, tools: list[Any]) -> tuple[list[Any], bool]:
-        """Look up provider→IR tool conversion in the process-level cache.
+        """Per-entry provider→IR tool conversion with caching.
 
-        On hit: returns ``(cached_ir_tools, True)``.
-        On miss: calls ``_convert_tools_from_p`` and returns
-        ``(ir_tools, False)``.  The caller must call
-        ``_cache_tools_from_p`` after the full IR request passes
-        validation, so only known-good results are cached.
+        Looks up each tool individually.  On hit, returns the cached
+        IR tool.  On miss, converts just that tool and caches the result.
+
+        Returns ``(ir_tools, all_cached)`` — when *all_cached* is True,
+        every tool was a cache hit and the caller may skip IR validation
+        for the tools field.
+
+        Handles Google's list/None return from ``p_tool_definition_to_ir``
+        transparently.
 
         .. warning::
-            The returned list is a **shared reference** into the cache.
-            Callers **must not** mutate it or any nested dict.  Mutations
-            silently corrupt the cache for all subsequent requests.
+            Returned dicts are **shared references** into the cache.
+            Callers **must not** mutate them.
 
         Args:
             tools: Provider-format tool definition list.
 
         Returns:
-            Tuple of (ir_tools, was_cached).
+            Tuple of (ir_tools, all_cached).
         """
-        from .cache import _SENTINEL, tools_cache_key, tools_from_p_cache
+        from .cache import _SENTINEL, get_cached_tool, put_cached_tool
 
-        key = tools_cache_key(self._CONVERTER_TAG, tools)
-        cached = tools_from_p_cache.get(key)
-        if cached is not _SENTINEL:
-            return cached, True
-        return self._convert_tools_from_p(tools), False
+        tag = self._CONVERTER_TAG + ":from_p"
+        ir_tools: list[Any] = []
+        all_cached = True
+
+        for t in tools:
+            cached = get_cached_tool(tag, t)
+            if cached is not _SENTINEL:
+                # Cached result may be list (Google), single dict, or None
+                if isinstance(cached, list):
+                    ir_tools.extend(cached)
+                elif cached is not None:
+                    ir_tools.append(cached)
+                continue
+
+            # Cache miss — convert this single tool
+            all_cached = False
+            try:
+                result = self.tool_ops.p_tool_definition_to_ir(t)
+            except Exception as e:
+                tool_type = (
+                    t.get("type", "unknown")
+                    if isinstance(t, dict)
+                    else type(t).__name__
+                )
+                tool_name = (
+                    (t.get("function", {}).get("name") or t.get("name", "unnamed"))
+                    if isinstance(t, dict)
+                    else str(t)
+                )
+                raise ValueError(
+                    f"Unsupported tool type={tool_type!r} name={tool_name!r}: {e}"
+                ) from e
+
+            put_cached_tool(tag, t, result)
+            if isinstance(result, list):
+                ir_tools.extend(result)
+            elif result is not None:
+                ir_tools.append(result)
+
+        return ir_tools, all_cached
 
     def _cache_tools_from_p(self, tools: list[Any], ir_tools: list[Any]) -> None:
-        """Store a validated provider→IR tool conversion result in the cache.
+        """Store validated provider→IR tool results in per-entry cache.
 
         Called after ``_validate_ir_request`` succeeds on the cold path,
-        so only validated tool lists enter the cache.
+        so only validated tool entries are cached.
 
-        Args:
-            tools: Original provider-format tools (used to compute key).
-            ir_tools: The validated IR tool list to cache.
+        For converters where the tool count may differ between input and
+        output (Google 1:N), individual entries were already cached
+        during ``_get_cached_tools_from_p``.  This method is a no-op
+        for those — the per-entry cache handles it.
         """
-        from .cache import tools_cache_key, tools_from_p_cache
-
-        key = tools_cache_key(self._CONVERTER_TAG, tools)
-        tools_from_p_cache.put(key, ir_tools)
+        # Per-entry caching is done inline in _get_cached_tools_from_p.
+        # This method exists for API compatibility with the 4 converter
+        # call sites that call it after validation.  Nothing to do here
+        # since entries are cached immediately on miss.
+        pass
 
     def _get_cached_tools_to_p(self, ir_tools: list[Any]) -> list[Any]:
-        """Convert IR tools to provider format, with caching.
+        """Per-entry IR→provider tool conversion with caching.
 
-        On hit: returns cached provider tool list.
-        On miss: calls ``ir_tool_definition_to_p`` per tool, caches the
-        result, and returns it.
+        Looks up each IR tool individually.  On miss, converts and
+        caches.
 
         .. warning::
-            The returned list is a **shared reference** into the cache.
-            Callers **must not** mutate it or any nested dict.  Mutations
-            silently corrupt the cache for all subsequent requests.
+            Returned dicts are **shared references** into the cache.
+            Callers **must not** mutate them.
 
         Args:
             ir_tools: IR tool definition list.
@@ -529,15 +644,21 @@ class BaseConverter(ABC):
         Returns:
             Provider-format tool definition list.
         """
-        from .cache import _SENTINEL, tools_cache_key, tools_to_p_cache
+        from .cache import _SENTINEL, get_cached_tool, put_cached_tool
 
-        key = tools_cache_key(self._CONVERTER_TAG, ir_tools)
-        cached = tools_to_p_cache.get(key)
-        if cached is not _SENTINEL:
-            return cached
-        p_tools = [self.tool_ops.ir_tool_definition_to_p(t) for t in ir_tools]
-        tools_to_p_cache.put(key, p_tools)
-        return p_tools
+        tag = self._CONVERTER_TAG + ":to_p"
+        results: list[Any] = []
+
+        for t in ir_tools:
+            cached = get_cached_tool(tag, t)
+            if cached is not _SENTINEL:
+                results.append(cached)
+            else:
+                converted = self.tool_ops.ir_tool_definition_to_p(t)
+                put_cached_tool(tag, t, converted)
+                results.append(converted)
+
+        return results
 
     # ==================== 便利方法 Convenience methods ====================
 
