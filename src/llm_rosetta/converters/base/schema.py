@@ -143,10 +143,10 @@ def _sanitize_value(
 ) -> Any:
     """Recursively sanitize a single schema value (dict, list, or passthrough)."""
     if isinstance(value, dict):
-        return sanitize_schema(value, defs, extra_strip_keys)
+        return _sanitize_schema_impl(value, defs, extra_strip_keys)
     if isinstance(value, list):
         return [
-            sanitize_schema(item, defs, extra_strip_keys)
+            _sanitize_schema_impl(item, defs, extra_strip_keys)
             if isinstance(item, dict)
             else item
             for item in value
@@ -168,28 +168,15 @@ def _strip_orphaned_required(result: dict[str, Any]) -> None:
         del result["required"]
 
 
-def sanitize_schema(
+def _sanitize_schema_impl(
     schema: dict[str, Any],
     defs: dict[str, dict[str, Any]] | None = None,
     extra_strip_keys: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Recursively remove unsupported JSON Schema keywords.
+    """Core implementation of schema sanitization (uncached).
 
-    Also resolves ``$ref`` references by inlining the referenced definition,
-    and flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
-    simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
-    which does not support these constructs at all.
-
-    Args:
-        schema: A JSON Schema dict (or sub-schema).
-        defs: Collected ``$defs``/``definitions`` from the top-level schema.
-            Populated automatically on the first call if the schema contains
-            definition maps.
-        extra_strip_keys: Additional provider-specific keys to strip
-            (e.g. ``{"additionalProperties"}`` for Google GenAI).
-
-    Returns:
-        A new dict with unsupported keys removed at every level.
+    Recursively removes unsupported JSON Schema keywords, resolves
+    ``$ref`` references, and flattens ``anyOf``/``oneOf``/``allOf``.
     """
     if defs is None:
         defs = {}
@@ -205,7 +192,7 @@ def sanitize_schema(
         if resolved:
             merged = {k: v for k, v in schema.items() if k != "$ref"}
             _deep_merge_schema(merged, resolved)
-            return sanitize_schema(merged, defs, extra_strip_keys)
+            return _sanitize_schema_impl(merged, defs, extra_strip_keys)
 
     strip_keys = UNSUPPORTED_SCHEMA_KEYS | (extra_strip_keys or set())
     result: dict[str, Any] = {}
@@ -219,4 +206,50 @@ def sanitize_schema(
         result = _flatten_combination(result)
 
     _strip_orphaned_required(result)
+    return result
+
+
+def sanitize_schema(
+    schema: dict[str, Any],
+    defs: dict[str, dict[str, Any]] | None = None,
+    extra_strip_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    """Recursively remove unsupported JSON Schema keywords.
+
+    Also resolves ``$ref`` references by inlining the referenced definition,
+    and flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
+    simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
+    which does not support these constructs at all.
+
+    Results are cached at the top-level entry point (where ``defs is None``)
+    to avoid redundant work when the same tool schemas are converted
+    repeatedly across conversation turns.
+
+    Args:
+        schema: A JSON Schema dict (or sub-schema).
+        defs: Collected ``$defs``/``definitions`` from the top-level schema.
+            Populated automatically on the first call if the schema contains
+            definition maps.
+        extra_strip_keys: Additional provider-specific keys to strip
+            (e.g. ``{"additionalProperties"}`` for Google GenAI).
+
+    Returns:
+        A new dict with unsupported keys removed at every level.
+    """
+    # Only cache top-level calls (defs=None is the public entry point).
+    # Recursive calls from _sanitize_value go through _sanitize_schema_impl
+    # directly and already have defs populated.
+    if defs is not None:
+        return _sanitize_schema_impl(schema, defs, extra_strip_keys)
+
+    from .cache import _SENTINEL, sanitize_cache, schema_cache_key
+
+    frozen_extra = frozenset(extra_strip_keys) if extra_strip_keys else None
+    key = schema_cache_key(schema, frozen_extra)
+    cached = sanitize_cache.get(key)
+    if cached is not _SENTINEL:
+        return cached
+
+    result = _sanitize_schema_impl(schema, defs, extra_strip_keys)
+    sanitize_cache.put(key, result)
     return result
