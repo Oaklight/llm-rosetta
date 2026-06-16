@@ -16,6 +16,7 @@ from .extensions import ExtensionItem
 from .messages import Message
 from .request import IRRequest
 from .response import IRResponse
+from .tools import ToolDefinition
 
 
 def validate_ir_request(data: dict[str, Any]) -> IRRequest:
@@ -65,9 +66,27 @@ def validate_messages(
     return validate(messages, list[Union[Message, ExtensionItem]])
 
 
+def validate_tools(
+    tools: list[Any],
+) -> list[ToolDefinition]:
+    """Validate a tool list against IR ToolDefinition type.
+
+    Args:
+        tools: List of tool definition dicts to validate.
+
+    Returns:
+        The validated list.
+
+    Raises:
+        ValidationError: If any tool doesn't match expected structure.
+    """
+    return validate(tools, list[ToolDefinition])
+
+
 __all__ = [
     "ValidationError",
     "validate_ir_request",
     "validate_ir_response",
     "validate_messages",
+    "validate_tools",
 ]

@@ -351,9 +351,8 @@ class GoogleGenAIConverter(BaseConverter):
 
         # Tools — check SDK config first, then REST top-level (with cache)
         tools = config.get("tools") or provider_request.get("tools")
-        _tools_cached = False
         if tools:
-            ir_request["tools"], _tools_cached = self._get_cached_tools_from_p(tools)
+            ir_request["tools"] = self._get_cached_tools_from_p(tools)
 
         # Tool choice — check SDK/REST snake_case/camelCase
         tool_config = (
@@ -391,12 +390,7 @@ class GoogleGenAIConverter(BaseConverter):
         if "thinking_config" in config or "thinkingConfig" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
-        result = self._validate_ir_request(
-            ir_request, _skip_tools_validation=_tools_cached
-        )
-        if not _tools_cached and tools and result.get("tools"):
-            self._cache_tools_from_p(tools, result["tools"])
-        return result
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,

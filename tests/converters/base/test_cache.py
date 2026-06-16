@@ -11,8 +11,8 @@ from llm_rosetta.converters.base.cache import (
     clear_all_caches,
     entry_cache_key,
     get_cached_tool,
-    is_message_validated,
-    mark_message_validated,
+    is_ir_validated,
+    mark_ir_validated,
     put_cached_tool,
     schema_cache_key,
 )
@@ -305,36 +305,52 @@ class TestToolEntryHelpers:
 
 
 # ---------------------------------------------------------------------------
-# Message validation helpers
+# Unified IR validation helpers
 # ---------------------------------------------------------------------------
 
 
-class TestMessageValidationHelpers:
+class TestIRValidationHelpers:
     def test_not_validated_initially(self):
         clear_all_caches()
         msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
-        assert is_message_validated(msg) is False
+        assert is_ir_validated("ir.message", msg) is False
 
     def test_mark_and_check(self):
         clear_all_caches()
         msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
-        mark_message_validated(msg)
-        assert is_message_validated(msg) is True
+        mark_ir_validated("ir.message", msg)
+        assert is_ir_validated("ir.message", msg) is True
 
-    def test_different_messages_independent(self):
+    def test_different_entries_independent(self):
         clear_all_caches()
         msg1 = {"role": "user", "content": [{"type": "text", "text": "hello"}]}
         msg2 = {"role": "user", "content": [{"type": "text", "text": "world"}]}
-        mark_message_validated(msg1)
-        assert is_message_validated(msg1) is True
-        assert is_message_validated(msg2) is False
+        mark_ir_validated("ir.message", msg1)
+        assert is_ir_validated("ir.message", msg1) is True
+        assert is_ir_validated("ir.message", msg2) is False
 
     def test_dict_key_order_independent(self):
         clear_all_caches()
         msg1 = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
         msg2 = {"content": [{"type": "text", "text": "hi"}], "role": "user"}
-        mark_message_validated(msg1)
-        assert is_message_validated(msg2) is True
+        mark_ir_validated("ir.message", msg1)
+        assert is_ir_validated("ir.message", msg2) is True
+
+    def test_different_tags_independent(self):
+        """Same content with different tags should not collide."""
+        clear_all_caches()
+        entry = {"name": "foo", "type": "function"}
+        mark_ir_validated("ir.tool", entry)
+        assert is_ir_validated("ir.tool", entry) is True
+        assert is_ir_validated("ir.message", entry) is False
+
+    def test_cross_converter_sharing(self):
+        """IR validation is converter-agnostic — no converter tag."""
+        clear_all_caches()
+        tool = {"type": "function", "name": "foo", "description": "d", "parameters": {}}
+        mark_ir_validated("ir.tool", tool)
+        # Same IR tool, different "converter" — should still hit
+        assert is_ir_validated("ir.tool", tool) is True
 
 
 # ---------------------------------------------------------------------------
@@ -345,24 +361,24 @@ class TestMessageValidationHelpers:
 class TestModuleSingletons:
     def test_clear_all_caches(self):
         from llm_rosetta.converters.base.cache import (
+            ir_validation_cache,
             sanitize_cache,
             tool_entry_cache,
-            validated_msg_cache,
         )
 
         tool_entry_cache.put(1, "x")
         sanitize_cache.put(2, "y")
-        validated_msg_cache.put(3, True)
+        ir_validation_cache.put(3, True)
 
         clear_all_caches()
 
         assert tool_entry_cache.get(1) is _SENTINEL
         assert sanitize_cache.get(2) is _SENTINEL
-        assert validated_msg_cache.get(3) is _SENTINEL
+        assert ir_validation_cache.get(3) is _SENTINEL
 
     def test_cache_info_structure(self):
         info = cache_info()
-        assert set(info.keys()) == {"tool_entry", "sanitize", "validated_msg"}
+        assert set(info.keys()) == {"tool_entry", "sanitize", "ir_validation"}
         for v in info.values():
             assert "hits" in v
             assert "misses" in v

@@ -324,9 +324,8 @@ class OpenAIChatConverter(BaseConverter):
 
         # 2. Tools (with process-level cache)
         tools = provider_request.get("tools")
-        _tools_cached = False
         if tools:
-            ir_request["tools"], _tools_cached = self._get_cached_tools_from_p(tools)
+            ir_request["tools"] = self._get_cached_tools_from_p(tools)
 
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -376,12 +375,7 @@ class OpenAIChatConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        result = self._validate_ir_request(
-            ir_request, _skip_tools_validation=_tools_cached
-        )
-        if not _tools_cached and tools:
-            self._cache_tools_from_p(tools, result.get("tools", []))
-        return result
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,

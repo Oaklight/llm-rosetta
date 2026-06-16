@@ -13,9 +13,9 @@ def _clear_tool_conversion_caches():
     """
     from llm_rosetta.converters.base.cache import (
         clear_all_caches,
+        ir_validation_cache,
         sanitize_cache,
         tool_entry_cache,
-        validated_msg_cache,
     )
 
     clear_all_caches()
@@ -25,7 +25,7 @@ def _clear_tool_conversion_caches():
     for name, cache in [
         ("tool_entry", tool_entry_cache),
         ("sanitize", sanitize_cache),
-        ("validated_msg", validated_msg_cache),
+        ("ir_validation", ir_validation_cache),
     ]:
         corrupted = cache.check_integrity()
         if corrupted:

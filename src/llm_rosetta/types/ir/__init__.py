@@ -64,6 +64,7 @@ from .validation import (  # noqa: F401
     validate_ir_request,
     validate_ir_response,
     validate_messages,
+    validate_tools,
 )
 
 # 消息类型 Message types

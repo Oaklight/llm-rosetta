@@ -209,7 +209,6 @@ class OpenAIResponsesConverter(BaseConverter):
         # 3. Tools (with process-level cache)
         # Filter out disabled tools before caching (external_web_access=False)
         tools = provider_request.get("tools")
-        _tools_cached = False
         if tools:
             active_tools = [
                 t
@@ -217,7 +216,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 if not (isinstance(t, dict) and t.get("external_web_access") is False)
             ]
             if active_tools:
-                ir_tools, _tools_cached = self._get_cached_tools_from_p(active_tools)
+                ir_tools = self._get_cached_tools_from_p(active_tools)
                 if ir_tools:
                     ir_request["tools"] = ir_tools
 
@@ -270,12 +269,7 @@ class OpenAIResponsesConverter(BaseConverter):
             if echo:
                 ctx.store_request_echo(echo)
 
-        result = self._validate_ir_request(
-            ir_request, _skip_tools_validation=_tools_cached
-        )
-        if not _tools_cached and tools and result.get("tools"):
-            self._cache_tools_from_p(tools, result["tools"])
-        return result
+        return self._validate_ir_request(ir_request)
 
     def response_from_provider(
         self,

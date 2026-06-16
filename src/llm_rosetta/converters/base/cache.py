@@ -268,13 +268,21 @@ sanitize_cache = LRUCache(maxsize=512)
 Keyed by ``(schema_json, extra_strip_keys)``.
 """
 
-validated_msg_cache = LRUCache(maxsize=4096)
-"""Per-message validation status cache.
+ir_validation_cache = LRUCache(maxsize=8192)
+"""Unified IR validation status cache (the **hub**).
 
-Stores ``True`` for messages that have passed IR validation.
-At ~170 bytes per message hash, 4096 entries ≈ negligible memory
-(only the key + True + deadline are stored, not the message content).
-Covers ~18 concurrent 218-message conversations.
+Stores ``True`` for any IR entry (tool, message, etc.) that has passed
+TypedDict validation.  Keyed by ``(type_tag, canonical_json)`` — the
+tag prevents cross-type hash collisions while allowing cross-converter
+sharing (IR is converter-agnostic).
+
+This is the **hub** in the hub-and-spoke architecture:
+- Spokes: ``tool_entry_cache`` (converter-specific conversion results)
+- Hub: ``ir_validation_cache`` (converter-agnostic validation status)
+
+A spoke hit implies a hub hit (entry was validated on first conversion).
+A hub hit does NOT imply a spoke hit (different converter may not have
+converted this entry yet).
 """
 
 
@@ -282,7 +290,8 @@ def clear_all_caches() -> None:
     """Clear all conversion caches.  Used in test fixtures."""
     tool_entry_cache.clear()
     sanitize_cache.clear()
-    validated_msg_cache.clear()
+    ir_validation_cache.clear()
+    _validated_ids.clear()
 
 
 def cache_info() -> dict[str, dict[str, Any]]:
@@ -290,7 +299,7 @@ def cache_info() -> dict[str, dict[str, Any]]:
     return {
         "tool_entry": tool_entry_cache.info(),
         "sanitize": sanitize_cache.info(),
-        "validated_msg": validated_msg_cache.info(),
+        "ir_validation": ir_validation_cache.info(),
     }
 
 
@@ -323,24 +332,51 @@ def put_cached_tool(tag: str, tool: dict[str, Any], result: Any) -> None:
     tool_entry_cache.put(entry_cache_key(tag, tool), result)
 
 
-def is_message_validated(msg: dict[str, Any]) -> bool:
-    """Check if a message was previously validated.
+def _ir_validation_key(tag: str, entry: Any) -> int:
+    """Compute a validation cache key for an IR entry.
+
+    The *tag* namespaces by IR type (e.g. ``"ir.tool"``, ``"ir.message"``)
+    so different IR types with the same content never collide.  No
+    converter tag — IR validation is converter-agnostic.
+    """
+    return hash(tag.encode() + b"\x00" + _canonical_json_bytes(entry))
+
+
+# Fast-path set: (tag, object_id) pairs of entries known to be validated.
+# Avoids json.dumps + hash on warm path when the same Python object
+# (from conversion cache) is checked.  Cleared with the caches.
+_validated_ids: set[tuple[str, int]] = set()
+
+
+def is_ir_validated(tag: str, entry: Any) -> bool:
+    """Check if an IR entry was previously validated.
+
+    Uses ``(tag, id(entry))`` as a fast-path (O(1) set lookup, no
+    serialization).  Falls back to content-hash lookup in the LRU
+    cache for entries not seen by reference (e.g. first request, or
+    cross-converter sharing).
 
     Args:
-        msg: A single IR message dict.
+        tag: IR type tag (e.g. ``"ir.tool"``, ``"ir.message"``).
+        entry: A single IR entry dict.
 
     Returns:
-        True if the message content hash is in the validation cache.
+        True if this entry has passed validation before.
     """
-    key = hash(_canonical_json_bytes(msg))
-    return validated_msg_cache.get(key) is not _SENTINEL
+    if (tag, id(entry)) in _validated_ids:
+        return True
+    return ir_validation_cache.get(_ir_validation_key(tag, entry)) is not _SENTINEL
 
 
-def mark_message_validated(msg: dict[str, Any]) -> None:
-    """Record a message as having passed IR validation.
+def mark_ir_validated(tag: str, entry: Any) -> None:
+    """Record an IR entry as having passed validation.
+
+    Marks both by ``(tag, id)`` (fast path for same-object lookups)
+    and by content hash (for cross-converter / cross-request sharing).
 
     Args:
-        msg: A single IR message dict.
+        tag: IR type tag (e.g. ``"ir.tool"``, ``"ir.message"``).
+        entry: A single IR entry dict.
     """
-    key = hash(_canonical_json_bytes(msg))
-    validated_msg_cache.put(key, True)
+    _validated_ids.add((tag, id(entry)))
+    ir_validation_cache.put(_ir_validation_key(tag, entry), True)

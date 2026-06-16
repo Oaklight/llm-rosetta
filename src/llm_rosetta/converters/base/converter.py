@@ -18,6 +18,7 @@ from ...types.ir.validation import (
     validate_ir_request,
     validate_ir_response,
     validate_messages,
+    validate_tools,
 )
 from .context import ConversionContext, StreamContext
 
@@ -447,27 +448,66 @@ class BaseConverter(ABC):
 
     # ==================== IR Validation helpers ====================
 
-    def _validate_ir_request(
-        self,
+    # List fields in IRRequest that support incremental validation.
+    # (field_name, ir_type_tag, standalone_validator, placeholder_for_skip)
+    # placeholder: value to substitute when all entries are cached.
+    #   [] for Required fields (messages), None to pop for NotRequired (tools).
+    _IR_VALIDATED_FIELDS: tuple[tuple[str, str, Any, Any], ...] = (
+        ("tools", "ir.tool", staticmethod(validate_tools), None),
+        ("messages", "ir.message", staticmethod(validate_messages), []),
+    )
+
+    @staticmethod
+    def _check_field_incremental(
         data: dict[str, Any],
-        *,
-        _skip_tools_validation: bool = False,
-    ) -> IRRequest:
+        field: str,
+        tag: str,
+        validator: Any,
+        placeholder: Any,
+        saved: dict[str, list[Any]],
+        newly_validated: list[tuple[str, Any]],
+    ) -> None:
+        """Check one list field against the IR validation cache.
+
+        Partitions entries into cached (skip) and new (validate).
+        On partial/full hit, swaps the field with a placeholder so the
+        main ``validate_ir_request`` pass skips it.
+        """
+        from .cache import is_ir_validated
+
+        original = data.get(field)
+        if not original:
+            return
+
+        new = [e for e in original if not is_ir_validated(tag, e)]
+        if not new:
+            # All cached — swap in placeholder
+            saved[field] = original
+            if placeholder is not None:
+                data[field] = placeholder
+            else:
+                data.pop(field, None)
+        elif len(new) < len(original):
+            # Partial hit — validate only new entries separately
+            validator(new)
+            newly_validated.extend((tag, e) for e in new)
+            saved[field] = original
+            if placeholder is not None:
+                data[field] = placeholder
+            else:
+                data.pop(field, None)
+        # else: all new — leave in place for the main pass
+
+    def _validate_ir_request(self, data: dict[str, Any]) -> IRRequest:
         """Validate and return an IRRequest if validate_output is enabled.
 
-        Applies two optimizations via the per-entry cache:
-
-        1. **Tools** (*_skip_tools_validation*): when all tools were
-           cache hits, pop the ``tools`` field before validation (they
-           were validated on the original cache-miss request).
-        2. **Messages**: check each message against the validation
-           cache.  Only validate messages not seen before.  If all
-           messages are cached, pop ``messages`` too.
+        Uses the unified ``ir_validation_cache`` (the hub) to skip
+        re-validation of IR entries that have already been validated,
+        regardless of which converter produced them.  Both tools and
+        messages are checked against the same cache.
 
         Args:
             data: Dict built by a concrete converter's request_from_provider.
-            _skip_tools_validation: Skip tools validation (all tools
-                were per-entry cache hits).
 
         Returns:
             The validated IRRequest (same object, typed).
@@ -478,52 +518,36 @@ class BaseConverter(ABC):
         if not self.validate_output:
             return cast(IRRequest, data)
 
-        from .cache import is_message_validated, mark_message_validated
+        from .cache import mark_ir_validated
 
-        # --- Message incremental validation ---
-        messages = data.get("messages", [])
-        new_messages: list[Any] | None = None
-        skip_messages = False
+        saved: dict[str, list[Any]] = {}
+        newly_validated: list[tuple[str, Any]] = []
 
-        if messages:
-            new_messages = [m for m in messages if not is_message_validated(m)]
-            if not new_messages:
-                # All messages previously validated — skip entirely
-                skip_messages = True
-            elif len(new_messages) < len(messages):
-                # Partial hit — validate only the new ones
-                validate_messages(new_messages)
-                skip_messages = True  # validated separately, skip in main pass
-
-        # --- Pop/replace fields that are already validated ---
-        popped_tools = None
-        if _skip_tools_validation and "tools" in data:
-            popped_tools = data.pop("tools")
-
-        # Replace messages with empty list (messages is Required in IRRequest,
-        # so we can't pop it — use [] as a cheap placeholder instead).
-        if skip_messages:
-            data["messages"] = []
+        for field, tag, validator, placeholder in self._IR_VALIDATED_FIELDS:
+            self._check_field_incremental(
+                data, field, tag, validator, placeholder, saved, newly_validated
+            )
 
         try:
             result = validate_ir_request(data)
         finally:
-            # Always restore popped/replaced fields
-            if popped_tools is not None:
-                data["tools"] = popped_tools
-            if skip_messages:
-                data["messages"] = messages
+            for field, original in saved.items():
+                data[field] = original
 
-        # Restore into result
-        if popped_tools is not None:
-            result["tools"] = popped_tools  # type: ignore[literal-required]
-        if skip_messages:
-            result["messages"] = messages  # type: ignore[literal-required]
+        for field, original in saved.items():
+            result[field] = original  # type: ignore[literal-required]
 
-        # Mark newly validated messages
-        if new_messages:
-            for msg in new_messages:
-                mark_message_validated(msg)
+        # Mark newly validated entries
+        for tag, entry in newly_validated:
+            mark_ir_validated(tag, entry)
+        # Mark entries validated by the main pass (all-new case)
+        for field, tag, _validator, _ph in self._IR_VALIDATED_FIELDS:
+            if field in saved:
+                continue
+            entries = result.get(field)
+            if entries:
+                for e in entries:
+                    mark_ir_validated(tag, e)
 
         return result
 
@@ -545,15 +569,14 @@ class BaseConverter(ABC):
 
     # ==================== Per-entry conversion caching ====================
 
-    def _get_cached_tools_from_p(self, tools: list[Any]) -> tuple[list[Any], bool]:
+    def _get_cached_tools_from_p(self, tools: list[Any]) -> list[Any]:
         """Per-entry provider→IR tool conversion with caching.
 
-        Looks up each tool individually.  On hit, returns the cached
-        IR tool.  On miss, converts just that tool and caches the result.
-
-        Returns ``(ir_tools, all_cached)`` — when *all_cached* is True,
-        every tool was a cache hit and the caller may skip IR validation
-        for the tools field.
+        Looks up each tool individually in the conversion cache (spoke).
+        On hit, also marks the IR tool in the validation hub cache so
+        ``_validate_ir_request`` can skip re-hashing it.  On miss,
+        converts and caches (the hub mark happens later in
+        ``_validate_ir_request`` after successful validation).
 
         Handles Google's list/None return from ``p_tool_definition_to_ir``
         transparently.
@@ -566,26 +589,22 @@ class BaseConverter(ABC):
             tools: Provider-format tool definition list.
 
         Returns:
-            Tuple of (ir_tools, all_cached).
+            IR tool definition list.
         """
         from .cache import _SENTINEL, get_cached_tool, put_cached_tool
 
         tag = self._CONVERTER_TAG + ":from_p"
         ir_tools: list[Any] = []
-        all_cached = True
 
         for t in tools:
             cached = get_cached_tool(tag, t)
             if cached is not _SENTINEL:
-                # Cached result may be list (Google), single dict, or None
                 if isinstance(cached, list):
                     ir_tools.extend(cached)
                 elif cached is not None:
                     ir_tools.append(cached)
                 continue
 
-            # Cache miss — convert this single tool
-            all_cached = False
             try:
                 result = self.tool_ops.p_tool_definition_to_ir(t)
             except Exception as e:
@@ -609,24 +628,7 @@ class BaseConverter(ABC):
             elif result is not None:
                 ir_tools.append(result)
 
-        return ir_tools, all_cached
-
-    def _cache_tools_from_p(self, tools: list[Any], ir_tools: list[Any]) -> None:
-        """Store validated provider→IR tool results in per-entry cache.
-
-        Called after ``_validate_ir_request`` succeeds on the cold path,
-        so only validated tool entries are cached.
-
-        For converters where the tool count may differ between input and
-        output (Google 1:N), individual entries were already cached
-        during ``_get_cached_tools_from_p``.  This method is a no-op
-        for those — the per-entry cache handles it.
-        """
-        # Per-entry caching is done inline in _get_cached_tools_from_p.
-        # This method exists for API compatibility with the 4 converter
-        # call sites that call it after validation.  Nothing to do here
-        # since entries are cached immediately on miss.
-        pass
+        return ir_tools
 
     def _get_cached_tools_to_p(self, ir_tools: list[Any]) -> list[Any]:
         """Per-entry IR→provider tool conversion with caching.
