@@ -8,7 +8,19 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## [Unreleased]
 
-*暂无变更。*
+### 新增
+
+- **进程级转换缓存** ([#276](https://github.com/Oaklight/llm-rosetta/issues/276), [#279](https://github.com/Oaklight/llm-rosetta/pull/279), [#281](https://github.com/Oaklight/llm-rosetta/pull/281), [#283](https://github.com/Oaklight/llm-rosetta/pull/283))：基于内容哈希的逐条 LRU 缓存，支持访问刷新 TTL（默认 30 分钟），覆盖工具转换、Schema 清理和 IR 校验。消除了会话轮次间对不变工具定义和消息的重复处理
+    - **Hub-and-Spoke 架构**：转换缓存（spoke）按 converter 隔离；IR 校验缓存（hub）跨 converter 共享
+    - **逐条缓存**：工具和消息按内容哈希独立缓存——部分工具变更时仅重新转换变更条目，跨 agent 的相同工具共享缓存
+    - **增量消息校验**：仅校验新增消息；已见过的消息通过 IR 校验 hub 跳过
+    - **变异检测**：测试 teardown 时通过 `check_integrity()` 检测缓存对象是否被意外修改；可选 `verify=True` 模式支持运行时自愈
+    - **基准测试**：本地热路径加速 4.4 倍（3250 µs → 527 µs）；生产环境 TTFB 降低 33%（11.4 ms → 7.6 ms）
+- **`validate_tools()`** ([#283](https://github.com/Oaklight/llm-rosetta/pull/283))：新增独立的 IR 工具定义列表校验函数，与 `validate_messages()` 对称
+
+### 变更
+
+- **`_convert_tools_from_p` 不再是抽象方法** ([#281](https://github.com/Oaklight/llm-rosetta/pull/281))：`BaseConverter` 提供默认实现，处理所有 provider（包括 Google 的 list/None 返回值）。移除了 4 个 converter 的重复覆写——减少约 90 行重复代码
 
 ## v0.6.9 — 2026-06-13
 
