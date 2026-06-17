@@ -523,12 +523,14 @@ class BaseConverter(ABC):
         saved: dict[str, list[Any]] = {}
         newly_validated: list[tuple[str, Any]] = []
 
-        for field, tag, validator, placeholder in self._IR_VALIDATED_FIELDS:
-            self._check_field_incremental(
-                data, field, tag, validator, placeholder, saved, newly_validated
-            )
-
+        # Single try/finally guards both the per-field incremental
+        # checks (which may swap fields) and the main validation pass.
+        # If any validator raises, all swaps are restored.
         try:
+            for field, tag, validator, placeholder in self._IR_VALIDATED_FIELDS:
+                self._check_field_incremental(
+                    data, field, tag, validator, placeholder, saved, newly_validated
+                )
             result = validate_ir_request(data)
         finally:
             for field, original in saved.items():

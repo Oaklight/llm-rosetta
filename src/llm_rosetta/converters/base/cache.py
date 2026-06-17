@@ -291,7 +291,6 @@ def clear_all_caches() -> None:
     tool_entry_cache.clear()
     sanitize_cache.clear()
     ir_validation_cache.clear()
-    _validated_ids.clear()
 
 
 def cache_info() -> dict[str, dict[str, Any]]:
@@ -342,19 +341,12 @@ def _ir_validation_key(tag: str, entry: Any) -> int:
     return hash(tag.encode() + b"\x00" + _canonical_json_bytes(entry))
 
 
-# Fast-path set: (tag, object_id) pairs of entries known to be validated.
-# Avoids json.dumps + hash on warm path when the same Python object
-# (from conversion cache) is checked.  Cleared with the caches.
-_validated_ids: set[tuple[str, int]] = set()
-
-
 def is_ir_validated(tag: str, entry: Any) -> bool:
     """Check if an IR entry was previously validated.
 
-    Uses ``(tag, id(entry))`` as a fast-path (O(1) set lookup, no
-    serialization).  Falls back to content-hash lookup in the LRU
-    cache for entries not seen by reference (e.g. first request, or
-    cross-converter sharing).
+    Uses a content-hash lookup in the ``ir_validation_cache`` LRU.
+    The tag prevents cross-type collisions (e.g. ``"ir.tool"`` vs
+    ``"ir.message"``).
 
     Args:
         tag: IR type tag (e.g. ``"ir.tool"``, ``"ir.message"``).
@@ -363,20 +355,14 @@ def is_ir_validated(tag: str, entry: Any) -> bool:
     Returns:
         True if this entry has passed validation before.
     """
-    if (tag, id(entry)) in _validated_ids:
-        return True
     return ir_validation_cache.get(_ir_validation_key(tag, entry)) is not _SENTINEL
 
 
 def mark_ir_validated(tag: str, entry: Any) -> None:
     """Record an IR entry as having passed validation.
 
-    Marks both by ``(tag, id)`` (fast path for same-object lookups)
-    and by content hash (for cross-converter / cross-request sharing).
-
     Args:
         tag: IR type tag (e.g. ``"ir.tool"``, ``"ir.message"``).
         entry: A single IR entry dict.
     """
-    _validated_ids.add((tag, id(entry)))
     ir_validation_cache.put(_ir_validation_key(tag, entry), True)
