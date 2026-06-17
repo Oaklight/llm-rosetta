@@ -534,8 +534,11 @@ class BaseConverter(ABC):
             for field, original in saved.items():
                 data[field] = original
 
+        # Restore saved fields into result (use dict view to avoid ty
+        # "invalid-key" error — TypedDict doesn't allow variable keys).
+        result_dict = cast(dict[str, Any], result)
         for field, original in saved.items():
-            result[field] = original  # type: ignore[literal-required]
+            result_dict[field] = original
 
         # Mark newly validated entries
         for tag, entry in newly_validated:
@@ -544,7 +547,7 @@ class BaseConverter(ABC):
         for field, tag, _validator, _ph in self._IR_VALIDATED_FIELDS:
             if field in saved:
                 continue
-            entries = result.get(field)
+            entries = result_dict.get(field)
             if entries:
                 for e in entries:
                     mark_ir_validated(tag, e)
