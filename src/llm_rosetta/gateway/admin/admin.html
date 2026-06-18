@@ -697,7 +697,7 @@ body { padding-bottom: 26px; }
       </label>
       <div style="display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:8px">
-          <label style="min-width:190px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.thinkingType">Thinking Type</label>
+          <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.thinkingType">Thinking Type</label>
           <select id="reasoningThinkingType" style="flex:1">
             <option value="" data-i18n="label.inheritProvider">(inherit from provider)</option>
             <option value="enabled">enabled</option>
@@ -705,11 +705,11 @@ body { padding-bottom: 26px; }
           </select>
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <label style="min-width:190px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.budgetRatio">Budget Tokens Ratio</label>
+          <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.budgetRatio">Budget Tokens Ratio</label>
           <input id="reasoningBudgetRatio" type="number" step="0.1" min="0" max="1" placeholder="(inherit)" style="flex:1">
         </div>
         <div style="display:flex;align-items:center;gap:8px">
-          <label style="min-width:190px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.disabledStrategy">Disabled Strategy</label>
+          <label style="min-width:140px;margin:0;font-size:0.85em;color:var(--text-dim);text-transform:none;letter-spacing:0" data-i18n="label.disabledStrategy">Disabled Strategy</label>
           <select id="reasoningDisabled" style="flex:1">
             <option value="" data-i18n="label.inheritProvider">(inherit from provider)</option>
             <option value="omit">omit</option>
@@ -904,7 +904,7 @@ const I18N = {
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities',
-    'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)',
+    'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
     'modal.addModel':'Add Model', 'modal.editModel':'Edit Model',
     'col.model':'Model', 'col.provider':'Provider', 'col.time':'Time',
@@ -1007,7 +1007,7 @@ const I18N = {
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b',
-    'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)',
+    'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)', 'label.inherited':'\u7ee7\u627f',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u5546', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u5546',
     'modal.addModel':'\u6dfb\u52a0\u6a21\u578b', 'modal.editModel':'\u7f16\u8f91\u6a21\u578b',
     'col.model':'\u6a21\u578b', 'col.provider':'\u670d\u52a1\u5546', 'col.time':'\u65f6\u95f4',
@@ -1436,10 +1436,18 @@ function openModelModal(model, provider, capabilities, upstreamModel) {
   const srcBadge = document.getElementById('reasoningSourceBadge');
   srcBadge.textContent = reasoning.source || 'none';
   srcBadge.className = 'badge badge-sm' + (reasoning.source === 'config' ? ' badge-cap-tools' : reasoning.source === 'model_override' ? ' badge-cap-reasoning' : '');
-  // Show effective values — config override takes display priority, then shim effective
-  document.getElementById('reasoningThinkingType').value = configOverride.thinking_type || reasoning.thinking_type || '';
-  document.getElementById('reasoningBudgetRatio').value = configOverride.budget_tokens_default_ratio != null ? configOverride.budget_tokens_default_ratio : (reasoning.budget_tokens_default_ratio != null ? reasoning.budget_tokens_default_ratio : '');
-  document.getElementById('reasoningDisabled').value = configOverride.disabled || reasoning.disabled || '';
+  // Update inherit option labels: show "value (inherited)" or just "(inherit)"
+  const inh = t('label.inherited');
+  const ttInherit = document.querySelector('#reasoningThinkingType option[value=""]');
+  ttInherit.textContent = reasoning.thinking_type ? reasoning.thinking_type + ' (' + inh + ')' : '(' + inh + ')';
+  const br = document.getElementById('reasoningBudgetRatio');
+  br.placeholder = reasoning.budget_tokens_default_ratio != null ? reasoning.budget_tokens_default_ratio + ' (' + inh + ')' : '(' + inh + ')';
+  const dsInherit = document.querySelector('#reasoningDisabled option[value=""]');
+  dsInherit.textContent = reasoning.disabled ? reasoning.disabled + ' (' + inh + ')' : '(' + inh + ')';
+  // Set values — config override if present, otherwise blank (inheriting)
+  document.getElementById('reasoningThinkingType').value = configOverride.thinking_type || '';
+  document.getElementById('reasoningBudgetRatio').value = configOverride.budget_tokens_default_ratio != null ? configOverride.budget_tokens_default_ratio : '';
+  document.getElementById('reasoningDisabled').value = configOverride.disabled || '';
 
   document.getElementById('modelModal').classList.add('open');
 }
