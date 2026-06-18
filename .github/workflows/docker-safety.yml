@@ -1,0 +1,46 @@
+name: Docker Safety
+
+on:
+  push:
+    paths:
+      - "**/Dockerfile*"
+      - "**/*.Dockerfile"
+      - ".dockerignore"
+  pull_request:
+    paths:
+      - "**/Dockerfile*"
+      - "**/*.Dockerfile"
+      - ".dockerignore"
+
+jobs:
+  docker-safety:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check .dockerignore exists
+        run: |
+          if [ ! -f .dockerignore ]; then
+            echo "::error::.dockerignore is missing — secrets can leak into Docker images"
+            exit 1
+          fi
+
+      - name: Check .dockerignore excludes secrets
+        run: |
+          FAIL=""
+          for pattern in ".env" "*.key" "*.pem"; do
+            if ! grep -qF "$pattern" .dockerignore; then
+              echo "::error::.dockerignore does not exclude '$pattern'"
+              FAIL=1
+            fi
+          done
+          [ -z "$FAIL" ] || exit 1
+
+      - name: Warn on broad COPY/ADD in Dockerfiles
+        run: |
+          FOUND=$(grep -rnE '^\s*(COPY|ADD)\s+\.\s' **/Dockerfile* Dockerfile* docker/Dockerfile* 2>/dev/null || true)
+          if [ -n "$FOUND" ]; then
+            echo "::warning::Broad COPY/ADD found (relies on .dockerignore for safety):"
+            echo "$FOUND"
+          fi
+
