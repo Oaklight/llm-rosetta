@@ -6,11 +6,11 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openro
 reasoning:
   disabled: thinking_disabled
   thinking_type: enabled
-  effort_field: thinking.budget_tokens
+  effort_field: output_config.effort
   effort_map:
-    minimal: 1024
-    low: 2048
-    medium: 5120
-    high: 10240
-    xhigh: 16384
-    max: 32768
+    minimal: low
+    low: low
+    medium: medium
+    high: high
+    xhigh: xhigh
+    max: max
