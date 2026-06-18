@@ -589,6 +589,31 @@ class TestCustomShim:
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 8000
 
+    def test_haiku_effort_field_none_drops_effort_keeps_thinking(self):
+        """Haiku-style cap: effort_field=none drops effort, keeps enabled+budget.
+
+        Mirrors the Anthropic Official Haiku 4.5 override — the model accepts
+        thinking.type=enabled + budget_tokens but rejects output_config.effort.
+        """
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="none",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "medium"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=8192,
+        )
+        # effort must NOT be emitted
+        assert "output_config" not in result
+        # thinking still derived from ratio
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 6553
+
     def test_custom_thinking_budget_zero_disabled(self):
         custom = ReasoningCapability(
             disabled="thinking_budget_zero",

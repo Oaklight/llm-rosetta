@@ -14,14 +14,17 @@ reasoning:
     xhigh: xhigh
     max: max
   # Anthropic Official thinking support matrix (tested 2026-06-18):
-  #   Haiku 4.5:  enabled+budget only (adaptive → 400)
+  #   Haiku 4.5:  enabled+budget only (adaptive → 400, effort → 400)
   #   Sonnet 4.6: both enabled+budget and adaptive work
   #   Opus 4.6:   both work
   #   Opus 4.7+:  adaptive only (enabled → 400)
+  # The effort param is only supported on Opus 4.5/4.6/4.7/4.8 and Sonnet 4.6.
+  # Haiku rejects it (400), so disable effort emission for Haiku.
   model_overrides:
     claude-haiku-4-5-20251001:
       thinking_type: enabled
       budget_tokens_default_ratio: 0.8
+      effort_field: none
     claude-opus-4-7:
       thinking_type: adaptive
     claude-opus-4-8:
