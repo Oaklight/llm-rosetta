@@ -13,3 +13,7 @@ reasoning:
     high: high
     xhigh: xhigh
     max: max
+  model_overrides:
+    claude-haiku-4-5-20251001:
+      thinking_type: enabled
+      budget_tokens_default_ratio: 0.8

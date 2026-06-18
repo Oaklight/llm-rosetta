@@ -18,3 +18,6 @@ reasoning:
   model_overrides:
     claudeopus47:
       thinking_type: adaptive
+    claudehaiku45:
+      thinking_type: enabled
+      budget_tokens_default_ratio: 0.8
