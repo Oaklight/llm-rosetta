@@ -135,6 +135,13 @@ class GatewayConfig:
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
 
+        # Per-model reasoning overrides from config.jsonc (admin UI edits).
+        # Keyed by gateway model name (same as self.models keys).
+        self.model_reasoning_overrides: dict[str, dict[str, Any]] = {}
+        for model_name, value in raw.get("models", {}).items():
+            if isinstance(value, dict) and value.get("reasoning_override"):
+                self.model_reasoning_overrides[model_name] = value["reasoning_override"]
+
         _server = raw.get("server", {})
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)

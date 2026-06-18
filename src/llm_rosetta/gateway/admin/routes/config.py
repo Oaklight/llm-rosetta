@@ -6,7 +6,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import list_shims
+from llm_rosetta.shims import get_shim, list_shims
 
 from ...config import GatewayConfig, load_config_raw, write_config
 from ...providers import known_provider_types
@@ -38,6 +38,55 @@ def _get_version() -> str:
         return __version__
     except Exception:
         return "unknown"
+
+
+def _resolve_model_reasoning(
+    model_name: str,
+    entry: dict[str, Any],
+    raw_models: dict[str, Any],
+    providers: dict[str, Any],
+) -> dict[str, Any]:
+    """Resolve the effective reasoning config for a model.
+
+    Resolution priority:
+    1. config.jsonc model-level ``reasoning_override``
+    2. Shim ``model_reasoning[upstream_id]``
+    3. Shim provider-level ``reasoning``
+
+    Returns a dict with ``source`` indicating where the config came from,
+    plus the effective field values.
+    """
+    provider_name = entry.get("provider", "")
+    provider_cfg = providers.get(provider_name, {})
+    shim_name = provider_cfg.get("type") or provider_name
+    upstream = entry.get("upstream_model") or model_name
+
+    shim = get_shim(shim_name)
+    if not shim or not shim.reasoning:
+        return {"source": "none"}
+
+    cap = shim.reasoning
+    source = "provider"
+    if shim.model_reasoning and upstream in shim.model_reasoning:
+        cap = shim.model_reasoning[upstream]
+        source = "model_override"
+
+    # Check config-level override
+    raw_model = raw_models.get(model_name, {})
+    config_override = (
+        raw_model.get("reasoning_override") if isinstance(raw_model, dict) else None
+    )
+    if config_override:
+        source = "config"
+
+    return {
+        "source": source,
+        "thinking_type": cap.thinking_type,
+        "disabled": cap.disabled,
+        "effort_field": cap.effort_field,
+        "budget_tokens_default_ratio": cap.budget_tokens_default_ratio,
+        "config_override": config_override,
+    }
 
 
 async def get_config(request: Any) -> Response:
@@ -76,7 +125,15 @@ async def get_config(request: Any) -> Response:
             }
             if value.get("upstream_model"):
                 entry["upstream_model"] = value["upstream_model"]
+            if value.get("reasoning_override"):
+                entry["reasoning_override"] = value["reasoning_override"]
             models_normalized[name] = entry
+
+    # Resolve effective reasoning config per model
+    for model_name, entry in models_normalized.items():
+        entry["reasoning"] = _resolve_model_reasoning(
+            model_name, entry, raw_models, providers
+        )
 
     # Mask api_keys in server section for the response
     server = dict(raw.get("server", {}))
@@ -363,6 +420,13 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
     upstream_model = body.get("upstream_model")
     if upstream_model:
         model_entry["upstream_model"] = upstream_model
+
+    # Persist per-model reasoning override (if provided)
+    reasoning_override = body.get("reasoning_override")
+    if isinstance(reasoning_override, dict):
+        cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
+        if cleaned:
+            model_entry["reasoning_override"] = cleaned
     data.setdefault("models", {})[name] = model_entry
 
     try:

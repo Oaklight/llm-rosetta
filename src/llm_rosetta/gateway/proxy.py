@@ -30,6 +30,7 @@ from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims import get_shim
+from llm_rosetta.shims.provider_shim import ReasoningCapability
 from llm_rosetta.shims.transforms import Transform, apply_transforms
 
 
@@ -381,15 +382,18 @@ def _inject_shim_reasoning(
     ctx: ConversionContext,
     shim_name: str | None,
     model: str | None = None,
+    config_override: dict[str, Any] | None = None,
 ) -> None:
     """Inject the shim's reasoning capability config into *ctx*.
 
     If the shim has a ``reasoning`` config, it is stored in
     ``ctx.options["reasoning_cap"]`` so converters can pick it up.
 
-    When *model* is provided (typically the upstream model ID after alias
-    resolution), per-model overrides from ``shim.model_reasoning`` take
-    precedence over the provider-level config.
+    Resolution priority (highest first):
+    1. ``config_override`` — per-model override from ``config.jsonc``
+       (set via admin UI).
+    2. ``shim.model_reasoning[model]`` — per-model override from provider YAML.
+    3. ``shim.reasoning`` — provider-level default.
     """
     if shim_name is None:
         return
@@ -400,8 +404,35 @@ def _inject_shim_reasoning(
     # Model-level override (keyed by upstream model ID)
     if model and shim.model_reasoning and model in shim.model_reasoning:
         cap = shim.model_reasoning[model]
+    # Config-level override (from admin UI, keyed by gateway model name)
+    if cap is not None and config_override:
+        cap = _apply_config_reasoning_override(cap, config_override)
     if cap is not None:
         ctx.options["reasoning_cap"] = cap
+
+
+def _apply_config_reasoning_override(
+    base: ReasoningCapability,
+    override: dict[str, Any],
+) -> ReasoningCapability:
+    """Merge config-level reasoning overrides onto a base capability.
+
+    Only fields present in *override* are replaced; the rest inherit
+    from *base*.
+    """
+    return ReasoningCapability(
+        disabled=override.get("disabled", base.disabled),
+        effort_field=override.get("effort_field", base.effort_field),
+        max_effort=override.get("max_effort", base.max_effort),
+        thinking_type=override.get("thinking_type", base.thinking_type),
+        unsigned_reasoning_blocks=override.get(
+            "unsigned_reasoning_blocks", base.unsigned_reasoning_blocks
+        ),
+        effort_map=override.get("effort_map", base.effort_map),
+        budget_tokens_default_ratio=override.get(
+            "budget_tokens_default_ratio", base.budget_tokens_default_ratio
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +450,7 @@ async def handle_non_streaming(
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
+    reasoning_config_override: dict[str, Any] | None = None,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     store = metadata_store or _default_metadata_store
@@ -436,7 +468,12 @@ async def handle_non_streaming(
 
     # Inject shim reasoning capability so converters use it.
     # body["model"] is the upstream model ID (post-alias) at this point.
-    _inject_shim_reasoning(ctx, target_shim_name, model=body.get("model"))
+    _inject_shim_reasoning(
+        ctx,
+        target_shim_name,
+        model=body.get("model"),
+        config_override=reasoning_config_override,
+    )
 
     # 1. Source -> IR
     try:
@@ -697,6 +734,7 @@ async def handle_streaming(
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
+    reasoning_config_override: dict[str, Any] | None = None,
 ) -> Response | StreamingResponse:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
@@ -713,7 +751,12 @@ async def handle_streaming(
         ctx.options["output_format"] = "rest"
 
     # Inject shim reasoning capability so converters use it.
-    _inject_shim_reasoning(ctx, target_shim_name, model=body.get("model"))
+    _inject_shim_reasoning(
+        ctx,
+        target_shim_name,
+        model=body.get("model"),
+        config_override=reasoning_config_override,
+    )
 
     # 1. Source -> IR
     try:
