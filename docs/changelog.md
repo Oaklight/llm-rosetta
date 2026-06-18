@@ -8,6 +8,8 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
 
 ## [Unreleased]
 
+## v0.6.10 — 2026-06-18
+
 ### 新增
 
 - **进程级转换缓存** ([#276](https://github.com/Oaklight/llm-rosetta/issues/276), [#279](https://github.com/Oaklight/llm-rosetta/pull/279), [#281](https://github.com/Oaklight/llm-rosetta/pull/281), [#283](https://github.com/Oaklight/llm-rosetta/pull/283))：基于内容哈希的逐条 LRU 缓存，支持访问刷新 TTL（默认 30 分钟），覆盖工具转换、Schema 清理和 IR 校验。消除了会话轮次间对不变工具定义和消息的重复处理
@@ -17,10 +19,22 @@ LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Chang
     - **变异检测**：测试 teardown 时通过 `check_integrity()` 检测缓存对象是否被意外修改；可选 `verify=True` 模式支持运行时自愈
     - **基准测试**：本地热路径加速 4.4 倍（3250 µs → 527 µs）；生产环境 TTFB 降低 33%（11.4 ms → 7.6 ms）
 - **`validate_tools()`** ([#283](https://github.com/Oaklight/llm-rosetta/pull/283))：新增独立的 IR 工具定义列表校验函数，与 `validate_messages()` 对称
+- **OpenRouter Anthropic shim** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284))：OpenRouter 的 Anthropic 兼容 Messages 端点现已成为一等 provider 类型。原单一 `openrouter` shim 拆分为 `openrouter--openai_chat`（Chat Completions）和 `openrouter--anthropic`（Messages API），使 OpenRouter 上的 Claude 模型可走原生 Anthropic 格式
+- **管理面板按模型 reasoning 覆盖** ([#288](https://github.com/Oaklight/llm-rosetta/pull/288))：模型编辑弹窗现在展示生效的 reasoning 配置（`thinking_type`、`budget_tokens_ratio`、`disabled_strategy`），带来源标记（provider / model_override / config）并支持行内编辑。覆盖项持久化到 `config.jsonc`，运行时按优先级解析：config 覆盖 > shim 模型覆盖 > shim provider 默认
+- **`budget_tokens_default_ratio` reasoning 能力字段** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：`ReasoningCapability` 新增 `budget_tokens_default_ratio` 字段。当 provider 要求 `thinking.type=enabled` 但调用方未提供 `budget_tokens` 时，按 `min(max(1024, max_tokens × ratio), max_tokens - 1)` 推导默认值，而不再回退到不支持的 `adaptive` 类型
 
 ### 变更
 
 - **`_convert_tools_from_p` 不再是抽象方法** ([#281](https://github.com/Oaklight/llm-rosetta/pull/281))：`BaseConverter` 提供默认实现，处理所有 provider（包括 Google 的 list/None 返回值）。移除了 4 个 converter 的重复覆写——减少约 90 行重复代码
+- **完善 Claude thinking 按模型覆盖** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：基于实测支持矩阵，为 Anthropic 和 Argo shim 补全按模型 thinking 覆盖——Haiku 4.5（`enabled`+budget）、Opus 4.7/4.8（仅 `adaptive`）、Argo 上的 Sonnet 4（`enabled`+budget）
+- **模型「克隆」取代「复制」** ([#290](https://github.com/Oaklight/llm-rosetta/pull/290))：模型行的克隆操作现在会打开预填的模型弹窗（服务商、能力、上游模型及生效的 reasoning 配置），名称留空，与服务商行的「克隆」行为一致——不再把 YAML 片段复制到剪贴板。表格中的模型名称仍可点击复制
+
+### 修复
+
+- **Haiku 4.5 `adaptive` thinking 400 错误** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：Haiku 4.5 支持扩展思考但只接受 `thinking.type=enabled` + `budget_tokens`，不支持 `adaptive`。此前未提供 budget 时回退到 `adaptive`，导致 Anthropic Official、Argo、OpenRouter 上均报 400。新增的 `budget_tokens_default_ratio` 改为推导 budget
+- **Haiku 4.5 `effort` 参数 400 错误** ([#289](https://github.com/Oaklight/llm-rosetta/pull/289))：`effort` 参数（`output_config.effort`）仅 Opus 4.5/4.6/4.7/4.8 和 Sonnet 4.6 支持，Haiku 不支持。Anthropic Official 对 Haiku 4.5 的 `reasoning_effort` 报 400。Haiku 模型覆盖现设 `effort_field: none`，丢弃不支持的字段同时保留可用的 `thinking.type=enabled` + budget 路径
+- **OpenRouter Anthropic reasoning effort 字段** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284))：`openrouter--anthropic` shim 使用 `output_config.effort`（Anthropic 格式）而非 OpenAI Chat 的 `reasoning_effort` 字段
+- **Docker 构建中的 `.env` 密钥泄露**：Docker 构建上下文不再包含 `.env` 文件，避免 API 密钥被打进镜像层
 
 ## v0.6.9 — 2026-06-13
 
