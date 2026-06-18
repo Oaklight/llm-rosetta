@@ -1,4 +1,4 @@
-name: openrouter
+name: openrouter--openai_chat
 base: openai_chat
 default_base_url: https://openrouter.ai/api/v1
 default_api_key_env: OPENROUTER_API_KEY

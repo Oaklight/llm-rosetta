@@ -1,0 +1,16 @@
+name: openrouter--anthropic
+base: anthropic
+default_base_url: https://openrouter.ai/api
+default_api_key_env: OPENROUTER_API_KEY
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openrouter.svg
+reasoning:
+  disabled: thinking_disabled
+  thinking_type: enabled
+  effort_field: thinking.budget_tokens
+  effort_map:
+    minimal: 1024
+    low: 2048
+    medium: 5120
+    high: 10240
+    xhigh: 16384
+    max: 32768

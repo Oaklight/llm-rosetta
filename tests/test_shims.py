@@ -150,7 +150,8 @@ class TestBuiltinShims:
             "deepseek",
             "volcengine--openai_chat",
             "volcengine--openai_responses",
-            "openrouter",
+            "openrouter--openai_chat",
+            "openrouter--anthropic",
             "minimax--openai_chat",
             "minimax--anthropic",
         ):

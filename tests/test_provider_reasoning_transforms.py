@@ -9,7 +9,7 @@ from llm_rosetta.shims.providers.minimax.openai_chat.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )
-from llm_rosetta.shims.providers.openrouter.transforms import (
+from llm_rosetta.shims.providers.openrouter.openai_chat.transforms import (
     _rename_reasoning_field,
 )
 

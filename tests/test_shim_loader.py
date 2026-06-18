@@ -96,7 +96,8 @@ class TestLoadProviders:
             "argo--openai_chat",
             "openai",
             "openai_responses",
-            "openrouter",
+            "openrouter--openai_chat",
+            "openrouter--anthropic",
             "anthropic",
             "google",
             "deepseek",
@@ -115,7 +116,8 @@ class TestLoadProviders:
         load_providers()
         for name in (
             "openai",
-            "openrouter",
+            "openrouter--openai_chat",
+            "openrouter--anthropic",
             "anthropic",
             "google",
             "deepseek",
@@ -259,7 +261,8 @@ class TestLoadProviders:
         expected = {
             "openai": "openai_chat",
             "openai_responses": "openai_responses",
-            "openrouter": "openai_chat",
+            "openrouter--openai_chat": "openai_chat",
+            "openrouter--anthropic": "anthropic",
             "anthropic": "anthropic",
             "google": "google",
             "deepseek": "openai_chat",
