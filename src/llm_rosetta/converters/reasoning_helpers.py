@@ -362,7 +362,7 @@ def _apply_anthropic_extras(
                     "falling back to 'adaptive'",
                     stacklevel=2,
                 )
-                result["thinking"] = {"type": "adaptive"}
+                result["thinking"]: dict[str, Any] = {"type": "adaptive"}
     elif mode == "auto" or effort is not None:
         thinking: dict[str, Any] = {"type": "adaptive"}
         if budget_tokens is not None:
