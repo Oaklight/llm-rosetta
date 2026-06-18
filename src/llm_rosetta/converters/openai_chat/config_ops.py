@@ -265,6 +265,7 @@ class OpenAIChatConfigOps(BaseConfigOps):
             ir_reasoning,
             cap,
             converter_type="openai_chat",
+            max_tokens=kwargs.get("max_tokens"),
         )
 
     @staticmethod

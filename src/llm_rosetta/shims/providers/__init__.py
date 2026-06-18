@@ -131,6 +131,9 @@ def _load_single_provider(
                 "unsigned_reasoning_blocks", "as_is"
             ),
             effort_map=reasoning_cfg.get("effort_map", {}),
+            budget_tokens_default_ratio=reasoning_cfg.get(
+                "budget_tokens_default_ratio"
+            ),
         )
 
     # Parse per-model reasoning overrides (inherit provider defaults).
@@ -155,6 +158,10 @@ def _load_single_provider(
                     reasoning_cap.unsigned_reasoning_blocks,
                 ),
                 effort_map=overrides.get("effort_map", reasoning_cap.effort_map),
+                budget_tokens_default_ratio=overrides.get(
+                    "budget_tokens_default_ratio",
+                    reasoning_cap.budget_tokens_default_ratio,
+                ),
             )
 
     shim = ProviderShim(

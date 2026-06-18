@@ -438,6 +438,157 @@ class TestCustomShim:
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 2048
 
+    def test_budget_ratio_derives_tokens_from_max_tokens(self):
+        """budget_tokens_default_ratio derives budget from max_tokens."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={
+                "minimal": "low",
+                "low": "low",
+                "medium": "medium",
+                "high": "high",
+                "xhigh": "xhigh",
+                "max": "max",
+            },
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=10000,
+        )
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 8000
+
+    def test_budget_ratio_clamps_to_max_minus_one(self):
+        """budget_tokens must be < max_tokens."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=1.0,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=2000,
+        )
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 1999
+
+    def test_budget_ratio_floor_1024(self):
+        """budget_tokens must be >= 1024 (Anthropic minimum)."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.3,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=2000,
+        )
+        assert result["thinking"]["type"] == "enabled"
+        # 2000 * 0.3 = 600, floored to 1024
+        assert result["thinking"]["budget_tokens"] == 1024
+
+    def test_budget_ratio_max_tokens_too_small_falls_back(self):
+        """When max_tokens <= 1024, can't satisfy both constraints → adaptive."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=1024,
+        )
+        # max_tokens <= 1024 → can't derive → falls back to adaptive
+        assert result["thinking"]["type"] == "adaptive"
+
+    def test_budget_ratio_none_falls_back_to_adaptive(self):
+        """Without budget_tokens_default_ratio, still falls back to adaptive."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=10000,
+        )
+        # No ratio → can't derive → adaptive
+        assert result["thinking"]["type"] == "adaptive"
+
+    def test_budget_ratio_without_max_tokens_falls_back(self):
+        """With ratio but no max_tokens, falls back to adaptive."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto", "effort": "high"}),
+            custom,
+            converter_type="anthropic",
+        )
+        # No max_tokens → can't derive → adaptive
+        assert result["thinking"]["type"] == "adaptive"
+
+    def test_budget_ratio_mode_enabled_no_budget_anthropic(self):
+        """mode=enabled without budget_tokens uses ratio to derive budget."""
+        custom = ReasoningCapability(
+            disabled="thinking_disabled",
+            effort_field="output_config.effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "enabled"}),
+            custom,
+            converter_type="anthropic",
+            max_tokens=8192,
+        )
+        assert result["thinking"]["type"] == "enabled"
+        # 8192 * 0.8 = 6553
+        assert result["thinking"]["budget_tokens"] == 6553
+
+    def test_budget_ratio_openai_chat(self):
+        """budget_tokens_default_ratio works for openai_chat converter too."""
+        custom = ReasoningCapability(
+            disabled="omit",
+            effort_field="reasoning_effort",
+            thinking_type="enabled",
+            effort_map={},
+            budget_tokens_default_ratio=0.8,
+        )
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"mode": "auto"}),
+            custom,
+            converter_type="openai_chat",
+            max_tokens=10000,
+        )
+        assert result["thinking"]["type"] == "enabled"
+        assert result["thinking"]["budget_tokens"] == 8000
+
     def test_custom_thinking_budget_zero_disabled(self):
         custom = ReasoningCapability(
             disabled="thinking_budget_zero",

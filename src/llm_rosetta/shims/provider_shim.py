@@ -62,6 +62,11 @@ class ReasoningCapability:
         thinking_type: Force ``thinking.type`` to this value.
         unsigned_reasoning_blocks: Policy for outbound unsigned reasoning blocks.
         effort_map: Map from normalised IR effort to provider effort string.
+        budget_tokens_default_ratio: When ``thinking_type`` is ``"enabled"``
+            but no ``budget_tokens`` is provided, derive a default budget as
+            ``max(1024, int(max_tokens * ratio))`` clamped to ``max_tokens - 1``.
+            Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
+            When ``None``, the existing ``"adaptive"`` fallback is used instead.
     """
 
     disabled: DisabledStrategy = "omit"
@@ -79,6 +84,7 @@ class ReasoningCapability:
             "max": "high",
         }
     )
+    budget_tokens_default_ratio: float | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -152,15 +152,7 @@ class AnthropicConverter(BaseConverter):
             result.update(stream_fields)
 
         # 9. Reasoning config
-        reasoning = ir_request.get("reasoning")
-        if reasoning:
-            rc_kwargs: dict[str, Any] = {}
-            if ctx and "reasoning_cap" in ctx.options:
-                rc_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
-            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
-                reasoning, **rc_kwargs
-            )
-            result.update(reasoning_fields)
+        self._apply_reasoning_config(ir_request, result, ctx)
 
         # 10. Cache config (block-level, warning)
         cache = ir_request.get("cache")
@@ -378,6 +370,28 @@ class AnthropicConverter(BaseConverter):
         return provider_response
 
     # ------------------------------------------------------------------
+    def _apply_reasoning_config(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Apply reasoning/thinking config to provider request."""
+        reasoning = ir_request.get("reasoning")
+        if not reasoning:
+            return
+        rc_kwargs: dict[str, Any] = {}
+        if "reasoning_cap" in ctx.options:
+            rc_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
+        # Pass max_tokens so budget_tokens_default_ratio can derive a
+        # default budget when the caller didn't provide one.
+        if "max_tokens" in result:
+            rc_kwargs["max_tokens"] = result["max_tokens"]
+        reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
+            reasoning, **rc_kwargs
+        )
+        result.update(reasoning_fields)
+
     # Cross-provider consistency helpers
     # ------------------------------------------------------------------
 

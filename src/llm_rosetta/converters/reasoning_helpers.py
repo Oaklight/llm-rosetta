@@ -120,6 +120,7 @@ def apply_reasoning_config(
     cap: ReasoningCapability,
     *,
     converter_type: str | None = None,
+    max_tokens: int | None = None,
 ) -> dict[str, Any]:
     """Convert IR ``ReasoningConfig`` → provider parameters using *cap*.
 
@@ -169,11 +170,13 @@ def apply_reasoning_config(
 
     # 4. Converter-specific structural pass-through.
     if converter_type == "openai_chat":
-        _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap)
+        _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap, max_tokens)
     elif converter_type == "openai_responses":
         _apply_openai_responses_extras(ir, result, mode, budget_tokens)
     elif converter_type == "anthropic":
-        _apply_anthropic_extras(ir, result, mode, effort, budget_tokens, cap)
+        _apply_anthropic_extras(
+            ir, result, mode, effort, budget_tokens, cap, max_tokens
+        )
     elif converter_type == "google":
         _apply_google_extras(ir, result, mode, budget_tokens)
 
@@ -253,6 +256,31 @@ def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
             target[k] = v
 
 
+# ── Budget tokens default derivation ──────────────────────────────────────
+
+#: Anthropic's minimum budget_tokens value (per official docs).
+_MIN_BUDGET_TOKENS = 1024
+
+
+def _derive_budget_tokens(
+    cap: ReasoningCapability,
+    max_tokens: int | None,
+) -> int | None:
+    """Derive ``budget_tokens`` from ``cap.budget_tokens_default_ratio`` and *max_tokens*.
+
+    Returns ``None`` when derivation is impossible (no ratio configured,
+    no ``max_tokens``, or ``max_tokens`` too small to satisfy the minimum).
+    """
+    if cap.budget_tokens_default_ratio is None or max_tokens is None:
+        return None
+    if max_tokens <= _MIN_BUDGET_TOKENS:
+        # Can't satisfy budget_tokens >= 1024 AND < max_tokens.
+        return None
+    budget = max(_MIN_BUDGET_TOKENS, int(max_tokens * cap.budget_tokens_default_ratio))
+    # Anthropic requires budget_tokens < max_tokens.
+    return min(budget, max_tokens - 1)
+
+
 # ── Converter-specific pass-through extras ─────────────────────────────────
 
 
@@ -262,6 +290,7 @@ def _apply_openai_chat_extras(
     mode: str | None,
     budget_tokens: int | None,
     cap: ReasoningCapability | None = None,
+    max_tokens: int | None = None,
 ) -> None:
     """OpenAI Chat extras: thinking object for mode/budget_tokens (DeepSeek ext)."""
     thinking: dict[str, Any] = {}
@@ -279,7 +308,11 @@ def _apply_openai_chat_extras(
         current_type = result["thinking"].get("type")
         target_type = cap.thinking_type
         if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
-            target_type = "adaptive"
+            derived = _derive_budget_tokens(cap, max_tokens)
+            if derived is not None:
+                result["thinking"]["budget_tokens"] = derived
+            else:
+                target_type = "adaptive"
         if current_type != target_type:
             result["thinking"]["type"] = target_type
             if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
@@ -312,18 +345,24 @@ def _apply_anthropic_extras(
     effort: str | None,
     budget_tokens: int | None,
     cap: ReasoningCapability | None = None,
+    max_tokens: int | None = None,
 ) -> None:
     """Anthropic extras: thinking object with type/budget_tokens."""
     if mode == "enabled":
         if budget_tokens is not None:
             result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
         else:
-            warnings.warn(
-                "Anthropic 'enabled' thinking requires budget_tokens, "
-                "falling back to 'adaptive'",
-                stacklevel=2,
-            )
-            result["thinking"] = {"type": "adaptive"}
+            # Try to derive budget from ratio before falling back to adaptive.
+            derived = _derive_budget_tokens(cap, max_tokens) if cap else None
+            if derived is not None:
+                result["thinking"] = {"type": "enabled", "budget_tokens": derived}
+            else:
+                warnings.warn(
+                    "Anthropic 'enabled' thinking requires budget_tokens, "
+                    "falling back to 'adaptive'",
+                    stacklevel=2,
+                )
+                result["thinking"] = {"type": "adaptive"}
     elif mode == "auto" or effort is not None:
         thinking: dict[str, Any] = {"type": "adaptive"}
         if budget_tokens is not None:
@@ -337,9 +376,13 @@ def _apply_anthropic_extras(
         current_type = result["thinking"].get("type")
         target_type = cap.thinking_type
         # Anthropic requires budget_tokens when type=enabled; if missing,
-        # fall back to adaptive instead of emitting an invalid payload.
+        # try to derive from ratio, otherwise fall back to adaptive.
         if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
-            target_type = "adaptive"
+            derived = _derive_budget_tokens(cap, max_tokens)
+            if derived is not None:
+                result["thinking"]["budget_tokens"] = derived
+            else:
+                target_type = "adaptive"
         if current_type != target_type:
             result["thinking"]["type"] = target_type
             if target_type == "adaptive" and "budget_tokens" in result["thinking"]:

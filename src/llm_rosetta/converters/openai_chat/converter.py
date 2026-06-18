@@ -131,6 +131,11 @@ class OpenAIChatConverter(BaseConverter):
             rc_kwargs: dict[str, Any] = {}
             if ctx and "reasoning_cap" in ctx.options:
                 rc_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
+            # Pass max_tokens so budget_tokens_default_ratio can derive a
+            # default budget when the caller didn't provide one.
+            mt = result.get("max_tokens") or result.get("max_completion_tokens")
+            if mt is not None:
+                rc_kwargs["max_tokens"] = mt
             reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
                 reasoning, **rc_kwargs
             )
