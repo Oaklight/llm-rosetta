@@ -1307,13 +1307,16 @@ function copyProviderEntry(name) {
   openProviderModal('', cfg.base_url, '', cfg.proxy, cfg.type || name);
 }
 
-function copyModelEntry(name) {
+function cloneModel(name) {
+  // Open the model modal pre-filled from an existing model, with a blank
+  // name so the user picks a new one. Mirrors copyProviderEntry's behavior.
   const models = configData.models || {};
   const info = models[name];
   const provider = typeof info === 'string' ? info : (info.provider || '');
   const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
-  let text = `${name}:\n  provider: ${provider}\n  capabilities: [${caps.join(', ')}]`;
-  copyText(text, t('toast.copied'));
+  const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
+  // name blank ('') → modal opens in "add" mode; sourceModel feeds reasoning config
+  openModelModal('', provider, caps, upstream, name);
 }
 
 // ===================== Toast =====================
@@ -1403,7 +1406,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   }
 }
 
-function openModelModal(model, provider, capabilities, upstreamModel) {
+function openModelModal(model, provider, capabilities, upstreamModel, sourceModel) {
+  // sourceModel: when cloning, the original model name to read reasoning from
+  // (the visible name field is left blank so the user picks a new name).
   document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').dataset.originalName = model || '';
@@ -1429,8 +1434,10 @@ function openModelModal(model, provider, capabilities, upstreamModel) {
   document.getElementById('capReasoning').checked = caps.includes('reasoning');
   onModelTypeChange();
 
-  // Populate reasoning config section
-  const info = model && configData ? configData.models[model] : null;
+  // Populate reasoning config section.
+  // Read from the edited model, or the source model when cloning.
+  const lookupName = model || sourceModel;
+  const info = lookupName && configData ? configData.models[lookupName] : null;
   const reasoning = (info && info.reasoning) || {};
   const configOverride = (info && info.reasoning_override) || {};
   const srcBadge = document.getElementById('reasoningSourceBadge');
@@ -1659,7 +1666,7 @@ function renderModels() {
             <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${esc(name)}','reasoning')` : ''}">${t('test.reasoning')}</div>
           </div>
         </div>`}
-        <button class="btn btn-sm" onclick="copyModelEntry('${esc(name)}')">${t('btn.copy')}</button>
+        <button class="btn btn-sm" onclick="cloneModel('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</button>
       </td>
