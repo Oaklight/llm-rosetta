@@ -15,9 +15,19 @@ reasoning:
     high: high
     xhigh: xhigh
     max: max
+  # Argo Anthropic thinking support matrix (tested 2026-06-18):
+  #   claudehaiku45:  enabled+budget only (adaptive → 400)
+  #   claudesonnet4:  enabled+budget only (adaptive → 400)
+  #   claudeopus46:   both enabled and adaptive work
+  #   claudeopus47+:  adaptive only (enabled → 400)
   model_overrides:
-    claudeopus47:
-      thinking_type: adaptive
     claudehaiku45:
       thinking_type: enabled
       budget_tokens_default_ratio: 0.8
+    claudesonnet4:
+      thinking_type: enabled
+      budget_tokens_default_ratio: 0.8
+    claudeopus47:
+      thinking_type: adaptive
+    claudeopus48:
+      thinking_type: adaptive
