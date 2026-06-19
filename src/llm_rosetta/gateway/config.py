@@ -148,6 +148,11 @@ class GatewayConfig:
         self.proxy: str | None = _server.get("proxy")
         self.credential_visible: bool = _server.get("credential_visible", True)
         self.admin_password: str | None = _server.get("admin_password")
+        if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
+            raise ValueError(
+                "config: admin_password contains an unresolved ${...} placeholder. "
+                "Set the environment variable or use a literal password."
+            )
 
         # Request-log retention knobs (consumed by setup_admin).  Kept as
         # a raw dict here so admin layer owns the resolution policy.
