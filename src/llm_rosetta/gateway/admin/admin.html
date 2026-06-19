@@ -158,6 +158,19 @@ tr:hover td { background: var(--bg-hover); }
 .provider-card.disabled { opacity: 0.5; }
 .provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
+/* List view */
+.provider-grid.list-view { grid-template-columns: 1fr; gap: 8px; }
+.provider-grid.list-view .provider-card {
+  display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+}
+.provider-grid.list-view .provider-card .card-header { margin-bottom: 0; min-width: 180px; flex-shrink: 0; }
+.provider-grid.list-view .provider-card .field { display: inline; margin-bottom: 0; margin-right: 12px; }
+.provider-grid.list-view .provider-card .field code { max-width: 160px; }
+.provider-grid.list-view .provider-card .actions { margin-top: 0; margin-left: auto; flex-shrink: 0; }
+/* View toggle buttons */
+.view-toggle { display:inline-flex;gap:2px;margin-left:8px; }
+.view-toggle .btn { padding:4px 6px; }
+.view-toggle .btn.active { color:var(--accent);border-color:var(--accent); }
 .provider-card .provider-logo { width: 16px; height: 16px; vertical-align: middle; margin-right: 4px; }
 .type-logo-wrapper { display: flex; align-items: center; gap: 8px; }
 .type-logo-wrapper select { flex: 1; }
@@ -196,7 +209,16 @@ code.copyable:hover { background: var(--bg-hover); }
   width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); font-size: 14px; font-family: var(--mono);
 }
-.form-group input:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
+/* Multi-key entry list (auto-switches from single input when comma-separated keys detected) */
+.multi-key-list { display:flex;flex-direction:column;gap:4px;margin-top:4px; }
+.multi-key-row { display:flex;gap:4px;align-items:center; }
+.multi-key-row input { flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+.multi-key-row input:focus { outline:none;border-color:var(--accent); }
+.multi-key-row .key-btn { flex-shrink:0; }
+.multi-key-footer { display:flex;align-items:center;gap:8px;margin-top:4px; }
+.multi-key-footer .key-count { font-size:11px;color:var(--text-dim); }
+.multi-key-footer .btn { font-size:11px;padding:2px 8px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 /* Toast */
@@ -332,11 +354,11 @@ th.sortable::after { content:'';display:inline-block;margin-left:4px;opacity:.4;
 th.sortable.asc::after { content:'\25B2';opacity:.8; }
 th.sortable.desc::after { content:'\25BC';opacity:.8; }
 
-/* Model search & filter */
-.model-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-.model-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
+/* Provider / Model search & filter toolbars */
+.model-toolbar, .provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
+.model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
 .model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
-.model-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
+.model-count, .provider-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
 
 /* Fetch models modal */
 .fetch-models-list { max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius);margin:8px 0; }
@@ -392,6 +414,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   .content { padding: 16px; }
   .chart-row { grid-template-columns: 1fr; }
   .provider-grid { grid-template-columns: 1fr; }
+  .provider-grid.list-view .provider-card { flex-wrap: wrap; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .section-header { flex-wrap: wrap; gap: 8px; }
@@ -488,7 +511,17 @@ body { padding-bottom: 26px; }
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
-        <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <div class="view-toggle">
+            <button class="btn btn-sm active" id="viewGridBtn" onclick="setProviderView('grid')" data-i18n-title="label.gridView" title="Grid view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+            <button class="btn btn-sm" id="viewListBtn" onclick="setProviderView('list')" data-i18n-title="label.listView" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
+        </div>
+      </div>
+      <div class="provider-toolbar" id="providerToolbar" style="display:none">
+        <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders">
+        <span class="provider-count" id="providerCount"></span>
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
@@ -642,11 +675,12 @@ body { padding-bottom: 26px; }
     </div>
     <div class="form-group">
       <label data-i18n="label.apiKey">API Key (or ${ENV_VAR} placeholder)</label>
-      <div style="display:flex;gap:4px;align-items:center">
-        <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1">
+      <div style="display:flex;gap:4px;align-items:center" id="provApiKeyRow">
+        <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1" onpaste="setTimeout(()=>_syncKeyField(),0)">
         <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
         <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       </div>
+      <div id="provApiKeyMultiBox" style="display:none"></div>
     </div>
     <div class="form-group">
       <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
@@ -940,7 +974,14 @@ const I18N = {
     'diag.host':'Host IP', 'diag.ip':'IP Location', 'diag.google':'Google', 'diag.runDiag':'Network Diagnostics',
     'diag.testing':'testing...', 'diag.unknown':'unknown', 'diag.direct':'direct, no proxy',
     'label.searchModels':'Search models...',
+    'label.searchProviders':'Search providers...',
+    'label.keyCount':'{count} keys (rotation)',
+    'label.addKey':'Add key',
+    'label.gridView':'Grid view', 'label.listView':'List view',
     'model.count':'{shown} / {total} models',
+    'provider.count':'{shown} / {total} providers',
+    'provider.countTotal':'{total} providers',
+    'empty.searchResults':'No matching results.',
     'section.apiKeys':'API Keys',
     'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
     'col.label':'Label', 'col.key':'Key', 'col.created':'Created',
@@ -1043,7 +1084,14 @@ const I18N = {
     'diag.host':'\u4e3b\u673a IP', 'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
     'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
     'label.searchModels':'\u641c\u7d22\u6a21\u578b...',
+    'label.searchProviders':'\u641c\u7d22\u670d\u52a1\u5546...',
+    'label.keyCount':'{count} \u4e2a\u5bc6\u94a5\uff08\u8f6e\u8f6c\uff09',
+    'label.addKey':'\u6dfb\u52a0\u5bc6\u94a5',
+    'label.gridView':'\u7f51\u683c\u89c6\u56fe', 'label.listView':'\u5217\u8868\u89c6\u56fe',
     'model.count':'{shown} / {total} \u4e2a\u6a21\u578b',
+    'provider.count':'{shown} / {total} \u4e2a\u670d\u52a1\u5546',
+    'provider.countTotal':'{total} \u4e2a\u670d\u52a1\u5546',
+    'empty.searchResults':'\u65e0\u5339\u914d\u7ed3\u679c\u3002',
     'section.apiKeys':'API \u5bc6\u94a5',
     'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
     'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4',
@@ -1384,6 +1432,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   const keyInput = document.getElementById('provApiKey');
   keyInput.type = 'password';
   keyInput.readOnly = false;
+  _resetKeyField();
   // Hide eye/copy buttons when credential visibility is off
   document.getElementById('provKeyToggleBtn').style.display = _credentialVisible ? '' : 'none';
   document.getElementById('provKeyCopyBtn').style.display = _credentialVisible ? '' : 'none';
@@ -1394,6 +1443,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   } else {
     keyInput.value = apiKey || '';
     keyInput.placeholder = '${OPENAI_API_KEY}';
+    _syncKeyField();
   }
   document.getElementById('provProxy').value = proxy || '';
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
@@ -1401,7 +1451,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   // When editing, fetch the real (unmasked) key
   if (name && _credentialVisible) {
     api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
-      if (res.api_key) keyInput.value = res.api_key;
+      if (res.api_key) {
+        keyInput.value = res.api_key;
+        _syncKeyField();
+      }
     }).catch(() => {});
   }
 }
@@ -1529,14 +1582,54 @@ async function runNetDiag() {
 function renderProviders() {
   const grid = document.getElementById('providerGrid');
   const providers = configData.providers || {};
-  if (Object.keys(providers).length === 0) {
+  const allEntries = Object.entries(providers);
+  const totalCount = allEntries.length;
+
+  // Show/hide search toolbar when > 6 providers
+  const toolbar = document.getElementById('providerToolbar');
+  toolbar.style.display = totalCount > 6 ? '' : 'none';
+
+  // Apply view mode class
+  grid.classList.toggle('list-view', _providerViewMode === 'list');
+  _updateViewToggle();
+
+  if (totalCount === 0) {
     grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.providers')}</p>`;
+    document.getElementById('providerCount').textContent = '';
     return;
   }
+
+  // Filter by search query
+  const query = (document.getElementById('providerSearch').value || '').trim().toLowerCase();
+  let entries = allEntries;
+  if (query) {
+    entries = entries.filter(([name, cfg]) => {
+      const typeName = cfg.type || name;
+      return name.toLowerCase().includes(query) ||
+        typeName.toLowerCase().includes(query) ||
+        (cfg.base_url || '').toLowerCase().includes(query);
+    });
+  }
+
+  // Update count
+  const countEl = document.getElementById('providerCount');
+  if (totalCount > 6) {
+    countEl.textContent = query ? t('provider.count', {shown: entries.length, total: totalCount})
+                                : t('provider.countTotal', {total: totalCount});
+  } else {
+    countEl.textContent = '';
+  }
+
   const shimLogo = Object.fromEntries(
     (configData.registered_shims || []).map(s => [s.name, s.logo])
   );
-  grid.innerHTML = Object.entries(providers).map(([name, cfg]) => {
+
+  if (entries.length === 0) {
+    grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.searchResults')}</p>`;
+    return;
+  }
+
+  grid.innerHTML = entries.map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
     const logo = shimLogo[typeName];
@@ -1561,6 +1654,24 @@ function renderProviders() {
       </div>
     </div>`;
   }).join('');
+}
+
+// Provider view mode (grid / list)
+let _providerViewMode = localStorage.getItem('provider-view') || 'grid';
+
+function setProviderView(mode) {
+  _providerViewMode = mode;
+  localStorage.setItem('provider-view', mode);
+  const grid = document.getElementById('providerGrid');
+  grid.classList.toggle('list-view', mode === 'list');
+  _updateViewToggle();
+}
+
+function _updateViewToggle() {
+  const gridBtn = document.getElementById('viewGridBtn');
+  const listBtn = document.getElementById('viewListBtn');
+  if (gridBtn) gridBtn.classList.toggle('active', _providerViewMode === 'grid');
+  if (listBtn) listBtn.classList.toggle('active', _providerViewMode === 'list');
 }
 
 let _modelSortKey = 'name';
@@ -1681,7 +1792,7 @@ async function saveProvider() {
   const name = document.getElementById('provName').value.trim();
   const provType = document.getElementById('provType').value;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
-  const apiKey = document.getElementById('provApiKey').value.trim();
+  const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();
   if (!name || !provType) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const body = {type: provType, base_url: baseUrl, proxy};
@@ -1779,15 +1890,125 @@ function editProvider(name) {
   openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
 }
 
-function toggleModalKeyVisibility() {
+// Multi-key field: auto-switch between single input and entry list
+let _keyFieldIsMulti = false;
+let _keyFieldVisible = false; // track visibility toggle for multi-key inputs
+
+function _syncKeyField() {
   const input = document.getElementById('provApiKey');
-  input.type = input.type === 'password' ? 'text' : 'password';
+  const box = document.getElementById('provApiKeyMultiBox');
+  const row = document.getElementById('provApiKeyRow');
+
+  if (!_keyFieldIsMulti) {
+    // Currently in single-input mode — check if value has commas
+    const val = input.value;
+    if (val.includes(',')) {
+      const keys = val.split(',').map(k => k.trim()).filter(Boolean);
+      _showMultiKeyUI(keys);
+    }
+  }
+  // In multi mode, _syncKeyField is a no-op (entries manage themselves)
+}
+
+function _showMultiKeyUI(keys) {
+  const row = document.getElementById('provApiKeyRow');
+  const box = document.getElementById('provApiKeyMultiBox');
+  row.style.display = 'none';
+  box.style.display = '';
+  _keyFieldIsMulti = true;
+  _keyFieldVisible = document.getElementById('provApiKey').type === 'text';
+  _renderMultiKeys(keys);
+}
+
+function _renderMultiKeys(keys) {
+  const box = document.getElementById('provApiKeyMultiBox');
+  const inputType = _keyFieldVisible ? 'text' : 'password';
+  const delSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  const eyeSvg = _keyFieldVisible
+    ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+    : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+
+  let html = '<div class="multi-key-list">';
+  keys.forEach((k, i) => {
+    html += `<div class="multi-key-row">
+      <input type="${inputType}" value="${esc(k)}" data-key-idx="${i}" placeholder="API key #${i+1}">
+      <button type="button" class="key-btn" onclick="_removeKeyEntry(${i})" title="Remove">${delSvg}</button>
+    </div>`;
+  });
+  html += '</div>';
+  html += `<div class="multi-key-footer">
+    <button type="button" class="btn btn-sm" onclick="_addKeyEntry()">+ ${t('label.addKey')}</button>
+    <button type="button" class="key-btn" onclick="toggleModalKeyVisibility()" title="Toggle visibility">${eyeSvg}</button>
+    <button type="button" class="key-btn" onclick="copyModalKey()" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+    <span class="key-count">${t('label.keyCount', {count: keys.length})}</span>
+  </div>`;
+  box.innerHTML = html;
+}
+
+function _getMultiKeys() {
+  const inputs = document.querySelectorAll('#provApiKeyMultiBox .multi-key-row input');
+  return [...inputs].map(el => el.value.trim()).filter(Boolean);
+}
+
+function _addKeyEntry() {
+  const keys = _getMultiKeys();
+  keys.push('');
+  _renderMultiKeys(keys);
+  // Focus the new empty input
+  const inputs = document.querySelectorAll('#provApiKeyMultiBox .multi-key-row input');
+  if (inputs.length) inputs[inputs.length - 1].focus();
+}
+
+function _removeKeyEntry(idx) {
+  const keys = _getMultiKeys();
+  keys.splice(idx, 1);
+  if (keys.length <= 1) {
+    // Switch back to single input
+    const input = document.getElementById('provApiKey');
+    input.value = keys[0] || '';
+    input.type = _keyFieldVisible ? 'text' : 'password';
+    document.getElementById('provApiKeyRow').style.display = '';
+    document.getElementById('provApiKeyMultiBox').style.display = 'none';
+    _keyFieldIsMulti = false;
+  } else {
+    _renderMultiKeys(keys);
+  }
+}
+
+function _resetKeyField() {
+  const row = document.getElementById('provApiKeyRow');
+  const box = document.getElementById('provApiKeyMultiBox');
+  row.style.display = '';
+  box.style.display = 'none';
+  box.innerHTML = '';
+  _keyFieldIsMulti = false;
+  _keyFieldVisible = false;
+}
+
+function _getKeyFieldValue() {
+  if (_keyFieldIsMulti) {
+    return _getMultiKeys().join(',');
+  }
+  return document.getElementById('provApiKey').value.trim();
+}
+
+function toggleModalKeyVisibility() {
+  if (_keyFieldIsMulti) {
+    _keyFieldVisible = !_keyFieldVisible;
+    const inputs = document.querySelectorAll('#provApiKeyMultiBox .multi-key-row input');
+    inputs.forEach(el => { el.type = _keyFieldVisible ? 'text' : 'password'; });
+    // Re-render to update eye icon
+    _renderMultiKeys(_getMultiKeys());
+  } else {
+    const input = document.getElementById('provApiKey');
+    input.type = input.type === 'password' ? 'text' : 'password';
+  }
 }
 
 async function copyModalKey() {
-  const input = document.getElementById('provApiKey');
+  const val = _getKeyFieldValue();
   try {
-    await navigator.clipboard.writeText(input.value);
+    await navigator.clipboard.writeText(val);
     showToast('API key copied');
   } catch(e) {
     showToast('Copy failed', 'error');
