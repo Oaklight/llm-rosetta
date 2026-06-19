@@ -26,7 +26,29 @@ from pathlib import Path
 
 import drawsvg as dw
 
-from scripts import SCRIPTS
+from scripts_data import SCRIPTS
+
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).parent / "fonts"))
+from fonts_embed import FONTS  # base64 woff2 subsets  # noqa: E402
+
+# Embedded-font families, one per script (the three distinct "scripts").
+FONT_FACE = {
+    "openai_chat": ("LogoJetBrains", "jetbrains"),
+    "anthropic": ("LogoPlex", "plex"),
+    "google": ("LogoSpace", "space"),
+}
+
+
+def _font_css() -> str:
+    """@font-face rules embedding the three subset woff2 as base64."""
+    rules = []
+    for _script, (fam, key) in FONT_FACE.items():
+        rules.append(
+            f"@font-face{{font-family:'{fam}';font-style:normal;"
+            f"font-weight:500;src:url(data:font/woff2;base64,{FONTS[key]}) "
+            f"format('woff2');}}")
+    return "".join(rules)
 
 HERE = Path(__file__).parent
 OUT = HERE / "out"
@@ -36,42 +58,62 @@ STONE_PATH = (HERE / "references" / "rosetta-stone-path.txt").read_text().strip(
 VB = 595.279
 
 # ---------------------------------------------------------------------------
-# Inscription layout — real text, three script bands.
+# Inscription layout — an UPRIGHT rectangular text block, deliberately larger
+# than the stone, then clipped to the silhouette. Rows are horizontal and
+# left-aligned to a single x; the broken-stone outline crops the overhang.
+# A real shattered stele truncates lines at its fractured edges — so partial
+# rows at the margins are correct and intentional.
 # ---------------------------------------------------------------------------
-TEXT_TOP = 104
-TEXT_BOTTOM = 478
-FONT = 10.5             # tiny carved characters
-LINE_STEP = 12.5        # baseline-to-baseline within a band (denser)
-BAND_GAP = 13           # extra space between the three script bands
-DIVIDER_GAP = 7         # where the carved divider sits within BAND_GAP
-
-
-def _row_left(y: float) -> float:
-    """Left inset following the stone's taper (narrower top, wider base)."""
-    t = max(0.0, min(1.0, (y - TEXT_TOP) / (TEXT_BOTTOM - TEXT_TOP)))
-    return 138 - 52 * t  # 138 -> 86  (start further left to fill width)
+# Overscan the text grid past every edge of the stone (bbox ~x50..520,
+# y60..510); the silhouette clip crops the overhang into broken-edge rows.
+GRID_LEFT = 48           # left of the stone's leftmost point
+GRID_TOP = 60            # above the stone's top
+GRID_BOTTOM = 524        # below the stone's base
+BAND_GAP_FACTOR = 1.6    # band gap = this * line step
+DIVIDER_FRAC = 0.5       # divider sits this fraction into the band gap
 
 
 def layout_inscription():
-    """Return (text_lines, divider_ys).
+    """Upright grid: constant left x, uniform horizontal rows top→bottom.
 
-    text_lines: list of (x, y, string)
-    divider_ys: y positions for the carved separators between bands.
+    Step is derived from line count so the block always spans the stone; the
+    clip mask (silhouette) crops whatever overruns the broken edges.
     """
-    lines = []
+    n = sum(len(s) for _, s in SCRIPTS)
+    n_gaps = len(SCRIPTS) - 1
+    span = GRID_BOTTOM - GRID_TOP
+    step = span / ((n - 1) + n_gaps * (BAND_GAP_FACTOR - 1))
+    band_gap = step * BAND_GAP_FACTOR
+    font = round(step * 0.95, 2)
+
+    lines = []  # (x, y, text, font_family)
     dividers = []
-    y = TEXT_TOP
-    for bi, (_name, script) in enumerate(SCRIPTS):
+    y = GRID_TOP
+    for bi, (name, script) in enumerate(SCRIPTS):
+        fam = SCRIPT_FONTS.get(name, SCRIPT_FONTS["_default"])
         for ln in script:
-            lines.append((_row_left(y), y, ln))
-            y += LINE_STEP
+            lines.append((GRID_LEFT, y, ln, fam))  # constant x → upright rows
+            y += step
         if bi < len(SCRIPTS) - 1:
-            dividers.append(y - LINE_STEP + DIVIDER_GAP)
-            y += BAND_GAP
-    return lines, dividers
+            y -= step
+            dividers.append(y + band_gap * DIVIDER_FRAC)
+            y += band_gap
+    return lines, dividers, font
 
 
-INSCRIPTION_LINES, DIVIDER_YS = layout_inscription()
+# Each of the three API dialects gets its own embedded typeface — visually
+# distinct "scripts" echoing hieroglyphic / demotic / Greek:
+#   OpenAI  → JetBrains Mono  (geometric, modern)
+#   Anthropic → IBM Plex Mono (humanist, warm)
+#   Google  → Space Mono      (retro, quirky)
+SCRIPT_FONTS = {
+    "openai_chat": f"'{FONT_FACE['openai_chat'][0]}', monospace",
+    "anthropic": f"'{FONT_FACE['anthropic'][0]}', monospace",
+    "google": f"'{FONT_FACE['google'][0]}', monospace",
+    "_default": "ui-monospace, Menlo, Consolas, monospace",
+}
+
+INSCRIPTION_LINES, DIVIDER_YS, FONT = layout_inscription()
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +151,9 @@ def _grain(d: dw.Drawing, fid: str, amount: float) -> None:
 def build(variant: str) -> dw.Drawing:
     p = PALETTES[variant]
     d = dw.Drawing(VB, VB, origin=(0, 0))
+
+    # embed the three subset fonts so the SVG is self-contained
+    d.append_css(_font_css())
 
     clip = dw.ClipPath()
     clip.append(dw.Path(STONE_PATH))
@@ -159,17 +204,17 @@ def build(variant: str) -> dw.Drawing:
             stroke_linecap="round"))
         inside.append(vein)
 
-    # carved dividers between the three script bands
+    # carved dividers between the three script bands — full-width upright rules,
+    # clipped to the stone like the text
     for dy in DIVIDER_YS:
-        x0 = _row_left(dy)
-        inside.append(dw.Rectangle(x0, dy, 478 - x0, 2.5, rx=1.25,
+        inside.append(dw.Rectangle(GRID_LEFT, dy, 470, 2.5, rx=1.25,
                                    fill=p["ink"], fill_opacity=p["ink_op"] * 0.5))
 
-    # the three scripts, as real tiny monospace text
-    for (x, y, text) in INSCRIPTION_LINES:
+    # the three scripts, each in its own typeface
+    for (x, y, text, fam) in INSCRIPTION_LINES:
         inside.append(dw.Text(
             text, FONT, x, y,
-            font_family="ui-monospace, 'SF Mono', Menlo, Consolas, monospace",
+            font_family=fam,
             font_weight="500",
             fill=p["ink"], fill_opacity=p["ink_op"],
             letter_spacing="-0.3"))
