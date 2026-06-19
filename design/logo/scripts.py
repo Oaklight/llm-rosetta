@@ -4,38 +4,51 @@ Like the real Rosetta Stone carries one decree in three scripts (hieroglyphic,
 demotic, Greek), our stone carries the *same* request in three API dialects:
 OpenAI Chat Completions, Anthropic Messages, and Google GenAI.
 
-Rendered at a tiny size: from afar it's carved-line texture; up close it's an
-easter egg — three real, equivalent request bodies. This mirrors exactly what
-llm-rosetta does: one intermediate request, three provider formats.
-"""
+Rendered tiny: from afar it's carved-line texture; up close it's an easter
+egg — three real, equivalent request bodies. Exactly what llm-rosetta does:
+one intermediate request, three provider formats.
 
-# Same logical request — "Translate 'hello' to French" — in each dialect.
-# Kept compact but syntactically real so a curious viewer sees genuine JSON.
+The payloads are deliberately full (system + tools + generation knobs) so the
+inscription fills the stone densely, like the real artifact's edge-to-edge text.
+"""
 
 OPENAI_CHAT = [
     '{"model":"gpt-5","messages":[',
-    '  {"role":"system","content":"You translate text."},',
+    '  {"role":"system","content":"You are a translator."},',
     '  {"role":"user","content":"Translate \'hello\' to French."}],',
-    '"temperature":0.2,"max_completion_tokens":256,"stream":true}',
+    '"tools":[{"type":"function","function":{"name":"glossary",',
+    '  "description":"look up a term","parameters":{"type":"object",',
+    '  "properties":{"term":{"type":"string"}},"required":["term"]}}}],',
+    '"tool_choice":"auto","response_format":{"type":"text"},',
+    '"temperature":0.2,"top_p":0.9,"frequency_penalty":0,',
+    '"max_completion_tokens":256,"stream":true}',
 ]
 
 ANTHROPIC_MESSAGES = [
     '{"model":"claude-opus-4-6","max_tokens":256,',
-    '"system":"You translate text.","messages":[',
+    '"system":"You are a translator.","messages":[',
     '  {"role":"user","content":[{"type":"text",',
     '   "text":"Translate \'hello\' to French."}]}],',
-    '"thinking":{"type":"enabled","budget_tokens":1024}}',
+    '"tools":[{"name":"glossary","description":"look up a term",',
+    '  "input_schema":{"type":"object","properties":{',
+    '   "term":{"type":"string"}},"required":["term"]}}],',
+    '"tool_choice":{"type":"auto"},"temperature":0.2,"top_p":0.9,',
+    '"thinking":{"type":"enabled","budget_tokens":1024},"stream":true}',
 ]
 
 GOOGLE_GENAI = [
     '{"contents":[{"role":"user","parts":[',
     '  {"text":"Translate \'hello\' to French."}]}],',
-    '"systemInstruction":{"parts":[{"text":"You translate text."}]},',
-    '"generationConfig":{"temperature":0.2,"maxOutputTokens":256,',
+    '"systemInstruction":{"parts":[{"text":"You are a translator."}]},',
+    '"tools":[{"functionDeclarations":[{"name":"glossary",',
+    '  "description":"look up a term","parameters":{"type":"OBJECT",',
+    '  "properties":{"term":{"type":"STRING"}},"required":["term"]}}]}],',
+    '"generationConfig":{"temperature":0.2,"topP":0.9,',
+    '  "maxOutputTokens":256,"responseMimeType":"text/plain",',
     '  "thinkingConfig":{"thinkingBudget":1024}}}',
 ]
 
-# Ordered top→bottom on the stone, mirroring the real artifact's three bands.
+# Ordered top→bottom, mirroring the real artifact's three bands.
 SCRIPTS = [
     ("openai_chat", OPENAI_CHAT),
     ("anthropic", ANTHROPIC_MESSAGES),

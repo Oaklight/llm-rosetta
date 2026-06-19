@@ -38,17 +38,18 @@ VB = 595.279
 # ---------------------------------------------------------------------------
 # Inscription layout — real text, three script bands.
 # ---------------------------------------------------------------------------
-TEXT_TOP = 120
-FONT = 11               # tiny carved characters
-LINE_STEP = 15          # baseline-to-baseline within a band
-BAND_GAP = 22           # extra space between the three script bands
-DIVIDER_GAP = 11        # where the carved divider sits within BAND_GAP
+TEXT_TOP = 104
+TEXT_BOTTOM = 478
+FONT = 10.5             # tiny carved characters
+LINE_STEP = 12.5        # baseline-to-baseline within a band (denser)
+BAND_GAP = 13           # extra space between the three script bands
+DIVIDER_GAP = 7         # where the carved divider sits within BAND_GAP
 
 
 def _row_left(y: float) -> float:
     """Left inset following the stone's taper (narrower top, wider base)."""
-    t = max(0.0, min(1.0, (y - TEXT_TOP) / (470 - TEXT_TOP)))
-    return 150 - 60 * t  # 150 -> 90
+    t = max(0.0, min(1.0, (y - TEXT_TOP) / (TEXT_BOTTOM - TEXT_TOP)))
+    return 138 - 52 * t  # 138 -> 86  (start further left to fill width)
 
 
 def layout_inscription():
@@ -161,7 +162,7 @@ def build(variant: str) -> dw.Drawing:
     # carved dividers between the three script bands
     for dy in DIVIDER_YS:
         x0 = _row_left(dy)
-        inside.append(dw.Rectangle(x0, dy, 470 - x0, 2.5, rx=1.25,
+        inside.append(dw.Rectangle(x0, dy, 478 - x0, 2.5, rx=1.25,
                                    fill=p["ink"], fill_opacity=p["ink_op"] * 0.5))
 
     # the three scripts, as real tiny monospace text
