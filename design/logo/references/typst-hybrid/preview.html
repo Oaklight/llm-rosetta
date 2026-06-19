@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Typst logo preview</title>
+<style>
+:root{color-scheme:light dark;--bg:#f8fafc;--fg:#0f172a;--muted:#64748b;--card:#fff;--border:#e2e8f0}
+@media(prefers-color-scheme:dark){:root{--bg:#020617;--fg:#e2e8f0;--muted:#94a3b8;--card:#0f172a;--border:#1e293b}}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:40px}
+h1{font-size:clamp(30px,5vw,52px);letter-spacing:-.05em;margin:0 0 8px}p{color:var(--muted);max-width:760px;line-height:1.5}
+.grid{max-width:1000px;margin:28px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px}
+.box{display:grid;place-items:center;min-height:300px;border-radius:16px;background:linear-gradient(45deg,#0001 25%,transparent 25%),linear-gradient(-45deg,#0001 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0001 75%),linear-gradient(-45deg,transparent 75%,#0001 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0}
+.box img{width:240px;height:240px;object-fit:contain}
+.fav{display:flex;gap:24px;align-items:center;justify-content:center;min-height:120px}
+.fav img{object-fit:contain}
+h2{font-size:18px;margin:14px 0 4px;letter-spacing:-.02em}.note{font-size:13px;color:var(--muted)}
+header{max-width:1000px;margin:0 auto}
+</style></head><body>
+<header><h1>Typst logo — first hybrid</h1><p>Real Rosetta silhouette embedded as SVG, inscription generated natively in Typst (for-loops over the three scripts). Vector SVG output. Pure gradient material (Typst has no SVG filters, so no grain/weathering yet).</p></header>
+<div class="grid">
+  <div class="card"><div class="box"><img src="logo.svg" alt="typst svg"></div><h2>SVG (vector)</h2><p class="note">Scales cleanly; this is the deliverable format.</p></div>
+  <div class="card"><div class="box"><img src="logo.png" alt="typst png"></div><h2>PNG @300ppi</h2><p class="note">Raster export for raster contexts.</p></div>
+  <div class="card"><div class="box fav">
+    <img src="logo.svg" width="64" height="64"><img src="logo.svg" width="32" height="32"><img src="logo.svg" width="16" height="16">
+  </div><h2>Favicon 64/32/16</h2><p class="note">Legibility at small sizes.</p></div>
+</div>
+</body></html>

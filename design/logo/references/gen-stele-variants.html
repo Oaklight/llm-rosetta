@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LLM-Rosetta logo preview</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --card: #ffffff;
+      --border: #e2e8f0;
+      --shadow: color-mix(in srgb, #020617 14%, transparent);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #020617;
+        --fg: #e2e8f0;
+        --muted: #94a3b8;
+        --card: #0f172a;
+        --border: #1e293b;
+        --shadow: color-mix(in srgb, #000 42%, transparent);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, color-mix(in srgb, #3b82f6 13%, transparent), transparent 38%), var(--bg);
+      color: var(--fg);
+      min-height: 100vh;
+      padding: 40px;
+    }
+    header { max-width: 1180px; margin: 0 auto 28px; }
+    h1 {
+      font-size: clamp(34px, 5vw, 60px);
+      line-height: 0.95;
+      margin: 0 0 12px;
+      letter-spacing: -0.055em;
+    }
+    p { color: var(--muted); font-size: 17px; line-height: 1.55; margin: 0; max-width: 780px; }
+    .grid {
+      max-width: 1180px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
+      gap: 24px;
+    }
+    .card {
+      background: color-mix(in srgb, var(--card) 92%, transparent);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 24px;
+      box-shadow: 0 20px 72px var(--shadow);
+    }
+    .logo-box {
+      display: grid;
+      place-items: center;
+      min-height: 310px;
+      background:
+        linear-gradient(45deg, color-mix(in srgb, var(--fg) 10%, transparent) 25%, transparent 25%),
+        linear-gradient(-45deg, color-mix(in srgb, var(--fg) 10%, transparent) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--fg) 10%, transparent) 75%),
+        linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--fg) 10%, transparent) 75%),
+        linear-gradient(135deg, #facc15, #22d3ee 45%, #a78bfa);
+      background-size: 24px 24px, 24px 24px, 24px 24px, 24px 24px, 100% 100%;
+      background-position: 0 0, 0 12px, 12px -12px, -12px 0, 0 0;
+      border-radius: 18px;
+    }
+    .meta { margin-top: 18px; }
+    h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: -0.025em; }
+    .swatches { display: flex; gap: 8px; margin-top: 14px; }
+    .swatch {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, white 45%, transparent);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, black 18%, transparent);
+    }
+    @media (max-width: 980px) { .grid { grid-template-columns: repeat(2, minmax(260px, 1fr)); } }
+    @media (max-width: 680px) { body { padding: 22px; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LLM-Rosetta logo explorations</h1>
+    <p>Cleaner Rosetta Stone-inspired marks with fewer decorative strokes, more consistent engraving rhythm, and no built-in background plate.</p>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Black stele logo" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneF" x1="84" y1="36" x2="203" y2="242" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#334155"/>
+              <stop offset="0.5" stop-color="#111827"/>
+              <stop offset="1" stop-color="#030712"/>
+            </linearGradient>
+            <clipPath id="shapeF"><path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z"/></clipPath>
+          </defs>
+          <path d="M76 222 69 104 100 50 121 28 187 30 215 48 228 96 220 202 198 239 111 260 84 238z" fill="url(#stoneF)"/>
+          <g clip-path="url(#shapeF)">
+            <g stroke="#cbd5e1" stroke-linecap="round" opacity="0.72">
+              <path d="M96 76h98" stroke-width="3.2"/>
+              <path d="M96 91h104" stroke-width="2.4"/>
+              <path d="M96 106h89" stroke-width="2.4"/>
+              <path d="M96 145h106" stroke-width="3"/>
+              <path d="M96 160h90" stroke-width="2.3"/>
+              <path d="M98 199h84" stroke-width="3"/>
+              <path d="M98 214h93" stroke-width="2.3"/>
+            </g>
+            <path d="M82 55c29-15 87-15 120 2" stroke="#f8fafc" stroke-width="4" opacity="0.10" fill="none"/>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>F. Black stele</h2>
+        <p>Historical object feel with structured, restrained inscription bands.</p>
+        <div class="swatches"><span class="swatch" style="background:#111827"></span><span class="swatch" style="background:#334155"></span><span class="swatch" style="background:#cbd5e1"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Angular outline logo" xmlns="http://www.w3.org/2000/svg">
+          <path d="M77 220 70 111 98 70 123 36 187 31 218 48 234 96 226 204 203 238 116 257 86 237z" fill="#eff6ff" stroke="#0f172a" stroke-width="7" stroke-linejoin="round"/>
+          <g fill="none" stroke="#0f172a" stroke-linecap="round">
+            <path d="M96 89h96" stroke-width="4"/>
+            <path d="M95 106h105" stroke-width="3"/>
+            <path d="M96 123h88" stroke-width="3"/>
+            <path d="M96 156h99" stroke-width="4"/>
+            <path d="M96 174h84" stroke-width="3"/>
+            <path d="M98 208h78" stroke-width="4" opacity="0.55"/>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>D. Angular outline</h2>
+        <p>Monochrome-friendly, with fewer strokes and a clearer silhouette.</p>
+        <div class="swatches"><span class="swatch" style="background:#0f172a"></span><span class="swatch" style="background:#eff6ff"></span><span class="swatch" style="background:#3b82f6"></span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="logo-box">
+        <svg width="270" height="270" viewBox="0 0 270 270" role="img" aria-label="Museum artifact fragment logo" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="stoneB" x1="76" y1="35" x2="207" y2="248" gradientUnits="userSpaceOnUse">
+              <stop stop-color="#f5f5f4"/>
+              <stop offset="0.48" stop-color="#a8a29e"/>
+              <stop offset="1" stop-color="#57534e"/>
+            </linearGradient>
+            <clipPath id="shapeB"><path d="M74 217 68 108 93 68 119 34 184 32 215 49 230 102 221 203 198 238 116 260 84 237z"/></clipPath>
+          </defs>
+          <path d="M74 217 68 108 93 68 119 34 184 32 215 49 230 102 221 203 198 238 116 260 84 237z" fill="url(#stoneB)"/>
+          <g clip-path="url(#shapeB)" fill="none" stroke-linecap="round">
+            <path d="M96 89h98" stroke="#f5f5f4" stroke-width="4" opacity="0.58"/>
+            <path d="M96 106h104" stroke="#f5f5f4" stroke-width="3" opacity="0.54"/>
+            <path d="M96 123h86" stroke="#f5f5f4" stroke-width="3" opacity="0.50"/>
+            <path d="M96 157h100" stroke="#57534e" stroke-width="3" opacity="0.44"/>
+            <path d="M99 175h88" stroke="#57534e" stroke-width="2.6" opacity="0.40"/>
+            <path d="M104 211h72" stroke="#44403c" stroke-width="2.8" opacity="0.38"/>
+          </g>
+        </svg>
+      </div>
+      <div class="meta">
+        <h2>B. Artifact fragment</h2>
+        <p>Stone-like and archival, with cleaner engraving and softer surface detail.</p>
+        <div class="swatches"><span class="swatch" style="background:#a8a29e"></span><span class="swatch" style="background:#57534e"></span><span class="swatch" style="background:#f5f5f4"></span></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
