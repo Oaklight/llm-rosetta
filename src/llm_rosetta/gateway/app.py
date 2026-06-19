@@ -219,7 +219,13 @@ async def _proxy_handler(
         return response
     except Exception as exc:
         error_detail = str(exc)
-        raise
+        logger.exception("[%s] unhandled error in proxy handler", request_id)
+        status_code = 500
+        resp = error_response_for_source(
+            source_provider, 500, f"Internal server error: {exc}"
+        )
+        resp.headers["x-request-id"] = request_id
+        return resp
     finally:
         _record_telemetry(
             request,
