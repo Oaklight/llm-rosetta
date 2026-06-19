@@ -78,7 +78,7 @@ VB = 595.279
 GRID_LEFT = 48           # left of the stone's leftmost point
 GRID_TOP = 60            # above the stone's top
 GRID_BOTTOM = 524        # below the stone's base
-BAND_GAP_FACTOR = 2.6    # band gap = this * line step (clearer band separation)
+BAND_GAP_FACTOR = 1.5    # band gap = this * line step (subtle pause, stays filled)
 DIVIDER_FRAC = 0.5       # divider sits this fraction into the band gap
 
 
