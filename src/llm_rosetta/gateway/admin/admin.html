@@ -25,6 +25,11 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+/* Hide main content until auth check completes to prevent flash of unauthenticated content */
+body.auth-pending > .header,
+body.auth-pending > .tabs,
+body.auth-pending > .content,
+body.auth-pending > .db-footer { display: none !important; }
 a { color: var(--accent); text-decoration: none; }
 
 /* Header */
@@ -424,7 +429,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 body { padding-bottom: 26px; }
 </style>
 </head>
-<body>
+<body class="auth-pending">
 
 <!-- Login overlay (shown when admin_password is configured) -->
 <div class="login-overlay" id="loginOverlay" style="display:none">
@@ -1250,6 +1255,7 @@ async function doLogin() {
     if (r.ok && data.token) {
       localStorage.setItem('admin_token', data.token);
       document.getElementById('loginOverlay').style.display = 'none';
+      document.body.classList.remove('auth-pending');
       const btn = document.getElementById('logoutBtn');
       if (btn) btn.style.display = '';
       _startInactivityTracking();
@@ -1284,9 +1290,11 @@ async function checkAuthAndInit() {
         return;
       }
     }
+    document.body.classList.remove('auth-pending');
     initApp();
   } catch(e) {
     console.error('Auth check failed:', e);
+    document.body.classList.remove('auth-pending');
     initApp(); // fallback: try to load anyway
   }
 }
