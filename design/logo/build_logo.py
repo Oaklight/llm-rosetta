@@ -32,20 +32,29 @@ import sys as _sys
 _sys.path.insert(0, str(Path(__file__).parent / "fonts"))
 from fonts_embed import FONTS  # base64 woff2 subsets  # noqa: E402
 
-# Embedded-font families, one per script (the three distinct "scripts").
-FONT_FACE = {
-    "openai_chat": ("LogoJetBrains", "jetbrains"),
-    "anthropic": ("LogoPlex", "plex"),
-    "google": ("LogoSpace", "space"),
+# Font THEMES — each maps the three scripts (OpenAI / Anthropic / Google) to
+# three embedded typefaces. We render one logo per theme to compare which
+# trio reads best as "three distinct scripts".
+FONT_THEMES = {
+    # current: three geometric/humanist monos
+    "monos": {"openai_chat": "jetbrains", "anthropic": "plex", "google": "space"},
+    # higher-contrast monos: ligature mono / classic / script-italic mono
+    "monos-contrast": {"openai_chat": "fira", "anthropic": "inconsolata",
+                       "google": "victor"},
+    # mixed families: mono / serif / sans — maximum script differentiation
+    "mixed": {"openai_chat": "jetbrains", "anthropic": "spectral",
+              "google": "inter"},
+    # warm + quirky: clean mono / humanist mono / retro mono
+    "warm": {"openai_chat": "redhat", "anthropic": "plex", "google": "space"},
 }
 
 
-def _font_css() -> str:
-    """@font-face rules embedding the three subset woff2 as base64."""
+def _font_css(theme: dict) -> str:
+    """@font-face rules for the three fonts used by *theme*."""
     rules = []
-    for _script, (fam, key) in FONT_FACE.items():
+    for key in dict.fromkeys(theme.values()):  # unique, ordered
         rules.append(
-            f"@font-face{{font-family:'{fam}';font-style:normal;"
+            f"@font-face{{font-family:'F-{key}';font-style:normal;"
             f"font-weight:500;src:url(data:font/woff2;base64,{FONTS[key]}) "
             f"format('woff2');}}")
     return "".join(rules)
@@ -69,15 +78,16 @@ VB = 595.279
 GRID_LEFT = 48           # left of the stone's leftmost point
 GRID_TOP = 60            # above the stone's top
 GRID_BOTTOM = 524        # below the stone's base
-BAND_GAP_FACTOR = 1.6    # band gap = this * line step
+BAND_GAP_FACTOR = 2.6    # band gap = this * line step (clearer band separation)
 DIVIDER_FRAC = 0.5       # divider sits this fraction into the band gap
 
 
-def layout_inscription():
+def layout_inscription(theme: dict):
     """Upright grid: constant left x, uniform horizontal rows top→bottom.
 
-    Step is derived from line count so the block always spans the stone; the
-    clip mask (silhouette) crops whatever overruns the broken edges.
+    Each script's lines are tagged with the theme's font family. Step is
+    derived from line count so the block always spans the stone; the clip
+    mask (silhouette) crops whatever overruns the broken edges.
     """
     n = sum(len(s) for _, s in SCRIPTS)
     n_gaps = len(SCRIPTS) - 1
@@ -90,7 +100,8 @@ def layout_inscription():
     dividers = []
     y = GRID_TOP
     for bi, (name, script) in enumerate(SCRIPTS):
-        fam = SCRIPT_FONTS.get(name, SCRIPT_FONTS["_default"])
+        key = theme.get(name)
+        fam = f"'F-{key}', monospace" if key else "ui-monospace, monospace"
         for ln in script:
             lines.append((GRID_LEFT, y, ln, fam))  # constant x → upright rows
             y += step
@@ -99,21 +110,6 @@ def layout_inscription():
             dividers.append(y + band_gap * DIVIDER_FRAC)
             y += band_gap
     return lines, dividers, font
-
-
-# Each of the three API dialects gets its own embedded typeface — visually
-# distinct "scripts" echoing hieroglyphic / demotic / Greek:
-#   OpenAI  → JetBrains Mono  (geometric, modern)
-#   Anthropic → IBM Plex Mono (humanist, warm)
-#   Google  → Space Mono      (retro, quirky)
-SCRIPT_FONTS = {
-    "openai_chat": f"'{FONT_FACE['openai_chat'][0]}', monospace",
-    "anthropic": f"'{FONT_FACE['anthropic'][0]}', monospace",
-    "google": f"'{FONT_FACE['google'][0]}', monospace",
-    "_default": "ui-monospace, Menlo, Consolas, monospace",
-}
-
-INSCRIPTION_LINES, DIVIDER_YS, FONT = layout_inscription()
 
 
 # ---------------------------------------------------------------------------
@@ -148,12 +144,14 @@ def _grain(d: dw.Drawing, fid: str, amount: float) -> None:
     d.append(f)
 
 
-def build(variant: str) -> dw.Drawing:
+def build(variant: str, theme_name: str = "monos") -> dw.Drawing:
     p = PALETTES[variant]
+    theme = FONT_THEMES[theme_name]
+    inscription_lines, divider_ys, font_size = layout_inscription(theme)
     d = dw.Drawing(VB, VB, origin=(0, 0))
 
-    # embed the three subset fonts so the SVG is self-contained
-    d.append_css(_font_css())
+    # embed only this theme's fonts so the SVG stays self-contained + small
+    d.append_css(_font_css(theme))
 
     clip = dw.ClipPath()
     clip.append(dw.Path(STONE_PATH))
@@ -206,14 +204,14 @@ def build(variant: str) -> dw.Drawing:
 
     # carved dividers between the three script bands — full-width upright rules,
     # clipped to the stone like the text
-    for dy in DIVIDER_YS:
+    for dy in divider_ys:
         inside.append(dw.Rectangle(GRID_LEFT, dy, 470, 2.5, rx=1.25,
                                    fill=p["ink"], fill_opacity=p["ink_op"] * 0.5))
 
     # the three scripts, each in its own typeface
-    for (x, y, text, fam) in INSCRIPTION_LINES:
+    for (x, y, text, fam) in inscription_lines:
         inside.append(dw.Text(
-            text, FONT, x, y,
+            text, font_size, x, y,
             font_family=fam,
             font_weight="500",
             fill=p["ink"], fill_opacity=p["ink_op"],
@@ -223,48 +221,59 @@ def build(variant: str) -> dw.Drawing:
     return d
 
 
-def main() -> None:
-    variants = list(PALETTES.keys())
-    for v in variants:
-        build(v).save_svg(str(OUT / f"logo-{v}.svg"))
+THEME_DESC = {
+    "monos": "JetBrains · IBM Plex · Space Mono (geometric / humanist / retro)",
+    "monos-contrast": "Fira Code · Inconsolata · Victor Mono (ligature / classic / script-italic)",
+    "mixed": "JetBrains Mono · Spectral · Inter (mono / serif / sans)",
+    "warm": "Red Hat Mono · IBM Plex · Space Mono",
+}
 
-    cards = "".join(
-        f'<section class="card"><div class="box"><img src="logo-{v}.svg" alt="{v}">'
-        f'</div><h2>{v}</h2></section>' for v in variants)
-    fav = "".join(
-        f'<img src="logo-outline.svg" width="{s}" height="{s}">' for s in (64, 32, 16))
-    zoom = ('<section class="card"><div class="box" style="min-height:420px">'
-            '<img src="logo-granodiorite.svg" style="width:420px;height:420px"></div>'
-            '<h2>granodiorite — zoom (read the three scripts)</h2></section>')
+
+def main() -> None:
+    # One granodiorite render per font theme, for comparison.
+    for tn in FONT_THEMES:
+        build("granodiorite", tn).save_svg(str(OUT / f"theme-{tn}.svg"))
+    # Standard 3-material set using the default theme.
+    for v in PALETTES:
+        build(v, "monos").save_svg(str(OUT / f"logo-{v}.svg"))
+
+    theme_cards = "".join(
+        f'<section class="card"><div class="box">'
+        f'<img src="theme-{tn}.svg" alt="{tn}"></div>'
+        f'<h2>{tn}</h2><p class="note">{THEME_DESC.get(tn, "")}</p></section>'
+        for tn in FONT_THEMES)
+    zoom_cards = "".join(
+        f'<section class="card"><div class="box" style="min-height:440px">'
+        f'<img src="theme-{tn}.svg" style="width:440px;height:440px"></div>'
+        f'<h2>{tn} — zoom</h2></section>'
+        for tn in FONT_THEMES)
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LLM-Rosetta logo — Gen 6</title><style>
+<title>LLM-Rosetta logo — font themes</title><style>
 :root{{color-scheme:light dark;--bg:#f8fafc;--fg:#0f172a;--muted:#64748b;--card:#fff;--border:#e2e8f0}}
 @media(prefers-color-scheme:dark){{:root{{--bg:#020617;--fg:#e2e8f0;--muted:#94a3b8;--card:#0f172a;--border:#1e293b}}}}
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:40px}}
-h1{{font-size:clamp(30px,5vw,52px);letter-spacing:-.05em;margin:0 0 8px}}p{{color:var(--muted);max-width:820px;line-height:1.5;margin:0}}
-.grid{{max-width:1040px;margin:28px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}}
-.card{{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px}}
-.box{{display:grid;place-items:center;min-height:300px;border-radius:16px;background:linear-gradient(45deg,#0001 25%,transparent 25%),linear-gradient(-45deg,#0001 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0001 75%),linear-gradient(-45deg,transparent 75%,#0001 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0}}
-.box img{{width:240px;height:240px;object-fit:contain}}
-.fav{{display:flex;gap:24px;align-items:center;justify-content:center;min-height:120px}}
-h2{{font-size:17px;margin:14px 0 4px;letter-spacing:-.02em;text-transform:capitalize}}
-header{{max-width:1040px;margin:0 auto}}
+h1{{font-size:clamp(28px,5vw,48px);letter-spacing:-.05em;margin:0 0 8px}}p{{color:var(--muted);max-width:860px;line-height:1.5;margin:0}}
+.grid{{max-width:1180px;margin:28px auto;display:grid;grid-template-columns:repeat(4,1fr);gap:20px}}
+.grid2{{max-width:1180px;margin:28px auto;display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}
+.card{{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:18px}}
+.box{{display:grid;place-items:center;min-height:240px;border-radius:16px;background:linear-gradient(45deg,#0001 25%,transparent 25%),linear-gradient(-45deg,#0001 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0001 75%),linear-gradient(-45deg,transparent 75%,#0001 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}}
+.box img{{width:200px;height:200px;object-fit:contain}}
+.note{{font-size:12px;color:var(--muted);margin-top:4px}}
+h2{{font-size:16px;margin:12px 0 2px;letter-spacing:-.02em}}
+header{{max-width:1180px;margin:0 auto}}
 </style></head><body>
-<header><h1>LLM-Rosetta logo — Gen 6</h1>
-<p>The inscription is real: the same request body in three API dialects
-(OpenAI Chat / Anthropic Messages / Google GenAI), carved as three scripts —
-exactly what the real Rosetta Stone does with hieroglyphic / demotic / Greek.
-From afar, texture; up close, an easter egg. Pure monochrome (no accent),
-real silhouette, pink vein + grain for material depth.</p></header>
-<div class="grid">{cards}</div>
-<div class="grid">{zoom}<section class="card"><div class="box fav">{fav}</div>
-<h2>favicon 64 / 32 / 16</h2></section></div>
+<header><h1>LLM-Rosetta logo — font themes</h1>
+<p>Same stone, same real convert() inscription — four typeface trios for the
+three scripts (OpenAI / Anthropic / Google). Top row = at-size; bottom =
+zoomed to read the three distinct "scripts". Which trio reads best?</p></header>
+<div class="grid">{theme_cards}</div>
+<div class="grid2">{zoom_cards}</div>
 </body></html>"""
     (OUT / "preview.html").write_text(html)
-    print("wrote", len(variants), "SVGs;",
-          len(INSCRIPTION_LINES), "inscription lines across",
-          len(SCRIPTS), "scripts")
+    n = sum(len(s) for _, s in SCRIPTS)
+    print("wrote", len(FONT_THEMES), "theme SVGs +", len(PALETTES),
+          "material SVGs;", n, "inscription lines")
 
 
 if __name__ == "__main__":

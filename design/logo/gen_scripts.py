@@ -17,40 +17,41 @@ from llm_rosetta import convert
 
 HERE = Path(__file__).parent
 
-# Two canonical requests — self-referential: the inscription is *about*
-# llm-rosetta and the Rosetta Stone itself. The carved text is the project
-# explaining what it is. Doubled content for density.
-REQ1 = {
+# ONE self-referential request — a multi-turn conversation about llm-rosetta
+# and the Rosetta Stone, with three tools. The whole decree, carried in three
+# API dialects: exactly the Rosetta Stone metaphor (one text, three scripts).
+# Rich enough to fill the stone top-to-bottom.
+REQUEST = {
     "model": "gpt-5",
     "messages": [
         {"role": "system",
-         "content": "You are llm-rosetta, a universal LLM API translator."},
+         "content": "You are llm-rosetta, a universal translator for LLM "
+                    "APIs. Convert any request between OpenAI, Anthropic, and "
+                    "Google formats, preserving messages, tools, and reasoning."},
         {"role": "user",
-         "content": "Convert one request across OpenAI, Anthropic, and "
-                    "Google formats, like the Rosetta Stone's three scripts."},
-    ],
-    "tools": [{"type": "function", "function": {
-        "name": "convert_request",
-        "description": "translate an LLM API payload between providers",
-        "parameters": {"type": "object",
-                       "properties": {"source": {"type": "string"},
-                                      "target": {"type": "string"}},
-                       "required": ["source", "target"]}}}],
-    "tool_choice": "auto",
-    "temperature": 0.2, "top_p": 0.9, "max_tokens": 256, "stream": True,
-}
-REQ2 = {
-    "model": "gpt-5",
-    "messages": [
-        {"role": "system",
-         "content": "You decode ancient and modern scripts alike."},
+         "content": "The Rosetta Stone bore one decree in three scripts — "
+                    "hieroglyphic, demotic, and Greek. Carry this one request "
+                    "across three API dialects the same way."},
+        {"role": "assistant",
+         "content": "Understood. One intermediate representation, three "
+                    "provider formats. I will keep the meaning identical and "
+                    "only change the dialect."},
         {"role": "user",
-         "content": "The Rosetta Stone bore one decree in three scripts; "
-                    "llm-rosetta bears one request in many API dialects."},
+         "content": "Translate 'hello' to French, and look up what the stone "
+                    "actually says if you are unsure."},
     ],
     "tools": [
         {"type": "function", "function": {
-            "name": "transliterate", "description": "render glyphs as text",
+            "name": "convert_request",
+            "description": "translate an LLM API payload between providers",
+            "parameters": {"type": "object",
+                           "properties": {"source": {"type": "string"},
+                                          "target": {"type": "string"},
+                                          "preserve_tools": {"type": "boolean"}},
+                           "required": ["source", "target"]}}},
+        {"type": "function", "function": {
+            "name": "transliterate",
+            "description": "render ancient glyphs as readable text",
             "parameters": {"type": "object",
                            "properties": {"script": {"type": "string"},
                                           "lang": {"type": "string"}},
@@ -62,9 +63,16 @@ REQ2 = {
                            "properties": {"query": {"type": "string"},
                                           "max_results": {"type": "integer"}},
                            "required": ["query"]}}},
+        {"type": "function", "function": {
+            "name": "web_fetch",
+            "description": "fetch and extract the contents of a URL",
+            "parameters": {"type": "object",
+                           "properties": {"url": {"type": "string"},
+                                          "max_chars": {"type": "integer"}},
+                           "required": ["url"]}}},
     ],
     "tool_choice": "auto",
-    "temperature": 0.7, "max_tokens": 512, "stream": True,
+    "temperature": 0.2, "top_p": 0.9, "max_tokens": 512, "stream": True,
 }
 
 WRAP = 92  # overrun right edge at all heights, clipped to full rows
@@ -74,20 +82,16 @@ def hard_wrap(s: str, width: int) -> list[str]:
     return [s[i:i + width] for i in range(0, len(s), width)]
 
 
-def to_lines(*objs: dict) -> list[str]:
-    out = []
-    for o in objs:
-        s = json.dumps(o, ensure_ascii=False, separators=(",", ":"))
-        out += hard_wrap(s, WRAP)
-    return out
+def to_lines(obj: dict) -> list[str]:
+    s = json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
+    return hard_wrap(s, WRAP)
 
 
 def main() -> None:
     blocks = []
     for tgt in ("openai_chat", "anthropic", "google"):
-        o1 = convert(REQ1, tgt, "openai_chat")
-        o2 = convert(REQ2, tgt, "openai_chat")
-        blocks.append((tgt, to_lines(o1, o2)))
+        out = convert(REQUEST, tgt, "openai_chat")
+        blocks.append((tgt, to_lines(out)))
 
     py = ['"""AUTO-GENERATED by gen_scripts.py — real convert() output. Do not edit."""',
           "", "SCRIPTS = ["]
