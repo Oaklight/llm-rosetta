@@ -1230,6 +1230,7 @@ function openSettings() {
 
 function showLoginOverlay() {
   localStorage.removeItem('admin_token');
+  document.body.classList.add('auth-pending');
   // Stop background polling timers to prevent repeated 401 → showLoginOverlay loops
   if (dashboardTimer) { clearInterval(dashboardTimer); dashboardTimer = null; }
   if (logTimer) { clearInterval(logTimer); logTimer = null; }
