@@ -56,6 +56,8 @@ def _record_telemetry(
             status_code=status_code,
             duration_ms=duration_ms,
             is_stream=is_stream,
+            provider_name=provider_name,
+            error_detail=error_detail,
         )
 
     request_log = getattr(request.app, "request_log", None)
@@ -335,7 +337,53 @@ async def handle_list_models_google(request: Any) -> Response:
 
 
 async def handle_health(request: Any) -> Response:
+    """Return operational metrics and per-provider health status.
+
+    Returns HTTP 503 if any provider is critically unhealthy
+    (success_rate < 0.5 over the last 100 requests with ≥ 10 samples).
+    """
+    metrics = getattr(request.app, "metrics", None)
+    if metrics is None:
+        return JSONResponse({"status": "ok"})
+
+    snap = metrics.snapshot(series_seconds=3600)  # 1-hour window for errors_last_hour
+    errors_last_hour = sum(
+        pt["errors"] for pt in snap.get("series", []) if pt.get("errors", 0)
+    )
+
+    provider_health = metrics.provider_health_snapshot()
+    critical = metrics.any_critical_provider()
+    overall_status = "degraded" if critical else "ok"
+
+    payload = {
+        "status": overall_status,
+        "uptime_seconds": snap["uptime_seconds"],
+        "requests_total": snap["total_requests"],
+        "errors_last_hour": errors_last_hour,
+        "providers": provider_health,
+    }
+    return JSONResponse(payload, status_code=503 if critical else 200)
+
+
+async def handle_health_live(request: Any) -> Response:
+    """Kubernetes liveness probe — always 200 while the process is up."""
     return JSONResponse({"status": "ok"})
+
+
+async def handle_health_ready(request: Any) -> Response:
+    """Kubernetes readiness probe — 200 if all providers are operational, 503 if not."""
+    metrics = getattr(request.app, "metrics", None)
+    if metrics is None:
+        return JSONResponse({"status": "ok"})
+
+    critical = metrics.any_critical_provider()
+    if critical:
+        provider_health = metrics.provider_health_snapshot()
+        return JSONResponse(
+            {"status": "not_ready", "providers": provider_health},
+            status_code=503,
+        )
+    return JSONResponse({"status": "ready"})
 
 
 # ---------------------------------------------------------------------------
@@ -408,6 +456,8 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
     app.route("/v1beta/models/<path:model_path>", methods=["POST"])(handle_google_genai)
     app.route("/health", methods=["GET"])(handle_health)
+    app.route("/health/live", methods=["GET"])(handle_health_live)
+    app.route("/health/ready", methods=["GET"])(handle_health_ready)
 
     # --- Auth ---
     import secrets

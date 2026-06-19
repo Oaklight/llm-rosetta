@@ -85,6 +85,67 @@ class _RollingWindow:
 
 
 # ---------------------------------------------------------------------------
+# Per-provider stats
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _ProviderStats:
+    """Recent rolling stats for a single target provider.
+
+    Tracks the last *window_size* requests so that ``success_rate`` and
+    ``avg_latency_ms`` are computed over a bounded, recent sample rather
+    than the entire uptime of the process.
+    """
+
+    window_size: int = 100
+
+    # Circular buffer tracking (duration_ms, is_error) for recent requests.
+    _durations: list[float] = field(default_factory=list)
+    _errors: list[bool] = field(default_factory=list)
+    _pos: int = 0  # next write position (only relevant when buffer is full)
+    _full: bool = False  # True once the buffer has been filled once
+
+    # Most recent error message (if any)
+    last_error: str | None = None
+
+    def record(self, duration_ms: float, *, is_error: bool, error_detail: str | None = None) -> None:
+        if len(self._durations) < self.window_size:
+            self._durations.append(duration_ms)
+            self._errors.append(is_error)
+            if len(self._durations) == self.window_size:
+                self._full = True
+                self._pos = 0
+        else:
+            self._durations[self._pos] = duration_ms
+            self._errors[self._pos] = is_error
+            self._pos = (self._pos + 1) % self.window_size
+        if is_error and error_detail:
+            self.last_error = error_detail
+
+    @property
+    def success_rate(self) -> float:
+        if not self._errors:
+            return 1.0
+        errors = sum(1 for e in self._errors if e)
+        return round(1.0 - errors / len(self._errors), 4)
+
+    @property
+    def avg_latency_ms(self) -> float:
+        if not self._durations:
+            return 0.0
+        return round(sum(self._durations) / len(self._durations), 1)
+
+    @property
+    def sample_size(self) -> int:
+        return len(self._durations)
+
+    def is_critical(self, threshold: float = 0.5) -> bool:
+        """True when success_rate has dropped below *threshold* on a meaningful sample."""
+        return self.sample_size >= 10 and self.success_rate < threshold
+
+
+# ---------------------------------------------------------------------------
 # Main collector
 # ---------------------------------------------------------------------------
 
@@ -110,8 +171,18 @@ class MetricsCollector:
     # Time-series
     _window: _RollingWindow = field(default_factory=_RollingWindow)
 
+    # Per-provider rolling stats (keyed by provider_name)
+    _provider_stats: dict[str, _ProviderStats] = field(default_factory=dict)
+
     # Timing
     _start_time: float = field(default_factory=time.monotonic)
+
+    def _get_provider_stats(self, provider_name: str) -> _ProviderStats:
+        stats = self._provider_stats.get(provider_name)
+        if stats is None:
+            stats = _ProviderStats()
+            self._provider_stats[provider_name] = stats
+        return stats
 
     def record_request(
         self,
@@ -122,6 +193,8 @@ class MetricsCollector:
         status_code: int,
         duration_ms: float,
         is_stream: bool,
+        provider_name: str | None = None,
+        error_detail: str | None = None,
     ) -> None:
         """Record a completed proxy request."""
         self.total_requests += 1
@@ -137,6 +210,29 @@ class MetricsCollector:
         self.by_status_code[status_code] = self.by_status_code.get(status_code, 0) + 1
 
         self._window.record(duration_ms, is_error=is_error)
+
+        # Per-provider stats (use provider_name if available, fall back to target)
+        pname = provider_name or target
+        self._get_provider_stats(pname).record(
+            duration_ms, is_error=is_error, error_detail=error_detail
+        )
+
+    def provider_health_snapshot(self) -> dict[str, dict]:
+        """Return a JSON-serializable per-provider health snapshot."""
+        out: dict[str, dict] = {}
+        for name, stats in self._provider_stats.items():
+            out[name] = {
+                "status": "critical" if stats.is_critical() else "ok",
+                "success_rate": stats.success_rate,
+                "avg_latency_ms": stats.avg_latency_ms,
+                "sample_size": stats.sample_size,
+                "last_error": stats.last_error,
+            }
+        return out
+
+    def any_critical_provider(self) -> bool:
+        """Return True if any tracked provider is critically unhealthy."""
+        return any(s.is_critical() for s in self._provider_stats.values())
 
     def export_counters(self) -> dict:
         """Return counters suitable for persistence (no time-series)."""
@@ -183,4 +279,5 @@ class MetricsCollector:
             "by_target_provider": dict(self.by_target_provider),
             "by_status_code": {str(k): v for k, v in self.by_status_code.items()},
             "series": self._window.get_series(series_seconds),
+            "providers": self.provider_health_snapshot(),
         }
