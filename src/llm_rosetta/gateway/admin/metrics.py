@@ -109,7 +109,9 @@ class _ProviderStats:
     # Most recent error message (if any)
     last_error: str | None = None
 
-    def record(self, duration_ms: float, *, is_error: bool, error_detail: str | None = None) -> None:
+    def record(
+        self, duration_ms: float, *, is_error: bool, error_detail: str | None = None
+    ) -> None:
         if len(self._durations) < self.window_size:
             self._durations.append(duration_ms)
             self._errors.append(is_error)
