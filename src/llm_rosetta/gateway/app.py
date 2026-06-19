@@ -407,7 +407,7 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     # /v1/* proxy endpoints remain open (Access-Control-Allow-Origin: *).
     # The list of allowed origins for admin can be overridden via
     # server.admin_cors_origins in config (default [] = same-origin only).
-    _admin_cors_origins: list[str] = getattr(config, "admin_cors_origins", []) or []
+    _admin_cors_origins: list[str] = config.admin_cors_origins
 
     def _is_admin_path(path: str) -> bool:
         return path.startswith("/admin/") or path == "/admin"

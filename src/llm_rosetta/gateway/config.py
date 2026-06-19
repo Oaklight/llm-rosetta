@@ -156,9 +156,10 @@ class GatewayConfig:
 
         # CORS allow-list for /admin/* endpoints.
         # Default [] means same-origin only (no Access-Control-Allow-Origin header).
-        # To permit a specific trusted origin set e.g.:
-        #   server:
-        #     admin_cors_origins: ["https://my-admin.example.com"]
+        # To permit a specific trusted origin set e.g. in your config (JSONC):
+        #   "server": {
+        #     "admin_cors_origins": ["https://my-admin.example.com"]
+        #   }
         self.admin_cors_origins: list[str] = _server.get("admin_cors_origins", []) or []
 
         # Request-log retention knobs (consumed by setup_admin).  Kept as
