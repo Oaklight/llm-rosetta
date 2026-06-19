@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 """LLM-Rosetta logo generator (drawsvg).
 
-Iterates from the Gen 4 "exact-shape pass": the real downloaded Rosetta Stone
-SVG silhouette as the base, with a token-block inscription clipped inside.
+Gen 5 — research-driven iteration on the Gen 4 exact-shape base.
+
+Borrowed details (from researching real artifact + Apple Rosetta 2 icon):
+  1. Dense, full-width inscription of short broken segments (Apple Rosetta 2
+     reads as real carved text, not sparse lines).
+  2. The real stone's signature pink granodiorite vein across the top-left.
+  3. Crystalline grain (feTurbulence) for stone material, not flat fill.
+  4. One blue "active token" slab = the decode-in-progress glint (our
+     differentiator vs Apple's pure-monochrome treatment).
 
 Run:
     python design/logo/build_logo.py
@@ -19,68 +26,136 @@ HERE = Path(__file__).parent
 OUT = HERE / "out"
 OUT.mkdir(exist_ok=True)
 
-# The real Rosetta Stone silhouette path (viewBox 0 0 595.279 595.279).
-# This is the irreplaceable identity anchor — never hand-redraw it.
+# Real Rosetta Stone silhouette path (viewBox 0 0 595.279 595.279).
+# Irreplaceable identity anchor — never hand-redraw it.
 STONE_PATH = (HERE / "references" / "rosetta-stone-path.txt").read_text().strip()
 
-VB = 595.279  # square viewBox side
+VB = 595.279
 
-# Gen 4 inscription layout: (x, y, width, height) of each carved line.
-# Three visual blocks mimicking the stone's three scripts.
-INSCRIPTION = [
-    # top block (hieroglyphic feel) — sparse
-    (178, 112, 70, 10), (262, 112, 92, 10), (368, 112, 44, 10),
-    (145, 138, 114, 8), (274, 138, 122, 8),
-    (125, 164, 80, 8), (219, 164, 148, 8), (382, 164, 52, 8),
-    # middle block (demotic) — dense
-    (102, 254, 188, 9), (306, 254, 112, 9),
-    (96, 280, 92, 8), (204, 280, 174, 8),
-    (96, 306, 152, 8), (264, 306, 116, 8),
-    # bottom block (greek) — justified
-    (92, 405, 260, 8), (92, 430, 214, 8), (92, 455, 164, 8),
-]
-# The "active token" — one highlighted line (the decode-in-progress glint).
-ACTIVE_TOKEN = (382, 138, 42, 8)
+# ---------------------------------------------------------------------------
+# Deterministic dense inscription (Apple-Rosetta-2 style: rows of short,
+# uneven segments filling the stone width). No RNG so output is reproducible.
+# ---------------------------------------------------------------------------
+
+# Interior text box, tracking the stone's slightly-narrower top.
+TEXT_TOP = 108
+TEXT_BOTTOM = 470
+ROW_STEP = 21          # vertical rhythm
+SEG_H = 8              # carved-line thickness
+GAP = 11               # gap between segments on a row
+
+# A repeating but irregular cycle of segment widths (px). Cycling through this
+# with a per-row offset yields organic, non-repeating-looking rows.
+SEG_CYCLE = [34, 52, 20, 44, 28, 60, 24, 40, 30, 48, 22, 56, 36, 26]
 
 
-# --- material palettes -----------------------------------------------------
+def _row_left(y: float) -> float:
+    """Left inset of the text box at height y — follows the stone's taper.
+
+    The real stone is a touch narrower near the top, wider at the base.
+    """
+    t = (y - TEXT_TOP) / (TEXT_BOTTOM - TEXT_TOP)  # 0 at top, 1 at bottom
+    return 150 - 64 * t  # 150 -> 86
+
+
+def _row_right(y: float) -> float:
+    t = (y - TEXT_TOP) / (TEXT_BOTTOM - TEXT_TOP)
+    return 440 + 70 * t  # 440 -> 510
+
+
+def dense_inscription():
+    """Yield (x, y, w, h) carved segments filling the stone, plus return the
+    chosen active-token rect.
+    """
+    segs = []
+    rows = []
+    y = TEXT_TOP
+    ci = 0
+    ri = 0
+    while y <= TEXT_BOTTOM:
+        left = _row_left(y)
+        right = _row_right(y)
+        x = left + (ri % 3) * 6  # tiny per-row left jitter
+        row_segs = []
+        while x < right:
+            w = SEG_CYCLE[ci % len(SEG_CYCLE)]
+            ci += 1
+            if x + w > right:
+                w = right - x
+                if w < 12:
+                    break
+            row_segs.append((x, y, w, SEG_H))
+            x += w + GAP
+        segs.extend(row_segs)
+        rows.append(row_segs)
+        y += ROW_STEP
+        ri += 1
+    # active token: pick a mid-stone row, a middle segment in it
+    mid_row = rows[len(rows) // 2 - 1]
+    token = mid_row[len(mid_row) // 2] if mid_row else None
+    return segs, token
+
+
+INSCRIPTION, ACTIVE_TOKEN = dense_inscription()
+
+
+# ---------------------------------------------------------------------------
+# Material palettes
+# ---------------------------------------------------------------------------
 PALETTES = {
-    "black": {  # A4 — dark granodiorite
-        "stops": [(0, "#475569"), (0.48, "#111827"), (1, "#030712")],
-        "ink": "#dbeafe",
-        "ink_op": 0.78,
-        "token": "#60a5fa",
+    "granodiorite": {  # true-to-artifact dark stone + pink vein
+        "stops": [(0, "#3d4757"), (0.5, "#232c3a"), (1, "#10141d")],
+        "ink": "#cdd8e6",
+        "ink_op": 0.85,
+        "token": "#38bdf8",
+        "vein": True,
+        "grain": 0.05,
         "stroke": None,
     },
-    "outline": {  # B4 — clean outline mark
-        "fill": "#eff6ff",
+    "outline": {  # clean favicon-friendly mark
+        "fill": "#ffffff",
         "ink": "#0f172a",
-        "ink_op": 0.82,
+        "ink_op": 0.85,
         "token": "#2563eb",
+        "vein": False,
+        "grain": 0.0,
         "stroke": "#0f172a",
         "stroke_w": 16,
     },
-    "artifact": {  # C4 — light artifact material
-        "stops": [(0, "#f5f5f4"), (0.48, "#a8a29e"), (1, "#57534e")],
-        "ink": "#44403c",
-        "ink_op": 0.55,
-        "token": "#2563eb",
-        "token_op": 0.72,
+    "ink-amber": {  # near-black slate, amber token, warm vein
+        "stops": [(0, "#2c2f37"), (0.5, "#181a20"), (1, "#0a0b0e")],
+        "ink": "#ecdcb6",
+        "ink_op": 0.82,
+        "token": "#f59e0b",
+        "vein": True,
+        "vein_color": "#c08462",  # warmer copper vein
+        "grain": 0.05,
         "stroke": None,
     },
 }
+
+
+def _add_grain_filter(d: dw.Drawing, fid: str, amount: float) -> None:
+    """Crystalline speckle via fractal noise, low-alpha overlay."""
+    f = dw.Filter(id=fid)
+    f.append(dw.FilterItem(
+        "feTurbulence", type="fractalNoise", baseFrequency="0.9",
+        numOctaves=2, seed=7, result="n"))
+    f.append(dw.FilterItem(
+        "feColorMatrix", in_="n", type="matrix",
+        values=f"0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 {amount} 0"))
+    d.append(f)
 
 
 def build(variant: str) -> dw.Drawing:
     p = PALETTES[variant]
     d = dw.Drawing(VB, VB, origin=(0, 0))
 
-    # clip path = stone silhouette
     clip = dw.ClipPath()
     clip.append(dw.Path(STONE_PATH))
     d.append(clip)
 
-    # stone body fill (gradient or flat)
+    # stone fill
     if "stops" in p:
         grad = dw.LinearGradient(120, 20, 500, 560, gradientUnits="userSpaceOnUse")
         for off, col in p["stops"]:
@@ -96,30 +171,67 @@ def build(variant: str) -> dw.Drawing:
                          stroke_linejoin="round")
     d.append(dw.Path(STONE_PATH, fill=fill, **stroke_kw))
 
-    # inscription, clipped to the stone
-    g = dw.Group(clip_path=clip)
+    inside = dw.Group(clip_path=clip)
+
+    # crystalline grain overlay
+    if p.get("grain"):
+        fid = f"grain-{variant}"
+        _add_grain_filter(d, fid, p["grain"])
+        inside.append(dw.Rectangle(0, 0, VB, VB, filter=f"url(#{fid})"))
+
+    # signature pink granodiorite vein across the top-left corner.
+    # A thin, soft, slightly-wavy diagonal streak (blurred) — reads as a
+    # mineral vein, not a painted band.
+    if p.get("vein"):
+        vc = p.get("vein_color", "#e8a0b8")
+        # blur filter to soften the streak into the stone
+        vfid = f"vein-blur-{variant}"
+        vf = dw.Filter(id=vfid, x="-30%", y="-30%", width="160%", height="160%")
+        vf.append(dw.FilterItem("feGaussianBlur", stdDeviation=6))
+        d.append(vf)
+        vgrad = dw.LinearGradient(60, 60, 300, 260, gradientUnits="userSpaceOnUse")
+        vgrad.add_stop(0, vc, opacity=0.0)
+        vgrad.add_stop(0.4, vc, opacity=0.7)
+        vgrad.add_stop(0.7, vc, opacity=0.35)
+        vgrad.add_stop(1, vc, opacity=0.0)
+        d.append(vgrad)
+        vein = dw.Group(filter=f"url(#{vfid})")
+        # gentle wavy diagonal from upper edge down toward left, like the real
+        # vein crossing the top-left corner
+        vein.append(dw.Path(
+            "M 70 40 C 140 70, 180 120, 150 175 C 130 210, 90 215, 60 205",
+            stroke=vgrad, stroke_width=16, fill="none", stroke_linecap="round"))
+        # a faint secondary hairline for natural variation
+        vein.append(dw.Path(
+            "M 95 48 C 150 80, 180 125, 158 168",
+            stroke=vc, stroke_width=5, stroke_opacity=0.3, fill="none",
+            stroke_linecap="round"))
+        inside.append(vein)
+
+    # dense inscription
     for (x, y, w, h) in INSCRIPTION:
-        g.append(dw.Rectangle(x, y, w, h, rx=h / 2, fill=p["ink"],
-                              fill_opacity=p["ink_op"]))
-    # active token
-    tx, ty, tw, th = ACTIVE_TOKEN
-    g.append(dw.Rectangle(tx, ty, tw, th, rx=th / 2, fill=p["token"],
-                          fill_opacity=p.get("token_op", 1.0)))
-    d.append(g)
+        if ACTIVE_TOKEN and (x, y, w, h) == ACTIVE_TOKEN:
+            continue
+        inside.append(dw.Rectangle(x, y, w, h, rx=h / 2, fill=p["ink"],
+                                   fill_opacity=p["ink_op"]))
+    # active token slab (slightly taller, solid)
+    if ACTIVE_TOKEN:
+        tx, ty, tw, th = ACTIVE_TOKEN
+        inside.append(dw.Rectangle(tx, ty - 2, max(tw, 40), th + 4, rx=4,
+                                   fill=p["token"], fill_opacity=p.get("token_op", 1.0)))
+
+    d.append(inside)
     return d
 
 
 def main() -> None:
-    variants = ["black", "outline", "artifact"]
+    variants = list(PALETTES.keys())
     for v in variants:
-        d = build(v)
-        d.save_svg(str(OUT / f"logo-{v}.svg"))
+        build(v).save_svg(str(OUT / f"logo-{v}.svg"))
 
-    # preview page
     cards = "".join(
-        f'<section class="card"><div class="box">'
-        f'<img src="logo-{v}.svg" alt="{v}"></div>'
-        f'<h2>{v}</h2></section>'
+        f'<section class="card"><div class="box"><img src="logo-{v}.svg" alt="{v}">'
+        f'</div><h2>{v}</h2></section>'
         for v in variants
     )
     fav = "".join(
@@ -127,28 +239,30 @@ def main() -> None:
     )
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LLM-Rosetta logo (drawsvg)</title><style>
+<title>LLM-Rosetta logo — Gen 5 (drawsvg)</title><style>
 :root{{color-scheme:light dark;--bg:#f8fafc;--fg:#0f172a;--muted:#64748b;--card:#fff;--border:#e2e8f0}}
 @media(prefers-color-scheme:dark){{:root{{--bg:#020617;--fg:#e2e8f0;--muted:#94a3b8;--card:#0f172a;--border:#1e293b}}}}
 *{{box-sizing:border-box}}body{{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);min-height:100vh;padding:40px}}
-h1{{font-size:clamp(30px,5vw,52px);letter-spacing:-.05em;margin:0 0 8px}}p{{color:var(--muted);max-width:760px;line-height:1.5;margin:0}}
-.grid{{max-width:1000px;margin:28px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}}
+h1{{font-size:clamp(30px,5vw,52px);letter-spacing:-.05em;margin:0 0 8px}}p{{color:var(--muted);max-width:780px;line-height:1.5;margin:0}}
+.grid{{max-width:1040px;margin:28px auto;display:grid;grid-template-columns:repeat(3,1fr);gap:24px}}
 .card{{background:var(--card);border:1px solid var(--border);border-radius:24px;padding:20px}}
 .box{{display:grid;place-items:center;min-height:300px;border-radius:16px;background:linear-gradient(45deg,#0001 25%,transparent 25%),linear-gradient(-45deg,#0001 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#0001 75%),linear-gradient(-45deg,transparent 75%,#0001 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0}}
 .box img{{width:240px;height:240px;object-fit:contain}}
 .fav{{display:flex;gap:24px;align-items:center;justify-content:center;min-height:120px}}
 h2{{font-size:18px;margin:14px 0 4px;letter-spacing:-.02em;text-transform:capitalize}}
-header{{max-width:1000px;margin:0 auto}}
+header{{max-width:1040px;margin:0 auto}}
 </style></head><body>
-<header><h1>LLM-Rosetta logo — drawsvg base (from Gen 4)</h1>
-<p>Real Rosetta silhouette + token-block inscription, generated with drawsvg.
-Three materials: black granodiorite, clean outline, light artifact.</p></header>
+<header><h1>LLM-Rosetta logo — Gen 5</h1>
+<p>Dense full-width inscription (Apple Rosetta 2 style), the real stone's
+pink granodiorite vein across the top-left, crystalline grain, and the blue
+active-token glint. Real silhouette throughout.</p></header>
 <div class="grid">{cards}</div>
 <div class="grid"><section class="card"><div class="box fav">{fav}</div>
 <h2>favicon 64 / 32 / 16</h2></section></div>
 </body></html>"""
     (OUT / "preview.html").write_text(html)
-    print("wrote", len(variants), "SVGs + preview.html to", OUT)
+    print("wrote", len(variants), "SVGs + preview.html;",
+          len(INSCRIPTION), "inscription segments")
 
 
 if __name__ == "__main__":
