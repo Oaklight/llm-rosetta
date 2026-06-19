@@ -378,6 +378,23 @@ def _resolve_target_transforms(
     return shim.from_transforms, shim.to_transforms
 
 
+def _apply_image_limit(
+    ir_request: dict,
+    shim_name: str | None,
+    *,
+    request_id: str = "-",
+) -> dict:
+    """Truncate images in *ir_request* if the target shim declares max_images."""
+    if shim_name is None:
+        return ir_request
+    shim = get_shim(shim_name)
+    if shim is None or shim.max_images is None:
+        return ir_request
+    from llm_rosetta.converters.base.image_limit import truncate_images
+
+    return truncate_images(ir_request, shim.max_images, request_id=request_id)
+
+
 def _inject_shim_reasoning(
     ctx: ConversionContext,
     shim_name: str | None,
@@ -485,6 +502,13 @@ async def handle_non_streaming(
 
     # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
+
+    # 1c. Enforce per-shim image count limit (e.g. Argo: 50 images max)
+    ir_request = _apply_image_limit(
+        ir_request,
+        target_shim_name,
+        request_id=ctx.options.get("request_id", "-"),
+    )
 
     # -- body log: IR request (after source -> IR) --
     log_original_request(ir_request)
@@ -768,6 +792,13 @@ async def handle_streaming(
 
     # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
+
+    # 1c. Enforce per-shim image count limit (e.g. Argo: 50 images max)
+    ir_request = _apply_image_limit(
+        ir_request,
+        target_shim_name,
+        request_id=ctx.options.get("request_id", "-"),
+    )
 
     # -- body log: IR request (after source -> IR) --
     log_original_request(ir_request)

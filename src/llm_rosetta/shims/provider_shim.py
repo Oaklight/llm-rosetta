@@ -131,6 +131,7 @@ class ProviderShim:
     to_transforms: tuple[Transform, ...] = ()
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
+    max_images: int | None = None
 
 
 # ---------------------------------------------------------------------------

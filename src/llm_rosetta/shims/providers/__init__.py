@@ -175,6 +175,7 @@ def _load_single_provider(
         to_transforms=to_t,
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
+        max_images=cfg.get("max_images"),
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)
