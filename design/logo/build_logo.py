@@ -59,16 +59,31 @@ def _row_left(y: float) -> float:
 
 
 def _row_right(y: float) -> float:
+    """Right edge of the text box — pushed out to fill the stone's right bulge.
+
+    Per design review: earlier the top rows stopped at ~x391 leaving ~100px of
+    bare stone-right; the silhouette reaches ~490-510 across the text band.
+    """
     t = (y - TEXT_TOP) / (TEXT_BOTTOM - TEXT_TOP)
-    return 440 + 70 * t  # 440 -> 510
+    return 478 + 32 * t  # 478 -> 510  (was 440 -> 510)
+
+
+# Reserved zone for the active-token slab. The generator skips any segment
+# overlapping this box so the slab always sits in clean space — locked rather
+# than relying on the width-cycle rhythm happening to leave a gap.
+TOKEN_SLAB = (250, 276, 58, 12)  # x, y, w, h; y=276 aligns to row 8 (108+8*21)
+
+
+def _overlaps_token(x: float, w: float, y: float) -> bool:
+    tx, ty, tw, th = TOKEN_SLAB
+    if abs(y - ty) > SEG_H:  # different row band
+        return False
+    return not (x + w < tx - 4 or x > tx + tw + 4)
 
 
 def dense_inscription():
-    """Yield (x, y, w, h) carved segments filling the stone, plus return the
-    chosen active-token rect.
-    """
+    """Generate carved segments filling the stone, reserving the token zone."""
     segs = []
-    rows = []
     y = TEXT_TOP
     ci = 0
     ri = 0
@@ -76,7 +91,6 @@ def dense_inscription():
         left = _row_left(y)
         right = _row_right(y)
         x = left + (ri % 3) * 6  # tiny per-row left jitter
-        row_segs = []
         while x < right:
             w = SEG_CYCLE[ci % len(SEG_CYCLE)]
             ci += 1
@@ -84,16 +98,13 @@ def dense_inscription():
                 w = right - x
                 if w < 12:
                     break
-            row_segs.append((x, y, w, SEG_H))
+            # skip segments that would collide with the reserved token slab
+            if not _overlaps_token(x, w, y):
+                segs.append((x, y, w, SEG_H))
             x += w + GAP
-        segs.extend(row_segs)
-        rows.append(row_segs)
         y += ROW_STEP
         ri += 1
-    # active token: pick a mid-stone row, a middle segment in it
-    mid_row = rows[len(rows) // 2 - 1]
-    token = mid_row[len(mid_row) // 2] if mid_row else None
-    return segs, token
+    return segs, TOKEN_SLAB
 
 
 INSCRIPTION, ACTIVE_TOKEN = dense_inscription()
@@ -109,7 +120,7 @@ PALETTES = {
         "ink_op": 0.85,
         "token": "#38bdf8",
         "vein": True,
-        "grain": 0.05,
+        "grain": 0.07,
         "stroke": None,
     },
     "outline": {  # clean favicon-friendly mark
@@ -129,7 +140,7 @@ PALETTES = {
         "token": "#f59e0b",
         "vein": True,
         "vein_color": "#c08462",  # warmer copper vein
-        "grain": 0.05,
+        "grain": 0.07,
         "stroke": None,
     },
 }
@@ -208,17 +219,14 @@ def build(variant: str) -> dw.Drawing:
             stroke_linecap="round"))
         inside.append(vein)
 
-    # dense inscription
+    # dense inscription (token zone already reserved by the generator)
     for (x, y, w, h) in INSCRIPTION:
-        if ACTIVE_TOKEN and (x, y, w, h) == ACTIVE_TOKEN:
-            continue
         inside.append(dw.Rectangle(x, y, w, h, rx=h / 2, fill=p["ink"],
                                    fill_opacity=p["ink_op"]))
-    # active token slab (slightly taller, solid)
-    if ACTIVE_TOKEN:
-        tx, ty, tw, th = ACTIVE_TOKEN
-        inside.append(dw.Rectangle(tx, ty - 2, max(tw, 40), th + 4, rx=4,
-                                   fill=p["token"], fill_opacity=p.get("token_op", 1.0)))
+    # active token slab — solid, slightly taller than the carved lines
+    tx, ty, tw, th = ACTIVE_TOKEN
+    inside.append(dw.Rectangle(tx, ty - 2, tw, th, rx=4,
+                               fill=p["token"], fill_opacity=p.get("token_op", 1.0)))
 
     d.append(inside)
     return d
