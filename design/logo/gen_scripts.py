@@ -25,20 +25,29 @@ REQUEST = {
     "model": "gpt-5",
     "messages": [
         {"role": "system",
-         "content": "You are llm-rosetta, a universal translator for LLM "
-                    "APIs. Convert any request between OpenAI, Anthropic, and "
-                    "Google formats, preserving messages, tools, and reasoning."},
+         "content": "You are llm-rosetta, a universal translator for large "
+                    "language model APIs. You convert any request between the "
+                    "OpenAI Chat Completions, OpenAI Responses, Anthropic "
+                    "Messages, and Google GenAI formats through one neutral "
+                    "intermediate representation, preserving every message, "
+                    "system instruction, tool definition, tool call, image, "
+                    "and reasoning block exactly as given. You never invent "
+                    "fields and never drop information in translation."},
         {"role": "user",
-         "content": "The Rosetta Stone bore one decree in three scripts — "
-                    "hieroglyphic, demotic, and Greek. Carry this one request "
-                    "across three API dialects the same way."},
+         "content": "The Rosetta Stone of 196 BC bore a single decree of "
+                    "Ptolemy V inscribed in three scripts — Egyptian "
+                    "hieroglyphic, Demotic, and Ancient Greek — which let "
+                    "scholars finally decipher the hieroglyphs. Carry this one "
+                    "request across the modern API dialects in the same way."},
         {"role": "assistant",
-         "content": "Understood. One intermediate representation, three "
-                    "provider formats. I will keep the meaning identical and "
-                    "only change the dialect."},
+         "content": "Understood. One intermediate representation, many provider "
+                    "formats. I will keep the meaning identical across all of "
+                    "them and only change the surface dialect, exactly as the "
+                    "three scripts on the stone all say the same thing."},
         {"role": "user",
-         "content": "Translate 'hello' to French, and look up what the stone "
-                    "actually says if you are unsure."},
+         "content": "Translate the greeting 'hello' into French, and if you are "
+                    "unsure what the stone actually says, search the web and "
+                    "fetch a reliable source before answering."},
     ],
     "tools": [
         {"type": "function", "function": {

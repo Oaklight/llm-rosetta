@@ -36,16 +36,19 @@ from fonts_embed import FONTS  # base64 woff2 subsets  # noqa: E402
 # three embedded typefaces. We render one logo per theme to compare which
 # trio reads best as "three distinct scripts".
 FONT_THEMES = {
-    # current: three geometric/humanist monos
-    "monos": {"openai_chat": "jetbrains", "anthropic": "plex", "google": "space"},
-    # higher-contrast monos: ligature mono / classic / script-italic mono
-    "monos-contrast": {"openai_chat": "fira", "anthropic": "inconsolata",
-                       "google": "victor"},
-    # mixed families: mono / serif / sans — maximum script differentiation
-    "mixed": {"openai_chat": "jetbrains", "anthropic": "spectral",
+    # Elena's pick — mono / serif / sans, the strongest three-script read.
+    # Spectral -> EB Garamond per her note (stronger stroke contrast, the
+    # serif survives small sizes better).
+    "mixed": {"openai_chat": "jetbrains", "anthropic": "garamond",
               "google": "inter"},
-    # warm + quirky: clean mono / humanist mono / retro mono
-    "warm": {"openai_chat": "redhat", "anthropic": "plex", "google": "space"},
+    # alt serif for the middle band
+    "mixed-baskerville": {"openai_chat": "jetbrains", "anthropic": "baskerville",
+                          "google": "inter"},
+    # original mixed (Spectral) for reference
+    "mixed-spectral": {"openai_chat": "jetbrains", "anthropic": "spectral",
+                       "google": "inter"},
+    # all-mono baseline for comparison
+    "monos": {"openai_chat": "jetbrains", "anthropic": "plex", "google": "space"},
 }
 
 
@@ -222,20 +225,22 @@ def build(variant: str, theme_name: str = "monos") -> dw.Drawing:
 
 
 THEME_DESC = {
-    "monos": "JetBrains · IBM Plex · Space Mono (geometric / humanist / retro)",
-    "monos-contrast": "Fira Code · Inconsolata · Victor Mono (ligature / classic / script-italic)",
-    "mixed": "JetBrains Mono · Spectral · Inter (mono / serif / sans)",
-    "warm": "Red Hat Mono · IBM Plex · Space Mono",
+    "mixed": "JetBrains Mono · EB Garamond · Inter (mono / serif / sans) — Elena's pick",
+    "mixed-baskerville": "JetBrains Mono · Libre Baskerville · Inter",
+    "mixed-spectral": "JetBrains Mono · Spectral · Inter (original)",
+    "monos": "JetBrains · IBM Plex · Space Mono (all-mono baseline)",
 }
+
+DEFAULT_THEME = "mixed"
 
 
 def main() -> None:
     # One granodiorite render per font theme, for comparison.
     for tn in FONT_THEMES:
         build("granodiorite", tn).save_svg(str(OUT / f"theme-{tn}.svg"))
-    # Standard 3-material set using the default theme.
+    # Standard 3-material set using the chosen default theme.
     for v in PALETTES:
-        build(v, "monos").save_svg(str(OUT / f"logo-{v}.svg"))
+        build(v, DEFAULT_THEME).save_svg(str(OUT / f"logo-{v}.svg"))
 
     theme_cards = "".join(
         f'<section class="card"><div class="box">'
