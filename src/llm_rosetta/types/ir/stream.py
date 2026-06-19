@@ -29,13 +29,7 @@ Contains the following event types:
 - UsageEvent: Usage statistics event
 """
 
-import sys
-from typing import Any, Literal, Union
-
-if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required, TypedDict
-else:
-    from typing_extensions import NotRequired, Required, TypedDict
+from typing import Any, Literal, NotRequired, Required, TypedDict, Union
 
 from .response import FinishReason, UsageInfo
 

@@ -5,13 +5,7 @@ IR工具相关类型定义
 IR tool-related type definitions
 """
 
-import sys
-from typing import Any, Literal
-
-if sys.version_info >= (3, 11):
-    from typing import NotRequired, TypedDict
-else:
-    from typing_extensions import NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 # ============================================================================
 # 工具定义类型 Tool definition types
