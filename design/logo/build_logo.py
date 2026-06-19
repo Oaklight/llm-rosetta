@@ -183,28 +183,28 @@ def build(variant: str) -> dw.Drawing:
     # A thin, soft, slightly-wavy diagonal streak (blurred) — reads as a
     # mineral vein, not a painted band.
     if p.get("vein"):
-        vc = p.get("vein_color", "#e8a0b8")
-        # blur filter to soften the streak into the stone
+        vc = p.get("vein_color", "#d98fb0")  # soft rose-pink
+        # heavier blur so the streak diffuses into the stone like a real vein
         vfid = f"vein-blur-{variant}"
-        vf = dw.Filter(id=vfid, x="-30%", y="-30%", width="160%", height="160%")
-        vf.append(dw.FilterItem("feGaussianBlur", stdDeviation=6))
+        vf = dw.Filter(id=vfid, x="-40%", y="-40%", width="180%", height="180%")
+        vf.append(dw.FilterItem("feGaussianBlur", stdDeviation=9))
         d.append(vf)
-        vgrad = dw.LinearGradient(60, 60, 300, 260, gradientUnits="userSpaceOnUse")
+        vgrad = dw.LinearGradient(70, 30, 230, 240, gradientUnits="userSpaceOnUse")
         vgrad.add_stop(0, vc, opacity=0.0)
-        vgrad.add_stop(0.4, vc, opacity=0.7)
-        vgrad.add_stop(0.7, vc, opacity=0.35)
+        vgrad.add_stop(0.45, vc, opacity=0.42)
+        vgrad.add_stop(0.75, vc, opacity=0.16)
         vgrad.add_stop(1, vc, opacity=0.0)
         d.append(vgrad)
         vein = dw.Group(filter=f"url(#{vfid})")
-        # gentle wavy diagonal from upper edge down toward left, like the real
-        # vein crossing the top-left corner
+        # long diagonal grazing the top-left corner, entering from the top edge
+        # and running down-left toward the side — matches the real artifact
         vein.append(dw.Path(
-            "M 70 40 C 140 70, 180 120, 150 175 C 130 210, 90 215, 60 205",
-            stroke=vgrad, stroke_width=16, fill="none", stroke_linecap="round"))
-        # a faint secondary hairline for natural variation
+            "M 150 36 C 120 90, 96 130, 84 180 C 78 205, 72 230, 64 250",
+            stroke=vgrad, stroke_width=22, fill="none", stroke_linecap="round"))
+        # faint parallel hairline for crystalline variation
         vein.append(dw.Path(
-            "M 95 48 C 150 80, 180 125, 158 168",
-            stroke=vc, stroke_width=5, stroke_opacity=0.3, fill="none",
+            "M 170 44 C 142 96, 118 134, 108 178",
+            stroke=vc, stroke_width=5, stroke_opacity=0.22, fill="none",
             stroke_linecap="round"))
         inside.append(vein)
 
