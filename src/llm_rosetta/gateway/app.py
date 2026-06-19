@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from typing import Any, cast
 
 from llm_rosetta._vendor.httpserver import (
@@ -113,17 +114,24 @@ async def _proxy_handler(
     """Shared handler for all proxy endpoints."""
     assert _config is not None
 
+    # Generate or honour a request ID for end-to-end traceability.
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+
     try:
         body: dict[str, Any] = request.json()
     except Exception:
-        return error_response_for_source(source_provider, 400, "Invalid JSON body")
+        resp = error_response_for_source(source_provider, 400, "Invalid JSON body")
+        resp.headers["x-request-id"] = request_id
+        return resp
 
     # Determine model
     model = model_override or extract_model(source_provider, body)
     if not model:
-        return error_response_for_source(
+        resp = error_response_for_source(
             source_provider, 400, "Missing 'model' in request body"
         )
+        resp.headers["x-request-id"] = request_id
+        return resp
 
     # If model came from URL (Google), inject it into body for the converter
     if model_override and "model" not in body:
@@ -141,11 +149,13 @@ async def _proxy_handler(
         target_provider: ProviderType = cast(ProviderType, target_provider_str)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
-        return error_response_for_source(
+        resp = error_response_for_source(
             source_provider,
             404,
             f"Unknown model: '{model}'. Configured models: {configured}",
         )
+        resp.headers["x-request-id"] = request_id
+        return resp
 
     # Model alias: replace the model name in the request body with the
     # actual upstream identifier so the converter and upstream provider
@@ -158,7 +168,8 @@ async def _proxy_handler(
 
     model_label = f"{model} (upstream={upstream_model})" if upstream_model else model
     logger.info(
-        "%s -> %s | model=%s stream=%s",
+        "[%s] %s -> %s | model=%s stream=%s",
+        request_id,
         source_provider,
         target_provider,
         model_label,
@@ -167,11 +178,11 @@ async def _proxy_handler(
 
     store: ProviderMetadataStore = request.app.metadata_store
 
-    # Forward OpenResponses-Version header to upstream if present
-    extra_headers: dict[str, str] | None = None
+    # Forward OpenResponses-Version header and request ID to upstream if present
+    extra_headers: dict[str, str] = {"x-request-id": request_id}
     or_version = request.headers.get("openresponses-version")
     if or_version:
-        extra_headers = {"OpenResponses-Version": or_version}
+        extra_headers["OpenResponses-Version"] = or_version
 
     # --- Metrics instrumentation ---
     if is_stream:
@@ -203,6 +214,8 @@ async def _proxy_handler(
             body_bytes = response.body
             if isinstance(body_bytes, bytes):
                 error_detail = body_bytes.decode("utf-8", errors="replace")
+        response.headers["x-request-id"] = request_id
+        logger.info("[%s] response status=%s", request_id, status_code)
         return response
     except Exception as exc:
         error_detail = str(exc)
