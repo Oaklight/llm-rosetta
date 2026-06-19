@@ -154,6 +154,13 @@ class GatewayConfig:
                 "Set the environment variable or use a literal password."
             )
 
+        # CORS allow-list for /admin/* endpoints.
+        # Default [] means same-origin only (no Access-Control-Allow-Origin header).
+        # To permit a specific trusted origin set e.g.:
+        #   server:
+        #     admin_cors_origins: ["https://my-admin.example.com"]
+        self.admin_cors_origins: list[str] = _server.get("admin_cors_origins", []) or []
+
         # Request-log retention knobs (consumed by setup_admin).  Kept as
         # a raw dict here so admin layer owns the resolution policy.
         self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}

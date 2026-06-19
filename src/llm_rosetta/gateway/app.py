@@ -403,33 +403,70 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     app.before_request(create_auth_hook(auth_state))
 
     # --- CORS ---
+    # Admin API endpoints are restricted to same-origin by default.
+    # /v1/* proxy endpoints remain open (Access-Control-Allow-Origin: *).
+    # The list of allowed origins for admin can be overridden via
+    # server.admin_cors_origins in config (default [] = same-origin only).
+    _admin_cors_origins: list[str] = getattr(config, "admin_cors_origins", []) or []
+
+    def _is_admin_path(path: str) -> bool:
+        return path.startswith("/admin/") or path == "/admin"
+
+    def _apply_cors(response: Any, origin: str | None) -> None:
+        """Set CORS headers on *response* for admin requests.
+
+        When *_admin_cors_origins* is non-empty the request Origin is reflected
+        only if it matches the allow-list; otherwise no CORS header is emitted
+        so browsers fall back to same-origin behaviour.
+        """
+        if _admin_cors_origins and origin and origin in _admin_cors_origins:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Vary"] = "Origin"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+        # Default: no header -> same-origin only (browser blocks cross-origin).
+
     @app.after_request
     async def add_cors_headers(request: Any, response: Any) -> Any:
-        response.headers["Access-Control-Allow-Origin"] = "*"
-        response.headers["Access-Control-Allow-Methods"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        # Prevent reverse-proxy caching of admin API responses (e.g. Caddy/Souin).
-        # Uses the full directive set that Souin recognises as NO-STORE-DIRECTIVE.
-        if request.path.startswith("/admin/api/"):
-            response.headers.setdefault(
-                "Cache-Control", "no-cache, no-store, must-revalidate"
-            )
+        if _is_admin_path(request.path):
+            # Restricted CORS for admin endpoints: same-origin only by default,
+            # or explicit allow-list via server.admin_cors_origins.
+            _apply_cors(response, request.headers.get("origin"))
+            # Prevent reverse-proxy caching of admin API responses (e.g. Caddy/Souin).
+            # Uses the full directive set that Souin recognises as NO-STORE-DIRECTIVE.
+            if request.path.startswith("/admin/api/"):
+                response.headers.setdefault(
+                    "Cache-Control", "no-cache, no-store, must-revalidate"
+                )
+        else:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
         return response
 
     @app.route("/<path:_path>", methods=["OPTIONS"])
     async def cors_preflight(request: Any, _path: str = "") -> Response:
-        return Response(body=b"", status_code=204)
+        resp = Response(body=b"", status_code=204)
+        if not _is_admin_path(request.path):
+            resp.headers["Access-Control-Allow-Origin"] = "*"
+            resp.headers["Access-Control-Allow-Methods"] = "*"
+            resp.headers["Access-Control-Allow-Headers"] = "*"
+        else:
+            _apply_cors(resp, request.headers.get("origin"))
+        return resp
 
     @app.errorhandler(404)
     async def handle_404(request: Any, exc: Any) -> Response:
         resp = JSONResponse({"error": "Not Found"}, status_code=404)
-        resp.headers["Access-Control-Allow-Origin"] = "*"
+        if not _is_admin_path(request.path):
+            resp.headers["Access-Control-Allow-Origin"] = "*"
         return resp
 
     @app.errorhandler(405)
     async def handle_405(request: Any, exc: Any) -> Response:
         resp = JSONResponse({"error": "Method Not Allowed"}, status_code=405)
-        resp.headers["Access-Control-Allow-Origin"] = "*"
+        if not _is_admin_path(request.path):
+            resp.headers["Access-Control-Allow-Origin"] = "*"
         return resp
 
     # --- Admin routes ---
