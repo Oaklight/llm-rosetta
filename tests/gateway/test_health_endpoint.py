@@ -240,7 +240,7 @@ class TestHandleHealthFunction:
         assert "providers" in body
         assert "myargo" in body["providers"]
 
-    def test_health_returns_503_for_critical_provider(self):
+    def test_health_returns_200_degraded_for_critical_provider(self):
         import json
 
         m = MetricsCollector()
@@ -259,7 +259,7 @@ class TestHandleHealthFunction:
         req = _FakeRequest(metrics=m)
         resp = _run(self.handle_health(req))
         body = json.loads(resp.body)
-        assert resp.status_code == 503
+        assert resp.status_code == 200  # /health always 200; use /health/ready for 503
         assert body["status"] == "degraded"
 
     def test_health_live_always_200(self):

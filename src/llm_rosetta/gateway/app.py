@@ -339,8 +339,9 @@ async def handle_list_models_google(request: Any) -> Response:
 async def handle_health(request: Any) -> Response:
     """Return operational metrics and per-provider health status.
 
-    Returns HTTP 503 if any provider is critically unhealthy
-    (success_rate < 0.5 over the last 100 requests with ≥ 10 samples).
+    Always returns HTTP 200. Use ``status: "degraded"`` in the payload
+    to signal provider issues without breaking existing monitors.
+    For a 503-on-unhealthy probe use ``/health/ready``.
     """
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
@@ -362,7 +363,7 @@ async def handle_health(request: Any) -> Response:
         "errors_last_hour": errors_last_hour,
         "providers": provider_health,
     }
-    return JSONResponse(payload, status_code=503 if critical else 200)
+    return JSONResponse(payload, status_code=200)
 
 
 async def handle_health_live(request: Any) -> Response:
