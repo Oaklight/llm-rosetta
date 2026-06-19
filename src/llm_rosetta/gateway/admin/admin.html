@@ -676,11 +676,14 @@ body { padding-bottom: 26px; }
     <div class="form-group">
       <label data-i18n="label.apiKey">API Key (or ${ENV_VAR} placeholder)</label>
       <div style="display:flex;gap:4px;align-items:center" id="provApiKeyRow">
-        <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1" onpaste="setTimeout(()=>_syncKeyField(),0)">
-        <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-        <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1" oninput="_syncKeyField()" onpaste="setTimeout(()=>_syncKeyField(),0)">
       </div>
       <div id="provApiKeyMultiBox" style="display:none"></div>
+      <div class="multi-key-footer" id="provApiKeySingleFooter">
+        <button type="button" class="btn btn-sm" onclick="_promoteToMultiKey()">+ <span data-i18n="label.addKey">Add key</span></button>
+        <button type="button" class="key-btn" id="provKeyToggleBtn" title="Toggle visibility" onclick="toggleModalKeyVisibility()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button type="button" class="key-btn" id="provKeyCopyBtn" title="Copy" onclick="copyModalKey()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+      </div>
     </div>
     <div class="form-group">
       <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
@@ -1910,11 +1913,20 @@ function _syncKeyField() {
   // In multi mode, _syncKeyField is a no-op (entries manage themselves)
 }
 
+function _promoteToMultiKey() {
+  const input = document.getElementById('provApiKey');
+  const currentKey = input.value.trim();
+  const keys = currentKey ? [currentKey, ''] : ['', ''];
+  _showMultiKeyUI(keys);
+  // Focus the new empty entry
+  const inputs = document.querySelectorAll('#provApiKeyMultiBox .multi-key-row input');
+  if (inputs.length > 1) inputs[inputs.length - 1].focus();
+}
+
 function _showMultiKeyUI(keys) {
-  const row = document.getElementById('provApiKeyRow');
-  const box = document.getElementById('provApiKeyMultiBox');
-  row.style.display = 'none';
-  box.style.display = '';
+  document.getElementById('provApiKeyRow').style.display = 'none';
+  document.getElementById('provApiKeySingleFooter').style.display = 'none';
+  document.getElementById('provApiKeyMultiBox').style.display = '';
   _keyFieldIsMulti = true;
   _keyFieldVisible = document.getElementById('provApiKey').type === 'text';
   _renderMultiKeys(keys);
@@ -1968,6 +1980,7 @@ function _removeKeyEntry(idx) {
     input.value = keys[0] || '';
     input.type = _keyFieldVisible ? 'text' : 'password';
     document.getElementById('provApiKeyRow').style.display = '';
+    document.getElementById('provApiKeySingleFooter').style.display = '';
     document.getElementById('provApiKeyMultiBox').style.display = 'none';
     _keyFieldIsMulti = false;
   } else {
@@ -1976,11 +1989,10 @@ function _removeKeyEntry(idx) {
 }
 
 function _resetKeyField() {
-  const row = document.getElementById('provApiKeyRow');
-  const box = document.getElementById('provApiKeyMultiBox');
-  row.style.display = '';
-  box.style.display = 'none';
-  box.innerHTML = '';
+  document.getElementById('provApiKeyRow').style.display = '';
+  document.getElementById('provApiKeySingleFooter').style.display = '';
+  document.getElementById('provApiKeyMultiBox').style.display = 'none';
+  document.getElementById('provApiKeyMultiBox').innerHTML = '';
   _keyFieldIsMulti = false;
   _keyFieldVisible = false;
 }
