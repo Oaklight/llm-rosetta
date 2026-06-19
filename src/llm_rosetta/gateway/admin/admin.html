@@ -158,15 +158,22 @@ tr:hover td { background: var(--bg-hover); }
 .provider-card.disabled { opacity: 0.5; }
 .provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
-/* List view */
-.provider-grid.list-view { grid-template-columns: 1fr; gap: 8px; }
+/* List view — CSS grid for column alignment across rows */
+.provider-grid.list-view { grid-template-columns: 1fr; gap: 4px; }
 .provider-grid.list-view .provider-card {
-  display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+  display: grid;
+  grid-template-columns: minmax(140px, 1.2fr) minmax(80px, 0.8fr) minmax(100px, 1.2fr) minmax(80px, 1fr) auto;
+  align-items: center; gap: 4px 12px; padding: 8px 16px;
 }
-.provider-grid.list-view .provider-card .card-header { margin-bottom: 0; min-width: 180px; flex-shrink: 0; }
-.provider-grid.list-view .provider-card .field { display: inline; margin-bottom: 0; margin-right: 12px; }
-.provider-grid.list-view .provider-card .field code { max-width: 160px; }
-.provider-grid.list-view .provider-card .actions { margin-top: 0; margin-left: auto; flex-shrink: 0; }
+.provider-grid.list-view .provider-card .card-header { margin-bottom: 0; overflow: hidden; }
+.provider-grid.list-view .provider-card .card-header .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.provider-grid.list-view .provider-card .field {
+  margin-bottom: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.provider-grid.list-view .provider-card .field code {
+  max-width: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.provider-grid.list-view .provider-card .actions { margin-top: 0; justify-self: end; white-space: nowrap; }
 /* View toggle buttons */
 .view-toggle { display:inline-flex;gap:2px;margin-left:8px; }
 .view-toggle .btn { padding:4px 6px; }
@@ -414,7 +421,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   .content { padding: 16px; }
   .chart-row { grid-template-columns: 1fr; }
   .provider-grid { grid-template-columns: 1fr; }
-  .provider-grid.list-view .provider-card { flex-wrap: wrap; }
+  .provider-grid.list-view .provider-card { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .section-header { flex-wrap: wrap; gap: 8px; }
@@ -511,17 +518,15 @@ body { padding-bottom: 26px; }
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
-        <div style="display:flex;align-items:center;gap:6px">
-          <div class="view-toggle">
-            <button class="btn btn-sm active" id="viewGridBtn" onclick="setProviderView('grid')" data-i18n-title="label.gridView" title="Grid view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
-            <button class="btn btn-sm" id="viewListBtn" onclick="setProviderView('list')" data-i18n-title="label.listView" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
-          </div>
-          <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
-        </div>
       </div>
-      <div class="provider-toolbar" id="providerToolbar" style="display:none">
-        <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders">
+      <div class="provider-toolbar" id="providerToolbar">
+        <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders" style="display:none">
         <span class="provider-count" id="providerCount"></span>
+        <div class="view-toggle">
+          <button class="btn btn-sm active" id="viewGridBtn" onclick="setProviderView('grid')" data-i18n-title="label.gridView" title="Grid view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></button>
+          <button class="btn btn-sm" id="viewListBtn" onclick="setProviderView('list')" data-i18n-title="label.listView" title="List view"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="openProviderModal()" data-i18n="btn.addProvider">+ Add Provider</button>
       </div>
       <div class="provider-grid" id="providerGrid"></div>
     </div>
@@ -1035,46 +1040,46 @@ const I18N = {
   },
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
-    'tab.providers':'\u670d\u52a1\u5546', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
+    'tab.providers':'\u670d\u52a1\u65b9', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
     'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
-    'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u5546', 'section.models':'\u6a21\u578b\u8def\u7531',
+    'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u65b9', 'section.models':'\u6a21\u578b\u8def\u7531',
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
-    'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u5546\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
+    'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u65b9\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
     'modal.settings':'\u8bbe\u7f6e', 'label.theme':'\u4e3b\u9898', 'label.language':'\u8bed\u8a00', 'theme.light':'\u6d45\u8272', 'theme.dark':'\u6df1\u8272',
     'btn.save':'\u4fdd\u5b58', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
-    'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u5546', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
+    'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u65b9', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
     'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.rotate':'\u8f6e\u6362', 'btn.resetFilters':'\u91cd\u7f6e\u8fc7\u6ee4\u5668',
     'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
-    'label.providerName':'\u670d\u52a1\u5546\u540d\u79f0', 'label.providerType':'\u670d\u52a1\u5546\u7c7b\u578b',
+    'label.providerName':'\u670d\u52a1\u65b9\u540d\u79f0', 'label.providerType':'\u670d\u52a1\u65b9\u7c7b\u578b',
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
     'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
-    'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u5546', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b',
+    'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u65b9', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b',
     'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)', 'label.inherited':'\u7ee7\u627f',
-    'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u5546', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u5546',
+    'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u65b9', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u65b9',
     'modal.addModel':'\u6dfb\u52a0\u6a21\u578b', 'modal.editModel':'\u7f16\u8f91\u6a21\u578b',
-    'col.model':'\u6a21\u578b', 'col.provider':'\u670d\u52a1\u5546', 'col.time':'\u65f6\u95f4',
+    'col.model':'\u6a21\u578b', 'col.provider':'\u670d\u52a1\u65b9', 'col.time':'\u65f6\u95f4',
     'col.sourceTarget':'\u6765\u6e90 \u2192 \u76ee\u6807', 'col.mode':'\u6a21\u5f0f',
     'col.status':'\u72b6\u6001', 'col.duration':'\u8017\u65f6', 'col.requests':'\u8bf7\u6c42\u6570',
     'stat.totalRequests':'\u603b\u8bf7\u6c42\u6570', 'stat.errorRate':'\u9519\u8bef\u7387',
     'stat.activeStreams':'\u6d3b\u8dc3\u6d41', 'stat.uptime':'\u8fd0\u884c\u65f6\u95f4',
     'chart.throughput':'\u541e\u5410\u91cf (req/s)', 'chart.latency':'\u5ef6\u8fdf (ms)',
-    'section.breakdown':'\u670d\u52a1\u5546\u7edf\u8ba1',
-    'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u5546',
+    'section.breakdown':'\u670d\u52a1\u65b9\u7edf\u8ba1',
+    'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u65b9',
     'filter.allStatus':'\u5168\u90e8\u72b6\u6001', 'filter.ok':'\u6b63\u5e38 (2xx/3xx)', 'filter.error':'\u9519\u8bef (4xx/5xx)',
     'test.text':'\u7b80\u5355\u6587\u672c', 'test.stream':'\u6d41\u5f0f',
     'test.tools':'\u51fd\u6570\u8c03\u7528', 'test.vision':'\u56fe\u50cf\u7406\u89e3', 'test.embedding':'Embedding', 'test.reasoning':'\u63a8\u7406',
-    'empty.providers':'\u6682\u65e0\u670d\u52a1\u5546\u914d\u7f6e\u3002', 'empty.models':'\u6682\u65e0\u6a21\u578b\u914d\u7f6e\u3002',
+    'empty.providers':'\u6682\u65e0\u670d\u52a1\u65b9\u914d\u7f6e\u3002', 'empty.models':'\u6682\u65e0\u6a21\u578b\u914d\u7f6e\u3002',
     'empty.logs':'\u6682\u65e0\u8bf7\u6c42\u8bb0\u5f55', 'empty.data':'\u6682\u65e0\u6570\u636e',
     'toast.serverSaved':'\u670d\u52a1\u5668\u8bbe\u7f6e\u5df2\u4fdd\u5b58',
-    'toast.providerSaved':"\u670d\u52a1\u5546 '{name}' \u5df2\u4fdd\u5b58",
-    'toast.providerDeleted':"\u670d\u52a1\u5546 '{name}' \u5df2\u5220\u9664",
+    'toast.providerSaved':"\u670d\u52a1\u65b9 '{name}' \u5df2\u4fdd\u5b58",
+    'toast.providerDeleted':"\u670d\u52a1\u65b9 '{name}' \u5df2\u5220\u9664",
     'provider.enabled':'\u5df2\u542f\u7528', 'provider.disabled':'\u5df2\u7981\u7528',
     'toast.modelSaved':"\u6a21\u578b '{name}' \u5df2\u4fdd\u5b58",
     'toast.modelDeleted':"\u6a21\u578b '{name}' \u5df2\u5220\u9664",
-    'confirm.deleteProvider':"\u786e\u5b9a\u5220\u9664\u670d\u52a1\u5546 '{name}'\uff1f",
-    'confirm.deleteProviderTitle':'\u5220\u9664\u670d\u52a1\u5546',
+    'confirm.deleteProvider':"\u786e\u5b9a\u5220\u9664\u670d\u52a1\u65b9 '{name}'\uff1f",
+    'confirm.deleteProviderTitle':'\u5220\u9664\u670d\u52a1\u65b9',
     'confirm.typeToConfirm':"\u8bf7\u8f93\u5165 {name} \u4ee5\u786e\u8ba4\u5220\u9664",
     'confirm.cascadeWarning':'\u4ee5\u4e0b {count} \u4e2a\u6a21\u578b\u4e5f\u5c06\u88ab\u5220\u9664\uff1a',
     'confirm.deleteModel':"\u786e\u5b9a\u5220\u9664\u6a21\u578b '{name}'\uff1f",
@@ -1087,13 +1092,13 @@ const I18N = {
     'diag.host':'\u4e3b\u673a IP', 'diag.ip':'IP \u5f52\u5c5e', 'diag.google':'Google', 'diag.runDiag':'\u7f51\u7edc\u8bca\u65ad',
     'diag.testing':'\u68c0\u6d4b\u4e2d...', 'diag.unknown':'\u672a\u77e5', 'diag.direct':'\u76f4\u8fde\uff0c\u672a\u4f7f\u7528\u4ee3\u7406',
     'label.searchModels':'\u641c\u7d22\u6a21\u578b...',
-    'label.searchProviders':'\u641c\u7d22\u670d\u52a1\u5546...',
+    'label.searchProviders':'\u641c\u7d22\u670d\u52a1\u65b9...',
     'label.keyCount':'{count} \u4e2a\u5bc6\u94a5\uff08\u8f6e\u8f6c\uff09',
     'label.addKey':'\u6dfb\u52a0\u5bc6\u94a5',
     'label.gridView':'\u7f51\u683c\u89c6\u56fe', 'label.listView':'\u5217\u8868\u89c6\u56fe',
     'model.count':'{shown} / {total} \u4e2a\u6a21\u578b',
-    'provider.count':'{shown} / {total} \u4e2a\u670d\u52a1\u5546',
-    'provider.countTotal':'{total} \u4e2a\u670d\u52a1\u5546',
+    'provider.count':'{shown} / {total} \u4e2a\u670d\u52a1\u65b9',
+    'provider.countTotal':'{total} \u4e2a\u670d\u52a1\u65b9',
     'empty.searchResults':'\u65e0\u5339\u914d\u7ed3\u679c\u3002',
     'section.apiKeys':'API \u5bc6\u94a5',
     'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
@@ -1113,18 +1118,18 @@ const I18N = {
     'toast.copied':'\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
     'confirm.deleteKey':"\u786e\u5b9a\u5220\u9664 API \u5bc6\u94a5 '{label}'\uff1f",
     'filter.allKeys':'\u5168\u90e8\u5bc6\u94a5',
-    'btn.fetchModels':'\u2B07 \u4ece\u670d\u52a1\u5546\u83b7\u53d6',
+    'btn.fetchModels':'\u2B07 \u4ece\u670d\u52a1\u65b9\u83b7\u53d6',
     'btn.selectAll':'\u5168\u9009', 'btn.deselectAll':'\u5168\u4e0d\u9009',
     'btn.addSelected':'\u6dfb\u52a0\u5df2\u9009',
-    'modal.fetchModels':'\u4ece\u670d\u52a1\u5546\u83b7\u53d6\u6a21\u578b',
-    'label.selectProvider':'\u9009\u62e9\u670d\u52a1\u5546',
+    'modal.fetchModels':'\u4ece\u670d\u52a1\u65b9\u83b7\u53d6\u6a21\u578b',
+    'label.selectProvider':'\u9009\u62e9\u670d\u52a1\u65b9',
     'label.modelPrefix':'\u524d\u7f00\uff1a',
     'label.modelType':'\u6a21\u578b\u7c7b\u578b',
     'label.llm':'LLM',
     'label.embedding':'Embedding',
     'fetch.loading':'\u6b63\u5728\u83b7\u53d6\u6a21\u578b...',
     'fetch.count':'{checked} / {total} \u5df2\u9009',
-    'fetch.noModels':'\u672a\u4ece\u8be5\u670d\u52a1\u5546\u627e\u5230\u6a21\u578b\u3002',
+    'fetch.noModels':'\u672a\u4ece\u8be5\u670d\u52a1\u65b9\u627e\u5230\u6a21\u578b\u3002',
     'toast.modelsAdded':'\u5df2\u6dfb\u52a0 {count} \u4e2a\u6a21\u578b',
     'toast.modelsRemoved':'\u5df2\u79fb\u9664 {count} \u4e2a\u6a21\u578b',
     'toast.modelsAllExist':'\u6240\u6709\u5df2\u9009\u6a21\u578b\u5747\u5df2\u5b58\u5728',
@@ -1588,9 +1593,8 @@ function renderProviders() {
   const allEntries = Object.entries(providers);
   const totalCount = allEntries.length;
 
-  // Show/hide search toolbar when > 6 providers
-  const toolbar = document.getElementById('providerToolbar');
-  toolbar.style.display = totalCount > 6 ? '' : 'none';
+  // Show search input only when > 6 providers
+  document.getElementById('providerSearch').style.display = totalCount > 6 ? '' : 'none';
 
   // Apply view mode class
   grid.classList.toggle('list-view', _providerViewMode === 'list');
@@ -1632,11 +1636,21 @@ function renderProviders() {
     return;
   }
 
+  const isList = _providerViewMode === 'list';
   grid.innerHTML = entries.map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
     const logo = shimLogo[typeName];
     const logoHtml = logo ? `<img class="provider-logo" src="${esc(logo)}" alt="">` : '';
+    // In list view, always output fixed columns (Type, Base URL, API Key) for alignment
+    const fieldsHtml = isList
+      ? `<div class="field" title="Type: ${esc(typeName)}"><code>${esc(typeName)}</code></div>
+         <div class="field" title="${esc(cfg.base_url || '')}"><code>${esc(cfg.base_url || '')}</code></div>
+         ${_credentialVisible ? `<div class="field" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>` : '<div class="field"></div>'}`
+      : `<div class="field">Type: <code>${esc(typeName)}</code></div>
+         <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
+         ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
+         ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}`;
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}">
       <div class="card-header">
@@ -1646,10 +1660,7 @@ function renderProviders() {
           <span class="slider"></span>
         </label>
       </div>
-      <div class="field">Type: <code>${esc(typeName)}</code></div>
-      <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-      ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
-      ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
+      ${fieldsHtml}
       <div class="actions">
         <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
