@@ -8,6 +8,30 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Admin panel provider UX enhancements** ([#292](https://github.com/Oaklight/llm-rosetta/pull/292)): Three improvements to the provider tab:
+    - **Multi-key entry list**: API key field auto-detects comma-separated keys (rotation) and switches to multiple `<input type="password">` entries. `+ Add key` button always visible for manual promotion. Eye toggle and copy button in unified footer
+    - **Provider search bar**: appears when provider count exceeds 6, filters by name, type, and base URL
+    - **Grid/list view toggle**: two icon buttons switch between card grid and compact single-column list view. Preference persisted in localStorage
+- **Request ID propagation** ([#296](https://github.com/Oaklight/llm-rosetta/pull/296), [#122](https://github.com/Oaklight/llm-rosetta/issues/122)): Every proxy request generates or honours an `X-Request-ID` header. Propagated to upstream providers, included in all response headers (including error responses), and logged with `[request_id]` prefix for end-to-end traceability
+- **Enhanced health check endpoints** ([#297](https://github.com/Oaklight/llm-rosetta/pull/297), [#127](https://github.com/Oaklight/llm-rosetta/issues/127)):
+    - `/health` — returns uptime, request counts, errors in the last hour, and per-provider health snapshot (success rate, avg latency, last error). Always HTTP 200; `status` field shows `"ok"` or `"degraded"`
+    - `/health/live` — always 200 (Kubernetes liveness probe)
+    - `/health/ready` — 200 when all providers healthy, 503 when any provider is critically unhealthy (Kubernetes readiness probe)
+- **CORS restriction on admin API** ([#294](https://github.com/Oaklight/llm-rosetta/pull/294), [#233](https://github.com/Oaklight/llm-rosetta/issues/233)): `/admin/api/*` endpoints no longer send `Access-Control-Allow-Origin: *`. New config option `server.admin_cors_origins` (list, default `[]`) allows explicit origin allow-listing. `/v1/*` proxy endpoints unchanged
+- **Image count enforcement via shim** ([#301](https://github.com/Oaklight/llm-rosetta/pull/301), [#299](https://github.com/Oaklight/llm-rosetta/issues/299)): `ProviderShim` gains `max_images` and `max_images_pattern` fields. When set, images exceeding the limit are replaced with text placeholders (oldest first, most recent kept). Argo OpenAI shim declares `max_images: 50` with pattern `^(gpt|o\d)` — only GPT/o models are truncated; Gemini and Claude through the same provider pass through unaffected
+
+### Changed
+
+- **Admin panel i18n**: Chinese translation updated from "服务商" to "服务方" (more neutral for mixed commercial and self-hosted providers)
+- **Request log timestamps** ([#298](https://github.com/Oaklight/llm-rosetta/pull/298)): Now show date and time (e.g. "06/19, 20:25:29") instead of time only
+
+### Fixed
+
+- **Admin panel auth flash** ([#291](https://github.com/Oaklight/llm-rosetta/pull/291)): Eliminated flash of unauthenticated content when `admin_password` is configured. Main UI is hidden via CSS (`body.auth-pending`) until the async auth check completes
+- **Admin password unresolved env var** ([#293](https://github.com/Oaklight/llm-rosetta/pull/293)): Gateway now refuses to start if `admin_password` contains an unresolved `${...}` placeholder, preventing a predictable literal string from being used as the password
+
 ## v0.6.10 — 2026-06-18
 
 ### Added
