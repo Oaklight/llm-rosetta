@@ -30,6 +30,18 @@ Each provider card shows its name, API standard type (or shim name), base URL, m
 
 When editing, API keys are shown as a password field with a visibility toggle and copy button. Masked keys displayed on cards are never written back to the config file.
 
+#### API Key Multi-Entry
+
+The API key field auto-detects comma-separated values and switches to a multi-entry list with individual password inputs, one per key. An **+ Add key** button is always visible to append additional keys. Each row has an eye toggle and copy button; the modal footer provides combined view-all and copy-all actions for the full comma-separated value.
+
+#### Provider Search
+
+When more than 6 providers are configured, a search bar appears at the top of the providers section. It filters providers in real time by name, type/shim, or base URL.
+
+#### Grid / List View
+
+Two icon buttons in the providers header let you switch between **grid** (card) and **list** (compact row) layout. The selected view is persisted in `localStorage`.
+
 ### Model Routing
 
 Below the providers section, a model routing table lists all configured models with their target provider and capabilities. You can:
@@ -129,7 +141,7 @@ Each entry includes:
 
 | Column | Description |
 |--------|-------------|
-| Time | Request timestamp |
+| Time | Request timestamp (date and time) |
 | Model | Model name from the request |
 | Source -> Target | Source API format and target provider |
 | Mode | Streaming or non-streaming |
@@ -177,6 +189,9 @@ See [Configuration — Admin Panel Security](configuration.md#admin-panel-securi
 
 When password protection is enabled:
 
+!!! info "No content flash"
+    While the browser verifies your stored session token, the admin UI remains hidden (`body.auth-pending`) until authentication is confirmed. This prevents a brief flash of the full interface before the login overlay appears.
+
 - The login token is stored in `localStorage`, so your session survives browser restarts — not just the current tab.
 - A **Logout** button appears in the top-right corner to end your session manually.
 - Sessions automatically expire after **30 minutes of inactivity**. Mouse movement, keyboard input, scrolling, and clicks all count as activity.
@@ -193,6 +208,9 @@ The gateway API key (configured via `server.api_key`) only protects AI request e
 ## Internationalization
 
 The admin panel supports English and Chinese (中文). Switch languages using the language dropdown in the top-right corner. The selection persists in `localStorage`.
+
+!!! note "Chinese label update"
+    The Chinese translation for "provider" was updated from **服务商** to **服务方** to better reflect the local usage convention.
 
 ## Data Persistence
 

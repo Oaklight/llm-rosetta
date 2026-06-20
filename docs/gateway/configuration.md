@@ -43,6 +43,26 @@ Built-in shims: `openai`, `openai_responses`, `anthropic`, `google`, `deepseek`,
 
 You can also register custom shims programmatically via `register_shim()`.
 
+### Image Count Limits
+
+Shims support `max_images` and `max_images_pattern` fields to enforce per-model image count limits:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `max_images` | int | Maximum number of images allowed per request |
+| `max_images_pattern` | str | Regex applied to the model name; the limit is only enforced for models whose names match the pattern |
+
+When a request exceeds the limit, the oldest images are replaced with a text placeholder. If `max_images_pattern` is set, only matching model names are subject to the limit — others pass through unchanged.
+
+**Example — built-in Argo OpenAI shim:**
+
+The built-in Argo OpenAI shim declares `max_images: 50` with `max_images_pattern: "^(gpt|o\d)"`. This means:
+
+- GPT and o-series models: truncated to 50 images
+- Gemini and Claude models routed through the same provider: pass through unchanged
+
+You can declare equivalent limits in a custom shim registered via `register_shim()`.
+
 !!! tip "Resolution priority"
     The provider type resolution order is: `shim` → `type` → provider name (fallback).
 
@@ -193,6 +213,9 @@ Supports `${ENV_VAR}` substitution:
 !!! tip
     If you expose the gateway publicly, setting `admin_password` is strongly recommended to prevent unauthorized access to provider configuration and request logs.
 
+!!! warning "Unresolved placeholders"
+    If `admin_password` contains an unresolved `${ENV_VAR}` placeholder (because the environment variable was not set at startup), the gateway **refuses to start** and logs a clear error. This prevents accidentally using the literal string `${ADMIN_PASSWORD}` as the password.
+
 ### `credential_visible`
 
 Boolean, default `true`. When set to `false`, API key values are hidden across the admin UI — the copy and view controls are disabled. This is useful when the gateway is shared among multiple users and you want to prevent API keys from being read directly from the panel.
@@ -208,6 +231,23 @@ Boolean, default `true`. When set to `false`, API key values are hidden across t
 !!! note
     This setting controls UI visibility only. The keys are still used by the gateway for upstream requests; they are simply not surfaced in the admin interface.
 
+### `admin_cors_origins`
+
+List of allowed origins for cross-origin requests to the admin API (`/admin/api/*`). By default (empty list), no `Access-Control-Allow-Origin` header is sent — only same-origin requests are permitted.
+
+To allow a specific origin:
+
+```jsonc
+{
+  "server": {
+    "admin_cors_origins": ["https://my-dashboard.example.com"]
+  }
+}
+```
+
+!!! note
+    CORS tightening applies to `/admin/api/*` endpoints only. The `/v1/*` proxy endpoints are unaffected.
+
 ## Debug Options
 
 ```jsonc
@@ -220,6 +260,43 @@ Boolean, default `true`. When set to `false`, API key values are hidden across t
 ```
 
 These can also be set via environment variables: `LLM_ROSETTA_VERBOSE=1`, `LLM_ROSETTA_LOG_BODIES=1`.
+
+## Request Tracing
+
+Every proxy request is assigned an `X-Request-ID` header. If the incoming request already carries this header, its value is preserved; otherwise a new UUID is generated. The header is:
+
+- Forwarded to the upstream provider
+- Included in all response headers (including error responses)
+- Logged with a `[request_id]` prefix for end-to-end traceability
+
+No configuration is required — request ID propagation is always active.
+
+## Health Check Endpoints
+
+The gateway exposes three health check endpoints:
+
+| Endpoint | HTTP status | Description |
+|----------|------------|-------------|
+| `/health` | Always 200 | Gateway status: uptime, request counts, errors in the last hour, and per-provider health |
+| `/health/live` | Always 200 | Kubernetes liveness probe — confirms the process is running |
+| `/health/ready` | 200 / 503 | Kubernetes readiness probe — 503 when any provider is degraded |
+
+Example `/health` response:
+
+```json
+{
+  "status": "ok",
+  "uptime": 3600.5,
+  "requests_total": 1234,
+  "errors_last_hour": 2,
+  "providers": {
+    "openai-prod":    { "status": "ok" },
+    "anthropic-prod": { "status": "ok" }
+  }
+}
+```
+
+The `status` field is `"ok"` when all providers are healthy, or `"degraded"` when one or more providers are experiencing errors.
 
 ## Full Example
 
@@ -245,7 +322,8 @@ These can also be set via environment variables: `LLM_ROSETTA_VERBOSE=1`, `LLM_R
     "port": 8765,
     "api_key": "${GATEWAY_API_KEY}",
     "admin_password": "${ADMIN_PASSWORD}",
-    "credential_visible": false
+    "credential_visible": false,
+    "admin_cors_origins": []
   }
 }
 ```
