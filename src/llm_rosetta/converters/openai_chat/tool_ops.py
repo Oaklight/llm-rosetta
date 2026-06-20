@@ -24,7 +24,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import log_orphan_warnings, sanitize_schema
+from ..base.helpers import log_orphan_warnings, sanitize_schema
 
 logger = logging.getLogger(__name__)
 

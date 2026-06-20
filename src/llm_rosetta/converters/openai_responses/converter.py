@@ -37,7 +37,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,

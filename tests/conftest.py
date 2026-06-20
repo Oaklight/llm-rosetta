@@ -11,7 +11,7 @@ def _clear_tool_conversion_caches():
     would silently corrupt the cache in production).  Then clears all
     caches for the next test.
     """
-    from llm_rosetta.converters.base.cache import (
+    from llm_rosetta.converters.base.helpers.cache import (
         clear_all_caches,
         ir_validation_cache,
         sanitize_cache,

@@ -48,7 +48,7 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.tools import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,

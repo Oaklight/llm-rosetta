@@ -10,7 +10,7 @@ structural integrity (see llm-rosetta#87):
 
 from typing import cast
 
-from llm_rosetta.converters.base.tools import strip_orphaned_tool_config
+from llm_rosetta.converters.base.helpers import strip_orphaned_tool_config
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.google_genai.converter import GoogleGenAIConverter
 from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter

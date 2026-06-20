@@ -10,7 +10,7 @@ import copy
 import pytest
 
 from llm_rosetta.converters.anthropic import AnthropicConverter
-from llm_rosetta.converters.base.cache import (
+from llm_rosetta.converters.base.helpers.cache import (
     cache_info,
     clear_all_caches,
 )

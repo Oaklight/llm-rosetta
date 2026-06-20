@@ -25,7 +25,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.tools import sanitize_schema
+from ..base.helpers import sanitize_schema
 from ._constants import generate_tool_call_id
 
 

@@ -17,7 +17,15 @@ src/llm_rosetta/converters/base/
 ├── tools.py         # BaseToolOps — tool conversion (definition, choice, call, result, config)
 ├── messages.py      # BaseMessageOps — message conversion (batch/single messages, validation)
 ├── configs.py       # BaseConfigOps — configuration conversion (generation, response_format, stream, reasoning, cache)
-└── converter.py     # BaseConverter — top-level converter (composes ops classes via class attributes)
+├── converter.py     # BaseConverter — top-level converter (composes ops classes via class attributes)
+├── context.py       # ConversionContext / StreamContext — conversion state management
+└── helpers/         # IR-level utility functions (provider-agnostic)
+    ├── cache.py         # LRU cache for tool definition conversion results
+    ├── schema.py        # JSON Schema sanitization for provider compatibility
+    ├── tool_content.py  # Multimodal content block conversion inside tool results
+    ├── orphan_fix.py    # Fix mismatched tool_call / tool_result pairing
+    ├── image_limit.py   # Truncate images to provider-declared limits
+    └── tool_call_unwind.py  # Unwind parallel tool calls into sequential pairs
 ```
 
 ## Architecture: Bottom-Up Ops Pattern

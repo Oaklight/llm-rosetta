@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from llm_rosetta.converters.base.cache import (
+from llm_rosetta.converters.base.helpers.cache import (
     DEFAULT_TTL,
     LRUCache,
     _SENTINEL,
@@ -208,12 +208,13 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=10.0)
         base_time = 1000.0
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic", return_value=base_time
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
+            return_value=base_time,
         ):
             cache.put(1, "a")
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 10.0,
         ):
             assert cache.get(1) is _SENTINEL
@@ -226,18 +227,19 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=10.0)
         base_time = 1000.0
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic", return_value=base_time
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
+            return_value=base_time,
         ):
             cache.put(1, "a")
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 8.0,
         ):
             cache.put(1, "b")
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 15.0,
         ):
             assert cache.get(1) == "b"
@@ -247,25 +249,25 @@ class TestLRUCache:
         cache = LRUCache(maxsize=4, ttl=10.0)
         base_time = 1000.0
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time,
         ):
             cache.put(1, "a")
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 8.0,
         ):
             assert cache.get(1) == "a"
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 15.0,
         ):
             assert cache.get(1) == "a"
 
         with patch(
-            "llm_rosetta.converters.base.cache.time.monotonic",
+            "llm_rosetta.converters.base.helpers.cache.time.monotonic",
             return_value=base_time + 26.0,
         ):
             assert cache.get(1) is _SENTINEL
@@ -360,7 +362,7 @@ class TestIRValidationHelpers:
 
 class TestModuleSingletons:
     def test_clear_all_caches(self):
-        from llm_rosetta.converters.base.cache import (
+        from llm_rosetta.converters.base.helpers.cache import (
             ir_validation_cache,
             sanitize_cache,
             tool_entry_cache,

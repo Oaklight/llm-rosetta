@@ -17,7 +17,15 @@ src/llm_rosetta/converters/base/
 ├── tools.py         # BaseToolOps — 工具转换（definition, choice, call, result, config）
 ├── messages.py      # BaseMessageOps — 消息转换（批量/单个消息，验证）
 ├── configs.py       # BaseConfigOps — 配置转换（generation, response_format, stream, reasoning, cache）
-└── converter.py     # BaseConverter — 主转换器（通过类属性组合 ops 类）
+├── converter.py     # BaseConverter — 主转换器（通过类属性组合 ops 类）
+├── context.py       # ConversionContext / StreamContext — 转换状态管理
+└── helpers/         # IR 级别工具函数（provider 无关）
+    ├── cache.py         # 工具定义转换结果 LRU 缓存
+    ├── schema.py        # JSON Schema 清洗，确保 provider 兼容性
+    ├── tool_content.py  # 工具结果中的多模态内容块转换
+    ├── orphan_fix.py    # 修复 tool_call / tool_result 配对不匹配
+    ├── image_limit.py   # 按 provider 声明限制截断图片数量
+    └── tool_call_unwind.py  # 将并行工具调用展开为顺序调用对
 ```
 
 ## 架构：Bottom-Up Ops Pattern

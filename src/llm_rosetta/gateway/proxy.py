@@ -402,7 +402,7 @@ def _apply_image_limit(
 
         if not upstream_model or not re.search(shim.max_images_pattern, upstream_model):
             return ir_request
-    from llm_rosetta.converters.base.image_limit import truncate_images
+    from llm_rosetta.converters.base.helpers.image_limit import truncate_images
 
     return truncate_images(ir_request, shim.max_images, request_id=request_id)
 
@@ -435,7 +435,7 @@ def _apply_tool_call_unwind(
             shim.unwind_parallel_tool_calls_pattern, upstream_model
         ):
             return ir_request
-    from llm_rosetta.shims.providers.argo.utils.tool_call_unwind import (
+    from llm_rosetta.converters.base.helpers.tool_call_unwind import (
         unwind_parallel_tool_calls_ir,
     )
 

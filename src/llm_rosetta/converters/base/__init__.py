@@ -23,8 +23,9 @@ from .content import BaseContentOps  # noqa: F401
 from .context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
 from .messages import BaseMessageOps  # noqa: F401
-from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p  # noqa: F401
-from .schema import sanitize_schema  # noqa: F401
+from .helpers.tool_content import convert_content_blocks_to_ir  # noqa: F401
+from .helpers.tool_content import convert_ir_content_blocks_to_p  # noqa: F401
+from .helpers.schema import sanitize_schema  # noqa: F401
 from .tools import BaseToolOps  # noqa: F401
 
 __all__ = [

@@ -1,6 +1,6 @@
 """Tests for image truncation utility."""
 
-from llm_rosetta.converters.base.image_limit import truncate_images
+from llm_rosetta.converters.base.helpers.image_limit import truncate_images
 
 
 def _make_request(image_counts_per_message: list[int]) -> dict:
@@ -207,7 +207,7 @@ class TestApplyImageLimitPattern:
         """Drive truncation logic directly without a real shim registry."""
         import re
 
-        from llm_rosetta.converters.base.image_limit import truncate_images
+        from llm_rosetta.converters.base.helpers.image_limit import truncate_images
 
         if pattern is not None and not re.search(pattern, model):
             return req

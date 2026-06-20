@@ -1,17 +1,17 @@
 """Unwind parallel tool calls into sequential call-result pairs (IR level).
 
-The Argo gateway rejects requests where a single model turn contains
-multiple ``functionCall`` parts paired with separate ``functionResponse``
-turns.  This module converts parallel tool calls into sequential
-assistant+tool message pairs so that every assistant message contains
-exactly one tool call followed by its corresponding tool result.
+Some upstream gateways reject requests where a single model turn contains
+multiple tool calls paired with separate tool result messages.  This module
+converts parallel tool calls into sequential assistant+tool message pairs
+so that every assistant message contains exactly one tool call followed by
+its corresponding tool result.
 
 The algorithm operates on **IR messages** (``role: "assistant"`` with
 ``type: "tool_call"`` content parts, ``role: "tool"`` with
 ``type: "tool_result"`` content parts).
 
-Ported from argo-proxy ``utils/tool_calls.py`` (which operates on
-OpenAI Chat format).
+Enabled per-provider via ``ProviderShim.unwind_parallel_tool_calls`` and
+``unwind_parallel_tool_calls_pattern`` (model-scoped regex).
 """
 
 from __future__ import annotations

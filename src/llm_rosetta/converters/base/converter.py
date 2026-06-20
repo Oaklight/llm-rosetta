@@ -473,7 +473,7 @@ class BaseConverter(ABC):
         On partial/full hit, swaps the field with a placeholder so the
         main ``validate_ir_request`` pass skips it.
         """
-        from .cache import is_ir_validated
+        from .helpers.cache import is_ir_validated
 
         original = data.get(field)
         if not original:
@@ -518,7 +518,7 @@ class BaseConverter(ABC):
         if not self.validate_output:
             return cast(IRRequest, data)
 
-        from .cache import mark_ir_validated
+        from .helpers.cache import mark_ir_validated
 
         saved: dict[str, list[Any]] = {}
         newly_validated: list[tuple[str, Any]] = []
@@ -596,7 +596,7 @@ class BaseConverter(ABC):
         Returns:
             IR tool definition list.
         """
-        from .cache import _SENTINEL, get_cached_tool, put_cached_tool
+        from .helpers.cache import _SENTINEL, get_cached_tool, put_cached_tool
 
         tag = self._CONVERTER_TAG + ":from_p"
         ir_tools: list[Any] = []
@@ -651,7 +651,7 @@ class BaseConverter(ABC):
         Returns:
             Provider-format tool definition list.
         """
-        from .cache import _SENTINEL, get_cached_tool, put_cached_tool
+        from .helpers.cache import _SENTINEL, get_cached_tool, put_cached_tool
 
         tag = self._CONVERTER_TAG + ":to_p"
         results: list[Any] = []
