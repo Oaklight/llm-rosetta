@@ -132,9 +132,9 @@ def _find_matching_result(
 
 
 def _create_sequential_pairs(
-    tool_call_parts: list[dict[str, Any]],
+    tool_call_parts: list[Any],
     tool_messages: list[dict[str, Any]],
-    non_tool_call_parts: list[dict[str, Any]],
+    non_tool_call_parts: list[Any],
 ) -> list[dict[str, Any]]:
     """Convert parallel tool calls into sequential call-result pairs.
 
