@@ -24,6 +24,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **实验性扩展类型标记** ([#302](https://github.com/Oaklight/llm-rosetta/pull/302), [#71](https://github.com/Oaklight/llm-rosetta/issues/71))：`SystemEvent`、`BatchMarker`、`SessionControl`、`ToolChainNode` 从 `types.ir.extensions` 移至 `types.ir.extensions_experimental`。旧导入路径仍可用但会触发 `DeprecationWarning`。这些类型从默认 `types.ir` 命名空间移除，可通过 `from llm_rosetta.types.ir import experimental` 访问
 - **Admin 面板 i18n**：中文翻译从"服务商"更新为"服务方"（对混合商业和自建服务方更中性）
 - **请求日志时间戳** ([#298](https://github.com/Oaklight/llm-rosetta/pull/298))：现在显示日期和时间（如 "06/19, 20:25:29"），而非仅显示时间
 
