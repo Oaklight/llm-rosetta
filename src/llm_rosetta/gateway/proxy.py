@@ -379,17 +379,29 @@ def _resolve_target_transforms(
 
 
 def _apply_image_limit(
-    ir_request: dict,
+    ir_request: dict[str, Any],
     shim_name: str | None,
     *,
+    upstream_model: str | None = None,
     request_id: str = "-",
-) -> dict:
-    """Truncate images in *ir_request* if the target shim declares max_images."""
+) -> dict[str, Any]:
+    """Truncate images in *ir_request* if the target shim declares max_images.
+
+    When the shim also declares ``max_images_pattern``, truncation only fires
+    when *upstream_model* matches the pattern (re.search).  This allows a
+    single provider (e.g. Argo) to enforce limits only for the model families
+    that actually have them (e.g. gpt-*, o*) while leaving others untouched.
+    """
     if shim_name is None:
         return ir_request
     shim = get_shim(shim_name)
     if shim is None or shim.max_images is None:
         return ir_request
+    if shim.max_images_pattern is not None:
+        import re
+
+        if not upstream_model or not re.search(shim.max_images_pattern, upstream_model):
+            return ir_request
     from llm_rosetta.converters.base.image_limit import truncate_images
 
     return truncate_images(ir_request, shim.max_images, request_id=request_id)
@@ -503,10 +515,11 @@ async def handle_non_streaming(
     # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
 
-    # 1c. Enforce per-shim image count limit (e.g. Argo: 50 images max)
+    # 1c. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
     ir_request = _apply_image_limit(
         ir_request,
         target_shim_name,
+        upstream_model=body.get("model"),
         request_id=ctx.options.get("request_id", "-"),
     )
 
@@ -793,10 +806,11 @@ async def handle_streaming(
     # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
 
-    # 1c. Enforce per-shim image count limit (e.g. Argo: 50 images max)
+    # 1c. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
     ir_request = _apply_image_limit(
         ir_request,
         target_shim_name,
+        upstream_model=body.get("model"),
         request_id=ctx.options.get("request_id", "-"),
     )
 

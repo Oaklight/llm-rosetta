@@ -1,6 +1,5 @@
 """Tests for image truncation utility."""
 
-import pytest
 from llm_rosetta.converters.base.image_limit import truncate_images
 
 
@@ -83,3 +82,56 @@ class TestTruncateImages:
         truncate_images(req, 2)
         # Original should be unchanged
         assert req["messages"][0]["content"] == original_content
+
+
+class TestApplyImageLimitPattern:
+    """Tests for model-scoped max_images_pattern logic."""
+
+    def _make_shim(self, max_images: int, pattern: str | None):
+        """Build a minimal ProviderShim-like object."""
+        from unittest.mock import MagicMock
+
+        shim = MagicMock()
+        shim.max_images = max_images
+        shim.max_images_pattern = pattern
+        return shim
+
+    def _apply(
+        self, req: dict, max_images: int, pattern: str | None, model: str
+    ) -> dict:
+        """Drive truncation logic directly without a real shim registry."""
+        import re
+
+        from llm_rosetta.converters.base.image_limit import truncate_images
+
+        if pattern is not None and not re.search(pattern, model):
+            return req
+        return truncate_images(req, max_images)
+
+    def test_gpt_model_truncated(self):
+        req = _make_request([60])
+        result = self._apply(req, 50, r"^(gpt|o\d)", "gpt-4o")
+        assert _count_images(result) == 50
+
+    def test_o_model_truncated(self):
+        req = _make_request([60])
+        result = self._apply(req, 50, r"^(gpt|o\d)", "o3-mini")
+        assert _count_images(result) == 50
+
+    def test_gemini_model_not_truncated(self):
+        req = _make_request([60])
+        result = self._apply(req, 50, r"^(gpt|o\d)", "gemini-2.0-flash")
+        assert result is req  # no truncation
+        assert _count_images(result) == 60
+
+    def test_claude_model_not_truncated(self):
+        req = _make_request([60])
+        result = self._apply(req, 50, r"^(gpt|o\d)", "claude-opus-4-5")
+        assert result is req
+        assert _count_images(result) == 60
+
+    def test_no_pattern_always_truncates(self):
+        """When max_images_pattern is None, apply to all models."""
+        req = _make_request([60])
+        result = self._apply(req, 50, None, "gemini-2.0-flash")
+        assert _count_images(result) == 50

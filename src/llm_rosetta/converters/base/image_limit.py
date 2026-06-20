@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from llm_rosetta.types.ir.request import IRRequest
+from typing import Any
 
 from llm_rosetta.types.ir.type_guards import is_image_part
 
@@ -14,11 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 def truncate_images(
-    ir_request: IRRequest,
+    ir_request: dict[str, Any],
     max_images: int,
     *,
     request_id: str = "-",
-) -> IRRequest:
+) -> dict[str, Any]:
     """Return a (possibly new) IR request with at most *max_images* images.
 
     Strategy: keep the MOST RECENT images; replace earlier ones with a
@@ -58,7 +55,7 @@ def truncate_images(
     # Build new messages list with placeholders
     import copy
 
-    new_messages = copy.deepcopy(messages)
+    new_messages: list[Any] = copy.deepcopy(messages)
     for msg_idx, part_idx in to_replace:
         new_messages[msg_idx]["content"][part_idx] = {
             "type": "text",

@@ -132,6 +132,9 @@ class ProviderShim:
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
     max_images: int | None = None
+    max_images_pattern: str | None = (
+        None  # regex; if set, only apply when model matches
+    )
 
 
 # ---------------------------------------------------------------------------
