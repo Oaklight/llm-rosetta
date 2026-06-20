@@ -51,8 +51,14 @@ def is_text_part(part: ContentPart) -> TypeGuard[TextPart]:
 
 
 def is_image_part(part: ContentPart) -> TypeGuard[ImagePart]:
-    """Check if a content part is an ImagePart."""
-    return isinstance(part, dict) and part.get("type") == "image"
+    """Check if a content part is an ImagePart.
+
+    Matches both ``type: "image"`` (Anthropic/IR canonical) and
+    ``type: "image_url"`` (OpenAI format retained in IR) so that
+    image-counting utilities (e.g. ``truncate_images``) work
+    regardless of the source format.
+    """
+    return isinstance(part, dict) and part.get("type") in ("image", "image_url")
 
 
 def is_file_part(part: ContentPart) -> TypeGuard[FilePart]:
@@ -223,6 +229,7 @@ _TYPE_STRING_MAP: dict[type, str] = {
 TYPE_CLASS_MAP: dict[str, type[ContentPart]] = {
     "text": TextPart,
     "image": ImagePart,
+    "image_url": ImagePart,  # OpenAI format alias
     "file": FilePart,
     "tool_call": ToolCallPart,
     "tool_result": ToolResultPart,

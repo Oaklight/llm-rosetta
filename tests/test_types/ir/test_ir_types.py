@@ -283,6 +283,7 @@ class TestTypeGuards:
         expected_types = {
             "text",
             "image",
+            "image_url",  # OpenAI format alias for image
             "file",
             "tool_call",
             "tool_result",
