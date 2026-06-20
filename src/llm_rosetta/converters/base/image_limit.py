@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any
+from typing import Any, cast
 
 from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
 
@@ -33,7 +33,7 @@ def _collect_image_positions(messages: list[Any]) -> list[_ImagePos]:
                 result = part.get("result")
                 if isinstance(result, list):
                     for block_idx, block in enumerate(result):
-                        if isinstance(block, dict) and is_image_part(block):
+                        if isinstance(block, dict) and is_image_part(cast(Any, block)):
                             positions.append((msg_idx, part_idx, block_idx))
     return positions
 
@@ -81,15 +81,23 @@ def truncate_images(
 
     placeholder = {"type": "text", "text": _PLACEHOLDER.format(limit=max_images)}
 
-    new_messages: list[Any] = copy.deepcopy(messages)
+    # Group replacements by message index so we only copy affected messages.
+    # Avoids deepcopy of the entire message list — a 200-message conversation
+    # with base64 images can be hundreds of MB; copying it all to replace one
+    # image is wasteful.
+    affected_msgs: dict[int, list[tuple[int, int | None]]] = {}
     for msg_idx, part_idx, block_idx in to_replace:
-        if block_idx is None:
-            # Direct image in message content
-            new_messages[msg_idx]["content"][part_idx] = placeholder.copy()
-        else:
-            # Image inside tool_result.result list
-            new_messages[msg_idx]["content"][part_idx]["result"][block_idx] = (
-                placeholder.copy()
-            )
+        affected_msgs.setdefault(msg_idx, []).append((part_idx, block_idx))
+
+    new_messages: list[Any] = list(messages)  # shallow copy of list
+    for msg_idx, replacements in affected_msgs.items():
+        # Deep-copy only the affected message
+        msg_copy = copy.deepcopy(messages[msg_idx])
+        for part_idx, block_idx in replacements:
+            if block_idx is None:
+                msg_copy["content"][part_idx] = placeholder.copy()
+            else:
+                msg_copy["content"][part_idx]["result"][block_idx] = placeholder.copy()
+        new_messages[msg_idx] = msg_copy
 
     return {**ir_request, "messages": new_messages}
