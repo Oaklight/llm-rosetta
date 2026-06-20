@@ -40,13 +40,9 @@ from .configs import (
     StreamConfig,
 )
 
-# 扩展项类型 Extension types
-from .extensions import (
-    BatchMarker,
+# 非实验性扩展项类型 Non-experimental extension types
+from .extensions_experimental import (
     ExtensionItem,
-    SessionControl,
-    SystemEvent,
-    ToolChainNode,
     is_extension_item,  # noqa: F401
 )
 
@@ -173,6 +169,9 @@ from collections.abc import Sequence
 IRInput = Sequence[Message | ExtensionItem]
 IRInputSimple = Sequence[Message]
 
+# Experimental extension types — imported on demand, not in default namespace
+from llm_rosetta.types.ir import extensions_experimental as experimental  # noqa: E402
+
 
 # ============================================================================
 # 导出所有类型 Export all types
@@ -224,10 +223,6 @@ __all__ = [
     # ========== 响应类型 Response types ==========
     "IRResponse",
     "ExtensionItem",
-    "SystemEvent",
-    "BatchMarker",
-    "SessionControl",
-    "ToolChainNode",
     "UsageInfo",
     "FinishReason",
     "ChoiceInfo",
@@ -246,4 +241,6 @@ __all__ = [
     # ========== 向后兼容类型 Backward compatibility types ==========
     "IRInput",
     "IRInputSimple",
+    # ========== 实验性类型命名空间 Experimental types namespace ==========
+    "experimental",
 ]

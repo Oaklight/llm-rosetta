@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from typing import Any, Union
 
 from ..._vendor.validate import ValidationError, validate
-from ...types.ir.extensions import ExtensionItem
+from ...types.ir.extensions_experimental import ExtensionItem
 from ...types.ir.messages import Message
 
 

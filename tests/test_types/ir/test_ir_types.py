@@ -52,11 +52,7 @@ from llm_rosetta.types.ir import (
     isinstance_part,
     get_part_type,
     TYPE_CLASS_MAP,
-    # Extensions
-    SystemEvent,
-    BatchMarker,
-    SessionControl,
-    ToolChainNode,
+    # Extensions (non-experimental)
     is_extension_item,
     # Tools
     ToolDefinition,
@@ -73,6 +69,12 @@ from llm_rosetta.types.ir import (
     IRResponse,
     UsageInfo,
     ChoiceInfo,
+)
+from llm_rosetta.types.ir.extensions_experimental import (
+    SystemEvent,
+    BatchMarker,
+    SessionControl,
+    ToolChainNode,
 )
 
 

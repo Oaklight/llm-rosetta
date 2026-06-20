@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from ...types.ir.extensions import ExtensionItem
+from ...types.ir.extensions_experimental import ExtensionItem
 from ...types.ir.messages import Message
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo

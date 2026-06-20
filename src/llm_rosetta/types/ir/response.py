@@ -13,7 +13,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import NotRequired, Required, TypedDict
 
-from .extensions import ExtensionItem, is_extension_item
+from .extensions_experimental import ExtensionItem, is_extension_item
 from .messages import Message
 
 # ============================================================================

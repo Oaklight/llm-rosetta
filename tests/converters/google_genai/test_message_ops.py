@@ -10,7 +10,7 @@ from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOp
 from llm_rosetta.converters.google_genai.message_ops import GoogleGenAIMessageOps
 from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
 from llm_rosetta.types.ir import Message
-from llm_rosetta.types.ir.extensions import ExtensionItem
+from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
 class TestGoogleGenAIMessageOps:

@@ -9,7 +9,7 @@ from llm_rosetta.converters.anthropic.message_ops import AnthropicMessageOps
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
 from llm_rosetta.shims.provider_shim import ReasoningCapability
 from llm_rosetta.types.ir import Message
-from llm_rosetta.types.ir.extensions import ExtensionItem
+from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
 class TestAnthropicMessageOps:

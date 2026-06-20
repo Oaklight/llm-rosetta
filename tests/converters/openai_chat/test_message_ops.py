@@ -11,7 +11,7 @@ from llm_rosetta.converters.openai_chat.message_ops import (
 )
 from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
-from llm_rosetta.types.ir.extensions import ExtensionItem
+from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
 class TestOpenAIChatMessageOps:

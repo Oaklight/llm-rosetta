@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, Union
 
 from ..._vendor.validate import ValidationError, validate
-from .extensions import ExtensionItem
+from .extensions_experimental import ExtensionItem
 from .messages import Message
 from .request import IRRequest
 from .response import IRResponse
