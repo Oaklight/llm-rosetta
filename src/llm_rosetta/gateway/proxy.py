@@ -28,6 +28,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResp
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.converters.base.anomaly_detector import check_ir_response_content
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims import get_shim
 from llm_rosetta.shims.provider_shim import ReasoningCapability
@@ -636,6 +637,14 @@ async def handle_non_streaming(
     # -- body log: upstream response --
     log_response(upstream_json, label="UPSTREAM RESPONSE")
 
+    # 6a-post. Check for anomalous content leaked by upstream gateway
+    check_ir_response_content(
+        ir_response,
+        provider=str(target_provider),
+        model=body.get("model"),
+        request_id=ctx.options.get("request_id", "-"),
+    )
+
     # 6b. Cache provider_metadata from tool calls for follow-up requests
     store.cache_from_response(ir_response)
 
@@ -705,6 +714,9 @@ def process_stream_chunk(
     store: ProviderMetadataStore,
     format_sse: Any,
     target_from_transforms: tuple[Transform, ...],
+    provider: str = "unknown",
+    request_id: str = "-",
+    model: str | None = None,
 ) -> list[str]:
     """Convert one upstream chunk through the full pipeline to source SSE strings.
 
@@ -721,6 +733,16 @@ def process_stream_chunk(
 
     result: list[str] = []
     for ir_event in ir_events:
+        # Check text delta events for anomalous gateway-leaked content
+        if isinstance(ir_event, dict) and ir_event.get("type") == "text_delta":
+            text = ir_event.get("text", "")
+            if isinstance(text, str):
+                check_ir_response_content(
+                    {"content": [{"type": "text", "text": text}]},
+                    provider=provider,
+                    model=model,
+                    request_id=request_id,
+                )
         store.cache_from_stream_event(ir_event)
         source_chunks = source_converter.stream_response_to_provider(
             ir_event, context=to_ctx
@@ -791,6 +813,9 @@ async def _stream_event_generator(
                 store=store,
                 format_sse=format_sse,
                 target_from_transforms=target_from_transforms,
+                provider=str(target_provider),
+                request_id=ctx.options.get("request_id", "-"),
+                model=model,
             ):
                 yield sse_line
 
