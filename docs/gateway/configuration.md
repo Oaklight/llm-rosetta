@@ -43,6 +43,26 @@ title: 配置
 
 也可以通过 `register_shim()` 以编程方式注册自定义 shim。
 
+### 图片数量限制
+
+Shim 支持 `max_images` 和 `max_images_pattern` 字段，用于对每次请求中的图片数量设置上限：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `max_images` | int | 每次请求允许的最大图片数量 |
+| `max_images_pattern` | str | 应用于模型名称的正则表达式；仅对匹配模型执行限制 |
+
+当请求超出上限时，最旧的图片将被替换为文本占位符。如果设置了 `max_images_pattern`，仅匹配的模型名称受限——其他模型不受影响，直接透传。
+
+**示例 — 内置 Argo OpenAI shim：**
+
+内置的 Argo OpenAI shim 声明了 `max_images: 50`，`max_images_pattern: "^(gpt|o\d)"`，效果如下：
+
+- GPT 系列和 o 系列模型：图片截断至 50 张
+- 通过同一服务方路由的 Gemini 和 Claude 模型：不受限制，直接透传
+
+可通过 `register_shim()` 注册自定义 shim 实现同样的限制逻辑。
+
 !!! tip "解析优先级"
     提供商类型解析顺序为：`shim` → `type` → 提供商名称（兜底）。
 
@@ -193,6 +213,9 @@ API Key 也支持 `${ENV_VAR}` 替换：
 !!! tip
     如果网关对公网开放，强烈建议设置 `admin_password`，防止未授权访问提供商配置和请求日志。
 
+!!! warning "未解析的占位符"
+    如果 `admin_password` 包含未解析的 `${ENV_VAR}` 占位符（即环境变量未在启动时设置），网关会**拒绝启动**并输出清晰的错误信息，防止将字面量字符串 `${ADMIN_PASSWORD}` 作为密码使用。
+
 ### `credential_visible`
 
 布尔值，默认 `true`。设为 `false` 后，管理界面中所有 API 密钥的值将被隐藏——复制和查看控件均会禁用。适用于网关被多个用户共用、不希望密钥从面板中直接读取的场景。
@@ -208,6 +231,23 @@ API Key 也支持 `${ENV_VAR}` 替换：
 !!! note
     此设置仅控制界面可见性。密钥仍会被网关用于上游请求，只是不在管理界面中展示。
 
+### `admin_cors_origins`
+
+允许跨域访问管理 API（`/admin/api/*`）的来源列表。默认为空列表，表示不发送 `Access-Control-Allow-Origin` 响应头，仅允许同源请求。
+
+如需允许特定来源：
+
+```jsonc
+{
+  "server": {
+    "admin_cors_origins": ["https://my-dashboard.example.com"]
+  }
+}
+```
+
+!!! note
+    CORS 收紧仅对 `/admin/api/*` 端点生效，`/v1/*` 代理端点不受影响。
+
 ## 调试选项
 
 ```jsonc
@@ -220,6 +260,43 @@ API Key 也支持 `${ENV_VAR}` 替换：
 ```
 
 也可以通过环境变量设置：`LLM_ROSETTA_VERBOSE=1`、`LLM_ROSETTA_LOG_BODIES=1`。
+
+## 请求追踪
+
+每个代理请求都会携带 `X-Request-ID` 请求头。若来源请求已包含该头，则保留其值；否则自动生成新的 UUID。该请求头会：
+
+- 转发给上游服务方
+- 出现在所有响应头中（包括错误响应）
+- 以 `[request_id]` 前缀写入日志，实现端到端可追溯
+
+无需任何配置——请求 ID 传播始终生效。
+
+## 健康检查端点
+
+网关提供三个健康检查端点：
+
+| 端点 | HTTP 状态码 | 说明 |
+|------|-----------|------|
+| `/health` | 始终 200 | 网关状态：运行时长、请求总数、最近一小时错误数、各服务方健康状况 |
+| `/health/live` | 始终 200 | Kubernetes 存活探针——确认进程正在运行 |
+| `/health/ready` | 200 / 503 | Kubernetes 就绪探针——任意服务方降级时返回 503 |
+
+`/health` 响应示例：
+
+```json
+{
+  "status": "ok",
+  "uptime": 3600.5,
+  "requests_total": 1234,
+  "errors_last_hour": 2,
+  "providers": {
+    "openai-prod":    { "status": "ok" },
+    "anthropic-prod": { "status": "ok" }
+  }
+}
+```
+
+`status` 字段取值：所有服务方正常时为 `"ok"`，一个或多个服务方异常时为 `"degraded"`。
 
 ## 完整示例
 
@@ -245,7 +322,8 @@ API Key 也支持 `${ENV_VAR}` 替换：
     "port": 8765,
     "api_key": "${GATEWAY_API_KEY}",
     "admin_password": "${ADMIN_PASSWORD}",
-    "credential_visible": false
+    "credential_visible": false,
+    "admin_cors_origins": []
   }
 }
 ```
