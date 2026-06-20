@@ -177,6 +177,10 @@ def _load_single_provider(
         model_reasoning=model_reasoning,
         max_images=cfg.get("max_images"),
         max_images_pattern=cfg.get("max_images_pattern"),
+        unwind_parallel_tool_calls=bool(cfg.get("unwind_parallel_tool_calls", False)),
+        unwind_parallel_tool_calls_pattern=cfg.get(
+            "unwind_parallel_tool_calls_pattern"
+        ),
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

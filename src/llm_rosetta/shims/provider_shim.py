@@ -135,6 +135,10 @@ class ProviderShim:
     max_images_pattern: str | None = (
         None  # regex; if set, only apply when model matches
     )
+    unwind_parallel_tool_calls: bool = False
+    unwind_parallel_tool_calls_pattern: str | None = (
+        None  # regex; if set, only apply when upstream model matches
+    )
 
 
 # ---------------------------------------------------------------------------

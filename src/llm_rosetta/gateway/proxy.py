@@ -407,6 +407,41 @@ def _apply_image_limit(
     return truncate_images(ir_request, shim.max_images, request_id=request_id)
 
 
+def _apply_tool_call_unwind(
+    ir_request: dict[str, Any],
+    shim_name: str | None,
+    *,
+    upstream_model: str | None = None,
+) -> dict[str, Any]:
+    """Unwind parallel tool calls if the target shim requires it.
+
+    When the shim declares ``unwind_parallel_tool_calls`` *and* the
+    upstream model matches ``unwind_parallel_tool_calls_pattern`` (if
+    set), parallel tool calls in the IR request are converted to
+    sequential call-result pairs.
+
+    This works around upstream gateways (e.g. Argo) whose internal
+    OpenAI→Gemini conversion does not support parallel tool calls.
+    """
+    if shim_name is None:
+        return ir_request
+    shim = get_shim(shim_name)
+    if shim is None or not shim.unwind_parallel_tool_calls:
+        return ir_request
+    if shim.unwind_parallel_tool_calls_pattern is not None:
+        import re
+
+        if not upstream_model or not re.search(
+            shim.unwind_parallel_tool_calls_pattern, upstream_model
+        ):
+            return ir_request
+    from llm_rosetta.shims.providers.argo.utils.tool_call_unwind import (
+        unwind_parallel_tool_calls_ir,
+    )
+
+    return unwind_parallel_tool_calls_ir(ir_request)
+
+
 def _inject_shim_reasoning(
     ctx: ConversionContext,
     shim_name: str | None,
@@ -521,6 +556,14 @@ async def handle_non_streaming(
         target_shim_name,
         upstream_model=body.get("model"),
         request_id=ctx.options.get("request_id", "-"),
+    )
+
+    # 1d. Unwind parallel tool calls for providers that require it
+    #     (e.g. Argo Gemini models)
+    ir_request = _apply_tool_call_unwind(
+        ir_request,
+        target_shim_name,
+        upstream_model=body.get("model"),
     )
 
     # -- body log: IR request (after source -> IR) --
@@ -812,6 +855,14 @@ async def handle_streaming(
         target_shim_name,
         upstream_model=body.get("model"),
         request_id=ctx.options.get("request_id", "-"),
+    )
+
+    # 1d. Unwind parallel tool calls for providers that require it
+    #     (e.g. Argo Gemini models)
+    ir_request = _apply_tool_call_unwind(
+        ir_request,
+        target_shim_name,
+        upstream_model=body.get("model"),
     )
 
     # -- body log: IR request (after source -> IR) --
