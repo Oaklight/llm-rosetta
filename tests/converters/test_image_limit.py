@@ -84,6 +84,111 @@ class TestTruncateImages:
         assert req["messages"][0]["content"] == original_content
 
 
+class TestTruncateToolResultImages:
+    """Images embedded in tool_result.result lists must also be counted."""
+
+    def _make_tool_result_request(
+        self, direct_images: int, tool_result_images: int
+    ) -> dict:
+        """Build a request with images in both content and tool results."""
+        content: list[dict] = []
+        for i in range(direct_images):
+            content.append(
+                {"type": "image", "image_url": f"https://example.com/img{i}.png"}
+            )
+        content.append(
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_1",
+                "result": [
+                    {
+                        "type": "image",
+                        "image_data": {
+                            "data": f"base64data{i}",
+                            "media_type": "image/png",
+                        },
+                    }
+                    for i in range(tool_result_images)
+                ],
+            }
+        )
+        return {"messages": [{"role": "user", "content": content}]}
+
+    def _total_images(self, req: dict) -> int:
+        """Count all images including those in tool results."""
+        count = 0
+        for msg in req["messages"]:
+            for part in msg.get("content", []):
+                if part.get("type") in ("image", "image_url"):
+                    count += 1
+                elif part.get("type") == "tool_result":
+                    result = part.get("result")
+                    if isinstance(result, list):
+                        count += sum(
+                            1
+                            for b in result
+                            if isinstance(b, dict)
+                            and b.get("type") in ("image", "image_url")
+                        )
+        return count
+
+    def test_tool_result_images_counted(self):
+        """49 direct + 2 in tool result = 51, should truncate to 50."""
+        req = self._make_tool_result_request(49, 2)
+        assert self._total_images(req) == 51
+        result = truncate_images(req, 50)
+        assert result is not req
+        assert self._total_images(result) == 50
+
+    def test_tool_result_only_images(self):
+        """All images inside tool results, none direct."""
+        req = self._make_tool_result_request(0, 55)
+        assert self._total_images(req) == 55
+        result = truncate_images(req, 50)
+        assert self._total_images(result) == 50
+
+    def test_no_truncation_with_tool_results(self):
+        """Images in tool results under limit — no truncation."""
+        req = self._make_tool_result_request(20, 10)
+        assert self._total_images(req) == 30
+        result = truncate_images(req, 50)
+        assert result is req
+
+    def test_mixed_keeps_most_recent(self):
+        """Oldest images replaced first, whether direct or in tool results."""
+        # 2 direct images (oldest), then tool result with 2 images, limit 3
+        content: list[dict] = [
+            {"type": "image", "image_url": "https://example.com/old1.png"},
+            {"type": "image", "image_url": "https://example.com/old2.png"},
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_1",
+                "result": [
+                    {
+                        "type": "image",
+                        "image_data": {"data": "new1", "media_type": "image/png"},
+                    },
+                    {
+                        "type": "image",
+                        "image_data": {"data": "new2", "media_type": "image/png"},
+                    },
+                ],
+            },
+        ]
+        req = {"messages": [{"role": "user", "content": content}]}
+        result = truncate_images(req, 3)
+        # Oldest direct image replaced, 3 kept (1 direct + 2 in tool result)
+        assert self._total_images(result) == 3
+
+    def test_original_not_mutated_with_tool_results(self):
+        req = self._make_tool_result_request(49, 2)
+        import copy
+
+        original = copy.deepcopy(req)
+        truncate_images(req, 50)
+        assert req == original
+
+
 class TestApplyImageLimitPattern:
     """Tests for model-scoped max_images_pattern logic."""
 
