@@ -1,802 +1,826 @@
 ---
-title: 更新日志
+title: Changelog
 ---
 
-# 更新日志
+# Changelog
 
-LLM-Rosetta 的所有重要变更均记录于此。本项目遵循 [Keep a Changelog](https://keepachangelog.com/) 规范。
+All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
 ## [Unreleased]
 
-## v0.6.10 — 2026-06-18
-
 ### 新增
 
-- **进程级转换缓存** ([#276](https://github.com/Oaklight/llm-rosetta/issues/276), [#279](https://github.com/Oaklight/llm-rosetta/pull/279), [#281](https://github.com/Oaklight/llm-rosetta/pull/281), [#283](https://github.com/Oaklight/llm-rosetta/pull/283))：基于内容哈希的逐条 LRU 缓存，支持访问刷新 TTL（默认 30 分钟），覆盖工具转换、Schema 清理和 IR 校验。消除了会话轮次间对不变工具定义和消息的重复处理
-    - **Hub-and-Spoke 架构**：转换缓存（spoke）按 converter 隔离；IR 校验缓存（hub）跨 converter 共享
-    - **逐条缓存**：工具和消息按内容哈希独立缓存——部分工具变更时仅重新转换变更条目，跨 agent 的相同工具共享缓存
-    - **增量消息校验**：仅校验新增消息；已见过的消息通过 IR 校验 hub 跳过
-    - **变异检测**：测试 teardown 时通过 `check_integrity()` 检测缓存对象是否被意外修改；可选 `verify=True` 模式支持运行时自愈
-    - **基准测试**：本地热路径加速 4.4 倍（3250 µs → 527 µs）；生产环境 TTFB 降低 33%（11.4 ms → 7.6 ms）
-- **`validate_tools()`** ([#283](https://github.com/Oaklight/llm-rosetta/pull/283))：新增独立的 IR 工具定义列表校验函数，与 `validate_messages()` 对称
-- **OpenRouter Anthropic shim** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284))：OpenRouter 的 Anthropic 兼容 Messages 端点现已成为一等 provider 类型。原单一 `openrouter` shim 拆分为 `openrouter--openai_chat`（Chat Completions）和 `openrouter--anthropic`（Messages API），使 OpenRouter 上的 Claude 模型可走原生 Anthropic 格式
-- **管理面板按模型 reasoning 覆盖** ([#288](https://github.com/Oaklight/llm-rosetta/pull/288))：模型编辑弹窗现在展示生效的 reasoning 配置（`thinking_type`、`budget_tokens_ratio`、`disabled_strategy`），带来源标记（provider / model_override / config）并支持行内编辑。覆盖项持久化到 `config.jsonc`，运行时按优先级解析：config 覆盖 > shim 模型覆盖 > shim provider 默认
-- **`budget_tokens_default_ratio` reasoning 能力字段** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：`ReasoningCapability` 新增 `budget_tokens_default_ratio` 字段。当 provider 要求 `thinking.type=enabled` 但调用方未提供 `budget_tokens` 时，按 `min(max(1024, max_tokens × ratio), max_tokens - 1)` 推导默认值，而不再回退到不支持的 `adaptive` 类型
+- **Admin 面板服务方 UX 增强** ([#292](https://github.com/Oaklight/llm-rosetta/pull/292))：服务方标签页三项改进：
+    - **多密钥条目列表**：API 密钥字段自动检测逗号分隔的密钥（轮转），切换为多个 `<input type="password">` 输入框。始终显示 `+ 添加密钥` 按钮。眼睛和复制按钮统一在底部
+    - **服务方搜索栏**：服务方数量超过 6 个时自动显示，支持按名称、类型、Base URL 过滤
+    - **网格/列表视图切换**：两个图标按钮切换卡片网格和紧凑单列列表视图，偏好保存在 localStorage
+- **Request ID 传播** ([#296](https://github.com/Oaklight/llm-rosetta/pull/296), [#122](https://github.com/Oaklight/llm-rosetta/issues/122))：每个代理请求生成或继承 `X-Request-ID` 头。向上游传播，包含在所有响应头中（包括错误响应），并以 `[request_id]` 前缀记录日志，实现端到端可追踪
+- **增强健康检查端点** ([#297](https://github.com/Oaklight/llm-rosetta/pull/297), [#127](https://github.com/Oaklight/llm-rosetta/issues/127))：
+    - `/health` — 返回运行时间、请求总数、最近一小时错误数、每个服务方的健康状态快照（成功率、平均延迟、最后错误）。始终 HTTP 200；`status` 字段显示 `"ok"` 或 `"degraded"`
+    - `/health/live` — 始终 200（Kubernetes 存活探针）
+    - `/health/ready` — 所有服务方健康时 200，任一服务方严重不健康时 503（Kubernetes 就绪探针）
+- **Admin API 的 CORS 限制** ([#294](https://github.com/Oaklight/llm-rosetta/pull/294), [#233](https://github.com/Oaklight/llm-rosetta/issues/233))：`/admin/api/*` 端点不再发送 `Access-Control-Allow-Origin: *`。新增配置选项 `server.admin_cors_origins`（列表，默认 `[]`）允许显式指定允许的来源。`/v1/*` 代理端点不受影响
+- **Shim 层图片数量限制** ([#301](https://github.com/Oaklight/llm-rosetta/pull/301), [#299](https://github.com/Oaklight/llm-rosetta/issues/299))：`ProviderShim` 新增 `max_images` 和 `max_images_pattern` 字段。超限时最早的图片被替换为文本占位符，保留最近的 N 张。Argo OpenAI shim 声明 `max_images: 50`，pattern 为 `^(gpt|o\d)` — 仅 GPT/o 模型被截断；经过同一服务方的 Gemini 和 Claude 不受影响
 
 ### 变更
 
-- **`_convert_tools_from_p` 不再是抽象方法** ([#281](https://github.com/Oaklight/llm-rosetta/pull/281))：`BaseConverter` 提供默认实现，处理所有 provider（包括 Google 的 list/None 返回值）。移除了 4 个 converter 的重复覆写——减少约 90 行重复代码
-- **完善 Claude thinking 按模型覆盖** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：基于实测支持矩阵，为 Anthropic 和 Argo shim 补全按模型 thinking 覆盖——Haiku 4.5（`enabled`+budget）、Opus 4.7/4.8（仅 `adaptive`）、Argo 上的 Sonnet 4（`enabled`+budget）
-- **模型「克隆」取代「复制」** ([#290](https://github.com/Oaklight/llm-rosetta/pull/290))：模型行的克隆操作现在会打开预填的模型弹窗（服务商、能力、上游模型及生效的 reasoning 配置），名称留空，与服务商行的「克隆」行为一致——不再把 YAML 片段复制到剪贴板。表格中的模型名称仍可点击复制
+- **Admin 面板 i18n**：中文翻译从"服务商"更新为"服务方"（对混合商业和自建服务方更中性）
+- **请求日志时间戳** ([#298](https://github.com/Oaklight/llm-rosetta/pull/298))：现在显示日期和时间（如 "06/19, 20:25:29"），而非仅显示时间
 
 ### 修复
 
-- **Haiku 4.5 `adaptive` thinking 400 错误** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287))：Haiku 4.5 支持扩展思考但只接受 `thinking.type=enabled` + `budget_tokens`，不支持 `adaptive`。此前未提供 budget 时回退到 `adaptive`，导致 Anthropic Official、Argo、OpenRouter 上均报 400。新增的 `budget_tokens_default_ratio` 改为推导 budget
-- **Haiku 4.5 `effort` 参数 400 错误** ([#289](https://github.com/Oaklight/llm-rosetta/pull/289))：`effort` 参数（`output_config.effort`）仅 Opus 4.5/4.6/4.7/4.8 和 Sonnet 4.6 支持，Haiku 不支持。Anthropic Official 对 Haiku 4.5 的 `reasoning_effort` 报 400。Haiku 模型覆盖现设 `effort_field: none`，丢弃不支持的字段同时保留可用的 `thinking.type=enabled` + budget 路径
-- **OpenRouter Anthropic reasoning effort 字段** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284))：`openrouter--anthropic` shim 使用 `output_config.effort`（Anthropic 格式）而非 OpenAI Chat 的 `reasoning_effort` 字段
-- **Docker 构建中的 `.env` 密钥泄露**：Docker 构建上下文不再包含 `.env` 文件，避免 API 密钥被打进镜像层
+- **Admin 面板认证内容闪烁** ([#291](https://github.com/Oaklight/llm-rosetta/pull/291))：消除了配置 `admin_password` 时登录遮罩出现前短暂显示管理内容的问题。通过 CSS（`body.auth-pending`）在异步认证检查完成前隐藏主界面
+- **Admin 密码未解析环境变量** ([#293](https://github.com/Oaklight/llm-rosetta/pull/293))：如果 `admin_password` 包含未解析的 `${...}` 占位符，网关现在拒绝启动，防止可预测的字面量字符串被用作密码
+
+## v0.6.10 — 2026-06-18
+
+### Added
+
+- **Process-level conversion cache** ([#276](https://github.com/Oaklight/llm-rosetta/issues/276), [#279](https://github.com/Oaklight/llm-rosetta/pull/279), [#281](https://github.com/Oaklight/llm-rosetta/pull/281), [#283](https://github.com/Oaklight/llm-rosetta/pull/283)): Per-entry LRU cache with access-refreshed TTL (default 30 min) for tool conversion, schema sanitization, and IR validation. Eliminates repeated work for unchanged tool definitions and messages across conversation turns
+    - **Hub-and-spoke architecture**: conversion caches (spokes) are converter-specific; IR validation cache (hub) is converter-agnostic and shared across all converters
+    - **Per-entry caching**: individual tools and messages cached by content hash — partial tool changes only re-convert the changed entries, and cross-agent tool overlap shares cache entries
+    - **Incremental message validation**: only newly appended messages are validated; previously-seen messages are skipped via the IR validation hub
+    - **Mutation detection**: `check_integrity()` on test teardown catches accidental in-place mutation of cached objects; optional `verify=True` mode for runtime self-healing
+    - **Benchmark**: 4.4× warm-path speedup (3250 µs → 527 µs local); 33% TTFB reduction in production (11.4 ms → 7.6 ms)
+- **`validate_tools()`** ([#283](https://github.com/Oaklight/llm-rosetta/pull/283)): New standalone IR validation function for tool definition lists, symmetric with `validate_messages()`
+- **OpenRouter Anthropic shim** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284)): OpenRouter's Anthropic-compatible Messages endpoint is now a first-class provider type. The single `openrouter` shim is split into `openrouter--openai_chat` (Chat Completions) and `openrouter--anthropic` (Messages API), letting OpenRouter route Claude models through the native Anthropic format
+- **Admin panel per-model reasoning override** ([#288](https://github.com/Oaklight/llm-rosetta/pull/288)): The model edit modal now displays the effective reasoning config (`thinking_type`, `budget_tokens_ratio`, `disabled_strategy`) with a source badge (provider / model_override / config) and inline editing. Overrides are persisted to `config.jsonc` and resolved at runtime with priority: config override > shim model_override > shim provider default
+- **`budget_tokens_default_ratio` reasoning capability** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287)): `ReasoningCapability` gains a `budget_tokens_default_ratio` field. When a provider requires `thinking.type=enabled` but the caller omits `budget_tokens`, a default is derived as `min(max(1024, max_tokens × ratio), max_tokens - 1)` instead of falling back to the unsupported `adaptive` type
+
+### Changed
+
+- **`_convert_tools_from_p` no longer abstract** ([#281](https://github.com/Oaklight/llm-rosetta/pull/281)): Default implementation in `BaseConverter` handles all providers (including Google's list/None return). Per-converter overrides removed — 90 lines of duplicated code eliminated
+- **Complete Claude thinking model_overrides** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287)): Added per-model thinking overrides for the Anthropic and Argo shims based on tested support matrices — Haiku 4.5 (`enabled`+budget), Opus 4.7/4.8 (`adaptive`-only), Sonnet 4 on Argo (`enabled`+budget)
+- **Model "Clone" replaces "Copy"** ([#290](https://github.com/Oaklight/llm-rosetta/pull/290)): The model row's clone action now opens a prefilled model modal (provider, capabilities, upstream model, and effective reasoning config) with a blank name, matching the provider row's "Clone" behavior — instead of copying a YAML snippet to the clipboard. The model name in the table remains click-to-copy
+
+### Fixed
+
+- **Haiku 4.5 `adaptive` thinking 400 errors** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287)): Haiku 4.5 supports extended thinking but only accepts `thinking.type=enabled` + `budget_tokens`, not `adaptive`. The previous fallback to `adaptive` when no budget was provided caused 400 errors on Anthropic Official, Argo, and OpenRouter. The new `budget_tokens_default_ratio` derives a budget instead
+- **Haiku 4.5 `effort` parameter 400 errors** ([#289](https://github.com/Oaklight/llm-rosetta/pull/289)): The `effort` parameter (`output_config.effort`) is only supported on Opus 4.5/4.6/4.7/4.8 and Sonnet 4.6 — not Haiku. Anthropic Official rejected `reasoning_effort` on Haiku 4.5 with a 400. The Haiku model_override now sets `effort_field: none` to drop the unsupported field while keeping the working `thinking.type=enabled` + budget path
+- **OpenRouter Anthropic reasoning effort field** ([#284](https://github.com/Oaklight/llm-rosetta/pull/284)): The `openrouter--anthropic` shim uses `output_config.effort` (Anthropic format) instead of the OpenAI Chat `reasoning_effort` field
+- **`.env` secret leakage in Docker builds**: Docker build context no longer includes `.env` files, preventing API keys from being baked into image layers
 
 ## v0.6.9 — 2026-06-13
 
-### 新增
+### Added
 
-- **API 密钥轮换**：新增 `POST /admin/api/keys/<id>/rotate` 端点，生成新密钥值同时保留原 id 和标签。管理面板 API Keys 表格新增"轮换"按钮，带行内确认和新密钥一次性复制弹窗。请求日志不受影响——按标签关联而非密钥值
-- **从服务商获取模型弹窗中的模型类型选择器**：批量添加模型时可选 LLM 或 Embedding。LLM 显示能力复选框（text、vision、tools、reasoning）；Embedding 自动设置 `['embedding']`
-- **添加/编辑模型弹窗中的模型类型选择器**：用相同的 Model Type 单选模式替换旧的 embedding 复选框互斥逻辑
+- **API key rotate**: New `POST /admin/api/keys/<id>/rotate` endpoint generates a fresh key value while preserving the same id and label. The admin panel shows a "Rotate" button with inline confirmation and a one-time copy modal for the new key. Request logs are unaffected — they associate by label, not key value
+- **Model type selector in Fetch from Provider modal**: Users can now choose between LLM and Embedding when batch-adding models. LLM shows capability checkboxes (text, vision, tools, reasoning); Embedding auto-sets `['embedding']`
+- **Model type selector in Add/Edit Model modal**: Replaces the old embedding checkbox + mutual-exclusion logic with the same Model Type radio pattern
 
-### 变更
+### Changed
 
-- **API 密钥长度升级**：默认生成密钥从 36 字符（`rsk-` + 32 hex）升级到 52 字符（`rsk-` + 48 hex），与 OpenAI 密钥长度一致（192 位熵）
+- **API key length upgraded**: Default generated keys increased from 36 characters (`rsk-` + 32 hex) to 52 characters (`rsk-` + 48 hex), matching OpenAI's key length (192-bit entropy)
 
-### 修复
+### Fixed
 
-- **SSE 流式代理兼容性**（[#274](https://github.com/Oaklight/llm-rosetta/issues/274), [#275](https://github.com/Oaklight/llm-rosetta/pull/275)）：更新内嵌 `httpserver` 至 v0.1.1——SSE（`text/event-stream`）流式响应现在使用 `Transfer-Encoding: chunked` 而非裸字节刷写加 `Connection: close`。修复 Go 反向代理（尤其是 NPS 的 `httputil.ReverseProxy`）将 SSE 数据误解析为 chunked encoding 导致 `invalid byte in chunk length` 错误和高并发下间歇性连接失败的问题。上游修复：[Oaklight/zerodep#101](https://github.com/Oaklight/zerodep/pull/101)
-- **管理面板登录后活动标签页不加载数据**：`initApp()` 现在在认证成功后触发当前活动标签页的数据加载，修复请求日志标签页登录后显示空白、需要手动切换才能加载的问题
-- **模型类型单选标签大写问题**：为 `.fetch-type-radios label` 添加 `text-transform: none`，防止 `.form-group label` CSS 将 "Embedding" 转为 "EMBEDDING"
+- **SSE streaming proxy compatibility** ([#274](https://github.com/Oaklight/llm-rosetta/issues/274), [#275](https://github.com/Oaklight/llm-rosetta/pull/275)): Vendored `httpserver` v0.1.1 — SSE (`text/event-stream`) streaming responses now use `Transfer-Encoding: chunked` instead of raw byte flushing with `Connection: close`. Fixes Go-based reverse proxies (notably NPS `httputil.ReverseProxy`) misinterpreting SSE data as chunked encoding, producing `invalid byte in chunk length` errors and intermittent connection failures under concurrent load. Upstream fix: [Oaklight/zerodep#101](https://github.com/Oaklight/zerodep/pull/101)
+- **Admin panel active tab not loading after login**: `initApp()` now triggers data loading for the currently active tab after successful authentication, fixing the issue where the Request Log tab appeared empty until manually switched away and back
+- **Uppercase model type radio labels**: Added `text-transform: none` to `.fetch-type-radios label` to prevent `.form-group label` CSS from uppercasing "Embedding" to "EMBEDDING"
 
 ## v0.6.8 — 2026-06-11
 
-### 新增
+### Added
 
-- **Shim 驱动的推理配置**（#245）：新增 `ReasoningCapability` 数据类，声明 `disabled` 策略、`effort_field`、`max_effort` 和 `effort_map`；`ProviderShim` 从 `provider.yaml` 的 `reasoning` 段加载配置；共享 `reasoning_helpers.py` 提供 `normalize_reasoning_input()` 和 `apply_reasoning_config()`；各转换器的 `ir_reasoning_config_to_p` 委托给共享 helper，不再硬编码努力级别降级逻辑
-- **扩展 effort 阶梯**（#245）：`ReasoningEffortLevel` 从 5 级扩展到 6 级（新增 `xhigh`）；输入归一化：`none` → `mode: disabled`；`max_effort` 上限可通过 shim YAML 声明
-- **流式 delta 事件携带 `block_index`**（#249）：`TextDeltaEvent`、`ReasoningDeltaEvent`、`ToolCallDeltaEvent` 新增可选 `block_index` 字段；Anthropic from_p 将 chunk `index` 写入 IR delta 事件
-- **`cache_creation_tokens` 用量字段**（#252）：`UsageInfo` TypedDict 新增 `cache_creation_tokens`；Anthropic、OpenAI Chat、OpenAI Responses、Google GenAI 在流式和非流式路径中透传缓存及明细用量字段
-- **模型级 `thinking_type` shim 推理配置**（[#256](https://github.com/Oaklight/llm-rosetta/pull/256)）：`ReasoningCapability` 新增 `thinking_type` 字段，强制出站 `thinking.type` 为 `"enabled"` 或 `"adaptive"`。`ProviderShim` 新增 `model_reasoning`，按上游模型 ID 进行逐模型覆盖（如 Argo `claudeopus47 → thinking_type: adaptive`）。`_normalize_thinking` transform 退役——thinking type 归一化现为声明式 shim YAML 配置
-- **Anthropic `provider_metadata` 支持 tool call / tool result / reasoning 块**（[#257](https://github.com/Oaklight/llm-rosetta/pull/257)）：Anthropic 转换器在 IR→provider 转换时将 `provider_metadata` 序列化为 `_provider_metadata` 附加到 `tool_use`、`tool_result` 和 `thinking` 块上，provider→IR 时读回。修复跨提供商往返中 Google `thought_signature` 丢失的问题（Anthropic 客户端 → Google 上游），此前导致 Gemini 2.5+ 以 400「missing thought_signature」拒绝请求
-- **响应侧 reasoning 无损保留**（[#263](https://github.com/Oaklight/llm-rosetta/pull/263)）：修复多个转换器在响应侧 IR→provider 转换中丢弃推理内容的问题：
-    - **Google GenAI**：`p_reasoning_to_ir` 将 `thoughtSignature` 捕获到 `provider_metadata` 中而非丢弃；`message_ops` 委托给 `content_ops.p_reasoning_to_ir()` 而非内联构造裸 `ReasoningPart`
-    - **Anthropic**：`ir_text_to_p` / `p_text_to_ir` 对 text 块也进行 `_provider_metadata` 往返保留，与 reasoning 块和 tool 块的处理一致
-    - **OpenAI Chat**：`_build_choice_to_provider` 收集 `ReasoningPart` 内容并输出为响应消息的 `reasoning_content` 字段，而非静默丢弃
+- **Shim-driven reasoning configuration** ([#244](https://github.com/Oaklight/llm-rosetta/issues/244), [#245](https://github.com/Oaklight/llm-rosetta/pull/245)): Reasoning effort mapping is now declarative. Provider shims declare a `ReasoningCapability` in `provider.yaml` — specifying `disabled` strategy (`omit` or `thinking_disabled`), `effort_field`, `effort_map`, and `max_effort` cap — instead of hardcoded converter branches. New shared `reasoning_helpers.py` provides `normalize_reasoning_input()` and `apply_reasoning_config()` used by all four converters
+- **Expanded reasoning effort ladder** ([#245](https://github.com/Oaklight/llm-rosetta/pull/245)): IR `ReasoningEffortLevel` expanded to six levels: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. Input normalization accepts `none` (maps to `mode: disabled`) and provider-native values (`xhigh`, `max`) as first-class efforts. Provider shims declare `effort_map` to convert IR levels to provider-specific strings and `max_effort` to cap the highest level emitted
+- **`block_index` on IR stream delta events** ([#246](https://github.com/Oaklight/llm-rosetta/issues/246), [#249](https://github.com/Oaklight/llm-rosetta/pull/249)): `TextDeltaEvent`, `ReasoningDeltaEvent`, and `ToolCallDeltaEvent` now carry an optional `block_index` field, preserving the provider's content block index through IR round-trips
+- **`cache_creation_tokens` in `UsageInfo`** ([#252](https://github.com/Oaklight/llm-rosetta/pull/252)): New field on the `UsageInfo` TypedDict for Anthropic cache creation token counts
+- **Model-level `thinking_type` in shim reasoning config** ([#256](https://github.com/Oaklight/llm-rosetta/pull/256)): `ReasoningCapability` gains a `thinking_type` field to force the outbound `thinking.type` to `"enabled"` or `"adaptive"`. `ProviderShim` gains `model_reasoning` for per-model overrides keyed by upstream model ID (e.g. Argo `claudeopus47 → thinking_type: adaptive`). The `_normalize_thinking` transform is retired — thinking type normalization is now declarative via shim YAML
+- **Anthropic `provider_metadata` on tool calls, tool results, and reasoning blocks** ([#257](https://github.com/Oaklight/llm-rosetta/pull/257)): The Anthropic converter now serializes `provider_metadata` as `_provider_metadata` on `tool_use`, `tool_result`, and `thinking` blocks during IR→provider conversion, and reads it back during provider→IR. Fixes Google `thought_signature` being lost in cross-provider round-trips (Anthropic client → Google upstream), which caused Gemini 2.5+ to reject requests with 400 "missing thought_signature"
+- **Response reasoning losslessness across converters** ([#263](https://github.com/Oaklight/llm-rosetta/pull/263)): Reasoning content is now preserved through response-side IR→provider conversion in all converters that previously dropped it:
+    - **Google GenAI**: `p_reasoning_to_ir` now captures `thoughtSignature` into `provider_metadata` instead of discarding it; `message_ops` delegates to `content_ops.p_reasoning_to_ir()` instead of constructing a bare `ReasoningPart` inline
+    - **Anthropic**: `ir_text_to_p` / `p_text_to_ir` now round-trip `_provider_metadata` on text blocks, matching the treatment already applied to reasoning and tool blocks
+    - **OpenAI Chat**: `_build_choice_to_provider` now collects `ReasoningPart` content and emits it as `reasoning_content` on the response message, instead of silently dropping reasoning parts
 
-- **提供商特定 reasoning 字段归一化**（[#264](https://github.com/Oaklight/llm-rosetta/pull/264)）：为 MiniMax、OpenRouter、Volcengine 添加 shim transform 和配置以处理 reasoning 字段差异：
-    - **MiniMax**：`thinking_type: adaptive`（拒绝 `enabled`）；`_inject_reasoning_split` to_transform 在请求含 thinking 时自动设置 `reasoning_split: true`；`_parse_think_tags` from_transform 在未启用 reasoning_split 时从 content 中提取 `<think>` 标签作为回退
-    - **OpenRouter**：`_rename_reasoning_field` from_transform 将 `message.reasoning` 重命名为 `message.reasoning_content`（OpenRouter 使用非标准字段名）
-    - **Volcengine**：`thinking_type: enabled`（拒绝 `adaptive`；覆盖 base converter 的 `auto → adaptive` 默认映射）
+- **Provider-specific reasoning field normalization** ([#264](https://github.com/Oaklight/llm-rosetta/pull/264)): Shim transforms and config for MiniMax, OpenRouter, and Volcengine reasoning fields:
+    - **MiniMax**: `thinking_type: adaptive` (rejects `enabled`); `_inject_reasoning_split` to_transform auto-sets `reasoning_split: true` when thinking is requested; `_parse_think_tags` from_transform extracts `<think>` tags from content as fallback
+    - **OpenRouter**: `_rename_reasoning_field` from_transform renames `message.reasoning` → `message.reasoning_content` (OpenRouter uses non-standard field name)
+    - **Volcengine**: `thinking_type: enabled` (rejects `adaptive`; overrides base converter's `auto → adaptive` default)
 
-### 变更
+### Changed
 
-- **`_build_ir_usage` 返回类型收紧**（#253）：返回类型从 `dict[str, Any]` 收紧为 `UsageInfo`，`_build_provider_usage` 参数类型从 `dict[str, Any]` 放宽为 `Mapping[str, Any]`；移除所有 usage 相关的 `ty: ignore`
-- **Anthropic 流式 usage 去重**（#253）：`message_start` 和 `message_delta` 处理器中重复的 cache 提取逻辑改为复用 `_build_ir_usage()`，净减 21 行重复代码
+- **`_build_ir_usage` return type tightened to `UsageInfo`** ([#253](https://github.com/Oaklight/llm-rosetta/pull/253)): All four converter overrides now return `UsageInfo` instead of `dict[str, Any]`, and `_build_provider_usage` accepts `Mapping[str, Any]` instead of `dict[str, Any]`. Removes all usage-related `ty: ignore` comments
+- **Anthropic stream usage handlers deduplicated** ([#253](https://github.com/Oaklight/llm-rosetta/pull/253)): `_handle_message_start_from_p` and `_handle_message_delta_from_p` now call `_build_ir_usage()` instead of duplicating cache field extraction inline (−21 lines)
 
-### 修复
+### Fixed
 
-- **流式 block index 失同步**（#249）：修复 Anthropic 流式 thinking block 后 text delta 使用错误 index（0）的问题——`to_p` 优先使用事件上的显式 `block_index`，`ContentBlockStartEvent` 锚定 `current_block_index`，不再通过 `next_block_index()` 自增
-- **跨提供商 block 边界合成**（#251）：从无 content block 的提供商（OpenAI Chat、OpenAI Responses、Google GenAI）转换到 Anthropic 时，在内容类型切换点（reasoning → text、text → tool_call 等）自动合成 `content_block_stop` + `content_block_start` 事件
-- **流式 usage 明细传播**（#252）：修复流式路径中 `cache_read_tokens`、`cache_creation_tokens`、`prompt_tokens_details`、`completion_tokens_details` 未正确传播的问题
-- **OpenAI Chat `thinking.type=auto` 透传修复**（[#258](https://github.com/Oaklight/llm-rosetta/pull/258)）：IR `mode: "auto"` 不是 OpenAI Chat `thinking.type` 的合法上游值。OpenAI Chat 转换器现在将 `auto` 映射为 `adaptive`，并应用与 Anthropic 路径相同的 shim `thinking_type` 覆盖及 `enabled` → `adaptive` 安全回退逻辑
-- **`thinking_type=enabled` 缺少 `budget_tokens` 时自动回退**：当 shim 声明 `thinking_type: enabled` 但请求中没有 `budget_tokens`（Anthropic 的 `type: "enabled"` 必须提供此字段）时，转换器自动回退为 `type: "adaptive"`，而非生成无效请求体。Anthropic 和 OpenAI Chat 两条转换路径均已应用
-- **Argo 历史消息中的未签名 Anthropic reasoning block**（[#268](https://github.com/Oaklight/llm-rosetta/issues/268), [#269](https://github.com/Oaklight/llm-rosetta/pull/269)）：`ReasoningCapability` 新增 `unsigned_reasoning_blocks: as_is | preserve`。`argo--anthropic` shim 使用 `preserve`，因此历史 assistant `thinking` block 如果没有可用签名，不会继续转发给 Argo 触发 400；对应 reasoning 内容会保存在 `provider_metadata.anthropic.unsigned_reasoning_blocks` 中
+- **Anthropic stream block index desync after thinking block** ([#246](https://github.com/Oaklight/llm-rosetta/issues/246), [#249](https://github.com/Oaklight/llm-rosetta/pull/249)): During Anthropic→IR→Anthropic streaming round-trip, text deltas after a thinking block used index 0 instead of the correct block index (e.g. 1). The Anthropic `from_p` path now copies `chunk["index"]` onto IR delta events, and the `to_p` path prefers the explicit `block_index` over the context fallback. Fixes Claude CLI "Content block is not a text block" errors
+- **Cross-provider stream block boundary synthesis** ([#250](https://github.com/Oaklight/llm-rosetta/issues/250), [#251](https://github.com/Oaklight/llm-rosetta/pull/251)): When converting IR streams from providers without content block events (OpenAI Chat, OpenAI Responses, Google GenAI) to Anthropic format, the serializer now emits synthetic `content_block_stop` / `content_block_start` at content-type transitions (e.g. reasoning → text). Previously text deltas could land inside a synthetic thinking block. Added `current_block_type` tracking to `StreamContext`
+- **Stream usage detail propagation** ([#252](https://github.com/Oaklight/llm-rosetta/pull/252)): Cache and detail token fields (`cache_read_tokens`, `cache_creation_tokens`, `prompt_tokens_details`, `completion_tokens_details`, `cachedContentTokenCount`) are now preserved through all four converters' streaming paths. Previously these fields were dropped during stream round-trips
+- **OpenAI Chat `thinking.type=auto` passthrough** ([#258](https://github.com/Oaklight/llm-rosetta/pull/258)): IR `mode: "auto"` is not a valid upstream value for OpenAI Chat's `thinking.type`. The OpenAI Chat converter now maps `auto` → `adaptive` before emitting the `thinking` object, and applies the same shim `thinking_type` override + `enabled` → `adaptive` safety fallback that the Anthropic path uses
+- **`thinking_type=enabled` fallback when `budget_tokens` missing**: When a shim declares `thinking_type: enabled` but the request has no `budget_tokens` (required by Anthropic for `type: "enabled"`), the converter now automatically falls back to `type: "adaptive"` instead of emitting an invalid payload. Applied to both Anthropic and OpenAI Chat converter paths
+- **Unsigned Anthropic reasoning blocks in Argo history** ([#268](https://github.com/Oaklight/llm-rosetta/issues/268), [#269](https://github.com/Oaklight/llm-rosetta/pull/269)): `ReasoningCapability` now supports `unsigned_reasoning_blocks: as_is | preserve`. The `argo--anthropic` shim uses `preserve` so prior assistant `thinking` blocks without a usable signature are not forwarded to Argo, avoiding 400 errors while preserving the reasoning content in `provider_metadata.anthropic.unsigned_reasoning_blocks`
 
 ## v0.6.7 — 2026-06-04
 
-### 修复
+### Fixed
 
-- **Embedding 端点 upstream_model 别名**：`/v1/embeddings` 透传处理器现在在转发前将 `upstream_model` 名称替换到请求体中，与 chat completions 代理处理器行为一致。此前模型别名（如 `bge-m3` → `BAAI/bge-m3`）被忽略，导致上游返回模型不存在错误。
-- **管理面板测试计时器泄漏**：已用时计数器现在全局追踪，启动新测试时清除旧计时器，避免多个计时器交替写入同一显示元素。
-- **管理面板测试超时自动取消**：浏览器侧 120 秒超时触发时，现在通过 API 显式取消服务端任务，而非任其继续运行。
-- **服务端测试任务超时**：在 `_run_test_task` 中添加 `asyncio.wait_for()` 设置 120 秒超时，确保挂起的上游调用在服务端被终止，而非等待 300 秒清理窗口。
+- **Embedding endpoint upstream_model alias**: The `/v1/embeddings` passthrough handler now substitutes the `upstream_model` name into the request body before forwarding, matching the behavior of the chat completions proxy handler. Previously model aliases (e.g. `bge-m3` → `BAAI/bge-m3`) were ignored, causing upstream model-not-found errors.
+- **Admin test timer leak**: The elapsed-time counter is now tracked globally and cleared when a new test starts, preventing multiple timers from writing alternating values to the same display element.
+- **Admin test timeout auto-cancel**: When the browser-side 120s timeout fires, the server-side task is now explicitly cancelled via the API instead of being left running.
+- **Server-side test task timeout**: Added `asyncio.wait_for()` with a 120s timeout to `_run_test_task`, so hung upstream calls are terminated server-side instead of lingering until the 300s cleanup window.
 
 ## v0.6.6 — 2026-06-03
 
-### 新增
+### Added
 
-- **管理面板状态栏请求总数**：页脚首段显示生命周期请求计数器，支持千位分隔符本地化格式；每个段落悬浮提示（中/英）说明各指标含义
-- **内嵌 httpclient URL 编码表单数据**：`httpclient` v0.4.2 —— 当 `data` 为字典且无文件时，自动编码为 `application/x-www-form-urlencoded`
+- **Admin status bar total requests**: Lifetime request counter shown as the first footer segment with locale-aware thousand separators; per-segment hover tooltips (en/zh) explain each metric
+- **Vendor httpclient URL-encoded form data**: `httpclient` v0.4.2 — when `data` is a dict without files, encode as `application/x-www-form-urlencoded` instead of requiring explicit serialization
 
-### 变更
+### Changed
 
-- **Schema 清理模块拆分**：JSON Schema 清理逻辑从 `converters/base/tools.py` 拆分到独立的 `converters/base/schema.py` 模块，职责更清晰
-- **圈复杂度降低**：降低工具操作（跨转换器复用 `extract_part_ids`/`log_orphan_warnings`）、网关认证（`check_admin_auth`）、流式代理（`process_stream_chunk`）、配置解析、日志和管理路由的认知复杂度
-- **complexipy 阈值**：`max-complexity-allowed` 从 15 提升至 25；添加 `complexipy-pre-commit` 钩子定义（已注释）以备后续启用
+- **Schema sanitization module split**: JSON Schema sanitization extracted from `converters/base/tools.py` into its own `converters/base/schema.py` module for clearer separation of concerns
+- **Cyclomatic complexity reduction**: Reduced cognitive complexity across tool ops (cross-converter `extract_part_ids`/`log_orphan_warnings` reuse), gateway auth (`check_admin_auth`), proxy streaming (`process_stream_chunk`), config parsing, logging, and admin routes
+- **complexipy threshold**: Raised `max-complexity-allowed` from 15 to 25; added `complexipy-pre-commit` hook definition (commented out) for future enablement
 
-### 修复
+### Fixed
 
-- **管理面板页脚国际化**：状态栏页脚切换语言时立即重新渲染，无需刷新页面
-- **Docker 非语义化版本构建**：`make build-docker V=dev-test` 不再失败——非语义化版本号的 `V` 值回退为从本地 wheel 安装
+- **Admin footer i18n**: Status bar footer now re-renders on language switch instead of requiring a page refresh
+- **Docker non-semver build**: `make build-docker V=dev-test` no longer fails — non-semver `V` values fall back to installing from local wheel instead of `pip install ==<version>`
 
 ## v0.6.5 — 2026-06-02
 
-### 新增
+### Added
 
-- **API 密钥标签过滤**：请求日志标签页新增下拉过滤器，按 API 密钥名称筛选日志条目
-- **客户端 IP 记录**：从 `X-Forwarded-For` / `X-Real-IP` / TCP 对端地址提取客户端 IP，在请求日志表格中新增"客户端 IP"列
-- **系统时钟**：管理面板顶栏显示实时更新的系统时间，便于与日志时间戳对照
-- **双阈值日志保留策略**：成功请求和错误请求独立裁剪；错误条目有独立的上限（`error_max`），不会被大量成功流量挤出
-- **数据库大小页脚**：管理面板底栏显示磁盘数据库大小、各类条目数量和保留上限
+- **API key label filter** — new dropdown on the Request Log tab to filter entries by API key name
+- **Client IP logging** — extracts client IP from `X-Forwarded-For` / `X-Real-IP` / TCP peer address and displays it in a new "Client IP" column on the Request Log tab
+- **System clock** — live-updating clock in the admin header for correlating log timestamps with current time
+- **Dual-threshold log retention** — success and error request log entries are pruned independently; errors get their own cap (`error_max`) so rare failures are not evicted by a flood of successful traffic
+- **DB sizing footer** — admin panel footer shows on-disk database size, entry counts per class, and retention caps
 
-### 修复
+### Fixed
 
-- **服务商过滤器**：过滤器现在按服务商显示名称正确匹配条目，支持三级回退（`target_provider_name` → `target_provider` → API 类型，用于遗留的 NULL 行），覆盖回填缺失和已禁用服务商的场景
-- **`/health` 信息泄露**：端点不再向未认证调用方暴露完整的服务商和模型列表，现仅返回 `{"status": "ok"}`
-- **i18n 完善**：补充页脚统计、系统时间标签、过滤选项、客户端 IP 列标题的缺失中文翻译
+- **Provider filter** — filter now correctly matches entries by provider display name, with three-tier fallback (`target_provider_name` → `target_provider` → API type for legacy NULL rows) to handle backfill gaps and disabled providers
+- **`/health` info leak** — endpoint no longer exposes the full provider and model list to unauthenticated callers; now returns only `{"status": "ok"}`
+- **i18n completeness** — added missing Chinese translations for footer stats, system time label, filter options, and Client IP column header
 
-### 变更
+### Changed
 
-- **Shim 目录结构**：服务商 shim 现支持分组子目录（如 `argo/anthropic/`、`argo/openai_chat/`）
-- **Schema 迁移**：`_migrate_add_columns()` 改为通用实现，一次性添加所有缺失的可空列
-- **CI**：切换至 pre-commit 进行代码检查，固定 ty 版本
+- **Shim directory layout** — provider shims now support grouped subdirectories (e.g. `argo/anthropic/`, `argo/openai_chat/`)
+- **Schema migration** — `_migrate_add_columns()` is now generic, adding any missing nullable columns in a single pass
+- **CI** — switched to pre-commit for lint/type checks, pinned ty version
 
 ## v0.6.4 — 2026-05-20
 
-### 新增
+### Added
 
-- **Tinyleaf 风格设置弹窗**：用轻量居中弹窗替换旧的模态对话框——点击遮罩或按 Escape 关闭，主题和语言使用下拉选择即时生效，底部 About 区域含版本号和项目链接（GitHub、PyPI、Docker Hub、Docs）
-- **轻量 Host IP 检测端点**：`GET /admin/api/diagnostics/host-ip` 仅读取 `/proc/net/route`（微秒级，无网络调用）；页面加载时自动更新代理 URL 占位符为正确的 Docker 宿主机 IP
-- **管理面板登录持久化**：登录状态存储在 `localStorage`，30 分钟无操作自动登出，顶部退出按钮，密码管理器兼容（标准 `<form>`、`autocomplete` 属性）
-- **行内删除确认**：模型、API 密钥和请求日志的两步确认替代原生 `confirm()` 对话框
-- **测试弹窗改进**：取消按钮带计时器、图表空状态提示、克隆按钮
-- **移动端响应式**：Header 自动换行、Tab 和表格可水平滚动
+- **Tinyleaf-style settings popup**: Replace the modal-overlay settings dialog with a lightweight centered popup — click outside or press Escape to dismiss, theme and language via `<select>` dropdowns with instant apply, About section with version and project links (GitHub, PyPI, Docker Hub, Docs)
+- **Lightweight host IP detection endpoint**: `GET /admin/api/diagnostics/host-ip` reads `/proc/net/route` only (microsecond-level, no network calls); proxy URL placeholders auto-update with the correct Docker host IP on page load
+- **Admin login persistence**: Login state stored in `localStorage` with 30-minute inactivity auto-logout, logout button in header, password manager compatibility (proper `<form>`, `autocomplete` attributes)
+- **Inline delete confirmation**: Two-step confirm for models, API keys, and request logs replaces native `confirm()` dialogs
+- **Test modal improvements**: Cancel button with elapsed timer, chart empty state message, Clone button for providers/models
+- **Mobile responsiveness**: Responsive header with wrapping, horizontally scrollable tabs and tables
 
-### 修复
+### Fixed
 
-- **Argo Anthropic 响应归一化**：检测并转换 Argo `/v1/messages` 端点返回的 OpenAI Chat 格式响应为 Anthropic Messages 格式
-- **模型级 `thinking_type` shim 推理配置**（[#254](https://github.com/Oaklight/llm-rosetta/issues/254)、[#256](https://github.com/Oaklight/llm-rosetta/pull/256)）：`ReasoningCapability` 新增 `thinking_type` 字段，`ProviderShim` 新增 `model_reasoning` 按上游模型 ID 覆盖。Argo `claudeopus47 → thinking_type: adaptive` 通过 `model_overrides` 声明。`_normalize_thinking` transform 退役——thinking type 归一化现为声明式
-- **行内确认 i18n 和 onclick 恢复**：补充缺失的 `confirm.sure`/`confirm.yes` 翻译；确认超时回退后恢复原始 onclick 处理函数
-- **反向代理缓存**：所有 admin API 响应添加 `Cache-Control: no-cache, no-store, must-revalidate`；测试轮询改用 POST
-- **登录遮罩循环**：防止登录遮罩关闭密码管理器的自动填充弹窗
-- **C901 复杂度**：从 `fetch_upstream_models` 提取 `_format_connection_error` 辅助函数
+- **Argo Anthropic response normalization**: Detect and convert OpenAI Chat Completions format responses from Argo's `/v1/messages` endpoint to Anthropic Messages format
+- **Model-level `thinking_type` in shim reasoning config** ([#254](https://github.com/Oaklight/llm-rosetta/issues/254), [#256](https://github.com/Oaklight/llm-rosetta/pull/256)): `ReasoningCapability` supports `thinking_type` to force `thinking.type` to `"enabled"` or `"adaptive"`. `ProviderShim` gains `model_reasoning` for per-model overrides keyed by upstream model ID. Argo `claudeopus47 → thinking_type: adaptive` via `model_overrides`. `_normalize_thinking` transform retired — thinking type normalization is now declarative
+- **Inline confirm i18n and onclick restore**: Add missing `confirm.sure`/`confirm.yes` translation keys; restore original `onclick` handler after confirmation reverts
+- **Reverse proxy caching**: Add `Cache-Control: no-cache, no-store, must-revalidate` on all admin API responses; switch test polling to POST
+- **Login overlay loop**: Prevent login overlay from dismissing password manager autofill popups
+- **C901 complexity**: Extract `_format_connection_error` helper from `fetch_upstream_models`
 
-### 安全
+### Security
 
-- **管理面板登录限流**：5 次失败后触发 5 分钟 IP 锁定
+- **Admin login rate limiting**: 5 failed attempts trigger a 5-minute IP lockout
 
-### 变更
+### Changed
 
-- **设置界面精简**：主题缩减为浅色/深色；主题和语言选择器从 Header 下拉框移入设置弹窗
+- **Settings UI simplified**: Themes reduced to Light/Dark; theme and language selectors moved from header dropdowns into the settings popup
 
 ## v0.6.3 — 2026-05-17
 
-### 新增
+### Added
 
-- **OpenAI Responses API `custom_tool_call` 全链路支持**：端到端处理 `type: "custom"` 工具类型 —— 请求侧（降级为 IR `type: "function"` 并通过 `_passthrough` 保留原始负载以支持同提供商往返）、响应解析（`custom_tool_call` 项使用纯文本 `input`）、流式传输（`response.custom_tool_call_input.delta/done` 事件）。跨提供商降级时自动合成单字符串参数的 JSON Schema，使 custom tool 在 Anthropic/Google 上仍可使用
-- **IR `ToolCallStartEvent` 新增 `tool_type` 字段**：流式事件现在携带 `tool_type`（"function"、"custom" 等），以便转换器发出正确的提供商特定事件类型
-- **Argo shim 支持 `model_id_field` 和 `upstream_model` 别名**：新增 `argo_openai`、`argo_anthropic`、`argo_google` 提供商 shim，可重写 Argo 代理端点的模型字段名。包含 `argo_anthropic` 的 thinking 规范化转换
-- **异步服务端测试任务**：管理面板测试请求改为后台任务运行，避免慢模型导致浏览器连接池耗尽
-- **管理面板登录限流**：管理面板登录端点增加暴力破解防护
+- **Full `custom_tool_call` support for OpenAI Responses API**: Handle the `type: "custom"` tool type end-to-end — request ingestion (coerce to IR `type: "function"` with `_passthrough` for round-trip), response parsing (`custom_tool_call` items with plain-text `input`), and streaming (`response.custom_tool_call_input.delta/done` events). Cross-provider degradation synthesizes a single-string-param JSON Schema so custom tools remain usable on Anthropic/Google
+- **`tool_type` field on IR `ToolCallStartEvent`**: Streaming events now carry `tool_type` ("function", "custom", etc.) so converters can emit the correct provider-specific event types
+- **Argo shims with `model_id_field` and `upstream_model` alias**: New `argo_openai`, `argo_anthropic`, `argo_google` provider shims that rewrite the model field name for Argo-proxied endpoints. Includes thinking normalization transform for `argo_anthropic`
+- **Async server-side test tasks**: Admin panel test requests now run in background tasks, preventing browser connection pool exhaustion on slow models
+- **Admin login rate limiting**: Brute-force protection on the admin login endpoint
 
-### 修复
+### Fixed
 
-- **管理面板存储型 XSS**：修复 `esc()` 辅助函数中单引号未转义的问题，防止通过提供商/模型名称注入
-- **Gateway 流式传输中 `custom_tool_call` 类型丢失**：`OpenAIResponsesStreamContext.from_base()` 现在复制 `_tool_call_types`，修复 IR→提供商流式路径中 custom tool 退化为 `function_call` 事件类型的问题
-- **管理面板 UI 回归**：修复获取模型复选框无限递归、允许在 `credential_visible` 关闭时编辑 API Key、消除前缀实时预览输入延迟、修复获取模型前缀丢失选中状态、关闭模态框时中止测试请求
-- **Reasoning 测试 `max_tokens` 过小**：强制 `budget_tokens >= 1024` 以满足推理能力测试需求
-- **httpclient AsyncClient 序列化锁**：更新内嵌 httpclient 至 v0.4.1，测试自调用使用独立 AsyncClient 避免死锁
-- **ty 类型检查错误**：解决与 ty 0.0.32+ 的兼容性问题
+- **Stored XSS in admin UI**: Escape single quotes in the `esc()` helper to prevent injection via provider/model names
+- **`custom_tool_call` streaming type loss in gateway**: `OpenAIResponsesStreamContext.from_base()` now copies `_tool_call_types`, fixing custom tools falling back to `function_call` event types during IR→provider streaming
+- **Admin UI regressions**: Fix infinite recursion in fetch models checkbox handler, allow API key editing regardless of `credential_visible` setting, remove prefix real-time preview input lag, fix fetch models prefix losing selections, abort test requests on modal close
+- **Reasoning test `max_tokens` too small**: Enforce `budget_tokens >= 1024` for reasoning capability tests
+- **httpclient AsyncClient serialization lock**: Update vendored httpclient to v0.4.1, use per-task AsyncClient for test self-calls to avoid deadlock
+- **ty type-check errors**: Resolve compatibility issues with ty 0.0.32+
 
-### 变更
+### Changed
 
-- **管理面板路由拆分为子包**：将单体 `routes.py` 重构为 `routes/` 子包，分为 auth、config、keys、observability、testing 等模块
-- **CI 切换至 pre-commit**：代码检查现使用 `pre-commit run --all-files`（ruff + ty）；complexipy 因上游问题暂时挂起
+- **Admin routes split into subpackage**: Refactored monolithic `routes.py` into `routes/` with dedicated modules for auth, config, keys, observability, and testing
+- **CI switched to pre-commit**: Linting now uses `pre-commit run --all-files` (ruff + ty); complexipy suspended pending upstream fix
 
 ## v0.6.2 — 2026-05-15
 
-### 新增
+### Added
 
-- **管理面板密码保护**：配置中的 `server.admin_password` 启用管理面板登录覆盖层，使用 HMAC 会话令牌
-- **凭证可见性控制**：`server.credential_visible: false` 在管理面板中隐藏 API Key 的查看/复制功能
-- **提供商级联删除**：删除提供商时展示受影响的模型并级联删除
+- **Admin password protection**: `server.admin_password` in config enables a login overlay for the admin panel, using HMAC-based session tokens
+- **Credential visibility control**: `server.credential_visible: false` hides API key viewing/copying across the admin UI
+- **Provider cascade delete**: Deleting a provider now shows affected models and cascade-deletes them
 
-### 修复
+### Fixed
 
-- **Base URL 被覆盖**：切换提供商类型不再覆盖用户已输入的 base URL
-- **请求日志折叠**：展开的错误详情行在自动刷新后保持展开状态
+- **Base URL overwrite**: Switching provider type no longer overwrites user-entered base URLs
+- **Request log collapse**: Expanded error detail rows persist across auto-refresh
 
-### 变更
+### Changed
 
-- **Python ≥3.11 零依赖**：用内嵌的 zerodep yaml 模块替换 PyYAML
+- **Zero-dependency on Python ≥3.11**: Replaced PyYAML with vendored zerodep yaml module
 
 ## v0.6.1 — 2026-05-15
 
-### 新增
+### Added
 
-- **`/v1/embeddings` 透传端点**：将 embedding 请求直接代理到上游提供商，无需 IR 转换 —— OpenAI embeddings 格式在兼容提供商间通用。包含指标和请求日志记录
-- **`/v1/models` 增强响应**：模型列表现在包含 `api_standard`（如 `"openai_chat"`、`"anthropic"`）和每模型 `capabilities` 字段
-- **管理面板"从提供商获取"功能**：在模型标签页中查询上游 `/v1/models`（或等效端点），浏览可用模型并通过复选框批量添加，支持可选前缀。已存在的模型显示为禁用状态
-- **模型管理增强**：模型标签页新增提供商过滤下拉框和模型名称搜索
-- **Embedding 能力和测试类型**：模型编辑器中新增 `embedding` 能力（与 `vision`/`tools` 互斥）。Embedding 模型获得单独的 Test 按钮，POST 到 `/v1/embeddings` 并显示维度数量
-- **Reasoning 能力和测试类型**：新增 `reasoning` 能力，配有专用测试（发送 `reasoning_effort: "low"`）。与 `embedding` 互斥
-- **管理面板标签页持久化**：活动标签页存储在 `localStorage` 中，页面刷新后保持不变
+- **`/v1/embeddings` passthrough endpoint**: Proxy embedding requests directly to upstream providers without IR conversion — the OpenAI embeddings format is universal across compatible providers. Includes metrics and request log instrumentation
+- **`/v1/models` enriched response**: Model listing now includes `api_standard` (e.g. `"openai_chat"`, `"anthropic"`) and per-model `capabilities` fields
+- **"Fetch from Provider" in admin panel**: Query upstream `/v1/models` (or equivalent) endpoint from the Models tab, browse available models with checkboxes, and bulk-add with optional prefix. Already-existing models shown as disabled
+- **Model management enhancements**: Provider filter dropdown and model name search in the Models tab
+- **Embedding capability and test type**: `embedding` capability in the model editor (mutually exclusive with `vision`/`tools`). Embedding models get a single Test button that POSTs to `/v1/embeddings` and displays dimension count
+- **Reasoning capability and test type**: `reasoning` capability with dedicated test that sends `reasoning_effort: "low"`. Mutually exclusive with `embedding`
+- **Admin panel tab persistence**: Active tab stored in `localStorage`, survives page refresh
 
-### 修复
+### Fixed
 
-- **SOCKS5 代理测试中缺失事件循环**：当之前的测试关闭了默认事件循环时，使用 `asyncio.new_event_loop()` 作为后备
-- **fetch_upstream_models 中的 httpclient 响应类型断言**：解决 `AsyncClient.get()` 返回类型的 ty 类型检查错误
+- **Missing event loop in SOCKS5 proxy tests**: Use `asyncio.new_event_loop()` as fallback when prior tests have closed the default event loop
+- **Type assertion for httpclient response in fetch_upstream_models**: Resolve ty type-check error for `AsyncClient.get()` return type
 
 ## v0.6.0 — 2026-05-15
 
-### 新增
+### Added
 
-- **声明式 YAML 提供商 Shim 目录**：Shim 现在以 `provider.yaml` + 可选 `transforms.py` 文件定义在 `shims/providers/<name>/` 下，导入时自动发现并注册
-- **提供商字段转换机制**：三个可组合的原语 —— `strip_fields()`、`rename_field()`、`set_defaults()` —— 处理提供商 API 方言与其基础标准之间的字段级差异
-- **7 个新内置提供商 shim**：xAI (Grok)、Qwen（通义千问/DashScope）、Moonshot（月之暗面/Kimi）、MiniMax、Zhipu（智谱 GLM）、OpenRouter、火山引擎 —— 各自附带提供商特定的转换规则
-- **网关代理应用 Shim 转换规则**：网关请求/响应管线现在对出站请求应用 `to_transforms`，对入站响应和流式 chunk 应用 `from_transforms`
-- **管理面板显示提供商 Logo**：提供商 shim 可声明 `logo` URL（SVG），在管理面板提供商卡片中显示
-- **恢复 SOCKS5 代理支持**：将内嵌的 `httpclient` 从 zerodep v0.3.1 更新至 v0.4.0，包含完整的 SOCKS5 代理支持（RFC 1928/1929，支持用户名/密码认证）。`--proxy socks5://...` CLI 参数和配置文件中的 `"proxy": "socks5://..."` 现可用于所有上游请求
+- **Provider shim layer with declarative YAML directory**: Shims are now defined as `provider.yaml` + optional `transforms.py` files under `shims/providers/<name>/`, automatically discovered and registered at import time
+- **Transform mechanism for provider-specific field adaptation**: Three composable primitives — `strip_fields()`, `rename_field()`, `set_defaults()` — handle field-level differences between a provider's API dialect and its base standard
+- **7 new built-in provider shims**: xAI (Grok), Qwen (DashScope), Moonshot (Kimi), MiniMax, Zhipu (GLM), OpenRouter, Volcengine — each with provider-specific transforms where needed
+- **Gateway proxy applies shim transforms**: The gateway request/response pipeline now applies `to_transforms` on outbound requests and `from_transforms` on inbound responses and stream chunks
+- **Provider logos in admin panel**: Provider shims can declare a `logo` URL (SVG), displayed in the admin panel provider cards
+- **SOCKS5 proxy support restored**: Updated vendored `httpclient` from zerodep v0.3.1 to v0.4.0, which includes full SOCKS5 proxy support (RFC 1928/1929, with username/password authentication). Both `--proxy socks5://...` CLI flag and `"proxy": "socks5://..."` config entries now work for all upstream requests
 
-### 变更
+### Changed
 
-- **Shim 系统重构为声明式 YAML**：将编程式 `builtins.py` 替换为基于目录的系统（`shims/providers/*/provider.yaml` + `transforms.py`）。添加新提供商现在只需 YAML + 可选 Python，无需修改核心代码
-- **内嵌 `validate` 更新至 zerodep v0.5.0**：新增 `FieldValidator` 和 `model_validator`，支持字段级别的转换+校验管道
+- **Shim system refactored to declarative YAML**: Replaced programmatic `builtins.py` with a directory-based system (`shims/providers/*/provider.yaml` + `transforms.py`). Adding a new provider now requires only YAML + optional Python, no changes to core code
+- **Vendored `validate` updated to zerodep v0.5.0**: Adds `FieldValidator` and `model_validator` for field-level transform+validate pipelines
 
-### 移除
+### Removed
 
-- **`ModelShim` 类已移除**：模型级元数据已移除，改为更简洁的仅提供商级 shim。`ProviderShim` 数据类不再包含 `models` 字段
+- **`ModelShim` class removed**: Model-level metadata removed in favor of simpler provider-only shims. The `ProviderShim` dataclass no longer has a `models` field
 
-### 重构
+### Refactored
 
-- **零依赖网关**（[#178](https://github.com/Oaklight/llm-rosetta/pull/178)）：将 Starlette + uvicorn + httpx 替换为内嵌的 zerodep `httpserver` 和 `httpclient` 模块。`[gateway]` extra 现在无外部运行时依赖
+- **Zero-dependency gateway** ([#178](https://github.com/Oaklight/llm-rosetta/pull/178)): Replaced Starlette + uvicorn + httpx with vendored zerodep `httpserver` and `httpclient` modules. The `[gateway]` extra now has zero external runtime dependencies
 
-### 修复
+### Fixed
 
-- **Schema 扁平化中的深度合并**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：修复 `$ref`/`$defs` 解析以深度合并属性并剥离孤立的 `required` 条目
-- **无条件 usage 回退与 StreamContext 合并**（[#176](https://github.com/Oaklight/llm-rosetta/pull/176)）：防止缺失 usage 数据时的异常，确保 StreamContext 状态正确合并
+- **Deep-merge properties in schema flattening** ([#161](https://github.com/Oaklight/llm-rosetta/issues/161)): Fix `$ref`/`$defs` resolution to deep-merge properties and strip orphaned `required` entries
+- **Unconditional usage fallback and StreamContext merge** ([#176](https://github.com/Oaklight/llm-rosetta/pull/176)): Guard against missing usage data and ensure StreamContext state is properly merged
 
-### 已知问题
+### Known Issues
 
-- **Google 工具 schema `required` 验证失败**（[#161](https://github.com/Oaklight/llm-rosetta/issues/161)）：部分 Anthropic 工具 schema 的 `required` 条目引用了未定义的属性，导致 Google API 以 `INVALID_ARGUMENT` 拒绝请求
+- **Google tool schema `required` validation** ([#161](https://github.com/Oaklight/llm-rosetta/issues/161)): Some Anthropic tool schemas have `required` entries referencing properties not defined in the schema, causing Google API to reject with `INVALID_ARGUMENT`
 
 ## v0.5.3 — 2026-04-25
 
-### 新增
+### Added
 
-- **OpenAI Chat 转换器：thinking 配置支持**（[#170](https://github.com/Oaklight/llm-rosetta/pull/170)）：OpenAI Chat 转换器现在处理 IR 请求中的 `reasoning_config`，映射到 OpenAI 的 `reasoning_effort` 参数。支持通过 Chat Completions API 路由时配置 thinking/扩展思考参数
-- **OpenAI Chat 转换器：`reasoning_content` 字段处理**：推理模型（如 o1、o3）的非流式和流式响应现在正确提取 `reasoning_content` 字段并转换为 IR `ReasoningPart`，在跨提供商转换中保留思维链内容
-- **管理面板请求日志显示上游错误体**：当上游提供商返回错误时，响应体现在包含在管理面板的请求日志条目中，无需查看服务器日志即可诊断上游故障
-- **管理面板提供商和模型复制按钮**：管理面板中的提供商和模型条目新增复制/克隆按钮，支持基于现有配置快速创建新条目
+- **OpenAI Chat converter: thinking config support** ([#170](https://github.com/Oaklight/llm-rosetta/pull/170)): The OpenAI Chat converter now handles `reasoning_config` in IR requests, mapping to OpenAI's `reasoning_effort` parameter. Enables thinking/extended thinking configuration when routing through the Chat Completions API
+- **OpenAI Chat converter: `reasoning_content` field handling**: Non-streaming and streaming responses from reasoning models (e.g., o1, o3) now correctly extract the `reasoning_content` field and convert it to IR `ReasoningPart`, preserving chain-of-thought content during cross-provider conversion
+- **Upstream error body in admin request log**: When an upstream provider returns an error, the response body is now included in the admin request log entry, making it easier to diagnose upstream failures without checking server logs
+- **Copy entry buttons for providers and models in admin page**: Provider and model entries in the admin panel now have copy/duplicate buttons for quickly creating new entries based on existing configurations
 
-### 修复
+### Fixed
 
-- **`UserContentPart` 缺少 `FilePart`**（[#160](https://github.com/Oaklight/llm-rosetta/issues/160)、[#162](https://github.com/Oaklight/llm-rosetta/pull/162)）：`UserContentPart` 联合类型未包含 `FilePart`，导致 `validate_ir_request()` 拒绝所有包含文件内容的用户消息（如 Claude Code 以 Anthropic `document` 块发送的 PDF 附件）。Anthropic（`document`）、Google（`inlineData`）和 OpenAI Responses（`input_file`）的双向转换逻辑已完整实现，仅类型定义缺失
-- **`google_genai/content_ops.py` 无条件导入 `httpx`**（[#163](https://github.com/Oaklight/llm-rosetta/issues/163)）：将 Google GenAI 内容转换器中图片 URL 下载使用的 `httpx` 替换为 `urllib.request`。`httpx` 仅声明为 `[gateway]` 可选依赖，但被无条件导入，导致未安装 `[gateway]` extra 时报 `ModuleNotFoundError`
-- **API Key 管理中 emoji 图标替换为 SVG**：管理面板中 API Key 操作按钮使用的 emoji 字符在不同平台渲染不一致。替换为内联 SVG 图标，并新增 Key 可见性切换按钮
-- **API Key 列布局偏移**：修复 CSS 布局问题，切换 Key 可见性时列宽变化导致相邻按钮位置偏移
-- **Wheel 路径与 extras 括号的 glob 冲突**：CI 安装命令中对 wheel 文件路径加引号，防止文件名包含 `[extras]` 括号语法时被 shell glob 展开
+- **`FilePart` excluded from `UserContentPart`** ([#160](https://github.com/Oaklight/llm-rosetta/issues/160), [#162](https://github.com/Oaklight/llm-rosetta/pull/162)): `UserContentPart` union type did not include `FilePart`, causing `validate_ir_request()` to reject any user message containing file content (e.g., PDF attachments sent by Claude Code as Anthropic `document` blocks). The bidirectional conversion logic was already implemented for Anthropic (`document`), Google (`inlineData`), and OpenAI Responses (`input_file`) — only the type definition was missing
+- **`google_genai/content_ops.py` unconditional `httpx` import** ([#163](https://github.com/Oaklight/llm-rosetta/issues/163)): Replaced `httpx` with `urllib.request` in the Google GenAI content converter for image URL downloads. `httpx` was only declared as a `[gateway]` optional dependency but was imported unconditionally, causing `ModuleNotFoundError` when installed without `[gateway]` extra
+- **Emoji icons replaced with SVG in API key management**: API key action buttons in the admin panel used emoji characters that rendered inconsistently across platforms. Replaced with inline SVG icons and added a key visibility toggle button
+- **API key column layout shift**: Fixed CSS layout issue where the API key column width changed when toggling key visibility, causing adjacent buttons to shift position
+- **Wheel path glob collision with extras brackets**: Quoted the wheel file path in CI install commands to prevent shell glob expansion when the filename contains `[extras]` bracket syntax
 
-### 重构
+### Refactored
 
-- **SQLite 持久化后端**：将基于 JSONL 的请求日志和基于 JSON 的指标持久化替换为统一的 SQLite 后端。提供更好的写入可靠性、原子操作，并消除日志轮转复杂性。内嵌 zerodep 的 `persistdict`（v0.4.1）作为键值存储层
+- **SQLite persistence backend**: Replaced the JSONL-based request log and JSON-based metrics persistence with a unified SQLite backend. Provides better write durability, atomic operations, and eliminates log rotation complexity. Vendored `persistdict` from zerodep (v0.4.1) as the key-value storage layer
 
-### CI/构建
+### CI/Build
 
-- **安装冒烟测试**：新增 CI 冒烟测试，验证 `pip install` 在 `llm-rosetta`（核心）和 `llm-rosetta[gateway]` 两种变体下均能成功安装，及早发现缺失或循环依赖
+- **Install smoke tests**: Added CI smoke tests that verify `pip install` succeeds for both `llm-rosetta` (core) and `llm-rosetta[gateway]` variants, catching missing or circular dependencies early
 
 ## v0.5.2 — 2026-04-19
 
-### 修复
+### Fixed
 
-- **流式往返事件膨胀**（[#157](https://github.com/Oaklight/llm-rosetta/issues/157)）：修复了多种 `Provider A → IR → Provider B` 流式转换中输出事件多于输入事件的场景：
-    - OpenAI Chat、Anthropic 和 Google GenAI 转换器在没有打开内容块时发出多余的 `content_block_end` 事件，导致输出流膨胀
-    - Google GenAI 复合 chunk（同一 SSE 帧中包含 text + finish）触发重复的文本和结束事件。通过 `StreamContext.pending_text` / `pending_finish` 延迟合并为单个事件
-    - 工具调用事件在非 Anthropic 目标中生成多余的 `content_block_start` / `content_block_end` 包装。通过 `_started` 生命周期守卫抑制
+- **Streaming round-trip event inflation** ([#157](https://github.com/Oaklight/llm-rosetta/issues/157)): Fixed multiple scenarios where `Provider A → IR → Provider B` streaming conversion produced more output events than input events:
+    - OpenAI Chat, Anthropic, and Google GenAI converters emitted redundant `content_block_end` events when no content block was open, inflating the output stream
+    - Google GenAI compound chunks (text + finish in the same SSE frame) triggered duplicate text and finish events. Deferred text/finish payloads via `StreamContext.pending_text` / `pending_finish` so they merge into a single event
+    - Tool call events generated spurious `content_block_start` / `content_block_end` wrappers in non-Anthropic targets. Suppressed via `_started` lifecycle guard
 
-### 重构
+### Refactored
 
-- **统一 `stream_response_to_provider` 分派**（[#157](https://github.com/Oaklight/llm-rosetta/issues/157)）：将 4 个 provider converter 中完全相同的分派逻辑（10 项 `_TO_P_DISPATCH` 表 + 分派骨架）提取到 `BaseConverter`。每个 converter 只需实现特定于 provider 的 `_post_process_to_provider` 钩子（OpenAI Chat 注入 envelope 字段；OpenAI Responses 注入 `sequence_number`）。净减少约 27 行
-- **`StreamContext` 缓冲便捷方法**：新增 `buffer_usage()` / `pop_pending_usage()` / `buffer_finish()` / `pop_pending_finish()`，替换 4 个 converter 中手动 set-and-clear 模式
+- **Unified `stream_response_to_provider` dispatch** ([#157](https://github.com/Oaklight/llm-rosetta/issues/157)): Extracted identical dispatch logic (10-entry `_TO_P_DISPATCH` table + dispatch skeleton) from all 4 provider converters into `BaseConverter`. Each converter now only implements a provider-specific `_post_process_to_provider` hook (OpenAI Chat injects envelope fields; OpenAI Responses injects `sequence_number`). Net reduction: ~27 lines
+- **`StreamContext` buffer convenience methods**: Added `buffer_usage()` / `pop_pending_usage()` / `buffer_finish()` / `pop_pending_finish()` to replace manual set-and-clear patterns across all converters
 
-### 变更
+### Changed
 
-- **固定开发工具版本**：`ty>=0.0.31` 和 `ruff>=0.15.0` 现在声明在 `pyproject.toml` 的 dev 依赖中。CI 不再单独安装，使用 `pip install -e ".[all]"` 中的版本
-- **Converter 测试加入 CI**：`tests/converters/`（1086+ 测试）现在与 `tests/test_types/` 一起在 GitHub Actions 中运行
-- **往返膨胀回归测试**：新增 pytest 参数化测试套件（`tests/converters/test_roundtrip_inflation.py`，15 个用例），验证所有 4 个 provider 在文本、推理、工具调用和复合场景下 `len(output_events) <= len(input_events)`
+- **Pinned dev tooling versions**: `ty>=0.0.31` and `ruff>=0.15.0` now declared in `pyproject.toml` dev dependencies. CI no longer installs them separately — uses versions from `pip install -e ".[all]"`
+- **Converter tests added to CI**: `tests/converters/` (1086+ tests) now runs in GitHub Actions alongside `tests/test_types/`
+- **Roundtrip inflation regression test**: New pytest-parametrized test suite (`tests/converters/test_roundtrip_inflation.py`, 15 cases) verifies `len(output_events) <= len(input_events)` for all 4 providers across text, reasoning, tool call, and compound scenarios
 
 ## v0.5.1 — 2026-04-15
 
-### 新增
+### Added
 
-- **`tool_ops` 便利 API**（[#148](https://github.com/Oaklight/llm-rosetta/issues/148)）：新增顶层 `llm_rosetta.tool_ops` 模块，无需实例化完整转换器即可独立进行工具定义转换。提供 `to_provider()` / `from_provider()` 统一分派及各提供商快捷函数（`to_openai_chat()`、`to_anthropic()` 等）。所有导入均为延迟加载
-- **多 Key API 管理**：管理面板支持每个网关多个 API Key，支持按 Key 标签标注、创建/查看/删除操作，以及请求日志中的使用追踪
-- **网关 API Key 认证**：可配置的 API Key（`server.api_key`）保护 AI 请求端点（`/v1/*`）。支持各格式原生凭证提取——OpenAI `Authorization: Bearer`、Anthropic `x-api-key`、Google `x-goog-api-key` / `?key=` 查询参数。未配置 Key 时所有请求直通（向后兼容）
-- **提供商启用/禁用**：每个提供商现在支持 `enabled` 字段（默认 `true`）。禁用的提供商及其模型从路由中静默排除
-- **Docker 支持**：官方 `Dockerfile`、`docker-compose.yml` 和 Makefile 目标（`build-docker`、`push-docker`、`run-docker`），支持容器化部署。基于 Alpine 的镜像，非 root 用户，配置卷挂载，PUID/PGID 支持
-- **管理面板增强**：
-    - 提供商开关切换（启用/禁用，无需删除）
-    - 模型搜索和列排序
-    - 提供商重命名，自动更新模型引用
-    - 网络诊断按钮（连通性检查 + 代理测试）
-    - 模型测试支持可折叠的原始请求/响应详情及视觉测试的图片预览
-    - 内嵌测试图片（base64 Data URI），避免外部网络下载
-    - 推理模型测试使用 `reasoning_effort: 'low'` 限制 token 预算
+- **`tool_ops` convenience API** ([#148](https://github.com/Oaklight/llm-rosetta/issues/148)): New top-level `llm_rosetta.tool_ops` module for standalone tool definition conversion without instantiating full converter pipelines. Provides `to_provider()` / `from_provider()` unified dispatch and per-provider shortcuts (`to_openai_chat()`, `to_anthropic()`, etc.). All imports are lazy
+- **Multi-key API management**: Admin panel now supports multiple API keys per gateway with per-key labels, create/reveal/delete operations, and usage tracking in request logs
+- **Gateway API key authentication**: Configurable API key (`server.api_key`) protects AI request endpoints (`/v1/*`). Supports format-native credential extraction — OpenAI `Authorization: Bearer`, Anthropic `x-api-key`, Google `x-goog-api-key` / `?key=` query param. When no key is configured, all requests pass through (backward compatible)
+- **Provider enable/disable**: Each provider now supports an `enabled` field (default `true`). Disabled providers and their models are silently excluded from routing
+- **Docker support**: Official `Dockerfile`, `docker-compose.yml`, and Makefile targets (`build-docker`, `push-docker`, `run-docker`) for containerized deployment. Alpine-based image with non-root user, config volume mount, and PUID/PGID support
+- **Admin panel enhancements**:
+    - Provider toggle switches (enable/disable without deleting)
+    - Model search and column sorting
+    - Provider rename with automatic model reference updates
+    - Network diagnostics button (connectivity check + proxy test)
+    - Model testing with collapsible raw request/response details and image preview for vision tests
+    - Embedded test image (base64 data URI) to avoid external network downloads
+    - `reasoning_effort: 'low'` for reasoning model tests to limit token budget
 
-### 变更
+### Changed
 
-- **移除管理面板的网关级认证**：管理面板端点（`/admin/*`）不再需要网关 API Key。管理访问控制委托给反向代理（如 Caddy、Nginx）。网关 API Key 仅认证 AI 请求端点（`/v1/*`）
-- **C901 圈复杂度阈值降至 15**：逐步从 25 → 20 → 15 降低所有转换器和网关模块的复杂度。提取跨提供商一致性辅助方法（`_build_ir_usage`、`_build_provider_usage`、`_convert_tools_from_p`、`_apply_tool_config`），4 个转换器使用统一命名
-- **`BaseConverter` 抽象方法**：新增 4 个抽象方法，规范化跨提供商辅助方法模式。preserve 模式钩子作为约定文档化，供支持无损往返的提供商使用
-- **vendored `validate.py` 更新至 zerodep v0.4.2**：内部重构，将单体 `_validate()` 拆分为专用辅助函数；无功能变化
+- **Admin panel authentication removed from gateway**: Admin panel endpoints (`/admin/*`) no longer require the gateway API key. Admin access control is delegated to the reverse proxy (e.g. Caddy, Nginx). The gateway API key now only authenticates AI request endpoints (`/v1/*`)
+- **C901 cyclomatic complexity enforced at threshold 15**: Progressive reduction from 25 → 20 → 15 across all converters and gateway modules. Extracted cross-provider consistency helpers (`_build_ir_usage`, `_build_provider_usage`, `_convert_tools_from_p`, `_apply_tool_config`) with identical names across all 4 converters
+- **`BaseConverter` abstract methods**: Four new abstract methods formalize the cross-provider helper pattern. Preserve-mode hooks documented as convention for providers supporting lossless round-trip
+- **Vendored `validate.py` updated to zerodep v0.4.2**: Internal refactor of monolithic `_validate()` into focused helpers; no functional changes
 
-### 修复
+### Fixed
 
-- **图片 URL 下载添加 User-Agent**：Google GenAI 内容转换器下载图片 URL 进行 base64 内联转换时，现在发送 `User-Agent: llm-rosetta/1.0 (image fetch)`，防止 Wikimedia 等服务器返回 403 Forbidden
-- **图片下载代理支持**：Google GenAI 转换器的图片下载现在遵循 `HTTPS_PROXY` / `HTTP_PROXY` 环境变量
-- **推理模型空内容回退**：管理面板测试结果现在正确处理 `content: ""`（推理模型将所有 `max_tokens` 消耗在推理 token 上时），而非显示原始 JSON
-- **配置文件未找到错误**：网关在配置文件不存在时显示友好的错误信息，而非 Python 堆栈跟踪
-- **ty 类型检查兼容性**：为 TypedDict 与 `dict[str, Any]` 不匹配及 `FinishReason` Literal 类型窄化添加 `ty: ignore` 注解
-- **Google 转换器在 thinking 耗尽所有 token 时崩溃**（[#152](https://github.com/Oaklight/llm-rosetta/issues/152)）：Gemini 2.5 Pro 在 `max_tokens` 较小时，thinking 可能消耗全部 token，产生无内容部分的响应。转换器现在回退到空 assistant 消息，而非 IR 验证失败
+- **User-Agent header for image URL downloads**: Google GenAI content converter now sends `User-Agent: llm-rosetta/1.0 (image fetch)` when downloading image URLs for inline base64 conversion, preventing 403 Forbidden from servers like Wikimedia
+- **Image URL download with proxy support**: Image downloads in the Google GenAI converter now respect `HTTPS_PROXY` / `HTTP_PROXY` environment variables
+- **Empty content fallback for reasoning models**: Admin panel test results now correctly handle `content: ""` (from reasoning models where all `max_tokens` are consumed by reasoning tokens) instead of showing raw JSON
+- **Config file not found error**: Gateway now shows a friendly error message when the config file doesn't exist, instead of a Python traceback
+- **ty type checker compatibility**: Added `ty: ignore` annotations for TypedDict vs `dict[str, Any]` mismatches and `FinishReason` Literal type narrowing
+- **Google converter crash when thinking consumes all tokens** ([#152](https://github.com/Oaklight/llm-rosetta/issues/152)): Gemini 2.5 Pro with small `max_tokens` could have all tokens consumed by thinking, producing a response with no content parts. The converter now falls back to an empty assistant message instead of failing IR validation
 
 ## v0.5.0 — 2026-04-12
 
-### 新增
+### Added
 
-- **网关管理面板**：在 `/admin/` 提供内置 Web 管理面板，支持管理网关配置、监控流量和查看请求日志，无需编辑配置文件或重启服务器
-    - **Configuration 标签页**：可视化管理提供商（添加、编辑、重命名、删除）和模型路由，支持能力标记（text/vision/tools）
-    - **Dashboard 标签页**：实时指标摘要卡片（总请求数、错误率、活跃流式连接、运行时间），滚动 60 秒吞吐量和延迟图表，按提供商分类统计
-    - **Request Log 标签页**：可过滤的请求日志，支持按模型、提供商、状态筛选，分页显示，状态码颜色标记
-    - **8 种主题**：Light、Indigo Dark、Dracula、Nord、Solarized、Osaka Jade、One Dark、Rosé Pine — 保存在 localStorage 中
-    - **国际化**：支持 English 和中文切换，选择保存在 localStorage 中
-- **文件持久化**：指标计数器（JSON）和请求日志（JSONL）自动保存到配置文件旁的磁盘目录中，数据在服务器重启后恢复。日志轮转支持 gzip 压缩（2 MB 限制，最多 3 个备份）
-- **提供商重命名**：重命名提供商时自动更新所有模型路由引用
-- **API Key 安全**：提供商卡片显示脱敏 Key，编辑弹窗中支持可见性切换和复制按钮。脱敏值不会被写回配置文件
+- **Gateway Admin Panel**: Built-in web admin panel at `/admin/` for managing gateway configuration, monitoring traffic, and inspecting request logs without editing config files or restarting the server
+    - **Configuration tab**: Visual management of providers (add, edit, rename, delete) and model routing with capabilities (text/vision/tools)
+    - **Dashboard tab**: Real-time metrics with summary cards (total requests, error rate, active streams, uptime), rolling 60-second throughput and latency charts, per-provider breakdown
+    - **Request Log tab**: Filterable request log with model, provider, and status filters, paginated view with color-coded status codes
+    - **8 themes**: Light, Indigo Dark, Dracula, Nord, Solarized, Osaka Jade, One Dark, Rosé Pine — persisted in localStorage
+    - **i18n**: English and Chinese language support with localStorage persistence
+- **File-based persistence**: Metrics counters (JSON) and request log (JSONL) are automatically saved to disk alongside the config file. Data survives server restarts. Log rotation with gzip compression (2 MB limit, 3 backups)
+- **Provider rename**: Renaming a provider automatically updates all model routing references
+- **API key security**: Masked keys on provider cards, reveal-on-demand with visibility toggle and copy button in edit modal. Masked values are never written back to config
 
-### 变更
+### Changed
 
-- **提供商名称与 API 标准类型解耦**：提供商名称现在是用户自定义字符串（如 `"my-openai"`、`"OpenRouter_anthropic"`），不再受限于 4 种标准类型标识符。独立的 `type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）
-- 将 `write_config()` 提取到 `config.py`，供 CLI 和管理面板共用
+- **Provider names decoupled from API standard types**: Provider names are now user-defined strings (e.g. `"my-openai"`, `"OpenRouter_anthropic"`) instead of being constrained to the 4 standard type identifiers. A separate `type` field specifies the API standard (`openai_chat`, `openai_responses`, `anthropic`, `google`)
+- Extracted `write_config()` to `config.py` for shared use by CLI and admin panel
 
 ## v0.4.2 — 2026-04-11
 
-### 变更
+### Changed
 
-- **`ReasoningConfig.enabled` 替换为 `mode` 字段**：布尔值 `enabled` 字段已被 `mode: Literal["auto", "enabled", "disabled"]` 替换。这使 IR 更贴近提供商语义（Anthropic 的三态 `thinking.type`、OpenAI Responses 的 `reasoning.type`）。省略 `mode` 保留原有的"提供商默认"行为。`effort` 字段现在直接位于 `ReasoningConfig` 中，而非嵌套
+- **`ReasoningConfig.enabled` replaced with `mode` field**: The boolean `enabled` field has been replaced by `mode: Literal["auto", "enabled", "disabled"]`. This aligns the IR more closely with provider semantics (Anthropic's three-way `thinking.type`, OpenAI Responses' `reasoning.type`). Omitting `mode` retains the previous "provider default" behavior. The `effort` field now lives directly in `ReasoningConfig` rather than being nested
 
-### 修复
+### Fixed
 
-- **Responses API `developer` 角色映射**：OpenAI Responses API 使用 `role: "developer"`（等同于 Chat 的 `"system"`）。此前该角色在 Provider→IR 转换中原样传递，导致验证失败。现已正确映射为 IR `"system"`
-- **Google GenAI `additionalProperties` 拒绝**：Google 的 function_declarations API 拒绝 JSON Schema 中的 `additionalProperties` 关键字。为 `sanitize_schema()` 新增 `extra_strip_keys` 参数，允许提供商剥离特定不支持的关键字。Google tool_ops 现递归剥离嵌套 schema 中的 `additionalProperties`
-- **Google GenAI `prompt_tokens_details` 格式不匹配**：Google 以 `list[ModalityTokenCount]` 格式返回 modality token 详情（如 `[{"modality": "TEXT", "token_count": 42}]`），但 IR 期望 `dict[str, int]`（如 `{"text_tokens": 42}`）。新增双向转换辅助函数 `_modality_list_to_dict()` 和 `_dict_to_modality_list()`，同时支持 SDK（`token_count`）和 REST API（`tokenCount`）字段名
-- **跨格式 tool call ID 前缀映射**：Responses API 强制要求 tool call ID 以 `fc_` 前缀，但 Chat 使用 `call_`，Anthropic 使用 `toolu_`。在 Responses 转换中新增自动前缀映射，防止跨格式场景下的验证失败
-- **自适应思考回退**：将 IR 推理配置转换为 Anthropic 格式时，`mode: "enabled"` 但缺少 `budget_tokens` 现在正确回退为 `{"type": "adaptive"}` 并发出警告，而非产生无效的不含必需 `budget_tokens` 的 `{"type": "enabled"}`
+- **Responses API `developer` role mapping**: The OpenAI Responses API uses `role: "developer"` (equivalent to Chat's `"system"`). Previously this role was passed through to IR unchanged, causing validation failures. Now correctly mapped to IR `"system"` during Provider→IR conversion
+- **Google GenAI `additionalProperties` rejection**: Google's function_declarations API rejects the `additionalProperties` JSON Schema keyword. Added `extra_strip_keys` parameter to `sanitize_schema()` so providers can strip provider-specific unsupported keywords. Google tool_ops now strips `additionalProperties` recursively from nested schemas
+- **Google GenAI `prompt_tokens_details` format mismatch**: Google returns modality token details as `list[ModalityTokenCount]` (e.g. `[{"modality": "TEXT", "token_count": 42}]`) but IR expects `dict[str, int]` (e.g. `{"text_tokens": 42}`). Added bidirectional conversion helpers `_modality_list_to_dict()` and `_dict_to_modality_list()`. Handles both SDK (`token_count`) and REST API (`tokenCount`) field names
+- **Cross-format tool call ID prefix mapping**: The Responses API enforces `fc_` prefix on tool call IDs, but Chat uses `call_` and Anthropic uses `toolu_`. Added automatic prefix mapping during Responses conversion to prevent validation failures in cross-format scenarios
+- **Adaptive thinking fallback**: When converting IR reasoning config to Anthropic format, `mode: "enabled"` without `budget_tokens` now correctly falls back to `{"type": "adaptive"}` with a warning, instead of producing an invalid `{"type": "enabled"}` without the required `budget_tokens`
 
 ## v0.4.1 — 2026-04-10
 
-### 新增
+### Added
 
-- **`convert()` 新增 `force_conversion` 参数**：新增 `force_conversion: bool = False` 仅关键字参数。设为 `True` 时，即使源和目标提供商相同，也会执行完整的 source→IR→target 转换管线，确保参数规范化（例如 OpenAI Chat 的 `max_tokens` → `max_completion_tokens`）。默认 `False` 保留现有的直通行为
+- **`force_conversion` parameter for `convert()`**: New `force_conversion: bool = False` keyword-only parameter. When `True`, the full source→IR→target pipeline runs even when source and target providers match, ensuring parameter normalization (e.g. `max_tokens` → `max_completion_tokens` for OpenAI Chat). Default `False` preserves existing passthrough behavior
 
-### 修复
+### Fixed
 
-- **内嵌 `validate.py` 更新至 zerodep v0.4.1**：应用 pyupgrade 修复 — `Callable` 从 `collections.abc` 而非 `typing` 导入（UP035），`@functools.cache` 替换 `@functools.lru_cache(maxsize=None)`（UP033）
-- 移除 benchmark 脚本中未使用的 `sys` 导入
-- 对 benchmark 脚本执行 `ruff format` 格式化
+- **Vendored `validate.py` updated from zerodep v0.4.1**: Applied pyupgrade fixes — `Callable` imported from `collections.abc` instead of `typing` (UP035), `@functools.cache` replaces `@functools.lru_cache(maxsize=None)` (UP033)
+- Removed unused `sys` import in benchmark script
+- Applied `ruff format` to benchmark scripts
 
-### 变更
+### Changed
 
-- 移除 README 中不准确的"相关项目"段落 — LLM-Rosetta 是独立项目，不属于 ToolRegistry 生态系统
+- Removed incorrect "Related Projects" section from README — LLM-Rosetta is an independent project, not part of the ToolRegistry ecosystem
 
 ## v0.4.0 — 2026-04-09
 
-### 新增
+### Added
 
-- **元数据保留：实现无损 A→IR→A 往返转换** (#60, PR #119)：`ConversionContext` 新增 `MetadataMode`（`"strip"` / `"preserve"`）选项，在 `from_provider` 阶段捕获提供商特有字段，在 `to_provider` 阶段重新注入，实现无损往返转换。`ConversionContext` 新增辅助方法：`store_request_echo()`、`store_response_extras()`、`store_output_items_meta()`、`get_echo_fields()`、`get_output_items_meta()`。各提供商覆盖范围：
-    - **OpenAI Responses**：捕获/恢复 28+ 回显字段（temperature、tools、reasoning、truncation 等）、逐输出项元数据（id、status、annotations、logprobs），`RESPONSES_REQUIRED_DEFAULTS` 字典提供规范要求字段的合理默认值，所有 SSE 事件包含 `sequence_number`
-    - **Anthropic**：保留 `stop_sequence`、`container`、citations 及 OpenRouter 扩展 usage 字段
-    - **OpenAI Chat**：`response_to_provider` 现在重新输出 `refusal` 和 `annotations` 字段（此前被丢弃）
-    - **Google GenAI**：保留 usage 元数据中的 `promptTokensDetails` 和 `cachedContentTokenCount`
-    - **网关**：流式和非流式路径自动启用 preserve 模式；流式传输中在 `from_ctx` 和 `to_ctx` 之间桥接元数据
+- **Metadata preservation for lossless A→IR→A round-trip** (#60, PR #119): New `MetadataMode` (`"strip"` / `"preserve"`) option in `ConversionContext` that captures provider-specific fields during `from_provider` and re-injects them during `to_provider`, enabling lossless round-trip conversion. Helper methods on `ConversionContext`: `store_request_echo()`, `store_response_extras()`, `store_output_items_meta()`, `get_echo_fields()`, `get_output_items_meta()`. Per-provider coverage:
+    - **OpenAI Responses**: captures/restores 28+ echo fields (temperature, tools, reasoning, truncation, etc.), per-output-item metadata (id, status, annotations, logprobs), `RESPONSES_REQUIRED_DEFAULTS` dict for spec-required fields with sensible defaults, `sequence_number` on all SSE events
+    - **Anthropic**: preserves `stop_sequence`, `container`, citations, and OpenRouter extension usage fields
+    - **OpenAI Chat**: now re-emits `refusal` and `annotations` fields in `response_to_provider` (previously dropped)
+    - **Google GenAI**: preserves `promptTokensDetails` and `cachedContentTokenCount` in usage metadata
+    - **Gateway**: automatically enables preserve mode for both streaming and non-streaming paths; bridges metadata between `from_ctx` and `to_ctx` during streaming
 
-### 修复
+### Fixed
 
-- **Open Responses 规范合规性（流式与非流式）**：所有 SSE 事件添加必需字段（`item_id`、`logprobs`、`annotations`、`status`、`sequence_number`、`output_index`、`content_index`），添加 usage 详细分解（`output_tokens_details`、`input_tokens_details`），非流式输出项生成消息 item ID 和 status，tool_ops 添加 `function_call` status 字段，`service_tier` 默认值改为 `"default"`（字符串而非 null，符合规范），required defaults 中添加 `completed_at`，未提供时 `created_at` 回退到当前时间，规范化回显工具的 `strict: null`，网关流式传输中从 `from_ctx` 到 `to_ctx` 桥接元数据。全部 6 个 Open Responses 合规性测试通过（schema + 语义）
+- **Open Responses spec compliance for streaming and non-streaming**: Added required fields to all SSE events (`item_id`, `logprobs`, `annotations`, `status`, `sequence_number`, `output_index`, `content_index`), usage detail breakdowns (`output_tokens_details`, `input_tokens_details`), message item IDs and status for non-streaming output items, `function_call` status field in tool_ops, `service_tier` default to `"default"` (string, not null per spec), `completed_at` in required defaults, `created_at` fallback to current time when not provided, normalized echoed tools with `strict: null`, and metadata bridging from `from_ctx` to `to_ctx` in gateway streaming. All 6 Open Responses compliance tests now pass (schema + semantic)
 
 ## v0.3.1 — 2026-04-07
 
-### 修复
+### Fixed
 
-- **`service_tier: None` 和 `system_fingerprint: None` 导致验证错误** (PR #118)：OpenAI 上游返回这些字段为 `null`，但存在性检查（`if "key" in dict`）通过后将 `None` 赋值给 IR 的 `NotRequired[str]` 字段。在 OpenAI Chat 和 OpenAI Responses 两个转换器中改为值非空检查。发现于 [Oaklight/argo-proxy#99](https://github.com/Oaklight/argo-proxy/issues/99) 测试过程中
-- **基类 `StreamContext` 在 Responses 流式传输中缺少提供商特定属性** (PR #118)：当网关传入基类 `StreamContext` 给 `OpenAIResponsesConverter.stream_response_to_provider()` 时，方法访问的 `accumulated_text`、`output_item_emitted` 等字段仅存在于 `OpenAIResponsesStreamContext` 子类。新增 `from_base()` 类方法自动升级，并通过 metadata 缓存保持跨调用状态
+- **`service_tier: None` and `system_fingerprint: None` causing validation errors** (PR #118): OpenAI upstream returns these fields as `null`, but the existence check (`if "key" in dict`) passed and assigned `None` to IR's `NotRequired[str]` field. Changed to value-not-None check in both OpenAI Chat and OpenAI Responses converters. Discovered via [Oaklight/argo-proxy#99](https://github.com/Oaklight/argo-proxy/issues/99)
+- **Base `StreamContext` missing provider-specific attributes in Responses streaming** (PR #118): When a gateway passes a base `StreamContext` to `OpenAIResponsesConverter.stream_response_to_provider()`, the method accesses `accumulated_text`, `output_item_emitted`, etc. that only exist on `OpenAIResponsesStreamContext`. Added auto-upgrade via `from_base()` classmethod with metadata caching to preserve state across calls
 
 ## v0.3.0 — 2026-04-07
 
-### 新增
+### Added
 
-- **全部 4 个转换器支持多模态工具结果** (#92, PR #109)：工具现在可以返回多模态内容（文本 + 图片 + 文件）作为 `ToolResultPart.result`。三个提供商（Anthropic、OpenAI Responses、Google GenAI）原生支持；内容块通过每个提供商的 `content_ops` 层转换。详见下方提供商支持矩阵
-- **OpenAI Chat 多模态工具结果无损往返** (#92, PR #108)：OpenAI Chat Completions 的工具消息仅接受 `content: string`。实现双重编码策略——工具消息保留 `json.dumps(result)` 作为数据兜底，同时合成用户消息携带可视内容（`image_url` 部分）包裹在 `<tool-content call-id="...">` XML 标签中。解包时优先从合成消息恢复多模态结构，若合成消息被智能体框架裁剪则回退到 JSON 解析
-- **`extract_all_text()` 辅助函数** (PR #109)：从 `TextPart` 和 `ReasoningPart` 内容中提取文本——适用于思考模型（如 gemini-2.5-flash），这类模型可能将答案放在 reasoning 部分而非 text 部分
-- **`generate_chart` 示例工具** (PR #109)：`examples/tools.py` 中新增多模态工具，返回 `[TextPart, ImagePart]`（含内联 base64 PNG），以及 `multimodal_tools_spec` 组合全部 3 个示例工具
-- **全部 4 个提供商 SDK 的多模态集成测试** (PR #109)：每个提供商新增两个测试场景——(A) 工具返回多模态内容（文本 + 图片），(B) 图片输入结合工具调用。全部 30 个测试通过官方 API 验证：OpenAI Chat 9/9、OpenAI Responses 6/6、Anthropic 8/8、Google GenAI 7/7
-- **运行时 IR 验证（零依赖内嵌验证器）** (#91)：`validate_ir_request()`、`validate_ir_response()` 和 `validate_ir_messages()` 工具函数，在运行时对 IR 结构进行 TypedDict 定义验证。4 个转换器的 `request_from_provider()` 和 `response_from_provider()` 现自动验证输出。替代手动 `BaseMessageOps.validate_messages` 实现。包含 Python <3.11 的 `typing_extensions.TypedDict` 兼容修复
-- **常量验证测试**：4 个 `test_constants.py` 文件中新增 39 个测试，验证所有 reason 映射值均为合法 IR finish reason、映射覆盖完整、事件类型常量格式正确、ID 生成产出正确格式
-- **Finish reason 映射测试覆盖**：38 个测试验证 reason 映射正确性，为常量重构提供安全网
-- **转换管线 `ConversionContext` 基类** (#106, PR #111)：新增 `ConversionContext` 数据类，包含 `warnings: list[str]`、`options: dict[str, Any]` 和 `metadata: dict[str, Any]`——为非流式转换提供结构化上下文容器。新增 `BaseConverter.create_conversion_context(**options)` 工厂方法，与已有的 `create_stream_context()` 对称。全部 6 个 `BaseConverter` 非流式方法现在接受可选的 `context: ConversionContext` 关键字参数；各转换器实现将警告同步到 `context.warnings`。网关代理为每个请求创建共享 context 并沿完整的 source→IR→target→response 管线传递
+- **Multimodal tool result support across all 4 converters** (#92, PR #109): Tools can now return multimodal content (text + images + files) as `ToolResultPart.result`. Three providers (Anthropic, OpenAI Responses, Google GenAI) support this natively; content blocks are converted through each provider's `content_ops` layer. See provider support matrix below
+- **Lossless multimodal tool result roundtrip for OpenAI Chat** (#92, PR #108): OpenAI Chat Completions only accepts `content: string` for tool messages. Implements a dual encoding strategy — tool message keeps `json.dumps(result)` as data fallback, plus a synthetic user message carries visual content (`image_url` parts) wrapped in `<tool-content call-id="...">` XML tags. Unpacking recovers multimodal structure from the synthetic message (preferred) or falls back to JSON parsing if the synthetic message was trimmed by agent frameworks
+- **`extract_all_text()` helper function** (PR #109): Extracts text from both `TextPart` and `ReasoningPart` content — useful for thinking models (e.g. gemini-2.5-flash) that may place answers in reasoning parts rather than text parts
+- **`generate_chart` example tool** (PR #109): New multimodal tool in `examples/tools.py` returning `[TextPart, ImagePart]` with inline base64 PNG, plus `multimodal_tools_spec` combining all 3 example tools
+- **Multimodal integration tests across all 4 provider SDKs** (PR #109): Two new test scenarios per provider — (A) tool returning multimodal content (text + image), (B) image input combined with tool calls. All 30 tests pass against official APIs: OpenAI Chat 9/9, OpenAI Responses 6/6, Anthropic 8/8, Google GenAI 7/7
+- **Runtime IR validation via vendored zero-dependency validator** (#91): `validate_ir_request()`, `validate_ir_response()`, and `validate_ir_messages()` utilities validate IR structures against their TypedDict definitions at runtime. All 4 converters now validate output in `request_from_provider()` and `response_from_provider()`. Replaces manual `BaseMessageOps.validate_messages`. Includes Python <3.11 compatibility for `typing_extensions.TypedDict`
+- **Constants validation tests**: 39 new tests across 4 `test_constants.py` files verifying that all reason mapping values are valid IR finish reasons, mapping coverage is complete, event type constants are well-formed, and ID generation produces correct formats
+- **Finish reason mapping test coverage**: 38 tests validating reason mapping correctness as a safety net for the constants refactoring
+- **`ConversionContext` base class for conversion pipelines** (#106, PR #111): New `ConversionContext` dataclass with `warnings: list[str]`, `options: dict[str, Any]`, and `metadata: dict[str, Any]` — a structured context container for non-streaming conversions. New `BaseConverter.create_conversion_context(**options)` factory method mirrors the existing `create_stream_context()`. All 6 non-streaming `BaseConverter` methods now accept an optional `context: ConversionContext` keyword parameter; converter implementations sync warnings to `context.warnings`. Gateway proxy creates a shared context per request and passes it through the full source→IR→target→response pipeline
 
-### 修复
+### Fixed
 
-- **工具转换失败时提供上下文错误信息** (#85, PR #110)：当 `p_tool_definition_to_ir()` 在处理格式错误或不支持的工具定义时失败，`ValueError` 现在包含 `type=` 和 `name=` 上下文信息，帮助用户识别是哪个工具导致了问题。已应用于全部 4 个转换器（OpenAI Chat、OpenAI Responses、Anthropic、Google GenAI），附带单元测试
-- **OpenAI Responses `tool_choice` 格式** (PR #109)：此前使用 Chat Completions 格式（`{"type": "function", "function": {"name": "..."}}`），现在使用 Responses 格式（`{"type": "function", "name": "..."}`）
-- **OpenAI Responses 工具调用 ID 往返** (PR #109)：Responses API 使用 `fc_` 前缀 ID，IR 使用 `call_` 前缀。Responses 的 `id` 现在单独保存在 `provider_metadata` 中（与 `call_id` 分开），实现无损往返转换
-- **OpenAI Responses 推理项往返** (PR #109)：推理模型（如 gpt-5-nano）发出带有 `id`（rs_ 前缀）、结构化 `summary` 数组和 `encrypted_content` 的推理项。这些信息现通过 `provider_metadata` 保留以实现无损往返——修复了推理项缺少原始 `id` 回传时导致的 400 错误
-- **IR 验证接受可选响应字段的 `None` 值** (PR #109)：`IRResponse` 中的 `logprobs` 和 `system_fingerprint` 现在接受 `None` 值（此前仅接受缺失键）
-- **OpenAI Responses `content_filter` finish reason 映射到错误状态** (#90)：`content_filter` 此前被错误映射到 `"completed"` 状态（`response_to_provider` 和 `stream_response_to_provider`）。现正确映射到 `"incomplete"` 状态，附带 `incomplete_details.reason = "content_filter"`
-- **Anthropic 流式传输缺少 `refusal` reason 映射**：流式传输的 `reason_map` 缺少非流式路径中存在的 `refusal` 条目，导致 Anthropic refusal 停止原因在流式传输期间被静默丢弃。作为常量提取的副作用修复（#64）——两条路径现在共享同一个 `ANTHROPIC_REASON_FROM_PROVIDER` 字典
+- **Contextual error messages for tool conversion failures** (#85, PR #110): When `p_tool_definition_to_ir()` fails on a malformed or unsupported tool definition, the `ValueError` now includes `type=` and `name=` context so users can identify which tool caused the issue. Applied to all 4 converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI) with unit tests
+- **OpenAI Responses `tool_choice` format** (PR #109): Was using Chat Completions format (`{"type": "function", "function": {"name": "..."}}`); now uses Responses format (`{"type": "function", "name": "..."}`)
+- **OpenAI Responses tool call ID round-trip** (PR #109): Responses API uses `fc_` prefix IDs while IR uses `call_` prefix. The Responses `id` is now preserved in `provider_metadata` separately from `call_id`, enabling lossless round-trip conversion
+- **OpenAI Responses reasoning item round-trip** (PR #109): Reasoning models (e.g. gpt-5-nano) emit reasoning items with `id` (rs_ prefix), structured `summary` arrays, and `encrypted_content`. These are now preserved through `provider_metadata` for lossless round-trip — fixes 400 errors when reasoning items were sent back without their original `id`
+- **IR validation accepts `None` for optional response fields** (PR #109): `logprobs` and `system_fingerprint` in `IRResponse` now accept `None` values (previously only accepted missing keys)
+- **OpenAI Responses `content_filter` finish reason mapped to wrong status** (#90): `content_filter` was incorrectly mapped to `"completed"` status in `response_to_provider` and `stream_response_to_provider`. Now correctly maps to `"incomplete"` status with `incomplete_details.reason = "content_filter"`
+- **Anthropic streaming missing `refusal` reason mapping**: The streaming `reason_map` was missing the `refusal` entry present in the non-streaming path, causing Anthropic refusal stop reasons to be silently dropped during streaming. Fixed as a side effect of the constants extraction (#64) — both paths now share the same `ANTHROPIC_REASON_FROM_PROVIDER` dict
 
-### 变更
+### Changed
 
-- **`ReasoningConfig.effort` 扩展为 5 级枚举** (#100)：Effort 级别新增 `"minimal"`、`"low"`、`"medium"`、`"high"`、`"max"`。提供商映射：Anthropic 映射到 `thinking.type="adaptive"` 配合 `thinking.effort`；OpenAI Chat/Responses 将 `"minimal"` 钳位为 `"low"`、`"max"` 钳位为 `"high"`（附带警告）；Google GenAI 映射到 `thinking_config.thinking_level`
-- **`ReasoningConfig.type` 替换为 `ReasoningConfig.enabled`** (#70)：`type: Literal["enabled", "disabled"]` 字段替换为 `enabled: bool`，避免遮蔽 Python 内建 `type`，提供更自然的 API
-- **合并重复的 IR 概念** (#69)：移除 `GenerationConfig` 中的 `candidate_count`——改用 `n`（Google GenAI 转换器内部映射 `n` ↔ `candidate_count`）。`system_instruction` 类型从 `str | list[dict]` 统一为 `str`
-- **规范化 `ImagePart`、`FilePart`、`AudioPart` 为标准形式** (#68)：每种 Part 现在恰好有两种标准形式——URL 引用 + 结构化内联数据（如 `image_data`）——加上统一的 `provider_ref: dict[str, Any]` 用于提供商特定引用。移除冗余的顶层 `data`/`media_type` 字段，`file_id`/`audio_id` 替换为 `provider_ref`
-- **IR 类型字段从 `Iterable` 改为 `list`；函数参数改为 `Sequence`** (#67)：TypedDict 字段使用 `list` 以支持索引和序列化；函数参数使用 `Sequence`（协变、只读）。同时修复 `strip_orphaned_tool_config` 中 `any()` 消耗单次迭代器的潜在 bug
-- **`StreamContext` 继承自 `ConversionContext`** (#106, PR #111)：`StreamContext` 现为 `ConversionContext` 的子类（IS-A 关系），统一流式与非流式路径的上下文模型。文件重命名：`base/stream_context.py` → `base/context.py`
-- **`StreamContext` 转为 dataclass 并引入提供商子类** (#65)：`StreamContext` 现为 `@dataclass`（消除防御性 `getattr`/`hasattr` 模式）。OpenAI Responses 特有状态提取至 `OpenAIResponsesStreamContext` 子类。新增 `BaseConverter.create_stream_context()` 工厂方法
+- **`ReasoningConfig.effort` expanded to 5-level enum** (#100): Effort levels now include `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`. Provider-specific mappings: Anthropic maps to `thinking.type="adaptive"` with `thinking.effort`; OpenAI Chat/Responses clamp `"minimal"`→`"low"` and `"max"`→`"high"` (with warnings); Google GenAI maps to `thinking_config.thinking_level`
+- **`ReasoningConfig.type` replaced with `ReasoningConfig.enabled`** (#70): The `type: Literal["enabled", "disabled"]` field is replaced with `enabled: bool` to avoid shadowing the Python built-in `type` and provide a more natural API
+- **Merged duplicate IR concepts** (#69): Removed `candidate_count` from `GenerationConfig` — use `n` instead (Google GenAI converter maps `n` ↔ `candidate_count` internally). Unified `system_instruction` type from `str | list[dict]` to `str`
+- **Normalized `ImagePart`, `FilePart`, `AudioPart` to canonical forms** (#68): Each part now has exactly two canonical forms — URL reference + structured inline data (e.g. `image_data`) — plus a unified `provider_ref: dict[str, Any]` for provider-specific references. Removed redundant top-level `data`/`media_type` fields and replaced `file_id`/`audio_id` with `provider_ref`
+- **IR type fields changed from `Iterable` to `list`; function parameters to `Sequence`** (#67): TypedDict fields now use `list` for indexable, serialization-friendly semantics; function parameters use `Sequence` (covariant, read-only). Also fixes a latent generator-consumption bug in `strip_orphaned_tool_config`
+- **`StreamContext` now inherits from `ConversionContext`** (#106, PR #111): `StreamContext` is a subclass of `ConversionContext` (IS-A relationship), unifying the context model for streaming and non-streaming paths. File renamed: `base/stream_context.py` → `base/context.py`
+- **`StreamContext` converted to dataclass with provider subclass** (#65): `StreamContext` is now a `@dataclass` with typed fields (eliminates defensive `getattr`/`hasattr` patterns). OpenAI Responses-specific state extracted into `OpenAIResponsesStreamContext` subclass. New `BaseConverter.create_stream_context()` factory method
 
-### 重构
+### Refactored
 
-- **Warnings 单源收敛** (#113, PR #115)：4 个转换器的 `request_to_provider` 方法现在统一使用 `ConversionContext` 作为警告的唯一积累点。消除了之前警告同时写入本地列表和 `context.warnings` 的双写模式。返回的 warnings 列表与 `context.warnings` 是同一个对象——不可能产生重复
-- **`ProviderMetadataStore` 替代全局 metadata 缓存** (#112, PR #117)：`proxy.py` 中的模块级 `_provider_metadata_cache` 字典替换为 `ProviderMetadataStore` 类——提供 TTL 过期（30 分钟）、最大容量淘汰（10k 条目）和显式生命周期管理。Store 在 `create_app()` 中按应用创建并通过 `app.state` 传递，消除隐式全局状态变更。`close_clients()` 重命名为 `close_resources()` 以在关闭时同步清理 store
-- **缩减公共 API 导出面** (#114, PR #116)：各转换器包的 `__all__` 导出精简为仅包含主转换器类，移除内部实现细节（`*MessageOps`、`*ContentOps`、`*ConfigOps`、`*ToolOps`、`*Constants`）。内部模块仍可通过显式导入使用，但不再作为公共 API 面推广
-- **将单体流式方法拆分为事件处理器** (#63)：4 个转换器中 8 个单体 `if`/`elif` 流式方法（约 1,781 行）替换为通过类级处理器表分发的独立处理器方法。公共 API 不变
-- **提取 OpenAI Responses 转换器共享工具函数** (#66)：`resolve_call_id()` 和 `build_message_preamble_events()` 从 `converter.py` 提取至 `utils.py`，附带专用单元测试
-- **提取各提供商常量用于 reason 映射及魔法值** (#64)：4 个转换器中散布的内联 reason 映射字典、SSE 事件类型字符串字面量、status-to-reason 条件逻辑和 ID 生成模式，现已集中到各提供商的 `_constants.py` 模块中。包含 `AnthropicEventType` 和 `ResponsesEventType` 常量类、`REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` 字典，以及 `generate_tool_call_id()` / `generate_message_id()` 辅助函数
+- **Warnings single-source convergence** (#113, PR #115): All 4 converter `request_to_provider` methods now use `ConversionContext` as the single accumulation point for warnings. Eliminates the dual-write pattern where warnings were written to both a local list and `context.warnings`. The returned warnings list IS the same object as `context.warnings` — no duplication possible
+- **`ProviderMetadataStore` replaces global metadata cache** (#112, PR #117): The module-level `_provider_metadata_cache` dict in `proxy.py` is replaced with `ProviderMetadataStore` — a class with TTL-based expiration (30 min), max-size eviction (10k entries), and explicit lifecycle management. The store is created per-app in `create_app()` and passed via `app.state`, eliminating implicit global mutation. `close_clients()` renamed to `close_resources()` to also clear the store on shutdown
+- **Shrink public API export surface** (#114, PR #116): Reduced `__all__` exports across converter packages to only the primary converter class, removing internal implementation details (`*MessageOps`, `*ContentOps`, `*ConfigOps`, `*ToolOps`, `*Constants`) from the public API. Internal modules remain importable for advanced use but are no longer promoted as public surface
+- **Extracted stream event handlers from monolithic methods** (#63): Replaced 8 monolithic `if`/`elif` stream methods (~1,781 lines) across all 4 converters with individual handler methods dispatched via class-level handler tables. Public API unchanged
+- **Extracted shared utility functions in OpenAI Responses converter** (#66): `resolve_call_id()` and `build_message_preamble_events()` extracted from `converter.py` into `utils.py` with dedicated unit tests
+- **Extracted per-provider constants for reason mappings and magic values** (#64): Inline reason mapping dicts, SSE event type string literals, status-to-reason conditional logic, and ID generation patterns across all 4 converters are now centralized in per-provider `_constants.py` modules. Includes `AnthropicEventType` and `ResponsesEventType` classes, `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` dicts, and `generate_tool_call_id()` / `generate_message_id()` helpers
 
 ## v0.2.6 — 2026-03-29
 
-### 修复
+### Fixed
 
-- **Responses API 转换后 Chat Completions tool 消息顺序错乱** *([@caidao22](https://github.com/caidao22))*：Codex CLI 在 Responses API 格式中会在 `function_call_output` 与其他项目（如用户警告消息）之间交错排列——在 Responses API 中通过 `call_id` 匹配是合法的。但经 IR → Chat Completions 转换后，交错的消息打破了 OpenAI Chat API 约束（`role: "tool"` 消息必须紧跟其 `assistant` `tool_calls`），导致上游返回 400 错误。在 `OpenAIChatMessageOps.ir_messages_to_p()` 中新增 `_reorder_tool_messages()` 后处理步骤，将 tool 响应重新归组到对应的 assistant 消息之后
-- **无工具定义时剥离孤立的 `tool_choice`/`tool_config`** *([@caidao22](https://github.com/caidao22))*：Codex 上下文压缩可能移除所有工具定义但保留 `tool_choice`（如 `"auto"`），导致上游 API 拒绝请求（*"tool_choice is set but no tools are provided"*）。在四个转换器中新增 `strip_orphaned_tool_config()`——属于 Codex 压缩修复家族：`fix_orphaned_tool_calls_ir`（孤立 tool_call/result 配对）、`_reorder_tool_messages`（tool 消息排序）。同时将 `fix_orphaned_tool_calls_ir` 扩展到 Google GenAI 转换器以保持完整性（#87）
-- **流式事件顺序修正**：四个提供商转换器（OpenAI Chat、OpenAI Responses、Anthropic、Google GenAI）中 `UsageEvent` 现在在 `FinishEvent` 之前发出。此前 `FinishEvent` 先处理，导致 `response.completed` 携带 `output_tokens=0`——下游消费者（如 Codex token 追踪）看到的是过时的用量数据。对于跨 chunk 场景（OpenAI Chat 在不同 chunk 中发送 `finish_reason` 和 `usage`），`FinishEvent` 现在将 `response.completed` 延迟到 `StreamEndEvent` 中发出，后者会合并待处理的 usage 数据
-- **Anthropic/Google → Chat 流式传输中并行工具调用被合并**：Anthropic 和 Google GenAI 的 `stream_response_from_provider` 发出的 `ToolCallStartEvent` 和 `ToolCallDeltaEvent` 缺少 `tool_call_index`。路由到 Chat Completions 时，所有并行工具调用默认索引为 0，导致客户端 SDK 将它们合并为一个调用。Anthropic 现在从 `context._tool_call_order` 位置派生 `tool_call_index`；Google 从 context 中的注册顺序计算（#88, #89）
-- **Responses `function_call` 输出缺少 `id` 字段**：非流式 `response_to_provider` 在 `function_call` 输出项上缺少 `id` 字段。流式传输使用合成的 `fc_` 前缀，可能通过 `p_tool_call_to_ir` 回退路径泄漏到 IR。统一两条路径，直接使用 `call_id` 作为 `id`（无前缀）
-- **Responses 流式传输 `item_id` 及空 `tool_call_id` 解析** *([@caidao22](https://github.com/caidao22))*：`StreamContext` 新增 `item_id` 追踪（`tool_call_item_id_map`，双向映射）。Responses `stream_response_to_provider` 现在在 `output_item.added` 上发出 `item.id`，在 `function_call_arguments.delta/done` 事件上发出 `item_id`（非 `call_id`）。纵深防御：通过 context 的 `tool_call_index` 解析空 `tool_call_id`（#86）
-- **非 function 类型工具名被添加类型前缀** *([@caidao22](https://github.com/caidao22))*：非 function 的 IR 工具定义（如 `type="custom"`、`name="apply_patch"`）转换时被添加了类型前缀（`custom_apply_patch`），导致工具调用匹配失败（客户端期望原始名称）。OpenAI Chat 和 Responses 转换器现在直接使用 `ir_tool["name"]`（#84）
+- **Chat Completions tool message ordering after Responses API conversion** *([@caidao22](https://github.com/caidao22))*: Codex CLI interleaves `function_call_output` with other items (e.g. user warnings) in Responses API format — valid there since items match by `call_id`. But after IR → Chat Completions conversion, the interleaved messages break the OpenAI Chat API constraint that `role: "tool"` messages must immediately follow their `assistant` `tool_calls`, causing upstream 400 errors. Added `_reorder_tool_messages()` post-processing in `OpenAIChatMessageOps.ir_messages_to_p()` that groups tool responses back to their corresponding assistant messages
+- **Orphaned `tool_choice`/`tool_config` stripped when no tools defined** *([@caidao22](https://github.com/caidao22))*: Codex context compaction can drop all tool definitions while keeping `tool_choice` (e.g. `"auto"`), causing upstream APIs to reject with *"tool_choice is set but no tools are provided"*. Added `strip_orphaned_tool_config()` in all four converters — part of the same Codex compaction fix family as `fix_orphaned_tool_calls_ir` (orphaned tool_call/result pairing) and `_reorder_tool_messages` (tool message ordering). Also extended `fix_orphaned_tool_calls_ir` to Google GenAI converter for completeness (#87)
+- **Stream event ordering**: `UsageEvent` is now emitted before `FinishEvent` in all four provider converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI). Previously `FinishEvent` was processed first, causing `response.completed` to carry `output_tokens=0` — downstream consumers (e.g. Codex token tracking) saw stale usage data. For cross-chunk scenarios (OpenAI Chat sends `finish_reason` and `usage` in separate chunks), `FinishEvent` now defers `response.completed` to `StreamEndEvent` which merges any pending usage
+- **Parallel tool calls merged into one in Anthropic/Google → Chat streaming**: Anthropic and Google GenAI `stream_response_from_provider` emitted `ToolCallStartEvent` and `ToolCallDeltaEvent` without `tool_call_index`. When routing to Chat Completions, all parallel tool calls defaulted to index 0, causing the client SDK to merge them into a single call. Anthropic now derives `tool_call_index` from `context._tool_call_order` position; Google computes it from registration order in context (#88, #89)
+- **Missing `id` field on Responses `function_call` output**: Non-streaming `response_to_provider` was missing the `id` field on `function_call` output items. Streaming used a synthetic `fc_` prefix that could leak into IR via `p_tool_call_to_ir` fallback path. Unified both paths to use `call_id` directly as `id` (no prefix)
+- **Responses streaming `item_id` and empty `tool_call_id` resolution** *([@caidao22](https://github.com/caidao22))*: Added `item_id` tracking to `StreamContext` (`tool_call_item_id_map`, bidirectional mapping). Responses `stream_response_to_provider` now emits `item.id` on `output_item.added` and `item_id` (not `call_id`) on `function_call_arguments.delta/done` events. Defense-in-depth: resolves empty `tool_call_id` by `tool_call_index` via context (#86)
+- **Non-function tool names mangled with type prefix** *([@caidao22](https://github.com/caidao22))*: Non-function IR tool definitions (e.g. `type="custom"`, `name="apply_patch"`) were converted with a type prefix (`custom_apply_patch`), breaking tool_call matching since the client expects the original name. Both OpenAI Chat and Responses converters now use `ir_tool["name"]` directly (#84)
 
 ## v0.2.5 — 2026-03-23
 
-### 修复
+### Fixed
 
-- **Anthropic `input_schema` 无参数工具缺少 `type` 字段**：无参数的 MCP 工具生成 `input_schema: {}`，但 Anthropic 要求必须包含 `"type"` 字段。现在当 schema 字典缺少 `type` 字段时默认为 `{"type": "object"}`——修复了 Google GenAI 或 OpenAI Responses 工具调用路由到 Anthropic 上游时出现的 `tools.0.custom.input_schema.type: Field required` 错误
-- **Google GenAI 全栈 camelCase 字段处理**：Gemini CLI 和 Google REST API 使用 camelCase（`inlineData`、`fileData`、`mimeType`、`fileUri`、`functionCall`、`functionResponse`、`finishReason`、`usageMetadata`、`responseMimeType`、`responseSchema`、`thinkingConfig`、`maxOutputTokens`、`stopSequences` 等），但转换器此前仅接受 snake_case。content_ops、config_ops、tool_ops、message_ops 和 converter 中所有 P→IR 方法现在同时接受两种命名；所有 IR→P 方法统一输出 camelCase 以兼容 REST API
-- **Google→IR 转换丢失图片/音频/文件数据**：`p_part_to_ir` 只检查 `inline_data`（snake_case），但 Gemini CLI 发送 `inlineData`（camelCase）——二进制内容被静默丢弃并输出 `不支持的Part类型` 警告。修复方式：在分发入口处规范化 camelCase 键名
-- **跨格式图片转换失败（Google → OpenAI/Anthropic）**：Google 的 `p_image_to_ir` 生成的 `ImagePart` 使用顶层 `data` + `media_type` 字段，但 OpenAI Chat、Anthropic 和 OpenAI Responses 的 `ir_image_to_p` 仅检查 `image_url` 和嵌套的 `image_data`——导致 `ValueError`。三个目标转换器现在都增加了对顶层字段的兜底处理（#68）
-- **Google GenAI tool_call_id 对账**：Google `functionCall` 没有 ID 字段，P→IR 时生成 UUID。但 Gemini CLI 为 `functionResponse` 分配自有 ID（格式：`name_timestamp_index`），造成不匹配。新增 `_reconcile_tool_call_ids` 方法，按函数名称匹配工具结果与工具调用，修复孤立 tool_call 错误
-- **tool_call_id 超出 OpenAI 40 字符限制**：生成的 ID 使用 `call_{name}_{8hex}` 格式——MCP 工具名如 `mcp_toolregistry-hub-server_datetime-now` 产生 54 字符 ID。缩短为 `call_{24hex}`（固定 29 字符）
-- **Google→IR 工具结果的 role 映射**：`functionResponse` 部分生成 `role: "user"` 的 IR 消息，导致 `fix_orphaned_tool_calls_ir`（检查 `role: "tool"`）无法检测。现在将 `functionResponse` 分离为 `role: "tool"` 消息，并在 `_IR_TO_GOOGLE_ROLE` 中添加显式 `"tool": "user"` 映射
-- **混合内容消息排序**：当 Google 消息同时包含 `functionResponse` 和 `inlineData` 时，内容部分排在工具结果之前，打断了 OpenAI 要求的 `assistant(tool_calls) → tool(response)` 顺序。修复后工具结果排在内容部分之前
-- **Google 内建工具（googleSearch、codeExecution）**：`p_tool_definition_to_ir` 对没有 `name` 字段的工具条目返回 `None`；converter 跳过这些条目，不再产生空 `function.name` 错误
-- **网关：Starlette `on_shutdown` 弃用兼容**：将已弃用的 `on_shutdown` 参数替换为 `lifespan` 异步上下文管理器——修复与 Starlette 0.38+（移除了 `on_shutdown`/`on_startup`）的兼容性
+- **Anthropic `input_schema` missing `type` for parameterless tools**: MCP tools with no parameters produce `input_schema: {}`, but Anthropic requires `"type"` to be present. Now defaults to `{"type": "object"}` when the schema dict lacks a `type` field — fixes `tools.0.custom.input_schema.type: Field required` errors when routing Google GenAI or OpenAI Responses tool calls to Anthropic upstream
+- **Google GenAI camelCase field handling across the full converter stack**: Gemini CLI and the Google REST API use camelCase (`inlineData`, `fileData`, `mimeType`, `fileUri`, `functionCall`, `functionResponse`, `finishReason`, `usageMetadata`, `responseMimeType`, `responseSchema`, `thinkingConfig`, `maxOutputTokens`, `stopSequences`, etc.), but the converter only accepted snake_case. All P→IR methods in content_ops, config_ops, tool_ops, message_ops, and converter now accept both conventions; all IR→P methods now output camelCase for REST API compatibility
+- **Image/audio/file data lost during Google→IR conversion**: `p_part_to_ir` checked for `inline_data` (snake_case) but Gemini CLI sends `inlineData` (camelCase) — binary content was silently dropped with a `不支持的Part类型` warning. Fixed by normalizing camelCase keys at the dispatch entry point
+- **Cross-format image conversion failure (Google → OpenAI/Anthropic)**: Google's `p_image_to_ir` produces `ImagePart` with top-level `data` + `media_type` fields, but OpenAI Chat, Anthropic, and OpenAI Responses `ir_image_to_p` only checked `image_url` and nested `image_data` — threw `ValueError`. All three target converters now handle top-level fields as a fallback path (#68)
+- **Google GenAI tool_call_id reconciliation**: Google `functionCall` has no ID field, so UUIDs are generated during P→IR. But Gemini CLI assigns its own IDs to `functionResponse` (format: `name_timestamp_index`), creating a mismatch. New `_reconcile_tool_call_ids` method matches tool results to tool calls by function name, fixing orphaned tool_call errors
+- **tool_call_id exceeds OpenAI 40-character limit**: Generated IDs used `call_{name}_{8hex}` format — MCP tool names like `mcp_toolregistry-hub-server_datetime-now` produced 54-char IDs. Shortened to `call_{24hex}` (fixed 29 chars)
+- **Google→IR role mapping for tool results**: `functionResponse` parts produced `role: "user"` IR messages, so `fix_orphaned_tool_calls_ir` (which checks `role: "tool"`) couldn't detect them. Now separates `functionResponse` into `role: "tool"` messages with explicit `"tool": "user"` in `_IR_TO_GOOGLE_ROLE`
+- **Mixed content message ordering**: When a Google message contains both `functionResponse` and `inlineData`, the content parts were emitted before tool results, breaking OpenAI's required `assistant(tool_calls) → tool(response)` ordering. Tool results now precede content parts in the split
+- **Google built-in tools (googleSearch, codeExecution)**: `p_tool_definition_to_ir` now returns `None` for tool entries without a `name` field; converter skips them instead of producing empty `function.name` errors
+- **Gateway: Starlette `on_shutdown` deprecation**: Replaced deprecated `on_shutdown` parameter with `lifespan` async context manager — fixes compatibility with Starlette 0.38+ which removed `on_shutdown`/`on_startup`
 
-### 新增
+### Added
 
-- **StreamContext**：`get_tool_call_args()` 和 `get_pending_tool_calls()` 方法，用于在流式处理期间查询已积累的工具调用状态
+- **StreamContext**: `get_tool_call_args()` and `get_pending_tool_calls()` methods for querying accumulated tool call state during streaming
 
-### 变更
+### Changed
 
-- **`BaseToolOps.p_tool_definition_to_ir` 返回类型**：改为 `ToolDefinition | list[ToolDefinition] | None`，支持不可转换的工具条目
+- **`BaseToolOps.p_tool_definition_to_ir` return type**: Now `ToolDefinition | list[ToolDefinition] | None` to support unconvertible tool entries
 
-### 新增（文档）
+### Added (Documentation)
 
-- **提供商与 CLI 兼容性矩阵**：新增指南页面，记录通过格式转换代理实际集成测试 Gemini CLI、Claude Code 和 OpenCode 时发现的真实问题
+- **Provider & CLI Compatibility Matrix**: New guide page documenting real-world issues found during live integration testing with Gemini CLI, Claude Code, and OpenCode through format-converting proxies
 
 ## v0.2.4 — 2026-03-22
 
-### 新增
+### Added
 
-- **`fix_orphaned_tool_calls()` 工具函数**：`converters/openai_chat/tool_ops.py`、`converters/openai_responses/tool_ops.py` 和 `converters/anthropic/tool_ops.py` 中的公开函数，**双向**检测和修复工具调用/结果的配对问题 — 为孤立的工具调用注入合成占位结果，**同时**移除没有匹配调用的孤立工具结果。OpenAI（Chat 和 Responses）及 Anthropic 严格要求此配对关系（否则返回 400 错误），仅 Google Gemini 对此宽松。在所有严格配对转换器的 `request_to_provider()` 中通过 IR 层级自动修复；检测到孤立工具调用或结果时输出 `WARNING` 级别日志（#82, #84）
+- **`fix_orphaned_tool_calls()` utilities**: Public functions in `converters/openai_chat/tool_ops.py`, `converters/openai_responses/tool_ops.py`, and `converters/anthropic/tool_ops.py` that detect mismatched tool calls/results and fix them bidirectionally — injecting synthetic placeholder results for orphaned calls **and** removing orphaned results without matching calls. OpenAI (Chat & Responses) and Anthropic strictly require this pairing (return 400 otherwise); only Google Gemini is lenient. Automatically applied at the IR level during `request_to_provider()` for all strict-pairing converters; emits `WARNING`-level log when orphaned tool calls or results are detected (#82, #84)
 
-### 修复
+### Fixed
 
-- **Anthropic→IR `tool_result` 消息的 role 规范化**：Anthropic 将 `tool_result` 块放在 `role: "user"` 消息中，但 IR 使用 `role: "tool"`（与 OpenAI 一致）。Anthropic 转换器现在将纯 `tool_result` 的 user 消息规范化为 `role: "tool"`，并将混合 `tool_result` + text 的消息拆分为独立的 `role: "tool"` 和 `role: "user"` IR 消息。修复了跨格式转换（如 Anthropic → OpenAI Chat）中 `fix_orphaned_tool_calls_ir()` 无法检测已回答工具调用的问题（#84）
-- **OpenAI Responses→IR `function_call_output` 的 role 规范化**：`function_call_output` 和 `mcp_call_output` 项此前被归入 `role: "user"` 的 IR 消息，但 IR 对工具结果使用 `role: "tool"`。Responses 转换器现在将这些项归入 `role: "tool"` 消息，修复了跨格式转换（如 Responses → OpenAI Chat）中 `fix_orphaned_tool_calls_ir()` 无法检测已回答工具调用的问题（#84）
+- **Anthropic→IR role normalization for `tool_result` messages**: Anthropic places `tool_result` blocks in `role: "user"` messages, but IR uses `role: "tool"` (like OpenAI). The Anthropic converter now normalizes pure `tool_result` user messages to `role: "tool"`, and splits mixed `tool_result` + text messages into separate `role: "tool"` and `role: "user"` IR messages. This fixes `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls in cross-format conversions (e.g. Anthropic → OpenAI Chat) (#84)
+- **OpenAI Responses→IR role normalization for `function_call_output` items**: `function_call_output` and `mcp_call_output` items were grouped into `role: "user"` IR messages, but IR uses `role: "tool"` for tool results. The Responses converter now groups these items into `role: "tool"` messages, fixing `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls when converting Responses → other formats (e.g. Responses → OpenAI Chat) (#84)
 
-### 新增（文档）
+### Added (Documentation)
 
-- **提供商方言差异指南**：在转换器指南中新增章节（中英文），记录工具 schema 清理、孤立工具调用处理、Google camelCase/snake_case 差异
+- **Provider Dialect Differences guide**: New section in the Converters guide (EN + ZH) documenting tool schema sanitization, orphaned tool call handling, and Google camelCase/snake_case differences
 
 ## v0.2.3 — 2026-03-22
 
-### 修复
+### Fixed
 
-- **所有转换器均执行工具 schema 清洗**：此前 `_sanitize_schema()` 仅在 OpenAI Chat 转换器中调用。Google GenAI、OpenAI Responses 和 Anthropic 转换器现在也在发送到上游前清洗工具参数 schema，防止 Vertex AI 等严格端点拒绝请求（#80）
-- **移除非标准 `ref` 和 `$schema` 关键字**：OpenCode 内置工具使用不带 `$` 前缀的裸 `ref` 字段和顶层 `$schema`，均被 Vertex AI 拒绝。已添加到不支持关键字黑名单（#80）
-- **通过内联解析 `$ref`/`$defs` 引用**：JSON Schema `$ref` 引用现在通过从 `$defs`/`definitions` 内联被引用的定义来解析，两个关键字均从输出中移除。支持嵌套和链式引用（#80）
-- **流式传输中工具调用参数未累积**：OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册了工具调用，但在流式传输期间从未调用 `append_tool_call_args()` 累积参数增量。这导致工具调用参数到达上游时为空（如 MCP 工具返回 `'query' is a required property`）。此前仅 OpenAI Responses 转换器正确处理（#81）
-- **OpenAI Chat 流式工具调用 ID 解析**：仅携带 `index` 而无 `id` 的增量 chunk 产生了空字符串 `tool_call_id`。现在通过 chunk 索引从 `StreamContext._tool_call_order` 解析有效 ID（#81）
+- **Tool schema sanitization applied to all converters**: `_sanitize_schema()` was previously only called in the OpenAI Chat converter. Google GenAI, OpenAI Responses, and Anthropic converters now also sanitize tool parameter schemas before sending to upstream, preventing rejections from strict endpoints like Vertex AI (#80)
+- **Non-standard `ref` and `$schema` keywords stripped**: OpenCode's built-in tools use a bare `ref` field (without `$` prefix) and `$schema` at the top level, both rejected by Vertex AI. Added to the unsupported keywords blocklist (#80)
+- **`$ref`/`$defs` resolved by inlining**: JSON Schema `$ref` references are now resolved by inlining the referenced definition from `$defs`/`definitions`, and both keys are removed from the output. Supports nested and chained references (#80)
+- **Streaming tool call arguments not accumulated**: OpenAI Chat, Anthropic, and Google GenAI converters registered tool calls in `StreamContext` but never called `append_tool_call_args()` to accumulate argument deltas during streaming. This caused tool call arguments to arrive empty at upstream (e.g., MCP tools returning `'query' is a required property`). Only the OpenAI Responses converter was correct (#81)
+- **OpenAI Chat streaming tool call ID resolution**: Delta-only chunks (carrying `index` but no `id`) produced an empty-string `tool_call_id`. Now resolves the effective ID from `StreamContext._tool_call_order` using the chunk index (#81)
 
-### 变更
+### Changed
 
-- **`sanitize_schema` 提取至 `converters/base/tools.py`**：Schema 清洗工具函数（此前为 `openai_chat/tool_ops.py` 中的私有函数 `_sanitize_schema`）现已提升为 `converters/base/tools.py` 中的公开共享函数，通过 `converters.base` 导出。所有 4 个转换器的 `tool_ops.py` 均从共享位置导入，消除了跨转换器的交叉导入依赖（#66）
+- **`sanitize_schema` extracted to `converters/base/tools.py`**: The schema sanitization utility (previously `_sanitize_schema` private to `openai_chat/tool_ops.py`) is now a public shared function in `converters/base/tools.py`, exported via `converters.base`. All 4 converter `tool_ops.py` files import from the shared location instead of cross-importing from `openai_chat` (#66)
 
 ## v0.2.2 — 2026-03-22
 
-### 修复
+### Fixed
 
-- **Anthropic SSE 输出缺少 `content_block_stop`**：将 OpenAI Chat 流式响应转换为 Anthropic SSE 格式时，`content_block_stop` 事件未在 `message_delta` 之前发送，导致 Claude Code 静默丢弃响应内容。Anthropic 转换器现在在处理 `FinishEvent` 时为任何打开的内容块发送 `content_block_stop`（#77）
-- **上游预检 chunk 被误判为流结束**：Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空的预检 chunk。OpenAI Chat 转换器现在仅在流已实际启动后才将空 choices chunk 视为流结束（`context.is_started` 守卫）（#77）
+- **Missing `content_block_stop` in Anthropic SSE output**: When converting OpenAI Chat streaming responses to Anthropic SSE format, `content_block_stop` events were not emitted before `message_delta`, causing Claude Code to silently discard response content. The Anthropic converter now emits `content_block_stop` for any open content block when processing a `FinishEvent` (#77)
+- **Upstream preflight chunk misinterpreted as stream end**: Argo API sends a preflight chunk with `choices: []` and empty `id`/`model` before actual content. The OpenAI Chat converter now only treats empty-choices chunks as stream-end after the stream has actually started (`context.is_started` guard) (#77)
 
 ## v0.2.1 — 2026-03-20
 
-### 新增
+### Added
 
-- **网关请求/响应体日志**：可配置的调试日志，支持彩色输出、请求体脱敏和截断 — 通过配置（`"debug": {"verbose": true, "log_bodies": true}`）、环境变量（`LLM_ROSETTA_VERBOSE`、`LLM_ROSETTA_LOG_BODIES`）或 `--verbose` CLI 参数启用
-- **Google `request_to_provider()` 支持 `output_format="rest"`**：传入 `output_format="rest"` 可直接获得 REST API 格式的请求体，`tools`/`tool_config` 提升至顶层，生成参数包装在 `generationConfig` 中 — 无需再手动进行 SDK→REST 格式转换
+- **Gateway request/response body logging**: configurable debug logging with colorized output, body sanitization and truncation — enable via config (`"debug": {"verbose": true, "log_bodies": true}`), env vars (`LLM_ROSETTA_VERBOSE`, `LLM_ROSETTA_LOG_BODIES`), or `--verbose` CLI flag
+- **Google `output_format="rest"` for `request_to_provider()`**: pass `output_format="rest"` to get a REST API–ready request body with `tools`/`tool_config` at top level and generation params wrapped in `generationConfig` — eliminates the need for manual SDK→REST fixups
 
-### 变更
+### Changed
 
-- **网关模块化重构**：将 `app.py`（1057 行）拆分为 `proxy.py`（代理引擎、SSE 处理、上游请求）、`cli.py`（CLI 入口、argparse、子命令）和精简后的 `app.py`（路由处理、应用工厂，约 210 行）
-- **Google REST 请求体转换迁移至核心包**：`_fixup_google_body()` 逻辑从 `gateway/proxy.py` 迁移至 `GoogleGenAIConverter._to_rest_body()`，消除了网关和全部 6 个 REST 示例中的重复 SDK→REST 转换代码
+- **Gateway modularization**: split `app.py` (1057 lines) into `proxy.py` (proxy engine, SSE handling, upstream requests), `cli.py` (CLI entry point, argparse, subcommands), and a slimmed `app.py` (route handlers, app factory, ~210 lines)
+- **Moved Google REST body fixup to core**: `_fixup_google_body()` logic moved from `gateway/proxy.py` into `GoogleGenAIConverter._to_rest_body()`, removing duplicated SDK→REST transforms from the gateway and all 6 REST examples
 
-### 修复
+### Fixed
 
-- OpenAI Responses 流式传输：为 `response.completed` 添加缺失的 `id`/`object`/`model` 字段，为文本增量事件添加 `output_index`/`content_index`，并补充完整的生命周期事件（`output_item.added`、`content_part.added`、`content_part.done`、`output_item.done`）（#56）
-- OpenAI Chat 流式传输：`tool_calls` 条目现在始终包含必需的 `index` 字段，当上游 IR 事件未明确提供时默认为 `0`（#57）
-- OpenAI Chat 流式传输：usage-only 数据块现在包含 `"choices": []`，以满足要求每个 `chat.completion.chunk` 必须包含 `choices` 数组的客户端验证（#55）
-- `stream_options`（Chat Completions 专用字段）不再泄漏到 OpenAI Responses API 请求中 — Responses 转换器的 `ir_stream_config_to_p()` 之前错误地输出了 `stream_options`，导致 Chat 格式客户端（Kilo、OpenCode）通过网关代理到 Responses API 时被上游拒绝（#58）
-- Google GenAI 转换器现在可以处理 REST 格式请求中顶层的 tools 和 tool_config（除了 SDK 格式的 `config.tools`）— 之前只识别 SDK 格式，导致网关代理请求中的工具定义被静默丢弃（#59）
-- Google camelCase `functionDeclarations` 未解析：`p_tool_definition_to_ir()` 现在同时处理 `functionDeclarations`（camelCase/REST）和 `function_declarations`（snake_case/SDK），并提取所有声明而非仅第一个。同时为 `functionCallingConfig`/`allowedFunctionNames` 和 `toolConfig` 添加 camelCase 支持 — 修复 Gemini CLI 通过网关的工具调用（#61）
-- Google 流式工具调用被拆分为两个 chunk：`stream_response_to_provider()` 现在延迟 `tool_call_start`，在 `tool_call_delta` 时发送完整的 `function_call`（name + args），匹配 Google API 的原生格式（#62）
+- OpenAI Responses streaming: added missing `id`/`object`/`model` fields to `response.completed`, `output_index`/`content_index` to text delta events, and proper lifecycle events (`output_item.added`, `content_part.added`, `content_part.done`, `output_item.done`) (#56)
+- OpenAI Chat streaming: `tool_calls` entries now always include the required `index` field, defaulting to `0` when not explicitly provided by the upstream IR event (#57)
+- OpenAI Chat streaming: usage-only chunk now includes `"choices": []` to satisfy clients that validate every `chat.completion.chunk` must contain a `choices` array (#55)
+- `stream_options` (Chat Completions-only field) no longer leaks into OpenAI Responses API requests — the Responses converter's `ir_stream_config_to_p()` was incorrectly emitting `stream_options`, causing upstream rejection when Chat-format clients (Kilo, OpenCode) were proxied to the Responses API (#58)
+- Google GenAI converter now handles tools and tool_config in REST-format requests (top-level fields) in addition to SDK format (`config.tools`) — previously only SDK format was recognized, silently stripping tool definitions from gateway-proxied requests (#59)
+- Google camelCase `functionDeclarations` not parsed: `p_tool_definition_to_ir()` now handles both `functionDeclarations` (camelCase/REST) and `function_declarations` (snake_case/SDK), and extracts all declarations instead of only the first. Also added camelCase support for `functionCallingConfig`/`allowedFunctionNames` and `toolConfig` in request parsing — fixes Gemini CLI tool calling through the gateway (#61)
+- Google streaming tool calls split into two chunks: `stream_response_to_provider()` now defers `tool_call_start` and emits the complete `function_call` (name + args) in a single chunk on `tool_call_delta`, matching the Google API's native format (#62)
 
 ## v0.2.0 — 2026-03-18
 
-### 新增
+### Added
 
-- **独立 API 测试脚本** (`llm_api_simple_tests/`)：20 个测试脚本（每个提供商 5 个），直接使用官方 SDK，覆盖简单查询、多轮对话、图片、函数调用和综合场景 — 作为 git 子模块从 [Oaklight/llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) 引入
-- **LLM-Rosetta Gateway**：跨提供商 HTTP 代理的 REST 网关应用
-- CLI 入口 (`llm-rosetta-gateway`) 及网关包结构
-- 网关配置文件自动发现：依次搜索 `./config.jsonc`、`~/.config/llm-rosetta-gateway/config.jsonc`、`~/.llm-rosetta-gateway/config.jsonc`
-- `--edit` / `-e` 标志：在 `$EDITOR` 中打开配置文件（回退到 nano/vi/vim）
-- `--version` / `-V` 标志：显示当前版本
-- ASCII 艺术启动横幅，支持 `--no-banner` 选项抑制显示
-- `add provider <name>` 子命令：添加提供商条目到配置（支持 `--api-key`、`--base-url` 参数或交互式提示；已知提供商自动填充默认值）
-- `add model <name>` 子命令：添加模型路由条目（支持 `--provider` 参数或交互式提示）
-- **网关提供商模块** (`providers.py`)：集中管理提供商定义，包括认证头构建器、URL 模板、默认基础 URL 和 API 密钥环境变量名
-- **API 密钥轮转**：每个提供商支持逗号分隔的多 API 密钥，通过 `KeyRing` 轮询使用
-- **代理支持**：全局 `server.proxy` 和逐提供商 `proxy` 配置，支持 HTTP/SOCKS 代理；CLI `--proxy` 参数覆盖配置
-- Makefile 新增 `test-integration` 目标，使用 `proxychains`（如已安装）运行集成测试
-- `init` 子命令：在 XDG 默认位置 (`~/.config/llm-rosetta-gateway/`) 创建模板 `config.jsonc` 文件
-- **模型列表端点**：`GET /v1/models`（兼容 OpenAI 和 Anthropic SDK）和 `GET /v1beta/models`（Google GenAI SDK 格式）— 使三种 SDK 的 `client.models.list()` 均可正常使用（#54）
+- **Standalone API test scripts** (`llm_api_simple_tests/`): 20 test scripts (5 per provider) using official SDKs directly, covering simple query, multi-round chat, image, function calling, and comprehensive scenarios — added as a git submodule from [Oaklight/llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests)
+- **LLM-Rosetta Gateway**: REST gateway application for cross-provider HTTP proxying
+- CLI entry point (`llm-rosetta-gateway`) and package structure for the gateway
+- Gateway config auto-discovery at `./config.jsonc`, `~/.config/llm-rosetta-gateway/config.jsonc`, `~/.llm-rosetta-gateway/config.jsonc`
+- `--edit` / `-e` flag to open config file in `$EDITOR` (falls back to nano/vi/vim)
+- `--version` / `-V` flag showing current version
+- ASCII art startup banner with `--no-banner` to suppress
+- `add provider <name>` subcommand for adding provider entries to config (with `--api-key`, `--base-url` flags or interactive prompts; known providers auto-fill defaults)
+- `add model <name>` subcommand for adding model routing entries (with `--provider` flag or interactive prompt)
+- **Gateway providers module** (`providers.py`): centralized provider definitions with auth-header builders, URL templates, default base URLs, and API key env-var names
+- **API key rotation**: round-robin `KeyRing` for comma-separated API keys per provider
+- **Proxy support**: global `server.proxy` and per-provider `proxy` config for HTTP/SOCKS proxies; CLI `--proxy` flag overrides config
+- Makefile `test-integration` target using `proxychains` (if available) for integration tests
+- `init` subcommand to create a template `config.jsonc` at the XDG default location (`~/.config/llm-rosetta-gateway/`)
+- **Model listing endpoints**: `GET /v1/models` (compatible with both OpenAI and Anthropic SDKs) and `GET /v1beta/models` (Google GenAI SDK format) — enables `client.models.list()` across all three SDKs (#54)
 
-### 变更
+### Changed
 
-- 最低 Python 版本提升至 3.10+；迁移至标准库 `typing`（移除 `typing_extensions`）
-- 使用 `ruff` 格式化整个代码库
-- 更新 Makefile，增加 `lint`、`test` 和 `build` 目标
-- 新增 `ty`（类型检查器）配置
-- 在 `pyproject.toml` 中配置 `ruff` lint 规则（`E`、`F`、`UP`）；忽略 `UP007`（Union 语法）和 `E501`（行长度）
-- 现代化 `src/`、`tests/`、`examples/` 和 `scripts/` 中的 typing 导入 — 将 `typing.Dict`、`List`、`Tuple`、`Optional`、`Type` 替换为标准库内建类型
+- Bumped minimum Python to 3.10+; migrated to stdlib `typing` (removed `typing_extensions`)
+- Applied `ruff` formatter across the entire codebase
+- Updated Makefile with `lint`, `test`, and `build` targets
+- Added `ty` (type checker) configuration
+- Configured `ruff` lint rules (`E`, `F`, `UP`) in `pyproject.toml`; ignore `UP007` (Union syntax) and `E501` (line length)
+- Modernized typing imports across `src/`, `tests/`, `examples/`, and `scripts/` — replaced `typing.Dict`, `List`, `Tuple`, `Optional`, `Type` with stdlib builtins
 
-### 修复
+### Fixed
 
-- 修复 Anthropic 提供商流式传输中 usage tokens 为 `null` 时的崩溃 — 所有转换器中 `TypeError: NoneType + int`（将 `.get("*_tokens", 0)` 替换为 `.get("*_tokens") or 0`）
-- 网关提供商 `base_url` 验证 — 配置错误（如 `https:example.com` 缺少 `//`）时提前报错并给出清晰提示
-- 网关依赖新增 `socksio` 以支持 SOCKS 代理（`httpx[socks]`）
-- 补充 `types` 包缺失的 `__init__.py`
-- 更新文档中 `git clone` URL，从 `llm-rosetta` 改为 `llm-rosetta`
-- 解决 `src/` 中所有 `ty` 类型检查器诊断（31 → 0）：
-    - 修复 `is_part_type()` TypeGuard 类型窄化 — 替换为特定类型守卫函数（`is_text_part` 等）
-    - 补充缺失的 TypedDict 字段：`TextPart`/`ReasoningPart` 上的 `provider_metadata`，`ImagePart`/`FilePart` 上的 `file_id`
-    - 修复 `IRRequest.messages` 类型，从 `Required[Message]` 改为 `Required[Iterable[Message]]`
-    - 使用 `cast()` 桥接 `dict[str, Any]` 中间值到 TypedDict 返回类型
-    - 修复转换器响应构建器中的 dict 字面量类型推断冲突
-- 解决 `tests/` 中所有 `ty` 类型检查器诊断（1506 → 0）：
-    - 为传递给期望 TypedDict 参数的函数的 dict 字面量添加 `cast()` 包装（`GenerationConfig`、`IRRequest`、`IRResponse`、`ToolDefinition`、`ToolChoice` 等）
-    - 使用 `cast(list[Any], ...)` 或 `cast(Message, ...)` 窄化 `Message | ExtensionItem` 联合类型结果
-    - 将 `Iterable` 内容字段转换为 `list` 以支持下标和 `len()` 访问
-    - 在对可选返回类型进行下标访问前添加 `assert ... is not None` 守卫
-    - 修复 `FinishReason`，从裸字符串改为 TypedDict 形式 `{"reason": "stop"}`
-    - 修复 `IRResponse.object` 字面量，从 `"chat.completion"` 改为 `"response"`
-- 解决 `src/` 和 `tests/` 中所有 `ruff` lint 违规（UP035 弃用导入、F401 未使用导入）
-- Google `thought_signature` 在网关往返中的保留 — 新版 Google 模型要求在函数调用部分中回传 `thoughtSignature`；网关现在按 `tool_call_id` 缓存 `provider_metadata`（含 `thought_signature`），并在后续请求中重新注入，支持流式和非流式模式（#51）
-- OpenAI Responses 转换器现在支持全部 3 种 `input` 格式：裸字符串（`"input": "hello"`）、简写列表（`[{"role": "user", "content": "hi"}]`）和结构化列表 — 此前仅支持结构化格式，导致 OpenAI Python SDK 发送的简写项被静默丢弃，跨提供商转换到 Anthropic 或 Google 时生成空 IR 消息
-
----
-
-## 2026-03-15 — 品牌重塑为 LLM-Rosetta
-
-### 变更
-
-- **项目从 LLM-Rosetta 重命名为 LLM-Rosetta**，涵盖所有代码、文档及配置
-- 包名从 `llm-rosetta` 改为 `llm_rosetta`；`pyproject.toml` 相应更新
-- 使用 Zensical 全面重写英文 (`docs_en`) 和中文 (`docs_zh`) 文档
-- README（中/英）更新品牌标识、徽章及 `pyproject.toml` 元数据
+- Streaming crash with Anthropic provider when usage tokens are `null` — `TypeError: NoneType + int` in all converters (replaced `.get("*_tokens", 0)` with `.get("*_tokens") or 0`)
+- Gateway provider `base_url` validation — fail early with clear error on config typos like `https:example.com` (missing `//`)
+- Added `socksio` to gateway dependencies for SOCKS proxy support (`httpx[socks]`)
+- Added missing `__init__.py` for `types` package
+- Updated `git clone` URL from `llm-rosetta` to `llm-rosetta` in documentation
+- Resolved all `ty` type checker diagnostics in `src/` (31 → 0):
+    - Fixed `is_part_type()` TypeGuard narrowing — replaced with specific type guard functions (`is_text_part`, etc.)
+    - Added missing TypedDict fields: `provider_metadata` on `TextPart`/`ReasoningPart`, `file_id` on `ImagePart`/`FilePart`
+    - Fixed `IRRequest.messages` type from `Required[Message]` to `Required[Iterable[Message]]`
+    - Used `cast()` to bridge `dict[str, Any]` intermediates to TypedDict return types
+    - Fixed dict literal type inference conflicts in converter response builders
+- Resolved all `ty` type checker diagnostics in `tests/` (1506 → 0):
+    - Added `cast()` wrappers on dict literals passed to functions expecting TypedDict parameters (`GenerationConfig`, `IRRequest`, `IRResponse`, `ToolDefinition`, `ToolChoice`, etc.)
+    - Narrowed `Message | ExtensionItem` union results with `cast(list[Any], ...)` or `cast(Message, ...)`
+    - Converted `Iterable` content fields to `list` for subscript and `len()` access
+    - Added `assert ... is not None` guards before subscripting optional return types
+    - Fixed `FinishReason` from bare string to TypedDict form `{"reason": "stop"}`
+    - Fixed `IRResponse.object` literal from `"chat.completion"` to `"response"`
+- Resolved all `ruff` lint violations in `src/` and `tests/` (UP035 deprecated imports, F401 unused imports)
+- Google `thought_signature` preservation through gateway round-trips — newer Google models require `thoughtSignature` echoed back in function call parts; the gateway now caches `provider_metadata` (including `thought_signature`) keyed by `tool_call_id` and re-injects it on subsequent requests for both streaming and non-streaming modes (#51)
+- OpenAI Responses converter now handles all 3 `input` formats: bare string (`"input": "hello"`), shorthand list (`[{"role": "user", "content": "hi"}]`), and structured list — previously only the structured format was supported, causing the OpenAI Python SDK's shorthand items to be silently dropped and producing empty IR messages when cross-converting to Anthropic or Google providers
 
 ---
 
-## 2026-03-06 — 流式传输与 StreamContext
+## 2026-03-15 — Rebrand to LLM-Rosetta
 
-### 新增
+### Changed
 
-- **`StreamContext`**：为所有 4 个提供商提供有状态的流式数据块处理
-- 所有转换器新增 `stream_response_from_provider()` 和 `stream_response_to_provider()` 方法
-- `accumulate_stream_to_assistant_message()` 辅助函数
-- `BaseConverter` 新增流式抽象方法（`stream_response_to_provider`、`stream_response_from_provider`）
-- 4 种新 IR 流式事件类型：`StreamStart`、`StreamEnd`、`ContentBlockStart`、`ContentBlockEnd`
-- `ReasoningDeltaEvent` 及 IR 流式类型新增 `tool_call_index` 字段
-- 所有提供商组合的跨提供商流式示例（SDK 和 REST 版本）
-- 示例中图片下载新增本地文件缓存和重试逻辑
-
-### 变更
-
-- 流式方法签名更新，增加可选 `context` 参数
-- 移除已弃用的 `from_provider` 方法；`auto_detect` 更新为新 API
-- 移除过时的单提供商示例脚本（已被跨提供商示例替代）
-- `_normalize()` 提取至 `BaseConverter` 作为共享工具方法
-
-### 修复
-
-- Google GenAI REST 流式/响应字段的 camelCase 回退处理
-- Anthropic 流式转换器：`thinking_delta`、`signature_delta`、`tool_call_id` 处理
-- OpenAI Chat 流式转换器：`reasoning_content`、空字符串、`tool_call_index` 处理
-- 补充测试包发现所需的 `__init__.py`
-- `google_genai_rest_e2e` 集成测试中的 `from_provider` 调用
+- **Project renamed from LLM-Rosetta to LLM-Rosetta** across all code, docs, and configuration
+- Package renamed from `llm-rosetta` to `llm_rosetta`; `pyproject.toml` updated accordingly
+- Documentation fully rewritten with Zensical for both English (`docs_en`) and Chinese (`docs_zh`)
+- README (EN/ZH) updated with new branding, badges, and `pyproject.toml` metadata
 
 ---
 
-## 2026-02-14 — 跨提供商示例与流式转换器
+## 2026-03-06 — Streaming & StreamContext
 
-### 新增
+### Added
 
-- 所有 4 个提供商的**流式转换器**：OpenAI Chat、Anthropic、Google GenAI、OpenAI Responses
-- 所有提供商的流式转换器单元测试
-- **6 个跨提供商对话示例**（基于 SDK）：OpenAI Chat ↔ Anthropic、OpenAI Chat ↔ Google GenAI、OpenAI Chat ↔ OpenAI Responses、Anthropic ↔ Google GenAI、Anthropic ↔ OpenAI Responses、Google GenAI ↔ OpenAI Responses
-- 跨提供商对话示例的公共资源模块
-- Google GenAI 兼容性的图片 URL 转内联 base64 辅助工具
-- OpenAI Responses E2E 集成测试（REST + SDK）
-- OpenAI Responses Ops 类及转换器的单元测试
-- 示例 README（中英文）
+- **`StreamContext`** for stateful stream chunk processing across all 4 providers
+- `stream_response_from_provider()` and `stream_response_to_provider()` methods on all converters
+- `accumulate_stream_to_assistant_message()` helper function
+- Stream abstract methods (`stream_response_to_provider`, `stream_response_from_provider`) added to `BaseConverter`
+- 4 new IR stream event types: `StreamStart`, `StreamEnd`, `ContentBlockStart`, `ContentBlockEnd`
+- `ReasoningDeltaEvent` and `tool_call_index` field on IR stream types
+- Cross-provider streaming examples for all provider pairs (SDK and REST variants)
+- Local file cache and retry logic for image downloads in examples
 
-### 变更
+### Changed
 
-- **OpenAI Responses 转换器**重构为 Bottom-Up Ops 模式
-- 重构后清理：移除弃用工具和空目录
+- Stream method signatures updated with optional `context` parameter
+- Deprecated `from_provider` methods removed; `auto_detect` updated to new API
+- Obsolete single-provider example scripts removed (replaced by cross-provider examples)
+- `_normalize()` extracted to `BaseConverter` as a shared utility
 
-### 修复
+### Fixed
 
-- 为 Google GenAI 提供商兼容性将图片 URL 转换为内联 base64
-
----
-
-## 2026-02-13 — Bottom-Up Ops 架构
-
-### 新增
-
-- **Google GenAI 转换器**使用 Bottom-Up Ops 模式重建
-- **OpenAI Responses API** 类型的 TypedDict 副本
-- **Google GenAI SDK** 类型的 TypedDict 副本
-- Google GenAI REST 和 SDK E2E 集成测试
-- `google_genai` 转换器 Ops 类的单元测试
-- Anthropic SDK 和 REST E2E 集成测试
-- OpenAI Chat E2E 测试拆分为 SDK 和 REST 版本
-- **GitHub Actions** CI/CD 工作流及 Dependabot 配置
-
-### 变更
-
-- **Anthropic 转换器**重新设计为 Bottom-Up Ops 架构
-- 导入更新为使用新的 `google_genai` 转换器模块
-- 移除旧的 `google/` 转换器及遗留测试
+- camelCase fallback for Google GenAI REST stream/response fields
+- Anthropic stream converter: `thinking_delta`, `signature_delta`, `tool_call_id` handling
+- OpenAI Chat stream converter: `reasoning_content`, empty string, `tool_call_index` handling
+- Missing `__init__.py` for test package discovery
+- `from_provider` calls in `google_genai_rest_e2e` integration test
 
 ---
 
-## 2026-02-12 — 转换器重新设计
+## 2026-02-14 — Cross-Provider Examples & Stream Converters
 
-### 新增
+### Added
 
-- **Anthropic SDK** 类型的 TypedDict 副本
-- **OpenAI Chat** 类型的 TypedDict 副本，包含向后兼容性和测试
-- 保留遗留 body 转换器设计作为历史参考
+- **Stream converters** for all 4 providers: OpenAI Chat, Anthropic, Google GenAI, OpenAI Responses
+- Stream converter unit tests for all providers
+- **6 cross-provider conversation examples** (SDK-based): OpenAI Chat ↔ Anthropic, OpenAI Chat ↔ Google GenAI, OpenAI Chat ↔ OpenAI Responses, Anthropic ↔ Google GenAI, Anthropic ↔ OpenAI Responses, Google GenAI ↔ OpenAI Responses
+- Common resources module for cross-provider conversation examples
+- Image URL to inline base64 conversion helpers for Google GenAI compatibility
+- OpenAI Responses E2E integration tests (REST + SDK)
+- Unit tests for OpenAI Responses Ops classes and converter
+- Examples README in English and Chinese
 
-### 变更
+### Changed
 
-- **OpenAI Chat 转换器**使用 Bottom-Up Ops 架构重新设计
-- 修复整个代码库的 ruff lint 错误
+- **OpenAI Responses converter** restructured to Bottom-Up Ops Pattern
+- Post-refactor cleanup: removed deprecated utils and empty directories
 
----
+### Fixed
 
-## 2026-01-06 — 分层架构与文档
-
-### 新增
-
-- 初始化英文和中文文档结构（`docs_en`、`docs_zh`）
-- 完整的错误处理文档
-- OpenAI Chat Converter 集成测试
-- `BaseConverter` 测试类的完整 mock 实现
-- 基础转换器的文件处理功能
-- 提供商到 IR 的映射文档
-
-### 变更
-
-- 转换器基类完善为分层抽象模板
-- 所有 4 个转换器重构为分层架构（Anthropic、OpenAI Chat、OpenAI Responses、Google GenAI）
-- IR 内容/部件转换方法的类型注解更新
-- IR 类型系统重组和增强
-- 代码注释和文档字符串添加英文翻译
-
-### 修复
-
-- 修正推理内容字段断言
-- 修复 OpenAI Chat Completions 转换器的文件内容处理
+- Image URLs converted to inline base64 for Google GenAI provider compatibility
 
 ---
 
-## 2026-01-05 — 自动检测与包成熟化
+## 2026-02-13 — Bottom-Up Ops Architecture
 
-### 新增
+### Added
 
-- **`detect_provider()`**：自动检测提供商格式
-- **`convert()`**：一步格式转换便捷函数
-- 消息验证中支持 `developer` 角色
-- `BaseConverter`、Anthropic、Google GenAI 和 OpenAI 转换器的综合验证测试
-- 工具调用和工具定义转换测试
-- pytest 配置及 `pytest-cov` 依赖
-- 竞品分析文档
+- **Google GenAI converter** rebuilt with Bottom-Up Ops Pattern
+- TypedDict replicas of **OpenAI Responses API** types
+- TypedDict replicas of **Google GenAI SDK** types
+- Google GenAI REST and SDK E2E integration tests
+- Unit tests for `google_genai` converter Ops classes
+- Anthropic SDK and REST E2E integration tests
+- OpenAI Chat E2E tests split into SDK and REST versions
+- **GitHub Actions** CI/CD workflows and Dependabot configuration
 
-### 变更
+### Changed
 
-- **包重命名**：从 `llm-provider-converter` 改为 `llm-rosetta`
-- 所有提供商标准化 IR 格式用法
-- 示例中使用 `Message` 类标准化消息创建
-- 测试套件从 unittest 迁移至 pytest
-- 提取公共逻辑至共享工具模块
-
-### 修复
-
-- OpenAI Responses 转换器中无当前消息上下文时的独立工具调用处理
-- Google GenAI Pydantic 模型处理重新排序以兼容元组
-- OpenAI 单文本部件的内容处理逻辑简化
+- **Anthropic converter** redesigned with bottom-up Ops architecture
+- Imports updated to use new `google_genai` converter module
+- Old `google/` converter and legacy tests removed
 
 ---
 
-## 2026-01-04 — 示例与打包
+## 2026-02-12 — Converter Redesign
 
-### 新增
+### Added
 
-- `pyproject.toml` 包配置
-- 带工具集成的多轮对话示例
-- 多轮对话示例中的 Anthropic 切换
-- 多轮对话示例中的 Google GenAI 函数调用
+- TypedDict replicas of **Anthropic SDK** types
+- TypedDict replicas of **OpenAI Chat** types with backward compatibility and tests
+- Legacy body converter design preserved as historical reference
 
-### 变更
+### Changed
 
-- 工具函数从转换器移至 IR 类型模块
-- OpenAI Chat 转换器代码格式化改进
-- 移除弃用的多提供商查询和天气工具模块
+- **OpenAI Chat converter** redesigned with bottom-up Ops architecture
+- Ruff lint errors fixed across entire codebase
 
 ---
 
-## 2025-12-24 — 初始实现
+## 2026-01-06 — Layered Architecture & Documentation
 
-### 新增
+### Added
 
-- **IR 类型系统**：消息、内容部分、工具、配置、请求/响应的中间表示类型
-- **`BaseConverter`** 抽象类：LLM 提供商转换基类
-- **`AnthropicConverter`**：Anthropic Messages API 双向转换
-- **`OpenAIChatConverter`**：OpenAI Chat Completions API 双向转换
-- **`OpenAIResponsesConverter`**：OpenAI Responses API 双向转换
-- **`GoogleGenAIConverter`**：Google GenAI SDK 格式双向转换
-- 所有 4 个转换器的综合测试套件
-- 包初始化和导出
-- 带模拟数据的天气工具示例
+- English and Chinese documentation structures initialized (`docs_en`, `docs_zh`)
+- Comprehensive error handling documentation
+- OpenAI Chat Converter integration tests
+- Comprehensive mock implementations for `BaseConverter` test class
+- File handling functionality in base converter
+- Provider-to-IR mapping documentation
+
+### Changed
+
+- Converter base refined with layered abstract template
+- All 4 converters restructured with layered architecture (Anthropic, OpenAI Chat, OpenAI Responses, Google GenAI)
+- Type annotations updated for IR content/part conversion methods
+- IR type system reorganized and enhanced
+- English translations added to code comments and docstrings
+
+### Fixed
+
+- Reasoning content field assertion corrected
+- File content handling in OpenAI Chat Completions converter
 
 ---
 
-## 2025-12-09 — 研究与设计
+## 2026-01-05 — Auto-Detection & Package Maturity
 
-### 新增
+### Added
 
-- 初始项目结构
-- LLM 提供商消息类型 schema 文档及比较
-- 提供商消息 IR 设计文档
-- 跨提供商 MCP 支持对比（OpenAI、Anthropic、Google）
-- Google GenAI Interactions API 类型分析
-- 多提供商查询示例函数
-- 查询示例中增加 OpenAI Responses API 支持
+- **`detect_provider()`** for automatic provider format auto-detection
+- **`convert()`** convenience function for one-step format conversion
+- `developer` role support in message validation
+- Comprehensive validation tests for `BaseConverter`, Anthropic, Google GenAI, and OpenAI converters
+- Tool call and tool definition conversion tests
+- pytest configuration and `pytest-cov` dependency
+- Competitive analysis document
+
+### Changed
+
+- **Package renamed** from `llm-provider-converter` to `llm-rosetta`
+- IR format usage standardized across all providers
+- Message creation standardized using `Message` class in examples
+- Test suite migrated from unittest to pytest
+- Common logic extracted into shared utility modules
+
+### Fixed
+
+- Standalone tool calls without current message context in OpenAI Responses converter
+- Google GenAI Pydantic model handling reordered for tuple compatibility
+- OpenAI content handling logic simplified for single text parts
+
+---
+
+## 2026-01-04 — Examples & Packaging
+
+### Added
+
+- `pyproject.toml` for package configuration
+- Multi-turn chat example with tool integration
+- Anthropic handover in multi-turn chat example
+- Google GenAI function calling in multi-turn chat example
+
+### Changed
+
+- Utility functions moved from converters to IR types module
+- OpenAI Chat converter code formatting improved
+- Deprecated multi-provider query and weather tool modules removed
+
+---
+
+## 2025-12-24 — Initial Implementation
+
+### Added
+
+- **IR type system**: intermediate representation types for messages, content parts, tools, configs, request/response
+- **`BaseConverter`** abstract class for LLM provider conversion
+- **`AnthropicConverter`**: bidirectional Anthropic Messages API conversion
+- **`OpenAIChatConverter`**: bidirectional OpenAI Chat Completions API conversion
+- **`OpenAIResponsesConverter`**: bidirectional OpenAI Responses API conversion
+- **`GoogleGenAIConverter`**: bidirectional Google GenAI SDK format conversion
+- Comprehensive test suites for all 4 converters
+- Package initialization and exports
+- Weather tool example with mock data
+
+---
+
+## 2025-12-09 — Research & Design
+
+### Added
+
+- Initial project structure
+- LLM provider message typing schemas documentation and comparison
+- Provider messages IR design documentation
+- MCP support comparison across providers (OpenAI, Anthropic, Google)
+- Google GenAI Interactions API type analysis
+- Multi-provider query example function
+- OpenAI Responses API support in query examples
