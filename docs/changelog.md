@@ -24,6 +24,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
+- **Speculative extension types marked experimental** ([#302](https://github.com/Oaklight/llm-rosetta/pull/302), [#71](https://github.com/Oaklight/llm-rosetta/issues/71)): `SystemEvent`, `BatchMarker`, `SessionControl`, `ToolChainNode` moved from `types.ir.extensions` to `types.ir.extensions_experimental`. Old import path still works but emits `DeprecationWarning`. Types removed from default `types.ir` namespace; available via `from llm_rosetta.types.ir import experimental`
 - **Admin panel i18n**: Chinese translation updated from "服务商" to "服务方" (more neutral for mixed commercial and self-hosted providers)
 - **Request log timestamps** ([#298](https://github.com/Oaklight/llm-rosetta/pull/298)): Now show date and time (e.g. "06/19, 20:25:29") instead of time only
 
