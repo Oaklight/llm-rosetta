@@ -10,9 +10,6 @@ from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
 
 logger = logging.getLogger(__name__)
 
-# Placeholder text for replaced images.
-_PLACEHOLDER = "[image omitted: provider limit of {limit} images per request]"
-
 # Position types for image locations in the IR.
 # Direct: (msg_idx, part_idx, None)  — image in message content
 # Nested: (msg_idx, part_idx, block_idx)  — image inside tool_result.result list
@@ -79,7 +76,10 @@ def truncate_images(
         max_images,
     )
 
-    placeholder = {"type": "text", "text": _PLACEHOLDER.format(limit=max_images)}
+    placeholder = {
+        "type": "text",
+        "text": f"[image omitted: provider limit of {max_images} images per request]",
+    }
 
     # Group replacements by message index so we only copy affected messages.
     # Avoids deepcopy of the entire message list — a 200-message conversation
