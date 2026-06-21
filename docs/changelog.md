@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.6.11 — 2026-06-21
+
 ### Added
 
 - **Admin panel provider UX enhancements** ([#292](https://github.com/Oaklight/llm-rosetta/pull/292)): Three improvements to the provider tab:
