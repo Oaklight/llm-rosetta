@@ -30,7 +30,11 @@ def _count_placeholders(ir_request: dict) -> int:
         1
         for msg in ir_request["messages"]
         for part in msg.get("content", [])
-        if part.get("type") == "text" and "image omitted" in part.get("text", "")
+        if part.get("type") == "text"
+        and (
+            "image omitted" in part.get("text", "")
+            or "image not available" in part.get("text", "")
+        )
     )
 
 
@@ -73,8 +77,7 @@ class TestTruncateImages:
         req = _make_request([3])
         result = truncate_images(req, 2)
         placeholder = result["messages"][0]["content"][0]
-        assert "50" not in placeholder["text"] or "2" in placeholder["text"]
-        assert "image omitted" in placeholder["text"]
+        assert "image omitted due to limit" in placeholder["text"]
 
     def test_original_not_mutated(self):
         req = _make_request([3])
@@ -240,3 +243,77 @@ class TestApplyImageLimitPattern:
         req = _make_request([60])
         result = self._apply(req, 50, None, "gemini-2.0-flash")
         assert _count_images(result) == 50
+
+
+class TestStripImagesForNonVision:
+    """Tests for strip_images_for_non_vision."""
+
+    def test_strips_all_images(self):
+        req = _make_request([5])
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        result = strip_images_for_non_vision(req, model="deepseek-v4-pro")
+        assert _count_images(result) == 0
+        assert _count_placeholders(result) == 5
+
+    def test_placeholder_text(self):
+        req = _make_request([1])
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        result = strip_images_for_non_vision(req, model="test")
+        placeholder = result["messages"][0]["content"][0]
+        assert placeholder["text"] == "[image not available]"
+
+    def test_no_images_returns_same_object(self):
+        req = {
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        }
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        result = strip_images_for_non_vision(req, model="test")
+        assert result is req
+
+    def test_strips_tool_result_images(self):
+        content: list[dict] = [
+            {"type": "image", "image_url": "https://example.com/1.png"},
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_1",
+                "result": [
+                    {
+                        "type": "image",
+                        "image_data": {"data": "abc", "media_type": "image/png"},
+                    },
+                ],
+            },
+        ]
+        req = {"messages": [{"role": "user", "content": content}]}
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        result = strip_images_for_non_vision(req, model="deepseek")
+        # Both direct and tool result images stripped
+        assert result["messages"][0]["content"][0]["text"] == "[image not available]"
+        assert (
+            result["messages"][0]["content"][1]["result"][0]["text"]
+            == "[image not available]"
+        )
+
+    def test_original_not_mutated(self):
+        req = _make_request([3])
+        import copy
+
+        original = copy.deepcopy(req)
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        strip_images_for_non_vision(req, model="test")
+        assert req == original

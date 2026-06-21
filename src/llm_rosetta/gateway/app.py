@@ -200,6 +200,7 @@ async def _proxy_handler(
         handler = handle_streaming if is_stream else handle_non_streaming
         # Resolve config-level reasoning override (keyed by gateway model name)
         reasoning_override = _config.model_reasoning_overrides.get(model)
+        model_caps = _config.model_capabilities.get(model, ["text"])
         response = await handler(
             source_provider,
             target_provider,
@@ -210,6 +211,7 @@ async def _proxy_handler(
             extra_headers=extra_headers,
             target_shim_name=target_shim_name,
             reasoning_config_override=reasoning_override,
+            model_capabilities=model_caps,
         )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):

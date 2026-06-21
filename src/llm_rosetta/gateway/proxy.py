@@ -442,6 +442,23 @@ def _apply_tool_call_unwind(
     return unwind_parallel_tool_calls_ir(ir_request)
 
 
+def _strip_non_vision_images(
+    ir_request: dict[str, Any],
+    model_capabilities: list[str],
+    *,
+    model: str = "",
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Strip all images if the model does not have vision capability."""
+    if "vision" in model_capabilities:
+        return ir_request
+    from llm_rosetta.converters.base.helpers.image_limit import (
+        strip_images_for_non_vision,
+    )
+
+    return strip_images_for_non_vision(ir_request, model=model, request_id=request_id)
+
+
 def _inject_shim_reasoning(
     ctx: ConversionContext,
     shim_name: str | None,
@@ -515,6 +532,7 @@ async def handle_non_streaming(
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
     reasoning_config_override: dict[str, Any] | None = None,
+    model_capabilities: list[str] | None = None,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     store = metadata_store or _default_metadata_store
@@ -550,15 +568,26 @@ async def handle_non_streaming(
     # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
 
-    # 1c. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
+    request_id = ctx.options.get("request_id", "-")
+
+    # 1c. Strip images for non-vision models (e.g. DeepSeek text-only)
+    if model_capabilities is not None:
+        ir_request = _strip_non_vision_images(
+            ir_request,
+            model_capabilities,
+            model=model,
+            request_id=request_id,
+        )
+
+    # 1d. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
     ir_request = _apply_image_limit(
         ir_request,
         target_shim_name,
         upstream_model=body.get("model"),
-        request_id=ctx.options.get("request_id", "-"),
+        request_id=request_id,
     )
 
-    # 1d. Unwind parallel tool calls for providers that require it
+    # 1e. Unwind parallel tool calls for providers that require it
     #     (e.g. Argo Gemini models)
     ir_request = _apply_tool_call_unwind(
         ir_request,
@@ -815,6 +844,7 @@ async def handle_streaming(
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
     reasoning_config_override: dict[str, Any] | None = None,
+    model_capabilities: list[str] | None = None,
 ) -> Response | StreamingResponse:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
@@ -849,15 +879,26 @@ async def handle_streaming(
     # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
     store.inject_into_request(ir_request)
 
-    # 1c. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
+    request_id = ctx.options.get("request_id", "-")
+
+    # 1c. Strip images for non-vision models (e.g. DeepSeek text-only)
+    if model_capabilities is not None:
+        ir_request = _strip_non_vision_images(
+            ir_request,
+            model_capabilities,
+            model=model,
+            request_id=request_id,
+        )
+
+    # 1d. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
     ir_request = _apply_image_limit(
         ir_request,
         target_shim_name,
         upstream_model=body.get("model"),
-        request_id=ctx.options.get("request_id", "-"),
+        request_id=request_id,
     )
 
-    # 1d. Unwind parallel tool calls for providers that require it
+    # 1e. Unwind parallel tool calls for providers that require it
     #     (e.g. Argo Gemini models)
     ir_request = _apply_tool_call_unwind(
         ir_request,
