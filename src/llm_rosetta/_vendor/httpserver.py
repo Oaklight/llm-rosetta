@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.1.1"
+# version = "0.2.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -947,33 +947,44 @@ class App:
         self,
         host: str = DEFAULT_HOST,
         port: int = DEFAULT_PORT,
+        *,
+        socket: str | None = None,
     ) -> None:
         """Start the server (blocking).
 
         Args:
-            host: Bind address.
-            port: Bind port. Use ``0`` for OS-assigned port.
+            host: Bind address (ignored when *socket* is set).
+            port: Bind port. Use ``0`` for OS-assigned port (ignored when
+                *socket* is set).
+            socket: Unix domain socket path. When set, the server listens
+                on a Unix socket instead of TCP. The socket file permissions
+                are restricted to owner-only (``0o600``) after creation.
+                Only available on Unix-like systems.
         """
         try:
-            asyncio.run(self._serve(host, port))
+            asyncio.run(self._serve(host, port, socket=socket))
         except KeyboardInterrupt:
             pass
 
-    async def _serve(self, host: str, port: int) -> None:
+    async def _serve(self, host: str, port: int, *, socket: str | None = None) -> None:
         """Internal async server loop."""
         self._shutdown_event = asyncio.Event()
+        self._socket_path: str | None = None
 
-        server = await asyncio.start_server(
-            self._handle_connection,
-            host,
-            port,
-        )
+        if socket:
+            server = await self._start_unix_socket(socket)
+        else:
+            server = await asyncio.start_server(
+                self._handle_connection,
+                host,
+                port,
+            )
+            addrs = server.sockets[0].getsockname() if server.sockets else (host, port)
+            self.host = addrs[0]
+            self.port = addrs[1]
+            logger.info("Serving on %s:%d", self.host, self.port)
 
         self._server = server
-        addrs = server.sockets[0].getsockname() if server.sockets else (host, port)
-        self.host = addrs[0]
-        self.port = addrs[1]
-        logger.info("Serving on %s:%d", self.host, self.port)
 
         loop = asyncio.get_running_loop()
         if sys.platform != "win32":
@@ -983,6 +994,70 @@ class App:
         async with server:
             await self._shutdown_event.wait()
             logger.info("Shutting down server")
+            if self._socket_path:
+                self._cleanup_socket()
+
+    async def _start_unix_socket(self, socket_path: str) -> asyncio.Server:
+        """Start listening on a Unix domain socket.
+
+        Handles stale socket cleanup, permission hardening (``0o600``),
+        and registers the path for shutdown cleanup.
+
+        Args:
+            socket_path: Path for the Unix domain socket file.
+
+        Returns:
+            The ``asyncio.Server`` instance.
+
+        Raises:
+            SystemExit: If the path exists but is not a socket, or the
+                parent directory does not exist.
+        """
+        import stat as stat_mod
+
+        path = os.path.realpath(socket_path)
+
+        # Remove stale socket if present
+        if os.path.exists(path):
+            try:
+                st = os.stat(path)
+                if stat_mod.S_ISSOCK(st.st_mode):
+                    os.unlink(path)
+                    logger.info("Removed stale socket: %s", path)
+                else:
+                    logger.error("Socket path exists and is not a socket: %s", path)
+                    sys.exit(1)
+            except OSError as exc:
+                logger.error("Cannot remove stale socket %s: %s", path, exc)
+                sys.exit(1)
+
+        # Ensure parent directory exists
+        parent = os.path.dirname(path)
+        if not os.path.isdir(parent):
+            logger.error("Socket parent directory does not exist: %s", parent)
+            sys.exit(1)
+
+        server = await asyncio.start_unix_server(
+            self._handle_connection,
+            path=path,
+        )
+
+        # Restrict permissions to owner-only
+        if os.path.exists(path):
+            os.chmod(path, 0o600)
+
+        self._socket_path = path
+        logger.info("Serving on unix:%s (mode 0600)", path)
+        return server
+
+    def _cleanup_socket(self) -> None:
+        """Remove the Unix socket file on shutdown."""
+        if self._socket_path and os.path.exists(self._socket_path):
+            try:
+                os.unlink(self._socket_path)
+                logger.info("Removed socket: %s", self._socket_path)
+            except OSError:
+                pass
 
     def shutdown(self) -> None:
         """Request a graceful server shutdown.
