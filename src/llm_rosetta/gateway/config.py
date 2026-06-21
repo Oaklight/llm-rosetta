@@ -146,6 +146,7 @@ class GatewayConfig:
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)
         self.proxy: str | None = _server.get("proxy")
+        self.socket: str | None = _server.get("socket")
         self.credential_visible: bool = _server.get("credential_visible", True)
         self.admin_password: str | None = _server.get("admin_password")
         if self.admin_password and _ENV_VAR_RE.search(self.admin_password):

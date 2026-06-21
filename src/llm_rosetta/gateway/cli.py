@@ -238,6 +238,12 @@ def main() -> None:
     parser.add_argument("--host", default=None, help="Override server host")
     parser.add_argument("--port", type=int, default=None, help="Override server port")
     parser.add_argument(
+        "--socket",
+        "-S",
+        default=None,
+        help="Listen on a Unix domain socket instead of TCP (e.g. /run/user/1000/rosetta.sock)",
+    )
+    parser.add_argument(
         "--proxy",
         default=None,
         help="HTTP/SOCKS proxy URL for upstream requests (overrides config)",
@@ -346,9 +352,13 @@ def main() -> None:
 
     host = args.host or config.host
     port = args.port or config.port
+    socket_path = args.socket or config.socket
 
     logger.info("Config loaded from %s", config_path)
-    logger.info("Starting llm-rosetta gateway on %s:%d", host, port)
+    if socket_path:
+        logger.info("Starting llm-rosetta gateway on unix:%s", socket_path)
+    else:
+        logger.info("Starting llm-rosetta gateway on %s:%d", host, port)
     logger.info("Configured providers: %s", list(config.providers.keys()))
     logger.info("Configured models: %s", list(config.models.keys()))
     if verbose:
@@ -361,6 +371,6 @@ def main() -> None:
     from .app import run_gateway
 
     try:
-        asyncio.run(run_gateway(app, host, port))
+        asyncio.run(run_gateway(app, host, port, socket=socket_path))
     except KeyboardInterrupt:
         pass
