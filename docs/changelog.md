@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.6.11 — 2026-06-21
+
 ### 新增
 
 - **Admin 面板服务方 UX 增强** ([#292](https://github.com/Oaklight/llm-rosetta/pull/292))：服务方标签页三项改进：
