@@ -58,7 +58,7 @@ Implementation details used within the library. Import at your own risk — thes
 | Ops base classes | `BaseContentOps`, `BaseToolOps`, `BaseMessageOps`, `BaseConfigOps` | `llm_rosetta.converters.base.content`, etc. |
 | Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.helpers.schema` |
 | Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.helpers.tool_content` |
-| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.orphan_fix` |
+| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.tool_orphan_fix` |
 
 ```python
 # Internal: use deep submodule imports
