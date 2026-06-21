@@ -58,7 +58,7 @@ from llm_rosetta.types.ir.helpers import extract_text_content
 | Ops 基类 | `BaseContentOps`、`BaseToolOps`、`BaseMessageOps`、`BaseConfigOps` | `llm_rosetta.converters.base.content` 等 |
 | Schema 工具 | `sanitize_schema` | `llm_rosetta.converters.base.helpers.schema` |
 | 内容转换辅助 | `convert_content_blocks_to_ir`、`convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.helpers.tool_content` |
-| 孤儿修复 | `fix_orphaned_tool_calls_ir`、`strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.orphan_fix` |
+| 孤儿修复 | `fix_orphaned_tool_calls_ir`、`strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.tool_orphan_fix` |
 
 ```python
 # 内部：使用深层子模块导入

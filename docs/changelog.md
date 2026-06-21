@@ -25,7 +25,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
-- **`converters/base/` 重组为 helpers/ 子包** ([#311](https://github.com/Oaklight/llm-rosetta/pull/311), [#310](https://github.com/Oaklight/llm-rosetta/issues/310))：工具函数从 `converters/base/` 平铺目录提取到 `converters/base/helpers/`。抽象基类（Ops 模式契约）保留在顶层；实现工具（`cache`、`schema`、`orphan_fix`、`tool_content`、`image_limit`、`tool_call_unwind`）移至 `helpers/`。`tools.py` 从 428 行精简到 185 行（纯 ABC）。`helpers/__init__.py` 重新导出公共函数
+- **`converters/base/` 重组为 helpers/ 子包** ([#311](https://github.com/Oaklight/llm-rosetta/pull/311), [#312](https://github.com/Oaklight/llm-rosetta/pull/312), [#310](https://github.com/Oaklight/llm-rosetta/issues/310))：工具函数从 `converters/base/` 平铺目录提取到 `converters/base/helpers/`。抽象基类（Ops 模式契约）保留在顶层；实现工具（`cache`、`schema`、`tool_orphan_fix`、`tool_content`、`tool_call_unwind`、`image_limit`、`reasoning`）移至 `helpers/`。`tools.py` 从 428 行精简到 185 行（纯 ABC）。`reasoning_helpers.py` 从 `converters/` 根目录移入。`orphan_fix.py` 重命名为 `tool_orphan_fix.py` 保持 `tool_*` 前缀一致。`helpers/__init__.py` 重新导出公共函数
 
 - **实验性扩展类型标记** ([#302](https://github.com/Oaklight/llm-rosetta/pull/302), [#71](https://github.com/Oaklight/llm-rosetta/issues/71))：`SystemEvent`、`BatchMarker`、`SessionControl`、`ToolChainNode` 从 `types.ir.extensions` 移至 `types.ir.extensions_experimental`。旧导入路径仍可用但会触发 `DeprecationWarning`。这些类型从默认 `types.ir` 命名空间移除，可通过 `from llm_rosetta.types.ir import experimental` 访问
 - **Admin 面板 i18n**：中文翻译从"服务商"更新为"服务方"（对混合商业和自建服务方更中性）
