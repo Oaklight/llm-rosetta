@@ -169,7 +169,7 @@ Strict endpoints (Vertex AI, OpenAI) reject tool parameter schemas containing no
 | `$schema` | OpenCode built-in tools | Not expected in nested schemas |
 | `additionalProperties` | Various | Rejected by some endpoints |
 
-**Fix**: `sanitize_schema()` extracted to `converters/base/tools.py` as a shared utility. Resolves `$ref`/`$defs` by inlining referenced definitions; strips unsupported keywords. Applied in all 4 converters.
+**Fix**: `sanitize_schema()` in `converters/base/helpers/schema.py` (shared utility). Resolves `$ref`/`$defs` by inlining referenced definitions; strips unsupported keywords. Applied in all 4 converters.
 
 **Version**: v0.2.3 (#80)
 

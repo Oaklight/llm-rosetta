@@ -56,27 +56,29 @@ Implementation details used within the library. Import at your own risk — thes
 | Type mappings | `TYPE_CLASS_MAP`, `get_part_type`, `isinstance_part` | `llm_rosetta.types.ir.type_guards` |
 | Validation | `ValidationError`, `validate_ir_request`, `validate_ir_response` | `llm_rosetta.types.ir.validation` |
 | Ops base classes | `BaseContentOps`, `BaseToolOps`, `BaseMessageOps`, `BaseConfigOps` | `llm_rosetta.converters.base.content`, etc. |
-| Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.tools` |
-| Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.tool_content` |
+| Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.helpers.schema` |
+| Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.helpers.tool_content` |
+| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.orphan_fix` |
 
 ```python
 # Internal: use deep submodule imports
 from llm_rosetta.types.ir.validation import validate_ir_request
-from llm_rosetta.converters.base.tools import sanitize_schema
+from llm_rosetta.converters.base.helpers import sanitize_schema
 ```
 
 ## Quick Reference
 
 ```text
-llm_rosetta                          # Stable: converters, context, convenience
-llm_rosetta.types.ir                 # Stable: core IR data types
-llm_rosetta.types.ir.type_guards     # Advanced: is_*_part, is_*_event guards
-llm_rosetta.types.ir.messages        # Advanced: create_*, is_*_message
-llm_rosetta.types.ir.helpers         # Advanced: extract_*, create_tool_result_message
-llm_rosetta.types.ir.validation      # Internal: validation utilities
-llm_rosetta.converters.base          # Stable: BaseConverter, context classes
-llm_rosetta.converters.base.content  # Internal: BaseContentOps
-llm_rosetta.converters.base.tools    # Internal: BaseToolOps, sanitize_schema
+llm_rosetta                              # Stable: converters, context, convenience
+llm_rosetta.types.ir                     # Stable: core IR data types
+llm_rosetta.types.ir.type_guards         # Advanced: is_*_part, is_*_event guards
+llm_rosetta.types.ir.messages            # Advanced: create_*, is_*_message
+llm_rosetta.types.ir.helpers             # Advanced: extract_*, create_tool_result_message
+llm_rosetta.types.ir.validation          # Internal: validation utilities
+llm_rosetta.converters.base              # Stable: BaseConverter, context classes
+llm_rosetta.converters.base.content      # Internal: BaseContentOps
+llm_rosetta.converters.base.tools        # Internal: BaseToolOps (pure ABC)
+llm_rosetta.converters.base.helpers      # Internal: utility functions (schema, cache, orphan fix, etc.)
 ```
 
 ## CI Enforcement
