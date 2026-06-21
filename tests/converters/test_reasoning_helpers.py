@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 
-from llm_rosetta.converters.reasoning_helpers import (
+from llm_rosetta.converters.base.helpers.reasoning import (
     DEFAULT_REASONING_CAPS,
     apply_reasoning_config,
     normalize_reasoning_input,

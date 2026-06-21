@@ -21,8 +21,8 @@ from __future__ import annotations
 import warnings
 from typing import Any, cast
 
-from ..shims.provider_shim import ReasoningCapability
-from ..types.ir.configs import ReasoningConfig
+from llm_rosetta.shims.provider_shim import ReasoningCapability
+from llm_rosetta.types.ir.configs import ReasoningConfig
 
 # ── Default reasoning capability configs per base converter type ──────────
 # Used as fallback when no shim-level config is present.

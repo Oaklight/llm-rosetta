@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .content import BaseContentOps
+    from ..content import BaseContentOps
 
 logger = logging.getLogger(__name__)
 

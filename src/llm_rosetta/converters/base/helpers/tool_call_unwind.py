@@ -238,7 +238,7 @@ def unwind_parallel_tool_calls_ir(
             transformed.extend(pairs)
             changed = True
 
-            logger.info(
+            logger.debug(
                 "Unwind: converted %d parallel tool calls to %d sequential pairs",
                 n_calls,
                 len(pairs) // 2,

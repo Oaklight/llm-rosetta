@@ -22,7 +22,7 @@ from ...types.ir.configs import (
     StreamConfig,
 )
 from ..base import BaseConfigOps
-from ..reasoning_helpers import DEFAULT_REASONING_CAPS, apply_reasoning_config
+from ..base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
 class OpenAIResponsesConfigOps(BaseConfigOps):
