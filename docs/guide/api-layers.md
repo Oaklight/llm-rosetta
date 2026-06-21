@@ -56,27 +56,29 @@ from llm_rosetta.types.ir.helpers import extract_text_content
 | 类型映射 | `TYPE_CLASS_MAP`、`get_part_type`、`isinstance_part` | `llm_rosetta.types.ir.type_guards` |
 | 验证工具 | `ValidationError`、`validate_ir_request`、`validate_ir_response` | `llm_rosetta.types.ir.validation` |
 | Ops 基类 | `BaseContentOps`、`BaseToolOps`、`BaseMessageOps`、`BaseConfigOps` | `llm_rosetta.converters.base.content` 等 |
-| Schema 工具 | `sanitize_schema` | `llm_rosetta.converters.base.tools` |
-| 内容转换辅助 | `convert_content_blocks_to_ir`、`convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.tool_content` |
+| Schema 工具 | `sanitize_schema` | `llm_rosetta.converters.base.helpers.schema` |
+| 内容转换辅助 | `convert_content_blocks_to_ir`、`convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.helpers.tool_content` |
+| 孤儿修复 | `fix_orphaned_tool_calls_ir`、`strip_orphaned_tool_config` | `llm_rosetta.converters.base.helpers.orphan_fix` |
 
 ```python
 # 内部：使用深层子模块导入
 from llm_rosetta.types.ir.validation import validate_ir_request
-from llm_rosetta.converters.base.tools import sanitize_schema
+from llm_rosetta.converters.base.helpers import sanitize_schema
 ```
 
 ## 快速参考
 
 ```text
-llm_rosetta                          # 稳定：转换器、上下文、便捷接口
-llm_rosetta.types.ir                 # 稳定：核心 IR 数据类型
-llm_rosetta.types.ir.type_guards     # 高级：is_*_part、is_*_event 守卫
-llm_rosetta.types.ir.messages        # 高级：create_*、is_*_message
-llm_rosetta.types.ir.helpers         # 高级：extract_*、create_tool_result_message
-llm_rosetta.types.ir.validation      # 内部：验证工具
-llm_rosetta.converters.base          # 稳定：BaseConverter、上下文类
-llm_rosetta.converters.base.content  # 内部：BaseContentOps
-llm_rosetta.converters.base.tools    # 内部：BaseToolOps、sanitize_schema
+llm_rosetta                              # 稳定：转换器、上下文、便捷接口
+llm_rosetta.types.ir                     # 稳定：核心 IR 数据类型
+llm_rosetta.types.ir.type_guards         # 高级：is_*_part、is_*_event 守卫
+llm_rosetta.types.ir.messages            # 高级：create_*、is_*_message
+llm_rosetta.types.ir.helpers             # 高级：extract_*、create_tool_result_message
+llm_rosetta.types.ir.validation          # 内部：验证工具
+llm_rosetta.converters.base              # 稳定：BaseConverter、上下文类
+llm_rosetta.converters.base.content      # 内部：BaseContentOps
+llm_rosetta.converters.base.tools        # 内部：BaseToolOps（纯 ABC）
+llm_rosetta.converters.base.helpers      # 内部：工具函数（schema、cache、orphan fix 等）
 ```
 
 ## CI 强制检查

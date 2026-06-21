@@ -169,7 +169,7 @@ IR 使用 `role: "tool"`（OpenAI 约定）。当源转换器保留原始 `role:
 | `$schema` | OpenCode 内置工具 | 嵌套 schema 中不应出现 |
 | `additionalProperties` | 多种来源 | 部分端点拒绝 |
 
-**修复**：`sanitize_schema()` 提取至 `converters/base/tools.py` 作为共享工具函数。通过内联引用定义解析 `$ref`/`$defs`；剥离不支持的关键字。在全部 4 个转换器中应用。
+**修复**：`sanitize_schema()` 位于 `converters/base/helpers/schema.py`（共享工具函数）。通过内联引用定义解析 `$ref`/`$defs`；剥离不支持的关键字。在全部 4 个转换器中应用。
 
 **版本**：v0.2.3（#80）
 

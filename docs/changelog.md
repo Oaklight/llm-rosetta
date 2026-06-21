@@ -21,8 +21,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
     - `/health/ready` — 所有服务方健康时 200，任一服务方严重不健康时 503（Kubernetes 就绪探针）
 - **Admin API 的 CORS 限制** ([#294](https://github.com/Oaklight/llm-rosetta/pull/294), [#233](https://github.com/Oaklight/llm-rosetta/issues/233))：`/admin/api/*` 端点不再发送 `Access-Control-Allow-Origin: *`。新增配置选项 `server.admin_cors_origins`（列表，默认 `[]`）允许显式指定允许的来源。`/v1/*` 代理端点不受影响
 - **Shim 层图片数量限制** ([#301](https://github.com/Oaklight/llm-rosetta/pull/301), [#299](https://github.com/Oaklight/llm-rosetta/issues/299))：`ProviderShim` 新增 `max_images` 和 `max_images_pattern` 字段。超限时最早的图片被替换为文本占位符，保留最近的 N 张。Argo OpenAI shim 声明 `max_images: 50`，pattern 为 `^(gpt|o\d)` — 仅 GPT/o 模型被截断；经过同一服务方的 Gemini 和 Claude 不受影响
+- **并行工具调用展开** ([#303](https://github.com/Oaklight/llm-rosetta/pull/303), [#300](https://github.com/Oaklight/llm-rosetta/issues/300))：`ProviderShim` 新增 `unwind_parallel_tool_calls` 和 `unwind_parallel_tool_calls_pattern` 字段。启用后，并行工具调用（一条 assistant 消息包含多个 `tool_call`）会在转发前展开为顺序调用-结果对。Argo OpenAI shim 以 `^gemini` pattern 启用 — Gemini 模型获得顺序对；GPT/o 模型不受影响
 
 ### 变更
+
+- **`converters/base/` 重组为 helpers/ 子包** ([#311](https://github.com/Oaklight/llm-rosetta/pull/311), [#310](https://github.com/Oaklight/llm-rosetta/issues/310))：工具函数从 `converters/base/` 平铺目录提取到 `converters/base/helpers/`。抽象基类（Ops 模式契约）保留在顶层；实现工具（`cache`、`schema`、`orphan_fix`、`tool_content`、`image_limit`、`tool_call_unwind`）移至 `helpers/`。`tools.py` 从 428 行精简到 185 行（纯 ABC）。`helpers/__init__.py` 重新导出公共函数
 
 - **实验性扩展类型标记** ([#302](https://github.com/Oaklight/llm-rosetta/pull/302), [#71](https://github.com/Oaklight/llm-rosetta/issues/71))：`SystemEvent`、`BatchMarker`、`SessionControl`、`ToolChainNode` 从 `types.ir.extensions` 移至 `types.ir.extensions_experimental`。旧导入路径仍可用但会触发 `DeprecationWarning`。这些类型从默认 `types.ir` 命名空间移除，可通过 `from llm_rosetta.types.ir import experimental` 访问
 - **Admin 面板 i18n**：中文翻译从"服务商"更新为"服务方"（对混合商业和自建服务方更中性）
@@ -32,6 +35,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Admin 面板认证内容闪烁** ([#291](https://github.com/Oaklight/llm-rosetta/pull/291))：消除了配置 `admin_password` 时登录遮罩出现前短暂显示管理内容的问题。通过 CSS（`body.auth-pending`）在异步认证检查完成前隐藏主界面
 - **Admin 密码未解析环境变量** ([#293](https://github.com/Oaklight/llm-rosetta/pull/293))：如果 `admin_password` 包含未解析的 `${...}` 占位符，网关现在拒绝启动，防止可预测的字面量字符串被用作密码
+- **工具结果中的图片纳入截断计数** ([#308](https://github.com/Oaklight/llm-rosetta/pull/308), [#299](https://github.com/Oaklight/llm-rosetta/issues/299))：`truncate_images()` 现在扫描 `tool_result.result` 列表内的图片，而不仅是直接消息内容。修复了在 IR 层面 ≤50 张图片但 OpenAI Chat 转换器解包工具结果图片后超过 50 张的请求。同时优化了 `deepcopy`，仅复制受影响的消息而非整个对话
+- **Argo Gemini 并行工具调用失败** ([#303](https://github.com/Oaklight/llm-rosetta/pull/303), [#300](https://github.com/Oaklight/llm-rosetta/issues/300))：Claude Code 发起并行工具调用时，所有通过 Argo 的 Gemini 模型都报 "function response parts ≠ function call parts" 错误。根因：Argo 内部的 OpenAI→Gemini 转换不会将独立的 tool result 消息合并为单个 `functionResponse` Content 块。通过在转发前将并行工具调用展开为顺序对修复
 
 ## v0.6.10 — 2026-06-18
 
