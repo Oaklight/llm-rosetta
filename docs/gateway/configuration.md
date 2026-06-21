@@ -132,6 +132,32 @@ Both HTTP and SOCKS5 proxies are supported:
 
 The CLI `--proxy` flag overrides the config-level proxy for all providers.
 
+## Unix Domain Socket
+
+The gateway can listen on a Unix domain socket instead of TCP. This is useful for shared multi-user hosts (e.g. HPC login nodes) where `127.0.0.1` still exposes the service to all local users:
+
+```jsonc
+{
+  "server": {
+    "socket": "/run/user/1000/rosetta.sock"
+  }
+}
+```
+
+Or via CLI:
+
+```bash
+llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
+```
+
+When `socket` is set, `host` and `port` are ignored. The socket file is:
+
+- Created with **owner-only permissions** (`0600`) — other users on the host cannot connect
+- **Automatically removed** on shutdown
+- **Stale sockets cleaned up** on startup (if a previous instance crashed)
+
+Combined with SSH `LocalForward`, this locks down the entire access chain end-to-end.
+
 ## Model Routing
 
 The `models` section maps model names to providers:
