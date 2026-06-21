@@ -132,6 +132,32 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 
 CLI `--proxy` 参数会覆盖配置文件中的全局代理设置。
 
+## Unix 域套接字
+
+Gateway 可以监听 Unix 域套接字而非 TCP。适用于共享多用户主机（如 HPC 登录节点），在这些环境中绑定 `127.0.0.1` 仍会暴露服务给所有本地用户：
+
+```jsonc
+{
+  "server": {
+    "socket": "/run/user/1000/rosetta.sock"
+  }
+}
+```
+
+或通过 CLI：
+
+```bash
+llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
+```
+
+设置 `socket` 后，`host` 和 `port` 将被忽略。套接字文件：
+
+- 创建时设置为**仅所有者可访问**（`0600`）——主机上的其他用户无法连接
+- 关闭时**自动删除**
+- 启动时**自动清理残留套接字**（如果上一个实例崩溃）
+
+结合 SSH `LocalForward`，可实现端到端的访问控制。
+
 ## 模型路由
 
 `models` 部分将模型名称映射到提供商：
