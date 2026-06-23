@@ -8,6 +8,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.6.12 — 2026-06-23
+
+### Fixed
+
+- **Restored legacy `converters/base/` import paths** ([#310](https://github.com/Oaklight/llm-rosetta/issues/310)): The v0.6.11 helpers/ reorganization unintentionally broke import paths that external callers relied on. `sanitize_schema`, `extract_part_ids`, `log_orphan_warnings`, `fix_orphaned_tool_calls_ir`, and `strip_orphaned_tool_config` are re-exported from `converters.base.tools` again, and compatibility shim modules at `converters.base.schema`, `converters.base.tool_content`, and `converters.base.cache` redirect to their new `helpers/` locations. The canonical import path remains `llm_rosetta.converters.base.helpers`; existing code importing from the old paths (e.g. `from llm_rosetta.converters.base.tools import sanitize_schema`) keeps working without changes. The cache singletons are shared across both paths
+
 ## v0.6.11 — 2026-06-21
 
 ### Added
