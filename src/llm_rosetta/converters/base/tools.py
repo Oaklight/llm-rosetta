@@ -21,6 +21,20 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 
+# Backward-compatibility re-exports.  These utilities moved to the ``helpers``
+# subpackage in v0.6.11, but external callers (e.g. argo-proxy) historically
+# imported them from this module via
+# ``from llm_rosetta.converters.base.tools import sanitize_schema``.
+# Re-export them here so the old import paths keep working.  The canonical
+# location is ``llm_rosetta.converters.base.helpers``.
+from .helpers.schema import sanitize_schema  # noqa: F401
+from .helpers.tool_orphan_fix import (  # noqa: F401
+    extract_part_ids,
+    fix_orphaned_tool_calls_ir,
+    log_orphan_warnings,
+    strip_orphaned_tool_config,
+)
+
 
 class BaseToolOps(ABC):
     """Abstract base class for tool conversion operations.
