@@ -14,14 +14,19 @@ from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import (
     _apply_config_reasoning_override,
     _resolve_shim,
-    apply_shim_to_ir,
-    setup_shim_context,
+    apply_ir_transforms,
+    configure_context,
 )
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
     register_shim,
     unregister_shim,
+)
+from llm_rosetta.shims.transforms import (
+    strip_non_vision_images,
+    truncate_images as truncate_images_transform,
+    unwind_parallel_tool_calls as unwind_transform,
 )
 
 
@@ -104,26 +109,26 @@ class TestResolveShim:
 
 
 # ---------------------------------------------------------------------------
-# setup_shim_context
+# configure_context
 # ---------------------------------------------------------------------------
 
 
-class TestSetupShimContext:
+class TestConfigureContext:
     def test_none_shim_is_noop(self):
         ctx = ConversionContext()
-        setup_shim_context(ctx, None)
+        configure_context(ctx, None)
         assert "reasoning_cap" not in ctx.options
 
     def test_shim_without_reasoning_is_noop(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=None)
-        setup_shim_context(ctx, shim)
+        configure_context(ctx, shim)
         assert "reasoning_cap" not in ctx.options
 
     def test_provider_level_reasoning(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
-        setup_shim_context(ctx, shim)
+        configure_context(ctx, shim)
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_model_level_override(self):
@@ -132,7 +137,7 @@ class TestSetupShimContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        setup_shim_context(ctx, shim, model="gpt-4")
+        configure_context(ctx, shim, model="gpt-4")
         assert ctx.options["reasoning_cap"] is _MODEL_REASONING_CAP
 
     def test_model_not_in_overrides_falls_back(self):
@@ -141,13 +146,13 @@ class TestSetupShimContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        setup_shim_context(ctx, shim, model="gpt-3.5")
+        configure_context(ctx, shim, model="gpt-3.5")
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_config_override_highest_priority(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
-        setup_shim_context(ctx, shim, config_override={"thinking_type": "adaptive"})
+        configure_context(ctx, shim, config_override={"thinking_type": "adaptive"})
         cap = ctx.options["reasoning_cap"]
         assert cap.thinking_type == "adaptive"
         # Other fields inherited from base
@@ -161,7 +166,7 @@ class TestSetupShimContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        setup_shim_context(
+        configure_context(
             ctx, shim, model="gpt-4", config_override={"disabled": "block"}
         )
         cap = ctx.options["reasoning_cap"]
@@ -173,39 +178,40 @@ class TestSetupShimContext:
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
         register_shim(shim)
-        setup_shim_context(ctx, "test-shim")
+        configure_context(ctx, "test-shim")
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_unknown_name_is_noop(self):
         ctx = ConversionContext()
-        setup_shim_context(ctx, "nonexistent")
+        configure_context(ctx, "nonexistent")
         assert "reasoning_cap" not in ctx.options
 
 
 # ---------------------------------------------------------------------------
-# apply_shim_to_ir
+# apply_ir_transforms
 # ---------------------------------------------------------------------------
 
 
-class TestApplyShimToIr:
+class TestApplyIrTransforms:
     def test_none_shim_passthrough(self):
         ir = _simple_ir_request()
         original = copy.deepcopy(ir)
-        result = apply_shim_to_ir(ir, None)
+        result = apply_ir_transforms(ir, None)
         assert result == original
 
     def test_shim_no_features_passthrough(self):
         ir = _simple_ir_request()
         original = copy.deepcopy(ir)
         shim = _make_shim()
-        result = apply_shim_to_ir(ir, shim)
+        result = apply_ir_transforms(ir, shim)
         assert result == original
 
     def test_strip_non_vision_when_no_vision_cap(self):
         """Images should be stripped when model lacks vision capability."""
         ir = _simple_ir_request(n_images=3)
-        result = apply_shim_to_ir(
-            ir, None, model_capabilities=["text"], upstream_model="deepseek-chat"
+        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
+        result = apply_ir_transforms(
+            ir, shim, model_capabilities=["text"], upstream_model="deepseek-chat"
         )
         # Images should be replaced with text placeholders
         content = result["messages"][0]["content"]
@@ -216,8 +222,9 @@ class TestApplyShimToIr:
         """Images should NOT be stripped when model has vision capability."""
         ir = _simple_ir_request(n_images=3)
         original = copy.deepcopy(ir)
-        result = apply_shim_to_ir(
-            ir, None, model_capabilities=["text", "vision"], upstream_model="gpt-4o"
+        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
+        result = apply_ir_transforms(
+            ir, shim, model_capabilities=["text", "vision"], upstream_model="gpt-4o"
         )
         assert result == original
 
@@ -225,14 +232,17 @@ class TestApplyShimToIr:
         """Images should NOT be stripped when model_capabilities is None."""
         ir = _simple_ir_request(n_images=3)
         original = copy.deepcopy(ir)
-        result = apply_shim_to_ir(ir, None, model_capabilities=None)
+        shim = _make_shim(ir_transforms=(strip_non_vision_images(),))
+        result = apply_ir_transforms(ir, shim, model_capabilities=None)
         assert result == original
 
     def test_image_limit_enforced(self):
         """Shim with max_images should truncate excess images."""
         ir = _simple_ir_request(n_images=5)
-        shim = _make_shim(name="test-shim-img", max_images=2)
-        result = apply_shim_to_ir(ir, shim)
+        shim = _make_shim(
+            name="test-shim-img", ir_transforms=(truncate_images_transform(2),)
+        )
+        result = apply_ir_transforms(ir, shim)
         content = result["messages"][0]["content"]
         image_parts = [p for p in content if p.get("type") == "image"]
         assert len(image_parts) <= 2
@@ -240,9 +250,12 @@ class TestApplyShimToIr:
     def test_image_limit_pattern_match(self):
         """Image limit should only fire when model matches pattern."""
         ir = _simple_ir_request(n_images=5)
-        shim = _make_shim(name="test-shim-img", max_images=2, max_images_pattern="^gpt")
+        shim = _make_shim(
+            name="test-shim-img",
+            ir_transforms=(truncate_images_transform(2, pattern="^gpt"),),
+        )
         # Matching model
-        result = apply_shim_to_ir(copy.deepcopy(ir), shim, upstream_model="gpt-4o")
+        result = apply_ir_transforms(copy.deepcopy(ir), shim, upstream_model="gpt-4o")
         content = result["messages"][0]["content"]
         image_parts = [p for p in content if p.get("type") == "image"]
         assert len(image_parts) <= 2
@@ -250,8 +263,13 @@ class TestApplyShimToIr:
     def test_image_limit_pattern_no_match(self):
         """Image limit should NOT fire when model doesn't match pattern."""
         ir = _simple_ir_request(n_images=5)
-        shim = _make_shim(name="test-shim-img", max_images=2, max_images_pattern="^gpt")
-        result = apply_shim_to_ir(copy.deepcopy(ir), shim, upstream_model="gemini-pro")
+        shim = _make_shim(
+            name="test-shim-img",
+            ir_transforms=(truncate_images_transform(2, pattern="^gpt"),),
+        )
+        result = apply_ir_transforms(
+            copy.deepcopy(ir), shim, upstream_model="gemini-pro"
+        )
         content = result["messages"][0]["content"]
         image_parts = [p for p in content if p.get("type") == "image"]
         assert len(image_parts) == 5  # untouched
@@ -303,8 +321,8 @@ class TestApplyShimToIr:
             ],
             "tools": [],
         }
-        shim = _make_shim(name="test-shim-unwind", unwind_parallel_tool_calls=True)
-        result = apply_shim_to_ir(ir, shim)
+        shim = _make_shim(name="test-shim-unwind", ir_transforms=(unwind_transform(),))
+        result = apply_ir_transforms(ir, shim)
         # After unwind: user + (assistant+tool) + (assistant+tool) = 5
         assert len(result["messages"]) == 5
 
@@ -357,17 +375,18 @@ class TestApplyShimToIr:
         }
         shim = _make_shim(
             name="test-shim-unwind",
-            unwind_parallel_tool_calls=True,
-            unwind_parallel_tool_calls_pattern="^gemini",
+            ir_transforms=(unwind_transform(pattern="^gemini"),),
         )
-        result = apply_shim_to_ir(ir, shim, upstream_model="gpt-4o")
+        result = apply_ir_transforms(ir, shim, upstream_model="gpt-4o")
         assert len(result["messages"]) == 4  # untouched
 
     def test_accepts_registered_name(self):
         ir = _simple_ir_request(n_images=5)
-        shim = _make_shim(name="test-shim-img", max_images=2)
+        shim = _make_shim(
+            name="test-shim-img", ir_transforms=(truncate_images_transform(2),)
+        )
         register_shim(shim)
-        result = apply_shim_to_ir(ir, "test-shim-img")
+        result = apply_ir_transforms(ir, "test-shim-img")
         content = result["messages"][0]["content"]
         image_parts = [p for p in content if p.get("type") == "image"]
         assert len(image_parts) <= 2

@@ -11,7 +11,7 @@ request conversion, response conversion, and/or streaming:
     # ... transport sends target_body, receives upstream_response ...
     source_response = pipeline.convert_response(upstream_response)
 
-**Low-level** — :func:`setup_shim_context` and :func:`apply_shim_to_ir`
+**Low-level** — :func:`configure_context` and :func:`apply_ir_transforms`
 for consumers that need finer control over individual pipeline stages.
 
 The pipeline is part of the core library — **no network dependency**.
@@ -22,13 +22,17 @@ the caller (gateway, argo-proxy, etc.) owns the transport.
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims.provider_shim import ProviderShim, ReasoningCapability, get_shim
-from llm_rosetta.shims.transforms import Transform, apply_transforms
+from llm_rosetta.shims.transforms import (
+    Transform,
+    TransformContext,
+    apply_ir_transforms as _apply_ir_transforms_exec,
+    apply_transforms,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -90,14 +94,14 @@ def _apply_config_reasoning_override(
 # ---------------------------------------------------------------------------
 
 
-def setup_shim_context(
+def configure_context(
     ctx: ConversionContext,
     shim: ProviderShim | str | None,
     *,
     model: str | None = None,
     config_override: dict[str, Any] | None = None,
 ) -> None:
-    """Inject shim-driven options into a ConversionContext.
+    """Configure a ConversionContext with shim-driven options.
 
     Currently injects ``reasoning_cap`` so converters produce the correct
     thinking/reasoning output for the target provider.
@@ -131,7 +135,7 @@ def setup_shim_context(
         ctx.options["reasoning_cap"] = cap
 
 
-def apply_shim_to_ir(
+def apply_ir_transforms(
     ir_request: dict[str, Any],
     shim: ProviderShim | str | None,
     *,
@@ -139,23 +143,11 @@ def apply_shim_to_ir(
     model_capabilities: list[str] | None = None,
     request_id: str = "-",
 ) -> dict[str, Any]:
-    """Apply all shim-driven IR-level transforms in canonical order.
+    """Apply all shim-driven IR-level transforms.
 
-    Operations applied (in order):
-
-    1. **Strip non-vision images** — if *model_capabilities* is provided
-       and does not include ``"vision"``, replace all images with text
-       placeholders.  Driven by the caller, not by the shim.
-    2. **Enforce image count limit** — if the shim declares
-       ``max_images`` (and the upstream model matches
-       ``max_images_pattern`` when set), truncate excess images.
-    3. **Unwind parallel tool calls** — if the shim declares
-       ``unwind_parallel_tool_calls`` (and the upstream model matches
-       ``unwind_parallel_tool_calls_pattern`` when set), split parallel
-       tool calls into sequential call-result pairs.
-
-    All operations are no-ops when the corresponding shim field is unset
-    or when the pattern guard doesn't match.
+    Builds a :class:`~llm_rosetta.shims.transforms.TransformContext` from
+    the provided parameters and runs the shim's ``ir_transforms`` tuple
+    through :func:`~llm_rosetta.shims.transforms.apply_ir_transforms`.
 
     Args:
         ir_request: The IR request dict.  Some operations mutate in-place,
@@ -163,60 +155,53 @@ def apply_shim_to_ir(
         shim: ProviderShim instance, registered name, or None (no-op).
         upstream_model: The upstream model ID (for pattern matching).
         model_capabilities: Model capability list (e.g. ``["text", "vision"]``).
-            When ``None``, the non-vision image stripping step is skipped.
+            When ``None``, transforms that check capabilities treat the
+            model as unknown and skip capability-dependent operations.
         request_id: Request identifier for logging.
 
     Returns:
         The IR request dict after all applicable transforms.  Always
-        assign the return value: ``ir = apply_shim_to_ir(ir, shim, ...)``.
+        assign the return value: ``ir = apply_ir_transforms(ir, shim, ...)``.
     """
-    # 1. Strip images for non-vision models (caller-driven, not shim-driven)
-    if model_capabilities is not None and "vision" not in model_capabilities:
-        from llm_rosetta.converters.base.helpers.image_limit import (
-            strip_images_for_non_vision,
-        )
-
-        ir_request = strip_images_for_non_vision(
-            ir_request, model=upstream_model or "", request_id=request_id
-        )
-
     resolved = _resolve_shim(shim)
-    if resolved is None:
+    if resolved is None or not resolved.ir_transforms:
         return ir_request
 
-    # 2. Enforce per-shim image count limit
-    if resolved.max_images is not None:
-        apply_limit = True
-        if resolved.max_images_pattern is not None:
-            apply_limit = bool(
-                upstream_model
-                and re.search(resolved.max_images_pattern, upstream_model)
-            )
-        if apply_limit:
-            from llm_rosetta.converters.base.helpers.image_limit import truncate_images
+    ctx = TransformContext(
+        model=upstream_model or "",
+        model_capabilities=model_capabilities,
+        request_id=request_id,
+    )
+    return _apply_ir_transforms_exec(resolved.ir_transforms, ir_request, ctx)
 
-            ir_request = truncate_images(
-                ir_request, resolved.max_images, request_id=request_id
-            )
 
-    # 3. Unwind parallel tool calls
-    if resolved.unwind_parallel_tool_calls:
-        apply_unwind = True
-        if resolved.unwind_parallel_tool_calls_pattern is not None:
-            apply_unwind = bool(
-                upstream_model
-                and re.search(
-                    resolved.unwind_parallel_tool_calls_pattern, upstream_model
-                )
-            )
-        if apply_unwind:
-            from llm_rosetta.converters.base.helpers.tool_call_unwind import (
-                unwind_parallel_tool_calls_ir,
-            )
+# ---------------------------------------------------------------------------
+# Deprecated aliases (backward compatibility with v0.6.x)
+# ---------------------------------------------------------------------------
 
-            ir_request = unwind_parallel_tool_calls_ir(ir_request)
 
-    return ir_request
+def setup_shim_context(*args: Any, **kwargs: Any) -> None:
+    """Deprecated: use :func:`configure_context`."""
+    import warnings
+
+    warnings.warn(
+        "setup_shim_context is deprecated; use configure_context()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return configure_context(*args, **kwargs)
+
+
+def apply_shim_to_ir(*args: Any, **kwargs: Any) -> dict[str, Any]:
+    """Deprecated: use :func:`apply_ir_transforms`."""
+    import warnings
+
+    warnings.warn(
+        "apply_shim_to_ir is deprecated; use apply_ir_transforms()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return apply_ir_transforms(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -389,7 +374,7 @@ class ConversionPipeline:
         if self._target_provider == "google":
             ctx.options["output_format"] = "rest"
 
-        setup_shim_context(
+        configure_context(
             ctx,
             self._shim,
             model=self._upstream_model or body.get("model"),
@@ -411,7 +396,7 @@ class ConversionPipeline:
 
         # Phase 2a: Shim-driven IR transforms
         request_id = ctx.options.get("request_id", "-")
-        ir_request = apply_shim_to_ir(
+        ir_request = apply_ir_transforms(
             ir_request,
             self._shim,
             upstream_model=self._upstream_model or body.get("model"),

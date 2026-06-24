@@ -16,7 +16,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .transforms import Transform
+from .transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
 
@@ -129,16 +129,9 @@ class ProviderShim:
     model_id_field: str | None = None
     from_transforms: tuple[Transform, ...] = ()
     to_transforms: tuple[Transform, ...] = ()
+    ir_transforms: tuple[IRTransform, ...] = ()
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
-    max_images: int | None = None
-    max_images_pattern: str | None = (
-        None  # regex; if set, only apply when model matches
-    )
-    unwind_parallel_tool_calls: bool = False
-    unwind_parallel_tool_calls_pattern: str | None = (
-        None  # regex; if set, only apply when upstream model matches
-    )
 
 
 # ---------------------------------------------------------------------------

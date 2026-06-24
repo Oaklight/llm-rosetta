@@ -66,8 +66,8 @@ _PROVIDERS_DIR = Path(__file__).parent
 
 def _load_transforms(
     provider_dir: Path, *, group: str | None = None, _builtin: bool = True
-) -> tuple[tuple, tuple]:
-    """Import transforms.py if present, return (from_transforms, to_transforms).
+) -> tuple[tuple, tuple, tuple]:
+    """Import transforms.py if present, return (from_transforms, to_transforms, ir_transforms).
 
     Args:
         provider_dir: Path to the leaf provider directory.
@@ -78,7 +78,7 @@ def _load_transforms(
     """
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
-        return (), ()
+        return (), (), ()
     prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
     if group is not None:
         module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
@@ -87,12 +87,13 @@ def _load_transforms(
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
-        return (), ()
+        return (), (), ()
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return (
         getattr(mod, "from_transforms", ()),
         getattr(mod, "to_transforms", ()),
+        getattr(mod, "ir_transforms", ()),
     )
 
 
@@ -116,7 +117,7 @@ def _load_single_provider(
         logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
         return None
 
-    from_t, to_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
+    from_t, to_t, ir_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -173,14 +174,9 @@ def _load_single_provider(
         model_id_field=cfg.get("model_id_field"),
         from_transforms=from_t,
         to_transforms=to_t,
+        ir_transforms=ir_t,
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
-        max_images=cfg.get("max_images"),
-        max_images_pattern=cfg.get("max_images_pattern"),
-        unwind_parallel_tool_calls=bool(cfg.get("unwind_parallel_tool_calls", False)),
-        unwind_parallel_tool_calls_pattern=cfg.get(
-            "unwind_parallel_tool_calls_pattern"
-        ),
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

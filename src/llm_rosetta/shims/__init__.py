@@ -21,7 +21,10 @@ from .provider_shim import (
     unregister_shim,
 )
 from .transforms import (
+    IRTransform,
     Transform,
+    TransformContext,
+    apply_ir_transforms,
     apply_transforms,
     default_message_field,
     rename_field,
@@ -54,5 +57,9 @@ __all__ = [
     "replace_message_field",
     "default_message_field",
     "strip_fields_for_model",
+    # IR transforms
+    "IRTransform",
+    "TransformContext",
+    "apply_ir_transforms",
     "load_providers_from_dir",
 ]

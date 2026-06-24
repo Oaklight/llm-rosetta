@@ -1,7 +1,7 @@
 """Argo OpenAI Chat schema transforms.
 
-Request-side (to_transforms)
------------------------------
+Request-side (to_transforms) — body-level
+-------------------------------------------
 - ``rename_field("max_tokens", "max_completion_tokens")``: converts the
   deprecated ``max_tokens`` parameter for newer OpenAI models.
 - ``replace_message_field("role", "developer", "system")``: downgrades
@@ -12,6 +12,15 @@ Request-side (to_transforms)
   null content when iterating message bodies.
 - ``strip_fields_for_model(r"^claudeopus47", "temperature")``: strips
   ``temperature`` for reasoning models that reject it (e.g. Claude Opus 4.7).
+
+Request-side (ir_transforms) — IR-level
+-----------------------------------------
+- ``strip_non_vision_images()``: replace images with text placeholders
+  for models without ``"vision"`` capability.
+- ``truncate_images(50, pattern=r"^(gpt|o\\d)")``: enforce 50-image limit
+  for GPT/o* models; Gemini and Claude pass through untouched.
+- ``unwind_parallel_tool_calls(pattern=r"^gemini")``: split parallel tool
+  calls into sequential pairs for Gemini models through Argo.
 """
 
 from llm_rosetta.shims.transforms import (
@@ -19,6 +28,9 @@ from llm_rosetta.shims.transforms import (
     rename_field,
     replace_message_field,
     strip_fields_for_model,
+    strip_non_vision_images,
+    truncate_images,
+    unwind_parallel_tool_calls,
 )
 
 to_transforms = (
@@ -28,3 +40,8 @@ to_transforms = (
     strip_fields_for_model(r"^claudeopus47", "temperature"),
 )
 from_transforms = ()
+ir_transforms = (
+    strip_non_vision_images(),
+    truncate_images(50, pattern=r"^(gpt|o\d)"),
+    unwind_parallel_tool_calls(pattern=r"^gemini"),
+)

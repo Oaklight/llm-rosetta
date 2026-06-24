@@ -1,12 +1,13 @@
 """Transform primitives for the provider shim layer.
 
-A **Transform** is a pure data transformation: ``dict → dict``.  Transforms
-bridge the gap between a real provider's API dialect and the "ideal" standard
-that the corresponding base converter expects.
+Two transform types:
 
-Transforms are NOT a replacement for converter functionality — they handle
-provider-specific field-level quirks (rename, strip, inject defaults),
-while converters handle semantic API-standard translation.
+* **Transform** — body-level: ``dict → dict``.  Handles provider-specific
+  field-level quirks (rename, strip, inject defaults) on the raw provider
+  request/response body.
+* **IRTransform** — IR-level: ``(dict, TransformContext) → dict``.  Operates
+  on the IR request with access to route-level context (model capabilities,
+  upstream model name, etc.).
 
 Design principles:
 
@@ -19,6 +20,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -198,3 +200,148 @@ def apply_transforms(
     for t in transforms:
         body = t(body)
     return body
+
+
+# ---------------------------------------------------------------------------
+# IR-level transforms (context-aware)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class TransformContext:
+    """Context available to IR-level transforms.
+
+    Carries route-level information that body-level transforms don't
+    need but IR transforms do (e.g. model capabilities for vision
+    stripping).
+
+    Attributes:
+        model: Upstream model identifier (post-alias).
+        model_capabilities: Declared capabilities of the model
+            (e.g. ``["text", "vision"]``).  ``None`` means unknown.
+        request_id: Request identifier for logging.
+    """
+
+    model: str = ""
+    model_capabilities: list[str] | None = None
+    request_id: str = "-"
+
+
+IRTransform = Callable[[dict[str, Any], TransformContext], dict[str, Any]]
+"""An IR-level data transformation: receives an IR request dict and a
+:class:`TransformContext`, returns the (possibly mutated) IR dict."""
+
+
+class _NamedIRTransform:
+    """Thin wrapper that gives a factory-produced IR transform a readable repr."""
+
+    __slots__ = ("_fn", "_repr")
+
+    def __init__(self, fn: IRTransform, repr_str: str) -> None:
+        self._fn = fn
+        self._repr = repr_str
+
+    def __call__(
+        self, body: dict[str, Any], context: TransformContext
+    ) -> dict[str, Any]:
+        return self._fn(body, context)
+
+    def __repr__(self) -> str:
+        return self._repr
+
+
+def apply_ir_transforms(
+    transforms: tuple[IRTransform, ...],
+    body: dict[str, Any],
+    context: TransformContext,
+) -> dict[str, Any]:
+    """Apply IR-level *transforms* sequentially with *context*."""
+    for t in transforms:
+        body = t(body, context)
+    return body
+
+
+# ---------------------------------------------------------------------------
+# IR-level factory functions
+# ---------------------------------------------------------------------------
+
+
+def strip_non_vision_images() -> IRTransform:
+    """Return an IR transform that replaces all images with text placeholders
+    when the model lacks ``"vision"`` capability.
+
+    No-op if ``model_capabilities`` is ``None`` (unknown) or includes
+    ``"vision"`` (idempotent).
+    """
+
+    def _strip(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        if context.model_capabilities is None or "vision" in context.model_capabilities:
+            return body
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            strip_images_for_non_vision,
+        )
+
+        return strip_images_for_non_vision(
+            body, model=context.model, request_id=context.request_id
+        )
+
+    return _NamedIRTransform(_strip, "strip_non_vision_images()")
+
+
+def truncate_images(max_images: int, pattern: str | None = None) -> IRTransform:
+    """Return an IR transform that truncates images exceeding *max_images*.
+
+    When *pattern* is set, truncation only fires if the upstream model
+    matches the regex (search on raw model string).
+
+    Example::
+
+        truncate_images(50, pattern=r"^(gpt|o\\d)")
+    """
+    compiled = re.compile(pattern) if pattern else None
+
+    def _truncate(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        if compiled is not None:
+            if not context.model or not compiled.search(context.model):
+                return body
+        from llm_rosetta.converters.base.helpers.image_limit import (
+            truncate_images as _truncate_impl,
+        )
+
+        return _truncate_impl(body, max_images, request_id=context.request_id)
+
+    label = f"truncate_images({max_images}"
+    if pattern:
+        label += f", pattern={pattern!r}"
+    label += ")"
+    return _NamedIRTransform(_truncate, label)
+
+
+def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
+    """Return an IR transform that splits parallel tool calls into
+    sequential call-result pairs.
+
+    When *pattern* is set, unwinding only fires if the upstream model
+    matches the regex (search on raw model string).
+
+    Example::
+
+        unwind_parallel_tool_calls(pattern=r"^gemini")
+    """
+    compiled = re.compile(pattern) if pattern else None
+
+    def _unwind(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        if compiled is not None:
+            if not context.model or not compiled.search(context.model):
+                return body
+        from llm_rosetta.converters.base.helpers.tool_call_unwind import (
+            unwind_parallel_tool_calls_ir,
+        )
+
+        return unwind_parallel_tool_calls_ir(body)
+
+    label = "unwind_parallel_tool_calls("
+    if pattern:
+        label += f"pattern={pattern!r}"
+    label += ")"
+    return _NamedIRTransform(_unwind, label)
