@@ -55,4 +55,4 @@ __all__ = [
     "setup_shim_context",
 ]
 
-from .pipeline import apply_shim_to_ir, setup_shim_context  # noqa: E402
+from llm_rosetta.pipeline import apply_shim_to_ir, setup_shim_context  # noqa: E402

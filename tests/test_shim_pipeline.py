@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.shims.pipeline import (
+from llm_rosetta.pipeline import (
     _apply_config_reasoning_override,
     _resolve_shim,
     apply_shim_to_ir,

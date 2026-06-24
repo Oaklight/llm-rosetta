@@ -30,7 +30,7 @@ from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims import get_shim
-from llm_rosetta.shims.pipeline import apply_shim_to_ir, setup_shim_context
+from llm_rosetta.pipeline import apply_shim_to_ir, setup_shim_context
 from llm_rosetta.shims.transforms import Transform, apply_transforms
 
 
