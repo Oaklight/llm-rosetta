@@ -30,7 +30,7 @@ from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims import get_shim
-from llm_rosetta.shims.provider_shim import ReasoningCapability
+from llm_rosetta.shims.pipeline import apply_shim_to_ir, setup_shim_context
 from llm_rosetta.shims.transforms import Transform, apply_transforms
 
 
@@ -378,144 +378,6 @@ def _resolve_target_transforms(
     return shim.from_transforms, shim.to_transforms
 
 
-def _apply_image_limit(
-    ir_request: dict[str, Any],
-    shim_name: str | None,
-    *,
-    upstream_model: str | None = None,
-    request_id: str = "-",
-) -> dict[str, Any]:
-    """Truncate images in *ir_request* if the target shim declares max_images.
-
-    When the shim also declares ``max_images_pattern``, truncation only fires
-    when *upstream_model* matches the pattern (re.search).  This allows a
-    single provider (e.g. Argo) to enforce limits only for the model families
-    that actually have them (e.g. gpt-*, o*) while leaving others untouched.
-    """
-    if shim_name is None:
-        return ir_request
-    shim = get_shim(shim_name)
-    if shim is None or shim.max_images is None:
-        return ir_request
-    if shim.max_images_pattern is not None:
-        import re
-
-        if not upstream_model or not re.search(shim.max_images_pattern, upstream_model):
-            return ir_request
-    from llm_rosetta.converters.base.helpers.image_limit import truncate_images
-
-    return truncate_images(ir_request, shim.max_images, request_id=request_id)
-
-
-def _apply_tool_call_unwind(
-    ir_request: dict[str, Any],
-    shim_name: str | None,
-    *,
-    upstream_model: str | None = None,
-) -> dict[str, Any]:
-    """Unwind parallel tool calls if the target shim requires it.
-
-    When the shim declares ``unwind_parallel_tool_calls`` *and* the
-    upstream model matches ``unwind_parallel_tool_calls_pattern`` (if
-    set), parallel tool calls in the IR request are converted to
-    sequential call-result pairs.
-
-    This works around upstream gateways (e.g. Argo) whose internal
-    OpenAI→Gemini conversion does not support parallel tool calls.
-    """
-    if shim_name is None:
-        return ir_request
-    shim = get_shim(shim_name)
-    if shim is None or not shim.unwind_parallel_tool_calls:
-        return ir_request
-    if shim.unwind_parallel_tool_calls_pattern is not None:
-        import re
-
-        if not upstream_model or not re.search(
-            shim.unwind_parallel_tool_calls_pattern, upstream_model
-        ):
-            return ir_request
-    from llm_rosetta.converters.base.helpers.tool_call_unwind import (
-        unwind_parallel_tool_calls_ir,
-    )
-
-    return unwind_parallel_tool_calls_ir(ir_request)
-
-
-def _strip_non_vision_images(
-    ir_request: dict[str, Any],
-    model_capabilities: list[str],
-    *,
-    model: str = "",
-    request_id: str = "-",
-) -> dict[str, Any]:
-    """Strip all images if the model does not have vision capability."""
-    if "vision" in model_capabilities:
-        return ir_request
-    from llm_rosetta.converters.base.helpers.image_limit import (
-        strip_images_for_non_vision,
-    )
-
-    return strip_images_for_non_vision(ir_request, model=model, request_id=request_id)
-
-
-def _inject_shim_reasoning(
-    ctx: ConversionContext,
-    shim_name: str | None,
-    model: str | None = None,
-    config_override: dict[str, Any] | None = None,
-) -> None:
-    """Inject the shim's reasoning capability config into *ctx*.
-
-    If the shim has a ``reasoning`` config, it is stored in
-    ``ctx.options["reasoning_cap"]`` so converters can pick it up.
-
-    Resolution priority (highest first):
-    1. ``config_override`` — per-model override from ``config.jsonc``
-       (set via admin UI).
-    2. ``shim.model_reasoning[model]`` — per-model override from provider YAML.
-    3. ``shim.reasoning`` — provider-level default.
-    """
-    if shim_name is None:
-        return
-    shim = get_shim(shim_name)
-    if shim is None:
-        return
-    cap = shim.reasoning
-    # Model-level override (keyed by upstream model ID)
-    if model and shim.model_reasoning and model in shim.model_reasoning:
-        cap = shim.model_reasoning[model]
-    # Config-level override (from admin UI, keyed by gateway model name)
-    if cap is not None and config_override:
-        cap = _apply_config_reasoning_override(cap, config_override)
-    if cap is not None:
-        ctx.options["reasoning_cap"] = cap
-
-
-def _apply_config_reasoning_override(
-    base: ReasoningCapability,
-    override: dict[str, Any],
-) -> ReasoningCapability:
-    """Merge config-level reasoning overrides onto a base capability.
-
-    Only fields present in *override* are replaced; the rest inherit
-    from *base*.
-    """
-    return ReasoningCapability(
-        disabled=override.get("disabled", base.disabled),
-        effort_field=override.get("effort_field", base.effort_field),
-        max_effort=override.get("max_effort", base.max_effort),
-        thinking_type=override.get("thinking_type", base.thinking_type),
-        unsigned_reasoning_blocks=override.get(
-            "unsigned_reasoning_blocks", base.unsigned_reasoning_blocks
-        ),
-        effort_map=override.get("effort_map", base.effort_map),
-        budget_tokens_default_ratio=override.get(
-            "budget_tokens_default_ratio", base.budget_tokens_default_ratio
-        ),
-    )
-
-
 # ---------------------------------------------------------------------------
 # Core proxy handlers
 # ---------------------------------------------------------------------------
@@ -549,8 +411,7 @@ async def handle_non_streaming(
         ctx.options["output_format"] = "rest"
 
     # Inject shim reasoning capability so converters use it.
-    # body["model"] is the upstream model ID (post-alias) at this point.
-    _inject_shim_reasoning(
+    setup_shim_context(
         ctx,
         target_shim_name,
         model=body.get("model"),
@@ -570,29 +431,13 @@ async def handle_non_streaming(
 
     request_id = ctx.options.get("request_id", "-")
 
-    # 1c. Strip images for non-vision models (e.g. DeepSeek text-only)
-    if model_capabilities is not None:
-        ir_request = _strip_non_vision_images(
-            ir_request,
-            model_capabilities,
-            model=model,
-            request_id=request_id,
-        )
-
-    # 1d. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
-    ir_request = _apply_image_limit(
+    # 1c–1e. Shim-driven IR transforms (non-vision strip, image limit, unwind)
+    ir_request = apply_shim_to_ir(
         ir_request,
         target_shim_name,
         upstream_model=body.get("model"),
+        model_capabilities=model_capabilities,
         request_id=request_id,
-    )
-
-    # 1e. Unwind parallel tool calls for providers that require it
-    #     (e.g. Argo Gemini models)
-    ir_request = _apply_tool_call_unwind(
-        ir_request,
-        target_shim_name,
-        upstream_model=body.get("model"),
     )
 
     # -- body log: IR request (after source -> IR) --
@@ -861,7 +706,7 @@ async def handle_streaming(
         ctx.options["output_format"] = "rest"
 
     # Inject shim reasoning capability so converters use it.
-    _inject_shim_reasoning(
+    setup_shim_context(
         ctx,
         target_shim_name,
         model=body.get("model"),
@@ -881,29 +726,13 @@ async def handle_streaming(
 
     request_id = ctx.options.get("request_id", "-")
 
-    # 1c. Strip images for non-vision models (e.g. DeepSeek text-only)
-    if model_capabilities is not None:
-        ir_request = _strip_non_vision_images(
-            ir_request,
-            model_capabilities,
-            model=model,
-            request_id=request_id,
-        )
-
-    # 1d. Enforce per-shim image count limit (e.g. Argo GPT/o*: 50 images max)
-    ir_request = _apply_image_limit(
+    # 1c–1e. Shim-driven IR transforms (non-vision strip, image limit, unwind)
+    ir_request = apply_shim_to_ir(
         ir_request,
         target_shim_name,
         upstream_model=body.get("model"),
+        model_capabilities=model_capabilities,
         request_id=request_id,
-    )
-
-    # 1e. Unwind parallel tool calls for providers that require it
-    #     (e.g. Argo Gemini models)
-    ir_request = _apply_tool_call_unwind(
-        ir_request,
-        target_shim_name,
-        upstream_model=body.get("model"),
     )
 
     # -- body log: IR request (after source -> IR) --

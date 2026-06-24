@@ -9,6 +9,7 @@ Public API:
 - **Registration** (startup): ``register_shim``, ``load_providers_from_dir``
 - **Query** (per request): ``get_shim``, ``list_shims``, ``resolve_base``
 - **Transforms**: ``apply_transforms``, ``strip_fields``, ``rename_field``, ``set_defaults``
+- **Pipeline**: ``setup_shim_context``, ``apply_shim_to_ir``
 """
 
 from .provider_shim import (
@@ -49,4 +50,9 @@ __all__ = [
     "rename_field",
     "set_defaults",
     "load_providers_from_dir",
+    # Pipeline
+    "apply_shim_to_ir",
+    "setup_shim_context",
 ]
+
+from .pipeline import apply_shim_to_ir, setup_shim_context  # noqa: E402
