@@ -12,9 +12,12 @@ from llm_rosetta.shims.provider_shim import (
 )
 from llm_rosetta.shims.transforms import (
     apply_transforms,
+    default_message_field,
     rename_field,
+    replace_message_field,
     set_defaults,
     strip_fields,
+    strip_fields_for_model,
 )
 
 
@@ -414,3 +417,206 @@ class TestConvertWithTransforms:
             source_provider="openai_chat",
         )
         assert "logprobs" not in result
+
+
+# ---------------------------------------------------------------------------
+# Message-level transforms
+# ---------------------------------------------------------------------------
+
+
+class TestReplaceMessageField:
+    def test_replaces_matching_value(self):
+        t = replace_message_field("role", "developer", "system")
+        body = {"messages": [{"role": "developer", "content": "hi"}]}
+        result = t(body)
+        assert result["messages"][0]["role"] == "system"
+
+    def test_noop_on_non_matching_value(self):
+        t = replace_message_field("role", "developer", "system")
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        result = t(body)
+        assert result["messages"][0]["role"] == "user"
+
+    def test_noop_on_no_messages(self):
+        t = replace_message_field("role", "developer", "system")
+        body = {"model": "gpt-4"}
+        result = t(body)
+        assert result == {"model": "gpt-4"}
+
+    def test_multiple_messages(self):
+        t = replace_message_field("role", "developer", "system")
+        body = {
+            "messages": [
+                {"role": "developer", "content": "sys"},
+                {"role": "user", "content": "hi"},
+                {"role": "developer", "content": "more"},
+            ]
+        }
+        result = t(body)
+        assert result["messages"][0]["role"] == "system"
+        assert result["messages"][1]["role"] == "user"
+        assert result["messages"][2]["role"] == "system"
+
+    def test_idempotent(self):
+        t = replace_message_field("role", "developer", "system")
+        body = {"messages": [{"role": "developer", "content": "hi"}]}
+        result1 = t(body)
+        result2 = t(result1)
+        assert result1 == result2
+
+    def test_repr(self):
+        t = replace_message_field("role", "developer", "system")
+        assert repr(t) == "replace_message_field('role', 'developer', 'system')"
+
+
+class TestDefaultMessageField:
+    def test_sets_none_to_default(self):
+        t = default_message_field("content", "")
+        body = {"messages": [{"role": "assistant", "content": None}]}
+        result = t(body)
+        assert result["messages"][0]["content"] == ""
+
+    def test_noop_on_existing_value(self):
+        t = default_message_field("content", "")
+        body = {"messages": [{"role": "user", "content": "hello"}]}
+        result = t(body)
+        assert result["messages"][0]["content"] == "hello"
+
+    def test_noop_on_missing_field(self):
+        t = default_message_field("content", "")
+        body = {"messages": [{"role": "user"}]}
+        result = t(body)
+        # field not present, get() returns None → sets default
+        assert result["messages"][0]["content"] == ""
+
+    def test_noop_on_no_messages(self):
+        t = default_message_field("content", "")
+        body = {"model": "gpt-4"}
+        result = t(body)
+        assert result == {"model": "gpt-4"}
+
+    def test_idempotent(self):
+        t = default_message_field("content", "")
+        body = {"messages": [{"role": "assistant", "content": None}]}
+        result1 = t(body)
+        result2 = t(result1)
+        assert result1 == result2
+
+    def test_repr(self):
+        t = default_message_field("content", "")
+        assert repr(t) == "default_message_field('content', '')"
+
+
+class TestStripFieldsForModel:
+    def test_strips_when_model_matches(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        body = {"model": "claudeopus47", "temperature": 0.7, "messages": []}
+        result = t(body)
+        assert "temperature" not in result
+        assert result["model"] == "claudeopus47"
+
+    def test_strips_with_normalised_model(self):
+        """Model name is normalised (lowercase, non-alnum stripped)."""
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        body = {"model": "Claude-Opus-4.7", "temperature": 0.7, "messages": []}
+        result = t(body)
+        assert "temperature" not in result
+
+    def test_noop_when_model_no_match(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        body = {"model": "gpt-4o", "temperature": 0.7, "messages": []}
+        result = t(body)
+        assert result["temperature"] == 0.7
+
+    def test_noop_when_no_model(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        body = {"temperature": 0.7, "messages": []}
+        result = t(body)
+        assert result["temperature"] == 0.7
+
+    def test_multiple_keys(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature", "top_p")
+        body = {"model": "claudeopus47", "temperature": 0.7, "top_p": 0.9}
+        result = t(body)
+        assert "temperature" not in result
+        assert "top_p" not in result
+
+    def test_idempotent(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        body = {"model": "claudeopus47", "temperature": 0.7}
+        result1 = t(body)
+        result2 = t(result1)
+        assert result1 == result2
+
+    def test_repr(self):
+        t = strip_fields_for_model(r"^claudeopus47", "temperature")
+        assert repr(t) == "strip_fields_for_model('^claudeopus47', 'temperature')"
+
+
+# ---------------------------------------------------------------------------
+# Argo OpenAI Chat shim integration
+# ---------------------------------------------------------------------------
+
+
+class TestArgoOpenaiChatTransforms:
+    @pytest.fixture(autouse=True)
+    def _load_builtins(self):
+        from llm_rosetta.shims.providers import load_providers
+
+        load_providers()
+
+    def test_argo_downgrades_developer_role(self):
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        body = {
+            "model": "gpt-4",
+            "messages": [{"role": "developer", "content": "system prompt"}],
+        }
+        result = apply_transforms(shim.to_transforms, body)
+        assert result["messages"][0]["role"] == "system"
+
+    def test_argo_normalizes_null_content(self):
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        body = {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "assistant", "content": None, "tool_calls": []},
+            ],
+        }
+        result = apply_transforms(shim.to_transforms, body)
+        assert result["messages"][0]["content"] == ""
+
+    def test_argo_strips_temperature_for_opus47(self):
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        body = {
+            "model": "claudeopus47",
+            "temperature": 0.7,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        result = apply_transforms(shim.to_transforms, body)
+        assert "temperature" not in result
+
+    def test_argo_keeps_temperature_for_other_models(self):
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        body = {
+            "model": "gpt-4o",
+            "temperature": 0.7,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        result = apply_transforms(shim.to_transforms, body)
+        assert result["temperature"] == 0.7
+
+    def test_argo_renames_max_tokens(self):
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        body = {
+            "model": "gpt-4",
+            "max_tokens": 100,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+        result = apply_transforms(shim.to_transforms, body)
+        assert "max_tokens" not in result
+        assert result["max_completion_tokens"] == 100

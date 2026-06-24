@@ -17,8 +17,9 @@ Design principles:
 
 from __future__ import annotations
 
-from typing import Any
+import re
 from collections.abc import Callable
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Core type
@@ -92,6 +93,96 @@ def set_defaults(**defaults: Any) -> Transform:
     return _NamedTransform(
         _defaults,
         f"set_defaults({', '.join(f'{k}={v!r}' for k, v in defaults.items())})",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Message-level factory functions
+# ---------------------------------------------------------------------------
+
+
+def replace_message_field(field: str, old_value: Any, new_value: Any) -> Transform:
+    """Return a transform that replaces *old_value* with *new_value* in
+    ``messages[].field``.
+
+    Iterates all entries in ``body["messages"]`` and replaces the field
+    value where it matches *old_value*.  No-op if ``messages`` is absent
+    or no entry has the matching value (idempotent).
+
+    Example::
+
+        replace_message_field("role", "developer", "system")
+    """
+
+    def _replace(body: dict[str, Any]) -> dict[str, Any]:
+        messages = body.get("messages")
+        if not messages or not isinstance(messages, list):
+            return body
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get(field) == old_value:
+                msg[field] = new_value
+        return body
+
+    return _NamedTransform(
+        _replace,
+        f"replace_message_field({field!r}, {old_value!r}, {new_value!r})",
+    )
+
+
+def default_message_field(field: str, default: Any) -> Transform:
+    """Return a transform that sets a default for ``messages[].field``
+    when its current value is ``None``.
+
+    No-op if ``messages`` is absent or no entry has a ``None`` value
+    for *field* (idempotent).
+
+    Example::
+
+        default_message_field("content", "")
+    """
+
+    def _default(body: dict[str, Any]) -> dict[str, Any]:
+        messages = body.get("messages")
+        if not messages or not isinstance(messages, list):
+            return body
+        for msg in messages:
+            if isinstance(msg, dict) and msg.get(field) is None:
+                msg[field] = default
+        return body
+
+    return _NamedTransform(
+        _default,
+        f"default_message_field({field!r}, {default!r})",
+    )
+
+
+def strip_fields_for_model(pattern: str, *keys: str) -> Transform:
+    """Return a transform that removes *keys* from the body only when
+    ``body["model"]`` matches *pattern* (regex search).
+
+    No-op if ``model`` is absent or doesn't match (idempotent).
+
+    Example::
+
+        strip_fields_for_model(r"^claudeopus47", "temperature")
+    """
+    compiled = re.compile(pattern)
+
+    def _strip(body: dict[str, Any]) -> dict[str, Any]:
+        model = body.get("model")
+        if not model or not isinstance(model, str):
+            return body
+        # Normalise for matching: strip non-alphanumeric, lowercase
+        normalised = re.sub(r"[^a-z0-9]", "", model.lower())
+        if not compiled.search(normalised):
+            return body
+        for k in keys:
+            body.pop(k, None)
+        return body
+
+    return _NamedTransform(
+        _strip,
+        f"strip_fields_for_model({pattern!r}, {', '.join(repr(k) for k in keys)})",
     )
 
 

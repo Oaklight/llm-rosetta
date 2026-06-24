@@ -23,9 +23,12 @@ from .provider_shim import (
 from .transforms import (
     Transform,
     apply_transforms,
+    default_message_field,
     rename_field,
+    replace_message_field,
     set_defaults,
     strip_fields,
+    strip_fields_for_model,
 )
 
 # Scan provider directories and register shims from YAML + transforms.py.
@@ -48,5 +51,8 @@ __all__ = [
     "strip_fields",
     "rename_field",
     "set_defaults",
+    "replace_message_field",
+    "default_message_field",
+    "strip_fields_for_model",
     "load_providers_from_dir",
 ]
