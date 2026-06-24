@@ -10,13 +10,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import HttpClientError, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .auth import api_key_label_var
 from .config import GatewayConfig
 from .logging import get_logger
-from .proxy import get_client
+from .transport import UpstreamConnectionError
 
 logger = get_logger()
 
@@ -97,8 +96,19 @@ async def handle_embeddings(
     status_code = 500
     error_detail: str | None = None
 
+    # Use the transport's client pool for connection reuse
+    from .transport.http import HttpTransport
+
+    transport = request.app.transport
+    assert isinstance(transport, HttpTransport)
+    client = transport._pool.get(provider_info.proxy_url)
+
     try:
-        client = get_client(provider_info.proxy_url)
+        from llm_rosetta._vendor.httpclient import (
+            HttpClientError,
+            Response as HttpResponse,
+        )
+
         upstream_resp = await client.post(upstream_url, json=body, headers=headers)
         assert isinstance(upstream_resp, HttpResponse)
 
@@ -117,7 +127,7 @@ async def handle_embeddings(
             status_code=200,
             content_type="application/json",
         )
-    except HttpClientError as exc:
+    except (HttpClientError, UpstreamConnectionError) as exc:
         error_detail = str(exc)
         status_code = 502
         return JSONResponse(

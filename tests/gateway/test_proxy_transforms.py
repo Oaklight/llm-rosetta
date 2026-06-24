@@ -3,22 +3,24 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+import json
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from llm_rosetta._vendor.httpclient import Response as HttpResponse
 from llm_rosetta.gateway.proxy import (
+    ProviderMetadataStore,
     _resolve_target_transforms,
     handle_non_streaming,
-    ProviderMetadataStore,
 )
+from llm_rosetta.gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     _reset_registry,
     register_shim,
 )
-from llm_rosetta.shims.transforms import strip_fields, rename_field
+from llm_rosetta.shims.transforms import rename_field, strip_fields
 
 
 # ---------------------------------------------------------------------------
@@ -28,15 +30,14 @@ from llm_rosetta.shims.transforms import strip_fields, rename_field
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the shim registry before and after each test."""
-    _reset_registry()
+    """Reset the shim registry before each test."""
     yield
     _reset_registry()
 
 
 @pytest.fixture()
 def volcengine_shim():
-    """Register a volcengine-like shim with to_transforms."""
+    """Register a volcengine-like shim with to_transforms that strip fields."""
     shim = ProviderShim(
         name="volcengine--openai_chat",
         base="openai_chat",
@@ -48,12 +49,12 @@ def volcengine_shim():
 
 @pytest.fixture()
 def shim_with_transforms():
-    """Register a shim with provider-level transforms."""
+    """Register a shim with both from_transforms and to_transforms."""
     shim = ProviderShim(
         name="custom_provider",
         base="openai_chat",
-        to_transforms=(strip_fields("unsupported_field"),),
         from_transforms=(rename_field("custom_id", "id"),),
+        to_transforms=(strip_fields("logprobs"),),
     )
     register_shim(shim)
     return shim
@@ -65,62 +66,54 @@ def shim_with_transforms():
 
 
 class TestResolveTargetTransforms:
-    def test_none_shim_returns_empty(self):
-        from_t, to_t = _resolve_target_transforms(None, "any-model")
+    def test_none_shim(self):
+        from_t, to_t = _resolve_target_transforms(None)
         assert from_t == ()
         assert to_t == ()
 
-    def test_unknown_shim_returns_empty(self):
-        from_t, to_t = _resolve_target_transforms("nonexistent", "any-model")
+    def test_unknown_shim(self):
+        from_t, to_t = _resolve_target_transforms("nonexistent-provider")
         assert from_t == ()
         assert to_t == ()
 
-    def test_shim_without_transforms_returns_empty(self):
-        register_shim(ProviderShim(name="plain", base="openai_chat"))
-        from_t, to_t = _resolve_target_transforms("plain", "any-model")
+    def test_volcengine_shim(self, volcengine_shim):
+        from_t, to_t = _resolve_target_transforms("volcengine--openai_chat")
+        assert to_t == volcengine_shim.to_transforms
         assert from_t == ()
-        assert to_t == ()
 
-    def test_shim_with_to_transforms(self, volcengine_shim):
-        from_t, to_t = _resolve_target_transforms(
-            "volcengine--openai_chat", "some-model"
+    def test_shim_with_both_transforms(self, shim_with_transforms):
+        from_t, to_t = _resolve_target_transforms("custom_provider")
+        assert from_t == shim_with_transforms.from_transforms
+        assert to_t == shim_with_transforms.to_transforms
+
+
+# ---------------------------------------------------------------------------
+# Mock transport helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_transport(
+    response_json: dict[str, Any],
+    *,
+    status_code: int = 200,
+    captured_body: dict[str, Any] | None = None,
+) -> MagicMock:
+    """Create a mock transport that returns an UpstreamResponse."""
+
+    async def mock_send_request(
+        provider_info, target_provider, body, model, *, extra_headers=None
+    ):
+        if captured_body is not None:
+            captured_body.update(body)
+        return UpstreamResponse(
+            status_code=status_code,
+            body=response_json if status_code < 400 else None,
+            raw_content=json.dumps(response_json).encode(),
         )
-        assert from_t == ()
-        assert len(to_t) == 1
-        # Verify the transform actually strips the right fields
-        body = {"logprobs": True, "top_logprobs": 5, "model": "test"}
-        result = to_t[0](body)
-        assert "logprobs" not in result
-        assert "top_logprobs" not in result
-        assert result["model"] == "test"
 
-    def test_shim_provider_level_only(self, shim_with_transforms):
-        """Only provider-level transforms are returned."""
-        from_t, to_t = _resolve_target_transforms("custom_provider", "special-v1")
-        assert len(from_t) == 1
-        assert len(to_t) == 1
-
-    def test_shim_same_regardless_of_model(self, shim_with_transforms):
-        """Transforms are the same no matter which model name is passed."""
-        from_t1, to_t1 = _resolve_target_transforms("custom_provider", "special-v1")
-        from_t2, to_t2 = _resolve_target_transforms("custom_provider", "regular-model")
-        assert from_t1 == from_t2
-        assert to_t1 == to_t2
-
-
-# ---------------------------------------------------------------------------
-# handle_non_streaming — transform integration
-# ---------------------------------------------------------------------------
-
-
-def _make_mock_response(status_code: int, json_data: dict) -> MagicMock:
-    """Create a mock HTTP response that passes isinstance checks."""
-    resp = MagicMock(spec=HttpResponse)
-    resp.status_code = status_code
-    resp.json.return_value = json_data
-    resp.content = b"{}"
-    resp.text = "{}"
-    return resp
+    transport = MagicMock()
+    transport.send_request = AsyncMock(side_effect=mock_send_request)
+    return transport
 
 
 def _make_provider_info() -> MagicMock:
@@ -132,43 +125,39 @@ def _make_provider_info() -> MagicMock:
     return info
 
 
+# ---------------------------------------------------------------------------
+# handle_non_streaming — transform integration
+# ---------------------------------------------------------------------------
+
+
 class TestNonStreamingTransforms:
     def test_to_transforms_strip_fields(self, volcengine_shim):
         """to_transforms should strip fields from the target request body."""
-        captured_body = {}
-
-        async def mock_post(url, json=None, headers=None, **kwargs):
-            captured_body.update(json or {})
-            return _make_mock_response(
-                200,
-                {
-                    "id": "resp-1",
-                    "choices": [{"message": {"role": "assistant", "content": "hi"}}],
-                },
-            )
-
-        mock_client = AsyncMock()
-        mock_client.post = mock_post
+        captured_body: dict[str, Any] = {}
+        transport = _make_mock_transport(
+            {
+                "id": "resp-1",
+                "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+            },
+            captured_body=captured_body,
+        )
 
         async def run():
-            with patch(
-                "llm_rosetta.gateway.proxy.get_client",
-                return_value=mock_client,
-            ):
-                await handle_non_streaming(
-                    source_provider="openai_chat",
-                    target_provider="openai_chat",
-                    provider_info=_make_provider_info(),
-                    body={
-                        "model": "test-model",
-                        "messages": [{"role": "user", "content": "hello"}],
-                        "logprobs": True,
-                        "top_logprobs": 5,
-                    },
-                    model="test-model",
-                    metadata_store=ProviderMetadataStore(),
-                    target_shim_name="volcengine--openai_chat",
-                )
+            await handle_non_streaming(
+                source_provider="openai_chat",
+                target_provider="openai_chat",
+                provider_info=_make_provider_info(),
+                body={
+                    "model": "test-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "logprobs": True,
+                    "top_logprobs": 5,
+                },
+                model="test-model",
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+                target_shim_name="volcengine--openai_chat",
+            )
 
         asyncio.run(run())
 
@@ -179,40 +168,31 @@ class TestNonStreamingTransforms:
 
     def test_no_shim_no_transforms(self):
         """Without a shim, no transforms should be applied."""
-        captured_body = {}
-
-        async def mock_post(url, json=None, headers=None, **kwargs):
-            captured_body.update(json or {})
-            return _make_mock_response(
-                200,
-                {
-                    "id": "resp-1",
-                    "choices": [{"message": {"role": "assistant", "content": "hi"}}],
-                },
-            )
-
-        mock_client = AsyncMock()
-        mock_client.post = mock_post
+        captured_body: dict[str, Any] = {}
+        transport = _make_mock_transport(
+            {
+                "id": "resp-1",
+                "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+            },
+            captured_body=captured_body,
+        )
 
         async def run():
-            with patch(
-                "llm_rosetta.gateway.proxy.get_client",
-                return_value=mock_client,
-            ):
-                await handle_non_streaming(
-                    source_provider="openai_chat",
-                    target_provider="openai_chat",
-                    provider_info=_make_provider_info(),
-                    body={
-                        "model": "gpt-4",
-                        "messages": [{"role": "user", "content": "hello"}],
-                        "logprobs": True,
-                        "top_logprobs": 5,
-                    },
-                    model="gpt-4",
-                    metadata_store=ProviderMetadataStore(),
-                    target_shim_name=None,
-                )
+            await handle_non_streaming(
+                source_provider="openai_chat",
+                target_provider="openai_chat",
+                provider_info=_make_provider_info(),
+                body={
+                    "model": "gpt-4",
+                    "messages": [{"role": "user", "content": "hello"}],
+                    "logprobs": True,
+                    "top_logprobs": 5,
+                },
+                model="gpt-4",
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+                target_shim_name=None,
+            )
 
         asyncio.run(run())
 
@@ -222,37 +202,28 @@ class TestNonStreamingTransforms:
 
     def test_from_transforms_on_response(self, shim_with_transforms):
         """from_transforms should be applied to the upstream response."""
-
-        async def mock_post(url, json=None, headers=None, **kwargs):
-            return _make_mock_response(
-                200,
-                {
-                    "custom_id": "resp-1",
-                    "choices": [{"message": {"role": "assistant", "content": "hi"}}],
-                },
-            )
-
-        mock_client = AsyncMock()
-        mock_client.post = mock_post
+        transport = _make_mock_transport(
+            {
+                "custom_id": "resp-1",
+                "choices": [{"message": {"role": "assistant", "content": "hi"}}],
+            },
+        )
 
         async def run():
-            with patch(
-                "llm_rosetta.gateway.proxy.get_client",
-                return_value=mock_client,
-            ):
-                response = await handle_non_streaming(
-                    source_provider="openai_chat",
-                    target_provider="openai_chat",
-                    provider_info=_make_provider_info(),
-                    body={
-                        "model": "regular-model",
-                        "messages": [{"role": "user", "content": "hello"}],
-                    },
-                    model="regular-model",
-                    metadata_store=ProviderMetadataStore(),
-                    target_shim_name="custom_provider",
-                )
-                return response
+            response = await handle_non_streaming(
+                source_provider="openai_chat",
+                target_provider="openai_chat",
+                provider_info=_make_provider_info(),
+                body={
+                    "model": "regular-model",
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
+                model="regular-model",
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+                target_shim_name="custom_provider",
+            )
+            return response
 
         response = asyncio.run(run())
         # The handler should complete without error

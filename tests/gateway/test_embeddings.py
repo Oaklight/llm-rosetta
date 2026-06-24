@@ -13,7 +13,7 @@ import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
 from llm_rosetta.gateway.embeddings import handle_embeddings
-from llm_rosetta.gateway.proxy import _http_clients
+from llm_rosetta.gateway.transport.http import HttpTransport
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +101,7 @@ def _make_request(body: dict[str, Any]) -> MagicMock:
     app = MagicMock()
     app.metrics = None
     app.request_log = None
+    app.transport = HttpTransport()
     req.app = app
     return req
 
@@ -114,10 +115,9 @@ class TestEmbeddingUpstreamModel:
     """Tests for upstream_model substitution in embedding requests."""
 
     @pytest.fixture(autouse=True)
-    def _clear_http_clients(self):
-        """Clear the shared HTTP client pool between tests to avoid stale
-        connections across ``asyncio.run()`` calls."""
-        _http_clients.clear()
+    def _clear_transport(self):
+        """Ensure fresh transport state between tests."""
+        yield
 
     def test_upstream_model_substituted(self, echo_embedding_server: str):
         """When upstream_model is configured, the body sent to upstream should

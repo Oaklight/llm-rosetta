@@ -207,6 +207,7 @@ async def _proxy_handler(
             provider_info,
             body,
             model,
+            transport=request.app.transport,  # type: ignore
             metadata_store=store,
             extra_headers=extra_headers,
             target_shim_name=target_shim_name,
@@ -446,7 +447,10 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
         os.environ.setdefault("HTTP_PROXY", config.proxy)
         os.environ.setdefault("HTTPS_PROXY", config.proxy)
 
+    from .transport import HttpTransport
+
     metadata_store = ProviderMetadataStore()
+    transport = HttpTransport()
 
     app = App(max_body_size=50_000_000, read_timeout=300.0)
 
@@ -548,6 +552,7 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     register_admin_routes(app)
 
     # --- App-level state ---
+    app.transport = transport  # type: ignore
     app.metadata_store = metadata_store  # type: ignore
     app.internal_token = internal_token  # type: ignore
     app.auth_state = auth_state  # type: ignore
@@ -574,4 +579,7 @@ async def run_gateway(
         except asyncio.CancelledError:
             pass
         _flush_now(app)
-        await close_resources(metadata_store=app.metadata_store)  # type: ignore
+        await close_resources(
+            transport=app.transport,  # type: ignore
+            metadata_store=app.metadata_store,  # type: ignore
+        )

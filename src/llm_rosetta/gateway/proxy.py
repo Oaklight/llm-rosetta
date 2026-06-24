@@ -1,13 +1,15 @@
-"""Proxy engine — upstream request building, SSE handling, and response conversion.
+"""Proxy engine — response conversion, metadata caching, and pipeline handlers.
 
-This module contains the core proxy logic extracted from ``app.py``:
-- Upstream request preparation (including Google body fixups)
-- SSE parsing and formatting
+This module contains the core proxy logic:
 - Provider metadata caching (e.g. Google ``thought_signature``)
-- HTTP client pool management
+- Shim transform resolution
 - Non-streaming and streaming request handlers
 - Error response helpers
 - Request body helpers
+
+Transport-level concerns (HTTP client, SSE parsing, upstream request assembly)
+are delegated to the :class:`~transport.UpstreamTransport` interface.
+Downstream SSE formatting lives in :mod:`transport.sse_format`.
 """
 
 from __future__ import annotations
@@ -18,12 +20,6 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
-from llm_rosetta._vendor.httpclient import (
-    AsyncClient,
-    HttpClientError,
-    Response as HttpResponse,
-    StreamingResponse as HttpStreamingResponse,
-)
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
 from llm_rosetta import get_converter_for_provider
@@ -33,7 +29,6 @@ from llm_rosetta.shims import get_shim
 from llm_rosetta.pipeline import apply_shim_to_ir, setup_shim_context
 from llm_rosetta.shims.transforms import Transform, apply_transforms
 
-
 from .logging import (
     get_logger,
     log_converted_request,
@@ -42,112 +37,14 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
-from .providers import ProviderInfo
+from .transport import (
+    ProviderInfo,
+    UpstreamConnectionError,
+    UpstreamTransport,
+)
+from .transport.sse_format import SSE_FORMATTERS, format_sse_done
 
 logger = get_logger()
-
-# ---------------------------------------------------------------------------
-# Upstream request building
-# ---------------------------------------------------------------------------
-
-
-def prepare_upstream(
-    target_provider: ProviderType,
-    provider_info: ProviderInfo,
-    provider_request: dict[str, Any],
-    model: str,
-    *,
-    stream: bool,
-    extra_headers: dict[str, str] | None = None,
-) -> tuple[str, dict[str, str], dict[str, Any]]:
-    """Return (url, headers, body) ready for the upstream HTTP call."""
-    url = provider_info.upstream_url(model, stream=stream)
-    headers = {
-        "Content-Type": "application/json",
-        **provider_info.auth_headers(),
-    }
-    if extra_headers:
-        headers.update(extra_headers)
-
-    body = dict(provider_request)
-
-    # Inject stream flag into the body for providers that use it
-    if stream:
-        if target_provider in ("openai_chat",):
-            body["stream"] = True
-            body["stream_options"] = {"include_usage": True}
-        elif target_provider in ("openai_responses", "open_responses", "anthropic"):
-            body["stream"] = True
-        # Google streaming is signaled via URL, not body
-
-    return url, headers, body
-
-
-# ---------------------------------------------------------------------------
-# SSE parsing (upstream → IR events)
-# ---------------------------------------------------------------------------
-
-
-def _iter_sse_lines(line: str) -> tuple[str | None, str | None] | None:
-    """Parse a single SSE line into (field, value) or None if not relevant.
-
-    Returns:
-        ("data", <value>)  for data lines
-        ("event", <value>) for event lines
-        None               for empty/irrelevant lines
-    """
-    if not line:
-        return None
-    if line.startswith("data: "):
-        return ("data", line[6:])
-    if line.startswith("event: "):
-        return ("event", line[7:])
-    return None
-
-
-def _is_openai_done(data: str) -> bool:
-    """Check if the SSE data payload signals end-of-stream (OpenAI [DONE])."""
-    return data.strip() == "[DONE]"
-
-
-# ---------------------------------------------------------------------------
-# SSE emission (IR events → source-format SSE text)
-# ---------------------------------------------------------------------------
-
-
-def _format_sse_openai_chat(chunk: dict[str, Any]) -> str:
-    """Format a chunk as OpenAI Chat SSE line."""
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-
-def _format_sse_openai_chat_done() -> str:
-    return "data: [DONE]\n\n"
-
-
-def _format_sse_anthropic(chunk: dict[str, Any]) -> str:
-    """Format a chunk as Anthropic SSE (event: type\\ndata: json)."""
-    event_type = chunk.get("type", "unknown")
-    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-
-def _format_sse_openai_responses(chunk: dict[str, Any]) -> str:
-    """Format a chunk as OpenAI Responses SSE (event: type\\ndata: json)."""
-    event_type = chunk.get("type", "unknown")
-    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-
-def _format_sse_google(chunk: dict[str, Any]) -> str:
-    """Format a chunk as Google SSE line."""
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
-
-
-SSE_FORMATTERS: dict[str, Any] = {
-    "openai_chat": _format_sse_openai_chat,
-    "openai_responses": _format_sse_openai_responses,
-    "open_responses": _format_sse_openai_responses,
-    "anthropic": _format_sse_anthropic,
-    "google": _format_sse_google,
-}
 
 
 # ---------------------------------------------------------------------------
@@ -218,30 +115,18 @@ def extract_model(source_provider: ProviderType, body: dict[str, Any]) -> str | 
 
 
 # ---------------------------------------------------------------------------
-# HTTP client pool
+# Resource cleanup
 # ---------------------------------------------------------------------------
-
-# Shared HTTP clients keyed by proxy URL (None = direct connection)
-_http_clients: dict[str | None, AsyncClient] = {}
-
-
-def get_client(proxy_url: str | None = None) -> AsyncClient:
-    """Get or create an ``AsyncClient`` for the given proxy URL."""
-    if proxy_url not in _http_clients:
-        _http_clients[proxy_url] = AsyncClient(
-            timeout=300.0,
-            proxy=proxy_url,
-        )
-    return _http_clients[proxy_url]
 
 
 async def close_resources(
-    *, metadata_store: ProviderMetadataStore | None = None
+    *,
+    transport: UpstreamTransport | None = None,
+    metadata_store: ProviderMetadataStore | None = None,
 ) -> None:
-    """Close all pooled HTTP clients and clear metadata store (called on app shutdown)."""
-    for client in _http_clients.values():
-        await client.aclose()
-    _http_clients.clear()
+    """Close transport and clear metadata store (called on app shutdown)."""
+    if transport is not None:
+        await transport.close()
     store = metadata_store or _default_metadata_store
     store.clear()
 
@@ -390,6 +275,7 @@ async def handle_non_streaming(
     body: dict[str, Any],
     model: str,
     *,
+    transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
@@ -457,46 +343,41 @@ async def handle_non_streaming(
     if target_to_t:
         target_body = apply_transforms(target_to_t, target_body)
 
-    # 3. Build upstream request
-    url, headers, upstream_body = prepare_upstream(
-        target_provider,
-        provider_info,
-        target_body,
-        model,
-        stream=False,
-        extra_headers=extra_headers,
-    )
-
     # -- body log: target request body --
-    log_converted_request(upstream_body)
+    log_converted_request(target_body)
 
-    # 4. Forward to upstream
-    client = get_client(provider_info.proxy_url)
+    # 3. Forward to upstream via transport
     try:
-        upstream_resp = await client.post(url, json=upstream_body, headers=headers)
-    except HttpClientError as exc:
+        resp = await transport.send_request(
+            provider_info,
+            target_provider,
+            target_body,
+            model,
+            extra_headers=extra_headers,
+        )
+    except UpstreamConnectionError as exc:
         return error_response_for_source(
             source_provider, 502, f"Upstream request failed: {exc}"
         )
-    assert isinstance(upstream_resp, HttpResponse)
 
-    # 5. Pass through upstream errors
-    if upstream_resp.status_code >= 400:
+    # 4. Pass through upstream errors
+    if resp.is_error:
         log_upstream_error(
-            upstream_resp.status_code,
-            upstream_resp.text,
+            resp.status_code,
+            resp.error_text,
             endpoint=str(target_provider),
         )
         return Response(
-            body=upstream_resp.content,
-            status_code=upstream_resp.status_code,
+            body=resp.raw_content,
+            status_code=resp.status_code,
             content_type="application/json",
         )
 
-    # 6. Target response -> IR
+    # 5. Target response -> IR
+    upstream_json = resp.body
+    assert upstream_json is not None
     try:
-        upstream_json = upstream_resp.json()
-        # 6a. Apply target shim from_transforms (normalise response dialect)
+        # 5a. Apply target shim from_transforms (normalise response dialect)
         if target_from_t:
             upstream_json = apply_transforms(target_from_t, upstream_json)
         ir_response = target_converter.response_from_provider(
@@ -510,10 +391,10 @@ async def handle_non_streaming(
     # -- body log: upstream response --
     log_response(upstream_json, label="UPSTREAM RESPONSE")
 
-    # 6b. Cache provider_metadata from tool calls for follow-up requests
+    # 5b. Cache provider_metadata from tool calls for follow-up requests
     store.cache_from_response(ir_response)
 
-    # 7. IR -> Source response
+    # 6. IR -> Source response
     try:
         source_response = source_converter.response_to_provider(
             ir_response, context=ctx
@@ -524,49 +405,6 @@ async def handle_non_streaming(
         )
 
     return JSONResponse(source_response)
-
-
-_SENTINEL_DONE = object()
-
-
-def _parse_sse_data(line: str) -> Any:
-    """Parse a single SSE line and return the JSON chunk, or None to skip.
-
-    Returns ``_SENTINEL_DONE`` when the stream signals completion.
-    """
-    parsed = _iter_sse_lines(line)
-    if parsed is None:
-        return None
-    field, value = parsed
-    if field == "event" or field != "data" or value is None:
-        return None
-    if _is_openai_done(value):
-        return _SENTINEL_DONE
-    try:
-        return json.loads(value)
-    except json.JSONDecodeError:
-        logger.warning("Skipping malformed SSE data: %s", value[:200])
-        return None
-
-
-async def _format_upstream_error(upstream_resp: Any, endpoint: str) -> str:
-    """Read an error response from upstream and format it as an SSE data line."""
-    raw = await upstream_resp.aread()
-    error_text = (
-        raw.decode("utf-8", errors="replace") if isinstance(raw, bytes) else raw
-    )
-    log_upstream_error(
-        upstream_resp.status_code,
-        error_text,
-        endpoint=endpoint,
-        is_streaming=True,
-    )
-    try:
-        error_body = json.loads(error_text)
-        error_msg = json.dumps(error_body)
-    except json.JSONDecodeError:
-        error_msg = error_text
-    return f"data: {error_msg}\n\n"
 
 
 def process_stream_chunk(
@@ -613,14 +451,14 @@ async def _stream_event_generator(
     source_converter: Any,
     target_converter: Any,
     ctx: ConversionContext,
+    transport: UpstreamTransport,
     provider_info: ProviderInfo,
-    url: str,
-    upstream_body: dict[str, Any],
-    headers: dict[str, str],
+    target_body: dict[str, Any],
+    model: str,
     format_sse: Any,
     store: ProviderMetadataStore,
-    model: str,
     target_from_transforms: tuple[Transform, ...] = (),
+    extra_headers: dict[str, str] | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from upstream, converting each chunk."""
     from_ctx = target_converter.create_stream_context()  # upstream -> IR
@@ -635,26 +473,35 @@ async def _stream_event_generator(
     chunk_count = 0
     t0 = time.monotonic()
 
-    client = get_client(provider_info.proxy_url)
-    upstream_resp = await client.post(
-        url, json=upstream_body, headers=headers, stream=True
-    )
-    assert isinstance(upstream_resp, HttpStreamingResponse)
-    async with upstream_resp:
-        if upstream_resp.status_code >= 400:
-            error_sse = await _format_upstream_error(
-                upstream_resp, str(target_provider)
+    try:
+        stream = await transport.send_streaming(
+            provider_info,
+            target_provider,
+            target_body,
+            model,
+            extra_headers=extra_headers,
+        )
+    except UpstreamConnectionError as exc:
+        yield f"data: {json.dumps({'error': {'message': str(exc)}})}\n\n"
+        return
+
+    async with stream:
+        if stream.is_error:
+            error_text = await stream.read_error()
+            log_upstream_error(
+                stream.status_code,
+                error_text,
+                endpoint=str(target_provider),
+                is_streaming=True,
             )
-            yield error_sse
+            try:
+                error_msg = json.dumps(json.loads(error_text))
+            except json.JSONDecodeError:
+                error_msg = error_text
+            yield f"data: {error_msg}\n\n"
             return
 
-        async for line in upstream_resp.aiter_lines():
-            chunk = _parse_sse_data(line)
-            if chunk is _SENTINEL_DONE:
-                break
-            if chunk is None:
-                continue
-
+        async for chunk in stream:
             chunk_count += 1
             for sse_line in process_stream_chunk(
                 chunk,
@@ -669,7 +516,7 @@ async def _stream_event_generator(
                 yield sse_line
 
     if source_provider == "openai_chat":
-        yield _format_sse_openai_chat_done()
+        yield format_sse_done()
 
     log_stream_summary(
         model=model,
@@ -685,6 +532,7 @@ async def handle_streaming(
     body: dict[str, Any],
     model: str,
     *,
+    transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
     target_shim_name: str | None = None,
@@ -752,18 +600,8 @@ async def handle_streaming(
     if target_to_t:
         target_body = apply_transforms(target_to_t, target_body)
 
-    # 3. Build upstream request (with stream=True)
-    url, headers, upstream_body = prepare_upstream(
-        target_provider,
-        provider_info,
-        target_body,
-        model,
-        stream=True,
-        extra_headers=extra_headers,
-    )
-
     # -- body log: target request body --
-    log_converted_request(upstream_body)
+    log_converted_request(target_body)
 
     format_sse = SSE_FORMATTERS[source_provider]
 
@@ -774,14 +612,14 @@ async def handle_streaming(
             source_converter=source_converter,
             target_converter=target_converter,
             ctx=ctx,
+            transport=transport,
             provider_info=provider_info,
-            url=url,
-            upstream_body=upstream_body,
-            headers=headers,
+            target_body=target_body,
+            model=model,
             format_sse=format_sse,
             store=store,
-            model=model,
             target_from_transforms=target_from_t,
+            extra_headers=extra_headers,
         ),
         content_type="text/event-stream",
     )
