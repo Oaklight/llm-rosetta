@@ -17,7 +17,14 @@ from ._base import (
     UpstreamTransport,
 )
 from .http import HttpTransport
-from .provider_info import AuthHeaderFn, KeyRing, ProviderInfo
+from .provider_info import (
+    AuthHeaderFn,
+    KeyRing,
+    ProviderInfo,
+    anthropic_auth,
+    google_auth,
+    openai_auth,
+)
 from .sse_format import SSE_FORMATTERS, format_sse_done
 
 __all__ = [
@@ -32,6 +39,9 @@ __all__ = [
     "AuthHeaderFn",
     "KeyRing",
     "ProviderInfo",
+    "openai_auth",
+    "anthropic_auth",
+    "google_auth",
     # Downstream SSE formatting
     "SSE_FORMATTERS",
     "format_sse_done",

@@ -3,6 +3,9 @@
 Proxies ``/v1/embeddings`` requests to the upstream provider without
 format conversion — the OpenAI embeddings API format is universal
 across providers that support it.
+
+Uses the :class:`~transport.UpstreamTransport` interface so the handler
+is transport-agnostic (works with HTTP, and future gRPC/WebSocket).
 """
 
 from __future__ import annotations
@@ -15,7 +18,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from .auth import api_key_label_var
 from .config import GatewayConfig
 from .logging import get_logger
-from .transport import UpstreamConnectionError
+from .transport import UpstreamConnectionError, UpstreamTransport
 
 logger = get_logger()
 
@@ -82,13 +85,9 @@ async def handle_embeddings(
     if upstream_model:
         body["model"] = upstream_model
 
-    # --- Build upstream URL ---
-    base_url = provider_info.base_url
-    upstream_url = f"{base_url}/embeddings"
-
-    # --- Forward request ---
-    headers = provider_info.auth_headers()
-    headers["Content-Type"] = "application/json"
+    # --- Forward via transport ---
+    upstream_url = f"{provider_info.base_url}/embeddings"
+    transport: UpstreamTransport = request.app.transport
 
     metrics = getattr(request.app, "metrics", None)
     request_log = getattr(request.app, "request_log", None)
@@ -96,38 +95,24 @@ async def handle_embeddings(
     status_code = 500
     error_detail: str | None = None
 
-    # Use the transport's client pool for connection reuse
-    from .transport.http import HttpTransport
-
-    transport = request.app.transport
-    assert isinstance(transport, HttpTransport)
-    client = transport._pool.get(provider_info.proxy_url)
-
     try:
-        from llm_rosetta._vendor.httpclient import (
-            HttpClientError,
-            Response as HttpResponse,
-        )
+        resp = await transport.send_passthrough(provider_info, upstream_url, body)
+        status_code = resp.status_code
 
-        upstream_resp = await client.post(upstream_url, json=body, headers=headers)
-        assert isinstance(upstream_resp, HttpResponse)
-
-        status_code = upstream_resp.status_code
-
-        if upstream_resp.status_code >= 400:
-            error_detail = upstream_resp.text
+        if resp.is_error:
+            error_detail = resp.error_text
             return Response(
-                body=upstream_resp.content,
-                status_code=upstream_resp.status_code,
+                body=resp.raw_content,
+                status_code=resp.status_code,
                 content_type="application/json",
             )
 
         return Response(
-            body=upstream_resp.content,
+            body=resp.raw_content,
             status_code=200,
             content_type="application/json",
         )
-    except (HttpClientError, UpstreamConnectionError) as exc:
+    except UpstreamConnectionError as exc:
         error_detail = str(exc)
         status_code = 502
         return JSONResponse(

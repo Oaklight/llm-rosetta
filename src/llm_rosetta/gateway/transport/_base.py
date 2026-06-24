@@ -148,6 +148,23 @@ class UpstreamTransport(Protocol):
         """Send a streaming request and return an async chunk iterator."""
         ...
 
+    async def send_passthrough(
+        self,
+        provider_info: ProviderInfo,
+        url: str,
+        body: dict[str, Any],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> UpstreamResponse:
+        """Send a raw passthrough request (no format-specific URL or flags).
+
+        Used for endpoints that don't go through IR conversion (e.g.
+        embeddings, reranking) — the URL is caller-provided, auth
+        headers come from *provider_info*, and the body is forwarded
+        as-is.
+        """
+        ...
+
     async def close(self) -> None:
         """Release all transport resources (connection pools, etc.)."""
         ...

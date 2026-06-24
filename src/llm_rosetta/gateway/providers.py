@@ -13,9 +13,9 @@ from typing import Any
 
 from .transport.provider_info import (
     ProviderInfo,
-    _anthropic_auth,
-    _google_auth,
-    _openai_auth,
+    anthropic_auth,
+    google_auth,
+    openai_auth,
 )
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
@@ -33,31 +33,31 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
     "openai_chat": {
         "default_base_url": "https://api.openai.com/v1",
         "default_api_key_env": "OPENAI_API_KEY",
-        "auth_header_fn": _openai_auth,
+        "auth_header_fn": openai_auth,
         "url_template": "{base_url}/chat/completions",
     },
     "openai_responses": {
         "default_base_url": "https://api.openai.com/v1",
         "default_api_key_env": "OPENAI_API_KEY",
-        "auth_header_fn": _openai_auth,
+        "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
     "open_responses": {
         "default_base_url": "https://api.openai.com/v1",
         "default_api_key_env": "OPENAI_API_KEY",
-        "auth_header_fn": _openai_auth,
+        "auth_header_fn": openai_auth,
         "url_template": "{base_url}/responses",
     },
     "anthropic": {
         "default_base_url": "https://api.anthropic.com",
         "default_api_key_env": "ANTHROPIC_API_KEY",
-        "auth_header_fn": _anthropic_auth,
+        "auth_header_fn": anthropic_auth,
         "url_template": "{base_url}/v1/messages",
     },
     "google": {
         "default_base_url": "https://generativelanguage.googleapis.com",
         "default_api_key_env": "GOOGLE_API_KEY",
-        "auth_header_fn": _google_auth,
+        "auth_header_fn": google_auth,
         "url_template": "{base_url}/v1beta/models/{model}:generateContent",
         "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
     },
@@ -135,7 +135,7 @@ def build_provider_info(
         stream_tpl = reg.get("stream_url_template")
     else:
         # Unknown / custom provider — best-effort defaults
-        auth_fn = _openai_auth
+        auth_fn = openai_auth
         url_tpl = "{base_url}/"
         stream_tpl = None
         logger.warning(

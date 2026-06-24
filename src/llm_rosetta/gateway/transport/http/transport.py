@@ -176,6 +176,38 @@ class HttpTransport:
         assert isinstance(resp, HttpStreamingResponse)
         return HttpUpstreamStream(resp)
 
+    async def send_passthrough(
+        self,
+        provider_info: ProviderInfo,
+        url: str,
+        body: dict[str, Any],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> UpstreamResponse:
+        """Send a raw passthrough request — no URL template or stream flags.
+
+        Used for non-conversion endpoints (embeddings, reranking, etc.).
+        """
+        headers = {
+            "Content-Type": "application/json",
+            **provider_info.auth_headers(),
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+
+        client = self._pool.get(provider_info.proxy_url)
+        try:
+            resp = await client.post(url, json=body, headers=headers)
+        except HttpClientError as exc:
+            raise UpstreamConnectionError(str(exc)) from exc
+
+        assert isinstance(resp, HttpResponse)
+        return UpstreamResponse(
+            status_code=resp.status_code,
+            body=resp.json() if resp.status_code < 400 else None,
+            raw_content=resp.content,
+        )
+
     async def close(self) -> None:
         """Close all pooled HTTP clients."""
         await self._pool.close_all()

@@ -5,8 +5,8 @@ upstream provider at the transport level:
 
 * :class:`KeyRing` — round-robin API key selector.
 * :class:`ProviderInfo` — base URL, auth headers, URL templates.
-* Auth header builder functions (``_openai_auth``, ``_anthropic_auth``,
-  ``_google_auth``).
+* Auth header builder functions (``openai_auth``, ``anthropic_auth``,
+  ``google_auth``).
 
 Higher-level factory logic (shim resolution, config parsing) stays in
 ``gateway.providers``.
@@ -105,16 +105,16 @@ class ProviderInfo:
 # ---------------------------------------------------------------------------
 
 
-def _openai_auth(api_key: str) -> dict[str, str]:
+def openai_auth(api_key: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {api_key}"}
 
 
-def _anthropic_auth(api_key: str) -> dict[str, str]:
+def anthropic_auth(api_key: str) -> dict[str, str]:
     return {
         "x-api-key": api_key,
         "anthropic-version": "2023-06-01",
     }
 
 
-def _google_auth(api_key: str) -> dict[str, str]:
+def google_auth(api_key: str) -> dict[str, str]:
     return {"x-goog-api-key": api_key}
