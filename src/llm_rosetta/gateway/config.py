@@ -9,6 +9,7 @@ import re
 from typing import Any
 
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.routing import ResolvedRoute
 
 from .providers import build_provider_info
 from .transport import ProviderInfo
@@ -336,3 +337,49 @@ class GatewayConfig:
             upstream_model,
             provider_name,
         )
+
+    # Default model capabilities when not explicitly declared.
+    DEFAULT_CAPABILITIES: list[str] = ["text"]
+
+    def resolve(
+        self,
+        source_provider: ProviderType,
+        model: str,
+    ) -> tuple[ResolvedRoute, ProviderInfo]:
+        """Resolve *model* to a :class:`ResolvedRoute` and :class:`ProviderInfo`.
+
+        Consolidates model lookup, provider type resolution, shim binding,
+        capability detection, and reasoning overrides into a single typed
+        result.
+
+        Args:
+            source_provider: API standard of the incoming request.
+            model: Model name as specified by the client.
+
+        Returns:
+            ``(route, provider_info)`` — the route contains all
+            pipeline-relevant fields; ``provider_info`` is the
+            transport-level connection config.
+
+        Raises:
+            KeyError: If the model is not in the routing table.
+        """
+        from typing import cast
+
+        provider_name = self.models[model]
+        provider_type = self.provider_types[provider_name]
+        shim_name = self.provider_shim_names.get(provider_name)
+        upstream_model = self.model_upstream_names.get(model)
+        caps = self.model_capabilities.get(model, list(self.DEFAULT_CAPABILITIES))
+        reasoning = self.model_reasoning_overrides.get(model)
+
+        route = ResolvedRoute(
+            source_provider=source_provider,
+            target_provider=cast(ProviderType, provider_type),
+            provider_name=provider_name,
+            shim_name=shim_name,
+            upstream_model=upstream_model,
+            model_capabilities=caps,
+            reasoning_override=reasoning,
+        )
+        return route, self.providers[provider_name]

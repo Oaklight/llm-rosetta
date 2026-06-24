@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Any, cast
+from typing import Any
 
 from llm_rosetta._vendor.httpserver import (
     App,
@@ -139,16 +139,9 @@ async def _proxy_handler(
     if model_override and "model" not in body:
         body["model"] = model_override
 
-    # Resolve target provider
+    # Resolve target provider via unified routing
     try:
-        (
-            target_provider_str,
-            provider_info,
-            target_shim_name,
-            upstream_model,
-            provider_name,
-        ) = _config.resolve_model(model)
-        target_provider: ProviderType = cast(ProviderType, target_provider_str)
+        route, provider_info = _config.resolve(source_provider, model)
     except KeyError:
         configured = ", ".join(sorted(_config.models.keys()))
         resp = error_response_for_source(
@@ -162,18 +155,20 @@ async def _proxy_handler(
     # Model alias: replace the model name in the request body with the
     # actual upstream identifier so the converter and upstream provider
     # both see the correct name.
-    if upstream_model:
-        body["model"] = upstream_model
+    if route.upstream_model:
+        body["model"] = route.upstream_model
 
     # Determine streaming
     is_stream = force_stream or detect_stream_request(source_provider, body)
 
-    model_label = f"{model} (upstream={upstream_model})" if upstream_model else model
+    model_label = (
+        f"{model} (upstream={route.upstream_model})" if route.upstream_model else model
+    )
     logger.info(
         "[%s] %s -> %s | model=%s stream=%s",
         request_id,
         source_provider,
-        target_provider,
+        route.target_provider,
         model_label,
         is_stream,
     )
@@ -198,21 +193,13 @@ async def _proxy_handler(
 
     try:
         handler = handle_streaming if is_stream else handle_non_streaming
-        # Resolve config-level reasoning override (keyed by gateway model name)
-        reasoning_override = _config.model_reasoning_overrides.get(model)
-        model_caps = _config.model_capabilities.get(model, ["text"])
         response = await handler(
-            source_provider,
-            target_provider,
+            route,
             provider_info,
             body,
-            model,
             transport=request.app.transport,  # type: ignore
             metadata_store=store,
             extra_headers=extra_headers,
-            target_shim_name=target_shim_name,
-            reasoning_config_override=reasoning_override,
-            model_capabilities=model_caps,
         )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
@@ -236,8 +223,8 @@ async def _proxy_handler(
             request,
             model=model,
             source_provider=source_provider,
-            target_provider=target_provider,
-            provider_name=provider_name,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
             is_stream=is_stream,
             status_code=status_code,
             duration_ms=(time.monotonic() - t0) * 1000,

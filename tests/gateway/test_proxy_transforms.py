@@ -14,6 +14,7 @@ from llm_rosetta.gateway.proxy import (
     handle_non_streaming,
 )
 from llm_rosetta.pipeline import ConversionPipeline
+from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -125,6 +126,22 @@ def _make_provider_info() -> MagicMock:
     return info
 
 
+def _make_route(
+    model: str = "test-model",
+    shim_name: str | None = None,
+    source: str = "openai_chat",
+    target: str = "openai_chat",
+) -> ResolvedRoute:
+    """Create a ResolvedRoute for tests."""
+    return ResolvedRoute(
+        source_provider=source,
+        target_provider=target,
+        provider_name="test-provider",
+        shim_name=shim_name,
+        upstream_model=model,
+    )
+
+
 # ---------------------------------------------------------------------------
 # handle_non_streaming — transform integration
 # ---------------------------------------------------------------------------
@@ -144,19 +161,16 @@ class TestNonStreamingTransforms:
 
         async def run():
             await handle_non_streaming(
-                source_provider="openai_chat",
-                target_provider="openai_chat",
-                provider_info=_make_provider_info(),
-                body={
+                _make_route(shim_name="volcengine--openai_chat"),
+                _make_provider_info(),
+                {
                     "model": "test-model",
                     "messages": [{"role": "user", "content": "hello"}],
                     "logprobs": True,
                     "top_logprobs": 5,
                 },
-                model="test-model",
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
-                target_shim_name="volcengine--openai_chat",
             )
 
         asyncio.run(run())
@@ -179,19 +193,16 @@ class TestNonStreamingTransforms:
 
         async def run():
             await handle_non_streaming(
-                source_provider="openai_chat",
-                target_provider="openai_chat",
-                provider_info=_make_provider_info(),
-                body={
+                _make_route(model="gpt-4"),
+                _make_provider_info(),
+                {
                     "model": "gpt-4",
                     "messages": [{"role": "user", "content": "hello"}],
                     "logprobs": True,
                     "top_logprobs": 5,
                 },
-                model="gpt-4",
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
-                target_shim_name=None,
             )
 
         asyncio.run(run())
@@ -211,17 +222,14 @@ class TestNonStreamingTransforms:
 
         async def run():
             response = await handle_non_streaming(
-                source_provider="openai_chat",
-                target_provider="openai_chat",
-                provider_info=_make_provider_info(),
-                body={
+                _make_route(model="regular-model", shim_name="custom_provider"),
+                _make_provider_info(),
+                {
                     "model": "regular-model",
                     "messages": [{"role": "user", "content": "hello"}],
                 },
-                model="regular-model",
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
-                target_shim_name="custom_provider",
             )
             return response
 

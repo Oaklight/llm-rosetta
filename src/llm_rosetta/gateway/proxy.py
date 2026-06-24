@@ -24,6 +24,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResp
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
+from llm_rosetta.routing import ResolvedRoute
 
 from .logging import (
     get_logger,
@@ -235,29 +236,26 @@ _default_metadata_store = ProviderMetadataStore()
 
 
 async def handle_non_streaming(
-    source_provider: ProviderType,
-    target_provider: ProviderType,
+    route: ResolvedRoute,
     provider_info: ProviderInfo,
     body: dict[str, Any],
-    model: str,
     *,
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
-    target_shim_name: str | None = None,
-    reasoning_config_override: dict[str, Any] | None = None,
-    model_capabilities: list[str] | None = None,
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     store = metadata_store or _default_metadata_store
+    # model was already injected into body by app.py
+    model = body.get("model", "")
 
     pipeline = ConversionPipeline(
-        source_provider,
-        target_provider,
-        target_shim_name,
-        upstream_model=body.get("model"),
-        model_capabilities=model_capabilities,
-        reasoning_config_override=reasoning_config_override,
+        route.source_provider,
+        route.target_provider,
+        route.shim_name,
+        upstream_model=model,
+        model_capabilities=route.model_capabilities,
+        reasoning_config_override=route.reasoning_override,
     )
 
     # Phase 1+2: Source → IR → Target
@@ -266,7 +264,7 @@ async def handle_non_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        return error_response_for_source(source_provider, 400, str(exc))
+        return error_response_for_source(route.source_provider, 400, str(exc))
 
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
@@ -277,21 +275,21 @@ async def handle_non_streaming(
     try:
         resp = await transport.send_request(
             provider_info,
-            target_provider,
+            route.target_provider,
             target_body,
             model,
             extra_headers=extra_headers,
         )
     except UpstreamConnectionError as exc:
         return error_response_for_source(
-            source_provider, 502, f"Upstream request failed: {exc}"
+            route.source_provider, 502, f"Upstream request failed: {exc}"
         )
 
     if resp.is_error:
         log_upstream_error(
             resp.status_code,
             resp.error_text,
-            endpoint=str(target_provider),
+            endpoint=str(route.target_provider),
         )
         return Response(
             body=resp.raw_content,
@@ -307,7 +305,7 @@ async def handle_non_streaming(
             resp.body, on_ir_ready=store.cache_from_response
         )
     except ConversionError as exc:
-        return error_response_for_source(source_provider, 502, str(exc))
+        return error_response_for_source(route.source_provider, 502, str(exc))
 
     return JSONResponse(source_response)
 
@@ -372,29 +370,26 @@ async def _stream_event_generator(
 
 
 async def handle_streaming(
-    source_provider: ProviderType,
-    target_provider: ProviderType,
+    route: ResolvedRoute,
     provider_info: ProviderInfo,
     body: dict[str, Any],
-    model: str,
     *,
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
-    target_shim_name: str | None = None,
-    reasoning_config_override: dict[str, Any] | None = None,
-    model_capabilities: list[str] | None = None,
 ) -> Response | StreamingResponse:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
+    # model was already injected into body by app.py
+    model = body.get("model", "")
 
     pipeline = ConversionPipeline(
-        source_provider,
-        target_provider,
-        target_shim_name,
-        upstream_model=body.get("model"),
-        model_capabilities=model_capabilities,
-        reasoning_config_override=reasoning_config_override,
+        route.source_provider,
+        route.target_provider,
+        route.shim_name,
+        upstream_model=model,
+        model_capabilities=route.model_capabilities,
+        reasoning_config_override=route.reasoning_override,
     )
 
     # Phase 1+2: Source → IR → Target
@@ -403,7 +398,7 @@ async def handle_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        return error_response_for_source(source_provider, 400, str(exc))
+        return error_response_for_source(route.source_provider, 400, str(exc))
 
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
@@ -415,12 +410,12 @@ async def handle_streaming(
     processor = pipeline.create_stream_processor(
         on_ir_event=store.cache_from_stream_event,
     )
-    format_sse = SSE_FORMATTERS[source_provider]
+    format_sse = SSE_FORMATTERS[route.source_provider]
 
     return StreamingResponse(
         _stream_event_generator(
-            source_provider=source_provider,
-            target_provider=target_provider,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
             processor=processor,
             transport=transport,
             provider_info=provider_info,
