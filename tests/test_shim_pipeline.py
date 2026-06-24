@@ -1,4 +1,10 @@
-"""Tests for llm_rosetta.shims.pipeline — unified shim entry points."""
+"""Tests for llm_rosetta.pipeline — unified shim-driven pipeline entry points.
+
+Note: This file imports private helpers (_resolve_shim, _apply_config_reasoning_override)
+directly from llm_rosetta.pipeline for unit-testing internal logic.  These are NOT
+re-exported by the backward-compat shim at llm_rosetta.shims.pipeline, which only
+exposes the two public functions (apply_shim_to_ir, setup_shim_context).
+"""
 
 import copy
 from typing import Any
