@@ -458,6 +458,19 @@ class TestConversionPipeline:
             pipeline.convert_request({"model": "gpt-4", "messages": 123})
         assert exc_info.value.phase == "source_to_ir"
 
+    def test_convert_request_twice_raises(self):
+        """Calling convert_request twice raises RuntimeError (one-shot)."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        with pytest.raises(RuntimeError, match="one-shot"):
+            pipeline.convert_request(
+                {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+            )
+
     def test_convert_response_before_request_raises(self):
         """Calling convert_response before convert_request raises RuntimeError."""
         from llm_rosetta.pipeline import ConversionPipeline

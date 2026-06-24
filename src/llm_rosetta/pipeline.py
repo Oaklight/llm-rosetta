@@ -374,7 +374,15 @@ class ConversionPipeline:
 
         Raises:
             ConversionError: If source→IR or IR→target conversion fails.
+            RuntimeError: If called more than once on the same instance.
+                Create a new ``ConversionPipeline`` per request.
         """
+        if self._ctx is not None:
+            raise RuntimeError(
+                "convert_request() already called on this pipeline instance. "
+                "ConversionPipeline is one-shot — create a new instance per request."
+            )
+
         # Setup context
         ctx = ConversionContext()
         ctx.options["metadata_mode"] = "preserve"
