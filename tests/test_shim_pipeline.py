@@ -1,6 +1,7 @@
 """Tests for llm_rosetta.shims.pipeline — unified shim entry points."""
 
 import copy
+from typing import Any
 
 import pytest
 
@@ -38,9 +39,9 @@ _MODEL_REASONING_CAP = ReasoningCapability(
 )
 
 
-def _make_shim(**kwargs):
+def _make_shim(**kwargs: Any) -> ProviderShim:
     """Create a ProviderShim with sensible defaults, overridable via kwargs."""
-    defaults = dict(name="test-shim", base="openai_chat")
+    defaults: dict[str, Any] = dict(name="test-shim", base="openai_chat")
     defaults.update(kwargs)
     return ProviderShim(**defaults)
 
@@ -53,9 +54,11 @@ def _register_cleanup():
         unregister_shim(name)
 
 
-def _simple_ir_request(n_messages=1, n_images=0):
+def _simple_ir_request(n_messages: int = 1, n_images: int = 0) -> dict[str, Any]:
     """Build a minimal IR request dict for testing."""
-    content = [{"type": "text", "text": f"message {i}"} for i in range(n_messages)]
+    content: list[dict[str, Any]] = [
+        {"type": "text", "text": f"message {i}"} for i in range(n_messages)
+    ]
     for i in range(n_images):
         content.append(
             {
