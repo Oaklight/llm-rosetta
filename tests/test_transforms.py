@@ -482,11 +482,11 @@ class TestDefaultMessageField:
         result = t(body)
         assert result["messages"][0]["content"] == "hello"
 
-    def test_noop_on_missing_field(self):
+    def test_sets_default_on_missing_field(self):
         t = default_message_field("content", "")
         body = {"messages": [{"role": "user"}]}
         result = t(body)
-        # field not present, get() returns None → sets default
+        # field absent, get() returns None → sets default
         assert result["messages"][0]["content"] == ""
 
     def test_noop_on_no_messages(self):

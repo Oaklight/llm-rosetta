@@ -131,10 +131,10 @@ def replace_message_field(field: str, old_value: Any, new_value: Any) -> Transfo
 
 def default_message_field(field: str, default: Any) -> Transform:
     """Return a transform that sets a default for ``messages[].field``
-    when its current value is ``None``.
+    when the field is absent or its value is ``None``.
 
-    No-op if ``messages`` is absent or no entry has a ``None`` value
-    for *field* (idempotent).
+    No-op if ``messages`` is absent or no entry needs defaulting
+    (idempotent).
 
     Example::
 
