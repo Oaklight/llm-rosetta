@@ -16,7 +16,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from .auth import api_key_label_var
 from .config import GatewayConfig
 from .logging import get_logger
-from .proxy import get_client
+from .transport import get_client
 
 logger = get_logger()
 

@@ -10,7 +10,8 @@ from typing import Any
 
 from llm_rosetta.auto_detect import ProviderType
 
-from .providers import ProviderInfo, build_provider_info
+from .providers import build_provider_info
+from .transport import ProviderInfo
 
 logger = logging.getLogger("llm-rosetta-gateway")
 

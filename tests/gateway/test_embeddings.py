@@ -13,7 +13,7 @@ import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
 from llm_rosetta.gateway.embeddings import handle_embeddings
-from llm_rosetta.gateway.proxy import _http_clients
+from llm_rosetta.gateway.transport.client import _http_clients
 
 
 # ---------------------------------------------------------------------------
