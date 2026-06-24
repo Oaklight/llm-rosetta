@@ -13,6 +13,7 @@ from llm_rosetta.gateway.proxy import (
     ProviderMetadataStore,
     handle_non_streaming,
 )
+from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.gateway.transport._base import UpstreamResponse
@@ -129,8 +130,8 @@ def _make_provider_info() -> MagicMock:
 def _make_route(
     model: str = "test-model",
     shim_name: str | None = None,
-    source: str = "openai_chat",
-    target: str = "openai_chat",
+    source: ProviderType = "openai_chat",
+    target: ProviderType = "openai_chat",
 ) -> ResolvedRoute:
     """Create a ResolvedRoute for tests."""
     return ResolvedRoute(
