@@ -11,9 +11,9 @@ import pytest
 
 from llm_rosetta.gateway.proxy import (
     ProviderMetadataStore,
-    _resolve_target_transforms,
     handle_non_streaming,
 )
+from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
@@ -61,30 +61,30 @@ def shim_with_transforms():
 
 
 # ---------------------------------------------------------------------------
-# _resolve_target_transforms
+# Pipeline transform resolution (replaces _resolve_target_transforms tests)
 # ---------------------------------------------------------------------------
 
 
-class TestResolveTargetTransforms:
+class TestPipelineTransformResolution:
     def test_none_shim(self):
-        from_t, to_t = _resolve_target_transforms(None)
-        assert from_t == ()
-        assert to_t == ()
+        p = ConversionPipeline("openai_chat", "openai_chat", None)
+        assert p._from_transforms == ()
+        assert p._to_transforms == ()
 
     def test_unknown_shim(self):
-        from_t, to_t = _resolve_target_transforms("nonexistent-provider")
-        assert from_t == ()
-        assert to_t == ()
+        p = ConversionPipeline("openai_chat", "openai_chat", "nonexistent-provider")
+        assert p._from_transforms == ()
+        assert p._to_transforms == ()
 
     def test_volcengine_shim(self, volcengine_shim):
-        from_t, to_t = _resolve_target_transforms("volcengine--openai_chat")
-        assert to_t == volcengine_shim.to_transforms
-        assert from_t == ()
+        p = ConversionPipeline("openai_chat", "openai_chat", "volcengine--openai_chat")
+        assert p._to_transforms == volcengine_shim.to_transforms
+        assert p._from_transforms == ()
 
     def test_shim_with_both_transforms(self, shim_with_transforms):
-        from_t, to_t = _resolve_target_transforms("custom_provider")
-        assert from_t == shim_with_transforms.from_transforms
-        assert to_t == shim_with_transforms.to_transforms
+        p = ConversionPipeline("openai_chat", "openai_chat", "custom_provider")
+        assert p._from_transforms == shim_with_transforms.from_transforms
+        assert p._to_transforms == shim_with_transforms.to_transforms
 
 
 # ---------------------------------------------------------------------------

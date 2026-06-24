@@ -22,12 +22,8 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
-from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.shims import get_shim
-from llm_rosetta.pipeline import apply_shim_to_ir, setup_shim_context
-from llm_rosetta.shims.transforms import Transform, apply_transforms
+from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 
 from .logging import (
     get_logger,
@@ -234,36 +230,6 @@ _default_metadata_store = ProviderMetadataStore()
 
 
 # ---------------------------------------------------------------------------
-# Shim transform resolution
-# ---------------------------------------------------------------------------
-
-
-_EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
-
-
-def _resolve_target_transforms(
-    shim_name: str | None,
-    model: str | None = None,
-) -> tuple[tuple[Transform, ...], tuple[Transform, ...]]:
-    """Look up target-side transforms from the shim registry.
-
-    Args:
-        shim_name: Registered shim name (e.g. ``"volcengine"``), or ``None``.
-        model: Unused, kept for API compatibility.
-
-    Returns:
-        ``(from_transforms, to_transforms)`` ready for ``apply_transforms``.
-        Both are empty tuples when no shim is found.
-    """
-    if shim_name is None:
-        return _EMPTY_TRANSFORMS, _EMPTY_TRANSFORMS
-    shim = get_shim(shim_name)
-    if shim is None:
-        return _EMPTY_TRANSFORMS, _EMPTY_TRANSFORMS
-    return shim.from_transforms, shim.to_transforms
-
-
-# ---------------------------------------------------------------------------
 # Core proxy handlers
 # ---------------------------------------------------------------------------
 
@@ -284,69 +250,30 @@ async def handle_non_streaming(
 ) -> Response:
     """Non-streaming proxy: convert -> forward -> convert back -> respond."""
     store = metadata_store or _default_metadata_store
-    source_converter = get_converter_for_provider(source_provider)
-    target_converter = get_converter_for_provider(target_provider)
 
-    # Resolve target-side transforms from shim registry
-    target_from_t, target_to_t = _resolve_target_transforms(target_shim_name, model)
-
-    # Shared context for the conversion pipeline
-    ctx = ConversionContext()
-    ctx.options["metadata_mode"] = "preserve"
-    if target_provider == "google":
-        ctx.options["output_format"] = "rest"
-
-    # Inject shim reasoning capability so converters use it.
-    setup_shim_context(
-        ctx,
-        target_shim_name,
-        model=body.get("model"),
-        config_override=reasoning_config_override,
-    )
-
-    # 1. Source -> IR
-    try:
-        ir_request = source_converter.request_from_provider(body, context=ctx)
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 400, f"Failed to parse request: {exc}"
-        )
-
-    # 1b. Restore cached provider_metadata (e.g. Google thought_signature)
-    store.inject_into_request(ir_request)
-
-    request_id = ctx.options.get("request_id", "-")
-
-    # 1c–1e. Shim-driven IR transforms (non-vision strip, image limit, unwind)
-    ir_request = apply_shim_to_ir(
-        ir_request,
+    pipeline = ConversionPipeline(
+        source_provider,
+        target_provider,
         target_shim_name,
         upstream_model=body.get("model"),
         model_capabilities=model_capabilities,
-        request_id=request_id,
+        reasoning_config_override=reasoning_config_override,
     )
 
-    # -- body log: IR request (after source -> IR) --
-    log_original_request(ir_request)
-
-    # 2. IR -> Target
+    # Phase 1+2: Source → IR → Target
     try:
-        target_body, _ = target_converter.request_to_provider(ir_request, context=ctx)
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 400, f"Conversion error: {exc}"
+        target_body = pipeline.convert_request(
+            body, on_ir_ready=store.inject_into_request
         )
-    if ctx.warnings:
-        logger.warning("Conversion warnings: %s", ctx.warnings)
+    except ConversionError as exc:
+        return error_response_for_source(source_provider, 400, str(exc))
 
-    # 2b. Apply target shim to_transforms (e.g. strip unsupported fields)
-    if target_to_t:
-        target_body = apply_transforms(target_to_t, target_body)
-
-    # -- body log: target request body --
+    log_original_request(pipeline.ir_request)
+    if pipeline.warnings:
+        logger.warning("Conversion warnings: %s", pipeline.warnings)
     log_converted_request(target_body)
 
-    # 3. Forward to upstream via transport
+    # Phase 3: Forward to upstream via transport
     try:
         resp = await transport.send_request(
             provider_info,
@@ -360,7 +287,6 @@ async def handle_non_streaming(
             source_provider, 502, f"Upstream request failed: {exc}"
         )
 
-    # 4. Pass through upstream errors
     if resp.is_error:
         log_upstream_error(
             resp.status_code,
@@ -373,103 +299,32 @@ async def handle_non_streaming(
             content_type="application/json",
         )
 
-    # 5. Target response -> IR
-    upstream_json = resp.body
-    assert upstream_json is not None
+    # Phase 4: Target response → Source response
+    assert resp.body is not None
+    log_response(resp.body, label="UPSTREAM RESPONSE")
     try:
-        # 5a. Apply target shim from_transforms (normalise response dialect)
-        if target_from_t:
-            upstream_json = apply_transforms(target_from_t, upstream_json)
-        ir_response = target_converter.response_from_provider(
-            upstream_json, context=ctx
+        source_response = pipeline.convert_response(
+            resp.body, on_ir_ready=store.cache_from_response
         )
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 502, f"Failed to parse upstream response: {exc}"
-        )
-
-    # -- body log: upstream response --
-    log_response(upstream_json, label="UPSTREAM RESPONSE")
-
-    # 5b. Cache provider_metadata from tool calls for follow-up requests
-    store.cache_from_response(ir_response)
-
-    # 6. IR -> Source response
-    try:
-        source_response = source_converter.response_to_provider(
-            ir_response, context=ctx
-        )
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 500, f"Failed to convert response: {exc}"
-        )
+    except ConversionError as exc:
+        return error_response_for_source(source_provider, 502, str(exc))
 
     return JSONResponse(source_response)
-
-
-def process_stream_chunk(
-    chunk: dict[str, Any],
-    *,
-    target_converter: Any,
-    source_converter: Any,
-    from_ctx: Any,
-    to_ctx: Any,
-    store: ProviderMetadataStore,
-    format_sse: Any,
-    target_from_transforms: tuple[Transform, ...],
-) -> list[str]:
-    """Convert one upstream chunk through the full pipeline to source SSE strings.
-
-    Handles: shim transforms → upstream→IR conversion → metadata bridging
-    → IR→source conversion → SSE formatting.
-    """
-    if target_from_transforms:
-        chunk = apply_transforms(target_from_transforms, chunk)
-
-    ir_events = target_converter.stream_response_from_provider(chunk, context=from_ctx)
-
-    if "_response_extras" in from_ctx.metadata:
-        to_ctx.metadata["_response_extras"] = from_ctx.metadata["_response_extras"]
-
-    result: list[str] = []
-    for ir_event in ir_events:
-        store.cache_from_stream_event(ir_event)
-        source_chunks = source_converter.stream_response_to_provider(
-            ir_event, context=to_ctx
-        )
-        if isinstance(source_chunks, list):
-            result.extend(format_sse(sc) for sc in source_chunks if sc)
-        elif source_chunks:
-            result.append(format_sse(source_chunks))
-    return result
 
 
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
     target_provider: ProviderType,
-    source_converter: Any,
-    target_converter: Any,
-    ctx: ConversionContext,
+    processor: Any,
     transport: UpstreamTransport,
     provider_info: ProviderInfo,
     target_body: dict[str, Any],
     model: str,
     format_sse: Any,
-    store: ProviderMetadataStore,
-    target_from_transforms: tuple[Transform, ...] = (),
     extra_headers: dict[str, str] | None = None,
 ) -> AsyncIterator[str]:
-    """Stream SSE events from upstream, converting each chunk."""
-    from_ctx = target_converter.create_stream_context()  # upstream -> IR
-    to_ctx = source_converter.create_stream_context()  # IR -> source
-
-    # Bridge preserve-mode metadata from request phase to streaming context
-    to_ctx.options["metadata_mode"] = "preserve"
-    from_ctx.options["metadata_mode"] = "preserve"
-    if "_request_echo" in ctx.metadata:
-        to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
-
+    """Stream SSE events from upstream, converting each chunk via Pipeline."""
     chunk_count = 0
     t0 = time.monotonic()
 
@@ -503,17 +358,8 @@ async def _stream_event_generator(
 
         async for chunk in stream:
             chunk_count += 1
-            for sse_line in process_stream_chunk(
-                chunk,
-                target_converter=target_converter,
-                source_converter=source_converter,
-                from_ctx=from_ctx,
-                to_ctx=to_ctx,
-                store=store,
-                format_sse=format_sse,
-                target_from_transforms=target_from_transforms,
-            ):
-                yield sse_line
+            for source_event in processor.process_chunk(chunk):
+                yield format_sse(source_event)
 
     if source_provider == "openai_chat":
         yield format_sse_done()
@@ -541,84 +387,46 @@ async def handle_streaming(
 ) -> Response | StreamingResponse:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
     store = metadata_store or _default_metadata_store
-    source_converter = get_converter_for_provider(source_provider)
-    target_converter = get_converter_for_provider(target_provider)
 
-    # Resolve target-side transforms from shim registry
-    target_from_t, target_to_t = _resolve_target_transforms(target_shim_name, model)
-
-    # Shared context for the request conversion phase
-    ctx = ConversionContext()
-    ctx.options["metadata_mode"] = "preserve"
-    if target_provider == "google":
-        ctx.options["output_format"] = "rest"
-
-    # Inject shim reasoning capability so converters use it.
-    setup_shim_context(
-        ctx,
-        target_shim_name,
-        model=body.get("model"),
-        config_override=reasoning_config_override,
-    )
-
-    # 1. Source -> IR
-    try:
-        ir_request = source_converter.request_from_provider(body, context=ctx)
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 400, f"Failed to parse request: {exc}"
-        )
-
-    # 1b. Inject cached provider_metadata (e.g. Google thought_signature)
-    store.inject_into_request(ir_request)
-
-    request_id = ctx.options.get("request_id", "-")
-
-    # 1c–1e. Shim-driven IR transforms (non-vision strip, image limit, unwind)
-    ir_request = apply_shim_to_ir(
-        ir_request,
+    pipeline = ConversionPipeline(
+        source_provider,
+        target_provider,
         target_shim_name,
         upstream_model=body.get("model"),
         model_capabilities=model_capabilities,
-        request_id=request_id,
+        reasoning_config_override=reasoning_config_override,
     )
 
-    # -- body log: IR request (after source -> IR) --
-    log_original_request(ir_request)
-
-    # 2. IR -> Target
+    # Phase 1+2: Source → IR → Target
     try:
-        target_body, _ = target_converter.request_to_provider(ir_request, context=ctx)
-    except Exception as exc:
-        return error_response_for_source(
-            source_provider, 400, f"Conversion error: {exc}"
+        target_body = pipeline.convert_request(
+            body, on_ir_ready=store.inject_into_request
         )
-    if ctx.warnings:
-        logger.warning("Conversion warnings: %s", ctx.warnings)
+    except ConversionError as exc:
+        return error_response_for_source(source_provider, 400, str(exc))
 
-    # 2b. Apply target shim to_transforms (e.g. strip unsupported fields)
-    if target_to_t:
-        target_body = apply_transforms(target_to_t, target_body)
+    log_original_request(pipeline.ir_request)
+    if pipeline.warnings:
+        logger.warning("Conversion warnings: %s", pipeline.warnings)
 
-    # -- body log: target request body --
     log_converted_request(target_body)
 
+    # Create stream processor for per-chunk conversion
+    processor = pipeline.create_stream_processor(
+        on_ir_event=store.cache_from_stream_event,
+    )
     format_sse = SSE_FORMATTERS[source_provider]
 
     return StreamingResponse(
         _stream_event_generator(
             source_provider=source_provider,
             target_provider=target_provider,
-            source_converter=source_converter,
-            target_converter=target_converter,
-            ctx=ctx,
+            processor=processor,
             transport=transport,
             provider_info=provider_info,
             target_body=target_body,
             model=model,
             format_sse=format_sse,
-            store=store,
-            target_from_transforms=target_from_t,
             extra_headers=extra_headers,
         ),
         content_type="text/event-stream",

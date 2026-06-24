@@ -1,9 +1,8 @@
-"""Tests for llm_rosetta.pipeline — unified shim-driven pipeline entry points.
+"""Tests for llm_rosetta.pipeline — ConversionPipeline and shim-driven helpers.
 
 Note: This file imports private helpers (_resolve_shim, _apply_config_reasoning_override)
 directly from llm_rosetta.pipeline for unit-testing internal logic.  These are NOT
-re-exported by the backward-compat shim at llm_rosetta.shims.pipeline, which only
-exposes the two public functions (apply_shim_to_ir, setup_shim_context).
+re-exported by the backward-compat shim at llm_rosetta.shims.pipeline.
 """
 
 import copy
@@ -410,3 +409,180 @@ class TestApplyConfigReasoningOverride:
         assert result.disabled == _REASONING_CAP.disabled
         assert result.effort_field == _REASONING_CAP.effort_field
         assert result.effort_map == _REASONING_CAP.effort_map
+
+
+# ---------------------------------------------------------------------------
+# ConversionPipeline
+# ---------------------------------------------------------------------------
+
+
+class TestConversionPipeline:
+    """Tests for the high-level ConversionPipeline class."""
+
+    def test_convert_request_openai_to_openai(self):
+        """Same-format round-trip produces valid target body."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        body = {
+            "model": "gpt-4",
+            "messages": [{"role": "user", "content": "hello"}],
+        }
+        target = pipeline.convert_request(body)
+        assert "messages" in target
+        assert target["model"] == "gpt-4"
+
+    def test_convert_response_openai_to_openai(self):
+        """Response round-trip produces valid source response."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        response = pipeline.convert_response(
+            {
+                "id": "resp-1",
+                "choices": [{"message": {"role": "assistant", "content": "hello"}}],
+            }
+        )
+        assert "choices" in response
+
+    def test_convert_request_raises_conversion_error(self):
+        """Completely invalid body should raise ConversionError with phase info."""
+        from llm_rosetta.pipeline import ConversionError, ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        with pytest.raises(ConversionError) as exc_info:
+            # messages must be iterable — passing an int triggers a parse error
+            pipeline.convert_request({"model": "gpt-4", "messages": 123})
+        assert exc_info.value.phase == "source_to_ir"
+
+    def test_convert_response_before_request_raises(self):
+        """Calling convert_response before convert_request raises RuntimeError."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        with pytest.raises(RuntimeError):
+            pipeline.convert_response({"choices": []})
+
+    def test_on_ir_ready_callback_request(self):
+        """on_ir_ready callback fires after source→IR, before shim transforms."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        captured: list[dict[str, Any]] = []
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]},
+            on_ir_ready=lambda ir: captured.append(ir),
+        )
+        assert len(captured) == 1
+        assert "messages" in captured[0]
+
+    def test_on_ir_ready_callback_response(self):
+        """on_ir_ready callback fires after target→IR in convert_response."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        captured: list[dict[str, Any]] = []
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        pipeline.convert_response(
+            {
+                "id": "resp-1",
+                "choices": [{"message": {"role": "assistant", "content": "ok"}}],
+            },
+            on_ir_ready=lambda ir: captured.append(ir),
+        )
+        assert len(captured) == 1
+
+    def test_context_available_after_convert_request(self):
+        """Pipeline context should be accessible after convert_request."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        with pytest.raises(RuntimeError):
+            _ = pipeline.context
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        ctx = pipeline.context
+        assert ctx.options.get("metadata_mode") == "preserve"
+
+    def test_ir_request_available_after_convert_request(self):
+        """Pipeline ir_request should be accessible after convert_request."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        with pytest.raises(RuntimeError):
+            _ = pipeline.ir_request
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        ir = pipeline.ir_request
+        assert "messages" in ir
+
+    def test_no_shim_passthrough(self):
+        """Pipeline without shim still works — no transforms applied."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", None)
+        target = pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        assert "messages" in target
+
+    def test_cross_format_openai_to_anthropic(self):
+        """Cross-format conversion produces valid target body."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "anthropic")
+        target = pipeline.convert_request(
+            {"model": "claude-3", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        # Anthropic format should have "messages" with different structure
+        assert "messages" in target
+
+    def test_create_stream_processor(self):
+        """StreamProcessor should be creatable after convert_request."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        processor = pipeline.create_stream_processor()
+        assert processor is not None
+
+    def test_create_stream_processor_before_request_raises(self):
+        """create_stream_processor before convert_request raises RuntimeError."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        with pytest.raises(RuntimeError):
+            pipeline.create_stream_processor()
+
+    def test_stream_processor_on_ir_event_callback(self):
+        """StreamProcessor on_ir_event callback fires for each IR event."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        captured: list[dict[str, Any]] = []
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        processor = pipeline.create_stream_processor(
+            on_ir_event=lambda ev: captured.append(ev)
+        )
+        # Feed a simple streaming chunk
+        chunk = {
+            "id": "chatcmpl-1",
+            "choices": [{"delta": {"content": "hello"}, "index": 0}],
+        }
+        events = processor.process_chunk(chunk)
+        # Should produce source events and fire callback for IR events
+        assert isinstance(events, list)
+        # Callback should have been called at least once if IR events were produced
+        if events:
+            assert len(captured) > 0
