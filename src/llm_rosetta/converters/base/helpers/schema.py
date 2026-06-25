@@ -31,6 +31,10 @@ UNSUPPORTED_SCHEMA_KEYS: set[str] = {
     "readOnly",
     "writeOnly",
     "examples",
+    # JSON Schema draft 6+ numeric constraints — not supported by
+    # Google GenAI and some other providers.
+    "exclusiveMinimum",
+    "exclusiveMaximum",
 }
 
 # Keys that hold definition maps (consumed for $ref resolution, then removed).
