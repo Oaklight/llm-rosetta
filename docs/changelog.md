@@ -31,8 +31,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Pipeline 重命名** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334))：`apply_shim_to_ir()` → `apply_ir_transforms()`、`setup_shim_context()` → `configure_context()`。旧名称发出 `DeprecationWarning`
 - **Gateway proxy.py**：handler 内部使用 `ConversionPipeline`。删除 `_resolve_target_transforms`、`process_stream_chunk`
-- **Embeddings handler**：使用 `transport.send_passthrough()` 替代直接访问 `HttpTransport._pool`
+- **Embeddings handler**：使用 `transport.send_passthrough()` 替代直接访问 `HttpTransport._pool`。从旧的 `resolve_model()` 迁移至统一的 `resolve()` API，用共享的 `_record_telemetry()` 替换内联遥测代码
 - **认证函数重命名**：`_openai_auth` → `openai_auth` 等（去掉下划线，公共 API）
+- **移除 `GatewayConfig.resolve_model()`**：旧的 5-tuple API 已被返回 `ResolvedRoute` + `ProviderInfo` 的 `resolve()` 取代。移除重复的 `DEFAULT_CAPABILITIES` 类变量
 
 ### 修复
 
