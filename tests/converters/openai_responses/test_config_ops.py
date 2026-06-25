@@ -272,19 +272,19 @@ class TestOpenAIResponsesConfigOps:
         assert result["reasoning"] == {"effort": "high"}
 
     def test_ir_reasoning_config_with_mode(self):
-        """Test reasoning config with mode field."""
+        """Test reasoning config with mode — type is NOT emitted (OpenAI rejects it)."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "enabled", "effort": "medium"})
         )
-        assert result["reasoning"]["type"] == "enabled"
+        assert "type" not in result.get("reasoning", {})
         assert result["reasoning"]["effort"] == "medium"
 
     def test_ir_reasoning_config_auto_mode(self):
-        """Test mode: auto maps to reasoning.type: enabled."""
+        """Test mode: auto — only effort is emitted, no reasoning.type."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
         )
-        assert result["reasoning"]["type"] == "enabled"
+        assert "type" not in result.get("reasoning", {})
         assert result["reasoning"]["effort"] == "high"
 
     def test_ir_reasoning_config_disabled_mode(self):

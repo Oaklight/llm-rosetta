@@ -325,12 +325,13 @@ def _apply_openai_responses_extras(
     mode: str | None,
     budget_tokens: int | None,
 ) -> None:
-    """OpenAI Responses extras: reasoning.type when mode is set."""
-    if mode:
-        reasoning = result.setdefault("reasoning", {})
-        # auto → enabled for Responses API
-        reasoning["type"] = "enabled" if mode == "auto" else mode
+    """OpenAI Responses extras.
 
+    Note: OpenAI Responses API does **not** accept ``reasoning.type``
+    (returns 400 Unknown parameter).  Reasoning is controlled via
+    ``reasoning.effort`` only, which is already handled by the effort
+    mapping in the caller.
+    """
     if budget_tokens is not None:
         warnings.warn(
             "OpenAI Responses API does not support reasoning budget_tokens, ignored",
