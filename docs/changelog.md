@@ -8,6 +8,38 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.0a0 — 2026-06-25
+
+### Added
+
+- **ConversionPipeline class** ([#322](https://github.com/Oaklight/llm-rosetta/pull/332)): High-level orchestration class encapsulating the full Phase 1→2→4 conversion lifecycle. `convert_request()`, `convert_response()`, `create_stream_processor()` with `on_ir_ready` callbacks for metadata store integration. One-shot guard prevents accidental reuse
+- **Routing layer** ([#323](https://github.com/Oaklight/llm-rosetta/pull/331)): `ResolvedRoute` frozen dataclass and `Router` protocol in the core library. `GatewayConfig.resolve()` consolidates model lookup, provider type, shim binding, capabilities, and reasoning overrides into a single typed result
+- **Capabilities module** ([#335](https://github.com/Oaklight/llm-rosetta/pull/336)): `capabilities.py` with `enforce_reasoning()` (pre-IR) and `enforce_vision()` (post-IR) — platform-level capability enforcement separated from provider-specific shim transforms
+- **IRTransform system** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334)): `TransformContext` dataclass, `IRTransform` callable type, `apply_ir_transforms()` executor, and `_NamedIRTransform` wrapper. IR-level transforms are now declarative on `ProviderShim.ir_transforms`, separate from body-level `Transform`
+- **IR transform factories**: `strip_non_vision_images()`, `truncate_images(max, pattern)`, `unwind_parallel_tool_calls(pattern)` — factory functions producing `IRTransform` callables
+- **Message-level transform primitives** ([#328](https://github.com/Oaklight/llm-rosetta/pull/333)): `replace_message_field()`, `default_message_field()`, `strip_fields_for_model()` for nested field operations on `messages[]`
+- **Transport layer** ([#321](https://github.com/Oaklight/llm-rosetta/pull/329)): `UpstreamTransport` protocol, `HttpTransport` implementation, `UpstreamResponse`/`UpstreamStream` types, `HttpClientPool`, `send_passthrough()` for non-conversion endpoints
+- **`resolve_shim()` public function**: Promoted from private `_resolve_shim()` to public API on `provider_shim.py`
+
+### Breaking Changes
+
+- **`ProviderShim` fields removed**: `max_images`, `max_images_pattern`, `unwind_parallel_tool_calls`, `unwind_parallel_tool_calls_pattern` deleted — these capabilities are now declared via `ir_transforms` tuple using factory functions (`truncate_images()`, `unwind_parallel_tool_calls()`)
+- **`apply_shim_to_ir()` behavior changed**: No longer hardcodes image/unwind operations; reads `shim.ir_transforms` declaratively. Renamed to `apply_ir_transforms()` (old name is a deprecated alias)
+- **Gateway handler signatures changed**: `handle_non_streaming` and `handle_streaming` take `route: ResolvedRoute` instead of 6 separate parameters (`source_provider`, `target_provider`, `model`, `target_shim_name`, `reasoning_config_override`, `model_capabilities`)
+
+### Refactored
+
+- **Pipeline renamed** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334)): `apply_shim_to_ir()` → `apply_ir_transforms()`, `setup_shim_context()` → `configure_context()`. Old names emit `DeprecationWarning`
+- **Gateway proxy.py**: Handlers use `ConversionPipeline` internally. `_resolve_target_transforms`, `process_stream_chunk` deleted
+- **Embeddings handler**: Uses `transport.send_passthrough()` instead of reaching into `HttpTransport._pool`
+- **Auth functions renamed**: `_openai_auth` → `openai_auth` etc. (dropped underscore, public API)
+
+### Fixed
+
+- **Restored legacy `converters/base/` import paths** ([#317](https://github.com/Oaklight/llm-rosetta/pull/317)): Backward-compatible shim modules at old paths (`converters.base.tools`, `.schema`, `.tool_content`, `.cache`)
+- **`sanitize_schema` strips `exclusiveMinimum`/`exclusiveMaximum`** ([#337](https://github.com/Oaklight/llm-rosetta/pull/337)): Google GenAI API rejects JSON Schema draft 6+ numeric constraints in tool definitions
+- **Stop emitting `reasoning.type` for OpenAI Responses API** ([#337](https://github.com/Oaklight/llm-rosetta/pull/337)): OpenAI and Volcengine Responses APIs reject `reasoning.type` — reasoning is controlled via `reasoning.effort` only. Historical bug from v0.6.8
+
 ## v0.6.12 — 2026-06-23
 
 ### Fixed
