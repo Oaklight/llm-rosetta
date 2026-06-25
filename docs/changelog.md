@@ -8,6 +8,38 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.0a0 — 2026-06-25
+
+### 新增
+
+- **ConversionPipeline 类** ([#322](https://github.com/Oaklight/llm-rosetta/pull/332))：高层编排类，封装完整的 Phase 1→2→4 转换生命周期。提供 `convert_request()`、`convert_response()`、`create_stream_processor()` 及 `on_ir_ready` 回调用于元数据存储集成。一次性保护防止意外复用
+- **路由层** ([#323](https://github.com/Oaklight/llm-rosetta/pull/331))：核心库中的 `ResolvedRoute` 冻结数据类和 `Router` 协议。`GatewayConfig.resolve()` 将模型查找、provider 类型、shim 绑定、capabilities 和 reasoning 覆盖整合为单一类型化结果
+- **能力模块** ([#335](https://github.com/Oaklight/llm-rosetta/pull/336))：`capabilities.py` 包含 `enforce_reasoning()`（IR 前）和 `enforce_vision()`（IR 后）——平台级能力约束，与 provider 特定的 shim 变换分离
+- **IRTransform 系统** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334))：`TransformContext` 数据类、`IRTransform` 可调用类型、`apply_ir_transforms()` 执行器和 `_NamedIRTransform` 包装器。IR 层变换现在在 `ProviderShim.ir_transforms` 上声明式配置，与 body 层 `Transform` 分离
+- **IR 变换工厂函数**：`strip_non_vision_images()`、`truncate_images(max, pattern)`、`unwind_parallel_tool_calls(pattern)` —— 产出 `IRTransform` 可调用对象的工厂函数
+- **消息级变换原语** ([#328](https://github.com/Oaklight/llm-rosetta/pull/333))：`replace_message_field()`、`default_message_field()`、`strip_fields_for_model()`，用于 `messages[]` 嵌套字段操作
+- **Transport 层** ([#321](https://github.com/Oaklight/llm-rosetta/pull/329))：`UpstreamTransport` 协议、`HttpTransport` 实现、`UpstreamResponse`/`UpstreamStream` 类型、`HttpClientPool`、`send_passthrough()` 用于非转换端点
+- **`resolve_shim()` 公共函数**：从私有 `_resolve_shim()` 提升为 `provider_shim.py` 上的公共 API
+
+### 破坏性变更
+
+- **`ProviderShim` 字段移除**：删除 `max_images`、`max_images_pattern`、`unwind_parallel_tool_calls`、`unwind_parallel_tool_calls_pattern` —— 这些能力现通过 `ir_transforms` 元组使用工厂函数声明（`truncate_images()`、`unwind_parallel_tool_calls()`）
+- **`apply_shim_to_ir()` 行为变更**：不再硬编码图片/unwind 操作，改为声明式读取 `shim.ir_transforms`。重命名为 `apply_ir_transforms()`（旧名称为弃用别名）
+- **Gateway handler 签名变更**：`handle_non_streaming` 和 `handle_streaming` 接收 `route: ResolvedRoute` 而非 6 个松散参数
+
+### 重构
+
+- **Pipeline 重命名** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334))：`apply_shim_to_ir()` → `apply_ir_transforms()`、`setup_shim_context()` → `configure_context()`。旧名称发出 `DeprecationWarning`
+- **Gateway proxy.py**：handler 内部使用 `ConversionPipeline`。删除 `_resolve_target_transforms`、`process_stream_chunk`
+- **Embeddings handler**：使用 `transport.send_passthrough()` 替代直接访问 `HttpTransport._pool`
+- **认证函数重命名**：`_openai_auth` → `openai_auth` 等（去掉下划线，公共 API）
+
+### 修复
+
+- **恢复旧 `converters/base/` 导入路径** ([#317](https://github.com/Oaklight/llm-rosetta/pull/317))：在旧路径提供向后兼容 shim 模块
+- **`sanitize_schema` 剥离 `exclusiveMinimum`/`exclusiveMaximum`** ([#337](https://github.com/Oaklight/llm-rosetta/pull/337))：Google GenAI API 拒绝工具定义中的 JSON Schema draft 6+ 数值约束
+- **停止为 OpenAI Responses API 生成 `reasoning.type`** ([#337](https://github.com/Oaklight/llm-rosetta/pull/337))：OpenAI 和 Volcengine Responses API 拒绝 `reasoning.type` —— reasoning 仅通过 `reasoning.effort` 控制。v0.6.8 的历史 bug
+
 ## v0.6.12 — 2026-06-23
 
 ### 修复
