@@ -31,8 +31,9 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Pipeline renamed** ([#330](https://github.com/Oaklight/llm-rosetta/pull/334)): `apply_shim_to_ir()` → `apply_ir_transforms()`, `setup_shim_context()` → `configure_context()`. Old names emit `DeprecationWarning`
 - **Gateway proxy.py**: Handlers use `ConversionPipeline` internally. `_resolve_target_transforms`, `process_stream_chunk` deleted
-- **Embeddings handler**: Uses `transport.send_passthrough()` instead of reaching into `HttpTransport._pool`
+- **Embeddings handler**: Uses `transport.send_passthrough()` instead of reaching into `HttpTransport._pool`. Migrated from `resolve_model()` to unified `resolve()` API and replaced inline telemetry with shared `_record_telemetry()`
 - **Auth functions renamed**: `_openai_auth` → `openai_auth` etc. (dropped underscore, public API)
+- **Removed `GatewayConfig.resolve_model()`**: Legacy 5-tuple API superseded by `resolve()` which returns `ResolvedRoute` + `ProviderInfo`. Duplicate `DEFAULT_CAPABILITIES` class variable removed
 
 ### Fixed
 
