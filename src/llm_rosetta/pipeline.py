@@ -11,8 +11,8 @@ request conversion, response conversion, and/or streaming:
     # ... transport sends target_body, receives upstream_response ...
     source_response = pipeline.convert_response(upstream_response)
 
-**Low-level** — :func:`configure_context` and :func:`apply_ir_transforms`
-for consumers that need finer control over individual pipeline stages.
+**Low-level** — :func:`apply_ir_transforms` and the functions in
+:mod:`llm_rosetta.capabilities` for finer control over individual stages.
 
 The pipeline is part of the core library — **no network dependency**.
 It produces a target request body and consumes a target response body;
@@ -25,8 +25,9 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from llm_rosetta.capabilities import enforce_reasoning, enforce_vision
 from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.shims.provider_shim import ProviderShim, ReasoningCapability, get_shim
+from llm_rosetta.shims.provider_shim import ProviderShim, resolve_shim
 from llm_rosetta.shims.transforms import (
     Transform,
     TransformContext,
@@ -35,58 +36,6 @@ from llm_rosetta.shims.transforms import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
-def _resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
-    """Resolve a shim argument to a ProviderShim instance.
-
-    Args:
-        shim: A ProviderShim instance, a registered name, or None.
-
-    Returns:
-        The resolved ProviderShim, or None.
-    """
-    if shim is None:
-        return None
-    if isinstance(shim, ProviderShim):
-        return shim
-    return get_shim(shim)
-
-
-def _apply_config_reasoning_override(
-    base: ReasoningCapability,
-    override: dict[str, Any],
-) -> ReasoningCapability:
-    """Merge config-level reasoning overrides onto a base capability.
-
-    Only fields present in *override* are replaced; the rest inherit
-    from *base*.
-
-    Args:
-        base: The base reasoning capability from the shim.
-        override: A dict of field overrides (e.g. from admin UI).
-
-    Returns:
-        A new ReasoningCapability with merged values.
-    """
-    return ReasoningCapability(
-        disabled=override.get("disabled", base.disabled),
-        effort_field=override.get("effort_field", base.effort_field),
-        max_effort=override.get("max_effort", base.max_effort),
-        thinking_type=override.get("thinking_type", base.thinking_type),
-        unsigned_reasoning_blocks=override.get(
-            "unsigned_reasoning_blocks", base.unsigned_reasoning_blocks
-        ),
-        effort_map=override.get("effort_map", base.effort_map),
-        budget_tokens_default_ratio=override.get(
-            "budget_tokens_default_ratio", base.budget_tokens_default_ratio
-        ),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -101,38 +50,15 @@ def configure_context(
     model: str | None = None,
     config_override: dict[str, Any] | None = None,
 ) -> None:
-    """Configure a ConversionContext with shim-driven options.
+    """Deprecated: use :func:`llm_rosetta.capabilities.enforce_reasoning`."""
+    import warnings
 
-    Currently injects ``reasoning_cap`` so converters produce the correct
-    thinking/reasoning output for the target provider.
-
-    Resolution priority (highest first):
-
-    1. *config_override* — per-model override from external config
-       (e.g. gateway admin UI).
-    2. ``shim.model_reasoning[model]`` — per-model override from the
-       provider YAML.
-    3. ``shim.reasoning`` — provider-level default.
-
-    Args:
-        ctx: Conversion context to mutate.
-        shim: ProviderShim instance, registered name, or None (no-op).
-        model: Upstream model ID (for per-model reasoning overrides).
-        config_override: External reasoning override (highest priority).
-    """
-    resolved = _resolve_shim(shim)
-    if resolved is None:
-        return
-
-    cap = resolved.reasoning
-    # Model-level override (keyed by upstream model ID)
-    if model and resolved.model_reasoning and model in resolved.model_reasoning:
-        cap = resolved.model_reasoning[model]
-    # Config-level override (from admin UI, keyed by gateway model name)
-    if cap is not None and config_override:
-        cap = _apply_config_reasoning_override(cap, config_override)
-    if cap is not None:
-        ctx.options["reasoning_cap"] = cap
+    warnings.warn(
+        "configure_context is deprecated; use capabilities.enforce_reasoning()",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    enforce_reasoning(ctx, shim, model=model, config_override=config_override)
 
 
 def apply_ir_transforms(
@@ -163,7 +89,7 @@ def apply_ir_transforms(
         The IR request dict after all applicable transforms.  Always
         assign the return value: ``ir = apply_ir_transforms(ir, shim, ...)``.
     """
-    resolved = _resolve_shim(shim)
+    resolved = resolve_shim(shim)
     if resolved is None or not resolved.ir_transforms:
         return ir_request
 
@@ -285,7 +211,7 @@ class ConversionPipeline:
         self._target_converter = get_converter_for_provider(target_provider)
 
         # Resolve body-level transforms from shim
-        resolved = _resolve_shim(shim)
+        resolved = resolve_shim(shim)
         if resolved is not None:
             self._from_transforms = resolved.from_transforms
             self._to_transforms = resolved.to_transforms
@@ -374,7 +300,8 @@ class ConversionPipeline:
         if self._target_provider == "google":
             ctx.options["output_format"] = "rest"
 
-        configure_context(
+        # Capability enforcement: reasoning (pre-IR)
+        enforce_reasoning(
             ctx,
             self._shim,
             model=self._upstream_model or body.get("model"),
@@ -394,8 +321,17 @@ class ConversionPipeline:
         if on_ir_ready is not None:
             on_ir_ready(ir_request)
 
-        # Phase 2a: Shim-driven IR transforms
         request_id = ctx.options.get("request_id", "-")
+
+        # Capability enforcement: vision (post-IR)
+        ir_request = enforce_vision(
+            ir_request,
+            model_capabilities=self._model_capabilities,
+            model=self._upstream_model or body.get("model") or "",
+            request_id=request_id,
+        )
+
+        # Phase 2a: Shim-driven IR transforms
         ir_request = apply_ir_transforms(
             ir_request,
             self._shim,

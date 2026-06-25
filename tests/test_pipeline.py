@@ -1,8 +1,7 @@
-"""Tests for llm_rosetta.pipeline — ConversionPipeline and shim-driven helpers.
+"""Tests for llm_rosetta.pipeline and llm_rosetta.capabilities.
 
-Note: This file imports private helpers (_resolve_shim, _apply_config_reasoning_override)
-directly from llm_rosetta.pipeline for unit-testing internal logic.  These are NOT
-re-exported by the backward-compat shim at llm_rosetta.shims.pipeline.
+Note: This file imports private helpers (resolve_shim, _apply_config_reasoning_override)
+directly from llm_rosetta.capabilities for unit-testing internal logic.
 """
 
 import copy
@@ -10,17 +9,17 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
-from llm_rosetta.pipeline import (
+from llm_rosetta.capabilities import (
     _apply_config_reasoning_override,
-    _resolve_shim,
-    apply_ir_transforms,
-    configure_context,
+    enforce_reasoning,
 )
+from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.pipeline import apply_ir_transforms
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     ReasoningCapability,
     register_shim,
+    resolve_shim,
     unregister_shim,
 )
 from llm_rosetta.shims.transforms import (
@@ -87,48 +86,48 @@ def _simple_ir_request(n_messages: int = 1, n_images: int = 0) -> dict[str, Any]
 
 
 # ---------------------------------------------------------------------------
-# _resolve_shim
+# resolve_shim
 # ---------------------------------------------------------------------------
 
 
 class TestResolveShim:
     def test_none(self):
-        assert _resolve_shim(None) is None
+        assert resolve_shim(None) is None
 
     def test_provider_shim_instance(self):
         shim = _make_shim()
-        assert _resolve_shim(shim) is shim
+        assert resolve_shim(shim) is shim
 
     def test_registered_name(self):
         shim = _make_shim()
         register_shim(shim)
-        assert _resolve_shim("test-shim") is shim
+        assert resolve_shim("test-shim") is shim
 
     def test_unknown_name(self):
-        assert _resolve_shim("nonexistent-shim") is None
+        assert resolve_shim("nonexistent-shim") is None
 
 
 # ---------------------------------------------------------------------------
-# configure_context
+# enforce_reasoning
 # ---------------------------------------------------------------------------
 
 
-class TestConfigureContext:
+class TestEnforceReasoning:
     def test_none_shim_is_noop(self):
         ctx = ConversionContext()
-        configure_context(ctx, None)
+        enforce_reasoning(ctx, None)
         assert "reasoning_cap" not in ctx.options
 
     def test_shim_without_reasoning_is_noop(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=None)
-        configure_context(ctx, shim)
+        enforce_reasoning(ctx, shim)
         assert "reasoning_cap" not in ctx.options
 
     def test_provider_level_reasoning(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
-        configure_context(ctx, shim)
+        enforce_reasoning(ctx, shim)
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_model_level_override(self):
@@ -137,7 +136,7 @@ class TestConfigureContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        configure_context(ctx, shim, model="gpt-4")
+        enforce_reasoning(ctx, shim, model="gpt-4")
         assert ctx.options["reasoning_cap"] is _MODEL_REASONING_CAP
 
     def test_model_not_in_overrides_falls_back(self):
@@ -146,13 +145,13 @@ class TestConfigureContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        configure_context(ctx, shim, model="gpt-3.5")
+        enforce_reasoning(ctx, shim, model="gpt-3.5")
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_config_override_highest_priority(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
-        configure_context(ctx, shim, config_override={"thinking_type": "adaptive"})
+        enforce_reasoning(ctx, shim, config_override={"thinking_type": "adaptive"})
         cap = ctx.options["reasoning_cap"]
         assert cap.thinking_type == "adaptive"
         # Other fields inherited from base
@@ -166,7 +165,7 @@ class TestConfigureContext:
             reasoning=_REASONING_CAP,
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
-        configure_context(
+        enforce_reasoning(
             ctx, shim, model="gpt-4", config_override={"disabled": "block"}
         )
         cap = ctx.options["reasoning_cap"]
@@ -178,12 +177,12 @@ class TestConfigureContext:
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
         register_shim(shim)
-        configure_context(ctx, "test-shim")
+        enforce_reasoning(ctx, "test-shim")
         assert ctx.options["reasoning_cap"] is _REASONING_CAP
 
     def test_unknown_name_is_noop(self):
         ctx = ConversionContext()
-        configure_context(ctx, "nonexistent")
+        enforce_reasoning(ctx, "nonexistent")
         assert "reasoning_cap" not in ctx.options
 
 

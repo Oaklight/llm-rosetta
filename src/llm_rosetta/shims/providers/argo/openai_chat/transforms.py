@@ -15,8 +15,6 @@ Request-side (to_transforms) — body-level
 
 Request-side (ir_transforms) — IR-level
 -----------------------------------------
-- ``strip_non_vision_images()``: replace images with text placeholders
-  for models without ``"vision"`` capability.
 - ``truncate_images(50, pattern=r"^(gpt|o\\d)")``: enforce 50-image limit
   for GPT/o* models; Gemini and Claude pass through untouched.
 - ``unwind_parallel_tool_calls(pattern=r"^gemini")``: split parallel tool
@@ -28,7 +26,6 @@ from llm_rosetta.shims.transforms import (
     rename_field,
     replace_message_field,
     strip_fields_for_model,
-    strip_non_vision_images,
     truncate_images,
     unwind_parallel_tool_calls,
 )
@@ -41,7 +38,6 @@ to_transforms = (
 )
 from_transforms = ()
 ir_transforms = (
-    strip_non_vision_images(),
     truncate_images(50, pattern=r"^(gpt|o\d)"),
     unwind_parallel_tool_calls(pattern=r"^gemini"),
 )

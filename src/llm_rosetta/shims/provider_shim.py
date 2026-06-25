@@ -168,6 +168,19 @@ def get_shim(name: str) -> ProviderShim | None:
     return _SHIM_REGISTRY.get(name)
 
 
+def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
+    """Resolve a shim argument to a :class:`ProviderShim` instance.
+
+    Accepts a :class:`ProviderShim` (returned as-is), a registered name
+    (looked up via :func:`get_shim`), or ``None`` (returns ``None``).
+    """
+    if shim is None:
+        return None
+    if isinstance(shim, ProviderShim):
+        return shim
+    return get_shim(shim)
+
+
 def list_shims() -> list[ProviderShim]:
     """Return all registered provider shims."""
     return list(_SHIM_REGISTRY.values())

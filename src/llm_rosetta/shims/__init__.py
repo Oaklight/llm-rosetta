@@ -18,6 +18,7 @@ from .provider_shim import (
     list_shims,
     register_shim,
     resolve_base,
+    resolve_shim,
     unregister_shim,
 )
 from .transforms import (
@@ -48,6 +49,7 @@ __all__ = [
     "get_shim",
     "list_shims",
     "resolve_base",
+    "resolve_shim",
     # Transforms
     "Transform",
     "apply_transforms",
