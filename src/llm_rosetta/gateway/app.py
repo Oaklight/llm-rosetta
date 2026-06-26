@@ -19,6 +19,8 @@ from .auth import AuthState, api_key_label_var, create_auth_hook
 from .config import GatewayConfig
 from .embeddings import handle_embeddings as _handle_embeddings
 from .logging import get_logger
+from llm_rosetta.observability.error_dump import dump_error
+
 from .proxy import (
     ProviderMetadataStore,
     close_resources,
@@ -266,6 +268,7 @@ async def _proxy_handler(
     profile: dict[str, Any] | None = None
     request_log = getattr(request.app, "request_log", None)
 
+    persistence = getattr(request.app, "persistence", None)
     deep_profiler = _try_start_profiler(request.app)
 
     try:
@@ -283,6 +286,7 @@ async def _proxy_handler(
                 extra_headers=extra_headers,
                 entry_id=pre_entry_id,
                 request_log=request_log,
+                persistence=persistence,
             )
         else:
             pre_entry_id = None
@@ -293,6 +297,7 @@ async def _proxy_handler(
                 transport=request.app.transport,
                 metadata_store=store,
                 extra_headers=extra_headers,
+                persistence=persistence,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
@@ -307,6 +312,17 @@ async def _proxy_handler(
         logger.exception("[%s] unhandled error in proxy handler", request_id)
         status_code = 500
         pre_entry_id = None
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=error_detail,
+            model=model,
+            source_provider=source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=500,
+            error_phase="conversion",
+        )
         resp = error_response_for_source(
             source_provider, 500, f"Internal server error: {exc}"
         )

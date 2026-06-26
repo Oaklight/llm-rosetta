@@ -26,6 +26,8 @@ from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 
+from llm_rosetta.observability.error_dump import dump_error
+
 from .logging import (
     get_logger,
     log_converted_request,
@@ -243,6 +245,7 @@ async def handle_non_streaming(
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
+    persistence: Any | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -306,6 +309,19 @@ async def handle_non_streaming(
             resp.error_text,
             endpoint=str(route.target_provider),
         )
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=resp.error_text,
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=resp.status_code,
+            error_phase="upstream",
+            upstream_url=str(provider_info.base_url),
+        )
         return (
             Response(
                 body=resp.raw_content,
@@ -344,6 +360,9 @@ async def _stream_event_generator(
     extra_headers: dict[str, str] | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
+    persistence: Any | None = None,
+    request_body: dict[str, Any] | None = None,
+    provider_name: str | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from upstream, converting each chunk via Pipeline."""
     chunk_count = 0
@@ -362,6 +381,20 @@ async def _stream_event_generator(
         )
     except UpstreamConnectionError as exc:
         stream_error = str(exc)
+        dump_error(
+            persistence,
+            request_body=request_body,
+            response_text=stream_error,
+            converted_body=target_body,
+            model=model,
+            source_provider=source_provider,
+            target_provider=target_provider,
+            provider_name=provider_name,
+            status_code=502,
+            error_phase="stream_header",
+            upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
+        )
         yield f"data: {json.dumps({'error': {'message': stream_error}})}\n\n"
         return
 
@@ -375,6 +408,20 @@ async def _stream_event_generator(
                     error_text,
                     endpoint=str(target_provider),
                     is_streaming=True,
+                )
+                dump_error(
+                    persistence,
+                    request_body=request_body,
+                    response_text=error_text,
+                    converted_body=target_body,
+                    model=model,
+                    source_provider=source_provider,
+                    target_provider=target_provider,
+                    provider_name=provider_name,
+                    status_code=stream.status_code,
+                    error_phase="stream_header",
+                    upstream_url=str(provider_info.base_url),
+                    request_log_id=entry_id,
                 )
                 try:
                     error_msg = json.dumps(json.loads(error_text))
@@ -429,6 +476,7 @@ async def handle_streaming(
     extra_headers: dict[str, str] | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
+    persistence: Any | None = None,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -488,6 +536,9 @@ async def handle_streaming(
                 extra_headers=extra_headers,
                 entry_id=entry_id,
                 request_log=request_log,
+                persistence=persistence,
+                request_body=body,
+                provider_name=route.provider_name,
             ),
             content_type="text/event-stream",
         ),

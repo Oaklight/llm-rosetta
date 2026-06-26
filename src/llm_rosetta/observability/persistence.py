@@ -128,6 +128,31 @@ class PersistenceManager:
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS dump_bodies (
+                hash        TEXT PRIMARY KEY,
+                data        BLOB NOT NULL,
+                orig_bytes  INTEGER NOT NULL,
+                created     TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS error_dumps (
+                id                  TEXT PRIMARY KEY,
+                request_log_id      TEXT,
+                timestamp           TEXT NOT NULL,
+                model               TEXT,
+                source_provider     TEXT,
+                target_provider     TEXT,
+                provider_name       TEXT,
+                status_code         INTEGER,
+                error_phase         TEXT,
+                body_hash           TEXT,
+                response_text       TEXT,
+                upstream_url        TEXT,
+                converted_body_hash TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ed_timestamp
+                ON error_dumps(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_ed_request_log
+                ON error_dumps(request_log_id);
         """)
         self._migrate_add_columns()
 
@@ -417,6 +442,218 @@ class PersistenceManager:
         except (json.JSONDecodeError, TypeError) as exc:
             logger.warning("Failed to load metrics: %s", exc)
             return None
+
+    # ------------------------------------------------------------------
+    # Error dumps
+    # ------------------------------------------------------------------
+
+    # Default retention cap for error_dumps rows (independent of
+    # request_log error_max).  The design calls for 10K as a default.
+    DEFAULT_DUMP_MAX = 10000
+
+    def insert_dump_body(self, body_hash: str, data: bytes, orig_bytes: int) -> None:
+        """Insert a compressed body blob, deduplicating by hash.
+
+        If the hash already exists the row is silently skipped.
+        """
+        from datetime import datetime, timezone
+
+        self._conn.execute(
+            "INSERT OR IGNORE INTO dump_bodies (hash, data, orig_bytes, created) "
+            "VALUES (?, ?, ?, ?)",
+            (body_hash, data, orig_bytes, datetime.now(timezone.utc).isoformat()),
+        )
+        self._conn.commit()
+
+    def insert_error_dump(
+        self,
+        *,
+        dump_id: str,
+        request_log_id: str | None,
+        timestamp: str,
+        model: str | None,
+        source_provider: str | None,
+        target_provider: str | None,
+        provider_name: str | None,
+        status_code: int | None,
+        error_phase: str | None,
+        body_hash: str | None,
+        response_text: str | None,
+        upstream_url: str | None,
+        converted_body_hash: str | None = None,
+    ) -> None:
+        """Insert an error dump record and prune if over capacity."""
+        self._conn.execute(
+            "INSERT OR IGNORE INTO error_dumps "
+            "(id, request_log_id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, error_phase, "
+            "body_hash, response_text, upstream_url, converted_body_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                dump_id,
+                request_log_id,
+                timestamp,
+                model,
+                source_provider,
+                target_provider,
+                provider_name,
+                status_code,
+                error_phase,
+                body_hash,
+                response_text,
+                upstream_url,
+                converted_body_hash,
+            ),
+        )
+        self._conn.commit()
+        self._prune_error_dumps()
+
+    def query_error_dumps(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        model: str | None = None,
+        error_phase: str | None = None,
+        provider: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Query error dumps with optional filters, newest first.
+
+        Returns:
+            A ``(entries, total)`` tuple.
+        """
+        where_clauses: list[str] = []
+        params: list[Any] = []
+
+        if model:
+            where_clauses.append("model = ?")
+            params.append(model)
+        if error_phase:
+            where_clauses.append("error_phase = ?")
+            params.append(error_phase)
+        if provider:
+            where_clauses.append("(provider_name = ? OR target_provider = ?)")
+            params.extend([provider, provider])
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        count_row = self._conn.execute(
+            f"SELECT COUNT(*) FROM error_dumps {where_sql}", params
+        ).fetchone()
+        total = count_row[0] if count_row else 0
+
+        cols = (
+            "id, request_log_id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, error_phase, "
+            "body_hash, response_text, upstream_url, converted_body_hash"
+        )
+        rows = self._conn.execute(
+            f"SELECT {cols} FROM error_dumps {where_sql} "
+            f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+
+        col_names = [
+            "id",
+            "request_log_id",
+            "timestamp",
+            "model",
+            "source_provider",
+            "target_provider",
+            "provider_name",
+            "status_code",
+            "error_phase",
+            "body_hash",
+            "response_text",
+            "upstream_url",
+            "converted_body_hash",
+        ]
+        entries = [
+            {k: v for k, v in zip(col_names, row) if v is not None} for row in rows
+        ]
+        return entries, total
+
+    def get_error_dump(self, dump_id: str) -> dict[str, Any] | None:
+        """Return a single error dump by ID, or ``None``."""
+        cols = (
+            "id, request_log_id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, error_phase, "
+            "body_hash, response_text, upstream_url, converted_body_hash"
+        )
+        row = self._conn.execute(
+            f"SELECT {cols} FROM error_dumps WHERE id = ?", (dump_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        col_names = [
+            "id",
+            "request_log_id",
+            "timestamp",
+            "model",
+            "source_provider",
+            "target_provider",
+            "provider_name",
+            "status_code",
+            "error_phase",
+            "body_hash",
+            "response_text",
+            "upstream_url",
+            "converted_body_hash",
+        ]
+        return {k: v for k, v in zip(col_names, row) if v is not None}
+
+    def get_dump_body(self, body_hash: str) -> bytes | None:
+        """Return the compressed body blob for a hash, or ``None``."""
+        row = self._conn.execute(
+            "SELECT data FROM dump_bodies WHERE hash = ?", (body_hash,)
+        ).fetchone()
+        return row[0] if row else None
+
+    def count_error_dumps(self) -> int:
+        """Return the total number of error dump entries."""
+        row = self._conn.execute("SELECT COUNT(*) FROM error_dumps").fetchone()
+        return row[0] if row else 0
+
+    def clear_error_dumps(self) -> None:
+        """Delete all error dumps and orphaned bodies."""
+        self._conn.execute("DELETE FROM error_dumps")
+        self._conn.execute(
+            "DELETE FROM dump_bodies WHERE hash NOT IN "
+            "(SELECT body_hash FROM error_dumps WHERE body_hash IS NOT NULL "
+            " UNION SELECT converted_body_hash FROM error_dumps "
+            " WHERE converted_body_hash IS NOT NULL)"
+        )
+        self._conn.commit()
+
+    def _prune_error_dumps(self) -> None:
+        """Remove oldest error dumps beyond the retention cap.
+
+        Also cleans up orphaned dump_bodies entries.
+        """
+        count = self.count_error_dumps()
+        if count <= self.DEFAULT_DUMP_MAX:
+            return
+
+        self._conn.execute(
+            "DELETE FROM error_dumps WHERE id NOT IN ("
+            "    SELECT id FROM error_dumps "
+            "    ORDER BY timestamp DESC LIMIT ?"
+            ")",
+            (self.DEFAULT_DUMP_MAX,),
+        )
+        # Clean up orphaned bodies
+        self._conn.execute(
+            "DELETE FROM dump_bodies WHERE hash NOT IN ("
+            "    SELECT body_hash FROM error_dumps "
+            "    WHERE body_hash IS NOT NULL"
+            "    UNION "
+            "    SELECT converted_body_hash FROM error_dumps "
+            "    WHERE converted_body_hash IS NOT NULL"
+            ")"
+        )
+        self._conn.commit()
 
     # ------------------------------------------------------------------
     # Lifecycle

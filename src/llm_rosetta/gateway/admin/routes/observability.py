@@ -251,3 +251,108 @@ async def network_diagnostics(request: Any) -> Response:
 async def get_host_ip(request: Any) -> Response:
     """Return the detected Docker host IP (lightweight, no network calls)."""
     return JSONResponse(_detect_host_ip())
+
+
+# ------------------------------------------------------------------
+# Error dumps
+# ------------------------------------------------------------------
+
+
+async def get_error_dumps(request: Any) -> Response:
+    """Return paginated, filtered error dump entries."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    limit = int(_qp(request, "limit", "50"))
+    offset = int(_qp(request, "offset", "0"))
+    model = _qp(request, "model")
+    error_phase = _qp(request, "error_phase")
+    provider = _qp(request, "provider")
+
+    entries, total = persistence.query_error_dumps(
+        limit=limit,
+        offset=offset,
+        model=model,
+        error_phase=error_phase,
+        provider=provider,
+    )
+    return JSONResponse({"entries": entries, "total": total})
+
+
+async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
+    """Return a single error dump with decompressed bodies."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    dump_id = request.path_params["dump_id"]
+    entry = persistence.get_error_dump(dump_id)
+    if entry is None:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    from llm_rosetta.observability.error_dump import decompress_body
+
+    # Decompress request body if present
+    if "body_hash" in entry:
+        body_data = persistence.get_dump_body(entry["body_hash"])
+        if body_data:
+            try:
+                entry["request_body"] = decompress_body(body_data)
+            except Exception:
+                entry["request_body"] = None
+
+    # Decompress converted body if present
+    if "converted_body_hash" in entry:
+        conv_data = persistence.get_dump_body(entry["converted_body_hash"])
+        if conv_data:
+            try:
+                entry["converted_body"] = decompress_body(conv_data)
+            except Exception:
+                entry["converted_body"] = None
+
+    return JSONResponse(entry)
+
+
+async def get_error_dump_body(request: Any, **kwargs: Any) -> Response:
+    """Download the raw decompressed request body JSON for an error dump."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    dump_id = request.path_params["dump_id"]
+    entry = persistence.get_error_dump(dump_id)
+    if entry is None:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+
+    body_hash = entry.get("body_hash")
+    if not body_hash:
+        return JSONResponse(
+            {"error": "No request body stored for this dump"}, status_code=404
+        )
+
+    body_data = persistence.get_dump_body(body_hash)
+    if not body_data:
+        return JSONResponse({"error": "Body data not found"}, status_code=404)
+
+    import zlib
+
+    raw_json = zlib.decompress(body_data)
+    return Response(
+        body=raw_json,
+        status_code=200,
+        content_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="error-dump-{dump_id}.json"'
+        },
+    )
+
+
+async def clear_error_dumps(request: Any) -> Response:
+    """Delete all error dumps."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    persistence.clear_error_dumps()
+    return JSONResponse({"ok": True})

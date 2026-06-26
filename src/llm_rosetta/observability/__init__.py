@@ -24,6 +24,13 @@ Typical usage::
 
 from __future__ import annotations
 
+from .error_dump import (
+    compress_body,
+    compute_body_hash,
+    decompress_body,
+    dump_error,
+    offload_images,
+)
 from .metrics import MetricsCollector
 from .persistence import DEFAULT_ERROR_MAX, DEFAULT_SUCCESS_MAX, PersistenceManager
 from .profiling import ProfilerState
@@ -37,4 +44,9 @@ __all__ = [
     "ProfilerState",
     "RequestLog",
     "RequestLogEntry",
+    "compress_body",
+    "compute_body_hash",
+    "decompress_body",
+    "dump_error",
+    "offload_images",
 ]

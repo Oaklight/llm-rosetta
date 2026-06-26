@@ -51,7 +51,11 @@ from .keys import (
     update_api_key,
 )
 from .observability import (
+    clear_error_dumps,
     clear_requests,
+    get_error_dump_body,
+    get_error_dump_detail,
+    get_error_dumps,
     get_host_ip,
     get_metrics,
     get_provider_key,
@@ -112,6 +116,15 @@ def register_admin_routes(app: Any) -> None:
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
+    # Error dumps
+    app.route("/admin/api/error-dumps", methods=["GET"])(get_error_dumps)
+    app.route("/admin/api/error-dumps/<dump_id>", methods=["GET"])(
+        get_error_dump_detail
+    )
+    app.route("/admin/api/error-dumps/<dump_id>/body", methods=["GET"])(
+        get_error_dump_body
+    )
+    app.route("/admin/api/error-dumps", methods=["DELETE"])(clear_error_dumps)
     # API key management
     app.route("/admin/api/keys", methods=["GET"])(get_api_keys)
     app.route("/admin/api/keys", methods=["POST"])(create_api_key)
