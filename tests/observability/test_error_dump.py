@@ -175,7 +175,9 @@ class TestDumpError:
         assert entry["response_text"] == '{"error": "rate limit"}'
 
         # Verify body was stored and decompressed correctly
-        body_data = persistence.get_dump_body(entry["body_hash"])
+        body_hash = entry["body_hash"]
+        assert isinstance(body_hash, str)
+        body_data = persistence.get_dump_body(body_hash)
         assert body_data is not None
         restored = decompress_body(body_data)
         assert restored == body
@@ -211,7 +213,11 @@ class TestDumpError:
         assert dump_id is not None
 
         entry = persistence.get_error_dump(dump_id)
-        body_data = persistence.get_dump_body(entry["body_hash"])
+        assert entry is not None
+        body_hash = entry["body_hash"]
+        assert isinstance(body_hash, str)
+        body_data = persistence.get_dump_body(body_hash)
+        assert body_data is not None
         restored = decompress_body(body_data)
         # The base64 should have been replaced
         content = restored["messages"][0]["content"]
@@ -237,6 +243,7 @@ class TestDumpError:
         )
         assert dump_id is not None
         entry = persistence.get_error_dump(dump_id)
+        assert entry is not None
         assert "body_hash" not in entry
 
     def test_converted_body_stored(self, persistence: PersistenceManager) -> None:
@@ -249,7 +256,9 @@ class TestDumpError:
             status_code=500,
             error_phase="upstream",
         )
+        assert dump_id is not None
         entry = persistence.get_error_dump(dump_id)
+        assert entry is not None
         assert "body_hash" in entry
         assert "converted_body_hash" in entry
         assert entry["body_hash"] != entry["converted_body_hash"]
@@ -344,5 +353,7 @@ class TestPersistenceErrorDumps:
             error_phase="upstream",
             request_log_id="abc123",
         )
+        assert dump_id is not None
         entry = persistence.get_error_dump(dump_id)
+        assert entry is not None
         assert entry["request_log_id"] == "abc123"
