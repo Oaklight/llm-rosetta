@@ -7,6 +7,7 @@ on a single asyncio event loop thread, no locks are required.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 
@@ -265,7 +266,7 @@ class MetricsCollector:
             int(k): v for k, v in data.get("by_status_code", {}).items()
         }
 
-    def rebuild_counters(self, rows: list[dict]) -> None:
+    def rebuild_counters(self, rows: Iterable[dict]) -> int:
         """Rebuild all counters from request log rows.
 
         Replaces current counter values with aggregates computed from
@@ -273,42 +274,62 @@ class MetricsCollector:
         ``target_provider``, ``target_provider_name``, ``is_stream``,
         and ``status_code`` keys.
 
+        Accepts any iterable (including generators) so the caller can
+        stream rows in batches without loading the entire table into
+        memory at once.
+
         Time-series and per-provider rolling stats are NOT rebuilt
         (they only make sense for recent data).
 
         Args:
-            rows: List of request log entry dicts (as returned by
-                ``PersistenceManager.query_log_entries``).
+            rows: Iterable of request log entry dicts.
+
+        Returns:
+            Number of rows processed.
         """
-        self.total_requests = 0
-        self.total_errors = 0
-        self.total_streams = 0
-        self.by_model = {}
-        self.by_source_provider = {}
-        self.by_target_provider = {}
-        self.by_status_code = {}
+        # Build in temporaries, then swap atomically.  The gateway runs
+        # on a single asyncio thread so there are no true data races,
+        # but building first avoids exposing half-rebuilt counters to
+        # concurrent ``snapshot()`` calls between await points.
+        total_requests = 0
+        total_errors = 0
+        total_streams = 0
+        by_model: dict[str, int] = {}
+        by_source: dict[str, int] = {}
+        by_target: dict[str, int] = {}
+        by_status: dict[int, int] = {}
 
         for r in rows:
-            self.total_requests += 1
+            total_requests += 1
             sc = r.get("status_code", 200)
             if sc >= 400:
-                self.total_errors += 1
+                total_errors += 1
             if r.get("is_stream"):
-                self.total_streams += 1
+                total_streams += 1
 
             model = r.get("model", "unknown")
-            self.by_model[model] = self.by_model.get(model, 0) + 1
+            by_model[model] = by_model.get(model, 0) + 1
 
             source = r.get("source_provider", "unknown")
-            self.by_source_provider[source] = self.by_source_provider.get(source, 0) + 1
+            by_source[source] = by_source.get(source, 0) + 1
 
-            # Prefer provider display name, fall back to API type
             target = r.get("target_provider_name") or r.get(
                 "target_provider", "unknown"
             )
-            self.by_target_provider[target] = self.by_target_provider.get(target, 0) + 1
+            by_target[target] = by_target.get(target, 0) + 1
 
-            self.by_status_code[sc] = self.by_status_code.get(sc, 0) + 1
+            by_status[sc] = by_status.get(sc, 0) + 1
+
+        # Atomic swap — active_streams is live state, not rebuilt.
+        self.total_requests = total_requests
+        self.total_errors = total_errors
+        self.total_streams = total_streams
+        self.by_model = by_model
+        self.by_source_provider = by_source
+        self.by_target_provider = by_target
+        self.by_status_code = by_status
+
+        return total_requests
 
     def snapshot(self, series_seconds: int = 60) -> dict:
         """Return a JSON-serializable metrics snapshot."""

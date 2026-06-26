@@ -12,7 +12,7 @@ import json
 import logging
 import sqlite3
 import warnings
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -316,29 +316,34 @@ class PersistenceManager:
         ).fetchall()
         return [row[0] for row in rows]
 
-    def all_log_rows_for_rebuild(self) -> list[dict[str, Any]]:
-        """Return lightweight dicts for every log entry (for counter rebuild).
+    def iter_log_rows_for_rebuild(
+        self, batch_size: int = 5000
+    ) -> Iterator[dict[str, Any]]:
+        """Yield lightweight dicts for every log entry (for counter rebuild).
 
         Only fetches the columns needed by
-        :meth:`~MetricsCollector.rebuild_counters`.  Does NOT load
-        heavy columns like ``profile`` or ``error_detail``.
+        :meth:`~MetricsCollector.rebuild_counters`.  Rows are fetched
+        in batches of *batch_size* to bound memory usage regardless of
+        table size.
         """
-        rows = self._conn.execute(
+        cursor = self._conn.execute(
             "SELECT model, source_provider, target_provider, "
             "target_provider_name, is_stream, status_code "
             "FROM request_log"
-        ).fetchall()
-        return [
-            {
-                "model": r[0],
-                "source_provider": r[1],
-                "target_provider": r[2],
-                "target_provider_name": r[3],
-                "is_stream": bool(r[4]),
-                "status_code": r[5],
-            }
-            for r in rows
-        ]
+        )
+        while True:
+            batch = cursor.fetchmany(batch_size)
+            if not batch:
+                break
+            for r in batch:
+                yield {
+                    "model": r[0],
+                    "source_provider": r[1],
+                    "target_provider": r[2],
+                    "target_provider_name": r[3],
+                    "is_stream": bool(r[4]),
+                    "status_code": r[5],
+                }
 
     def count_log_entries(self) -> int:
         """Return the total number of log entries."""

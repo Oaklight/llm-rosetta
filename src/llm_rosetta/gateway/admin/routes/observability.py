@@ -89,8 +89,7 @@ async def rebuild_metrics(request: Any) -> Response:
         )
 
     metrics = request.app.metrics
-    rows = persistence.all_log_rows_for_rebuild()
-    metrics.rebuild_counters(rows)
+    count = metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
 
     # Persist the rebuilt counters immediately
     persistence.save_metrics(metrics.export_counters())
@@ -98,7 +97,7 @@ async def rebuild_metrics(request: Any) -> Response:
     return JSONResponse(
         {
             "ok": True,
-            "rebuilt_from": len(rows),
+            "rebuilt_from": count,
             "counters": metrics.export_counters(),
         }
     )
