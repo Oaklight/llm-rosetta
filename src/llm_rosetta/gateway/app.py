@@ -43,8 +43,20 @@ def _record_telemetry(
     status_code: int,
     duration_ms: float,
     error_detail: str | None,
-) -> None:
-    """Record metrics and request log entry after a proxy call completes."""
+    profile: dict[str, Any] | None = None,
+    entry_id_override: str | None = None,
+) -> str | None:
+    """Record metrics and request log entry after a proxy call completes.
+
+    Args:
+        entry_id_override: Pre-generated entry ID for streaming requests.
+            When provided, the entry is created with this ID so the
+            stream generator can write back profile data by ID.
+
+    Returns:
+        The request log entry ID, or ``None`` if no request log is
+        configured.
+    """
     metrics = getattr(request.app, "metrics", None)
     if is_stream and metrics:
         metrics.active_streams -= 1
@@ -62,22 +74,30 @@ def _record_telemetry(
 
     request_log = getattr(request.app, "request_log", None)
     if request_log is not None:
+        from dataclasses import replace as _dc_replace
+
         from .admin.request_log import RequestLogEntry
 
-        request_log.add(
-            RequestLogEntry.create(
-                model=model,
-                source_provider=source_provider,
-                target_provider=target_provider,
-                target_provider_name=provider_name,
-                is_stream=is_stream,
-                status_code=status_code,
-                duration_ms=duration_ms,
-                error_detail=error_detail,
-                api_key_label=api_key_label_var.get(),
-                client_ip=_extract_client_ip(request),
-            )
+        entry = RequestLogEntry.create(
+            model=model,
+            source_provider=source_provider,
+            target_provider=target_provider,
+            target_provider_name=provider_name,
+            is_stream=is_stream,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            error_detail=error_detail,
+            api_key_label=api_key_label_var.get(),
+            client_ip=_extract_client_ip(request),
+            profile=profile,
         )
+        # For streaming, use the pre-generated ID so the stream
+        # generator can write back profile data by this ID.
+        if entry_id_override:
+            entry = _dc_replace(entry, id=entry_id_override)
+        request_log.add(entry)
+        return entry.id
+    return None
 
 
 def _extract_client_ip(request: Any) -> str | None:
@@ -102,6 +122,55 @@ def _extract_client_ip(request: Any) -> str | None:
 # ---------------------------------------------------------------------------
 # Route handlers
 # ---------------------------------------------------------------------------
+
+
+def _try_start_profiler(app: Any) -> Any | None:
+    """Start a per-request deep profiler if profiling is enabled.
+
+    Returns a started DeepProfiler instance, or ``None`` if profiling
+    is disabled or pyinstrument is not installed.
+    """
+    state = getattr(app, "profiler_state", None)
+    if state is None or not state.should_profile():
+        return None
+    try:
+        profiler = state.create_profiler()
+        profiler.start()
+        return profiler
+    except RuntimeError:
+        return None
+
+
+def _try_stop_profiler(
+    profiler: Any,
+    app: Any,
+    *,
+    request_id: str,
+    model: str,
+    source: str,
+    target: str,
+    is_stream: bool,
+    duration_ms: float,
+) -> None:
+    """Stop a running deep profiler and store the result."""
+    if profiler is None:
+        return
+    try:
+        profiler.stop()
+        state = getattr(app, "profiler_state", None)
+        if state is not None:
+            state.store_result(
+                profiler,
+                request_id=request_id,
+                model=model,
+                source=source,
+                target=target,
+                is_stream=is_stream,
+                duration_ms=duration_ms,
+            )
+    except Exception:
+        logger.debug("Failed to store profiling result")
+
 
 # Global config — set at startup
 _config: GatewayConfig | None = None
@@ -190,17 +259,37 @@ async def _proxy_handler(
     t0 = time.monotonic()
     status_code = 500
     error_detail: str | None = None
+    profile: dict[str, Any] | None = None
+    request_log = getattr(request.app, "request_log", None)
+
+    deep_profiler = _try_start_profiler(request.app)
 
     try:
-        handler = handle_streaming if is_stream else handle_non_streaming
-        response = await handler(
-            route,
-            provider_info,
-            body,
-            transport=request.app.transport,
-            metadata_store=store,
-            extra_headers=extra_headers,
-        )
+        if is_stream:
+            # For streaming, we pre-generate the entry_id so the stream
+            # generator can write back stream-phase profile after completion.
+            pre_entry_id = uuid.uuid4().hex
+
+            response, profile = await handle_streaming(
+                route,
+                provider_info,
+                body,
+                transport=request.app.transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+                entry_id=pre_entry_id,
+                request_log=request_log,
+            )
+        else:
+            pre_entry_id = None
+            response, profile = await handle_non_streaming(
+                route,
+                provider_info,
+                body,
+                transport=request.app.transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+            )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
             body_bytes = response.body
@@ -213,12 +302,26 @@ async def _proxy_handler(
         error_detail = str(exc)
         logger.exception("[%s] unhandled error in proxy handler", request_id)
         status_code = 500
+        pre_entry_id = None
         resp = error_response_for_source(
             source_provider, 500, f"Internal server error: {exc}"
         )
         resp.headers["x-request-id"] = request_id
         return resp
     finally:
+        duration_ms = (time.monotonic() - t0) * 1000
+
+        _try_stop_profiler(
+            deep_profiler,
+            request.app,
+            request_id=request_id,
+            model=model,
+            source=source_provider,
+            target=route.target_provider,
+            is_stream=is_stream,
+            duration_ms=duration_ms,
+        )
+
         _record_telemetry(
             request,
             model=model,
@@ -227,8 +330,10 @@ async def _proxy_handler(
             provider_name=route.provider_name,
             is_stream=is_stream,
             status_code=status_code,
-            duration_ms=(time.monotonic() - t0) * 1000,
+            duration_ms=duration_ms,
             error_detail=error_detail,
+            profile=profile,
+            entry_id_override=pre_entry_id,
         )
 
 

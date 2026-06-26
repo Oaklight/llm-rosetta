@@ -222,7 +222,7 @@ class TestNonStreamingTransforms:
         )
 
         async def run():
-            response = await handle_non_streaming(
+            response, profile = await handle_non_streaming(
                 _make_route(model="regular-model", shim_name="custom_provider"),
                 _make_provider_info(),
                 {
@@ -232,8 +232,11 @@ class TestNonStreamingTransforms:
                 transport=transport,
                 metadata_store=ProviderMetadataStore(),
             )
-            return response
+            return response, profile
 
-        response = asyncio.run(run())
+        response, profile = asyncio.run(run())
         # The handler should complete without error
         assert response.status_code == 200
+        # Profile should contain timing data
+        assert "request_conversion_ms" in profile
+        assert "upstream_ms" in profile

@@ -133,7 +133,7 @@ class PersistenceManager:
         cursor = self._conn.execute("PRAGMA table_info(request_log)")
         columns = {row[1] for row in cursor.fetchall()}
         added = False
-        for col in ("target_provider_name", "client_ip"):
+        for col in ("target_provider_name", "client_ip", "profile"):
             if col not in columns:
                 self._conn.execute(f"ALTER TABLE request_log ADD COLUMN {col} TEXT")
                 added = True
@@ -184,6 +184,7 @@ class PersistenceManager:
         "api_key_label",
         "target_provider_name",
         "client_ip",
+        "profile",
     ]
 
     def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -194,8 +195,8 @@ class PersistenceManager:
             "INSERT OR IGNORE INTO request_log "
             "(id, timestamp, model, source_provider, target_provider, "
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
-            "target_provider_name, client_ip) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "target_provider_name, client_ip, profile) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -210,6 +211,7 @@ class PersistenceManager:
                     e.get("api_key_label"),
                     e.get("target_provider_name"),
                     e.get("client_ip"),
+                    json.dumps(e["profile"]) if e.get("profile") else None,
                 )
                 for e in entries
             ],
@@ -427,12 +429,50 @@ class PersistenceManager:
         )
         self._conn.commit()
 
+    def update_entry_profile(
+        self, entry_id: str, profile_update: dict[str, Any]
+    ) -> None:
+        """Merge additional profile data into an existing log entry.
+
+        Reads the current profile JSON, merges *profile_update* on top,
+        and writes it back.  Used by the streaming path to write back
+        stream metrics after the stream completes.
+
+        Args:
+            entry_id: The log entry ID to update.
+            profile_update: Profile keys to merge.
+        """
+        row = self._conn.execute(
+            "SELECT profile FROM request_log WHERE id = ?", (entry_id,)
+        ).fetchone()
+        if row is None:
+            return
+        existing: dict[str, Any] = {}
+        if row[0]:
+            try:
+                existing = json.loads(row[0])
+            except (json.JSONDecodeError, TypeError):
+                pass
+        existing.update(profile_update)
+        self._conn.execute(
+            "UPDATE request_log SET profile = ? WHERE id = ?",
+            (json.dumps(existing, ensure_ascii=False), entry_id),
+        )
+        self._conn.commit()
+
     @classmethod
     def _row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
         d: dict[str, Any] = {}
         for col, val in zip(cls._LOG_COLUMNS, row):
             if col == "is_stream":
                 d[col] = bool(val)
+            elif col == "profile":
+                if val is not None:
+                    try:
+                        d[col] = json.loads(val)
+                    except (json.JSONDecodeError, TypeError):
+                        d[col] = None
+                # omit if None (match old behavior for optional fields)
             elif col in ("error_detail", "api_key_label", "client_ip") and val is None:
                 continue  # omit None optional fields (match old behavior)
             else:

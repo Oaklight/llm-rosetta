@@ -7,6 +7,7 @@ This package splits the admin route handlers into focused modules:
 - keys        — Gateway API key management
 - observability — Metrics, request log, network diagnostics
 - testing     — Async model test tasks
+- profiling   — On-demand pyinstrument profiling
 """
 
 from __future__ import annotations
@@ -57,6 +58,14 @@ from .observability import (
     get_request_key_labels,
     get_requests,
     network_diagnostics,
+)
+from .profiling import (
+    clear_profiling_results,
+    disable_profiling,
+    enable_profiling,
+    get_profiling_result,
+    get_profiling_results,
+    get_profiling_status,
 )
 from .testing import (
     cancel_test,
@@ -113,3 +122,14 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
     app.route("/admin/api/test/<task_id>/poll", methods=["POST"])(get_test_result)
     app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)
+    # Profiling
+    app.route("/admin/api/profiling/status", methods=["GET"])(get_profiling_status)
+    app.route("/admin/api/profiling/enable", methods=["POST"])(enable_profiling)
+    app.route("/admin/api/profiling/disable", methods=["POST"])(disable_profiling)
+    app.route("/admin/api/profiling/results", methods=["GET"])(get_profiling_results)
+    app.route("/admin/api/profiling/results/<index>", methods=["GET"])(
+        get_profiling_result
+    )
+    app.route("/admin/api/profiling/results", methods=["DELETE"])(
+        clear_profiling_results
+    )

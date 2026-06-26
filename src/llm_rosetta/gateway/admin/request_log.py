@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +32,7 @@ class RequestLogEntry:
     api_key_label: str | None = None
     target_provider_name: str | None = None
     client_ip: str | None = None
+    profile: dict[str, Any] | None = None
 
     @classmethod
     def create(
@@ -47,6 +48,7 @@ class RequestLogEntry:
         api_key_label: str | None = None,
         target_provider_name: str | None = None,
         client_ip: str | None = None,
+        profile: dict[str, Any] | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -62,6 +64,7 @@ class RequestLogEntry:
             api_key_label=api_key_label,
             target_provider_name=target_provider_name,
             client_ip=client_ip,
+            profile=profile,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -84,6 +87,8 @@ class RequestLogEntry:
             d["target_provider_name"] = self.target_provider_name
         if self.client_ip is not None:
             d["client_ip"] = self.client_ip
+        if self.profile is not None:
+            d["profile"] = self.profile
         return d
 
 
@@ -206,6 +211,27 @@ class RequestLog:
         entries = [e.to_dict() for e in self._pending]
         self._pending.clear()
         return entries
+
+    def update_profile(self, entry_id: str, profile_update: dict[str, Any]) -> None:
+        """Merge additional profile data into an existing entry.
+
+        Used by the streaming path to write back stream metrics
+        (TTFB, duration, chunk count) after stream completion.
+
+        Args:
+            entry_id: The log entry ID to update.
+            profile_update: Profile keys to merge (e.g.
+                ``{"stream_ttfb_ms": 120.5, "stream_complete": True}``).
+        """
+        if self._persistence is not None:
+            self._persistence.update_entry_profile(entry_id, profile_update)
+        else:
+            # In-memory: find and rebuild the frozen entry
+            for i, entry in enumerate(self._entries):
+                if entry.id == entry_id:
+                    merged = dict(entry.profile or {}, **profile_update)
+                    self._entries[i] = replace(entry, profile=merged)
+                    break
 
     def clear(self) -> None:
         """Remove all entries."""

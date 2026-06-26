@@ -22,6 +22,7 @@ the caller (gateway, argo-proxy, etc.) owns the transport.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -223,6 +224,9 @@ class ConversionPipeline:
         self._ctx: ConversionContext | None = None
         self._ir_request: dict[str, Any] | None = None
 
+        # Per-phase timing (always-on, ~30ns per perf_counter call)
+        self._profile: dict[str, float] = {}
+
     @property
     def context(self) -> ConversionContext:
         """The request-phase conversion context.
@@ -262,6 +266,31 @@ class ConversionPipeline:
         if self._ctx is None:
             return []
         return self._ctx.warnings
+
+    @property
+    def profile(self) -> dict[str, float]:
+        """Per-phase timing data collected during conversion.
+
+        Contains millisecond durations for each conversion sub-phase.
+        Populated incrementally by :meth:`convert_request` and
+        :meth:`convert_response`.  Always available (returns ``{}``
+        before any conversion).
+
+        Keys after :meth:`convert_request`::
+
+            source_to_ir_ms      — Source format → IR parsing
+            ir_transforms_ms     — Vision enforcement + shim IR transforms
+            ir_to_target_ms      — IR → target format serialization
+            body_transforms_ms   — Shim body-level to_transforms
+            request_conversion_ms — Total request conversion time
+
+        Keys added by :meth:`convert_response`::
+
+            response_from_target_ms — Target response → IR parsing
+            response_to_source_ms   — IR → source response serialization
+            response_conversion_ms  — Total response conversion time
+        """
+        return self._profile
 
     def convert_request(
         self,
@@ -309,13 +338,17 @@ class ConversionPipeline:
         )
         self._ctx = ctx
 
+        t_total = time.perf_counter()
+
         # Phase 1: Source → IR
+        t0 = time.perf_counter()
         try:
             ir_request = self._source_converter.request_from_provider(body, context=ctx)
         except Exception as exc:
             raise ConversionError(
                 f"Failed to parse request: {exc}", phase="source_to_ir"
             ) from exc
+        self._profile["source_to_ir_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
         # Hook: let caller inject metadata before IR transforms
         if on_ir_ready is not None:
@@ -323,7 +356,8 @@ class ConversionPipeline:
 
         request_id = ctx.options.get("request_id", "-")
 
-        # Capability enforcement: vision (post-IR)
+        # Capability enforcement: vision (post-IR) + shim IR transforms
+        t0 = time.perf_counter()
         ir_request = enforce_vision(
             ir_request,
             model_capabilities=self._model_capabilities,
@@ -339,9 +373,11 @@ class ConversionPipeline:
             model_capabilities=self._model_capabilities,
             request_id=request_id,
         )
+        self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
         self._ir_request = ir_request
 
         # Phase 2b: IR → Target
+        t0 = time.perf_counter()
         try:
             target_body, _ = self._target_converter.request_to_provider(
                 ir_request, context=ctx
@@ -350,11 +386,19 @@ class ConversionPipeline:
             raise ConversionError(
                 f"Conversion error: {exc}", phase="ir_to_target"
             ) from exc
+        self._profile["ir_to_target_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
         # Phase 2c: Body-level shim to_transforms
+        t0 = time.perf_counter()
         if self._to_transforms:
             target_body = apply_transforms(self._to_transforms, target_body)
+        self._profile["body_transforms_ms"] = round(
+            (time.perf_counter() - t0) * 1000, 2
+        )
 
+        self._profile["request_conversion_ms"] = round(
+            (time.perf_counter() - t_total) * 1000, 2
+        )
         return target_body
 
     def convert_response(
@@ -384,6 +428,7 @@ class ConversionPipeline:
             RuntimeError: If called before :meth:`convert_request`.
         """
         ctx = self.context  # raises RuntimeError if not ready
+        t_total = time.perf_counter()
 
         # Phase 4a: Body-level shim from_transforms
         response = upstream_response
@@ -391,6 +436,7 @@ class ConversionPipeline:
             response = apply_transforms(self._from_transforms, response)
 
         # Phase 4b: Target response → IR
+        t0 = time.perf_counter()
         try:
             ir_response = self._target_converter.response_from_provider(
                 response, context=ctx
@@ -400,12 +446,16 @@ class ConversionPipeline:
                 f"Failed to parse upstream response: {exc}",
                 phase="response_to_ir",
             ) from exc
+        self._profile["response_from_target_ms"] = round(
+            (time.perf_counter() - t0) * 1000, 2
+        )
 
         # Hook: let caller cache metadata from IR response
         if on_ir_ready is not None:
             on_ir_ready(ir_response)
 
         # Phase 4c: IR → Source response
+        t0 = time.perf_counter()
         try:
             source_response = self._source_converter.response_to_provider(
                 ir_response, context=ctx
@@ -414,7 +464,13 @@ class ConversionPipeline:
             raise ConversionError(
                 f"Failed to convert response: {exc}", phase="ir_to_source"
             ) from exc
+        self._profile["response_to_source_ms"] = round(
+            (time.perf_counter() - t0) * 1000, 2
+        )
 
+        self._profile["response_conversion_ms"] = round(
+            (time.perf_counter() - t_total) * 1000, 2
+        )
         return source_response
 
     def create_stream_processor(

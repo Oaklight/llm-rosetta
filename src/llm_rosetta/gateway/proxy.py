@@ -243,9 +243,16 @@ async def handle_non_streaming(
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> Response:
-    """Non-streaming proxy: convert -> forward -> convert back -> respond."""
+) -> tuple[Response, dict[str, Any]]:
+    """Non-streaming proxy: convert -> forward -> convert back -> respond.
+
+    Returns:
+        A ``(response, profile)`` tuple.  The profile dict contains
+        per-phase timing data merged from the conversion pipeline and
+        gateway-level measurements (upstream latency).
+    """
     store = metadata_store or _default_metadata_store
+    profile: dict[str, Any] = {}
     # model was already injected into body by app.py
     model = body.get("model", "")
 
@@ -264,7 +271,9 @@ async def handle_non_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        return error_response_for_source(route.source_provider, 400, str(exc))
+        return error_response_for_source(route.source_provider, 400, str(exc)), profile
+
+    profile.update(pipeline.profile)
 
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
@@ -272,6 +281,7 @@ async def handle_non_streaming(
     log_converted_request(target_body)
 
     # Phase 3: Forward to upstream via transport
+    t_upstream = time.perf_counter()
     try:
         resp = await transport.send_request(
             provider_info,
@@ -281,9 +291,14 @@ async def handle_non_streaming(
             extra_headers=extra_headers,
         )
     except UpstreamConnectionError as exc:
-        return error_response_for_source(
-            route.source_provider, 502, f"Upstream request failed: {exc}"
+        profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
+        return (
+            error_response_for_source(
+                route.source_provider, 502, f"Upstream request failed: {exc}"
+            ),
+            profile,
         )
+    profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
 
     if resp.is_error:
         log_upstream_error(
@@ -291,10 +306,13 @@ async def handle_non_streaming(
             resp.error_text,
             endpoint=str(route.target_provider),
         )
-        return Response(
-            body=resp.raw_content,
-            status_code=resp.status_code,
-            content_type="application/json",
+        return (
+            Response(
+                body=resp.raw_content,
+                status_code=resp.status_code,
+                content_type="application/json",
+            ),
+            profile,
         )
 
     # Phase 4: Target response → Source response
@@ -305,9 +323,12 @@ async def handle_non_streaming(
             resp.body, on_ir_ready=store.cache_from_response
         )
     except ConversionError as exc:
-        return error_response_for_source(route.source_provider, 502, str(exc))
+        profile.update(pipeline.profile)
+        return error_response_for_source(route.source_provider, 502, str(exc)), profile
 
-    return JSONResponse(source_response)
+    # Merge response-phase timings from pipeline
+    profile.update(pipeline.profile)
+    return JSONResponse(source_response), profile
 
 
 async def _stream_event_generator(
@@ -321,10 +342,15 @@ async def _stream_event_generator(
     model: str,
     format_sse: Any,
     extra_headers: dict[str, str] | None = None,
+    entry_id: str | None = None,
+    request_log: Any | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from upstream, converting each chunk via Pipeline."""
     chunk_count = 0
     t0 = time.monotonic()
+    stream_error: str | None = None
+    ttfb_ms: float | None = None
+    t_stream_open = time.perf_counter()
 
     try:
         stream = await transport.send_streaming(
@@ -335,38 +361,62 @@ async def _stream_event_generator(
             extra_headers=extra_headers,
         )
     except UpstreamConnectionError as exc:
-        yield f"data: {json.dumps({'error': {'message': str(exc)}})}\n\n"
+        stream_error = str(exc)
+        yield f"data: {json.dumps({'error': {'message': stream_error}})}\n\n"
         return
 
-    async with stream:
-        if stream.is_error:
-            error_text = await stream.read_error()
-            log_upstream_error(
-                stream.status_code,
-                error_text,
-                endpoint=str(target_provider),
-                is_streaming=True,
-            )
+    try:
+        async with stream:
+            if stream.is_error:
+                error_text = await stream.read_error()
+                stream_error = error_text
+                log_upstream_error(
+                    stream.status_code,
+                    error_text,
+                    endpoint=str(target_provider),
+                    is_streaming=True,
+                )
+                try:
+                    error_msg = json.dumps(json.loads(error_text))
+                except json.JSONDecodeError:
+                    error_msg = error_text
+                yield f"data: {error_msg}\n\n"
+                return
+
+            async for chunk in stream:
+                if chunk_count == 0:
+                    ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
+                chunk_count += 1
+                for source_event in processor.process_chunk(chunk):
+                    yield format_sse(source_event)
+
+        if source_provider == "openai_chat":
+            yield format_sse_done()
+
+        log_stream_summary(
+            model=model,
+            duration_s=time.monotonic() - t0,
+            chunk_count=chunk_count,
+        )
+    except Exception as exc:
+        stream_error = str(exc)
+        raise
+    finally:
+        # Write back stream profile to request log entry
+        if entry_id and request_log is not None:
+            stream_profile: dict[str, Any] = {
+                "stream_duration_ms": round((time.monotonic() - t0) * 1000, 2),
+                "stream_chunks": chunk_count,
+                "stream_complete": stream_error is None,
+            }
+            if ttfb_ms is not None:
+                stream_profile["stream_ttfb_ms"] = ttfb_ms
+            if stream_error is not None:
+                stream_profile["stream_error"] = stream_error[:500]
             try:
-                error_msg = json.dumps(json.loads(error_text))
-            except json.JSONDecodeError:
-                error_msg = error_text
-            yield f"data: {error_msg}\n\n"
-            return
-
-        async for chunk in stream:
-            chunk_count += 1
-            for source_event in processor.process_chunk(chunk):
-                yield format_sse(source_event)
-
-    if source_provider == "openai_chat":
-        yield format_sse_done()
-
-    log_stream_summary(
-        model=model,
-        duration_s=time.monotonic() - t0,
-        chunk_count=chunk_count,
-    )
+                request_log.update_profile(entry_id, stream_profile)
+            except Exception:
+                logger.debug("Failed to write stream profile for %s", entry_id)
 
 
 async def handle_streaming(
@@ -377,9 +427,19 @@ async def handle_streaming(
     transport: UpstreamTransport,
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
-) -> Response | StreamingResponse:
-    """Streaming proxy: convert -> forward -> stream-convert back -> SSE."""
+    entry_id: str | None = None,
+    request_log: Any | None = None,
+) -> tuple[Response | StreamingResponse, dict[str, Any]]:
+    """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
+
+    Returns:
+        A ``(response, profile)`` tuple.  The profile dict contains
+        request-phase timing data.  Stream-phase metrics (TTFB,
+        duration, chunks) are written back to the request log entry
+        after the stream completes.
+    """
     store = metadata_store or _default_metadata_store
+    profile: dict[str, Any] = {}
     # model was already injected into body by app.py
     model = body.get("model", "")
 
@@ -398,7 +458,9 @@ async def handle_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        return error_response_for_source(route.source_provider, 400, str(exc))
+        return error_response_for_source(route.source_provider, 400, str(exc)), profile
+
+    profile.update(pipeline.profile)
 
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
@@ -412,17 +474,22 @@ async def handle_streaming(
     )
     format_sse = SSE_FORMATTERS[route.source_provider]
 
-    return StreamingResponse(
-        _stream_event_generator(
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            processor=processor,
-            transport=transport,
-            provider_info=provider_info,
-            target_body=target_body,
-            model=model,
-            format_sse=format_sse,
-            extra_headers=extra_headers,
+    return (
+        StreamingResponse(
+            _stream_event_generator(
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                processor=processor,
+                transport=transport,
+                provider_info=provider_info,
+                target_body=target_body,
+                model=model,
+                format_sse=format_sse,
+                extra_headers=extra_headers,
+                entry_id=entry_id,
+                request_log=request_log,
+            ),
+            content_type="text/event-stream",
         ),
-        content_type="text/event-stream",
+        profile,
     )
