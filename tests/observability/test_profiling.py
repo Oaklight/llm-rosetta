@@ -54,10 +54,15 @@ class TestProfilerState:
 
     def test_max_results_trim(self):
         state = ProfilerState(max_results=3)
+
+        class _FakeProfiler:
+            def output_html(self):
+                return "<html/>"
+
+            def output_text(self):
+                return "text"
+
         for i in range(5):
-            state.results.append({"i": i})
-        # Manually trigger trim (store_result does it, but we test directly)
-        if len(state.results) > state._max_results:
-            state.results = state.results[-state._max_results :]
+            state.store_result(_FakeProfiler(), model=f"model-{i}")
         assert len(state.results) == 3
-        assert state.results[0]["i"] == 2
+        assert state.results[0]["model"] == "model-2"

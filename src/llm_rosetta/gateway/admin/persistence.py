@@ -1,9 +1,8 @@
 """SQLite-based persistence for gateway admin data.
 
-.. deprecated::
-    This module re-exports from :mod:`llm_rosetta.observability.persistence`
-    for backward compatibility.  Import directly from
-    ``llm_rosetta.observability`` instead.
+This module re-exports from :mod:`llm_rosetta.observability.persistence`
+for backward compatibility.  New code should import directly from
+``llm_rosetta.observability``.
 """
 
 from __future__ import annotations
