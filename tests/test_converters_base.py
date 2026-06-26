@@ -183,13 +183,11 @@ class MockMessageOps(BaseMessageOps):
         return provider_messages, warnings
 
     @staticmethod
-    def p_messages_to_ir(
-        provider_messages: list[Any], **kwargs: Any
-    ) -> list[Union[Message, ExtensionItem]]:
-        ir_messages = []
+    def p_messages_to_ir(provider_messages: list[Any], **kwargs: Any) -> list[Any]:
+        ir_messages: list[Any] = []
 
         for msg in provider_messages:
-            ir_msg = {"role": msg["role"], "content": []}
+            ir_msg: dict[str, Any] = {"role": msg["role"], "content": []}
 
             for part in msg.get("content", []):
                 if part.get("type") == "text":
