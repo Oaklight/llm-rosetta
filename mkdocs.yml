@@ -103,6 +103,7 @@ plugins:
           - api/tool-ops.md
           - api/shims.md
           - api/utils.md
+          - api/observability.md
           - api/admin.md
         路线图:
           - roadmap.md
@@ -184,5 +185,6 @@ nav:
       - Tool Ops: api/tool-ops.md
       - Shims: api/shims.md
       - 工具函数: api/utils.md
+      - 可观测性: api/observability.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md

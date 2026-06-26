@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### 新增
+
+- **可观测性包** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341))：将 `MetricsCollector`、`RequestLog`、`RequestLogEntry`、`PersistenceManager` 和 `ProfilerState` 从 `gateway/admin/` 提取到新的顶层 `llm_rosetta.observability` 包。这些模块与框架无关，任何 LLM 代理消费者（如 argo-proxy）均可直接使用，无需依赖网关的配置系统或 HTTP 服务器。`gateway/admin/` 模块通过重新导出保持完全向后兼容。
+
 ## v0.7.0a0 — 2026-06-25
 
 ### 新增
