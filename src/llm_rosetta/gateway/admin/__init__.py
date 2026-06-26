@@ -6,9 +6,13 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from .metrics import MetricsCollector
-from .persistence import DEFAULT_ERROR_MAX, DEFAULT_SUCCESS_MAX, PersistenceManager
-from .request_log import RequestLog
+from llm_rosetta.observability import (
+    DEFAULT_ERROR_MAX,
+    DEFAULT_SUCCESS_MAX,
+    MetricsCollector,
+    PersistenceManager,
+    RequestLog,
+)
 
 if TYPE_CHECKING:
     from ..config import GatewayConfig
@@ -102,7 +106,7 @@ def setup_admin(
     request_log = RequestLog(persistence=persistence)
 
     # On-demand deep profiling state
-    from .routes.profiling import ProfilerState
+    from llm_rosetta.observability import ProfilerState
 
     profiler_state = ProfilerState()
 

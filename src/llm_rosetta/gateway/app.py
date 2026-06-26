@@ -76,7 +76,7 @@ def _record_telemetry(
     if request_log is not None:
         from dataclasses import replace as _dc_replace
 
-        from .admin.request_log import RequestLogEntry
+        from llm_rosetta.observability import RequestLogEntry
 
         entry = RequestLogEntry.create(
             model=model,
