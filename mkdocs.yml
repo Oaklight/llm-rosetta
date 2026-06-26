@@ -103,6 +103,7 @@ plugins:
           - api/tool-ops.md
           - api/shims.md
           - api/utils.md
+          - api/observability.md
           - api/admin.md
         Roadmap:
           - roadmap.md
@@ -184,5 +185,6 @@ nav:
       - Tool Ops: api/tool-ops.md
       - Shims: api/shims.md
       - Utilities: api/utils.md
+      - Observability: api/observability.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md

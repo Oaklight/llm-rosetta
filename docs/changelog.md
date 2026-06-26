@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Observability package** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341)): Extracted `MetricsCollector`, `RequestLog`, `RequestLogEntry`, `PersistenceManager`, and `ProfilerState` from `gateway/admin/` into a new top-level `llm_rosetta.observability` package. These modules are framework-agnostic and can be used by any LLM proxy consumer (e.g. argo-proxy) without depending on the gateway's config system or HTTP server. The `gateway/admin/` modules now re-export from `observability/` for full backward compatibility.
+
 ## v0.7.0a0 — 2026-06-25
 
 ### Added
