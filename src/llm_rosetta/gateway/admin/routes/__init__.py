@@ -58,6 +58,7 @@ from .observability import (
     get_request_key_labels,
     get_requests,
     network_diagnostics,
+    rebuild_metrics,
 )
 from .profiling import (
     clear_profiling_results,
@@ -103,6 +104,7 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
     # Metrics
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
+    app.route("/admin/api/metrics/rebuild", methods=["POST"])(rebuild_metrics)
     # Request log
     app.route("/admin/api/requests", methods=["GET"])(get_requests)
     app.route("/admin/api/requests/key-labels", methods=["GET"])(get_request_key_labels)

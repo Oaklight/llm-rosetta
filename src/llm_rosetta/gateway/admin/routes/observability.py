@@ -75,6 +75,35 @@ async def get_metrics(request: Any) -> Response:
     return JSONResponse(snap)
 
 
+async def rebuild_metrics(request: Any) -> Response:
+    """Rebuild metrics counters from request log entries.
+
+    Useful after fixing a counter bug or when persisted counters
+    have drifted from the actual request log data.
+    """
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse(
+            {"error": "No persistence configured (in-memory mode)"},
+            status_code=400,
+        )
+
+    metrics = request.app.metrics
+    rows = persistence.all_log_rows_for_rebuild()
+    metrics.rebuild_counters(rows)
+
+    # Persist the rebuilt counters immediately
+    persistence.save_metrics(metrics.export_counters())
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "rebuilt_from": len(rows),
+            "counters": metrics.export_counters(),
+        }
+    )
+
+
 async def get_request_key_labels(request: Any) -> Response:
     """Return API key labels seen in request logs."""
     log = request.app.request_log

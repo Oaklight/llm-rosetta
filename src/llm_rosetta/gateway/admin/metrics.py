@@ -208,7 +208,12 @@ class MetricsCollector:
 
         self.by_model[model] = self.by_model.get(model, 0) + 1
         self.by_source_provider[source] = self.by_source_provider.get(source, 0) + 1
-        self.by_target_provider[target] = self.by_target_provider.get(target, 0) + 1
+        # Use provider_name (e.g. "Argo Claude") when available,
+        # fall back to API type (e.g. "anthropic") for backward compat.
+        target_key = provider_name or target
+        self.by_target_provider[target_key] = (
+            self.by_target_provider.get(target_key, 0) + 1
+        )
         self.by_status_code[status_code] = self.by_status_code.get(status_code, 0) + 1
 
         self._window.record(duration_ms, is_error=is_error)
@@ -259,6 +264,51 @@ class MetricsCollector:
         self.by_status_code = {
             int(k): v for k, v in data.get("by_status_code", {}).items()
         }
+
+    def rebuild_counters(self, rows: list[dict]) -> None:
+        """Rebuild all counters from request log rows.
+
+        Replaces current counter values with aggregates computed from
+        *rows*.  Each row must have ``model``, ``source_provider``,
+        ``target_provider``, ``target_provider_name``, ``is_stream``,
+        and ``status_code`` keys.
+
+        Time-series and per-provider rolling stats are NOT rebuilt
+        (they only make sense for recent data).
+
+        Args:
+            rows: List of request log entry dicts (as returned by
+                ``PersistenceManager.query_log_entries``).
+        """
+        self.total_requests = 0
+        self.total_errors = 0
+        self.total_streams = 0
+        self.by_model = {}
+        self.by_source_provider = {}
+        self.by_target_provider = {}
+        self.by_status_code = {}
+
+        for r in rows:
+            self.total_requests += 1
+            sc = r.get("status_code", 200)
+            if sc >= 400:
+                self.total_errors += 1
+            if r.get("is_stream"):
+                self.total_streams += 1
+
+            model = r.get("model", "unknown")
+            self.by_model[model] = self.by_model.get(model, 0) + 1
+
+            source = r.get("source_provider", "unknown")
+            self.by_source_provider[source] = self.by_source_provider.get(source, 0) + 1
+
+            # Prefer provider display name, fall back to API type
+            target = r.get("target_provider_name") or r.get(
+                "target_provider", "unknown"
+            )
+            self.by_target_provider[target] = self.by_target_provider.get(target, 0) + 1
+
+            self.by_status_code[sc] = self.by_status_code.get(sc, 0) + 1
 
     def snapshot(self, series_seconds: int = 60) -> dict:
         """Return a JSON-serializable metrics snapshot."""

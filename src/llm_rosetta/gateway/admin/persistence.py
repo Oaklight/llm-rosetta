@@ -316,6 +316,30 @@ class PersistenceManager:
         ).fetchall()
         return [row[0] for row in rows]
 
+    def all_log_rows_for_rebuild(self) -> list[dict[str, Any]]:
+        """Return lightweight dicts for every log entry (for counter rebuild).
+
+        Only fetches the columns needed by
+        :meth:`~MetricsCollector.rebuild_counters`.  Does NOT load
+        heavy columns like ``profile`` or ``error_detail``.
+        """
+        rows = self._conn.execute(
+            "SELECT model, source_provider, target_provider, "
+            "target_provider_name, is_stream, status_code "
+            "FROM request_log"
+        ).fetchall()
+        return [
+            {
+                "model": r[0],
+                "source_provider": r[1],
+                "target_provider": r[2],
+                "target_provider_name": r[3],
+                "is_stream": bool(r[4]),
+                "status_code": r[5],
+            }
+            for r in rows
+        ]
+
     def count_log_entries(self) -> int:
         """Return the total number of log entries."""
         row = self._conn.execute("SELECT COUNT(*) FROM request_log").fetchone()
