@@ -14,7 +14,6 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -350,21 +349,21 @@ async def handle_non_streaming(
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
-    target_provider: ProviderType,
+    stream: Any,
     processor: Any,
-    transport: UpstreamTransport,
-    provider_info: ProviderInfo,
-    target_body: dict[str, Any],
     model: str,
     format_sse: Any,
-    extra_headers: dict[str, str] | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
-    persistence: Any | None = None,
-    request_body: dict[str, Any] | None = None,
-    provider_name: str | None = None,
 ) -> AsyncIterator[str]:
-    """Stream SSE events from upstream, converting each chunk via Pipeline."""
+    """Stream SSE events from an already-opened upstream stream.
+
+    The caller (``handle_streaming``) is responsible for opening the upstream
+    connection and checking for immediate errors *before* constructing the
+    ``StreamingResponse``.  This ensures the HTTP status code sent to the
+    client reflects the upstream status (e.g. 400 for token-limit errors)
+    rather than always being 200.
+    """
     chunk_count = 0
     t0 = time.monotonic()
     stream_error: str | None = None
@@ -372,64 +371,7 @@ async def _stream_event_generator(
     t_stream_open = time.perf_counter()
 
     try:
-        stream = await transport.send_streaming(
-            provider_info,
-            target_provider,
-            target_body,
-            model,
-            extra_headers=extra_headers,
-        )
-    except UpstreamConnectionError as exc:
-        stream_error = str(exc)
-        dump_error(
-            persistence,
-            request_body=request_body,
-            response_text=stream_error,
-            converted_body=target_body,
-            model=model,
-            source_provider=source_provider,
-            target_provider=target_provider,
-            provider_name=provider_name,
-            status_code=502,
-            error_phase="stream_header",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        yield f"data: {json.dumps({'error': {'message': stream_error}})}\n\n"
-        return
-
-    try:
         async with stream:
-            if stream.is_error:
-                error_text = await stream.read_error()
-                stream_error = error_text
-                log_upstream_error(
-                    stream.status_code,
-                    error_text,
-                    endpoint=str(target_provider),
-                    is_streaming=True,
-                )
-                dump_error(
-                    persistence,
-                    request_body=request_body,
-                    response_text=error_text,
-                    converted_body=target_body,
-                    model=model,
-                    source_provider=source_provider,
-                    target_provider=target_provider,
-                    provider_name=provider_name,
-                    status_code=stream.status_code,
-                    error_phase="stream_header",
-                    upstream_url=str(provider_info.base_url),
-                    request_log_id=entry_id,
-                )
-                try:
-                    error_msg = json.dumps(json.loads(error_text))
-                except json.JSONDecodeError:
-                    error_msg = error_text
-                yield f"data: {error_msg}\n\n"
-                return
-
             async for chunk in stream:
                 if chunk_count == 0:
                     ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
@@ -480,6 +422,11 @@ async def handle_streaming(
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
+    Opens the upstream connection *before* constructing the
+    ``StreamingResponse`` so that immediate errors (4xx/5xx from the
+    upstream) are returned with the correct HTTP status code instead of
+    being buried inside an SSE event on an HTTP 200 response.
+
     Returns:
         A ``(response, profile)`` tuple.  The profile dict contains
         request-phase timing data.  Stream-phase metrics (TTFB,
@@ -516,7 +463,77 @@ async def handle_streaming(
 
     log_converted_request(target_body)
 
-    # Create stream processor for per-chunk conversion
+    # Phase 3: Open upstream connection and check for immediate errors
+    # *before* committing to a 200 StreamingResponse.
+    try:
+        stream = await transport.send_streaming(
+            provider_info,
+            route.target_provider,
+            target_body,
+            model,
+            extra_headers=extra_headers,
+        )
+    except UpstreamConnectionError as exc:
+        error_msg = str(exc)
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=error_msg,
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=502,
+            error_phase="stream_header",
+            upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
+        )
+        return (
+            error_response_for_source(
+                route.source_provider, 502, f"Upstream request failed: {exc}"
+            ),
+            profile,
+        )
+
+    # If the upstream responded with an error status (e.g. 400 token limit,
+    # 429 rate limit), return a proper error response with the correct HTTP
+    # status code so the client SDK can surface the real error message.
+    if stream.is_error:
+        error_text = await stream.read_error()
+        await stream.close()
+        log_upstream_error(
+            stream.status_code,
+            error_text,
+            endpoint=str(route.target_provider),
+            is_streaming=True,
+        )
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=error_text,
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=stream.status_code,
+            error_phase="stream_header",
+            upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
+        )
+        return (
+            Response(
+                body=error_text.encode("utf-8")
+                if isinstance(error_text, str)
+                else error_text,
+                status_code=stream.status_code,
+                content_type="application/json",
+            ),
+            profile,
+        )
+
+    # Phase 4: No error — create stream processor and return SSE response
     processor = pipeline.create_stream_processor(
         on_ir_event=store.cache_from_stream_event,
     )
@@ -526,19 +543,12 @@ async def handle_streaming(
         StreamingResponse(
             _stream_event_generator(
                 source_provider=route.source_provider,
-                target_provider=route.target_provider,
+                stream=stream,
                 processor=processor,
-                transport=transport,
-                provider_info=provider_info,
-                target_body=target_body,
                 model=model,
                 format_sse=format_sse,
-                extra_headers=extra_headers,
                 entry_id=entry_id,
                 request_log=request_log,
-                persistence=persistence,
-                request_body=body,
-                provider_name=route.provider_name,
             ),
             content_type="text/event-stream",
         ),
