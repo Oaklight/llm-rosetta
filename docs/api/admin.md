@@ -610,6 +610,320 @@ GET /admin/api/diagnostics/network
 
 ---
 
+### 重建指标
+
+从持久化的请求日志重建所有指标计数器。适用于修复计数器 bug 后或内存中的计数器与
+实际日志数据不一致的情况。
+
+```
+POST /admin/api/metrics/rebuild
+```
+
+**响应**
+
+```json
+{
+  "ok": true,
+  "rebuilt_from": 1234,
+  "counters": {
+    "total_requests": 1234,
+    "total_errors": 12,
+    "total_streams": 456
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `rebuilt_from` | `int` | 用于重建计数器的日志条目数。 |
+| `counters` | `object` | 重建后的计数器值（已立即持久化）。 |
+
+**错误**：400（未配置持久化——网关以纯内存模式运行）。
+
+---
+
+## 性能分析
+
+基于 [pyinstrument](https://github.com/joerick/pyinstrument) 的按需深度性能分析。
+启用后，网关会对接下来的 *N* 个请求进行性能分析，并保存交互式火焰图结果。
+
+!!! note "可选依赖"
+    性能分析需要 `pyinstrument`。安装方式：
+    `pip install llm-rosetta[profiling]`
+
+### 获取状态
+
+返回当前的性能分析状态。
+
+```
+GET /admin/api/profiling/status
+```
+
+**响应**
+
+```json
+{
+  "enabled": false,
+  "remaining": 0,
+  "results_count": 3,
+  "max_results": 20
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `enabled` | `bool` | 性能分析是否已启用。 |
+| `remaining` | `int` | 剩余待分析的请求数。 |
+| `results_count` | `int` | 已存储的分析结果数量。 |
+| `max_results` | `int` | 保留的最大结果数（超出时裁剪最旧的）。 |
+
+---
+
+### 启用性能分析
+
+为接下来的 *N* 个请求启用性能分析。
+
+```
+POST /admin/api/profiling/enable
+```
+
+**请求体**
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|-------|------|
+| `requests` | `int` | `5` | 要分析的请求数。取值范围 **1–100**。 |
+
+**响应**
+
+```json
+{
+  "enabled": true,
+  "remaining": 10,
+  "results_count": 0,
+  "max_results": 20
+}
+```
+
+**错误**：400（未安装 `pyinstrument`）。
+
+---
+
+### 禁用性能分析
+
+在剩余计数归零之前手动禁用性能分析。
+
+```
+POST /admin/api/profiling/disable
+```
+
+**响应**
+
+```json
+{
+  "enabled": false,
+  "remaining": 0,
+  "results_count": 3,
+  "max_results": 20
+}
+```
+
+---
+
+### 列出分析结果
+
+返回所有已存储分析结果的摘要（不含完整的 HTML/text 内容以保持响应紧凑）。
+
+```
+GET /admin/api/profiling/results
+```
+
+**响应**
+
+```json
+{
+  "results": [
+    {
+      "timestamp": "2025-01-15T12:00:00+00:00",
+      "request_id": "a1b2c3d4",
+      "model": "gpt-4o",
+      "source": "openai_chat",
+      "target": "openai",
+      "is_stream": false,
+      "duration_ms": 1234.56
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### 获取单个结果
+
+按索引（从 0 开始）返回单个分析结果。
+
+```
+GET /admin/api/profiling/results/<index>
+```
+
+| 查询参数 | 类型 | 默认值 | 说明 |
+|---------|------|-------|------|
+| `format` | `"html"` \| `"json"` | `"json"` | `html` 直接返回交互式火焰图，Content-Type 为 `text/html`。 |
+
+**响应（JSON，默认）**
+
+返回完整结果对象，包含 `html` 和 `text` 字段。
+
+**响应（HTML）**
+
+直接返回 pyinstrument 火焰图 HTML 页面（Content-Type 为 `text/html`），可在浏览器中查看。
+
+**错误**：400（无效索引）、404（索引超出范围）。
+
+---
+
+### 下载全部结果
+
+将所有分析结果下载为 ZIP 压缩包。每个结果保存为 HTML 火焰图文件，
+命名格式为 `profile-<index>-<model>-<timestamp>.html`。
+
+```
+GET /admin/api/profiling/results/download
+```
+
+返回 `application/zip` 响应，带 `Content-Disposition: attachment` 头。
+
+**错误**：404（无结果可下载）。
+
+---
+
+### 清除分析结果
+
+删除所有已存储的分析结果。
+
+```
+DELETE /admin/api/profiling/results
+```
+
+**响应**
+
+```json
+{"ok": true}
+```
+
+---
+
+## 错误转储
+
+当网关在请求处理过程中遇到错误时，可以持久化详细的诊断转储，包括原始请求体、
+转换后的请求体、错误详情和计时信息。错误转储功能需要配置持久化。
+
+### 列出错误转储
+
+返回分页、可过滤的错误转储条目（最新优先）。
+
+```
+GET /admin/api/error-dumps?limit=50&offset=0
+```
+
+| 查询参数 | 类型 | 默认值 | 说明 |
+|---------|------|-------|------|
+| `limit` | `int` | `50` | 每页条数。 |
+| `offset` | `int` | `0` | 跳过的条目数。 |
+| `model` | `string` | — | 按模型名称过滤。 |
+| `error_phase` | `string` | — | 按错误发生阶段过滤。 |
+| `provider` | `string` | — | 按目标提供商过滤。 |
+
+**响应**
+
+```json
+{
+  "entries": [
+    {
+      "id": "d1e2f3a4",
+      "timestamp": "2025-01-15T12:00:00+00:00",
+      "model": "gpt-4o",
+      "provider": "openai",
+      "error_phase": "upstream",
+      "error_message": "Connection refused",
+      "status_code": 502,
+      "body_hash": "abc123..."
+    }
+  ],
+  "total": 42
+}
+```
+
+**错误**：400（未配置持久化）。
+
+---
+
+### 获取错误转储详情
+
+返回单个错误转储，包含解压后的请求体和转换后的请求体。
+
+```
+GET /admin/api/error-dumps/<dump_id>
+```
+
+**响应**
+
+```json
+{
+  "id": "d1e2f3a4",
+  "timestamp": "2025-01-15T12:00:00+00:00",
+  "model": "gpt-4o",
+  "provider": "openai",
+  "error_phase": "upstream",
+  "error_message": "Connection refused",
+  "status_code": 502,
+  "body_hash": "abc123...",
+  "request_body": {"model": "gpt-4o", "messages": [...]},
+  "converted_body_hash": "def456...",
+  "converted_body": {"model": "gpt-4o", "messages": [...]}
+}
+```
+
+`request_body` 和 `converted_body` 字段为解压后的 JSON 对象。
+如果解压失败或未存储请求体，这些字段为 `null`。
+
+**错误**：400（未配置持久化）、404（转储不存在）。
+
+---
+
+### 下载请求体
+
+下载错误转储的原始解压请求体 JSON 文件。
+
+```
+GET /admin/api/error-dumps/<dump_id>/body
+```
+
+返回 `application/json` 响应，带
+`Content-Disposition: attachment; filename="error-dump-<dump_id>.json"` 头。
+
+**错误**：400（未配置持久化）、404（转储不存在或未存储请求体）。
+
+---
+
+### 清除错误转储
+
+删除所有已存储的错误转储。
+
+```
+DELETE /admin/api/error-dumps
+```
+
+**响应**
+
+```json
+{"ok": true}
+```
+
+**错误**：400（未配置持久化）。
+
+---
+
 ## 模型测试
 
 Admin API 以异步方式执行模型测试。`POST` 启动任务后，通过 `GET` 轮询结果。

@@ -15,6 +15,11 @@ from llm_rosetta.observability import (
     ProfilerState,
     RequestLog,
     RequestLogEntry,
+    dump_error,
+    offload_images,
+    compute_body_hash,
+    compress_body,
+    decompress_body,
 )
 ```
 
@@ -144,6 +149,13 @@ pm = PersistenceManager(
 | `count_success_entries()` | 成功条目数（status < 400） |
 | `count_error_entries()` | 错误条目数（status ≥ 400） |
 | `db_file_sizes()` | 磁盘文件大小 |
+| `insert_dump_body(body_hash, data, orig_bytes)` | 插入压缩的 body 数据，按哈希去重 |
+| `insert_error_dump(dump_id, ...)` | 插入错误转储记录并在超出容量时修剪 |
+| `query_error_dumps(limit, offset, ...)` | 过滤、分页查询错误转储（最新优先） |
+| `get_error_dump(dump_id)` | 按 ID 返回单条错误转储 |
+| `get_dump_body(body_hash)` | 按哈希返回压缩的 body 数据 |
+| `count_error_dumps()` | 错误转储总条目数 |
+| `clear_error_dumps()` | 删除所有错误转储及孤立的 body 数据 |
 | `close()` | 提交并关闭数据库 |
 
 ### 保留默认值
@@ -183,6 +195,126 @@ if state.should_profile():
 | `store_result(profiler, ...)` | 存储分析结果 |
 | `status()` | 当前分析状态字典 |
 | `clear_results()` | 移除所有已存储的结果 |
+
+---
+
+## 错误转储 (Error Dump)
+
+当上游或转换错误发生时，网关可以捕获完整的请求上下文，供后续重放或调试使用。
+`error_dump` 模块提供了一组辅助函数，用于卸载图片、计算哈希、压缩并通过
+`PersistenceManager` 存储转储数据。
+
+所有公开函数均为即发即忘安全（fire-and-forget safe）——内部捕获并记录异常，
+调用方无需 `try/except` 包装。
+
+### `dump_error()`
+
+记录错误上下文的主入口。成功时返回转储 ID，持久化禁用或发生异常时返回 `None`。
+
+```python
+from llm_rosetta.observability import dump_error
+
+dump_id = dump_error(
+    persistence,
+    request_body={"model": "gpt-4o", "messages": [...]},
+    response_text="Internal Server Error",
+    converted_body=converted,
+    model="gpt-4o",
+    source_provider="openai_chat",
+    target_provider="anthropic",
+    provider_name="My Anthropic",
+    status_code=500,
+    error_phase="upstream",
+    upstream_url="https://api.anthropic.com/v1/messages",
+    request_log_id=entry.id,
+)
+```
+
+#### 参数
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `persistence` | `PersistenceManager \| None` | 持久化管理器（`None` → 空操作） |
+| `request_body` | `dict \| None` | 原始请求体字典 |
+| `response_text` | `str \| None` | 上游错误响应文本（截断至 64 KB） |
+| `converted_body` | `dict \| None` | 转换后的目标格式请求体（如有） |
+| `model` | `str \| None` | 请求中的模型名称 |
+| `source_provider` | `str \| None` | 源 API 格式（如 `"openai_chat"`） |
+| `target_provider` | `str \| None` | 目标 API 格式（如 `"anthropic"`） |
+| `provider_name` | `str \| None` | 人类可读的提供商名称 |
+| `status_code` | `int \| None` | 上游 HTTP 状态码 |
+| `error_phase` | `str \| None` | `"upstream"`、`"stream_header"`、`"stream_chunk"` 或 `"conversion"` 之一 |
+| `upstream_url` | `str \| None` | 被调用的上游 URL |
+| `request_log_id` | `str \| None` | 关联到请求日志条目的外键 |
+
+超过 10 MB（`MAX_BODY_BYTES`）的请求体将被跳过——仅存储元数据。
+
+### `offload_images(body)`
+
+将内联的 base64 图片数据 URI 替换为 SHA256 摘要占位符。返回深拷贝——原始
+body 不会被修改。
+
+```python
+from llm_rosetta.observability import offload_images
+
+cleaned = offload_images(request_body)
+# base64 数据 → "[image image/png sha256:abc123… 450KB]"
+```
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `body` | `dict[str, Any]` | 请求/响应体字典 |
+
+**返回值：** 深拷贝，其中所有 `data:image/…;base64,…` 字符串均被替换为人类可读的占位符。
+
+### `compute_body_hash(body)`
+
+对规范化 JSON（键排序、无空白）计算 SHA256 哈希。
+
+```python
+from llm_rosetta.observability import compute_body_hash
+
+h = compute_body_hash({"model": "gpt-4o", "messages": []})
+# "e3b0c44298fc1c149afb..."
+```
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `body` | `dict[str, Any]` | 要计算哈希的 body 字典 |
+
+**返回值：** 十六进制编码的 SHA256 摘要字符串。
+
+### `compress_body(body)`
+
+将 body 字典进行 JSON 序列化并 zlib 压缩。
+
+```python
+from llm_rosetta.observability import compress_body
+
+compressed, original_size = compress_body(request_body)
+```
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `body` | `dict[str, Any]` | 要压缩的 body 字典 |
+
+**返回值：** `(compressed_bytes, original_size)` 元组。
+
+### `decompress_body(data)`
+
+将 zlib 压缩的 JSON body 解压还原为字典。是 `compress_body` 的逆操作。
+
+```python
+from llm_rosetta.observability import decompress_body
+
+body = decompress_body(compressed)
+```
+
+| 参数 | 类型 | 描述 |
+|------|------|------|
+| `data` | `bytes` | zlib 压缩的 JSON 字节数据 |
+
+**返回值：** 反序列化后的字典。
 
 ---
 

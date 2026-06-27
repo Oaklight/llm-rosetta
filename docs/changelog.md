@@ -8,9 +8,26 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.0a1 — 2026-06-27
+
 ### 新增
 
-- **可观测性包** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341))：将 `MetricsCollector`、`RequestLog`、`RequestLogEntry`、`PersistenceManager` 和 `ProfilerState` 从 `gateway/admin/` 提取到新的顶层 `llm_rosetta.observability` 包。这些模块与框架无关，任何 LLM 代理消费者（如 argo-proxy）均可直接使用，无需依赖网关的配置系统或 HTTP 服务器。`gateway/admin/` 模块通过重新导出保持完全向后兼容。
+- **可观测性包** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341))：将 `MetricsCollector`、`RequestLog`、`RequestLogEntry`、`PersistenceManager` 和 `ProfilerState` 从 `gateway/admin/` 提取到新的顶层 `llm_rosetta.observability` 包。这些模块与框架无关，任何 LLM 代理消费者（如 argo-proxy）均可直接使用，无需依赖网关的配置系统或 HTTP 服务器。`gateway/admin/` 模块通过重新导出保持完全向后兼容
+- **混合性能分析系统** ([#339](https://github.com/Oaklight/llm-rosetta/pull/339))：`ConversionPipeline.profile` 中内置 always-on 的 `perf_counter` 阶段计时（source_to_ir_ms、ir_transforms_ms、ir_to_target_ms 等），加上按需的 per-request pyinstrument 深度分析（通过 admin API 控制）。核心库新增 `DeepProfiler` 上下文管理器（`llm_rosetta.profiling`）。新增 `[profiling]` 可选依赖组。Gateway admin 端点：`POST /admin/api/profiling/enable`、`GET /admin/api/profiling/results`、`GET /admin/api/profiling/results/<index>`、`POST /admin/api/profiling/disable`、`DELETE /admin/api/profiling/results`
+- **性能分析管理 UI** ([#339](https://github.com/Oaklight/llm-rosetta/pull/339))：管理面板新增 "Profiling" 区域，包含启用/停用控制、结果列表、火焰图下载（单个和批量）以及重启提示
+- **错误转储功能** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341))：Fire-and-forget 错误转储系统，在上游/转换失败时捕获完整请求上下文。哈希前进行图片卸载以实现基于内容的去重，zlib 压缩，10K 条目上限并级联修剪。proxy.py/app.py 中 4 个触发点覆盖上游错误、流头部错误、流块错误和转换错误。新导出函数：`dump_error()`、`offload_images()`、`compute_body_hash()`、`compress_body()`、`decompress_body()`（从 `llm_rosetta.observability`）
+- **指标重建** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340))：`POST /admin/api/metrics/rebuild` 端点及管理面板 "Rebuild Counters" 按钮。使用 `fetchmany(5000)` 批量迭代和原子交换从请求日志历史中重建所有指标计数器，避免暴露半重建状态
+
+### 修复
+
+- **指标按提供商名称分组** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340))：面板 breakdown 区域现在按提供商显示名称分组，而非按 API 类型（此前将所有 Anthropic 格式的提供商合并为一行）
+- **配置文件写入安全**：`write_config()` 现使用文件锁确保跨进程安全
+- **Vendored httpserver 更新至 0.2.1**：对格式错误的请求返回正确的 HTTP 错误响应，而非静默断开连接
+- **Vendored SSE 更新至 0.3.2**：解析器初始化使用构造函数参数，而非初始化后修改
+
+### 变更
+
+- **开发工具版本锁定**：在 `[project.optional-dependencies]` 中锁定 `ruff==0.15.20` 和 `ty==0.0.54`，防止上游工具发版导致 CI 漂移
 
 ## v0.7.0a0 — 2026-06-25
 
