@@ -617,6 +617,326 @@ Each sub-object includes `"ok": false` and an `"error"` message on failure.
 
 ---
 
+### Rebuild metrics
+
+Rebuild all metrics counters from the persisted request log.  Useful after
+fixing a counter bug or when in-memory counters have drifted from the actual
+log data.
+
+```
+POST /admin/api/metrics/rebuild
+```
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "rebuilt_from": 1234,
+  "counters": {
+    "total_requests": 1234,
+    "total_errors": 12,
+    "total_streams": 456
+  }
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rebuilt_from` | `int` | Number of log entries used to rebuild the counters. |
+| `counters` | `object` | The rebuilt counter values (immediately persisted). |
+
+**Errors**: 400 (no persistence configured — gateway is running in memory-only mode).
+
+---
+
+## Profiling
+
+On-demand deep profiling powered by [pyinstrument](https://github.com/joerick/pyinstrument).
+When enabled, the gateway profiles the next *N* requests and stores interactive
+flamegraph results.
+
+!!! note "Optional dependency"
+    Profiling requires `pyinstrument`.  Install with:
+    `pip install llm-rosetta[profiling]`
+
+### Get status
+
+Return the current profiling state.
+
+```
+GET /admin/api/profiling/status
+```
+
+**Response**
+
+```json
+{
+  "enabled": false,
+  "remaining": 0,
+  "results_count": 3,
+  "max_results": 20
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `enabled` | `bool` | Whether profiling is currently active. |
+| `remaining` | `int` | Number of requests left to profile. |
+| `results_count` | `int` | Number of stored profiling results. |
+| `max_results` | `int` | Maximum number of results kept (oldest are trimmed). |
+
+---
+
+### Enable profiling
+
+Enable profiling for the next *N* requests.
+
+```
+POST /admin/api/profiling/enable
+```
+
+**Request body**
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `requests` | `int` | `5` | Number of requests to profile.  Clamped to **1–100**. |
+
+**Response**
+
+```json
+{
+  "enabled": true,
+  "remaining": 10,
+  "results_count": 0,
+  "max_results": 20
+}
+```
+
+**Errors**: 400 (`pyinstrument` is not installed).
+
+---
+
+### Disable profiling
+
+Manually disable profiling before the remaining counter reaches zero.
+
+```
+POST /admin/api/profiling/disable
+```
+
+**Response**
+
+```json
+{
+  "enabled": false,
+  "remaining": 0,
+  "results_count": 3,
+  "max_results": 20
+}
+```
+
+---
+
+### List results
+
+Return summaries of all stored profiling results (without the full HTML/text
+bodies to keep the response compact).
+
+```
+GET /admin/api/profiling/results
+```
+
+**Response**
+
+```json
+{
+  "results": [
+    {
+      "timestamp": "2025-01-15T12:00:00+00:00",
+      "request_id": "a1b2c3d4",
+      "model": "gpt-4o",
+      "source": "openai_chat",
+      "target": "openai",
+      "is_stream": false,
+      "duration_ms": 1234.56
+    }
+  ],
+  "total": 1
+}
+```
+
+---
+
+### Get single result
+
+Return a single profiling result by index (0-based).
+
+```
+GET /admin/api/profiling/results/<index>
+```
+
+| Query param | Type | Default | Description |
+|-------------|------|---------|-------------|
+| `format` | `"html"` \| `"json"` | `"json"` | `html` returns the interactive flamegraph directly with `text/html` content type. |
+
+**Response (JSON, default)**
+
+Returns the full result object including `html` and `text` fields.
+
+**Response (HTML)**
+
+Returns the pyinstrument flamegraph HTML page directly (content type
+`text/html`), suitable for viewing in a browser.
+
+**Errors**: 400 (invalid index), 404 (index out of range).
+
+---
+
+### Download all results
+
+Download all profiling results as a ZIP archive.  Each result is saved as an
+HTML flamegraph file named `profile-<index>-<model>-<timestamp>.html`.
+
+```
+GET /admin/api/profiling/results/download
+```
+
+Returns a `application/zip` response with `Content-Disposition: attachment`.
+
+**Errors**: 404 (no results to download).
+
+---
+
+### Clear results
+
+Delete all stored profiling results.
+
+```
+DELETE /admin/api/profiling/results
+```
+
+**Response**
+
+```json
+{"ok": true}
+```
+
+---
+
+## Error Dumps
+
+When the gateway encounters an error during request processing, it can
+persist detailed diagnostic dumps including the original request body,
+converted body, error details, and timing information.  Error dumps require
+persistence to be configured.
+
+### List error dumps
+
+Return paginated, filtered error dump entries (newest first).
+
+```
+GET /admin/api/error-dumps?limit=50&offset=0
+```
+
+| Query param | Type | Default | Description |
+|-------------|------|---------|-------------|
+| `limit` | `int` | `50` | Page size. |
+| `offset` | `int` | `0` | Number of entries to skip. |
+| `model` | `string` | — | Filter by model name. |
+| `error_phase` | `string` | — | Filter by the phase where the error occurred. |
+| `provider` | `string` | — | Filter by target provider. |
+
+**Response**
+
+```json
+{
+  "entries": [
+    {
+      "id": "d1e2f3a4",
+      "timestamp": "2025-01-15T12:00:00+00:00",
+      "model": "gpt-4o",
+      "provider": "openai",
+      "error_phase": "upstream",
+      "error_message": "Connection refused",
+      "status_code": 502,
+      "body_hash": "abc123..."
+    }
+  ],
+  "total": 42
+}
+```
+
+**Errors**: 400 (no persistence configured).
+
+---
+
+### Get error dump detail
+
+Return a single error dump with decompressed request and converted bodies.
+
+```
+GET /admin/api/error-dumps/<dump_id>
+```
+
+**Response**
+
+```json
+{
+  "id": "d1e2f3a4",
+  "timestamp": "2025-01-15T12:00:00+00:00",
+  "model": "gpt-4o",
+  "provider": "openai",
+  "error_phase": "upstream",
+  "error_message": "Connection refused",
+  "status_code": 502,
+  "body_hash": "abc123...",
+  "request_body": {"model": "gpt-4o", "messages": [...]},
+  "converted_body_hash": "def456...",
+  "converted_body": {"model": "gpt-4o", "messages": [...]}
+}
+```
+
+The `request_body` and `converted_body` fields contain the decompressed JSON
+objects.  They are `null` if decompression fails or the body was not stored.
+
+**Errors**: 400 (no persistence configured), 404 (dump not found).
+
+---
+
+### Download request body
+
+Download the raw decompressed request body JSON for an error dump as a file.
+
+```
+GET /admin/api/error-dumps/<dump_id>/body
+```
+
+Returns a `application/json` response with
+`Content-Disposition: attachment; filename="error-dump-<dump_id>.json"`.
+
+**Errors**: 400 (no persistence configured), 404 (dump not found or no body stored).
+
+---
+
+### Clear error dumps
+
+Delete all stored error dumps.
+
+```
+DELETE /admin/api/error-dumps
+```
+
+**Response**
+
+```json
+{"ok": true}
+```
+
+**Errors**: 400 (no persistence configured).
+
+---
+
 ## Model Testing
 
 The admin API runs model tests asynchronously.  `POST` starts a task,

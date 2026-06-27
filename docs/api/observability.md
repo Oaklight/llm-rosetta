@@ -17,6 +17,11 @@ from llm_rosetta.observability import (
     ProfilerState,
     RequestLog,
     RequestLogEntry,
+    dump_error,
+    offload_images,
+    compute_body_hash,
+    compress_body,
+    decompress_body,
 )
 ```
 
@@ -148,6 +153,13 @@ pm = PersistenceManager(
 | `count_success_entries()` | Successful entries (status < 400) |
 | `count_error_entries()` | Error entries (status ≥ 400) |
 | `db_file_sizes()` | On-disk byte sizes |
+| `insert_dump_body(body_hash, data, orig_bytes)` | Insert a compressed body blob, deduplicating by hash |
+| `insert_error_dump(dump_id, ...)` | Insert an error dump record and prune if over capacity |
+| `query_error_dumps(limit, offset, ...)` | Filtered, paginated query of error dumps (newest-first) |
+| `get_error_dump(dump_id)` | Return a single error dump by ID |
+| `get_dump_body(body_hash)` | Return the compressed body blob for a hash |
+| `count_error_dumps()` | Total number of error dump entries |
+| `clear_error_dumps()` | Delete all error dumps and orphaned bodies |
 | `close()` | Commit and close the database |
 
 ### Retention defaults
@@ -188,6 +200,131 @@ if state.should_profile():
 | `store_result(profiler, ...)` | Store profiling result |
 | `status()` | Current profiling status dict |
 | `clear_results()` | Remove all stored results |
+
+---
+
+## Error Dump
+
+When an upstream or conversion error occurs, the gateway can capture the full
+request context for later replay or debugging.  The `error_dump` module provides
+helpers that offload images, hash, compress, and store the dump payload via
+`PersistenceManager`.
+
+All public functions are fire-and-forget safe — they catch and log exceptions
+internally so callers never need `try/except` wrappers.
+
+### `dump_error()`
+
+The primary entry point for recording error context.  Returns the dump ID on
+success, or `None` when persistence is disabled or an exception occurs.
+
+```python
+from llm_rosetta.observability import dump_error
+
+dump_id = dump_error(
+    persistence,
+    request_body={"model": "gpt-4o", "messages": [...]},
+    response_text="Internal Server Error",
+    converted_body=converted,
+    model="gpt-4o",
+    source_provider="openai_chat",
+    target_provider="anthropic",
+    provider_name="My Anthropic",
+    status_code=500,
+    error_phase="upstream",
+    upstream_url="https://api.anthropic.com/v1/messages",
+    request_log_id=entry.id,
+)
+```
+
+#### Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `persistence` | `PersistenceManager \| None` | Persistence manager (`None` → no-op) |
+| `request_body` | `dict \| None` | Original request body dict |
+| `response_text` | `str \| None` | Upstream error response text (truncated to 64 KB) |
+| `converted_body` | `dict \| None` | Converted target-format body, if available |
+| `model` | `str \| None` | Model name from the request |
+| `source_provider` | `str \| None` | Source API format (e.g. `"openai_chat"`) |
+| `target_provider` | `str \| None` | Target API format (e.g. `"anthropic"`) |
+| `provider_name` | `str \| None` | Human-readable provider name |
+| `status_code` | `int \| None` | Upstream HTTP status code |
+| `error_phase` | `str \| None` | One of `"upstream"`, `"stream_header"`, `"stream_chunk"`, `"conversion"` |
+| `upstream_url` | `str \| None` | The upstream URL that was called |
+| `request_log_id` | `str \| None` | Foreign key to the request log entry |
+
+Bodies larger than 10 MB (`MAX_BODY_BYTES`) are skipped — only metadata is
+stored.
+
+### `offload_images(body)`
+
+Replace inline base64 image data URIs with SHA256 digest placeholders.
+Returns a deep copy — the original body is not mutated.
+
+```python
+from llm_rosetta.observability import offload_images
+
+cleaned = offload_images(request_body)
+# base64 data → "[image image/png sha256:abc123… 450KB]"
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `body` | `dict[str, Any]` | Request/response body dict |
+
+**Returns:** A deep copy with every `data:image/…;base64,…` string replaced by
+a human-readable placeholder.
+
+### `compute_body_hash(body)`
+
+SHA256 of canonicalized JSON (sorted keys, no whitespace).
+
+```python
+from llm_rosetta.observability import compute_body_hash
+
+h = compute_body_hash({"model": "gpt-4o", "messages": []})
+# "e3b0c44298fc1c149afb..."
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `body` | `dict[str, Any]` | Body dict to hash |
+
+**Returns:** Hex-encoded SHA256 digest string.
+
+### `compress_body(body)`
+
+JSON-serialize and zlib-compress a body dict.
+
+```python
+from llm_rosetta.observability import compress_body
+
+compressed, original_size = compress_body(request_body)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `body` | `dict[str, Any]` | Body dict to compress |
+
+**Returns:** `(compressed_bytes, original_size)` tuple.
+
+### `decompress_body(data)`
+
+Decompress a zlib-compressed JSON body back to a dict.  Inverse of
+`compress_body`.
+
+```python
+from llm_rosetta.observability import decompress_body
+
+body = decompress_body(compressed)
+```
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `data` | `bytes` | zlib-compressed JSON bytes |
+
+**Returns:** Deserialized dict.
 
 ---
 

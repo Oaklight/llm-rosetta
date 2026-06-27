@@ -8,9 +8,26 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.0a1 — 2026-06-27
+
 ### Added
 
-- **Observability package** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341)): Extracted `MetricsCollector`, `RequestLog`, `RequestLogEntry`, `PersistenceManager`, and `ProfilerState` from `gateway/admin/` into a new top-level `llm_rosetta.observability` package. These modules are framework-agnostic and can be used by any LLM proxy consumer (e.g. argo-proxy) without depending on the gateway's config system or HTTP server. The `gateway/admin/` modules now re-export from `observability/` for full backward compatibility.
+- **Hybrid profiling system** ([#339](https://github.com/Oaklight/llm-rosetta/pull/339)): Always-on `perf_counter` phase timing in `ConversionPipeline.profile` (source_to_ir_ms, ir_transforms_ms, ir_to_target_ms, etc.) plus on-demand per-request pyinstrument deep profiling via admin API. `DeepProfiler` context manager in `llm_rosetta.profiling`; new `[profiling]` optional dependency group. Admin endpoints: `POST /admin/api/profiling/enable`, `GET /admin/api/profiling/results`, `GET /admin/api/profiling/results/<index>`, `POST /admin/api/profiling/disable`, `DELETE /admin/api/profiling/results`
+- **Profiling admin UI** ([#339](https://github.com/Oaklight/llm-rosetta/pull/339)): New "Profiling" section in admin dashboard with enable/disable controls, result listing, flamegraph download (single and bulk), and restart hint
+- **Error dump capability** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341)): Fire-and-forget error dump system that captures full request context on upstream/conversion failures. Image offload before hashing for content-based dedup, zlib compression, 10K entry cap with cascade pruning. Four trigger points covering upstream errors, stream header errors, stream chunk errors, and conversion errors. New functions `dump_error()`, `offload_images()`, `compute_body_hash()`, `compress_body()`, `decompress_body()` exported from `llm_rosetta.observability`
+- **Metrics rebuild** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340)): `POST /admin/api/metrics/rebuild` endpoint and "Rebuild Counters" button in admin dashboard. Reconstructs all metrics counters from request log history using batched iteration and atomic swap to avoid exposing half-rebuilt state
+- **Observability package** ([#341](https://github.com/Oaklight/llm-rosetta/issues/341)): Extracted `MetricsCollector`, `RequestLog`, `RequestLogEntry`, `PersistenceManager`, and `ProfilerState` from `gateway/admin/` into a new top-level `llm_rosetta.observability` package. These modules are framework-agnostic and can be used by any LLM proxy consumer (e.g. argo-proxy) without depending on the gateway's config system or HTTP server. The `gateway/admin/` modules now re-export from `observability/` for full backward compatibility
+
+### Fixed
+
+- **Metrics breakdown by provider name** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340)): Dashboard breakdown section now groups by provider display name instead of API type, which was merging all Anthropic-format providers into one row
+- **Config file write safety**: `write_config()` now uses file locking for cross-process safety
+- **Vendored httpserver updated to 0.2.1**: Returns proper HTTP error responses instead of silent disconnects on malformed requests
+- **Vendored SSE updated to 0.3.2**: Uses constructor arguments for parser initialization instead of post-init mutation
+
+### Changed
+
+- **Dev tool versions pinned**: `ruff==0.15.20` and `ty==0.0.54` pinned in `[project.optional-dependencies]` to prevent CI drift from upstream tool releases
 
 ## v0.7.0a0 — 2026-06-25
 
