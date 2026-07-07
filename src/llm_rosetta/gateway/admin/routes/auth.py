@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import time
 from typing import Any
 
@@ -101,7 +102,7 @@ async def admin_login(request: Any) -> Response:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
     password = body.get("password", "")
-    if password != auth_state.admin_password:
+    if not hmac.compare_digest(password, auth_state.admin_password):
         _record_login_failure(ip)
         blocked, retry_after = _check_login_rate_limit(ip)
         resp: dict[str, Any] = {"error": "Invalid password"}
@@ -120,3 +121,91 @@ async def admin_check(request: Any) -> Response:
     auth_state = request.app.auth_state
     requires_auth = bool(auth_state.admin_password)
     return JSONResponse({"requires_auth": requires_auth})
+
+
+async def change_password(request: Any) -> Response:
+    """Change the admin password (requires current password)."""
+    from ._shared import _get_config_path, _reload_gateway_config
+    from ...config import load_config_raw, write_config
+
+    auth_state = request.app.auth_state
+    if not auth_state.admin_password:
+        return JSONResponse({"error": "Admin password not configured"}, status_code=400)
+
+    # Rate-limit password change attempts the same way as login
+    ip = _get_client_ip(request)
+    blocked, retry_after = _check_login_rate_limit(ip)
+    if blocked:
+        return JSONResponse(
+            {
+                "error": f"Too many failed attempts. Try again in {int(retry_after) + 1}s."
+            },
+            status_code=429,
+        )
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    current = body.get("current_password", "")
+    new_pw = body.get("new_password", "")
+
+    if not current or not new_pw:
+        return JSONResponse(
+            {"error": "Both current_password and new_password are required"},
+            status_code=400,
+        )
+
+    if len(new_pw) < 4:
+        return JSONResponse(
+            {"error": "New password must be at least 4 characters"},
+            status_code=400,
+        )
+
+    if not hmac.compare_digest(current, auth_state.admin_password):
+        _record_login_failure(ip)
+        return JSONResponse({"error": "Current password is incorrect"}, status_code=401)
+
+    _clear_login_failures(ip)
+
+    # Persist to config file
+    config_path = _get_config_path(request)
+    if not config_path:
+        return JSONResponse({"error": "No config file path available"}, status_code=500)
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    data.setdefault("server", {})["admin_password"] = new_pw
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    # Hot-reload config (syncs auth state via _sync_auth_middleware)
+    _reload_gateway_config(request, config_path)
+
+    # Return the new admin token so frontend can swap immediately
+    return JSONResponse({"ok": True, "token": auth_state.admin_token})
+
+
+async def rotate_token(request: Any) -> Response:
+    """Rotate the internal proxy token and recalculate admin token.
+
+    The new token is in-memory only — not persisted to config.  A restart
+    regenerates a fresh token regardless, so persistence is unnecessary.
+    The copied token stops working after restart by design.
+    """
+    auth_state = request.app.auth_state
+    new_admin_token = auth_state.rotate_internal_token()
+
+    # Also update the app-level internal_token reference
+    request.app.internal_token = auth_state.internal_token
+
+    return JSONResponse({"ok": True, "token": new_admin_token})
