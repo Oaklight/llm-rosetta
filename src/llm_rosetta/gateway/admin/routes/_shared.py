@@ -53,6 +53,20 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
 
     _sync_auth_middleware(request.app, new_config)
 
+    # Hot-reload log level
+    from llm_rosetta.gateway.logging import setup_logging as _setup_logging
+
+    _setup_logging(verbose=new_config.verbose, log_bodies=new_config.log_bodies)
+
+    # Hot-reload log retention caps
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is not None:
+        rl_cfg = new_config.request_log or {}
+        if "success_max" in rl_cfg:
+            persistence.success_max = int(rl_cfg["success_max"])
+        if "error_max" in rl_cfg:
+            persistence.error_max = int(rl_cfg["error_max"])
+
     return new_config
 
 
@@ -62,6 +76,9 @@ def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
     if auth_state is not None:
         auth_state.key_set = config.api_key_set
         auth_state.labels = dict(config.api_key_labels)
+        # Sync admin password (e.g. changed via CLI or config edit)
+        if config.admin_password != auth_state.admin_password:
+            auth_state.change_password(config.admin_password or "")
 
 
 def _build_provider_entry(

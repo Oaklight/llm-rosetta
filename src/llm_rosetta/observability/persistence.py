@@ -91,10 +91,18 @@ class PersistenceManager:
         """Cap on retained successful request log entries."""
         return self._success_max
 
+    @success_max.setter
+    def success_max(self, value: int) -> None:
+        self._success_max = value
+
     @property
     def error_max(self) -> int:
         """Cap on retained error request log entries (status_code >= 400)."""
         return self._error_max
+
+    @error_max.setter
+    def error_max(self, value: int) -> None:
+        self._error_max = value
 
     @property
     def db_path(self) -> Path:

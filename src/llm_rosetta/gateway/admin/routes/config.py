@@ -152,6 +152,7 @@ async def get_config(request: Any) -> Response:
             "providers": masked_providers,
             "models": models_normalized,
             "server": server,
+            "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
             "version": _get_version(),
             "known_provider_types": known_provider_types(),
@@ -531,6 +532,26 @@ async def put_server_settings(request: Any) -> Response:
             server["proxy"] = proxy
         else:
             server.pop("proxy", None)
+
+    # Credential visibility toggle
+    if "credential_visible" in body:
+        server["credential_visible"] = bool(body["credential_visible"])
+
+    # Log retention caps (floor prevents accidental wipe)
+    if "request_log" in body:
+        rl = body["request_log"]
+        rl_cfg = server.setdefault("request_log", {})
+        if "success_max" in rl:
+            rl_cfg["success_max"] = max(50000, int(rl["success_max"]))
+        if "error_max" in rl:
+            rl_cfg["error_max"] = max(5000, int(rl["error_max"]))
+
+    # Debug / log level
+    debug = data.setdefault("debug", {})
+    if "verbose" in body:
+        debug["verbose"] = bool(body["verbose"])
+    if "log_bodies" in body:
+        debug["log_bodies"] = bool(body["log_bodies"])
 
     try:
         write_config(config_path, data)

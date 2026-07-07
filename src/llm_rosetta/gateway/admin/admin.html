@@ -68,6 +68,28 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--bg); color: var(--text);
   border: 1px solid var(--border); border-radius: 4px;
 }
+.settings-popup-item input[type="number"],
+.settings-popup-item input[type="password"] {
+  flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 4px;
+  font-family: var(--mono);
+}
+.settings-popup-item input[type="number"] { max-width: 90px; }
+.settings-popup-item .toggle-label {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px;
+}
+.settings-popup-item .toggle-label input[type="checkbox"] { accent-color: var(--accent); }
+.settings-token-row {
+  display: flex; align-items: center; gap: 6px; font-size: 11px;
+  font-family: var(--mono); color: var(--text-dim); word-break: break-all;
+}
+.countdown { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.countdown .cd-time { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.settings-section-title {
+  font-size: 11px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
+}
 .settings-divider { border-top: 1px solid var(--border); margin: 6px 0; }
 .about-link {
   display: inline-flex; align-items: center; gap: 6px;
@@ -661,8 +683,9 @@ body { padding-bottom: 26px; }
 
 <!-- Settings Popup (tinyleaf-style) -->
 <div class="settings-popup" id="settingsPopup" onclick="this.classList.remove('open')">
-  <div class="settings-popup-panel" onclick="event.stopPropagation()">
+  <div class="settings-popup-panel" onclick="event.stopPropagation()" style="max-height:85vh;overflow-y:auto">
     <h3 data-i18n="modal.settings">Settings</h3>
+    <!-- Theme & Language -->
     <div class="settings-popup-item">
       <label data-i18n="label.theme">Theme</label>
       <select id="settingsThemeSelect" onchange="setTheme(this.value)">
@@ -678,6 +701,81 @@ body { padding-bottom: 26px; }
       </select>
     </div>
     <div class="settings-divider"></div>
+    <!-- Log Level & Auto-Refresh -->
+    <div class="settings-popup-item">
+      <label data-i18n="label.logLevel">Log Level</label>
+      <select id="settingsLogLevel" onchange="saveSettingsField('logLevel',this.value)">
+        <option value="normal" data-i18n="logLevel.normal">Normal</option>
+        <option value="verbose" data-i18n="logLevel.verbose">Verbose</option>
+        <option value="debug" data-i18n="logLevel.debug">Debug (bodies)</option>
+      </select>
+    </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.autoRefresh">Auto-Refresh</label>
+      <select id="settingsAutoRefresh" onchange="saveAutoRefresh(this.value)">
+        <option value="1000">1s</option>
+        <option value="3000" selected>3s</option>
+        <option value="5000">5s</option>
+        <option value="10000">10s</option>
+        <option value="30000">30s</option>
+        <option value="0" data-i18n="label.off">Off</option>
+      </select>
+    </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.credentialReveal">Credential Reveal</label>
+      <label class="toggle-label">
+        <input type="checkbox" id="settingsCredentialVisible" onchange="saveSettingsField('credentialVisible',this.checked)">
+        <span data-i18n="label.enabled">Enabled</span>
+      </label>
+    </div>
+    <div class="settings-divider"></div>
+    <!-- Log Retention -->
+    <div class="settings-section-title" data-i18n="label.logRetention">Log Retention</div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.successMax">Success</label>
+      <input type="number" id="settingsSuccessMax" min="50000" step="10000" value="50000">
+    </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.errorMax">Error</label>
+      <input type="number" id="settingsErrorMax" min="5000" step="5000" value="10000">
+      <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
+    </div>
+    <div class="settings-divider"></div>
+    <!-- Admin Token -->
+    <div class="settings-section-title" data-i18n="label.adminToken">Admin Token</div>
+    <div class="settings-token-row">
+      <span id="settingsTokenDisplay" style="flex:1">—</span>
+      <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
+      <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotate">Rotate</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+      <span class="countdown" id="tokenCountdown"></span>
+      <select id="settingsRotateInterval" style="font-size:11px;padding:2px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
+        <option value="5">5 min</option>
+        <option value="15" selected>15 min</option>
+        <option value="30">30 min</option>
+        <option value="60">60 min</option>
+      </select>
+    </div>
+    <div class="settings-divider"></div>
+    <!-- Change Password -->
+    <div class="settings-section-title" data-i18n="label.changePassword">Change Password</div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.currentPw">Current</label>
+      <input type="password" id="settingsCurrentPw" autocomplete="current-password">
+    </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.newPw">New</label>
+      <input type="password" id="settingsNewPw" autocomplete="new-password">
+    </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.confirmPw">Confirm</label>
+      <input type="password" id="settingsConfirmPw" autocomplete="new-password">
+      <button class="btn btn-sm" onclick="changeAdminPassword()" data-i18n="btn.change">Change</button>
+    </div>
+    <div id="settingsPwError" style="font-size:11px;color:var(--error);margin-top:2px"></div>
+    <div class="settings-divider"></div>
+    <!-- Version & Links -->
     <div style="text-align:center;padding:4px 0 2px">
       <div style="font-size:15px;font-weight:600;margin-bottom:2px">llm-rosetta</div>
       <div id="settingsVersion" style="font-size:11px;color:var(--text-dim);margin-bottom:8px"></div>
@@ -968,7 +1066,14 @@ const I18N = {
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL',
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
-    'btn.save':'Save', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
+    'btn.save':'Save', 'btn.copy':'Copy', 'btn.change':'Change', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
+    'label.logLevel':'Log Level', 'logLevel.normal':'Normal', 'logLevel.verbose':'Verbose', 'logLevel.debug':'Debug (bodies)',
+    'label.autoRefresh':'Auto-Refresh', 'label.off':'Off', 'label.credentialReveal':'Credential Reveal', 'label.enabled':'Enabled',
+    'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error',
+    'label.adminToken':'Admin Token', 'label.rotatingIn':'Rotating in <span class="cd-time">{time}</span>',
+    'label.changePassword':'Change Password', 'label.currentPw':'Current', 'label.newPw':'New', 'label.confirmPw':'Confirm',
+    'pw.required':'Both current and new password required', 'pw.mismatch':'Passwords do not match', 'pw.tooShort':'Password too short (min 4)', 'pw.changed':'Password changed',
+    'toast.saved':'Saved', 'toast.error':'Error', 'toast.copied':'Copied to clipboard', 'toast.copyFailed':'Copy failed', 'toast.tokenRotated':'Token rotated', 'toast.retentionMin':'Minimum: success 50,000 / error 5,000',
     'btn.addProvider':'+ Add Provider', 'btn.addModel':'+ Add Model',
     'btn.edit':'Edit', 'btn.delete':'Delete', 'btn.rotate':'Rotate', 'btn.resetFilters':'Reset Filters',
     'btn.prev':'Prev', 'btn.next':'Next', 'btn.test':'Test',
@@ -1085,7 +1190,14 @@ const I18N = {
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
     'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u65b9\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
     'modal.settings':'\u8bbe\u7f6e', 'label.theme':'\u4e3b\u9898', 'label.language':'\u8bed\u8a00', 'theme.light':'\u6d45\u8272', 'theme.dark':'\u6df1\u8272',
-    'btn.save':'\u4fdd\u5b58', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
+    'btn.save':'\u4fdd\u5b58', 'btn.copy':'\u590d\u5236', 'btn.change':'\u4fee\u6539', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
+    'label.logLevel':'\u65e5\u5fd7\u7ea7\u522b', 'logLevel.normal':'\u6b63\u5e38', 'logLevel.verbose':'\u8be6\u7ec6', 'logLevel.debug':'\u8c03\u8bd5 (\u542b\u8bf7\u6c42\u4f53)',
+    'label.autoRefresh':'\u81ea\u52a8\u5237\u65b0', 'label.off':'\u5173\u95ed', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.enabled':'\u5df2\u542f\u7528',
+    'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25',
+    'label.adminToken':'\u7ba1\u7406 Token', 'label.rotatingIn':'<span class="cd-time">{time}</span> \u540e\u8f6e\u6362',
+    'label.changePassword':'\u4fee\u6539\u5bc6\u7801', 'label.currentPw':'\u5f53\u524d\u5bc6\u7801', 'label.newPw':'\u65b0\u5bc6\u7801', 'label.confirmPw':'\u786e\u8ba4\u5bc6\u7801',
+    'pw.required':'\u8bf7\u586b\u5199\u5f53\u524d\u5bc6\u7801\u548c\u65b0\u5bc6\u7801', 'pw.mismatch':'\u4e24\u6b21\u8f93\u5165\u4e0d\u4e00\u81f4', 'pw.tooShort':'\u5bc6\u7801\u592a\u77ed\uff08\u81f3\u5c114\u4f4d\uff09', 'pw.changed':'\u5bc6\u7801\u5df2\u4fee\u6539',
+    'toast.saved':'\u5df2\u4fdd\u5b58', 'toast.error':'\u64cd\u4f5c\u5931\u8d25', 'toast.copied':'\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f', 'toast.copyFailed':'\u590d\u5236\u5931\u8d25', 'toast.tokenRotated':'Token \u5df2\u8f6e\u6362', 'toast.retentionMin':'\u6700\u4f4e\uff1a\u6210\u529f 50,000 / \u5931\u8d25 5,000',
     'btn.addProvider':'+ \u6dfb\u52a0\u670d\u52a1\u65b9', 'btn.addModel':'+ \u6dfb\u52a0\u6a21\u578b',
     'btn.edit':'\u7f16\u8f91', 'btn.delete':'\u5220\u9664', 'btn.rotate':'\u8f6e\u6362', 'btn.resetFilters':'\u91cd\u7f6e\u8fc7\u6ee4\u5668',
     'btn.prev':'\u4e0a\u4e00\u9875', 'btn.next':'\u4e0b\u4e00\u9875', 'btn.test':'\u6d4b\u8bd5',
@@ -1314,15 +1426,172 @@ function doLogout() {
 
 function openSettings() {
   const popup = document.getElementById('settingsPopup');
-  // Sync dropdowns with current state
+  // Sync theme & language
   const ts = document.getElementById('settingsThemeSelect');
   if (ts) ts.value = currentTheme;
   const ls = document.getElementById('settingsLangSelect');
   if (ls) ls.value = currentLang;
-  // Show version
+  // Version
   const ver = document.getElementById('settingsVersion');
   if (ver) ver.textContent = configData?.version ? 'v' + configData.version : '';
+  // Sync log level
+  const ll = document.getElementById('settingsLogLevel');
+  if (ll && configData?.server) {
+    const dbg = configData.debug || {};
+    if (dbg.log_bodies) ll.value = 'debug';
+    else if (dbg.verbose) ll.value = 'verbose';
+    else ll.value = 'normal';
+  }
+  // Sync auto-refresh
+  const ar = document.getElementById('settingsAutoRefresh');
+  if (ar) ar.value = localStorage.getItem('dashboardRefreshMs') || '3000';
+  // Sync credential visibility
+  const cv = document.getElementById('settingsCredentialVisible');
+  if (cv) cv.checked = _credentialVisible;
+  // Sync log retention
+  if (configData?.server?.request_log) {
+    const sm = document.getElementById('settingsSuccessMax');
+    const em = document.getElementById('settingsErrorMax');
+    if (sm) sm.value = configData.server.request_log.success_max || 50000;
+    if (em) em.value = configData.server.request_log.error_max || 10000;
+  }
+  // Sync token
+  _refreshTokenDisplay();
+  // Sync rotate interval
+  const ri = document.getElementById('settingsRotateInterval');
+  if (ri) ri.value = localStorage.getItem('tokenRotateMinutes') || '15';
+  // Clear password fields
+  ['settingsCurrentPw','settingsNewPw','settingsConfirmPw'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('settingsPwError').textContent = '';
   popup.classList.toggle('open');
+}
+
+// --- Settings save helpers ---
+let _dashboardRefreshMs = parseInt(localStorage.getItem('dashboardRefreshMs') || '3000', 10);
+
+async function saveSettingsField(field, value) {
+  const body = {};
+  if (field === 'logLevel') {
+    body.verbose = (value === 'verbose' || value === 'debug');
+    body.log_bodies = (value === 'debug');
+  } else if (field === 'credentialVisible') {
+    body.credential_visible = value;
+  }
+  try {
+    await api.put('/admin/api/config/server', body);
+    await loadConfig(); showToast(t('toast.saved'));
+  } catch { showToast(t('toast.error'), 'error'); }
+}
+
+function saveAutoRefresh(val) {
+  _dashboardRefreshMs = parseInt(val, 10);
+  localStorage.setItem('dashboardRefreshMs', val);
+  // Restart dashboard timer if active
+  if (dashboardTimer) {
+    clearInterval(dashboardTimer);
+    dashboardTimer = _dashboardRefreshMs > 0
+      ? setInterval(loadMetrics, _dashboardRefreshMs)
+      : null;
+  }
+}
+
+async function saveLogRetention() {
+  const sm = parseInt(document.getElementById('settingsSuccessMax')?.value || '50000', 10);
+  const em = parseInt(document.getElementById('settingsErrorMax')?.value || '10000', 10);
+  if (sm < 50000 || em < 5000) { showToast(t('toast.retentionMin'), 'error'); return; }
+  try {
+    await api.put('/admin/api/config/server', { request_log: { success_max: sm, error_max: em } });
+    await loadConfig(); showToast(t('toast.saved'));
+  } catch { showToast(t('toast.error'), 'error'); }
+}
+
+// --- Admin Token ---
+let _tokenRotateTimer = null;
+let _tokenRotateEnd = 0;
+let _tokenCountdownTimer = null;
+
+function _refreshTokenDisplay() {
+  const el = document.getElementById('settingsTokenDisplay');
+  if (!el || !internalToken) { if (el) el.textContent = '—'; return; }
+  // Mask: show first 14 chars + ... + last 4
+  const masked = internalToken.length > 20
+    ? internalToken.slice(0, 14) + '...' + internalToken.slice(-4)
+    : internalToken;
+  el.textContent = masked;
+}
+
+async function copyAdminToken() {
+  if (!internalToken) return;
+  try {
+    await navigator.clipboard.writeText(internalToken);
+    showToast(t('toast.copied'));
+  } catch { showToast(t('toast.copyFailed'), 'error'); return; }
+  // Start auto-rotate countdown
+  const minutes = parseInt(localStorage.getItem('tokenRotateMinutes') || '15', 10);
+  _tokenRotateEnd = Date.now() + minutes * 60 * 1000;
+  if (_tokenRotateTimer) clearTimeout(_tokenRotateTimer);
+  if (_tokenCountdownTimer) clearInterval(_tokenCountdownTimer);
+  _tokenRotateTimer = setTimeout(_doTokenRotate, minutes * 60 * 1000);
+  _tokenCountdownTimer = setInterval(_updateTokenCountdown, 1000);
+  _updateTokenCountdown();
+}
+
+function _updateTokenCountdown() {
+  const el = document.getElementById('tokenCountdown');
+  if (!el) return;
+  const remaining = Math.max(0, _tokenRotateEnd - Date.now());
+  if (remaining <= 0) {
+    el.textContent = '';
+    if (_tokenCountdownTimer) { clearInterval(_tokenCountdownTimer); _tokenCountdownTimer = null; }
+    return;
+  }
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  el.innerHTML = t('label.rotatingIn', { time: `${mins}:${String(secs).padStart(2,'0')}` });
+}
+
+async function _doTokenRotate() {
+  _tokenRotateTimer = null;
+  if (_tokenCountdownTimer) { clearInterval(_tokenCountdownTimer); _tokenCountdownTimer = null; }
+  document.getElementById('tokenCountdown').textContent = '';
+  try {
+    const data = await api.post('/admin/api/token/rotate');
+    // api.post returns parsed JSON directly, not a Response
+    if (data.token) {
+      localStorage.setItem('admin_token', data.token);
+    }
+    // Refresh internal token display
+    const td = await api.get('/admin/api/internal-token');
+    internalToken = td.token;
+    _refreshTokenDisplay();
+    showToast(t('toast.tokenRotated'));
+  } catch (e) {
+    showToast(t('toast.error'), 'error');
+  }
+}
+
+// --- Change Password ---
+async function changeAdminPassword() {
+  const current = document.getElementById('settingsCurrentPw')?.value || '';
+  const newPw = document.getElementById('settingsNewPw')?.value || '';
+  const confirm = document.getElementById('settingsConfirmPw')?.value || '';
+  const errEl = document.getElementById('settingsPwError');
+  errEl.textContent = '';
+  if (!current || !newPw) { errEl.textContent = t('pw.required'); return; }
+  if (newPw !== confirm) { errEl.textContent = t('pw.mismatch'); return; }
+  if (newPw.length < 4) { errEl.textContent = t('pw.tooShort'); return; }
+  try {
+    const data = await api.put('/admin/api/config/password', { current_password: current, new_password: newPw });
+    if (data.token) localStorage.setItem('admin_token', data.token);
+    ['settingsCurrentPw','settingsNewPw','settingsConfirmPw'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    showToast(t('pw.changed'));
+  } catch (e) {
+    errEl.textContent = e.message || t('toast.error');
+  }
 }
 
 function showLoginOverlay() {
@@ -2891,7 +3160,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     currentTab = id;
     localStorage.setItem('llm-rosetta-tab', id);
     stopTimers();
-    if (id === 'dashboard') { loadMetrics(); dashboardTimer = setInterval(loadMetrics, 3000); }
+    if (id === 'dashboard') { loadMetrics(); dashboardTimer = (_dashboardRefreshMs > 0 ? setInterval(loadMetrics, _dashboardRefreshMs) : null); }
     if (id === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
     if (id === 'providers' || id === 'models') { loadConfig(); }
     if (id === 'keys') { loadKeys(); }
@@ -3261,7 +3530,7 @@ function initApp() {
   // the tab restore (savedTab.click()) runs before auth completes, so
   // its fetch calls fail with 401.  Re-trigger here after successful auth.
   stopTimers();
-  if (currentTab === 'dashboard') { loadMetrics(); dashboardTimer = setInterval(loadMetrics, 3000); }
+  if (currentTab === 'dashboard') { loadMetrics(); dashboardTimer = (_dashboardRefreshMs > 0 ? setInterval(loadMetrics, _dashboardRefreshMs) : null); }
   if (currentTab === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
 }
 // ===================== System Clock =====================

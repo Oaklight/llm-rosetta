@@ -14,6 +14,7 @@ configured, all requests pass through (backward compatible).
 from __future__ import annotations
 
 import contextvars
+import hmac
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
@@ -120,7 +121,7 @@ def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
 
     # Check X-Admin-Token header
     admin_token = request.headers.get("x-admin-token", "")
-    if admin_token and admin_token == auth_state.admin_token:
+    if admin_token and hmac.compare_digest(admin_token, auth_state.admin_token or ""):
         return None
 
     # Block unauthenticated API calls
@@ -147,15 +148,49 @@ class AuthState:
         self.admin_password = admin_password
         # Derive admin token from password + internal_token via HMAC
         self.admin_token: str | None = None
-        if admin_password and internal_token:
+        self._recalculate_admin_token()
+
+    def _recalculate_admin_token(self) -> None:
+        """Derive ``admin_token`` from ``admin_password`` + ``internal_token``.
+
+        Called on init and after password or internal_token changes.
+        """
+        if self.admin_password and self.internal_token:
             import hashlib
             import hmac as _hmac
 
             self.admin_token = _hmac.new(
-                internal_token.encode(),
-                admin_password.encode(),
+                self.internal_token.encode(),
+                self.admin_password.encode(),
                 hashlib.sha256,
             ).hexdigest()
+        else:
+            self.admin_token = None
+
+    def rotate_internal_token(self) -> str:
+        """Generate a new internal token and recalculate admin_token.
+
+        Returns:
+            The new admin_token (or empty string if no password is set).
+        """
+        import secrets
+
+        self.internal_token = f"rsk-internal-{secrets.token_hex(16)}"
+        self._recalculate_admin_token()
+        return self.admin_token or ""
+
+    def change_password(self, new_password: str) -> str:
+        """Update the admin password and recalculate admin_token.
+
+        Args:
+            new_password: The new plaintext password.
+
+        Returns:
+            The new admin_token.
+        """
+        self.admin_password = new_password
+        self._recalculate_admin_token()
+        return self.admin_token or ""
 
 
 def create_auth_hook(auth_state: AuthState) -> Any:

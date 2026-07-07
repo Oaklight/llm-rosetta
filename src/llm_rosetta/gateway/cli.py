@@ -202,6 +202,51 @@ def _cmd_add_model(args: argparse.Namespace) -> None:
 # CLI entry point
 # ---------------------------------------------------------------------------
 
+
+def _cmd_set_password(args: argparse.Namespace) -> None:
+    """Set or change the admin password directly in the config file.
+
+    Intended for forgot-password recovery — does not require the current
+    password.  The gateway must be restarted for the change to take effect
+    (unless it happens to hot-reload the config).
+    """
+    import getpass
+
+    config_path = discover_config(args.config)
+    if config_path is None or not os.path.isfile(config_path):
+        print(f"Config file not found: {config_path or '(auto-detect failed)'}")
+        sys.exit(1)
+
+    new_pw = getpass.getpass("New admin password: ")
+    if not new_pw:
+        print("Password cannot be empty.")
+        sys.exit(1)
+    if len(new_pw) < 4:
+        print("Password must be at least 4 characters.")
+        sys.exit(1)
+    confirm = getpass.getpass("Confirm password: ")
+    if new_pw != confirm:
+        print("Passwords do not match.")
+        sys.exit(1)
+
+    try:
+        data = load_config_raw(config_path)
+    except Exception as exc:
+        print(f"Failed to read config: {exc}")
+        sys.exit(1)
+
+    data.setdefault("server", {})["admin_password"] = new_pw
+
+    try:
+        write_config(config_path, data)
+    except Exception as exc:
+        print(f"Failed to write config: {exc}")
+        sys.exit(1)
+
+    print(f"Admin password updated in {config_path}")
+    print("Restart the gateway for changes to take effect.")
+
+
 _KNOWN_PROVIDERS = known_provider_types()
 
 
@@ -286,6 +331,15 @@ def main() -> None:
     model_parser.add_argument("name", help="Model name (e.g. gpt-4o)")
     model_parser.add_argument("--provider", default=None, help="Target provider name")
 
+    # ``set-password`` subcommand
+    pw_parser = sub.add_parser(
+        "set-password",
+        help="Set or change admin password (for forgot-password recovery)",
+    )
+    pw_parser.add_argument(
+        "config", nargs="?", default=None, help="Path to config file"
+    )
+
     args = parser.parse_args()
 
     # --- edit mode ---
@@ -306,6 +360,11 @@ def main() -> None:
             _cmd_add_model(args)
         else:
             sub.choices["add"].print_help()
+        return
+
+    # --- set-password subcommand ---
+    if args.command == "set-password":
+        _cmd_set_password(args)
         return
 
     # --- normal server startup ---
