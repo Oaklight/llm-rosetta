@@ -654,6 +654,29 @@ body { padding-bottom: 26px; }
       </table></div>
       <div id="profilingEmpty" class="empty" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
     </div>
+    <div class="section" id="captureSection">
+      <h2 style="margin-bottom:12px" data-i18n="section.capture">Content Capture</h2>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <span id="captureBadge" class="badge" style="padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600">OFF</span>
+        <label style="font-size:13px" data-i18n="capture.requests">Requests:</label>
+        <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+        <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
+        <button class="btn btn-sm" onclick="clearCaptureResults()" data-i18n="capture.clear">Clear</button>
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="capture.hint">Captures full request/response bodies in memory. Results are ephemeral and lost on restart.</p>
+      <div class="table-scroll"><table>
+        <thead><tr>
+          <th data-i18n="col.time">Time</th>
+          <th data-i18n="col.model">Model</th>
+          <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
+          <th data-i18n="capture.mode">Mode</th>
+          <th data-i18n="col.status">Status</th>
+          <th data-i18n="capture.detail">Detail</th>
+        </tr></thead>
+        <tbody id="captureResults"></tbody>
+      </table></div>
+      <div id="captureEmpty" class="empty" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
+    </div>
   </div>
 
   <!-- Request Log Tab -->
@@ -1107,6 +1130,12 @@ const I18N = {
     'profiling.empty':'No profiling results. Enable profiling and send requests.',
     'profiling.remaining':'{n} remaining',
     'profiling.downloadAll':'Download All', 'profiling.hint':'Results are in-memory only and will be lost on restart. Download important results.',
+    'section.capture':'Content Capture',
+    'capture.enable':'Enable', 'capture.disable':'Disable', 'capture.clear':'Clear',
+    'capture.requests':'Requests:', 'capture.detail':'Detail', 'capture.mode':'Mode',
+    'capture.empty':'No captures. Enable capture and send requests.',
+    'capture.remaining':'{n} remaining',
+    'capture.hint':'Captures full request/response bodies in memory. Results are ephemeral and lost on restart.',
     'filter.allModels':'All Models', 'filter.allProviders':'All Providers',
     'filter.allStatus':'All Status', 'filter.ok':'OK (2xx/3xx)', 'filter.error':'Error (4xx/5xx)',
     'test.text':'Simple Text', 'test.stream':'Stream',
@@ -1231,6 +1260,12 @@ const I18N = {
     'profiling.empty':'\u6682\u65e0\u5206\u6790\u7ed3\u679c\u3002\u542f\u7528\u540e\u53d1\u9001\u8bf7\u6c42\u5373\u53ef\u91c7\u96c6\u3002',
     'profiling.remaining':'\u5269\u4f59 {n} \u4e2a',
     'profiling.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'profiling.hint':'\u7ed3\u679c\u4ec5\u5b58\u4e8e\u5185\u5b58\uff0c\u91cd\u542f\u540e\u4e22\u5931\u3002\u8bf7\u53ca\u65f6\u4e0b\u8f7d\u91cd\u8981\u7ed3\u679c\u3002',
+    'section.capture':'\u5185\u5bb9\u6355\u83b7',
+    'capture.enable':'\u542f\u7528', 'capture.disable':'\u505c\u6b62', 'capture.clear':'\u6e05\u7a7a',
+    'capture.requests':'\u8bf7\u6c42\u6570\uff1a', 'capture.detail':'\u8be6\u60c5', 'capture.mode':'\u6a21\u5f0f',
+    'capture.empty':'\u6682\u65e0\u6355\u83b7\u7ed3\u679c\u3002\u542f\u7528\u540e\u53d1\u9001\u8bf7\u6c42\u5373\u53ef\u91c7\u96c6\u3002',
+    'capture.remaining':'\u5269\u4f59 {n} \u4e2a',
+    'capture.hint':'\u6355\u83b7\u5b8c\u6574\u8bf7\u6c42/\u54cd\u5e94\u4f53\u5230\u5185\u5b58\u3002\u7ed3\u679c\u4ec5\u5b58\u4e8e\u5185\u5b58\uff0c\u91cd\u542f\u540e\u4e22\u5931\u3002',
     'filter.allModels':'\u5168\u90e8\u6a21\u578b', 'filter.allProviders':'\u5168\u90e8\u670d\u52a1\u65b9',
     'filter.allStatus':'\u5168\u90e8\u72b6\u6001', 'filter.ok':'\u6b63\u5e38 (2xx/3xx)', 'filter.error':'\u9519\u8bef (4xx/5xx)',
     'test.text':'\u7b80\u5355\u6587\u672c', 'test.stream':'\u6d41\u5f0f',
@@ -2756,6 +2791,8 @@ async function loadMetrics() {
   renderPersistence(data.persistence, data.total_requests);
   loadProfilingStatus();
   loadProfilingResults();
+  loadCaptureStatus();
+  loadCaptureResults();
 }
 
 // ===================== Profiling =====================
@@ -2869,6 +2906,100 @@ async function downloadAllFlamegraphs() {
     a.click();
     URL.revokeObjectURL(a.href);
   } catch (e) { showToast('Failed to download', 'error'); }
+}
+
+// ===================== Content Capture =====================
+let _captureEnabled = false;
+
+async function loadCaptureStatus() {
+  try {
+    const s = await api.get('/admin/api/capture/status');
+    _captureEnabled = s.enabled;
+    const badge = document.getElementById('captureBadge');
+    const btn = document.getElementById('captureToggleBtn');
+    if (badge) {
+      if (s.enabled) {
+        badge.textContent = t('capture.remaining').replace('{n}', s.remaining);
+        badge.style.background = 'var(--green, #22c55e)';
+        badge.style.color = '#fff';
+      } else {
+        badge.textContent = 'OFF';
+        badge.style.background = 'var(--text-dim, #888)';
+        badge.style.color = '#fff';
+      }
+    }
+    if (btn) btn.textContent = s.enabled ? t('capture.disable') : t('capture.enable');
+  } catch (e) { /* ignore */ }
+}
+
+async function loadCaptureResults() {
+  try {
+    const data = await api.get('/admin/api/capture/results');
+    const tbody = document.getElementById('captureResults');
+    const empty = document.getElementById('captureEmpty');
+    if (!tbody) return;
+    const results = data.results || [];
+    if (results.length === 0) {
+      tbody.innerHTML = '';
+      if (empty) empty.style.display = '';
+      return;
+    }
+    if (empty) empty.style.display = 'none';
+    tbody.innerHTML = results.map((r, i) => {
+      const ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '-';
+      const mode = r.is_stream ? 'stream' : 'sync';
+      const st = r.status_code != null ? r.status_code : '-';
+      return `<tr>
+        <td>${esc(ts)}</td>
+        <td>${esc(r.model || '-')}</td>
+        <td>${esc(r.source_provider || '-')} \u2192 ${esc(r.target_provider || '-')}</td>
+        <td>${mode}</td>
+        <td>${st}</td>
+        <td><button class="btn btn-sm" onclick="viewCapture(${i})" title="View">\ud83d\udd0d</button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) { /* ignore */ }
+}
+
+async function toggleCapture() {
+  if (_captureEnabled) {
+    await api.post('/admin/api/capture/disable');
+  } else {
+    const n = parseInt(document.getElementById('captureCount')?.value || '5', 10);
+    await api.post('/admin/api/capture/enable', { requests: Math.max(1, Math.min(100, n)) });
+  }
+  await loadCaptureStatus();
+}
+
+async function clearCaptureResults() {
+  await api.del('/admin/api/capture/results');
+  await loadCaptureResults();
+}
+
+async function viewCapture(index) {
+  try {
+    const data = await api.get('/admin/api/capture/results/' + index);
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const sections = [
+      { title: 'Original Request', body: data.original_request },
+      { title: 'Converted Body', body: data.converted_body },
+      { title: 'Upstream Response', body: data.upstream_response },
+    ];
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Capture #${index}</title>
+<style>body{font-family:system-ui,sans-serif;margin:20px;background:#1a1a2e;color:#e0e0e0}
+h1{font-size:18px;color:#a0c4ff}h2{font-size:15px;margin-top:24px;color:#bbb;cursor:pointer;user-select:none}
+.meta{font-size:13px;color:#888;margin-bottom:16px}
+pre{background:#0d1117;padding:12px;border-radius:6px;overflow-x:auto;font-size:13px;line-height:1.5;border:1px solid #333;white-space:pre-wrap;word-break:break-word}
+.collapsed pre{display:none}
+</style></head><body>
+<h1>Content Capture Detail</h1>
+<div class="meta">Model: ${esc(data.model||'-')} | ${esc(data.source_provider||'-')} \u2192 ${esc(data.target_provider||'-')} | ${data.is_stream?'stream':'sync'} | Status: ${data.status_code??'-'} | ${esc(data.timestamp||'-')}</div>
+${sections.map(s => `<div><h2 onclick="this.parentElement.classList.toggle('collapsed')">${s.title} \u25bc</h2><pre>${esc(JSON.stringify(s.body, null, 2))}</pre></div>`).join('')}
+</body></html>`;
+    w.document.write(html);
+    w.document.close();
+  } catch (e) { showToast('Failed to load capture detail', 'error'); }
 }
 
 // Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.

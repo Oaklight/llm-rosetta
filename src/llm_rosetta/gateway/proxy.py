@@ -25,6 +25,7 @@ from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
 
+from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
 
 from .logging import (
@@ -245,6 +246,7 @@ async def handle_non_streaming(
     metadata_store: ProviderMetadataStore | None = None,
     extra_headers: dict[str, str] | None = None,
     persistence: Any | None = None,
+    capture_state: CaptureState | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -343,6 +345,25 @@ async def handle_non_streaming(
 
     # Merge response-phase timings from pipeline
     profile.update(pipeline.profile)
+
+    # Content capture (non-streaming): record all three stages
+    if capture_state is not None:
+        capture_state.record(
+            CapturedRequest(
+                original_request=body,
+                converted_body=target_body,
+                upstream_response=resp.body,
+                request_id=(
+                    extra_headers.get("x-request-id", "") if extra_headers else ""
+                ),
+                model=model,
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                is_stream=False,
+                status_code=resp.status_code,
+            )
+        )
+
     return JSONResponse(source_response), profile
 
 
@@ -355,6 +376,8 @@ async def _stream_event_generator(
     format_sse: Any,
     entry_id: str | None = None,
     request_log: Any | None = None,
+    capture_record: CapturedRequest | None = None,
+    capture_state: CaptureState | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
 
@@ -369,6 +392,9 @@ async def _stream_event_generator(
     stream_error: str | None = None
     ttfb_ms: float | None = None
     t_stream_open = time.perf_counter()
+    upstream_chunks: list[dict[str, Any]] | None = (
+        [] if capture_record is not None else None
+    )
 
     try:
         async with stream:
@@ -376,6 +402,8 @@ async def _stream_event_generator(
                 if chunk_count == 0:
                     ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
                 chunk_count += 1
+                if upstream_chunks is not None:
+                    upstream_chunks.append(chunk)
                 for source_event in processor.process_chunk(chunk):
                     yield format_sse(source_event)
 
@@ -407,6 +435,12 @@ async def _stream_event_generator(
             except Exception:
                 logger.debug("Failed to write stream profile for %s", entry_id)
 
+        # Content capture (streaming): record accumulated upstream chunks
+        if capture_record is not None and capture_state is not None:
+            capture_record.upstream_response = upstream_chunks
+            capture_record.status_code = getattr(stream, "status_code", 200)
+            capture_state.record(capture_record)
+
 
 async def handle_streaming(
     route: ResolvedRoute,
@@ -419,6 +453,7 @@ async def handle_streaming(
     entry_id: str | None = None,
     request_log: Any | None = None,
     persistence: Any | None = None,
+    capture_state: CaptureState | None = None,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -547,6 +582,21 @@ async def handle_streaming(
     )
     format_sse = SSE_FORMATTERS[route.source_provider]
 
+    # Build a partial capture record if content capture is active.
+    # The generator will fill in upstream_response and status_code
+    # after the stream completes.
+    _capture_record: CapturedRequest | None = None
+    if capture_state is not None:
+        _capture_record = CapturedRequest(
+            original_request=body,
+            converted_body=target_body,
+            request_id=(extra_headers.get("x-request-id", "") if extra_headers else ""),
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            is_stream=True,
+        )
+
     return (
         StreamingResponse(
             _stream_event_generator(
@@ -557,6 +607,8 @@ async def handle_streaming(
                 format_sse=format_sse,
                 entry_id=entry_id,
                 request_log=request_log,
+                capture_record=_capture_record,
+                capture_state=capture_state,
             ),
             content_type="text/event-stream",
         ),

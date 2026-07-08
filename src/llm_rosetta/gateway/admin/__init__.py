@@ -110,9 +110,15 @@ def setup_admin(
 
     profiler_state = ProfilerState()
 
+    # In-memory content capture state
+    from llm_rosetta.observability import CaptureState
+
+    capture_state = CaptureState()
+
     app.metrics = metrics
     app.request_log = request_log
     app.persistence = persistence
     app.gateway_config = config
     app.config_path = config_path
     app.profiler_state = profiler_state
+    app.capture_state = capture_state

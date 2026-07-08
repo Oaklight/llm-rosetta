@@ -66,6 +66,14 @@ from .observability import (
     network_diagnostics,
     rebuild_metrics,
 )
+from .capture import (
+    clear_capture_results,
+    disable_capture,
+    enable_capture,
+    get_capture_result,
+    get_capture_results,
+    get_capture_status,
+)
 from .profiling import (
     clear_profiling_results,
     disable_profiling,
@@ -142,6 +150,13 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
     app.route("/admin/api/test/<task_id>/poll", methods=["POST"])(get_test_result)
     app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)
+    # Content capture
+    app.route("/admin/api/capture/status", methods=["GET"])(get_capture_status)
+    app.route("/admin/api/capture/enable", methods=["POST"])(enable_capture)
+    app.route("/admin/api/capture/disable", methods=["POST"])(disable_capture)
+    app.route("/admin/api/capture/results", methods=["GET"])(get_capture_results)
+    app.route("/admin/api/capture/results/<index>", methods=["GET"])(get_capture_result)
+    app.route("/admin/api/capture/results", methods=["DELETE"])(clear_capture_results)
     # Profiling
     app.route("/admin/api/profiling/status", methods=["GET"])(get_profiling_status)
     app.route("/admin/api/profiling/enable", methods=["POST"])(enable_profiling)
