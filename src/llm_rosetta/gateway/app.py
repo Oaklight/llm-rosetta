@@ -269,6 +269,10 @@ async def _proxy_handler(
     request_log = getattr(request.app, "request_log", None)
 
     persistence = getattr(request.app, "persistence", None)
+    # Only pass persistence to dump_error when error dumps are enabled.
+    # Use a separate local so `persistence` stays available for future uses
+    # in this path without being affected by this toggle.
+    _error_persistence = persistence if _config.error_dumps_enabled else None
     deep_profiler = _try_start_profiler(request.app)
 
     try:
@@ -286,7 +290,7 @@ async def _proxy_handler(
                 extra_headers=extra_headers,
                 entry_id=pre_entry_id,
                 request_log=request_log,
-                persistence=persistence,
+                persistence=_error_persistence,
             )
         else:
             pre_entry_id = None
@@ -297,7 +301,7 @@ async def _proxy_handler(
                 transport=request.app.transport,
                 metadata_store=store,
                 extra_headers=extra_headers,
-                persistence=persistence,
+                persistence=_error_persistence,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
@@ -313,7 +317,7 @@ async def _proxy_handler(
         status_code = 500
         pre_entry_id = None
         dump_error(
-            persistence,
+            _error_persistence,
             request_body=body,
             response_text=error_detail,
             model=model,

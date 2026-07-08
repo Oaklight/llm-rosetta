@@ -552,6 +552,8 @@ async def put_server_settings(request: Any) -> Response:
         debug["verbose"] = bool(body["verbose"])
     if "log_bodies" in body:
         debug["log_bodies"] = bool(body["log_bodies"])
+    if "error_dumps" in body:
+        debug["error_dumps"] = bool(body["error_dumps"])
 
     try:
         write_config(config_path, data)

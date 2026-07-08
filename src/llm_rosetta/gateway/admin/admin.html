@@ -728,6 +728,13 @@ body { padding-bottom: 26px; }
         <span data-i18n="label.enabled">Enabled</span>
       </label>
     </div>
+    <div class="settings-popup-item">
+      <label data-i18n="label.errorDumps">Error Detail Log</label>
+      <label class="toggle-label">
+        <input type="checkbox" id="settingsErrorDumps" onchange="saveSettingsField('errorDumps',this.checked)">
+        <span data-i18n="label.enabled">Enabled</span>
+      </label>
+    </div>
     <div class="settings-divider"></div>
     <!-- Log Retention -->
     <div class="settings-section-title" data-i18n="label.logRetention">Log Retention</div>
@@ -1068,7 +1075,7 @@ const I18N = {
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
     'btn.save':'Save', 'btn.copy':'Copy', 'btn.change':'Change', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
     'label.logLevel':'Log Level', 'logLevel.normal':'Normal', 'logLevel.verbose':'Verbose', 'logLevel.debug':'Debug (bodies)',
-    'label.autoRefresh':'Auto-Refresh', 'label.off':'Off', 'label.credentialReveal':'Credential Reveal', 'label.enabled':'Enabled',
+    'label.autoRefresh':'Auto-Refresh', 'label.off':'Off', 'label.credentialReveal':'Credential Reveal', 'label.errorDumps':'Error Detail Log', 'label.enabled':'Enabled',
     'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error',
     'label.adminToken':'Admin Token', 'label.rotatingIn':'Rotating in <span class="cd-time">{time}</span>',
     'label.changePassword':'Change Password', 'label.currentPw':'Current', 'label.newPw':'New', 'label.confirmPw':'Confirm',
@@ -1192,7 +1199,7 @@ const I18N = {
     'modal.settings':'\u8bbe\u7f6e', 'label.theme':'\u4e3b\u9898', 'label.language':'\u8bed\u8a00', 'theme.light':'\u6d45\u8272', 'theme.dark':'\u6df1\u8272',
     'btn.save':'\u4fdd\u5b58', 'btn.copy':'\u590d\u5236', 'btn.change':'\u4fee\u6539', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
     'label.logLevel':'\u65e5\u5fd7\u7ea7\u522b', 'logLevel.normal':'\u6b63\u5e38', 'logLevel.verbose':'\u8be6\u7ec6', 'logLevel.debug':'\u8c03\u8bd5 (\u542b\u8bf7\u6c42\u4f53)',
-    'label.autoRefresh':'\u81ea\u52a8\u5237\u65b0', 'label.off':'\u5173\u95ed', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.enabled':'\u5df2\u542f\u7528',
+    'label.autoRefresh':'\u81ea\u52a8\u5237\u65b0', 'label.off':'\u5173\u95ed', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.errorDumps':'\u9519\u8bef\u8be6\u60c5\u8bb0\u5f55', 'label.enabled':'\u5df2\u542f\u7528',
     'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25',
     'label.adminToken':'\u7ba1\u7406 Token', 'label.rotatingIn':'<span class="cd-time">{time}</span> \u540e\u8f6e\u6362',
     'label.changePassword':'\u4fee\u6539\u5bc6\u7801', 'label.currentPw':'\u5f53\u524d\u5bc6\u7801', 'label.newPw':'\u65b0\u5bc6\u7801', 'label.confirmPw':'\u786e\u8ba4\u5bc6\u7801',
@@ -1448,6 +1455,8 @@ function openSettings() {
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
   if (cv) cv.checked = _credentialVisible;
+  const ed = document.getElementById('settingsErrorDumps');
+  if (ed) ed.checked = configData?.debug?.error_dumps !== false;
   // Sync log retention
   if (configData?.server?.request_log) {
     const sm = document.getElementById('settingsSuccessMax');
@@ -1478,6 +1487,8 @@ async function saveSettingsField(field, value) {
     body.log_bodies = (value === 'debug');
   } else if (field === 'credentialVisible') {
     body.credential_visible = value;
+  } else if (field === 'errorDumps') {
+    body.error_dumps = value;
   }
   try {
     await api.put('/admin/api/config/server', body);

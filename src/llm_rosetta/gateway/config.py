@@ -209,6 +209,7 @@ class GatewayConfig:
         self.log_bodies: bool = _debug.get("log_bodies", False) or os.environ.get(
             "LLM_ROSETTA_LOG_BODIES", ""
         ).lower() in ("1", "true", "yes")
+        self.error_dumps_enabled: bool = _debug.get("error_dumps", True)
 
         self._validate()
 
