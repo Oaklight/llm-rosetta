@@ -268,7 +268,9 @@ async def _proxy_handler(
     profile: dict[str, Any] | None = None
     request_log = getattr(request.app, "request_log", None)
 
-    persistence = getattr(request.app, "persistence", None)
+    # Error dump persistence — pass None to disable dump_error in handlers
+    _raw_persistence = getattr(request.app, "persistence", None)
+    persistence = _raw_persistence if _config.error_dumps_enabled else None
     deep_profiler = _try_start_profiler(request.app)
 
     try:
