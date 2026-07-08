@@ -296,6 +296,22 @@ async def handle_non_streaming(
         )
     except UpstreamConnectionError as exc:
         profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
+        if capture_state is not None:
+            capture_state.record(
+                CapturedRequest(
+                    original_request=body,
+                    converted_body=target_body,
+                    request_id=(
+                        extra_headers.get("x-request-id", "") if extra_headers else ""
+                    ),
+                    model=model,
+                    source_provider=route.source_provider,
+                    target_provider=route.target_provider,
+                    is_stream=False,
+                    status_code=502,
+                    upstream_response={"error": str(exc)},
+                )
+            )
         return (
             error_response_for_source(
                 route.source_provider, 502, f"Upstream request failed: {exc}"
@@ -323,6 +339,22 @@ async def handle_non_streaming(
             error_phase="upstream",
             upstream_url=str(provider_info.base_url),
         )
+        if capture_state is not None:
+            capture_state.record(
+                CapturedRequest(
+                    original_request=body,
+                    converted_body=target_body,
+                    upstream_response=resp.body,
+                    request_id=(
+                        extra_headers.get("x-request-id", "") if extra_headers else ""
+                    ),
+                    model=model,
+                    source_provider=route.source_provider,
+                    target_provider=route.target_provider,
+                    is_stream=False,
+                    status_code=resp.status_code,
+                )
+            )
         return (
             Response(
                 body=resp.raw_content,
