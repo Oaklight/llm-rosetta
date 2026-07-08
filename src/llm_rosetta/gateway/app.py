@@ -273,6 +273,14 @@ async def _proxy_handler(
     # Use a separate local so `persistence` stays available for future uses
     # in this path without being affected by this toggle.
     _error_persistence = persistence if _config.error_dumps_enabled else None
+
+    capture_state = getattr(request.app, "capture_state", None)
+    _active_capture = (
+        capture_state
+        if capture_state is not None and capture_state.should_capture()
+        else None
+    )
+
     deep_profiler = _try_start_profiler(request.app)
 
     try:
@@ -291,6 +299,7 @@ async def _proxy_handler(
                 entry_id=pre_entry_id,
                 request_log=request_log,
                 persistence=_error_persistence,
+                capture_state=_active_capture,
             )
         else:
             pre_entry_id = None
@@ -302,6 +311,7 @@ async def _proxy_handler(
                 metadata_store=store,
                 extra_headers=extra_headers,
                 persistence=_error_persistence,
+                capture_state=_active_capture,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
