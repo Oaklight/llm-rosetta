@@ -78,13 +78,13 @@ class CaptureState:
         with self._lock:
             self._enabled = True
             self._remaining = max(1, requests)
-            return self.status()
+            return self._status_unlocked()
 
     def disable(self) -> dict[str, Any]:
         with self._lock:
             self._enabled = False
             self._remaining = 0
-            return self.status()
+            return self._status_unlocked()
 
     # -- Request path -------------------------------------------------------
 
@@ -108,13 +108,17 @@ class CaptureState:
 
     # -- Query --------------------------------------------------------------
 
-    def status(self) -> dict[str, Any]:
-        # Caller may or may not hold _lock; read snapshot.
+    def _status_unlocked(self) -> dict[str, Any]:
+        """Return status dict. Caller must already hold ``_lock``."""
         return {
             "enabled": self._enabled,
             "remaining": self._remaining,
             "captured": len(self._results),
         }
+
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            return self._status_unlocked()
 
     @property
     def results(self) -> list[CapturedRequest]:
