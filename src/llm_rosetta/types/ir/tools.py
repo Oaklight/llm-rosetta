@@ -54,6 +54,7 @@ class ToolDefinition(TypedDict):
     parameters: dict[str, Any]  # JSON Schema
     required_parameters: NotRequired[list[str]]
     metadata: NotRequired[dict[str, Any]]
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 # ============================================================================

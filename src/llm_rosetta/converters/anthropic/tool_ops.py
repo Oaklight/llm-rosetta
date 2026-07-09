@@ -181,6 +181,10 @@ class AnthropicToolOps(BaseToolOps):
         if isinstance(schema, dict) and "type" not in schema:
             schema = {"type": "object", **schema}
         result["input_schema"] = schema
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
         return result
 
     @staticmethod
@@ -210,6 +214,10 @@ class AnthropicToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         result["metadata"] = {}
+        # Read cache_control → cache_hint
+        cache_control = provider_tool.get("cache_control")
+        if cache_control is not None:
+            result["cache_hint"] = cache_control
         return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
@@ -315,6 +323,11 @@ class AnthropicToolOps(BaseToolOps):
         if "provider_metadata" in ir_tool_call:
             result["_provider_metadata"] = ir_tool_call["provider_metadata"]
 
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool_call.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
+
         return result
 
     @staticmethod
@@ -349,6 +362,11 @@ class AnthropicToolOps(BaseToolOps):
         pm = provider_tool_call.get("_provider_metadata")
         if pm:
             part["provider_metadata"] = pm
+
+        # Read cache_control → cache_hint
+        cache_control = provider_tool_call.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
 
         return part
 
@@ -391,6 +409,11 @@ class AnthropicToolOps(BaseToolOps):
         if "provider_metadata" in ir_tool_result:
             result["_provider_metadata"] = ir_tool_result["provider_metadata"]
 
+        # Preserve cache_hint → cache_control
+        cache_hint = ir_tool_result.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
+
         return result
 
     @staticmethod
@@ -420,6 +443,11 @@ class AnthropicToolOps(BaseToolOps):
         pm = provider_tool_result.get("_provider_metadata")
         if pm:
             part["provider_metadata"] = pm
+
+        # Read cache_control → cache_hint
+        cache_control = provider_tool_result.get("cache_control")
+        if cache_control is not None:
+            part["cache_hint"] = cache_control
 
         return part
 

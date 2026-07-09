@@ -26,6 +26,7 @@ class TextPart(TypedDict):
     type: Required[Literal["text"]]
     text: Required[str]
     provider_metadata: NotRequired[dict[str, Any]]
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 class ImageData(TypedDict):
@@ -49,6 +50,7 @@ class ImagePart(TypedDict):
     provider_ref: NotRequired[
         dict[str, Any]
     ]  # Provider-specific reference (e.g. file_id)
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 class FileData(TypedDict):
@@ -79,6 +81,7 @@ class FilePart(TypedDict):
     provider_ref: NotRequired[
         dict[str, Any]
     ]  # Provider-specific reference (e.g. file_id)
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 # ============================================================================
@@ -126,6 +129,7 @@ class ToolCallPart(TypedDict):
     provider_metadata: NotRequired[
         dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 class ToolResultPart(TypedDict):
@@ -144,6 +148,7 @@ class ToolResultPart(TypedDict):
     provider_metadata: NotRequired[
         dict[str, Any]
     ]  # Provider特定的元数据 Provider-specific metadata
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 # ============================================================================
@@ -187,6 +192,7 @@ class ReasoningPart(TypedDict):
         Literal["in_progress", "completed", "incomplete"]
     ]  # 推理状态 Reasoning status
     provider_metadata: NotRequired[dict[str, Any]]
+    cache_hint: NotRequired[dict[str, Any]]
 
 
 class UrlCitation(TypedDict, total=False):
