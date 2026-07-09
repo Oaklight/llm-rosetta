@@ -991,7 +991,7 @@ class TestGoogleGenAIConverterFullRoundTrip:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
-            "system_instruction": "Be helpful.",
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
             "generation": {"temperature": 0.7, "max_tokens": 100},
             "tools": [
                 {

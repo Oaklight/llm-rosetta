@@ -727,7 +727,7 @@ class TestRequestResponseTypes:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
-            "system_instruction": "You are a helpful assistant.",
+            "system_instruction": [{"type": "text", "text": "You are a helpful assistant."}],
             "generation": {"temperature": 0.7, "max_tokens": 1000},
             "stream": {"enabled": True},
         }
