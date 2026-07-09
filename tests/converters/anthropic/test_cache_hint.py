@@ -615,3 +615,71 @@ class TestCacheHintIgnoredByOtherConverters:
                 for part in content:
                     if isinstance(part, dict):
                         assert "cache_control" not in part
+
+
+class TestCrossFormatSystemCacheHint:
+    """System blocks with cache_control are flattened for non-Anthropic output."""
+
+    def test_anthropic_system_cache_to_openai_flattens(self):
+        """Anthropic system with cache_control → IR → OpenAI: string, no cache_control."""
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        anthropic_converter = AnthropicConverter()
+        openai_converter = OpenAIChatConverter()
+
+        provider_request = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 1024,
+            "system": [
+                {
+                    "type": "text",
+                    "text": "You are helpful.",
+                    "cache_control": CACHE_CONTROL_EPHEMERAL,
+                },
+                {"type": "text", "text": "Be concise."},
+            ],
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+        }
+        ir = anthropic_converter.request_from_provider(provider_request)
+        result, warnings = openai_converter.request_to_provider(ir)
+
+        # System should be a plain string in the first system message
+        system_msgs = [m for m in result["messages"] if m["role"] == "system"]
+        assert len(system_msgs) == 1
+        content = system_msgs[0]["content"]
+        assert isinstance(content, str)
+        assert "cache_control" not in str(result)
+
+    def test_anthropic_system_cache_to_google_flattens(self):
+        """Anthropic system with cache_control → IR → Google: string, no cache_control."""
+        from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+
+        anthropic_converter = AnthropicConverter()
+        google_converter = GoogleGenAIConverter()
+
+        provider_request = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 1024,
+            "system": [
+                {
+                    "type": "text",
+                    "text": "You are helpful.",
+                    "cache_control": CACHE_CONTROL_EPHEMERAL,
+                },
+            ],
+            "messages": [
+                {"role": "user", "content": "Hello"}
+            ],
+        }
+        ir = anthropic_converter.request_from_provider(provider_request)
+        result, warnings = google_converter.request_to_provider(ir)
+
+        # Google system_instruction should be structured but without cache_control
+        system_inst = result.get("system_instruction")
+        assert system_inst is not None
+        # Should contain the text, flattened
+        system_text = str(system_inst)
+        assert "helpful" in system_text
+        assert "cache_control" not in str(result)
