@@ -266,8 +266,8 @@ class TestGroupedProviders:
         """Grouped shims have their transforms.py imported."""
         anth = get_shim("argo--anthropic")
         assert anth is not None
-        # argo_anthropic has from_transforms (to_transforms retired)
-        assert len(anth.from_transforms) > 0
+        # argo_anthropic has pre_ir_transforms (post_ir_transforms retired)
+        assert len(anth.pre_ir_transforms) > 0
 
     def test_grouped_provider_reasoning_configs_loaded(self):
         """Grouped shims load reasoning capability configs."""
