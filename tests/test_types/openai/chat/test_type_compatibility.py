@@ -149,6 +149,7 @@ def test_response_with_optional_fields():
                 "total_tokens": 23,
                 "prompt_tokens_details": {
                     "cached_tokens": 5,
+                    "cache_write_tokens": 2,
                 },
                 "completion_tokens_details": {
                     "reasoning_tokens": 3,
@@ -162,6 +163,7 @@ def test_response_with_optional_fields():
         assert sdk_validated.usage is not None
         assert sdk_validated.usage.prompt_tokens_details is not None
         assert sdk_validated.usage.prompt_tokens_details.cached_tokens == 5
+        assert sdk_validated.usage.prompt_tokens_details.cache_write_tokens == 2
         assert sdk_validated.usage.completion_tokens_details is not None
         assert sdk_validated.usage.completion_tokens_details.reasoning_tokens == 3
         assert sdk_validated.system_fingerprint == "fp_test123"
@@ -280,12 +282,13 @@ def test_usage_statistics():
             "prompt_tokens": 10,
             "completion_tokens": 20,
             "total_tokens": 30,
-            "prompt_tokens_details": {"cached_tokens": 5},
+            "prompt_tokens_details": {"cached_tokens": 5, "cache_write_tokens": 3},
             "completion_tokens_details": {"reasoning_tokens": 8},
         }
         sdk_detailed = SDKCompletionUsage.model_validate(detailed_usage)
         assert sdk_detailed.prompt_tokens_details is not None
         assert sdk_detailed.prompt_tokens_details.cached_tokens == 5
+        assert sdk_detailed.prompt_tokens_details.cache_write_tokens == 3
         assert sdk_detailed.completion_tokens_details is not None
         assert sdk_detailed.completion_tokens_details.reasoning_tokens == 8
 
