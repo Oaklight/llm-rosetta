@@ -107,7 +107,14 @@ class OpenAIResponsesConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → instructions field
+        # system_instruction may be a list of IR text parts (with cache_hint)
+        # when the original request was Anthropic with cache_control.
+        # Flatten to string — OpenAI handles caching automatically.
         system_instruction = ir_request.get("system_instruction")
+        if isinstance(system_instruction, list):
+            system_instruction = " ".join(
+                p["text"] for p in system_instruction if p.get("type") == "text"
+            )
         if system_instruction:
             result["instructions"] = system_instruction
 

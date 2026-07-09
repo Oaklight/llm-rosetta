@@ -98,8 +98,14 @@ class AnthropicConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → top-level system parameter
+        # system_instruction may be a plain string (legacy) or a list of IR
+        # text parts with cache_hint (set by request_from_provider when the
+        # original Anthropic request had cache_control on system blocks).
         system_instruction = ir_request.get("system_instruction")
-        if system_instruction:
+        if isinstance(system_instruction, list):
+            # Structured parts — output as blocks to preserve cache_control
+            result["system"] = self.message_ops._ir_system_to_p(system_instruction)
+        elif system_instruction:
             result["system"] = system_instruction
 
         # 2. Messages — fix orphaned tool_calls/results at IR level before
@@ -107,30 +113,20 @@ class AnthropicConverter(BaseConverter):
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Extract system messages from message list
-        for item in ir_messages:
-            if isinstance(item, dict) and item.get("role") == "system":
-                content = item.get("content", [])
-                if not content:
-                    continue
-                # NOTE: currently only checks text parts because Anthropic
-                # system only supports text blocks.  If system gains other
-                # block types in the future, broaden this scan.
-                has_cache_hint = any(
-                    p.get("cache_hint") for p in content if is_text_part(p)
-                )
-                if has_cache_hint:
-                    # Use structured blocks to preserve cache_hint → cache_control
-                    result["system"] = self.message_ops._ir_system_to_p(
-                        content
-                    )
-                elif "system" not in result:
-                    # No cache_hint — flatten to string (legacy behavior)
-                    text_parts = [
-                        p["text"] for p in content if is_text_part(p)
-                    ]
+        # Extract system messages from ir_messages (cross-format path:
+        # other converters may put system in ir_messages instead of
+        # system_instruction).  ir_messages_to_p skips system role, so
+        # we handle them here.
+        if "system" not in result:
+            for item in ir_messages:
+                if isinstance(item, dict) and item.get("role") == "system":
+                    content = item.get("content", [])
+                    if not content:
+                        continue
+                    text_parts = [p["text"] for p in content if is_text_part(p)]
                     if text_parts:
                         result["system"] = " ".join(text_parts)
+                    break
 
         message_kwargs: dict[str, Any] = {}
         if ctx and "reasoning_cap" in ctx.options:
@@ -204,51 +200,35 @@ class AnthropicConverter(BaseConverter):
         }
 
         # 1. System instruction
+        # When system blocks carry cache_control, store as a list of IR text
+        # parts (with cache_hint) so the Anthropic outbound path can emit
+        # structured blocks.  Other converters that consume system_instruction
+        # handle the list by flattening to a joined string (see
+        # _flatten_system_instruction).  When no cache_control is present,
+        # store as a plain string (legacy behavior).
         system_content = provider_request.get("system")
         if system_content:
             if isinstance(system_content, str):
                 ir_request["system_instruction"] = system_content
-                _system_cache_parts = None
             elif isinstance(system_content, list):
                 text_parts: list[str] = []
                 ir_system_parts: list[Any] = []
                 for part in system_content:
                     if isinstance(part, dict) and part.get("type") == "text":
                         text_parts.append(part["text"])
-                        ir_system_parts.append(
-                            self.content_ops.p_text_to_ir(part)
-                        )
-                if text_parts:
-                    ir_request["system_instruction"] = " ".join(text_parts)
-                # When cache_hint is present, store structured parts for
-                # insertion into ir_messages (see below).  system_instruction
-                # is still set above as a joined string so consumers that
-                # don't care about cache semantics get plain text.  On the
-                # outbound path, request_to_provider prefers the structured
-                # system message over the string when cache_hint is present.
+                        ir_system_parts.append(self.content_ops.p_text_to_ir(part))
                 if ir_system_parts and any(
                     p.get("cache_hint") for p in ir_system_parts
                 ):
-                    _system_cache_parts = ir_system_parts
-                else:
-                    _system_cache_parts = None
-            else:
-                _system_cache_parts = None
-        else:
-            _system_cache_parts = None
+                    # Structured parts with cache hints — preserve as list
+                    ir_request["system_instruction"] = ir_system_parts
+                elif text_parts:
+                    # No cache hints — flatten to string (legacy behavior)
+                    ir_request["system_instruction"] = " ".join(text_parts)
 
         # 2. Messages
         messages = provider_request.get("messages", [])
         ir_messages = self.message_ops.p_messages_to_ir(messages)
-
-        # Insert structured system message at front if cache_hint needs
-        # to be preserved (must happen after message conversion so the
-        # assignment below doesn't overwrite it)
-        if _system_cache_parts is not None:
-            ir_messages.insert(
-                0,
-                {"role": "system", "content": _system_cache_parts},
-            )
         ir_request["messages"] = ir_messages
 
         # 3. Tools (with process-level cache)

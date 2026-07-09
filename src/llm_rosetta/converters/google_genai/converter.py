@@ -227,7 +227,7 @@ class GoogleGenAIConverter(BaseConverter):
         system_instruction = None
 
         # From IRRequest.system_instruction field
-        ir_system = ir_request.get("system_instruction")
+        ir_system = self._resolve_system_instruction(ir_request)
         if ir_system:
             system_instruction = {"role": "user", "parts": [{"text": ir_system}]}
 
@@ -611,6 +611,22 @@ class GoogleGenAIConverter(BaseConverter):
             )
 
         return usage_metadata
+
+    @staticmethod
+    def _resolve_system_instruction(ir_request: Any) -> str | None:
+        """Extract system_instruction from IR as a plain string.
+
+        system_instruction may be a list of IR text parts (with cache_hint)
+        when the original request was Anthropic with cache_control.
+        Flatten to string — Gemini handles caching automatically.
+        """
+        ir_system = ir_request.get("system_instruction")
+        if isinstance(ir_system, list):
+            return (
+                " ".join(p["text"] for p in ir_system if p.get("type") == "text")
+                or None
+            )
+        return ir_system  # str or None
 
     @staticmethod
     def _parse_system_instruction(system_instruction: Any) -> str | None:

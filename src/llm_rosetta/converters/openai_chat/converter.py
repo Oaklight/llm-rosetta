@@ -87,8 +87,15 @@ class OpenAIChatConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → system message
+        # system_instruction may be a list of IR text parts (with cache_hint)
+        # when the original request was Anthropic with cache_control.
+        # Flatten to string — OpenAI handles caching automatically.
         messages: list[dict[str, Any]] = []
         system_instruction = ir_request.get("system_instruction")
+        if isinstance(system_instruction, list):
+            system_instruction = " ".join(
+                p["text"] for p in system_instruction if p.get("type") == "text"
+            )
         if system_instruction:
             messages.append({"role": "system", "content": system_instruction})
 

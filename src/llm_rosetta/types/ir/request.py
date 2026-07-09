@@ -63,7 +63,7 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[str]
+    system_instruction: NotRequired[str | list[Any]]  # str or list of IR text parts
 
     # ========== 工具相关 Tool Related ==========
     tools: NotRequired[list[ToolDefinition]]
