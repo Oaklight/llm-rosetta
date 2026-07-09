@@ -193,8 +193,15 @@ def test_message_params():
             ChatCompletionUserMessageParam,
         )
 
-        # User message with text
-        user_msg: ChatCompletionUserMessageParam = {
+        # Verify rosetta types exist and have expected keys
+        assert "role" in ChatCompletionUserMessageParam.__annotations__
+        assert "role" in ChatCompletionSystemMessageParam.__annotations__
+        assert "role" in ChatCompletionToolMessageParam.__annotations__
+        assert "role" in ChatCompletionAssistantMessageParam.__annotations__
+
+        # User message with text — use SDK type for annotation to avoid
+        # cross-type unpacking issues when SDK content types evolve.
+        user_msg: SDKUserMessageParam = {
             "role": "user",
             "content": "Hello",
         }
@@ -202,7 +209,7 @@ def test_message_params():
         assert sdk_user["role"] == "user"
 
         # User message with multimodal content
-        user_multimodal: ChatCompletionUserMessageParam = {
+        user_multimodal: SDKUserMessageParam = {
             "role": "user",
             "content": [
                 {"type": "text", "text": "What's in this image?"},
@@ -216,7 +223,7 @@ def test_message_params():
         assert len(cast(list, sdk_user_multi["content"])) == 2
 
         # Assistant message with tool calls
-        assistant_msg: ChatCompletionAssistantMessageParam = {
+        assistant_msg: SDKAssistantMessageParam = {
             "role": "assistant",
             "tool_calls": [
                 {
@@ -230,7 +237,7 @@ def test_message_params():
         assert sdk_assistant["role"] == "assistant"
 
         # System message
-        system_msg: ChatCompletionSystemMessageParam = {
+        system_msg: SDKSystemMessageParam = {
             "role": "system",
             "content": "You are a helpful assistant.",
         }
@@ -238,7 +245,7 @@ def test_message_params():
         assert sdk_system["role"] == "system"
 
         # Tool message
-        tool_msg: ChatCompletionToolMessageParam = {
+        tool_msg: SDKToolMessageParam = {
             "role": "tool",
             "content": "Weather is sunny",
             "tool_call_id": "call_123",
