@@ -52,10 +52,14 @@ class TestAnthropicConverter:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
-            "system_instruction": "You are a helpful assistant.",
+            "system_instruction": [
+                {"type": "text", "text": "You are a helpful assistant."}
+            ],
         }
         result, warnings = self.converter.request_to_provider(ir_request)
-        assert result["system"] == "You are a helpful assistant."
+        assert result["system"] == [
+            {"type": "text", "text": "You are a helpful assistant."}
+        ]
 
     def test_request_with_system_message_in_messages(self):
         """Test system message in messages list is extracted."""
@@ -70,7 +74,7 @@ class TestAnthropicConverter:
             ],
         }
         result, warnings = self.converter.request_to_provider(ir_request)
-        assert result["system"] == "Be helpful."
+        assert result["system"] == [{"type": "text", "text": "Be helpful."}]
         # System message should not be in messages list
         assert all(m["role"] != "system" for m in result["messages"])
 
@@ -223,7 +227,9 @@ class TestAnthropicConverter:
             "messages": [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert ir_request["system_instruction"] == "You are helpful."
+        assert ir_request["system_instruction"] == [
+            {"type": "text", "text": "You are helpful."}
+        ]
 
     def test_request_from_provider_with_thinking(self):
         """Test request from provider with thinking."""
@@ -745,7 +751,7 @@ class TestAnthropicConverterFullRoundTrip:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
-            "system_instruction": "Be helpful.",
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
             "generation": {"temperature": 0.7, "max_tokens": 100},
             "tools": [
                 {
@@ -763,7 +769,9 @@ class TestAnthropicConverterFullRoundTrip:
         restored = self.converter.request_from_provider(provider)
 
         assert restored["model"] == "claude-3-5-sonnet-20241022"
-        assert restored["system_instruction"] == "Be helpful."
+        assert restored["system_instruction"] == [
+            {"type": "text", "text": "Be helpful."}
+        ]
         assert restored["generation"]["temperature"] == 0.7
         assert restored["generation"]["max_tokens"] == 100
         tools = list(restored["tools"])

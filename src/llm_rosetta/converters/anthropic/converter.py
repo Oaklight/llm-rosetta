@@ -21,6 +21,7 @@ from typing import Any, cast
 from ...types.ir import (
     ExtensionItem,
     Message,
+    TextPart,
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
@@ -98,25 +99,28 @@ class AnthropicConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → top-level system parameter
-        system_instruction = ir_request.get("system_instruction")
-        if system_instruction:
-            result["system"] = system_instruction
+        # system_instruction is list[TextPart]; convert via content_ops
+        # so each block's metadata (e.g. cache_hint) is preserved.
+        system_parts = ir_request.get("system_instruction")
+        if system_parts:
+            result["system"] = self.message_ops._ir_system_to_p(system_parts)
 
         # 2. Messages — fix orphaned tool_calls/results at IR level before
         #    conversion.  Anthropic strictly requires bidirectional pairing.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Extract system messages from message list
-        for item in ir_messages:
-            if isinstance(item, dict) and item.get("role") == "system":
-                content = item.get("content", [])
-                text_parts = []
-                for part in content:
-                    if is_text_part(part):
-                        text_parts.append(part["text"])
-                if text_parts and "system" not in result:
-                    result["system"] = " ".join(text_parts)
+        # Extract system messages from ir_messages (cross-format path:
+        # other converters may put system in ir_messages instead of
+        # system_instruction).  ir_messages_to_p skips system role, so
+        # we handle them here.
+        if "system" not in result:
+            for item in ir_messages:
+                if isinstance(item, dict) and item.get("role") == "system":
+                    content = item.get("content", [])
+                    if content:
+                        result["system"] = self.message_ops._ir_system_to_p(content)
+                    break
 
         message_kwargs: dict[str, Any] = {}
         if ctx and "reasoning_cap" in ctx.options:
@@ -189,18 +193,20 @@ class AnthropicConverter(BaseConverter):
             "messages": [],
         }
 
-        # 1. System instruction
+        # 1. System instruction → list[TextPart]
         system_content = provider_request.get("system")
         if system_content:
             if isinstance(system_content, str):
-                ir_request["system_instruction"] = system_content
+                ir_request["system_instruction"] = [
+                    TextPart(type="text", text=system_content)
+                ]
             elif isinstance(system_content, list):
-                text_parts = []
+                ir_parts = []
                 for part in system_content:
                     if isinstance(part, dict) and part.get("type") == "text":
-                        text_parts.append(part["text"])
-                if text_parts:
-                    ir_request["system_instruction"] = " ".join(text_parts)
+                        ir_parts.append(self.content_ops.p_text_to_ir(part))
+                if ir_parts:
+                    ir_request["system_instruction"] = ir_parts
 
         # 2. Messages
         messages = provider_request.get("messages", [])

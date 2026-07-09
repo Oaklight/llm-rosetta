@@ -52,12 +52,14 @@ class TestOpenAIChatConverter:
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": "Hi"}]}
                 ],
-                "system_instruction": "You are helpful.",
+                "system_instruction": [{"type": "text", "text": "You are helpful."}],
             },
         )
         result, _ = self.converter.request_to_provider(ir_request)
         assert result["messages"][0]["role"] == "system"
-        assert result["messages"][0]["content"] == "You are helpful."
+        assert result["messages"][0]["content"] == [
+            {"type": "text", "text": "You are helpful."}
+        ]
         assert result["messages"][1]["role"] == "user"
 
     def test_request_to_provider_full(self):
@@ -69,7 +71,7 @@ class TestOpenAIChatConverter:
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
                 ],
-                "system_instruction": "Be helpful.",
+                "system_instruction": [{"type": "text", "text": "Be helpful."}],
                 "generation": {
                     "temperature": 0.7,
                     "max_tokens": 100,
@@ -138,7 +140,7 @@ class TestOpenAIChatConverter:
         }
         result = self.converter.request_from_provider(provider_request)
         assert result["model"] == "gpt-4o"
-        assert result["system_instruction"] == "Be helpful"
+        assert result["system_instruction"] == [{"type": "text", "text": "Be helpful"}]
         messages = list(result["messages"])
         assert len(messages) == 1
         assert messages[0]["role"] == "user"
@@ -591,7 +593,7 @@ class TestOpenAIChatConverterFullRoundTrip:
                 "messages": [
                     {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
                 ],
-                "system_instruction": "Be helpful.",
+                "system_instruction": [{"type": "text", "text": "Be helpful."}],
                 "generation": {"temperature": 0.7, "max_tokens": 100},
                 "tools": [
                     {
@@ -610,7 +612,9 @@ class TestOpenAIChatConverterFullRoundTrip:
         restored = self.converter.request_from_provider(provider)
 
         assert restored["model"] == "gpt-4o"
-        assert restored["system_instruction"] == "Be helpful."
+        assert restored["system_instruction"] == [
+            {"type": "text", "text": "Be helpful."}
+        ]
         assert restored["generation"]["temperature"] == 0.7
         assert restored["generation"]["max_tokens"] == 100
         tools = list(restored["tools"])

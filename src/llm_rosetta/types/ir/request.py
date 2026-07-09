@@ -26,6 +26,7 @@ from .configs import (
     StreamConfig,
 )
 from .messages import Message
+from .parts import TextPart
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
 
 # ============================================================================
@@ -63,7 +64,12 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[str]
+    #
+    # Canonical form is list[TextPart].  A single string "You are helpful."
+    # is represented as [TextPart(type="text", text="You are helpful.")].
+    # This ensures consistent structure across all converters and allows
+    # block-level metadata (e.g. cache_hint) to flow through the pipeline.
+    system_instruction: NotRequired[list[TextPart]]
 
     # ========== 工具相关 Tool Related ==========
     tools: NotRequired[list[ToolDefinition]]

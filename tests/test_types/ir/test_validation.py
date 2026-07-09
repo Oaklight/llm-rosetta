@@ -72,8 +72,12 @@ class TestValidateIRRequest:
         assert len(result["messages"]) == 1
 
     def test_valid_with_system_instruction(self):
-        result = validate_ir_request(_minimal_request(system_instruction="Be helpful"))
-        assert result["system_instruction"] == "Be helpful"
+        result = validate_ir_request(
+            _minimal_request(
+                system_instruction=[{"type": "text", "text": "Be helpful"}]
+            )
+        )
+        assert result["system_instruction"] == [{"type": "text", "text": "Be helpful"}]
 
     def test_valid_with_generation_config(self):
         result = validate_ir_request(

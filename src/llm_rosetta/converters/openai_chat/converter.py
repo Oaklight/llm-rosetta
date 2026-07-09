@@ -12,6 +12,7 @@ from typing import Any, cast
 from ...types.ir import (
     ExtensionItem,
     Message,
+    TextPart,
     is_citation_part,
     is_reasoning_part,
     is_refusal_part,
@@ -87,10 +88,12 @@ class OpenAIChatConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → system message
+        # system_instruction is list[TextPart]; convert via content_ops
         messages: list[dict[str, Any]] = []
-        system_instruction = ir_request.get("system_instruction")
-        if system_instruction:
-            messages.append({"role": "system", "content": system_instruction})
+        system_parts = ir_request.get("system_instruction")
+        if system_parts:
+            content = [self.content_ops.ir_text_to_p(p) for p in system_parts]
+            messages.append({"role": "system", "content": content})
 
         # 2. Messages — fix orphaned tool_calls at IR level before conversion.
         # OpenAI Chat API strictly requires every tool_call_id to have a
@@ -271,32 +274,32 @@ class OpenAIChatConverter(BaseConverter):
 
     def _extract_system_and_messages(
         self, messages: list[Any]
-    ) -> tuple[list[dict[str, Any]], str | None]:
+    ) -> tuple[list[dict[str, Any]], list[TextPart] | None]:
         """Split system messages from user/assistant messages.
 
         Returns:
-            Tuple of (non-system IR messages, system text or None).
+            Tuple of (non-system IR messages, system parts or None).
         """
         ir_messages: list[dict[str, Any]] = []
-        system_text: str | None = None
+        system_parts: list[TextPart] | None = None
         for msg in messages:
             if isinstance(msg, dict) and msg.get("role") == "system":
                 content = msg.get("content", "")
                 if isinstance(content, str):
-                    system_text = content
+                    system_parts = [TextPart(type="text", text=content)]
                 elif isinstance(content, list):
-                    text_parts = [
-                        part["text"]
+                    parts = [
+                        TextPart(type="text", text=part["text"])
                         for part in content
                         if isinstance(part, dict) and part.get("type") == "text"
                     ]
-                    if text_parts:
-                        system_text = " ".join(text_parts)
+                    if parts:
+                        system_parts = parts
             else:
                 converted = self.message_ops._p_message_to_ir(msg)
                 if converted:
                     ir_messages.append(converted)
-        return ir_messages, system_text
+        return ir_messages, system_parts
 
     def request_from_provider(
         self,
@@ -322,10 +325,10 @@ class OpenAIChatConverter(BaseConverter):
 
         # 1. Messages - separate system messages as system_instruction
         messages = provider_request.get("messages", [])
-        ir_messages, system_text = self._extract_system_and_messages(messages)
+        ir_messages, system_parts = self._extract_system_and_messages(messages)
         ir_request["messages"] = ir_messages
-        if system_text:
-            ir_request["system_instruction"] = system_text
+        if system_parts:
+            ir_request["system_instruction"] = system_parts
 
         # 2. Tools (with process-level cache)
         tools = provider_request.get("tools")

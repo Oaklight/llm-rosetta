@@ -47,7 +47,9 @@ class TestGoogleGenAIConverter:
             "messages": [
                 {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
             ],
-            "system_instruction": "You are a helpful assistant.",
+            "system_instruction": [
+                {"type": "text", "text": "You are a helpful assistant."}
+            ],
         }
         result, warnings = self.converter.request_to_provider(ir_request)
         assert "system_instruction" in result
@@ -232,7 +234,9 @@ class TestGoogleGenAIConverter:
             "config": {},
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert ir_request["system_instruction"] == "You are helpful."
+        assert ir_request["system_instruction"] == [
+            {"type": "text", "text": "You are helpful."}
+        ]
 
     def test_request_from_provider_with_system_instruction_dict(self):
         """Test request from provider with dict system instruction."""
@@ -246,7 +250,9 @@ class TestGoogleGenAIConverter:
             "config": {},
         }
         ir_request = self.converter.request_from_provider(provider_request)
-        assert ir_request["system_instruction"] == "Be helpful."
+        assert ir_request["system_instruction"] == [
+            {"type": "text", "text": "Be helpful."}
+        ]
 
     def test_request_from_provider_with_tools(self):
         """Test request from provider with tools."""
