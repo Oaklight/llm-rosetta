@@ -214,11 +214,11 @@ class ConversionPipeline:
         # Resolve body-level transforms from shim
         resolved = resolve_shim(shim)
         if resolved is not None:
-            self._from_transforms = resolved.from_transforms
-            self._to_transforms = resolved.to_transforms
+            self._pre_ir_transforms = resolved.pre_ir_transforms
+            self._post_ir_transforms = resolved.post_ir_transforms
         else:
-            self._from_transforms = _EMPTY_TRANSFORMS
-            self._to_transforms = _EMPTY_TRANSFORMS
+            self._pre_ir_transforms = _EMPTY_TRANSFORMS
+            self._post_ir_transforms = _EMPTY_TRANSFORMS
 
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
@@ -281,7 +281,7 @@ class ConversionPipeline:
             source_to_ir_ms      — Source format → IR parsing
             ir_transforms_ms     — Vision enforcement + shim IR transforms
             ir_to_target_ms      — IR → target format serialization
-            body_transforms_ms   — Shim body-level to_transforms
+            body_transforms_ms   — Shim body-level post_ir_transforms
             request_conversion_ms — Total request conversion time
 
         Keys added by :meth:`convert_response`::
@@ -388,10 +388,10 @@ class ConversionPipeline:
             ) from exc
         self._profile["ir_to_target_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-        # Phase 2c: Body-level shim to_transforms
+        # Phase 2c: Body-level shim post_ir_transforms
         t0 = time.perf_counter()
-        if self._to_transforms:
-            target_body = apply_transforms(self._to_transforms, target_body)
+        if self._post_ir_transforms:
+            target_body = apply_transforms(self._post_ir_transforms, target_body)
         self._profile["body_transforms_ms"] = round(
             (time.perf_counter() - t0) * 1000, 2
         )
@@ -409,7 +409,7 @@ class ConversionPipeline:
     ) -> dict[str, Any]:
         """Convert a target-format response body back to source format.
 
-        Executes Phase 4 (from_transforms → Target→IR → IR→Source).
+        Executes Phase 4 (pre_ir_transforms → Target→IR → IR→Source).
 
         Must be called after :meth:`convert_request` (uses the same
         conversion context).
@@ -430,10 +430,10 @@ class ConversionPipeline:
         ctx = self.context  # raises RuntimeError if not ready
         t_total = time.perf_counter()
 
-        # Phase 4a: Body-level shim from_transforms
+        # Phase 4a: Body-level shim pre_ir_transforms
         response = upstream_response
-        if self._from_transforms:
-            response = apply_transforms(self._from_transforms, response)
+        if self._pre_ir_transforms:
+            response = apply_transforms(self._pre_ir_transforms, response)
 
         # Phase 4b: Target response → IR
         t0 = time.perf_counter()
@@ -513,7 +513,7 @@ class ConversionPipeline:
             source_converter=self._source_converter,
             from_ctx=from_ctx,
             to_ctx=to_ctx,
-            from_transforms=self._from_transforms,
+            pre_ir_transforms=self._pre_ir_transforms,
             on_ir_event=on_ir_event,
         )
 
@@ -540,7 +540,7 @@ class StreamProcessor:
         source_converter: The client format converter.
         from_ctx: StreamContext for upstream→IR conversion.
         to_ctx: StreamContext for IR→source conversion.
-        from_transforms: Shim from_transforms to apply before conversion.
+        pre_ir_transforms: Shim pre_ir_transforms to apply before conversion.
         on_ir_event: Optional callback for each IR event.
     """
 
@@ -551,14 +551,14 @@ class StreamProcessor:
         source_converter: Any,
         from_ctx: Any,
         to_ctx: Any,
-        from_transforms: tuple[Transform, ...] = (),
+        pre_ir_transforms: tuple[Transform, ...] = (),
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._target_converter = target_converter
         self._source_converter = source_converter
         self._from_ctx = from_ctx
         self._to_ctx = to_ctx
-        self._from_transforms = from_transforms
+        self._pre_ir_transforms = pre_ir_transforms
         self._on_ir_event = on_ir_event
 
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
@@ -571,9 +571,9 @@ class StreamProcessor:
             List of source-format event dicts.  May be empty (some
             upstream chunks produce no source events), one, or multiple.
         """
-        # Apply shim from_transforms
-        if self._from_transforms:
-            chunk = apply_transforms(self._from_transforms, chunk)
+        # Apply shim pre_ir_transforms
+        if self._pre_ir_transforms:
+            chunk = apply_transforms(self._pre_ir_transforms, chunk)
 
         # Target → IR events
         ir_events = self._target_converter.stream_response_from_provider(

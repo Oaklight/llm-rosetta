@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from .transforms import IRTransform, Transform
 
@@ -110,10 +110,12 @@ class ProviderShim:
             fetching the upstream model list.  Defaults to ``"id"``
             when ``None``.  Useful for providers like Argo that place
             the actual model identifier in a non-standard field.
-        from_transforms: Transforms applied when data comes FROM this
-            provider (normalise dialect → standard).
-        to_transforms: Transforms applied when data goes TO this
-            provider (standard → dialect).
+        pre_ir_transforms: Body-level transforms applied BEFORE IR
+            conversion (normalise provider dialect → standard).
+            Aliased as ``from_transforms`` for backward compatibility.
+        post_ir_transforms: Body-level transforms applied AFTER IR
+            conversion (standard → provider dialect).
+            Aliased as ``to_transforms`` for backward compatibility.
         reasoning: Reasoning capability config for this provider.
             When ``None``, the converter uses its built-in default.
         model_reasoning: Per-model reasoning overrides keyed by
@@ -127,11 +129,57 @@ class ProviderShim:
     default_api_key_env: str | None = None
     logo: str | None = None
     model_id_field: str | None = None
-    from_transforms: tuple[Transform, ...] = ()
-    to_transforms: tuple[Transform, ...] = ()
+    pre_ir_transforms: tuple[Transform, ...] = ()
+    post_ir_transforms: tuple[Transform, ...] = ()
     ir_transforms: tuple[IRTransform, ...] = ()
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
+
+    def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
+        """Accept both new and legacy kwarg names.
+
+        Legacy ``from_transforms`` maps to ``pre_ir_transforms``;
+        ``to_transforms`` maps to ``post_ir_transforms``.
+        New names take precedence if both are provided.
+        """
+        # Map legacy names → new names (new names take precedence)
+        if "from_transforms" in kwargs and "pre_ir_transforms" not in kwargs:
+            kwargs["pre_ir_transforms"] = kwargs.pop("from_transforms")
+        else:
+            kwargs.pop("from_transforms", None)
+        if "to_transforms" in kwargs and "post_ir_transforms" not in kwargs:
+            kwargs["post_ir_transforms"] = kwargs.pop("to_transforms")
+        else:
+            kwargs.pop("to_transforms", None)
+
+        # Apply defaults for fields not in kwargs
+        defaults = {
+            "default_base_url": None,
+            "default_api_key_env": None,
+            "logo": None,
+            "model_id_field": None,
+            "pre_ir_transforms": (),
+            "post_ir_transforms": (),
+            "ir_transforms": (),
+            "reasoning": None,
+            "model_reasoning": None,
+        }
+        for k, v in defaults.items():
+            kwargs.setdefault(k, v)
+
+        for k, v in kwargs.items():
+            object.__setattr__(self, k, v)
+
+    # Backward-compatible aliases (read-only)
+    @property
+    def from_transforms(self) -> tuple[Transform, ...]:
+        """Alias for ``pre_ir_transforms`` (deprecated)."""
+        return self.pre_ir_transforms
+
+    @property
+    def to_transforms(self) -> tuple[Transform, ...]:
+        """Alias for ``post_ir_transforms`` (deprecated)."""
+        return self.post_ir_transforms
 
 
 # ---------------------------------------------------------------------------

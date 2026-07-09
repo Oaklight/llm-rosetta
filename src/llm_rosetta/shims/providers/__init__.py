@@ -19,7 +19,8 @@ Directory layout
 ----------------
 Each subdirectory that contains a ``provider.yaml`` is treated as a leaf
 provider definition.  An optional ``transforms.py`` alongside the YAML
-may export ``to_transforms`` and/or ``from_transforms`` tuples.
+may export ``pre_ir_transforms`` and/or ``post_ir_transforms`` tuples
+(legacy names ``from_transforms`` / ``to_transforms`` are also accepted).
 
 **Grouped directories** are also supported: a child directory that does
 NOT contain ``provider.yaml`` but DOES contain subdirectories with one is
@@ -67,7 +68,11 @@ _PROVIDERS_DIR = Path(__file__).parent
 def _load_transforms(
     provider_dir: Path, *, group: str | None = None, _builtin: bool = True
 ) -> tuple[tuple, tuple, tuple]:
-    """Import transforms.py if present, return (from_transforms, to_transforms, ir_transforms).
+    """Import transforms.py if present, return (pre_ir_transforms, post_ir_transforms, ir_transforms).
+
+    Accepts both new names (``pre_ir_transforms``, ``post_ir_transforms``)
+    and legacy names (``from_transforms``, ``to_transforms``) from the
+    transforms module.  New names take precedence if both are present.
 
     Args:
         provider_dir: Path to the leaf provider directory.
@@ -90,9 +95,12 @@ def _load_transforms(
         return (), (), ()
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
+    # New names take precedence; fall back to legacy names
+    pre = getattr(mod, "pre_ir_transforms", None) or getattr(mod, "from_transforms", ())
+    post = getattr(mod, "post_ir_transforms", None) or getattr(mod, "to_transforms", ())
     return (
-        getattr(mod, "from_transforms", ()),
-        getattr(mod, "to_transforms", ()),
+        pre,
+        post,
         getattr(mod, "ir_transforms", ()),
     )
 
@@ -117,7 +125,7 @@ def _load_single_provider(
         logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
         return None
 
-    from_t, to_t, ir_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
+    pre_t, post_t, ir_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -172,8 +180,8 @@ def _load_single_provider(
         default_api_key_env=cfg.get("default_api_key_env"),
         logo=cfg.get("logo"),
         model_id_field=cfg.get("model_id_field"),
-        from_transforms=from_t,
-        to_transforms=to_t,
+        pre_ir_transforms=pre_t,
+        post_ir_transforms=post_t,
         ir_transforms=ir_t,
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,

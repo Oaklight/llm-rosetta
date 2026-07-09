@@ -240,11 +240,11 @@ def convert(
     source_shim = get_shim(source_provider)
     target_shim = get_shim(target_provider)
 
-    source_from_t = source_shim.from_transforms if source_shim else ()
-    target_to_t = target_shim.to_transforms if target_shim else ()
+    source_pre_t = source_shim.pre_ir_transforms if source_shim else ()
+    target_post_t = target_shim.post_ir_transforms if target_shim else ()
 
-    # --- Apply source from_transforms ---
-    body = apply_transforms(source_from_t, source_body)
+    # --- Apply source pre_ir_transforms ---
+    body = apply_transforms(source_pre_t, source_body)
 
     # --- Core conversion: source → IR → target ---
     source_converter = get_converter_for_provider(source_provider)
@@ -265,7 +265,7 @@ def convert(
         ir_request, context=ctx
     )
 
-    # --- Apply target to_transforms ---
-    target_body = apply_transforms(target_to_t, target_body)
+    # --- Apply target post_ir_transforms ---
+    target_body = apply_transforms(target_post_t, target_body)
 
     return target_body
