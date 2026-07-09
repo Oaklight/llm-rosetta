@@ -10,6 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
+- **Transform 字段重命名** —— `from_transforms` → `pre_ir_transforms`，`to_transforms` → `post_ir_transforms`（`ProviderShim` 上的字段）。旧名称在构造函数参数和 `transforms.py` 导出中均作为向后兼容别名继续有效。
 - **`system_instruction` 统一为 `list[TextPart]`** ([#364](https://github.com/Oaklight/llm-rosetta/issues/364))：IR 中 `system_instruction` 的规范形式从 `str` 改为 `list[TextPart]`。单个字符串 `"You are helpful."` 表示为 `[TextPart(type="text", text="You are helpful.")]`。确保所有 converter 间结构一致，并支持 block 级元数据（如 Anthropic prompt caching 的 `cache_hint`）在 IR 管线中流转。四个 converter 均已更新。**Breaking**：直接将 `ir_request["system_instruction"]` 当 `str` 读取的代码需要改为处理 `list[TextPart]`。
 
 ## v0.7.0a1 — 2026-06-27

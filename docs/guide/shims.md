@@ -17,12 +17,15 @@ ProviderShim ("deepseek")
 ├── default_base_url: "https://api.deepseek.com"
 ├── default_api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
-├── to_transforms: (strip_fields("n", "logit_bias", "seed"),)
-└── from_transforms: ()
+├── post_ir_transforms: (strip_fields("n", "logit_bias", "seed"),)
+└── pre_ir_transforms: ()
 ```
 
 - **ProviderShim** —— 提供商身份：名称、基础转换器类型、默认 URL、默认 API 密钥环境变量、Logo URL，以及可选的转换规则。
-- **Transforms** —— 纯 `dict → dict` 函数，围绕转换器应用。`to_transforms` 将输出请求适配为提供商方言；`from_transforms` 标准化输入响应。
+- **Transforms** —— 纯 `dict → dict` 函数，围绕转换器应用。`post_ir_transforms` 将输出请求适配为提供商方言；`pre_ir_transforms` 标准化输入响应。
+
+!!! note "向后兼容别名"
+    旧字段名 `to_transforms` 和 `from_transforms` 仍作为别名被接受 —— 在 `ProviderShim` 构造函数参数和 `transforms.py` 导出中均可使用。
 
 ### 声明式提供商目录
 
@@ -45,7 +48,7 @@ src/llm_rosetta/shims/providers/
 每个提供商子目录包含：
 
 - **`provider.yaml`**（必需）—— 声明 `name`、`base`、`default_base_url`、`default_api_key_env` 和 `logo`
-- **`transforms.py`**（可选）—— 导出 `to_transforms` 和/或 `from_transforms` 元组
+- **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 `provider.yaml` 示例：
 
@@ -63,8 +66,8 @@ logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepse
 from llm_rosetta.shims.transforms import strip_fields
 
 # DeepSeek 不支持 n、logit_bias 和 seed
-to_transforms = (strip_fields("n", "logit_bias", "seed"),)
-from_transforms = ()
+post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
+pre_ir_transforms = ()
 ```
 
 导入时，`shims/__init__.py` 自动扫描所有提供商目录并注册，然后发现通过 entry point 声明的插件 shim。
@@ -89,8 +92,8 @@ flowchart LR
         E["get_shim(name)"] --> F["_SHIM_REGISTRY.get(name)"]
         F --> G["注入 reasoning_cap
         到 ConversionContext"]
-        F --> H["应用 to_transforms
-        / from_transforms"]
+        F --> H["应用 post_ir_transforms
+        / pre_ir_transforms"]
     end
 
     注册 --> 使用
@@ -265,7 +268,7 @@ OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_t
 
 - **模型级 `thinking_type` 覆盖**：默认 `thinking_type: enabled`，通过 `model_overrides` 为 `claudeopus47` 设置 `thinking_type: adaptive`（Vertex AI 后端）。声明式处理。
 - **`unsigned_reasoning_blocks: preserve`**：历史消息中没有有效签名的 thinking block 保存在 metadata 中而非转发（避免 Argo 400 错误）。
-- **`from_transforms` —— OpenAI 响应格式归一化**：Argo 可能从 `/v1/messages` 返回 OpenAI Chat 格式响应，该 transform 在转换器处理前将其归一化为 Anthropic 格式。
+- **`pre_ir_transforms` —— OpenAI 响应格式归一化**：Argo 可能从 `/v1/messages` 返回 OpenAI Chat 格式响应，该 transform 在转换器处理前将其归一化为 Anthropic 格式。
 
 ### 配置
 
@@ -316,12 +319,12 @@ result = convert(request_body, source="openai_chat", target="volcengine")
 
 ```text
 请求:  客户端请求体 → source.from_provider() → IR → target.to_provider()
-       → [to_transforms] → 上游 API
+       → [post_ir_transforms] → 上游 API
 
-响应:  上游响应 → [from_transforms] → target.response_from_provider()
+响应:  上游响应 → [pre_ir_transforms] → target.response_from_provider()
        → IR → source.response_to_provider() → 客户端
 
-流式:  chunk → [from_transforms] → target.stream_from_provider()
+流式:  chunk → [pre_ir_transforms] → target.stream_from_provider()
        → IR → source.stream_to_provider() → 客户端
 ```
 
@@ -374,7 +377,7 @@ my_shim = ProviderShim(
     base="openai_chat",
     default_base_url="https://api.my-provider.com/v1",
     default_api_key_env="MY_PROVIDER_API_KEY",
-    to_transforms=(strip_fields("logprobs", "seed"),),
+    post_ir_transforms=(strip_fields("logprobs", "seed"),),
 )
 register_shim(my_shim)
 ```
@@ -401,8 +404,8 @@ register_shim(my_shim)
     ```python
     from llm_rosetta.shims.transforms import strip_fields
 
-    to_transforms = (strip_fields("unsupported_field"),)
-    from_transforms = ()
+    post_ir_transforms = (strip_fields("unsupported_field"),)
+    pre_ir_transforms = ()
     ```
 
 提供商在导入时自动发现并注册。
@@ -448,5 +451,5 @@ unregister_shim("my-provider")
 当找到 shim 时：
 
 - `default_base_url` 和 `default_api_key_env` 在配置未明确指定时作为后备值使用
-- `to_transforms` 应用于发送给上游提供商的请求
-- `from_transforms` 应用于接收到的响应/流式 chunk，在转换之前执行
+- `post_ir_transforms` 应用于发送给上游提供商的请求
+- `pre_ir_transforms` 应用于接收到的响应/流式 chunk，在转换之前执行
