@@ -1,6 +1,6 @@
 """Argo Anthropic schema transforms.
 
-Response-side (from_transforms)
+Response-side (pre_ir_transforms)
 --------------------------------
 ``_normalize_openai_response`` rewrites OpenAI Chat Completions format responses
 to Anthropic Messages format.  Argo's ``/v1/messages`` endpoint inconsistently
@@ -123,7 +123,7 @@ def _normalize_openai_response(body: dict[str, Any]) -> dict[str, Any]:
 # Transform tuples (consumed by the shim loader)
 # ---------------------------------------------------------------------------
 
-to_transforms = ()
-from_transforms = (
+post_ir_transforms = ()
+pre_ir_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )

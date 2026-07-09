@@ -5,5 +5,5 @@ of the Anthropic Messages API — no request- or response-side transforms
 are needed.
 """
 
-to_transforms = ()
-from_transforms = ()
+post_ir_transforms = ()
+pre_ir_transforms = ()

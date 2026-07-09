@@ -13,6 +13,7 @@ functions (``get_shim``, ``list_shims``) read from it.
 from __future__ import annotations
 
 import logging
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -143,14 +144,28 @@ class ProviderShim:
         New names take precedence if both are provided.
         """
         # Map legacy names → new names (new names take precedence)
-        if "from_transforms" in kwargs and "pre_ir_transforms" not in kwargs:
-            kwargs["pre_ir_transforms"] = kwargs.pop("from_transforms")
-        else:
-            kwargs.pop("from_transforms", None)
-        if "to_transforms" in kwargs and "post_ir_transforms" not in kwargs:
-            kwargs["post_ir_transforms"] = kwargs.pop("to_transforms")
-        else:
-            kwargs.pop("to_transforms", None)
+        if "from_transforms" in kwargs:
+            warnings.warn(
+                "ProviderShim(from_transforms=...) is deprecated, "
+                "use pre_ir_transforms instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if "pre_ir_transforms" not in kwargs:
+                kwargs["pre_ir_transforms"] = kwargs.pop("from_transforms")
+            else:
+                kwargs.pop("from_transforms")
+        if "to_transforms" in kwargs:
+            warnings.warn(
+                "ProviderShim(to_transforms=...) is deprecated, "
+                "use post_ir_transforms instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            if "post_ir_transforms" not in kwargs:
+                kwargs["post_ir_transforms"] = kwargs.pop("to_transforms")
+            else:
+                kwargs.pop("to_transforms")
 
         # Apply defaults for fields not in kwargs.
         # Keep in sync with dataclass field defaults above.

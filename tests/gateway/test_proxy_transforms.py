@@ -39,11 +39,11 @@ def _clean_registry():
 
 @pytest.fixture()
 def volcengine_shim():
-    """Register a volcengine-like shim with to_transforms that strip fields."""
+    """Register a volcengine-like shim with post_ir_transforms that strip fields."""
     shim = ProviderShim(
         name="volcengine--openai_chat",
         base="openai_chat",
-        to_transforms=(strip_fields("logprobs", "top_logprobs"),),
+        post_ir_transforms=(strip_fields("logprobs", "top_logprobs"),),
     )
     register_shim(shim)
     return shim
@@ -51,12 +51,12 @@ def volcengine_shim():
 
 @pytest.fixture()
 def shim_with_transforms():
-    """Register a shim with both from_transforms and to_transforms."""
+    """Register a shim with both pre_ir_transforms and post_ir_transforms."""
     shim = ProviderShim(
         name="custom_provider",
         base="openai_chat",
-        from_transforms=(rename_field("custom_id", "id"),),
-        to_transforms=(strip_fields("logprobs"),),
+        pre_ir_transforms=(rename_field("custom_id", "id"),),
+        post_ir_transforms=(strip_fields("logprobs"),),
     )
     register_shim(shim)
     return shim
@@ -149,8 +149,8 @@ def _make_route(
 
 
 class TestNonStreamingTransforms:
-    def test_to_transforms_strip_fields(self, volcengine_shim):
-        """to_transforms should strip fields from the target request body."""
+    def test_post_ir_transforms_strip_fields(self, volcengine_shim):
+        """post_ir_transforms should strip fields from the target request body."""
         captured_body: dict[str, Any] = {}
         transport = _make_mock_transport(
             {
@@ -212,8 +212,8 @@ class TestNonStreamingTransforms:
         assert "logprobs" in captured_body
         assert "top_logprobs" in captured_body
 
-    def test_from_transforms_on_response(self, shim_with_transforms):
-        """from_transforms should be applied to the upstream response."""
+    def test_pre_ir_transforms_on_response(self, shim_with_transforms):
+        """pre_ir_transforms should be applied to the upstream response."""
         transport = _make_mock_transport(
             {
                 "custom_id": "resp-1",

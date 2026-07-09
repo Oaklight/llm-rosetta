@@ -182,8 +182,8 @@ class TestShimWithTransforms:
         s = ProviderShim(
             name="test",
             base="openai_chat",
-            from_transforms=(t1,),
-            to_transforms=(t2,),
+            pre_ir_transforms=(t1,),
+            post_ir_transforms=(t2,),
         )
         assert s.from_transforms == (t1,)
         assert s.to_transforms == (t2,)
@@ -206,7 +206,7 @@ class TestBuiltinTransforms:
 
         load_providers()
 
-    def test_volcengine_has_to_transforms(self):
+    def test_volcengine_has_post_ir_transforms(self):
         shim = get_shim("volcengine--openai_chat")
         assert shim is not None
         assert len(shim.to_transforms) > 0
@@ -347,12 +347,12 @@ class TestConvertWithTransforms:
 
         load_providers()
 
-    def test_convert_applies_source_from_transforms(self):
-        """Source shim's from_transforms should normalise before conversion."""
+    def test_convert_applies_source_pre_ir_transforms(self):
+        """Source shim's pre_ir_transforms should normalise before conversion."""
         custom = ProviderShim(
             name="custom-oai",
             base="openai_chat",
-            from_transforms=(rename_field("custom_field", "model"),),
+            pre_ir_transforms=(rename_field("custom_field", "model"),),
         )
         register_shim(custom)
 
@@ -365,12 +365,12 @@ class TestConvertWithTransforms:
         result = convert(body, "anthropic", source_provider="custom-oai")
         assert "model" in result
 
-    def test_convert_applies_target_to_transforms(self):
-        """Target shim's to_transforms should adapt after conversion."""
+    def test_convert_applies_target_post_ir_transforms(self):
+        """Target shim's post_ir_transforms should adapt after conversion."""
         custom = ProviderShim(
             name="custom-target",
             base="openai_chat",
-            to_transforms=(strip_fields("logprobs"),),
+            post_ir_transforms=(strip_fields("logprobs"),),
         )
         register_shim(custom)
 
@@ -400,7 +400,7 @@ class TestConvertWithTransforms:
         custom = ProviderShim(
             name="idem-test",
             base="openai_chat",
-            to_transforms=(t, t),
+            post_ir_transforms=(t, t),
         )
         register_shim(custom)
 

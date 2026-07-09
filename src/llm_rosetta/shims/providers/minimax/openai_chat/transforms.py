@@ -66,8 +66,8 @@ def _parse_think_tags(body: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
-to_transforms = (
+post_ir_transforms = (
     strip_fields("logprobs", "top_logprobs", "seed", "stop"),
     _NamedTransform(_inject_reasoning_split, "inject_reasoning_split()"),
 )
-from_transforms = (_NamedTransform(_parse_think_tags, "parse_think_tags()"),)
+pre_ir_transforms = (_NamedTransform(_parse_think_tags, "parse_think_tags()"),)

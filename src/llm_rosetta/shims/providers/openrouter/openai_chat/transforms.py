@@ -40,5 +40,5 @@ def _rename_reasoning_field(body: dict[str, Any]) -> dict[str, Any]:
     return body
 
 
-to_transforms = ()
-from_transforms = (_NamedTransform(_rename_reasoning_field, "rename_reasoning()"),)
+post_ir_transforms = ()
+pre_ir_transforms = (_NamedTransform(_rename_reasoning_field, "rename_reasoning()"),)

@@ -6,5 +6,5 @@ Strip them before sending upstream to avoid 400 errors.
 
 from llm_rosetta.shims.transforms import strip_fields
 
-to_transforms = (strip_fields("logprobs", "top_logprobs"),)
-from_transforms = ()
+post_ir_transforms = (strip_fields("logprobs", "top_logprobs"),)
+pre_ir_transforms = ()

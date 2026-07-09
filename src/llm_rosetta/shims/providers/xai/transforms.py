@@ -9,5 +9,5 @@ References:
 
 from llm_rosetta.shims.transforms import strip_fields
 
-to_transforms = (strip_fields("logit_bias"),)
-from_transforms = ()
+post_ir_transforms = (strip_fields("logit_bias"),)
+pre_ir_transforms = ()
