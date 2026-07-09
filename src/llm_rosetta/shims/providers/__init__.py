@@ -95,9 +95,14 @@ def _load_transforms(
         return (), (), ()
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    # New names take precedence; fall back to legacy names
-    pre = getattr(mod, "pre_ir_transforms", None) or getattr(mod, "from_transforms", ())
-    post = getattr(mod, "post_ir_transforms", None) or getattr(mod, "to_transforms", ())
+    # New names take precedence; fall back to legacy names.
+    # Use `is None` (not `or`) since empty tuple () is falsy but valid.
+    pre = getattr(mod, "pre_ir_transforms", None)
+    if pre is None:
+        pre = getattr(mod, "from_transforms", ())
+    post = getattr(mod, "post_ir_transforms", None)
+    if post is None:
+        post = getattr(mod, "to_transforms", ())
     return (
         pre,
         post,

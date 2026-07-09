@@ -152,8 +152,9 @@ class ProviderShim:
         else:
             kwargs.pop("to_transforms", None)
 
-        # Apply defaults for fields not in kwargs
-        defaults = {
+        # Apply defaults for fields not in kwargs.
+        # Keep in sync with dataclass field defaults above.
+        _FIELD_DEFAULTS = {
             "default_base_url": None,
             "default_api_key_env": None,
             "logo": None,
@@ -164,8 +165,17 @@ class ProviderShim:
             "reasoning": None,
             "model_reasoning": None,
         }
-        for k, v in defaults.items():
+        _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
+        for k, v in _FIELD_DEFAULTS.items():
             kwargs.setdefault(k, v)
+
+        # Reject unknown kwargs (match frozen dataclass behavior)
+        unknown = set(kwargs) - _VALID_FIELDS
+        if unknown:
+            raise TypeError(
+                f"ProviderShim.__init__() got unexpected keyword argument(s): "
+                f"{', '.join(sorted(unknown))}"
+            )
 
         for k, v in kwargs.items():
             object.__setattr__(self, k, v)
