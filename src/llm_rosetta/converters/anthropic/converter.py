@@ -113,6 +113,9 @@ class AnthropicConverter(BaseConverter):
                 content = item.get("content", [])
                 if not content:
                     continue
+                # NOTE: currently only checks text parts because Anthropic
+                # system only supports text blocks.  If system gains other
+                # block types in the future, broaden this scan.
                 has_cache_hint = any(
                     p.get("cache_hint") for p in content if is_text_part(p)
                 )
@@ -217,8 +220,12 @@ class AnthropicConverter(BaseConverter):
                         )
                 if text_parts:
                     ir_request["system_instruction"] = " ".join(text_parts)
-                # Stash structured system parts with cache_hint for
-                # insertion after message conversion (see below)
+                # When cache_hint is present, store structured parts for
+                # insertion into ir_messages (see below).  system_instruction
+                # is still set above as a joined string so consumers that
+                # don't care about cache semantics get plain text.  On the
+                # outbound path, request_to_provider prefers the structured
+                # system message over the string when cache_hint is present.
                 if ir_system_parts and any(
                     p.get("cache_hint") for p in ir_system_parts
                 ):
