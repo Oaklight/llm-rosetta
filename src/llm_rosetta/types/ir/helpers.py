@@ -122,6 +122,32 @@ def create_tool_result_message(
 
 
 # ============================================================================
+def flatten_system_instruction(system_instruction: Any) -> str | None:
+    """Flatten system_instruction to a plain string.
+
+    ``system_instruction`` in ``IRRequest`` may be a plain string (legacy)
+    or a list of IR ``TextPart`` dicts (with ``cache_hint``, set by the
+    Anthropic converter when the original request had ``cache_control``
+    on system blocks).
+
+    Converters that don't support block-level caching (OpenAI, Google)
+    should call this to get a plain string.
+
+    Args:
+        system_instruction: The ``system_instruction`` value from an IR request.
+
+    Returns:
+        A plain string, or ``None`` if the input is empty/absent.
+    """
+    if isinstance(system_instruction, list):
+        text = " ".join(
+            p["text"] for p in system_instruction if p.get("type") == "text"
+        )
+        return text or None
+    return system_instruction  # str or None
+
+
+# ============================================================================
 # 导出的主要函数 Main Exported Functions
 # ============================================================================
 
@@ -132,4 +158,6 @@ __all__ = [
     "extract_tool_calls",
     # 消息创建函数 Message creation functions
     "create_tool_result_message",
+    # System instruction helpers
+    "flatten_system_instruction",
 ]

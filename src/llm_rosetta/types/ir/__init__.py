@@ -52,6 +52,7 @@ from .helpers import (  # noqa: F401
     extract_all_text,
     extract_text_content,
     extract_tool_calls,
+    flatten_system_instruction,
 )
 
 # 验证工具 Validation utilities (internal — import from .validation directly)

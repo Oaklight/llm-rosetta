@@ -27,6 +27,7 @@ from .configs import (
 )
 from .messages import Message
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
+from .parts import TextPart
 
 # ============================================================================
 # 主请求类型 Main Request Type
@@ -63,7 +64,9 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[str | list[Any]]  # str or list of IR text parts
+    system_instruction: NotRequired[
+        str | list[TextPart]
+    ]  # str or list of IR text parts with cache_hint
 
     # ========== 工具相关 Tool Related ==========
     tools: NotRequired[list[ToolDefinition]]
