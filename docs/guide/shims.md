@@ -17,12 +17,15 @@ ProviderShim ("deepseek")
 ├── default_base_url: "https://api.deepseek.com"
 ├── default_api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
-├── to_transforms: (strip_fields("n", "logit_bias", "seed"),)
-└── from_transforms: ()
+├── post_ir_transforms: (strip_fields("n", "logit_bias", "seed"),)
+└── pre_ir_transforms: ()
 ```
 
 - **ProviderShim** — provider identity: name, base converter type, default URL, default API key env var, logo URL, and optional transforms.
-- **Transforms** — pure `dict → dict` functions applied around converters. `to_transforms` adapt outgoing requests to the provider's dialect; `from_transforms` normalize incoming responses.
+- **Transforms** — pure `dict → dict` functions applied around converters. `post_ir_transforms` adapt outgoing requests to the provider's dialect; `pre_ir_transforms` normalize incoming responses.
+
+!!! note "Backward-compatible aliases"
+    The old field names `to_transforms` and `from_transforms` are still accepted as aliases — both in `ProviderShim` constructor kwargs and in `transforms.py` exports.
 
 ### Declarative Provider Directory
 
@@ -45,7 +48,7 @@ src/llm_rosetta/shims/providers/
 Each provider subdirectory contains:
 
 - **`provider.yaml`** (required) — declares `name`, `base`, `default_base_url`, `default_api_key_env`, and `logo`
-- **`transforms.py`** (optional) — exports `to_transforms` and/or `from_transforms` tuples
+- **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
 
 Example `provider.yaml`:
 
@@ -63,8 +66,8 @@ Example `transforms.py`:
 from llm_rosetta.shims.transforms import strip_fields
 
 # DeepSeek does not support n, logit_bias, or seed
-to_transforms = (strip_fields("n", "logit_bias", "seed"),)
-from_transforms = ()
+post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
+pre_ir_transforms = ()
 ```
 
 At import time, `shims/__init__.py` scans all provider directories and registers them automatically, then discovers any plugin shims via entry points.
@@ -89,8 +92,8 @@ flowchart LR
         E["get_shim(name)"] --> F["_SHIM_REGISTRY.get(name)"]
         F --> G["inject reasoning_cap
         into ConversionContext"]
-        F --> H["apply to_transforms
-        / from_transforms"]
+        F --> H["apply post_ir_transforms
+        / pre_ir_transforms"]
     end
 
     Registration --> Usage
@@ -180,7 +183,7 @@ OpenAI-compatible shim with one transform: `max_tokens` → `max_completion_toke
 
 - **Model-level `thinking_type` override**: `thinking_type: enabled` by default, with `model_overrides` for `claudeopus47: thinking_type: adaptive` (Vertex AI backend). Handled declaratively via reasoning config.
 - **`unsigned_reasoning_blocks: preserve`**: Prior thinking blocks without valid signatures are preserved in metadata instead of being forwarded (avoids Argo 400 errors).
-- **`from_transforms` — OpenAI response normalization**: Argo may return OpenAI Chat format from `/v1/messages`. The transform converts it to Anthropic format before the converter sees it.
+- **`pre_ir_transforms` — OpenAI response normalization**: Argo may return OpenAI Chat format from `/v1/messages`. The transform converts it to Anthropic format before the converter sees it.
 
 ### Configuration
 
@@ -317,12 +320,12 @@ result = convert(request_body, source="openai_chat", target="volcengine")
 
 ```text
 Request:  client body → source.from_provider() → IR → target.to_provider()
-          → [to_transforms] → upstream API
+          → [post_ir_transforms] → upstream API
 
-Response: upstream → [from_transforms] → target.response_from_provider()
+Response: upstream → [pre_ir_transforms] → target.response_from_provider()
           → IR → source.response_to_provider() → client
 
-Stream:   chunk → [from_transforms] → target.stream_from_provider()
+Stream:   chunk → [pre_ir_transforms] → target.stream_from_provider()
           → IR → source.stream_to_provider() → client
 ```
 
@@ -375,7 +378,7 @@ my_shim = ProviderShim(
     base="openai_chat",
     default_base_url="https://api.my-provider.com/v1",
     default_api_key_env="MY_PROVIDER_API_KEY",
-    to_transforms=(strip_fields("logprobs", "seed"),),
+    post_ir_transforms=(strip_fields("logprobs", "seed"),),
 )
 register_shim(my_shim)
 ```
@@ -402,8 +405,8 @@ To add a new provider to the built-in registry:
     ```python
     from llm_rosetta.shims.transforms import strip_fields
 
-    to_transforms = (strip_fields("unsupported_field"),)
-    from_transforms = ()
+    post_ir_transforms = (strip_fields("unsupported_field"),)
+    pre_ir_transforms = ()
     ```
 
 The provider is automatically discovered and registered at import time.
@@ -449,5 +452,5 @@ Resolution order for provider type:
 When a shim is found:
 
 - `default_base_url` and `default_api_key_env` serve as fallbacks if not set in config
-- `to_transforms` are applied to outgoing requests before sending to the upstream provider
-- `from_transforms` are applied to incoming responses/stream chunks before conversion
+- `post_ir_transforms` are applied to outgoing requests before sending to the upstream provider
+- `pre_ir_transforms` are applied to incoming responses/stream chunks before conversion
