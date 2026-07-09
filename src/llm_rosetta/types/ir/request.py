@@ -64,9 +64,16 @@ class IRRequest(TypedDict):
     # - OpenAI Responses: instructions
     # - Anthropic: system
     # - Google: config.system_instruction
-    system_instruction: NotRequired[
-        str | list[TextPart]
-    ]  # str or list of IR text parts with cache_hint
+    #
+    # Usually a plain string.  When the Anthropic source request has
+    # cache_control on system blocks, this is a list[TextPart] carrying
+    # cache_hint metadata so the Anthropic outbound path can emit
+    # structured blocks.
+    #
+    # Consumers that only need the text should call
+    # flatten_system_instruction() (from types.ir.helpers) which handles
+    # both str and list forms and always returns str | None.
+    system_instruction: NotRequired[str | list[TextPart]]
 
     # ========== 工具相关 Tool Related ==========
     tools: NotRequired[list[ToolDefinition]]
