@@ -185,13 +185,13 @@ class TestShimWithTransforms:
             pre_ir_transforms=(t1,),
             post_ir_transforms=(t2,),
         )
-        assert s.from_transforms == (t1,)
-        assert s.to_transforms == (t2,)
+        assert s.pre_ir_transforms == (t1,)
+        assert s.post_ir_transforms == (t2,)
 
     def test_provider_shim_default_empty(self):
         s = ProviderShim(name="test", base="openai_chat")
-        assert s.from_transforms == ()
-        assert s.to_transforms == ()
+        assert s.pre_ir_transforms == ()
+        assert s.post_ir_transforms == ()
 
 
 # ---------------------------------------------------------------------------
@@ -209,13 +209,13 @@ class TestBuiltinTransforms:
     def test_volcengine_has_post_ir_transforms(self):
         shim = get_shim("volcengine--openai_chat")
         assert shim is not None
-        assert len(shim.to_transforms) > 0
+        assert len(shim.post_ir_transforms) > 0
 
     def test_volcengine_strips_logprobs(self):
         shim = get_shim("volcengine--openai_chat")
         assert shim is not None
         body = {"model": "test", "logprobs": True, "top_logprobs": 5, "messages": []}
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "logprobs" not in result
         assert "top_logprobs" not in result
         assert result["model"] == "test"
@@ -231,7 +231,7 @@ class TestBuiltinTransforms:
             "temperature": 0.7,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "n" not in result
         assert "logit_bias" not in result
         assert "seed" not in result
@@ -247,7 +247,7 @@ class TestBuiltinTransforms:
             "temperature": 1.0,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "logit_bias" not in result
         assert result["model"] == "grok-3"
         assert result["temperature"] == 1.0
@@ -264,7 +264,7 @@ class TestBuiltinTransforms:
             "temperature": 0.5,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "logprobs" not in result
         assert "top_logprobs" not in result
         assert "logit_bias" not in result
@@ -282,7 +282,7 @@ class TestBuiltinTransforms:
             "temperature": 0.7,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "frequency_penalty" not in result
         assert "logit_bias" not in result
         assert result["model"] == "qwen-max"
@@ -300,7 +300,7 @@ class TestBuiltinTransforms:
             "temperature": 0.8,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "logprobs" not in result
         assert "top_logprobs" not in result
         assert "seed" not in result
@@ -323,7 +323,7 @@ class TestBuiltinTransforms:
             "temperature": 0.8,
             "messages": [],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "n" not in result
         assert "presence_penalty" not in result
         assert "frequency_penalty" not in result
@@ -572,7 +572,7 @@ class TestArgoOpenaiChatTransforms:
             "model": "gpt-4",
             "messages": [{"role": "developer", "content": "system prompt"}],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert result["messages"][0]["role"] == "system"
 
     def test_argo_normalizes_null_content(self):
@@ -584,7 +584,7 @@ class TestArgoOpenaiChatTransforms:
                 {"role": "assistant", "content": None, "tool_calls": []},
             ],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert result["messages"][0]["content"] == ""
 
     def test_argo_strips_temperature_for_opus47(self):
@@ -595,7 +595,7 @@ class TestArgoOpenaiChatTransforms:
             "temperature": 0.7,
             "messages": [{"role": "user", "content": "hi"}],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "temperature" not in result
 
     def test_argo_keeps_temperature_for_other_models(self):
@@ -606,7 +606,7 @@ class TestArgoOpenaiChatTransforms:
             "temperature": 0.7,
             "messages": [{"role": "user", "content": "hi"}],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert result["temperature"] == 0.7
 
     def test_argo_renames_max_tokens(self):
@@ -617,6 +617,6 @@ class TestArgoOpenaiChatTransforms:
             "max_tokens": 100,
             "messages": [{"role": "user", "content": "hi"}],
         }
-        result = apply_transforms(shim.to_transforms, body)
+        result = apply_transforms(shim.post_ir_transforms, body)
         assert "max_tokens" not in result
         assert result["max_completion_tokens"] == 100

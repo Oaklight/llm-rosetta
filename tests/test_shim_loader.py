@@ -37,12 +37,12 @@ class TestLoadTransforms:
         assert to_t == ()
 
     def test_transforms_with_to_only(self, tmp_path: Path):
-        """Loads to_transforms from transforms.py."""
+        """Loads post_ir_transforms from transforms.py."""
         tf = tmp_path / "transforms.py"
         tf.write_text(
             textwrap.dedent("""\
             from llm_rosetta.shims.transforms import strip_fields
-            to_transforms = (strip_fields("foo"),)
+            post_ir_transforms = (strip_fields("foo"),)
         """)
         )
         from_t, to_t, ir_t = _load_transforms(tmp_path)
@@ -55,13 +55,13 @@ class TestLoadTransforms:
         assert result["bar"] == 2
 
     def test_transforms_with_both(self, tmp_path: Path):
-        """Loads both from_transforms and to_transforms."""
+        """Loads both pre_ir_transforms and post_ir_transforms."""
         tf = tmp_path / "transforms.py"
         tf.write_text(
             textwrap.dedent("""\
             from llm_rosetta.shims.transforms import strip_fields, rename_field
-            to_transforms = (strip_fields("x"),)
-            from_transforms = (rename_field("a", "b"),)
+            post_ir_transforms = (strip_fields("x"),)
+            pre_ir_transforms = (rename_field("a", "b"),)
         """)
         )
         from_t, to_t, ir_t = _load_transforms(tmp_path)
@@ -139,11 +139,11 @@ class TestLoadProviders:
         load_providers()
         v = get_shim("volcengine--openai_chat")
         assert v is not None
-        assert len(v.to_transforms) == 1
-        assert len(v.from_transforms) == 0
+        assert len(v.post_ir_transforms) == 1
+        assert len(v.pre_ir_transforms) == 0
         # Verify it strips the right fields
         body = {"logprobs": True, "top_logprobs": 5, "messages": []}
-        result = v.to_transforms[0](body)
+        result = v.post_ir_transforms[0](body)
         assert "logprobs" not in result
         assert "messages" in result
 
@@ -152,10 +152,10 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("deepseek")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
         body = {"n": 2, "logit_bias": {}, "seed": 42, "messages": []}
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "n" not in result
         assert "logit_bias" not in result
         assert "seed" not in result
@@ -166,10 +166,10 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("xai")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
         body = {"logit_bias": {"50256": -100}, "messages": []}
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "logit_bias" not in result
         assert "messages" in result
 
@@ -178,8 +178,8 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("moonshot")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
         body = {
             "logprobs": True,
             "top_logprobs": 5,
@@ -187,7 +187,7 @@ class TestLoadProviders:
             "seed": 123,
             "messages": [],
         }
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "logprobs" not in result
         assert "top_logprobs" not in result
         assert "logit_bias" not in result
@@ -199,10 +199,10 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("qwen")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
         body = {"frequency_penalty": 0.5, "logit_bias": {}, "messages": []}
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "frequency_penalty" not in result
         assert "logit_bias" not in result
         assert "messages" in result
@@ -212,8 +212,8 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("minimax--openai_chat")
         assert s is not None
-        assert len(s.to_transforms) == 2  # strip_fields + inject_reasoning_split
-        assert len(s.from_transforms) == 1  # parse_think_tags
+        assert len(s.post_ir_transforms) == 2  # strip_fields + inject_reasoning_split
+        assert len(s.pre_ir_transforms) == 1  # parse_think_tags
         body = {
             "logprobs": True,
             "top_logprobs": 5,
@@ -221,7 +221,7 @@ class TestLoadProviders:
             "stop": ["\n"],
             "messages": [],
         }
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "logprobs" not in result
         assert "top_logprobs" not in result
         assert "seed" not in result
@@ -233,8 +233,8 @@ class TestLoadProviders:
         load_providers()
         s = get_shim("zhipu")
         assert s is not None
-        assert len(s.to_transforms) == 1
-        assert len(s.from_transforms) == 0
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
         body = {
             "n": 2,
             "presence_penalty": 0.5,
@@ -245,7 +245,7 @@ class TestLoadProviders:
             "seed": 42,
             "messages": [],
         }
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "n" not in result
         assert "presence_penalty" not in result
         assert "frequency_penalty" not in result
@@ -347,14 +347,14 @@ class TestLoadProvidersFromDir:
         (d / "provider.yaml").write_text("name: myplugin\nbase: openai_chat\n")
         (d / "transforms.py").write_text(
             "from llm_rosetta.shims.transforms import strip_fields\n"
-            'to_transforms = (strip_fields("foo"),)\n'
+            'post_ir_transforms = (strip_fields("foo"),)\n'
         )
         shims = load_providers_from_dir(tmp_path)
         s = [s for s in shims if s.name == "myplugin"][0]
-        assert len(s.to_transforms) == 1
+        assert len(s.post_ir_transforms) == 1
         # Verify the transform works
         body = {"foo": 1, "bar": 2}
-        result = s.to_transforms[0](body)
+        result = s.post_ir_transforms[0](body)
         assert "foo" not in result
         assert result["bar"] == 2
 
