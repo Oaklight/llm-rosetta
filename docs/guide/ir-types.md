@@ -39,6 +39,9 @@ from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, T
 ir_request: IRRequest = {
     "model": "gpt-4o",
     "messages": [...],          # list of Message
+    "system_instruction": [     # optional list[TextPart]
+        {"type": "text", "text": "You are a helpful assistant."},
+    ],
     "tools": [...],             # optional list of ToolDefinition
     "tool_choice": "auto",      # optional ToolChoice
     "generation": {             # optional GenerationConfig
@@ -47,6 +50,11 @@ ir_request: IRRequest = {
     },
 }
 ```
+
+!!! note "`system_instruction` is always `list[TextPart]`"
+    Even a single system prompt string is wrapped as `[TextPart(type="text", text="...")]`.
+    This canonical form ensures block-level metadata (such as `cache_hint` for Anthropic
+    prompt caching) can flow through the IR pipeline without union types.
 
 ## IRResponse
 

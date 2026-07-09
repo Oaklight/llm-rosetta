@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **`system_instruction` unified to `list[TextPart]`** ([#364](https://github.com/Oaklight/llm-rosetta/issues/364)): The canonical IR form of `system_instruction` is now `list[TextPart]` instead of `str`. A single string `"You are helpful."` is represented as `[TextPart(type="text", text="You are helpful.")]`. This ensures consistent structure across all converters and enables block-level metadata (e.g. `cache_hint` for Anthropic prompt caching) to flow through the IR pipeline. All 4 converters updated. **Breaking**: code that reads `ir_request["system_instruction"]` as `str` must handle `list[TextPart]`.
+
 ## v0.7.0a1 — 2026-06-27
 
 ### Added
