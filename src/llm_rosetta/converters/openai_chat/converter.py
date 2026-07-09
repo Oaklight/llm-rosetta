@@ -87,13 +87,15 @@ class OpenAIChatConverter(BaseConverter):
         ctx = context if context is not None else ConversionContext()
         result: dict[str, Any] = {"model": ir_request["model"]}
 
-        # 1. System instruction → system message
-        # system_instruction is list[TextPart]; convert via content_ops
+        # 1. System instruction → system message (plain string)
+        # OpenAI Chat system messages use plain string content for maximum
+        # downstream compatibility (some consumers don't handle array form).
         messages: list[dict[str, Any]] = []
         system_parts = ir_request.get("system_instruction")
         if system_parts:
-            content = [self.content_ops.ir_text_to_p(p) for p in system_parts]
-            messages.append({"role": "system", "content": content})
+            system_text = " ".join(p["text"] for p in system_parts if is_text_part(p))
+            if system_text:
+                messages.append({"role": "system", "content": system_text})
 
         # 2. Messages — fix orphaned tool_calls at IR level before conversion.
         # OpenAI Chat API strictly requires every tool_call_id to have a
