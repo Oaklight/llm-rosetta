@@ -12,10 +12,12 @@ from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
 from llm_rosetta.types.ir import (
     FilePart,
+    IRRequest,
     ImagePart,
     ReasoningPart,
     TextPart,
     ToolCallPart,
+    ToolDefinition,
     ToolResultPart,
 )
 
@@ -220,7 +222,7 @@ class TestToolDefinitionCacheHint:
         assert "cache_hint" not in ir
 
     def test_ir_tool_definition_to_p_writes_cache_control(self):
-        ir_tool: dict = {
+        ir_tool: ToolDefinition = {
             "type": "function",
             "name": "get_weather",
             "description": "Get weather",
@@ -577,7 +579,7 @@ class TestCacheHintIgnoredByOtherConverters:
 
         converter = OpenAIChatConverter()
         # Create an IR request with cache_hint on text
-        ir_request = {
+        ir_request: IRRequest = {
             "model": "gpt-4",
             "messages": [
                 {
