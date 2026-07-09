@@ -49,9 +49,9 @@ class AnthropicContentOps(BaseContentOps):
         if pm:
             result["_provider_metadata"] = pm
         # Preserve cache_hint → cache_control
-        ch = ir_text.get("cache_hint")
-        if ch:
-            result["cache_control"] = ch
+        cache_hint = ir_text.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
         return result
 
     @staticmethod
@@ -78,9 +78,9 @@ class AnthropicContentOps(BaseContentOps):
             if pm:
                 result["provider_metadata"] = pm
             # Read cache_control → cache_hint
-            cc = provider_text.get("cache_control")
-            if cc:
-                result["cache_hint"] = cc
+            cache_control = provider_text.get("cache_control")
+            if cache_control is not None:
+                result["cache_hint"] = cache_control
             return result
         raise ValueError(f"Cannot convert to TextPart: {provider_text!r}")
 
@@ -119,9 +119,9 @@ class AnthropicContentOps(BaseContentOps):
         else:
             raise ValueError("ImagePart must have either image_url or image_data")
         # Preserve cache_hint → cache_control
-        ch = ir_image.get("cache_hint")
-        if ch:
-            result["cache_control"] = ch
+        cache_hint = ir_image.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
         return result
 
     @staticmethod
@@ -148,9 +148,9 @@ class AnthropicContentOps(BaseContentOps):
         else:
             result = ImagePart(type="image")
         # Read cache_control → cache_hint
-        cc = provider_image.get("cache_control")
-        if cc:
-            result["cache_hint"] = cc
+        cache_control = provider_image.get("cache_control")
+        if cache_control is not None:
+            result["cache_hint"] = cache_control
         return result
 
     # ==================== File ====================
@@ -188,9 +188,9 @@ class AnthropicContentOps(BaseContentOps):
         else:
             raise ValueError("FilePart must have either file_data or file_url")
         # Preserve cache_hint → cache_control
-        ch = ir_file.get("cache_hint")
-        if ch:
-            result["cache_control"] = ch
+        cache_hint = ir_file.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
         return result
 
     @staticmethod
@@ -217,9 +217,9 @@ class AnthropicContentOps(BaseContentOps):
         else:
             result = FilePart(type="file")
         # Read cache_control → cache_hint
-        cc = provider_file.get("cache_control")
-        if cc:
-            result["cache_hint"] = cc
+        cache_control = provider_file.get("cache_control")
+        if cache_control is not None:
+            result["cache_hint"] = cache_control
         return result
 
     # ==================== Audio (not supported) ====================
@@ -276,9 +276,9 @@ class AnthropicContentOps(BaseContentOps):
             result["_provider_metadata"] = pm
 
         # Preserve cache_hint → cache_control
-        ch = ir_reasoning.get("cache_hint")
-        if ch:
-            result["cache_control"] = ch
+        cache_hint = ir_reasoning.get("cache_hint")
+        if cache_hint is not None:
+            result["cache_control"] = cache_hint
 
         return result
 
@@ -307,9 +307,9 @@ class AnthropicContentOps(BaseContentOps):
             result["provider_metadata"] = pm
 
         # Read cache_control → cache_hint
-        cc = provider_reasoning.get("cache_control")
-        if cc:
-            result["cache_hint"] = cc
+        cache_control = provider_reasoning.get("cache_control")
+        if cache_control is not None:
+            result["cache_hint"] = cache_control
 
         return result
 
