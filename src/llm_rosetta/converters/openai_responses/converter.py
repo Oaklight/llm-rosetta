@@ -16,6 +16,7 @@ from typing import Any, cast
 from ...types.ir import (
     ExtensionItem,
     Message,
+    TextPart,
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
@@ -106,10 +107,12 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx = context if context is not None else ConversionContext()
         result: dict[str, Any] = {"model": ir_request["model"]}
 
-        # 1. System instruction → instructions field
-        system_instruction = ir_request.get("system_instruction")
-        if system_instruction:
-            result["instructions"] = system_instruction
+        # 1. System instruction → instructions field (plain string)
+        system_parts = ir_request.get("system_instruction")
+        if system_parts:
+            result["instructions"] = " ".join(
+                p["text"] for p in system_parts if is_text_part(p)
+            )
 
         # 2. Messages → input items — fix orphaned tool_calls at IR level
         # before conversion.  OpenAI Responses API strictly requires every
@@ -187,10 +190,12 @@ class OpenAIResponsesConverter(BaseConverter):
             "messages": [],
         }
 
-        # 1. Instructions → system_instruction
+        # 1. Instructions → system_instruction (list[TextPart])
         instructions = provider_request.get("instructions")
         if instructions:
-            ir_request["system_instruction"] = instructions
+            ir_request["system_instruction"] = [
+                TextPart(type="text", text=instructions)
+            ]
 
         # 2. Input items → messages
         input_items = provider_request.get("input", [])

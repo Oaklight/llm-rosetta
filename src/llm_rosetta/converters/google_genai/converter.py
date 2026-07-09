@@ -24,6 +24,7 @@ from ...types.ir import (
     ExtensionItem,
     IRInput,
     Message,
+    TextPart,
     ToolChoice,
     ToolDefinition,
     is_message,
@@ -224,12 +225,7 @@ class GoogleGenAIConverter(BaseConverter):
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. Handle system_instruction
-        system_instruction = None
-
-        # From IRRequest.system_instruction field
-        ir_system = ir_request.get("system_instruction")
-        if ir_system:
-            system_instruction = {"role": "user", "parts": [{"text": ir_system}]}
+        system_instruction = self._build_system_instruction(ir_request)
 
         # 2. Handle messages — fix orphaned tool_calls/results and strip
         #    orphaned tool_choice/tool_config at IR level before conversion.
@@ -613,19 +609,31 @@ class GoogleGenAIConverter(BaseConverter):
         return usage_metadata
 
     @staticmethod
-    def _parse_system_instruction(system_instruction: Any) -> str | None:
-        """Parse Google GenAI system_instruction to plain text."""
+    def _build_system_instruction(ir_request: Any) -> dict[str, Any] | None:
+        """Build Google system_instruction Content from IR system_instruction.
+
+        Converts IR list[TextPart] to Google's Content format:
+        ``{"role": "user", "parts": [{"text": "..."}]}``.
+        """
+        system_parts = ir_request.get("system_instruction")
+        if not system_parts:
+            return None
+        parts = [{"text": p["text"]} for p in system_parts if is_text_part(p)]
+        return {"role": "user", "parts": parts} if parts else None
+
+    @staticmethod
+    def _parse_system_instruction(system_instruction: Any) -> list[TextPart] | None:
+        """Parse Google GenAI system_instruction to list[TextPart]."""
         if isinstance(system_instruction, str):
-            return system_instruction
+            return [TextPart(type="text", text=system_instruction)]
         if isinstance(system_instruction, dict):
             parts = system_instruction.get("parts", [])
             text_parts = [
-                part["text"]
+                TextPart(type="text", text=part["text"])
                 for part in parts
                 if isinstance(part, dict) and "text" in part
             ]
-            if text_parts:
-                return " ".join(text_parts)
+            return text_parts or None
         return None
 
     def messages_to_provider(
