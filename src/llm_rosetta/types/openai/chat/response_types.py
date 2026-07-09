@@ -30,6 +30,7 @@ class PromptTokensDetails(TypedDict, total=False):
     Reference: openai.types.CompletionUsage.PromptTokensDetails
     """
 
+    cache_write_tokens: NotRequired[int | None]
     cached_tokens: NotRequired[int | None]
     audio_tokens: NotRequired[int | None]
 

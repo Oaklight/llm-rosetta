@@ -128,6 +128,9 @@ class InputTokensDetails(TypedDict, total=False):
     Reference: openai.types.responses.response_usage.InputTokensDetails
     """
 
+    cache_write_tokens: int
+    """Number of cache-write tokens."""
+
     cached_tokens: int
     """Number of cached tokens."""
 
