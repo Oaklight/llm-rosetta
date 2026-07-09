@@ -48,6 +48,10 @@ class AnthropicContentOps(BaseContentOps):
         pm = ir_text.get("provider_metadata")
         if pm:
             result["_provider_metadata"] = pm
+        # Preserve cache_hint → cache_control
+        ch = ir_text.get("cache_hint")
+        if ch:
+            result["cache_control"] = ch
         return result
 
     @staticmethod
@@ -73,6 +77,10 @@ class AnthropicContentOps(BaseContentOps):
             pm = provider_text.get("_provider_metadata")
             if pm:
                 result["provider_metadata"] = pm
+            # Read cache_control → cache_hint
+            cc = provider_text.get("cache_control")
+            if cc:
+                result["cache_hint"] = cc
             return result
         raise ValueError(f"Cannot convert to TextPart: {provider_text!r}")
 
@@ -95,7 +103,7 @@ class AnthropicContentOps(BaseContentOps):
         """
         image_data = ir_image.get("image_data")
         if image_data:
-            return {
+            result: dict[str, Any] = {
                 "type": "image",
                 "source": {
                     "type": "base64",
@@ -103,15 +111,18 @@ class AnthropicContentOps(BaseContentOps):
                     "data": image_data["data"],
                 },
             }
-
-        image_url = ir_image.get("image_url")
-        if image_url:
-            return {
+        elif ir_image.get("image_url"):
+            result = {
                 "type": "image",
-                "source": {"type": "url", "url": image_url},
+                "source": {"type": "url", "url": ir_image["image_url"]},
             }
-
-        raise ValueError("ImagePart must have either image_url or image_data")
+        else:
+            raise ValueError("ImagePart must have either image_url or image_data")
+        # Preserve cache_hint → cache_control
+        ch = ir_image.get("cache_hint")
+        if ch:
+            result["cache_control"] = ch
+        return result
 
     @staticmethod
     def p_image_to_ir(provider_image: Any, **kwargs: Any) -> ImagePart:
@@ -125,7 +136,7 @@ class AnthropicContentOps(BaseContentOps):
         """
         source = provider_image.get("source", {})
         if source.get("type") == "base64":
-            return ImagePart(
+            result = ImagePart(
                 type="image",
                 image_data={
                     "data": source.get("data", ""),
@@ -133,8 +144,14 @@ class AnthropicContentOps(BaseContentOps):
                 },
             )
         elif source.get("type") == "url":
-            return ImagePart(type="image", image_url=source.get("url", ""))
-        return ImagePart(type="image")
+            result = ImagePart(type="image", image_url=source.get("url", ""))
+        else:
+            result = ImagePart(type="image")
+        # Read cache_control → cache_hint
+        cc = provider_image.get("cache_control")
+        if cc:
+            result["cache_hint"] = cc
+        return result
 
     # ==================== File ====================
 
@@ -155,7 +172,7 @@ class AnthropicContentOps(BaseContentOps):
         """
         file_data = ir_file.get("file_data")
         if file_data:
-            return {
+            result: dict[str, Any] = {
                 "type": "document",
                 "source": {
                     "type": "base64",
@@ -163,15 +180,18 @@ class AnthropicContentOps(BaseContentOps):
                     "data": file_data["data"],
                 },
             }
-
-        file_url = ir_file.get("file_url")
-        if file_url:
-            return {
+        elif ir_file.get("file_url"):
+            result = {
                 "type": "document",
-                "source": {"type": "url", "url": file_url},
+                "source": {"type": "url", "url": ir_file["file_url"]},
             }
-
-        raise ValueError("FilePart must have either file_data or file_url")
+        else:
+            raise ValueError("FilePart must have either file_data or file_url")
+        # Preserve cache_hint → cache_control
+        ch = ir_file.get("cache_hint")
+        if ch:
+            result["cache_control"] = ch
+        return result
 
     @staticmethod
     def p_file_to_ir(provider_file: Any, **kwargs: Any) -> FilePart:
@@ -185,7 +205,7 @@ class AnthropicContentOps(BaseContentOps):
         """
         source = provider_file.get("source", {})
         if source.get("type") == "base64":
-            return FilePart(
+            result = FilePart(
                 type="file",
                 file_data={
                     "data": source["data"],
@@ -193,8 +213,14 @@ class AnthropicContentOps(BaseContentOps):
                 },
             )
         elif source.get("type") == "url":
-            return FilePart(type="file", file_url=source["url"])
-        return FilePart(type="file")
+            result = FilePart(type="file", file_url=source["url"])
+        else:
+            result = FilePart(type="file")
+        # Read cache_control → cache_hint
+        cc = provider_file.get("cache_control")
+        if cc:
+            result["cache_hint"] = cc
+        return result
 
     # ==================== Audio (not supported) ====================
 
@@ -249,6 +275,11 @@ class AnthropicContentOps(BaseContentOps):
         if pm:
             result["_provider_metadata"] = pm
 
+        # Preserve cache_hint → cache_control
+        ch = ir_reasoning.get("cache_hint")
+        if ch:
+            result["cache_control"] = ch
+
         return result
 
     @staticmethod
@@ -274,6 +305,11 @@ class AnthropicContentOps(BaseContentOps):
         pm = provider_reasoning.get("_provider_metadata")
         if pm:
             result["provider_metadata"] = pm
+
+        # Read cache_control → cache_hint
+        cc = provider_reasoning.get("cache_control")
+        if cc:
+            result["cache_hint"] = cc
 
         return result
 
