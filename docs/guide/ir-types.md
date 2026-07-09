@@ -39,6 +39,9 @@ from llm_rosetta.types.ir import SystemMessage, UserMessage, AssistantMessage, T
 ir_request: IRRequest = {
     "model": "gpt-4o",
     "messages": [...],          # Message 列表
+    "system_instruction": [     # 可选的 list[TextPart]
+        {"type": "text", "text": "You are a helpful assistant."},
+    ],
     "tools": [...],             # 可选的 ToolDefinition 列表
     "tool_choice": "auto",      # 可选的 ToolChoice
     "generation": {             # 可选的 GenerationConfig
@@ -47,6 +50,11 @@ ir_request: IRRequest = {
     },
 }
 ```
+
+!!! note "`system_instruction` 始终为 `list[TextPart]`"
+    即使是单个 system prompt 字符串也会被包装为 `[TextPart(type="text", text="...")]`。
+    这种规范形式确保 block 级元数据（如 Anthropic prompt caching 的 `cache_hint`）
+    可以在 IR 管线中流转，无需使用 union 类型。
 
 ## IRResponse
 
