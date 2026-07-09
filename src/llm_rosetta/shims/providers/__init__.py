@@ -100,9 +100,19 @@ def _load_transforms(
     pre = getattr(mod, "pre_ir_transforms", None)
     if pre is None:
         pre = getattr(mod, "from_transforms", ())
+        if pre and hasattr(mod, "from_transforms"):
+            logger.info(
+                "%s uses deprecated 'from_transforms'; rename to 'pre_ir_transforms'",
+                tf_path,
+            )
     post = getattr(mod, "post_ir_transforms", None)
     if post is None:
         post = getattr(mod, "to_transforms", ())
+        if post and hasattr(mod, "to_transforms"):
+            logger.info(
+                "%s uses deprecated 'to_transforms'; rename to 'post_ir_transforms'",
+                tf_path,
+            )
     return (
         pre,
         post,

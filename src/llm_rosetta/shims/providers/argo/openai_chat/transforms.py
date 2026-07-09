@@ -1,6 +1,6 @@
 """Argo OpenAI Chat schema transforms.
 
-Request-side (to_transforms) — body-level
+Request-side (post_ir_transforms) — body-level
 -------------------------------------------
 - ``rename_field("max_tokens", "max_completion_tokens")``: converts the
   deprecated ``max_tokens`` parameter for newer OpenAI models.
@@ -30,13 +30,13 @@ from llm_rosetta.shims.transforms import (
     unwind_parallel_tool_calls,
 )
 
-to_transforms = (
+post_ir_transforms = (
     rename_field("max_tokens", "max_completion_tokens"),
     replace_message_field("role", "developer", "system"),
     default_message_field("content", ""),
     strip_fields_for_model(r"^claudeopus47", "temperature"),
 )
-from_transforms = ()
+pre_ir_transforms = ()
 ir_transforms = (
     truncate_images(50, pattern=r"^(gpt|o\d)"),
     unwind_parallel_tool_calls(pattern=r"^gemini"),

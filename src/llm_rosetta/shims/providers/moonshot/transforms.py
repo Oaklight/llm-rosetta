@@ -10,5 +10,5 @@ References:
 
 from llm_rosetta.shims.transforms import strip_fields
 
-to_transforms = (strip_fields("logprobs", "top_logprobs", "logit_bias", "seed"),)
-from_transforms = ()
+post_ir_transforms = (strip_fields("logprobs", "top_logprobs", "logit_bias", "seed"),)
+pre_ir_transforms = ()

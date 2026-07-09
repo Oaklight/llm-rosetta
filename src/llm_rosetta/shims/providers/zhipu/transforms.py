@@ -15,7 +15,7 @@ References:
 
 from llm_rosetta.shims.transforms import strip_fields
 
-to_transforms = (
+post_ir_transforms = (
     strip_fields(
         "n",
         "presence_penalty",
@@ -26,4 +26,4 @@ to_transforms = (
         "seed",
     ),
 )
-from_transforms = ()
+pre_ir_transforms = ()
