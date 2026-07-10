@@ -127,6 +127,8 @@ async def get_config(request: Any) -> Response:
                 entry["upstream_model"] = value["upstream_model"]
             if value.get("reasoning_override"):
                 entry["reasoning_override"] = value["reasoning_override"]
+            if value.get("flatten_system"):
+                entry["flatten_system"] = value["flatten_system"]
             models_normalized[name] = entry
 
     # Resolve effective reasoning config per model
@@ -421,6 +423,11 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
     upstream_model = body.get("upstream_model")
     if upstream_model:
         model_entry["upstream_model"] = upstream_model
+
+    # Persist per-model flatten_system flag (if provided)
+    flatten_system = body.get("flatten_system")
+    if flatten_system is not None:
+        model_entry["flatten_system"] = bool(flatten_system)
 
     # Persist per-model reasoning override (if provided)
     reasoning_override = body.get("reasoning_override")

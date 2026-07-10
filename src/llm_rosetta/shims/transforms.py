@@ -345,3 +345,56 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
         label += f"pattern={pattern!r}"
     label += ")"
     return _NamedIRTransform(_unwind, label)
+
+
+# ---------------------------------------------------------------------------
+# Body-level: system message flattening
+# ---------------------------------------------------------------------------
+
+
+def flatten_system_content(pattern: str | None = None) -> Transform:
+    """Return a body-level transform that flattens system message content
+    arrays to plain strings.
+
+    Converts ``messages[].content`` from
+    ``[{"type": "text", "text": "..."}]`` to a joined string for system
+    messages.  Idempotent — no-op if content is already a string.
+
+    When *pattern* is set, flattening only fires if ``body["model"]``
+    matches the regex (search on raw model string).
+
+    Example::
+
+        flatten_system_content()                     # always flatten
+        flatten_system_content(pattern=r"gemini")    # only for gemini models
+    """
+    compiled = re.compile(pattern) if pattern else None
+
+    def _flatten(body: dict[str, Any]) -> dict[str, Any]:
+        if compiled is not None:
+            model = body.get("model", "")
+            if not compiled.search(model):
+                return body
+
+        messages = body.get("messages")
+        if not messages or not isinstance(messages, list):
+            return body
+
+        for msg in messages:
+            if not isinstance(msg, dict) or msg.get("role") != "system":
+                continue
+            content = msg.get("content")
+            if isinstance(content, list):
+                text = " ".join(
+                    p.get("text", "") if isinstance(p, dict) else str(p)
+                    for p in content
+                )
+                msg["content"] = text
+
+        return body
+
+    label = "flatten_system_content("
+    if pattern:
+        label += f"pattern={pattern!r}"
+    label += ")"
+    return _NamedTransform(_flatten, label)

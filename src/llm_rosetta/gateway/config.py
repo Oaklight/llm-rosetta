@@ -156,6 +156,17 @@ class GatewayConfig:
             if isinstance(value, dict) and value.get("reasoning_override"):
                 self.model_reasoning_overrides[model_name] = value["reasoning_override"]
 
+        # Per-model flatten_system flag (explicit config or auto-detected).
+        # When True, system message content arrays are flattened to plain
+        # strings before sending upstream.
+        self.model_flatten_system: dict[str, bool] = {}
+        for model_name, value in raw.get("models", {}).items():
+            if isinstance(value, dict) and "flatten_system" in value:
+                self.model_flatten_system[model_name] = bool(value["flatten_system"])
+            elif re.search(r"gemini", model_name, re.IGNORECASE):
+                # Auto-detect: gemini models default to flatten_system=True
+                self.model_flatten_system[model_name] = True
+
         _server = raw.get("server", {})
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)
@@ -348,6 +359,7 @@ class GatewayConfig:
         upstream_model = self.model_upstream_names.get(model)
         caps = self.model_capabilities.get(model, list(self.DEFAULT_CAPABILITIES))
         reasoning = self.model_reasoning_overrides.get(model)
+        flatten_system = self.model_flatten_system.get(model, False)
 
         route = ResolvedRoute(
             source_provider=source_provider,
@@ -357,5 +369,6 @@ class GatewayConfig:
             upstream_model=upstream_model,
             model_capabilities=caps,
             reasoning_override=reasoning,
+            flatten_system=flatten_system,
         )
         return route, self.providers[provider_name]

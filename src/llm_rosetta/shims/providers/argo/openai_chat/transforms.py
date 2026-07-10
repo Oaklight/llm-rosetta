@@ -12,6 +12,9 @@ Request-side (post_ir_transforms) — body-level
   null content when iterating message bodies.
 - ``strip_fields_for_model(r"^claudeopus47", "temperature")``: strips
   ``temperature`` for reasoning models that reject it (e.g. Claude Opus 4.7).
+- ``flatten_system_content(pattern=r"^gemini")``: flattens system message
+  content arrays to plain strings for Gemini models, which don't handle
+  structured content in system messages.
 
 Request-side (ir_transforms) — IR-level
 -----------------------------------------
@@ -23,6 +26,7 @@ Request-side (ir_transforms) — IR-level
 
 from llm_rosetta.shims.transforms import (
     default_message_field,
+    flatten_system_content,
     rename_field,
     replace_message_field,
     strip_fields_for_model,
@@ -35,6 +39,7 @@ post_ir_transforms = (
     replace_message_field("role", "developer", "system"),
     default_message_field("content", ""),
     strip_fields_for_model(r"^claudeopus47", "temperature"),
+    flatten_system_content(pattern=r"^gemini"),
 )
 pre_ir_transforms = ()
 ir_transforms = (

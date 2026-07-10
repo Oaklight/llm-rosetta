@@ -893,6 +893,10 @@ body { padding-bottom: 26px; }
         <label><input type="checkbox" id="capReasoning" onchange="updateReasoningVisibility()"> reasoning</label>
       </div>
     </div>
+    <div class="form-group">
+      <label><input type="checkbox" id="flattenSystem"> <span data-i18n="label.flattenSystem">Flatten system content</span></label>
+      <div style="font-size:0.8em;color:var(--text-dim);margin-top:4px" data-i18n="label.flattenSystemHint">Flatten system message content arrays to plain strings for upstream compatibility.</div>
+    </div>
     <div class="form-group" id="modelReasoningGroup" style="display:none">
       <label><span data-i18n="label.reasoningConfig">Reasoning Config</span>
         <span class="badge badge-sm" id="reasoningSourceBadge" style="margin-left:6px"></span>
@@ -1112,7 +1116,7 @@ const I18N = {
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
     'label.proxyUrl':'Proxy URL (optional, overrides global)',
-    'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities',
+    'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities', 'label.flattenSystem':'Flatten system content', 'label.flattenSystemHint':'Flatten system message content arrays to plain strings for upstream compatibility.',
     'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
     'modal.addModel':'Add Model', 'modal.editModel':'Edit Model',
@@ -2432,6 +2436,10 @@ async function saveModel() {
     if (budgetRatioStr !== '') override.budget_tokens_default_ratio = parseFloat(budgetRatioStr);
     if (disabledStrategy) override.disabled = disabledStrategy;
     if (Object.keys(override).length > 0) body.reasoning_override = override;
+  }
+  // flatten_system
+  if (document.getElementById('flattenSystem').checked) {
+    body.flatten_system = true;
   }
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {

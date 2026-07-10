@@ -57,7 +57,9 @@ class TestOpenAIChatConverter:
         )
         result, _ = self.converter.request_to_provider(ir_request)
         assert result["messages"][0]["role"] == "system"
-        assert result["messages"][0]["content"] == "You are helpful."
+        assert result["messages"][0]["content"] == [
+            {"type": "text", "text": "You are helpful."}
+        ]
         assert result["messages"][1]["role"] == "user"
 
     def test_request_to_provider_full(self):

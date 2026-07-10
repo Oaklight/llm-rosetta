@@ -282,6 +282,13 @@ async def handle_non_streaming(
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
         logger.warning("Conversion warnings: %s", pipeline.warnings)
+
+    # Per-model system message flattening (gateway config override)
+    if route.flatten_system:
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        target_body = flatten_system_content()(target_body)
+
     log_converted_request(target_body)
 
     # Phase 3: Forward to upstream via transport
@@ -527,6 +534,12 @@ async def handle_streaming(
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
         logger.warning("Conversion warnings: %s", pipeline.warnings)
+
+    # Per-model system message flattening (gateway config override)
+    if route.flatten_system:
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        target_body = flatten_system_content()(target_body)
 
     log_converted_request(target_body)
 
