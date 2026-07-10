@@ -8,6 +8,14 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Anthropic `cache_control` preservation** ([#362](https://github.com/Oaklight/llm-rosetta/pull/362)): New `cache_hint` field on IR parts (`TextPart`, `ImagePart`, `FilePart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, `ToolDefinition`) enables round-tripping Anthropic's block-level `cache_control` through the IR pipeline. The Anthropic converter reads `cache_control` → `cache_hint` on ingest and writes it back on output; non-Anthropic converters silently ignore `cache_hint`, ensuring cross-format safety.
+
+### Fixed
+
+- **OpenAI SDK 2.45+ compatibility**: Added `cache_write_tokens` field to `InputTokensDetails` (Responses API) and `PromptTokensDetails` (Chat Completions API) TypedDict replicas to match upstream SDK changes.
+
 ### Changed
 
 - **Transform fields renamed** — `from_transforms` → `pre_ir_transforms`, `to_transforms` → `post_ir_transforms` on `ProviderShim`. Old names accepted as backward-compatible aliases in both constructor kwargs and `transforms.py` exports.
