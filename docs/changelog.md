@@ -8,9 +8,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.7.0 — 2026-07-10
+
 ### 新增
 
 - **Anthropic `cache_control` 保留** ([#362](https://github.com/Oaklight/llm-rosetta/pull/362))：IR 部件（`TextPart`、`ImagePart`、`FilePart`、`ReasoningPart`、`ToolCallPart`、`ToolResultPart`、`ToolDefinition`）新增 `cache_hint` 字段，支持 Anthropic block 级 `cache_control` 在 IR 管线中的往返传递。Anthropic converter 在输入时读取 `cache_control` → `cache_hint`，在输出时写回；非 Anthropic converter 静默忽略 `cache_hint`，确保跨格式安全。
+- **`flatten_system_content()` 变换** ([#370](https://github.com/Oaklight/llm-rosetta/issues/370))：新增 body 级变换工厂，将系统消息内容数组展平为纯文本字符串。OpenAI Chat converter 现在为系统消息输出结构化内容数组（保留 `cache_hint` 的 block 边界）；`flatten_system_content()` 在需要时降级为纯字符串以兼容上游。支持 per-model `flatten_system` 网关配置，Gemini 模型自动检测。管理面板包含开关控件。
 
 ### 修复
 
