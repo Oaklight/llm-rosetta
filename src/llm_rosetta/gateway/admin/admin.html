@@ -1862,6 +1862,11 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   document.getElementById('capVision').checked = caps.includes('vision');
   document.getElementById('capTools').checked = caps.includes('tools');
   document.getElementById('capReasoning').checked = caps.includes('reasoning');
+  // flatten_system — read from model config, or infer auto-detect for gemini
+  const fsModel = model && configData ? configData.models[model] : null;
+  const fsCfg = fsModel && fsModel.flatten_system;
+  const fsAuto = model && /gemini/i.test(model);
+  document.getElementById('flattenSystem').checked = fsCfg != null ? !!fsCfg : !!fsAuto;
   onModelTypeChange();
 
   // Populate reasoning config section.
@@ -2438,9 +2443,7 @@ async function saveModel() {
     if (Object.keys(override).length > 0) body.reasoning_override = override;
   }
   // flatten_system
-  if (document.getElementById('flattenSystem').checked) {
-    body.flatten_system = true;
-  }
+  body.flatten_system = document.getElementById('flattenSystem').checked;
   const originalName = document.getElementById('modelName').dataset.originalName;
   if (originalName && originalName !== name) {
     body.rename_from = originalName;
