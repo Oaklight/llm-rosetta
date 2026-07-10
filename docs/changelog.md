@@ -8,9 +8,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.0 — 2026-07-10
+
 ### Added
 
 - **Anthropic `cache_control` preservation** ([#362](https://github.com/Oaklight/llm-rosetta/pull/362)): New `cache_hint` field on IR parts (`TextPart`, `ImagePart`, `FilePart`, `ReasoningPart`, `ToolCallPart`, `ToolResultPart`, `ToolDefinition`) enables round-tripping Anthropic's block-level `cache_control` through the IR pipeline. The Anthropic converter reads `cache_control` → `cache_hint` on ingest and writes it back on output; non-Anthropic converters silently ignore `cache_hint`, ensuring cross-format safety.
+- **`flatten_system_content()` transform** ([#370](https://github.com/Oaklight/llm-rosetta/issues/370)): New body-level transform factory that flattens system message content arrays to plain strings. OpenAI Chat converter now outputs structured content arrays for system messages (preserving block boundaries for `cache_hint`); `flatten_system_content()` downgrades to plain strings for upstream compatibility. Per-model `flatten_system` gateway config with auto-detection for Gemini models. Admin panel toggle included.
 
 ### Fixed
 
