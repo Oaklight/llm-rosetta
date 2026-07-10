@@ -620,3 +620,147 @@ class TestArgoOpenaiChatTransforms:
         result = apply_transforms(shim.post_ir_transforms, body)
         assert "max_tokens" not in result
         assert result["max_completion_tokens"] == 100
+
+
+# ============================================================================
+# flatten_system_content
+# ============================================================================
+
+
+class TestFlattenSystemContent:
+    """Tests for flatten_system_content() body-level transform."""
+
+    def test_flattens_array_to_string(self):
+        """Content array is joined into a plain string."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "gemini-3.5-flash",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [
+                        {"type": "text", "text": "Be helpful."},
+                        {"type": "text", "text": "Be concise."},
+                    ],
+                },
+                {"role": "user", "content": "Hi"},
+            ],
+        }
+        result = flatten_system_content()(body)
+        assert result["messages"][0]["content"] == "Be helpful. Be concise."
+
+    def test_idempotent_string_unchanged(self):
+        """Already-string content is left as-is."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "system", "content": "Be helpful."},
+                {"role": "user", "content": "Hi"},
+            ],
+        }
+        result = flatten_system_content()(body)
+        assert result["messages"][0]["content"] == "Be helpful."
+
+    def test_idempotent_double_apply(self):
+        """Applying twice produces the same result."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "test",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Hello"}],
+                },
+            ],
+        }
+        f = flatten_system_content()
+        result1 = f(body)
+        result2 = f(result1)
+        assert result1 == result2
+
+    def test_no_system_message_noop(self):
+        """No system message → no-op."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "test",
+            "messages": [{"role": "user", "content": "Hi"}],
+        }
+        result = flatten_system_content()(body)
+        assert result == body
+
+    def test_no_messages_noop(self):
+        """Missing messages key → no-op."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {"model": "test"}
+        result = flatten_system_content()(body)
+        assert result == body
+
+    def test_pattern_match(self):
+        """Only flattens when model matches pattern."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "gemini25flash",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Hello"}],
+                },
+            ],
+        }
+        result = flatten_system_content(pattern=r"^gemini")(body)
+        assert result["messages"][0]["content"] == "Hello"
+
+    def test_pattern_no_match(self):
+        """Non-matching model → no-op."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "gpt5nano",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "Hello"}],
+                },
+            ],
+        }
+        result = flatten_system_content(pattern=r"^gemini")(body)
+        # Should NOT flatten — content stays as array
+        assert isinstance(result["messages"][0]["content"], list)
+
+    def test_user_messages_untouched(self):
+        """Only system messages are flattened, user messages stay as-is."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        body = {
+            "model": "test",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": [{"type": "text", "text": "System"}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "User"}],
+                },
+            ],
+        }
+        result = flatten_system_content()(body)
+        assert result["messages"][0]["content"] == "System"
+        assert isinstance(result["messages"][1]["content"], list)
+
+    def test_repr(self):
+        """Transform has a readable repr."""
+        from llm_rosetta.shims.transforms import flatten_system_content
+
+        assert repr(flatten_system_content()) == "flatten_system_content()"
+        assert (
+            repr(flatten_system_content(pattern=r"^gemini"))
+            == "flatten_system_content(pattern='^gemini')"
+        )

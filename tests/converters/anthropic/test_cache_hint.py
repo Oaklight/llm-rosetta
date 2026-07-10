@@ -631,11 +631,14 @@ class TestCrossFormatSystemCacheHint:
         ir = anthropic_converter.request_from_provider(provider_request)
         result, warnings = openai_converter.request_to_provider(ir)
 
-        # System should be a plain string in the first system message
+        # System should be a structured content array (no cache_control)
         system_msgs = [m for m in result["messages"] if m["role"] == "system"]
         assert len(system_msgs) == 1
         content = system_msgs[0]["content"]
-        assert isinstance(content, str)
+        assert isinstance(content, list)
+        assert len(content) == 2
+        assert content[0]["text"] == "You are helpful."
+        assert content[1]["text"] == "Be concise."
         assert "cache_control" not in str(result)
 
     def test_anthropic_system_cache_to_google_flattens(self):
