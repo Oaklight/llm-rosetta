@@ -8,6 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.7.1 — 2026-07-16
+
+### 修复
+
+- **Anthropic 和 Google 的工具 Schema 清理** ([#372](https://github.com/Oaklight/llm-rosetta/issues/372))：Anthropic 拒绝工具参数 schema 中的 OpenAPI `nullable` 扩展（例如 Pydantic 生成的 JSON Schema）。新增 `convert_nullable_to_type_array()` helper，递归地将 `"nullable": true` 转换为标准 JSON Schema `"type": [T, "null"]`。Anthropic converter 现在会剥离 `title` 字段并转换 `nullable` 为 type 数组；Google GenAI converter 剥离 `title`（保留 `nullable`——Google 支持该字段）。同时处理了 `nullable: true` 与 `anyOf`/`oneOf` 共存但无 `type` 字段的边界情况。
+- **`flatten_system` 复选框布局和国际化** 修复（网关管理面板）。
+
+### 变更
+
+- 升级 vendored `validate` 0.6.0 → 0.6.1（支持 dataclass 实例）。
+- 限制 Dependabot 仅监控 LLM SDK 依赖。
+
+### 新增
+
+- SDK 类型覆盖扫描器和手动 CI 工作流，用于追踪 provider SDK 类型对齐情况。
+
 ## v0.7.0 — 2026-07-10
 
 ### 新增
