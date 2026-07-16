@@ -39,9 +39,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-openai = ["openai"]
-anthropic = ["anthropic"]
-google = ["google-genai"]
+openai = ["openai>=2.0.0"]
+anthropic = ["anthropic>=0.84.0"]
+google = ["google-genai>=1.67.0"]
 gateway = []
 profiling = ["pyinstrument>=5.0.0"]
 dev = [
