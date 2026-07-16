@@ -5,6 +5,10 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    allow:
+      - dependency-name: "openai"
+      - dependency-name: "anthropic"
+      - dependency-name: "google-genai"
     groups:
       llm-sdks:
         patterns:
@@ -12,7 +16,3 @@ updates:
           - "anthropic"
           - "google-genai"
 
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "monthly"
