@@ -341,3 +341,117 @@ class TestAnthropicToolOps:
         """Test empty Anthropic tool config → empty IR."""
         result = AnthropicToolOps.p_tool_config_to_ir({})
         assert result == {}
+
+    # ==================== Schema Sanitization (#372) ====================
+
+    def test_ir_tool_definition_strips_nullable(self):
+        """nullable: true should be converted to type array for Anthropic."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "run_cmd",
+            "description": "Run a command",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cwd": {
+                        "default": None,
+                        "type": "string",
+                        "nullable": True,
+                    }
+                },
+            },
+            "required_parameters": [],
+            "metadata": {},
+        }
+        result = AnthropicToolOps.ir_tool_definition_to_p(ir_tool)
+        cwd_schema = result["input_schema"]["properties"]["cwd"]
+        assert cwd_schema["type"] == ["string", "null"]
+        assert "nullable" not in cwd_schema
+
+    def test_ir_tool_definition_strips_title(self):
+        """title fields should be stripped for Anthropic."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "run_cmd",
+            "description": "Run a command",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "cwd": {
+                        "title": "Cwd",
+                        "type": "string",
+                    }
+                },
+            },
+            "required_parameters": [],
+            "metadata": {},
+        }
+        result = AnthropicToolOps.ir_tool_definition_to_p(ir_tool)
+        cwd_schema = result["input_schema"]["properties"]["cwd"]
+        assert "title" not in cwd_schema
+
+    def test_ir_tool_definition_pydantic_schema(self):
+        """Full Pydantic-generated schema from issue #372."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "execute",
+            "description": "Execute a shell command",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "title": "Command",
+                        "type": "string",
+                    },
+                    "cwd": {
+                        "default": None,
+                        "title": "Cwd",
+                        "type": "string",
+                        "nullable": True,
+                    },
+                    "timeout": {
+                        "default": 120,
+                        "title": "Timeout",
+                        "type": "integer",
+                    },
+                },
+                "required": ["command"],
+            },
+            "required_parameters": ["command"],
+            "metadata": {},
+        }
+        result = AnthropicToolOps.ir_tool_definition_to_p(ir_tool)
+        schema = result["input_schema"]
+        assert "title" not in schema["properties"]["command"]
+        assert "title" not in schema["properties"]["cwd"]
+        assert "title" not in schema["properties"]["timeout"]
+        assert schema["properties"]["cwd"]["type"] == ["string", "null"]
+        assert "nullable" not in schema["properties"]["cwd"]
+        assert schema["properties"]["command"]["type"] == "string"
+        assert schema["properties"]["timeout"]["type"] == "integer"
+
+    def test_ir_tool_definition_anyof_nullable_converted(self):
+        """anyOf nullable pattern should end up as type array, not nullable."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "test",
+            "description": "Test",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "field": {
+                        "anyOf": [
+                            {"type": "string"},
+                            {"type": "null"},
+                        ]
+                    }
+                },
+            },
+            "required_parameters": [],
+            "metadata": {},
+        }
+        result = AnthropicToolOps.ir_tool_definition_to_p(ir_tool)
+        field_schema = result["input_schema"]["properties"]["field"]
+        assert field_schema["type"] == ["string", "null"]
+        assert "nullable" not in field_schema
+        assert "anyOf" not in field_schema

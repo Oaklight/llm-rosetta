@@ -60,7 +60,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             func_decl["parameters"] = (
                 sanitize_schema(
                     parameters,
-                    extra_strip_keys={"additionalProperties"},
+                    extra_strip_keys={"additionalProperties", "title"},
                 )
                 if isinstance(parameters, dict)
                 else parameters
