@@ -257,3 +257,54 @@ def sanitize_schema(
     result = _sanitize_schema_impl(schema, defs, extra_strip_keys)
     sanitize_cache.put(key, result)
     return result
+
+
+# ---- nullable → type-array conversion ----
+
+
+def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
+    """Recursively convert ``"nullable": true`` to standard JSON Schema type arrays.
+
+    Transforms ``{"type": "string", "nullable": true}`` into
+    ``{"type": ["string", "null"]}`` and removes the ``nullable`` key.
+    When ``type`` is already a list, appends ``"null"`` if absent.
+    When ``type`` is missing, only strips the ``nullable`` key.
+    """
+    result: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "nullable":
+            continue
+        if isinstance(value, dict):
+            result[key] = _nullable_to_type_array(value)
+        elif isinstance(value, list):
+            result[key] = [
+                _nullable_to_type_array(item) if isinstance(item, dict) else item
+                for item in value
+            ]
+        else:
+            result[key] = value
+
+    if schema.get("nullable") is True and "type" in result:
+        current_type = result["type"]
+        if isinstance(current_type, str):
+            result["type"] = [current_type, "null"]
+        elif isinstance(current_type, list) and "null" not in current_type:
+            result["type"] = [*current_type, "null"]
+
+    return result
+
+
+def convert_nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
+    """Convert ``"nullable": true`` to standard JSON Schema ``"type": [T, "null"]``.
+
+    Providers like Anthropic do not support the OpenAPI ``nullable`` extension.
+    This function recursively replaces it with the equivalent JSON Schema
+    representation using type arrays.
+
+    Args:
+        schema: A sanitized JSON Schema dict.
+
+    Returns:
+        A new dict with ``nullable`` fields replaced by type arrays.
+    """
+    return _nullable_to_type_array(schema)

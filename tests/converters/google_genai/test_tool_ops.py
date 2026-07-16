@@ -441,3 +441,41 @@ class TestGoogleGenAIToolOps:
         """Test Google tool config → IR ToolCallConfig (empty)."""
         result = GoogleGenAIToolOps.p_tool_config_to_ir({})
         assert result == {}
+
+    # ==================== Schema Sanitization (#372) ====================
+
+    def test_ir_tool_definition_strips_title(self):
+        """title fields should be stripped for Google GenAI."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "run_cmd",
+            "description": "Run a command",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"title": "Command", "type": "string"},
+                    "cwd": {"title": "Cwd", "type": "string", "nullable": True},
+                },
+            },
+        }
+        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        params = result["function_declarations"][0]["parameters"]
+        assert "title" not in params["properties"]["command"]
+        assert "title" not in params["properties"]["cwd"]
+
+    def test_ir_tool_definition_preserves_nullable(self):
+        """Google GenAI supports nullable — it should be preserved."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "test",
+            "description": "Test",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "field": {"type": "string", "nullable": True},
+                },
+            },
+        }
+        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        params = result["function_declarations"][0]["parameters"]
+        assert params["properties"]["field"]["nullable"] is True

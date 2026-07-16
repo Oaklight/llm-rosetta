@@ -28,7 +28,12 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import extract_part_ids, log_orphan_warnings, sanitize_schema
+from ..base.helpers import (
+    convert_nullable_to_type_array,
+    extract_part_ids,
+    log_orphan_warnings,
+    sanitize_schema,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -175,8 +180,12 @@ class AnthropicToolOps(BaseToolOps):
         }
         raw_schema = ir_tool.get("parameters", {})
         schema = (
-            sanitize_schema(raw_schema) if isinstance(raw_schema, dict) else raw_schema
+            sanitize_schema(raw_schema, extra_strip_keys={"title"})
+            if isinstance(raw_schema, dict)
+            else raw_schema
         )
+        if isinstance(schema, dict):
+            schema = convert_nullable_to_type_array(schema)
         # Anthropic requires input_schema to have "type"; default to object
         if isinstance(schema, dict) and "type" not in schema:
             schema = {"type": "object", **schema}
