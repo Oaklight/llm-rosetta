@@ -132,3 +132,36 @@ class TestConvertNullableToTypeArray:
         result = convert_nullable_to_type_array(schema)
         assert result["anyOf"][0]["type"] == ["string", "null"]
         assert result["anyOf"][1]["type"] == "integer"
+
+    def test_nullable_with_anyof_no_type(self):
+        """nullable + anyOf without type → inject null variant into anyOf."""
+        schema = {
+            "anyOf": [{"type": "string"}, {"type": "integer"}],
+            "nullable": True,
+        }
+        result = convert_nullable_to_type_array(schema)
+        assert "nullable" not in result
+        assert {"type": "null"} in result["anyOf"]
+        assert len(result["anyOf"]) == 3
+
+    def test_nullable_with_oneof_no_type(self):
+        """nullable + oneOf without type → inject null variant into oneOf."""
+        schema = {
+            "oneOf": [{"type": "string"}, {"type": "integer"}],
+            "nullable": True,
+        }
+        result = convert_nullable_to_type_array(schema)
+        assert "nullable" not in result
+        assert {"type": "null"} in result["oneOf"]
+        assert len(result["oneOf"]) == 3
+
+    def test_nullable_with_anyof_already_has_null(self):
+        """nullable + anyOf that already has null → no duplicate."""
+        schema = {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "nullable": True,
+        }
+        result = convert_nullable_to_type_array(schema)
+        assert "nullable" not in result
+        null_count = sum(1 for v in result["anyOf"] if v == {"type": "null"})
+        assert null_count == 1
