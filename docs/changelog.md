@@ -8,6 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.1 — 2026-07-16
+
+### Fixed
+
+- **Tool schema sanitization for Anthropic and Google** ([#372](https://github.com/Oaklight/llm-rosetta/issues/372)): Anthropic rejects the OpenAPI `nullable` extension in tool parameter schemas (e.g. from Pydantic-generated JSON Schema). New `convert_nullable_to_type_array()` helper recursively converts `"nullable": true` to standard JSON Schema `"type": [T, "null"]`. Anthropic converter now strips `title` fields and converts `nullable` to type arrays; Google GenAI converter strips `title` (keeps `nullable` — Google supports it). Also handles the edge case where `nullable: true` appears alongside `anyOf`/`oneOf` without a `type` field.
+- **`flatten_system` checkbox layout and i18n** in the gateway admin panel.
+
+### Changed
+
+- Bump vendored `validate` 0.6.0 → 0.6.1 (dataclass instance support).
+- Restrict Dependabot to LLM SDK dependencies only.
+
+### Added
+
+- SDK type coverage scanner and manual CI workflow for tracking provider SDK type alignment.
+
 ## v0.7.0 — 2026-07-10
 
 ### Added
