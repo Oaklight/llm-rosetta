@@ -99,6 +99,26 @@ class ProviderInfo:
         )
         return tpl.format(base_url=self.base_url, model=model)
 
+    def with_url_templates(
+        self,
+        url_template: str | None = None,
+        stream_url_template: str | None = None,
+    ) -> ProviderInfo:
+        """Return a shallow copy with overridden URL template(s).
+
+        The new instance shares the same :class:`KeyRing` (round-robin
+        state is preserved).  Fields not overridden keep their current
+        values.
+        """
+        import copy
+
+        clone = copy.copy(self)
+        if url_template is not None:
+            object.__setattr__(clone, "_url_template", url_template)
+        if stream_url_template is not None:
+            object.__setattr__(clone, "_stream_url_template", stream_url_template)
+        return clone
+
 
 # ---------------------------------------------------------------------------
 # Per-provider auth header builders

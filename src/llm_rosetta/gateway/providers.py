@@ -143,6 +143,12 @@ def build_provider_info(
             base_type,
         )
 
+    # Per-provider url_template / stream_url_template override from config
+    if "url_template" in cfg:
+        url_tpl = cfg["url_template"]
+    if "stream_url_template" in cfg:
+        stream_tpl = cfg["stream_url_template"]
+
     # Fall back to base-type defaults if still missing
     if "base_url" not in cfg:
         default_url = get_default_base_url(base_type)
