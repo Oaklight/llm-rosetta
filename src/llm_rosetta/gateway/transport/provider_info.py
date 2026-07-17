@@ -114,9 +114,9 @@ class ProviderInfo:
 
         clone = copy.copy(self)
         if url_template is not None:
-            object.__setattr__(clone, "_url_template", url_template)
+            clone._url_template = url_template
         if stream_url_template is not None:
-            object.__setattr__(clone, "_stream_url_template", stream_url_template)
+            clone._stream_url_template = stream_url_template
         return clone
 
 
