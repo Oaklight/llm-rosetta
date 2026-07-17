@@ -184,6 +184,18 @@ class GatewayConfig:
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
 
+        # Per-model URL template overrides.
+        self.model_url_templates: dict[str, str] = {}
+        self.model_stream_url_templates: dict[str, str] = {}
+        for model_name, value in raw.get("models", {}).items():
+            if isinstance(value, dict):
+                if "url_template" in value:
+                    self.model_url_templates[model_name] = value["url_template"]
+                if "stream_url_template" in value:
+                    self.model_stream_url_templates[model_name] = value[
+                        "stream_url_template"
+                    ]
+
         # Per-model reasoning overrides from config.jsonc (admin UI edits).
         # Keyed by gateway model name (same as self.models keys).
         self.model_reasoning_overrides: dict[str, dict[str, Any]] = {}
@@ -406,4 +418,15 @@ class GatewayConfig:
             reasoning_override=reasoning,
             flatten_system=flatten_system,
         )
-        return route, self.providers[provider_name]
+
+        pinfo = self.providers[provider_name]
+
+        # Per-model URL template override: create a shallow copy of the
+        # provider info with modified template(s) so the transport layer
+        # hits the right endpoint.
+        model_url_tpl = self.model_url_templates.get(model)
+        model_stream_tpl = self.model_stream_url_templates.get(model)
+        if model_url_tpl or model_stream_tpl:
+            pinfo = pinfo.with_url_templates(model_url_tpl, model_stream_tpl)
+
+        return route, pinfo
