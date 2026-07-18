@@ -7,7 +7,7 @@ from typing import Any, overload
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ...config import GatewayConfig, load_config, write_config  # noqa: F401
+from ...config import ConfigIO, GatewayConfig
 
 _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
 
@@ -42,11 +42,17 @@ def _get_config_path(request: Any) -> str | None:
     return getattr(request.app, "config_path", None)
 
 
+def _get_config_io(request: Any) -> ConfigIO:
+    """Return the :class:`ConfigIO` adapter stored on the app object."""
+    return request.app.config_io  # type: ignore[attr-defined]
+
+
 def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
     """Re-read config from disk, rebuild GatewayConfig, swap into app state."""
     import llm_rosetta.gateway.app as _app_mod
 
-    raw = load_config(config_path)
+    config_io = _get_config_io(request)
+    raw = config_io.load(config_path)
     new_config = GatewayConfig(raw)
     _app_mod._config = new_config
     request.app.gateway_config = new_config

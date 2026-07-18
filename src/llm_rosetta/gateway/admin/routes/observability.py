@@ -131,12 +131,12 @@ async def get_requests(request: Any) -> Response:
         if provider_type is None:
             # Fallback: read from raw config file (covers disabled providers)
             from ._shared import _get_config_path
-            from ...config import load_config_raw
+            from ._shared import _get_config_io
 
             config_path = _get_config_path(request)
             if config_path:
                 try:
-                    raw = load_config_raw(config_path)
+                    raw = _get_config_io(request).load_raw(config_path)
                     raw_prov = raw.get("providers", {}).get(provider, {})
                     raw_type = raw_prov.get("type") or raw_prov.get("shim")
                     if raw_type:
@@ -173,7 +173,7 @@ async def get_provider_key(request: Any, **kwargs: Any) -> Response:
             {"error": "Credential visibility is disabled"}, status_code=403
         )
     from ._shared import _get_config_path
-    from ...config import load_config_raw
+    from ._shared import _get_config_io
 
     config_path = _get_config_path(request)
     if not config_path:
@@ -182,7 +182,7 @@ async def get_provider_key(request: Any, **kwargs: Any) -> Response:
     name = request.path_params["name"]
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 

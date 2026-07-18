@@ -15,7 +15,7 @@ from llm_rosetta.observability import (
 )
 
 if TYPE_CHECKING:
-    from ..config import GatewayConfig
+    from ..config import ConfigIO, GatewayConfig
 
 __all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"]
 
@@ -66,12 +66,27 @@ def setup_admin(
     app: Any,
     config: GatewayConfig,
     config_path: str | None,
+    config_io: ConfigIO | None = None,
 ) -> None:
     """Initialize admin panel state on the app.
+
+    Args:
+        app: The httpserver application.
+        config: Parsed gateway configuration.
+        config_path: Path to the config file on disk (``None`` disables
+            persistence and config editing).
+        config_io: Optional I/O adapter for reading/writing the config
+            file.  Defaults to :class:`JsoncConfigIO` when ``None``.
+            Supply a custom implementation for non-JSONC formats
+            (e.g. YAML in argo-proxy).
 
     Routes are registered separately via ``register_admin_routes`` before
     calling this function.
     """
+    if config_io is None:
+        from ..config import JsoncConfigIO
+
+        config_io = JsoncConfigIO()
     metrics = MetricsCollector()
 
     # Set up SQLite persistence alongside the config file
@@ -120,5 +135,6 @@ def setup_admin(
     app.persistence = persistence
     app.gateway_config = config
     app.config_path = config_path
+    app.config_io = config_io
     app.profiler_state = profiler_state
     app.capture_state = capture_state

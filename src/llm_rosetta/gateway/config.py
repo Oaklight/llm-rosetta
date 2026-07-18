@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
@@ -103,6 +103,41 @@ def load_config_raw(path: str) -> dict[str, Any]:
         raw = f.read()
     stripped = _strip_jsonc_comments(raw)
     return json.loads(stripped)
+
+
+@runtime_checkable
+class ConfigIO(Protocol):
+    """Protocol for reading/writing gateway config files.
+
+    The default :class:`JsoncConfigIO` handles JSONC files.  Downstream
+    projects (e.g. argo-proxy) can supply an alternative implementation
+    for other formats (YAML, TOML, etc.) via ``setup_admin(..., config_io=...)``.
+    """
+
+    def load(self, path: str) -> dict[str, Any]:
+        """Read config with env-var substitution (for runtime use)."""
+        ...
+
+    def load_raw(self, path: str) -> dict[str, Any]:
+        """Read config without env-var substitution (for edit round-trips)."""
+        ...
+
+    def save(self, path: str, data: dict[str, Any]) -> None:
+        """Write config back to disk."""
+        ...
+
+
+class JsoncConfigIO:
+    """Default :class:`ConfigIO` — reads/writes JSONC with env-var substitution."""
+
+    def load(self, path: str) -> dict[str, Any]:
+        return load_config(path)
+
+    def load_raw(self, path: str) -> dict[str, Any]:
+        return load_config_raw(path)
+
+    def save(self, path: str, data: dict[str, Any]) -> None:
+        write_config(path, data)
 
 
 def discover_config(explicit_path: str | None = None) -> str | None:

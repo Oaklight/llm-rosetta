@@ -8,10 +8,11 @@ from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim, list_shims
 
-from ...config import GatewayConfig, load_config_raw, write_config
+from ...config import GatewayConfig
 from ...providers import known_provider_types
 from ._shared import (
     _build_provider_entry,
+    _get_config_io,
     _get_config_path,
     _handle_provider_rename,
     _mask_api_key,
@@ -96,7 +97,7 @@ async def get_config(request: Any) -> Response:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
-        raw = load_config_raw(config_path)
+        raw = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -189,7 +190,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     base_url = body.get("base_url", "")
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -219,7 +220,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     data.setdefault("providers", {})[name] = provider_entry
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -255,7 +256,7 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     name = request.path_params["name"]
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -292,7 +293,7 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     del providers[name]
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -329,7 +330,7 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
     name = request.path_params["name"]
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -348,7 +349,7 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
         providers[name]["enabled"] = False
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -387,7 +388,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "'provider' is required"}, status_code=400)
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -438,7 +439,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
     data.setdefault("models", {})[name] = model_entry
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -476,7 +477,7 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
     name = request.path_params["name"]
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -487,7 +488,7 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
     del models[name]
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -526,7 +527,7 @@ async def put_server_settings(request: Any) -> Response:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -563,7 +564,7 @@ async def put_server_settings(request: Any) -> Response:
         debug["error_dumps"] = bool(body["error_dumps"])
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
@@ -738,7 +739,7 @@ async def bulk_add_models(request: Any) -> Response:
         )
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
@@ -781,7 +782,7 @@ async def bulk_add_models(request: Any) -> Response:
         )
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
