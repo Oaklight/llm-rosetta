@@ -19,14 +19,16 @@ Usage::
 
 from .app import create_app
 from .cli import main
-from .config import GatewayConfig, discover_config, load_config
+from .config import ConfigIO, GatewayConfig, JsoncConfigIO, discover_config, load_config
 from .proxy import ProviderMetadataStore
 
 __all__ = [
+    "ConfigIO",
+    "GatewayConfig",
+    "JsoncConfigIO",
     "ProviderMetadataStore",
     "create_app",
-    "main",
-    "GatewayConfig",
     "discover_config",
     "load_config",
+    "main",
 ]

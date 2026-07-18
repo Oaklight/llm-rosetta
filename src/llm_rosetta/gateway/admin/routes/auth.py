@@ -126,7 +126,7 @@ async def admin_check(request: Any) -> Response:
 async def change_password(request: Any) -> Response:
     """Change the admin password (requires current password)."""
     from ._shared import _get_config_path, _reload_gateway_config
-    from ...config import load_config_raw, write_config
+    from ._shared import _get_config_io
 
     auth_state = request.app.auth_state
     if not auth_state.admin_password:
@@ -175,14 +175,14 @@ async def change_password(request: Any) -> Response:
         return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
-        data = load_config_raw(config_path)
+        data = _get_config_io(request).load_raw(config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
 
     data.setdefault("server", {})["admin_password"] = new_pw
 
     try:
-        write_config(config_path, data)
+        _get_config_io(request).save(config_path, data)
     except Exception as exc:
         return JSONResponse(
             {"error": f"Failed to write config: {exc}"}, status_code=500
