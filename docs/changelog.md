@@ -8,10 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.2 — 2026-07-20
+
+### Added
+
+- **`custom_head` injection for admin panel** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378)): `setup_admin()` accepts an optional `custom_head` HTML fragment injected before `</head>`. Downstream projects can inject `<style>`/`<script>` tags to customize admin UI without modifying the reference `admin.html`. Cached per value — no per-request overhead.
+- **`branding` dict for admin panel identity** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378)): `setup_admin(..., branding={title, subtitle, version, links, attribution})` customizes the header, login screen, and settings footer. Serialized as `window.__branding` via `custom_head`; consumer script in `admin.html` patches the DOM. Element IDs: `brandTitle`, `brandLoginTitle`, `brandFooterName`, `brandFooterLinks`. Without branding, the default llm-rosetta identity is unchanged.
+
 ### Changed
 
 - Bump vendored `httpclient` 0.4.4 → 0.4.5 — fixes fd leak where `close()` did not close `_async_writer`, preventing `__del__` from cleaning up leaked async streaming responses.
 - **Extract `ConfigIO` protocol for admin panel config I/O** ([#376](https://github.com/Oaklight/llm-rosetta/pull/376)): Admin routes now use a `ConfigIO` protocol instead of importing `load_config`/`load_config_raw`/`write_config` directly. Default `JsoncConfigIO` implementation preserves existing behavior; downstream projects (e.g. argo-proxy) can supply alternative implementations via `setup_admin(..., config_io=...)`. Internal helpers `_get_config_path` and `_get_config_io` now raise descriptive `RuntimeError` on missing values instead of returning `None`, removing 16 redundant guard blocks across route handlers.
+- Replace Unicode emoji (🔍) with inline SVG in the content capture table for consistent cross-platform rendering.
+
+### Fixed
+
+- Escape `</` in branding JSON serialization to prevent `<script>` tag breakout when branding values contain `</script>`.
 
 ## v0.7.1 — 2026-07-16
 
