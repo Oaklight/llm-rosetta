@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 变更
+
+- 升级 vendored `httpclient` 0.4.4 → 0.4.5——修复 fd 泄漏问题：`close()` 未关闭 `_async_writer`，导致 `__del__` 无法清理泄漏的异步流式响应。
+
 ## v0.7.1 — 2026-07-16
 
 ### 修复
