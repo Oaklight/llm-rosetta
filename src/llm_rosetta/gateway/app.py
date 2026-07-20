@@ -589,13 +589,12 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
         config.api_key_labels,
         internal_token,
         admin_password=config.admin_password,
-        open_on_no_keys=True,
     )
     if not config.api_key_set:
         logger.warning(
-            "No API keys configured — all /v1/* endpoints are open. "
-            "Set server.api_keys in your config or generate keys in "
-            "the admin panel to restrict access."
+            "No API keys configured — all /v1/* endpoints are BLOCKED. "
+            "Generate keys in the admin panel or set server.api_keys "
+            "in your config to allow access."
         )
     app.before_request(create_auth_hook(auth_state))
 
