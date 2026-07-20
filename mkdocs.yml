@@ -93,6 +93,7 @@ plugins:
           - gateway/cli.md
           - gateway/cli-integrations.md
           - gateway/admin-panel.md
+          - gateway/integration.md
           - gateway/validation.md
           - gateway/validation-cli.md
           - gateway/validation-sdk.md
@@ -174,6 +175,7 @@ nav:
       - Admin:
           - Admin Panel: gateway/admin-panel.md
           - Admin API: api/admin.md
+      - Integration Guide: gateway/integration.md
       - Validation:
           - gateway/validation.md
           - CLI Cross-Format Testing: gateway/validation-cli.md
