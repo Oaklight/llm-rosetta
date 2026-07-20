@@ -25,7 +25,10 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 
 def _get_gateway_config(request: Any) -> GatewayConfig | None:
-    """Return the live GatewayConfig from the app module."""
+    """Return the live GatewayConfig from the app or module."""
+    cfg = getattr(request.app, "gateway_config", None)
+    if cfg is not None:
+        return cfg
     import llm_rosetta.gateway.app as _app_mod
 
     return _app_mod._config
