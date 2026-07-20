@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- Bump vendored `httpclient` 0.4.4 → 0.4.5 — fixes fd leak where `close()` did not close `_async_writer`, preventing `__del__` from cleaning up leaked async streaming responses.
+
 ## v0.7.1 — 2026-07-16
 
 ### Fixed
