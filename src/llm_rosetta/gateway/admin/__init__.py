@@ -67,6 +67,7 @@ def setup_admin(
     config: GatewayConfig,
     config_path: str | None,
     config_io: ConfigIO | None = None,
+    custom_head: str | None = None,
 ) -> None:
     """Initialize admin panel state on the app.
 
@@ -79,6 +80,10 @@ def setup_admin(
             file.  Defaults to :class:`JsoncConfigIO` when ``None``.
             Supply a custom implementation for non-JSONC formats
             (e.g. YAML in argo-proxy).
+        custom_head: Optional HTML fragment (``<style>``, ``<script>``,
+            etc.) injected before ``</head>`` when serving the admin
+            panel.  Allows downstream projects to override UI behavior
+            without modifying the reference ``admin.html``.
 
     Routes are registered separately via ``register_admin_routes`` before
     calling this function.
@@ -138,3 +143,4 @@ def setup_admin(
     app.config_io = config_io
     app.profiler_state = profiler_state
     app.capture_state = capture_state
+    app.admin_custom_head = custom_head or ""

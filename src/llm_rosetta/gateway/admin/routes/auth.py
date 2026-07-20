@@ -10,17 +10,21 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ..static import load_admin_html
 
-# Cached HTML — loaded once on first request.
-_admin_html: str | None = None
+# Cached HTML — loaded once on first request, per custom_head value.
+_admin_html_cache: dict[str, str] = {}
 
 
 async def serve_admin_html(request: Any) -> Response:
-    """Serve the admin panel SPA."""
-    global _admin_html
-    if _admin_html is None:
-        _admin_html = load_admin_html()
+    """Serve the admin panel SPA with optional custom_head injection."""
+    custom_head: str = getattr(request.app, "admin_custom_head", "")
+    cache_key = custom_head
+    if cache_key not in _admin_html_cache:
+        html = load_admin_html()
+        if custom_head:
+            html = html.replace("</head>", f"{custom_head}\n</head>", 1)
+        _admin_html_cache[cache_key] = html
     return Response(
-        body=_admin_html,
+        body=_admin_html_cache[cache_key],
         status_code=200,
         content_type="text/html; charset=utf-8",
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
