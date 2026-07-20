@@ -18,6 +18,7 @@ from llm_rosetta.auto_detect import ProviderType
 from .auth import AuthState, api_key_label_var, create_auth_hook
 from .config import GatewayConfig
 from .embeddings import handle_embeddings as _handle_embeddings
+from .headers import build_upstream_extra_headers
 from .logging import get_logger
 from llm_rosetta.observability.error_dump import dump_error
 
@@ -250,11 +251,8 @@ async def _proxy_handler(
 
     store: ProviderMetadataStore = request.app.metadata_store
 
-    # Forward OpenResponses-Version header and request ID to upstream if present
-    extra_headers: dict[str, str] = {"x-request-id": request_id}
-    or_version = request.headers.get("openresponses-version")
-    if or_version:
-        extra_headers["OpenResponses-Version"] = or_version
+    # Forward only explicitly supported client headers to upstream.
+    extra_headers = build_upstream_extra_headers(request, request_id)
 
     # --- Metrics instrumentation ---
     if is_stream:

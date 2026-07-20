@@ -7,12 +7,13 @@ import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from llm_rosetta.gateway.config import GatewayConfig
 from llm_rosetta.gateway.embeddings import handle_embeddings
+from llm_rosetta.gateway.transport._base import UpstreamResponse
 from llm_rosetta.gateway.transport.http import HttpTransport
 
 
@@ -91,11 +92,15 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
     return GatewayConfig(raw)
 
 
-def _make_request(body: dict[str, Any]) -> MagicMock:
+def _make_request(
+    body: dict[str, Any],
+    *,
+    headers: dict[str, str] | None = None,
+) -> MagicMock:
     """Create a mock HTTP request with the given JSON body."""
     req = MagicMock()
     req.json.return_value = body
-    req.headers = {}
+    req.headers = headers or {}
 
     # Provide app-level attributes that handle_embeddings accesses
     app = MagicMock()
@@ -140,3 +145,25 @@ class TestEmbeddingUpstreamModel:
 
         body = json.loads(response.body)
         assert body["model"] == "my-embed"
+
+    def test_user_agent_forwarded_to_passthrough_transport(self):
+        """Embeddings passthrough should preserve the client's User-Agent."""
+        config = _make_config("https://api.example.com/v1")
+        request = _make_request(
+            {"model": "my-embed", "input": "hello"},
+            headers={"user-agent": "codex-cli/1.2.3"},
+        )
+        request.app.transport = MagicMock()
+        request.app.transport.send_passthrough = AsyncMock(
+            return_value=UpstreamResponse(
+                status_code=200,
+                body={"object": "list", "data": [], "model": "my-embed"},
+                raw_content=b'{"object":"list","data":[],"model":"my-embed"}',
+            )
+        )
+
+        response = asyncio.run(handle_embeddings(request, config))
+
+        assert response.status_code == 200
+        _, kwargs = request.app.transport.send_passthrough.call_args
+        assert kwargs["extra_headers"]["User-Agent"] == "codex-cli/1.2.3"
