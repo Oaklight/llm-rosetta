@@ -854,6 +854,15 @@ body { padding-bottom: 26px; }
       <label data-i18n="label.proxyUrl">Proxy URL (optional, overrides global)<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
       <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
     </div>
+    <div class="form-group">
+      <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">
+      <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.urlTemplateHint">Override the endpoint path. Placeholders: {base_url}, {model}</div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
@@ -899,6 +908,15 @@ body { padding-bottom: 26px; }
         <label><input type="checkbox" id="flattenSystem"> <span data-i18n="label.flattenSystem">Flatten system content</span></label>
       </div>
       <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.flattenSystemHint">Flatten system message content arrays to plain strings for upstream compatibility.</div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="modelUrlTemplate" placeholder="{base_url}/models/{model}/generate">
+      <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.urlTemplateHint">Override the endpoint path. Placeholders: {base_url}, {model}</div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="modelStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
     </div>
     <div class="form-group" id="modelReasoningGroup" style="display:none">
       <label><span data-i18n="label.reasoningConfig">Reasoning Config</span>
@@ -1118,7 +1136,7 @@ const I18N = {
     'label.selectOne':'— select —',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
-    'label.proxyUrl':'Proxy URL (optional, overrides global)',
+    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities', 'label.systemOptions':'System Options', 'label.flattenSystem':'Flatten system content', 'label.flattenSystemHint':'Flatten system message content arrays to plain strings for upstream compatibility.',
     'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
@@ -1248,7 +1266,7 @@ const I18N = {
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
-    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09',
+    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09', 'label.urlTemplate':'URL \u6a21\u677f', 'label.streamUrlTemplate':'\u6d41\u5f0f URL \u6a21\u677f', 'label.urlTemplateHint':'\u8986\u76d6\u7aef\u70b9\u8def\u5f84\u3002\u5360\u4f4d\u7b26\uff1a{base_url}\u3001{model}',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u65b9', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b', 'label.systemOptions':'\u7cfb\u7edf\u9009\u9879', 'label.flattenSystem':'\u5c55\u5e73\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9', 'label.flattenSystemHint':'\u5c06\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9\u6570\u7ec4\u5c55\u5e73\u4e3a\u7eaf\u6587\u672c\u5b57\u7b26\u4e32\uff0c\u4ee5\u517c\u5bb9\u4e0a\u6e38\u670d\u52a1\u3002',
     'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)', 'label.inherited':'\u7ee7\u627f',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u65b9', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u65b9',
@@ -1826,6 +1844,10 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     _syncKeyField();
   }
   document.getElementById('provProxy').value = proxy || '';
+  // URL template overrides
+  const provCfg = name && configData ? configData.providers[name] : null;
+  document.getElementById('provUrlTemplate').value = (provCfg && provCfg.url_template) || '';
+  document.getElementById('provStreamUrlTemplate').value = (provCfg && provCfg.stream_url_template) || '';
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
@@ -1870,6 +1892,9 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   const fsCfg = fsModel && fsModel.flatten_system;
   const fsAuto = model && /gemini/i.test(model);
   document.getElementById('flattenSystem').checked = fsCfg != null ? !!fsCfg : !!fsAuto;
+  // URL template overrides
+  document.getElementById('modelUrlTemplate').value = (fsModel && fsModel.url_template) || '';
+  document.getElementById('modelStreamUrlTemplate').value = (fsModel && fsModel.stream_url_template) || '';
   onModelTypeChange();
 
   // Populate reasoning config section.
@@ -2027,7 +2052,9 @@ function renderProviders() {
       : `<div class="field">Type: <code>${esc(typeName)}</code></div>
          <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
          ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
-         ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}`;
+         ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
+     ${cfg.url_template ? `<div class="field">URL Template: <code>${esc(cfg.url_template)}</code></div>` : ''}
+     ${cfg.stream_url_template ? `<div class="field">Stream URL Template: <code>${esc(cfg.stream_url_template)}</code></div>` : ''}`;
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}">
       <div class="card-header">
@@ -2153,8 +2180,10 @@ function renderModels() {
     const isEmbedding = caps.includes('embedding');
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
+      const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
+      const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
-      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag} ${capBadges}</td>
+      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${capBadges}</td>
       <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         ${isEmbedding ? `<button class="btn btn-sm btn-test" style="border-radius:var(--radius);color:var(--orange);font-weight:600" onclick="runTest('${esc(name)}','embedding')">${t('btn.test')}</button>` : `<div class="test-group">
@@ -2186,7 +2215,11 @@ async function saveProvider() {
   const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();
   if (!name || !provType) { showToast(t('error.fieldsRequired'), 'error'); return; }
+  const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
+  const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {type: provType, base_url: baseUrl, proxy};
+  if (urlTemplate) body.url_template = urlTemplate;
+  if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
@@ -2445,6 +2478,11 @@ async function saveModel() {
     if (disabledStrategy) override.disabled = disabledStrategy;
     if (Object.keys(override).length > 0) body.reasoning_override = override;
   }
+  // URL template overrides
+  const urlTpl = document.getElementById('modelUrlTemplate').value.trim();
+  const streamUrlTpl = document.getElementById('modelStreamUrlTemplate').value.trim();
+  if (urlTpl) body.url_template = urlTpl;
+  if (streamUrlTpl) body.stream_url_template = streamUrlTpl;
   // flatten_system
   body.flatten_system = document.getElementById('flattenSystem').checked;
   const originalName = document.getElementById('modelName').dataset.originalName;
