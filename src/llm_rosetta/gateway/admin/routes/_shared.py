@@ -44,7 +44,10 @@ def _get_config_path(request: Any) -> str | None:
 
 def _get_config_io(request: Any) -> ConfigIO:
     """Return the :class:`ConfigIO` adapter stored on the app object."""
-    return request.app.config_io  # type: ignore[attr-defined]
+    io = getattr(request.app, "config_io", None)
+    if io is None:
+        raise RuntimeError("No ConfigIO adapter configured on this application")
+    return io
 
 
 def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
