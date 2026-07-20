@@ -68,6 +68,7 @@ def setup_admin(
     config_path: str | None,
     config_io: ConfigIO | None = None,
     custom_head: str | None = None,
+    branding: dict[str, Any] | None = None,
 ) -> None:
     """Initialize admin panel state on the app.
 
@@ -84,6 +85,15 @@ def setup_admin(
             etc.) injected before ``</head>`` when serving the admin
             panel.  Allows downstream projects to override UI behavior
             without modifying the reference ``admin.html``.
+        branding: Optional dict to customize the admin panel identity.
+            Supported keys::
+
+                title       — header title (default: "llm-rosetta")
+                subtitle    — header subtitle (default: "gateway admin")
+                version     — version shown in settings footer
+                links       — list of {"label", "url", "icon"} for footer buttons
+                              icon: "github" | "pypi" | "docker" | "docs" | None
+                attribution — "Powered by ..." line in settings footer
 
     Routes are registered separately via ``register_admin_routes`` before
     calling this function.
@@ -143,4 +153,12 @@ def setup_admin(
     app.config_io = config_io
     app.profiler_state = profiler_state
     app.capture_state = capture_state
-    app.admin_custom_head = custom_head or ""
+    # Build custom_head: user-supplied fragment + branding injection
+    parts: list[str] = []
+    if custom_head:
+        parts.append(custom_head)
+    if branding:
+        import json as _json
+
+        parts.append(f"<script>window.__branding={_json.dumps(branding)};</script>")
+    app.admin_custom_head = "\n".join(parts)
