@@ -8,10 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.7.2 — 2026-07-20
+
+### 新增
+
+- **管理面板 `custom_head` 注入** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378))：`setup_admin()` 接受可选的 `custom_head` HTML 片段，注入到 `</head>` 之前。下游项目可注入 `<style>`/`<script>` 标签来定制管理面板 UI，无需修改参考 `admin.html`。按值缓存，无每次请求开销。
+- **管理面板 `branding` 品牌配置** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378))：`setup_admin(..., branding={title, subtitle, version, links, attribution})` 可定制页头、登录页面和设置页脚。通过 `custom_head` 序列化为 `window.__branding`；`admin.html` 中的消费脚本负责修改 DOM。新增元素 ID：`brandTitle`、`brandLoginTitle`、`brandFooterName`、`brandFooterLinks`。未提供 branding 时，默认 llm-rosetta 标识不变。
+
 ### 变更
 
 - 升级 vendored `httpclient` 0.4.4 → 0.4.5——修复 fd 泄漏问题：`close()` 未关闭 `_async_writer`，导致 `__del__` 无法清理泄漏的异步流式响应。
 - **提取 `ConfigIO` 协议用于管理面板配置读写** ([#376](https://github.com/Oaklight/llm-rosetta/pull/376))：管理面板路由现在通过 `ConfigIO` 协议而非直接导入 `load_config`/`load_config_raw`/`write_config`。默认 `JsoncConfigIO` 实现保持现有行为不变；下游项目（如 argo-proxy）可通过 `setup_admin(..., config_io=...)` 提供替代实现。内部辅助函数 `_get_config_path` 和 `_get_config_io` 在值缺失时抛出描述性 `RuntimeError`，移除了路由处理器中 16 处冗余的空值检查。
+- 内容捕获表格中将 Unicode emoji（🔍）替换为内联 SVG，确保跨平台渲染一致。
+
+### 修复
+
+- 修复 branding JSON 序列化中 `</` 未转义的问题，防止 branding 值包含 `</script>` 时导致 `<script>` 标签断裂。
 
 ## v0.7.1 — 2026-07-16
 
