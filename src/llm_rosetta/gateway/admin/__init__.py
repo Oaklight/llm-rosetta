@@ -160,5 +160,6 @@ def setup_admin(
     if branding:
         import json as _json
 
-        parts.append(f"<script>window.__branding={_json.dumps(branding)};</script>")
+        serialized = _json.dumps(branding).replace("</", r"<\/")
+        parts.append(f"<script>window.__branding={serialized};</script>")
     app.admin_custom_head = "\n".join(parts)
