@@ -90,6 +90,26 @@ def _resolve_model_reasoning(
     }
 
 
+def _normalize_model_entry(value: Any) -> dict[str, Any]:
+    """Normalize a single model config value to a dict for the admin UI."""
+    if isinstance(value, str):
+        return {"provider": value, "capabilities": ["text"]}
+    entry: dict[str, Any] = {
+        "provider": value.get("provider", ""),
+        "capabilities": value.get("capabilities", ["text"]),
+    }
+    for key in (
+        "upstream_model",
+        "reasoning_override",
+        "flatten_system",
+        "url_template",
+        "stream_url_template",
+    ):
+        if value.get(key):
+            entry[key] = value[key]
+    return entry
+
+
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
@@ -113,22 +133,9 @@ async def get_config(request: Any) -> Response:
 
     # Normalize models to dict format for consistent admin UI
     raw_models = raw.get("models", {})
-    models_normalized: dict[str, Any] = {}
-    for name, value in raw_models.items():
-        if isinstance(value, str):
-            models_normalized[name] = {"provider": value, "capabilities": ["text"]}
-        elif isinstance(value, dict):
-            entry = {
-                "provider": value.get("provider", ""),
-                "capabilities": value.get("capabilities", ["text"]),
-            }
-            if value.get("upstream_model"):
-                entry["upstream_model"] = value["upstream_model"]
-            if value.get("reasoning_override"):
-                entry["reasoning_override"] = value["reasoning_override"]
-            if value.get("flatten_system"):
-                entry["flatten_system"] = value["flatten_system"]
-            models_normalized[name] = entry
+    models_normalized = {
+        name: _normalize_model_entry(value) for name, value in raw_models.items()
+    }
 
     # Resolve effective reasoning config per model
     for model_name, entry in models_normalized.items():
@@ -411,9 +418,9 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
         "provider": provider,
         "capabilities": capabilities,
     }
-    upstream_model = body.get("upstream_model")
-    if upstream_model:
-        model_entry["upstream_model"] = upstream_model
+    for opt_key in ("upstream_model", "url_template", "stream_url_template"):
+        if body.get(opt_key):
+            model_entry[opt_key] = body[opt_key]
 
     # Persist per-model flatten_system flag (if provided)
     flatten_system = body.get("flatten_system")
