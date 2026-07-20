@@ -11,6 +11,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### 变更
 
 - 升级 vendored `httpclient` 0.4.4 → 0.4.5——修复 fd 泄漏问题：`close()` 未关闭 `_async_writer`，导致 `__del__` 无法清理泄漏的异步流式响应。
+- **提取 `ConfigIO` 协议用于管理面板配置读写** ([#376](https://github.com/Oaklight/llm-rosetta/pull/376))：管理面板路由现在通过 `ConfigIO` 协议而非直接导入 `load_config`/`load_config_raw`/`write_config`。默认 `JsoncConfigIO` 实现保持现有行为不变；下游项目（如 argo-proxy）可通过 `setup_admin(..., config_io=...)` 提供替代实现。内部辅助函数 `_get_config_path` 和 `_get_config_io` 在值缺失时抛出描述性 `RuntimeError`，移除了路由处理器中 16 处冗余的空值检查。
 
 ## v0.7.1 — 2026-07-16
 
