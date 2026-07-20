@@ -21,8 +21,6 @@ from ._shared import (
 async def get_api_keys(request: Any) -> Response:
     """List all gateway API keys (values masked)."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         data = _get_config_io(request).load_raw(config_path)
@@ -49,8 +47,6 @@ async def get_api_keys(request: Any) -> Response:
 async def create_api_key(request: Any) -> Response:
     """Create a new gateway API key."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         body = request.json()
@@ -110,8 +106,6 @@ async def create_api_key(request: Any) -> Response:
 async def update_api_key(request: Any, **kwargs: Any) -> Response:
     """Update an API key's label."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     key_id = request.path_params["key_id"]
 
@@ -163,8 +157,6 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
 async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     """Delete a gateway API key."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     key_id = request.path_params["key_id"]
 
@@ -205,8 +197,6 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
 async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     """Rotate an API key: generate a new value, keep the same id and label."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     key_id = request.path_params["key_id"]
 
@@ -260,8 +250,6 @@ async def reveal_api_key(request: Any, **kwargs: Any) -> Response:
             {"error": "Credential visibility is disabled"}, status_code=403
         )
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     key_id = request.path_params["key_id"]
 
