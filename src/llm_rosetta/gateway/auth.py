@@ -7,8 +7,13 @@ extracting credentials in the format native to each API standard:
 - Anthropic: ``x-api-key: <key>``
 - Google GenAI: ``x-goog-api-key: <key>`` or ``?key=<key>`` query param
 
-Supports multiple API keys with labels for tracking. If no keys are
-configured, all requests pass through (backward compatible).
+Supports multiple API keys with labels for tracking.
+
+When no keys are configured, behavior depends on ``open_on_no_keys``:
+- ``True``:  all requests pass through (backward compatible default
+  for the standalone gateway).
+- ``False``: requests are rejected with 403 (secure default for
+  embedded/downstream usage).
 """
 
 from __future__ import annotations
@@ -141,11 +146,13 @@ class AuthState:
         labels: dict[str, str],
         internal_token: str | None,
         admin_password: str | None = None,
+        open_on_no_keys: bool = False,
     ) -> None:
         self.key_set = key_set
         self.labels = labels
         self.internal_token = internal_token
         self.admin_password = admin_password
+        self.open_on_no_keys = open_on_no_keys
         # Derive admin token from password + internal_token via HMAC
         self.admin_token: str | None = None
         self._recalculate_admin_token()
@@ -215,7 +222,11 @@ def create_auth_hook(auth_state: AuthState) -> Any:
             return check_admin_auth(request, auth_state)
 
         if not auth_state.key_set:
-            return None  # no gateway API keys configured → pass through
+            if auth_state.open_on_no_keys:
+                return None
+            return _error_for_path(
+                path, 403, "No API keys configured. Generate one in the admin panel."
+            )
 
         # API paths: extract key using format-appropriate strategy
         key = _extract_key(request)
