@@ -16,6 +16,7 @@ from typing import Any
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .config import GatewayConfig
+from .headers import build_upstream_extra_headers
 from .logging import get_logger
 from .transport import UpstreamConnectionError, UpstreamTransport
 
@@ -87,13 +88,20 @@ async def handle_embeddings(
     # --- Forward via transport ---
     upstream_url = f"{provider_info.base_url}/embeddings"
     transport: UpstreamTransport = request.app.transport
+    request_id = request.headers.get("x-request-id", "")
+    extra_headers = build_upstream_extra_headers(request, request_id)
 
     t0 = time.monotonic()
     status_code = 500
     error_detail: str | None = None
 
     try:
-        resp = await transport.send_passthrough(provider_info, upstream_url, body)
+        resp = await transport.send_passthrough(
+            provider_info,
+            upstream_url,
+            body,
+            extra_headers=extra_headers,
+        )
         status_code = resp.status_code
 
         if resp.is_error:
