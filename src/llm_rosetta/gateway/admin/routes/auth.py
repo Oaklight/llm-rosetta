@@ -171,8 +171,6 @@ async def change_password(request: Any) -> Response:
 
     # Persist to config file
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         data = _get_config_io(request).load_raw(config_path)

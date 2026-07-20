@@ -93,8 +93,6 @@ def _resolve_model_reasoning(
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         raw = _get_config_io(request).load_raw(config_path)
@@ -176,8 +174,6 @@ async def get_config(request: Any) -> Response:
 async def put_provider(request: Any, **kwargs: Any) -> Response:
     """Add or update a provider entry."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     name = request.path_params["name"]
 
@@ -250,8 +246,6 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
 async def delete_provider(request: Any, **kwargs: Any) -> Response:
     """Remove a provider entry."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     name = request.path_params["name"]
 
@@ -324,8 +318,6 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
 async def toggle_provider(request: Any, **kwargs: Any) -> Response:
     """Toggle a provider's enabled/disabled state."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     name = request.path_params["name"]
 
@@ -373,8 +365,6 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
 async def put_model(request: Any, **kwargs: Any) -> Response:
     """Add or update a model routing entry."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     name = request.path_params["name"]
 
@@ -471,8 +461,6 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
 async def delete_model(request: Any, **kwargs: Any) -> Response:
     """Remove a model routing entry."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     name = request.path_params["name"]
 
@@ -518,8 +506,6 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
 async def put_server_settings(request: Any) -> Response:
     """Update server settings (e.g. global proxy)."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         body = request.json()
@@ -588,8 +574,6 @@ async def put_server_settings(request: Any) -> Response:
 async def reload_config(request: Any) -> Response:
     """Force hot-reload of the config from disk."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -720,8 +704,6 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
 async def bulk_add_models(request: Any) -> Response:
     """Bulk-add multiple models for a given provider."""
     config_path = _get_config_path(request)
-    if not config_path:
-        return JSONResponse({"error": "No config file path available"}, status_code=500)
 
     try:
         body = request.json()

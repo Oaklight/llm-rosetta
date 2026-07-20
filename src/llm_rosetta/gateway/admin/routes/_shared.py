@@ -37,9 +37,12 @@ def _mask_api_key(value: str) -> str:
     return value[:4] + "***" + value[-4:]
 
 
-def _get_config_path(request: Any) -> str | None:
+def _get_config_path(request: Any) -> str:
     """Return the config file path stored on the app object."""
-    return getattr(request.app, "config_path", None)
+    path = getattr(request.app, "config_path", None)
+    if path is None:
+        raise RuntimeError("No config file path available")
+    return path
 
 
 def _get_config_io(request: Any) -> ConfigIO:
