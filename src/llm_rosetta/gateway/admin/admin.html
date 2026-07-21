@@ -1038,6 +1038,21 @@ body { padding-bottom: 26px; }
   </div>
 </div>
 
+<!-- Matryoshka Dimensions Modal -->
+<div class="modal-overlay" id="matryoshkaModal">
+  <div class="modal" style="max-width:360px">
+    <h3 data-i18n="test.matryoshka">Matryoshka</h3>
+    <div class="form-group">
+      <label data-i18n="test.matryoshkaDimPrompt">Enter dimensions for matryoshka embedding:</label>
+      <input id="matryoshkaDim" type="number" min="1" value="256" style="margin-top:6px" onkeydown="if(event.key==='Enter')confirmMatryoshka()">
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal('matryoshkaModal')" data-i18n="btn.cancel">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMatryoshka()" data-i18n="btn.ok">OK</button>
+    </div>
+  </div>
+</div>
+
 <!-- Test Result Modal -->
 <div class="modal-overlay" id="testModal">
   <div class="modal modal-wide">
@@ -1157,7 +1172,7 @@ const I18N = {
     'label.selectOne':'— select —',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
-    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.selected':'selected', 'btn.enable':'Enable', 'btn.disable':'Disable', 'model.enabled':'Enabled', 'model.disabled':'Disabled', 'label.on':'ON', 'label.off':'OFF', 'test.embedding':'Embedding', 'test.embedBatch':'Batch', 'test.matryoshka':'Matryoshka', 'test.embedMultimodal':'Multimodal (image)', 'test.matryoshkaDimPrompt':'Enter dimensions for matryoshka embedding:', 'error.invalidDimension':'Invalid dimension value', 'confirm.bulkDelete':'Delete {count} model(s)?', 'toast.bulkDone':'{action} applied to {count} model(s)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
+    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.selected':'selected', 'btn.enable':'Enable', 'btn.disable':'Disable', 'model.enabled':'Enabled', 'model.disabled':'Disabled', 'label.on':'ON', 'label.off':'OFF', 'test.embedding':'Embedding', 'test.embedBatch':'Batch', 'test.matryoshka':'Matryoshka', 'test.embedMultimodal':'Multimodal (image)', 'test.matryoshkaDimPrompt':'Enter dimensions for matryoshka embedding:', 'btn.ok':'OK', 'error.invalidDimension':'Invalid dimension value', 'confirm.bulkDelete':'Delete {count} model(s)?', 'toast.bulkDone':'{action} applied to {count} model(s)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities', 'label.systemOptions':'System Options', 'label.flattenSystem':'Flatten system content', 'label.flattenSystemHint':'Flatten system message content arrays to plain strings for upstream compatibility.',
     'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
@@ -1287,7 +1302,7 @@ const I18N = {
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
-    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09', 'label.urlTemplate':'URL \u6a21\u677f', 'label.streamUrlTemplate':'\u6d41\u5f0f URL \u6a21\u677f', 'label.urlTemplateHint':'\u8986\u76d6\u7aef\u70b9\u8def\u5f84\u3002\u5360\u4f4d\u7b26\uff1a{base_url}\u3001{model}', 'label.selected':'\u5df2\u9009\u62e9', 'btn.enable':'\u542f\u7528', 'btn.disable':'\u7981\u7528', 'model.enabled':'\u5df2\u542f\u7528', 'model.disabled':'\u5df2\u7981\u7528', 'label.on':'\u5f00', 'label.off':'\u5173', 'test.embedding':'Embedding', 'test.embedBatch':'\u6279\u91cf', 'test.matryoshka':'\u5957\u5a03 (Matryoshka)', 'test.embedMultimodal':'\u591a\u6a21\u6001 (\u56fe\u7247)', 'test.matryoshkaDimPrompt':'\u8f93\u5165 Matryoshka \u7ef4\u5ea6\uff1a', 'error.invalidDimension':'\u65e0\u6548\u7684\u7ef4\u5ea6\u503c', 'confirm.bulkDelete':'\u5220\u9664 {count} \u4e2a\u6a21\u578b\uff1f', 'toast.bulkDone':'{action} \u5df2\u5e94\u7528\u5230 {count} \u4e2a\u6a21\u578b',
+    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09', 'label.urlTemplate':'URL \u6a21\u677f', 'label.streamUrlTemplate':'\u6d41\u5f0f URL \u6a21\u677f', 'label.urlTemplateHint':'\u8986\u76d6\u7aef\u70b9\u8def\u5f84\u3002\u5360\u4f4d\u7b26\uff1a{base_url}\u3001{model}', 'label.selected':'\u5df2\u9009\u62e9', 'btn.enable':'\u542f\u7528', 'btn.disable':'\u7981\u7528', 'model.enabled':'\u5df2\u542f\u7528', 'model.disabled':'\u5df2\u7981\u7528', 'label.on':'\u5f00', 'label.off':'\u5173', 'test.embedding':'Embedding', 'test.embedBatch':'\u6279\u91cf', 'test.matryoshka':'\u5957\u5a03 (Matryoshka)', 'test.embedMultimodal':'\u591a\u6a21\u6001 (\u56fe\u7247)', 'test.matryoshkaDimPrompt':'\u8f93\u5165 Matryoshka \u7ef4\u5ea6\uff1a', 'error.invalidDimension':'\u65e0\u6548\u7684\u7ef4\u5ea6\u503c', 'btn.ok':'\u786e\u5b9a', 'confirm.bulkDelete':'\u5220\u9664 {count} \u4e2a\u6a21\u578b\uff1f', 'toast.bulkDone':'{action} \u5df2\u5e94\u7528\u5230 {count} \u4e2a\u6a21\u578b',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u65b9', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b', 'label.systemOptions':'\u7cfb\u7edf\u9009\u9879', 'label.flattenSystem':'\u5c55\u5e73\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9', 'label.flattenSystemHint':'\u5c06\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9\u6570\u7ec4\u5c55\u5e73\u4e3a\u7eaf\u6587\u672c\u5b57\u7b26\u4e32\uff0c\u4ee5\u517c\u5bb9\u4e0a\u6e38\u670d\u52a1\u3002',
     'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)', 'label.inherited':'\u7ee7\u627f',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u65b9', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u65b9',
@@ -3583,12 +3598,18 @@ function _newTestSignal() {
 }
 
 
+let _matryoshkaModel = '';
 function promptMatryoshka(model) {
-  const dim = prompt(t('test.matryoshkaDimPrompt'), '256');
-  if (dim === null) return;
-  const dimensions = parseInt(dim, 10);
-  if (isNaN(dimensions) || dimensions < 1) { showToast(t('error.invalidDimension'), 'error'); return; }
-  runTest(model, 'matryoshka', dimensions);
+  _matryoshkaModel = model;
+  document.getElementById('matryoshkaDim').value = '256';
+  document.getElementById('matryoshkaModal').classList.add('open');
+  document.getElementById('matryoshkaDim').focus();
+}
+function confirmMatryoshka() {
+  const dim = parseInt(document.getElementById('matryoshkaDim').value, 10);
+  if (isNaN(dim) || dim < 1) { showToast(t('error.invalidDimension'), 'error'); return; }
+  closeModal('matryoshkaModal');
+  runTest(_matryoshkaModel, 'matryoshka', dim);
 }
 
 async function runTest(model, type, extraParam) {
