@@ -174,16 +174,21 @@ class OpenAIChatConverter(BaseConverter):
         }
         p_prompt_details = p_usage.get("prompt_tokens_details")
         if p_prompt_details:
-            usage_info["prompt_tokens_details"] = p_prompt_details
-            if "cached_tokens" in p_prompt_details:
-                usage_info["cache_read_tokens"] = p_prompt_details["cached_tokens"]
+            # Filter None values — IR requires dict[str, int]
+            cleaned = {k: v for k, v in p_prompt_details.items() if v is not None}
+            if cleaned:
+                usage_info["prompt_tokens_details"] = cleaned
+            cached = p_prompt_details.get("cached_tokens")
+            if cached is not None:
+                usage_info["cache_read_tokens"] = cached
         p_completion_details = p_usage.get("completion_tokens_details")
         if p_completion_details:
-            usage_info["completion_tokens_details"] = p_completion_details
-            if "reasoning_tokens" in p_completion_details:
-                usage_info["reasoning_tokens"] = p_completion_details[
-                    "reasoning_tokens"
-                ]
+            cleaned = {k: v for k, v in p_completion_details.items() if v is not None}
+            if cleaned:
+                usage_info["completion_tokens_details"] = cleaned
+            reasoning = p_completion_details.get("reasoning_tokens")
+            if reasoning is not None:
+                usage_info["reasoning_tokens"] = reasoning
         return cast(UsageInfo, usage_info)
 
     def _apply_tool_config(
