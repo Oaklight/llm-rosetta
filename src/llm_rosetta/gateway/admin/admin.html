@@ -341,7 +341,7 @@ canvas { width: 100%; height: 160px; }
 .test-menu-item:hover { background: var(--bg-hover); }
 .test-menu-item:first-child { border-radius: var(--radius) var(--radius) 0 0; }
 .test-menu-item:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-.test-menu-item.disabled { color: var(--text-dim); opacity: 0.4; cursor: not-allowed; }
+.test-menu-item.disabled { color: var(--text-dim); opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .test-menu-item.disabled:hover { background: none; }
 
 /* Test result modal (wider) */
@@ -588,6 +588,14 @@ body { padding-bottom: 26px; }
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
         <span class="model-count" id="modelCount"></span>
       </div>
+      <div class="bulk-bar" id="modelBulkBar">
+        <span class="bulk-count" id="modelBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+        <div class="bulk-actions">
+          <button class="btn btn-sm" onclick="bulkModels('enable')" data-i18n="btn.enable">Enable</button>
+          <button class="btn btn-sm" onclick="bulkModels('disable')" data-i18n="btn.disable">Disable</button>
+          <button class="btn btn-sm btn-danger" onclick="bulkModels('delete')" data-i18n="btn.delete">Delete</button>
+        </div>
+      </div>
       <div class="table-scroll"><table>
         <thead><tr>
           <th style="width:30px"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
@@ -595,14 +603,6 @@ body { padding-bottom: 26px; }
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider">Provider</th>
           <th></th>
         </tr></thead>
-        <div class="bulk-bar" id="modelBulkBar">
-          <span class="bulk-count" id="modelBulkCount">0</span> <span data-i18n="label.selected">selected</span>
-          <div class="bulk-actions">
-            <button class="btn btn-sm" onclick="bulkModels('enable')" data-i18n="btn.enable">Enable</button>
-            <button class="btn btn-sm" onclick="bulkModels('disable')" data-i18n="btn.disable">Disable</button>
-            <button class="btn btn-sm btn-danger" onclick="bulkModels('delete')" data-i18n="btn.delete">Delete</button>
-          </div>
-        </div>
         <tbody id="modelTable"></tbody>
       </table></div>
     </div>
