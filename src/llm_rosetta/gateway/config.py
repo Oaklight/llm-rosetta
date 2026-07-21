@@ -355,6 +355,10 @@ class GatewayConfig:
             else:
                 raise ValueError(f"config: invalid model entry for '{name}'")
 
+            # Skip disabled models
+            if isinstance(value, dict) and value.get("enabled") is False:
+                continue
+
             if provider_name not in raw_providers:
                 continue
 

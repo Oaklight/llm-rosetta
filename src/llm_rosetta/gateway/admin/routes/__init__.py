@@ -41,6 +41,8 @@ from .config import (
     put_provider,
     put_server_settings,
     reload_config,
+    bulk_update_models,
+    toggle_model,
     toggle_provider,
 )
 from .keys import (
@@ -112,6 +114,10 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(put_model)
     app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(delete_model)
+    app.route("/admin/api/config/models/<path:name>/toggle", methods=["POST"])(
+        toggle_model
+    )
+    app.route("/admin/api/config/models/bulk", methods=["POST"])(bulk_update_models)
     app.route("/admin/api/config/providers/<name>/models", methods=["GET"])(
         fetch_upstream_models
     )

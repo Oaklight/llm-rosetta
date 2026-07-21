@@ -183,6 +183,18 @@ tr:hover td { background: var(--bg-hover); }
 }
 .provider-card .field code { overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: inline-block; vertical-align: bottom; }
 .provider-card.disabled { opacity: 0.5; }
+.model-disabled td:not(:first-child):not(:last-child) { opacity: 0.4; }
+.bulk-bar { display:none;align-items:center;gap:10px;padding:8px 14px;margin-bottom:8px;background:#ddf4ff;border:1px solid #a8d4f5;border-radius:8px;font-size:13px; }
+.bulk-bar .bulk-count { font-weight:600;color:var(--accent); }
+.bulk-bar .bulk-actions { margin-left:auto;display:flex;gap:6px; }
+.row-check { width:16px;height:16px;cursor:pointer;accent-color:var(--accent); }
+.pill-toggle { display:inline-flex;border:1px solid var(--border);border-radius:14px;overflow:hidden;font-size:11px;font-weight:600;cursor:pointer;user-select:none;vertical-align:middle;min-width:52px;text-align:center; }
+.pill-toggle span { padding:3px 8px;transition:all 0.15s; }
+.pill-toggle.is-on .pill-on { background:var(--green, #2da44e);color:#fff; }
+.pill-toggle.is-on .pill-off { background:var(--bg-card);color:var(--text-dim); }
+.pill-toggle.is-off .pill-off { background:var(--border);color:var(--text); }
+.pill-toggle.is-off .pill-on { background:var(--bg-card);color:var(--text-dim); }
+.btn-test-embed { color:var(--orange, #d4740a) !important;font-weight:600; }
 .provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
 /* List view — CSS grid for column alignment across rows */
@@ -578,10 +590,19 @@ body { padding-bottom: 26px; }
       </div>
       <div class="table-scroll"><table>
         <thead><tr>
+          <th style="width:30px"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
           <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model">Model</th>
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider">Provider</th>
           <th></th>
         </tr></thead>
+        <div class="bulk-bar" id="modelBulkBar">
+          <span class="bulk-count" id="modelBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+          <div class="bulk-actions">
+            <button class="btn btn-sm" onclick="bulkModels('enable')" data-i18n="btn.enable">Enable</button>
+            <button class="btn btn-sm" onclick="bulkModels('disable')" data-i18n="btn.disable">Disable</button>
+            <button class="btn btn-sm btn-danger" onclick="bulkModels('delete')" data-i18n="btn.delete">Delete</button>
+          </div>
+        </div>
         <tbody id="modelTable"></tbody>
       </table></div>
     </div>
@@ -1136,7 +1157,7 @@ const I18N = {
     'label.selectOne':'— select —',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
-    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
+    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.selected':'selected', 'btn.enable':'Enable', 'btn.disable':'Disable', 'model.enabled':'Enabled', 'model.disabled':'Disabled', 'label.on':'ON', 'label.off':'OFF', 'test.embedding':'Embedding', 'confirm.bulkDelete':'Delete {count} model(s)?', 'toast.bulkDone':'{action} applied to {count} model(s)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities', 'label.systemOptions':'System Options', 'label.flattenSystem':'Flatten system content', 'label.flattenSystemHint':'Flatten system message content arrays to plain strings for upstream compatibility.',
     'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
@@ -1266,7 +1287,7 @@ const I18N = {
     'label.selectOne':'\u2014 \u8bf7\u9009\u62e9 \u2014',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key\uff08\u6216 ${ENV_VAR} \u5360\u4f4d\u7b26\uff09', 'label.keyUnchangedHint':'\u7559\u7a7a\u4ee5\u4fdd\u7559\u5f53\u524d\u5bc6\u94a5',
-    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09', 'label.urlTemplate':'URL \u6a21\u677f', 'label.streamUrlTemplate':'\u6d41\u5f0f URL \u6a21\u677f', 'label.urlTemplateHint':'\u8986\u76d6\u7aef\u70b9\u8def\u5f84\u3002\u5360\u4f4d\u7b26\uff1a{base_url}\u3001{model}',
+    'label.proxyUrl':'\u4ee3\u7406 URL\uff08\u53ef\u9009\uff0c\u8986\u76d6\u5168\u5c40\u8bbe\u7f6e\uff09', 'label.urlTemplate':'URL \u6a21\u677f', 'label.streamUrlTemplate':'\u6d41\u5f0f URL \u6a21\u677f', 'label.urlTemplateHint':'\u8986\u76d6\u7aef\u70b9\u8def\u5f84\u3002\u5360\u4f4d\u7b26\uff1a{base_url}\u3001{model}', 'label.selected':'\u5df2\u9009\u62e9', 'btn.enable':'\u542f\u7528', 'btn.disable':'\u7981\u7528', 'model.enabled':'\u5df2\u542f\u7528', 'model.disabled':'\u5df2\u7981\u7528', 'label.on':'\u5f00', 'label.off':'\u5173', 'test.embedding':'Embedding', 'confirm.bulkDelete':'\u5220\u9664 {count} \u4e2a\u6a21\u578b\uff1f', 'toast.bulkDone':'{action} \u5df2\u5e94\u7528\u5230 {count} \u4e2a\u6a21\u578b',
     'label.modelName':'\u6a21\u578b\u540d\u79f0', 'label.provider':'\u670d\u52a1\u65b9', 'label.upstreamModel':'\u4e0a\u6e38\u6a21\u578b', 'label.capabilities':'\u80fd\u529b', 'label.systemOptions':'\u7cfb\u7edf\u9009\u9879', 'label.flattenSystem':'\u5c55\u5e73\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9', 'label.flattenSystemHint':'\u5c06\u7cfb\u7edf\u6d88\u606f\u5185\u5bb9\u6570\u7ec4\u5c55\u5e73\u4e3a\u7eaf\u6587\u672c\u5b57\u7b26\u4e32\uff0c\u4ee5\u517c\u5bb9\u4e0a\u6e38\u670d\u52a1\u3002',
     'label.reasoningConfig':'\u63a8\u7406\u914d\u7f6e', 'label.thinkingType':'\u601d\u8003\u7c7b\u578b', 'label.budgetRatio':'\u9884\u7b97 Token \u6bd4\u4f8b', 'label.disabledStrategy':'\u7981\u7528\u7b56\u7565', 'label.inheritProvider':'(\u7ee7\u627f\u81ea Provider)', 'label.inherited':'\u7ee7\u627f',
     'modal.addProvider':'\u6dfb\u52a0\u670d\u52a1\u65b9', 'modal.editProvider':'\u7f16\u8f91\u670d\u52a1\u65b9',
@@ -2125,7 +2146,7 @@ function renderModels() {
   document.getElementById('sortProvider').className = 'sortable' + (_modelSortKey === 'provider' ? ` ${_modelSortDir}` : '');
 
   if (totalCount === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
     document.getElementById('modelCount').textContent = '';
     return;
   }
@@ -2157,7 +2178,7 @@ function renderModels() {
   countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
 
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
     return;
   }
 
@@ -2169,6 +2190,8 @@ function renderModels() {
 
   tbody.innerHTML = entries.map(({name, prov, info}) => {
     const provDisabled = disabledProviders.has(prov);
+    const modelEnabled = typeof info === 'object' ? info.enabled !== false : true;
+    const rowDimmed = provDisabled || !modelEnabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const capBadges = caps.map(c => {
       const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : c === 'reasoning' ? 'badge-cap-reasoning' : 'badge-cap';
@@ -2180,26 +2203,34 @@ function renderModels() {
     const isEmbedding = caps.includes('embedding');
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
-      const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
-      const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
-    return `<tr${provDisabled ? ' style="opacity:0.4"' : ''}>
+    const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
+    const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
+    return `<tr${rowDimmed ? ' class="model-disabled"' : ''}>
+      <td><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
       <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${capBadges}</td>
       <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
-        ${isEmbedding ? `<button class="btn btn-sm btn-test" style="border-radius:var(--radius);color:var(--orange);font-weight:600" onclick="runTest('${esc(name)}','embedding')">${t('btn.test')}</button>` : `<div class="test-group">
-          <button class="btn btn-sm btn-test" onclick="runTest('${esc(name)}','text')">${t('btn.test')}</button>
+        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="test-group">
+          <button class="btn btn-sm btn-test${isEmbedding ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${isEmbedding ? 'embedding' : 'text'}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">${t('test.text')}</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">${t('test.stream')}</div>
+            ${isEmbedding ? `<div class="test-menu-item" onclick="runTest('${esc(name)}','embedding')">${t('test.embedding')}</div>` : `<div class="test-menu-item" onclick="runTest('${esc(name)}','text')">${t('test.text')}</div>`}
+            <div class="test-menu-item${isEmbedding ? ' disabled' : ''}" onclick="${isEmbedding ? '' : `runTest('${esc(name)}','stream')`}">${t('test.stream')}</div>
             <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">${t('test.tools')}</div>
             <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
             <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${esc(name)}','reasoning')` : ''}">${t('test.reasoning')}</div>
           </div>
-        </div>`}
-        <button class="btn btn-sm" onclick="cloneModel('${esc(name)}')">${t('btn.clone')}</button>
+        </div>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteModel('${esc(name)}', this)">${t('btn.delete')}</button>
+        <div class="model-more-menu" style="display:inline-block;position:relative">
+          <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
+          <div class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
+            <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
+            <div style="border-top:1px solid var(--border);margin:2px 0"></div>
+            <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
+          </div>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -2515,6 +2546,46 @@ async function _doDeleteModel(name) {
   const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
   if (res.ok) { showToast(t('toast.modelDeleted',{name})); loadConfig(); }
   else { showToast(res.error || 'Failed', 'error'); }
+}
+
+
+async function toggleModel(name) {
+  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(name)}/toggle`);
+  if (res.ok) {
+    const stateKey = res.enabled ? 'model.enabled' : 'model.disabled';
+    showToast(`${name}: ${t(stateKey)}`);
+    loadConfig();
+  } else { showToast(res.error || 'Failed', 'error'); }
+}
+
+function selectAllModels(headerCb) {
+  document.querySelectorAll('#modelTable .row-check').forEach(cb => cb.checked = headerCb.checked);
+  updateModelBulk();
+}
+
+function updateModelBulk() {
+  const checked = document.querySelectorAll('#modelTable .row-check:checked');
+  const bar = document.getElementById('modelBulkBar');
+  document.getElementById('modelBulkCount').textContent = checked.length;
+  bar.style.display = checked.length > 0 ? 'flex' : 'none';
+}
+
+async function bulkModels(action) {
+  const checked = document.querySelectorAll('#modelTable .row-check:checked');
+  const names = [...checked].map(cb => cb.dataset.model);
+  if (!names.length) return;
+  if (action === 'delete' && !confirm(t('confirm.bulkDelete', {count: names.length}))) return;
+  const res = await api.post('/admin/api/config/models/bulk', {action, models: names});
+  if (res.ok) {
+    showToast(t('toast.bulkDone', {action, count: res.affected.length}));
+    loadConfig();
+  } else { showToast(res.error || 'Failed', 'error'); }
+}
+
+function toggleMoreMenu(btn) {
+  const menu = btn.nextElementSibling;
+  document.querySelectorAll('.more-menu').forEach(m => { if (m !== menu) m.style.display = 'none'; });
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
 }
 
 function editModel(name, provider) {
@@ -3788,6 +3859,12 @@ checkAuthAndInit();
     }
   }
 })();
+
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.model-more-menu')) {
+    document.querySelectorAll('.more-menu').forEach(m => m.style.display = 'none');
+  }
+});
 </script>
 </body>
 </html>
