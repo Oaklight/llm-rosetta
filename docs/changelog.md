@@ -8,6 +8,15 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增
+
+- **模型启用/禁用开关** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：管理面板中为每个模型添加了 ON/OFF 药丸开关。禁用的模型不参与路由（`_parse_models` 跳过 `enabled: false`）。后端路由：`toggle_model`、`bulk_update_models`（批量启用/禁用/删除）。
+- **Embedding 测试菜单** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：Embedding 模型现在显示专属测试选项——Embedding、批量（文本数组）、套娃 Matryoshka（用户指定维度）、多模态（图片）。Matryoshka 使用自定义 modal 替代原生 `prompt()` 弹窗。
+
+### 变更
+
+- **模型表格 UI 重构** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：新增 checkbox 列支持多选，顶部显示批量操作栏（启用/禁用/删除）。Clone 和 Delete 收入 ⋯ 下拉菜单。Test 按钮在 LLM 和 embedding 模型间统一宽度。
+
 ## v0.7.2 — 2026-07-20
 
 ### 新增
