@@ -110,6 +110,8 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
     ):
         if value.get(key):
             entry[key] = value[key]
+    if value.get("enabled") is not None:
+        entry["enabled"] = value["enabled"]
     return entry
 
 
@@ -370,6 +372,124 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
         )
 
     return JSONResponse({"ok": True, "provider": name, "enabled": new_enabled})
+
+
+async def toggle_model(request: Any, **kwargs: Any) -> Response:
+    """Toggle a model's enabled/disabled state."""
+    config_path = _get_config_path(request)
+
+    name = request.path_params["name"]
+
+    try:
+        data = _get_config_io(request).load_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    models = data.get("models", {})
+    if name not in models:
+        return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+
+    # Normalize string shorthand to dict
+    if isinstance(models[name], str):
+        models[name] = {"provider": models[name]}
+
+    currently_enabled = models[name].get("enabled", True)
+    new_enabled = not currently_enabled
+
+    if new_enabled:
+        models[name].pop("enabled", None)
+    else:
+        models[name]["enabled"] = False
+
+    try:
+        _get_config_io(request).save(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse({"ok": True, "model": name, "enabled": new_enabled})
+
+
+async def bulk_update_models(request: Any) -> Response:
+    """Bulk enable, disable, or delete models."""
+    config_path = _get_config_path(request)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    action = body.get("action")
+    names = body.get("models", [])
+    if action not in ("enable", "disable", "delete") or not names:
+        return JSONResponse(
+            {"error": "'action' (enable/disable/delete) and 'models' are required"},
+            status_code=400,
+        )
+
+    try:
+        data = _get_config_io(request).load_raw(config_path)
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+
+    models = data.get("models", {})
+    affected: list[str] = []
+
+    for name in names:
+        if name not in models:
+            continue
+        if action == "delete":
+            del models[name]
+            affected.append(name)
+        else:
+            if isinstance(models[name], str):
+                models[name] = {"provider": models[name]}
+            if action == "enable":
+                models[name].pop("enabled", None)
+            else:
+                models[name]["enabled"] = False
+            affected.append(name)
+
+    try:
+        _get_config_io(request).save(config_path, data)
+    except Exception as exc:
+        return JSONResponse(
+            {"error": f"Failed to write config: {exc}"}, status_code=500
+        )
+
+    try:
+        new_config = _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        return JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
+
+    return JSONResponse(
+        {
+            "ok": True,
+            "action": action,
+            "affected": affected,
+            "models": dict(new_config.models),
+        }
+    )
 
 
 async def put_model(request: Any, **kwargs: Any) -> Response:
