@@ -8,6 +8,15 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Per-model enable/disable toggle** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Models can now be individually enabled or disabled via an ON/OFF pill toggle in the admin panel. Disabled models are excluded from routing (`_parse_models` skips `enabled: false`). Backend routes: `toggle_model`, `bulk_update_models` (batch enable/disable/delete).
+- **Embedding test menu** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Embedding models now show dedicated test options — Embedding, Batch (array of texts), Matryoshka (user-specified dimensions), and Multimodal (image). Matryoshka uses a custom modal instead of a native `prompt()` dialog.
+
+### Changed
+
+- **Model table UI restyle** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Checkbox column for multi-select with bulk action bar (Enable/Disable/Delete). Clone and Delete moved into ⋯ dropdown menu. Test button unified across LLM and embedding models.
+
 ## v0.7.2 — 2026-07-20
 
 ### Added
