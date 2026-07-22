@@ -85,10 +85,14 @@ class ContentBlockEndEvent(TypedDict):
     """Emitted when a content block ends.
 
     Signals that no more deltas will arrive for the given block_index.
+    When the block is a tool_use block, ``tool_call_id`` carries the
+    correlation identifier so downstream consumers can flush argument
+    buffers for the correct call.
     """
 
     type: Required[Literal["content_block_end"]]
     block_index: Required[int]  # 0-based block index
+    tool_call_id: NotRequired[str]  # Present when ending a tool_use block
 
 
 # ============================================================================

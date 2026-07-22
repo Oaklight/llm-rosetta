@@ -799,6 +799,105 @@ class TestStreamResponseFromProviderWithContext:
         self.converter.stream_response_from_provider(chunk, context=ctx)
         assert ctx.get_tool_name("call_abc") == "get_weather"
 
+    def test_finish_emits_content_block_end_with_tool_call_id(self):
+        """Finish after tool call emits ContentBlockEndEvent with tool_call_id (#384)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        # Stream a tool call start + arguments
+        tool_chunk = {
+            "id": "chatcmpl-001",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_abc",
+                                "type": "function",
+                                "index": 0,
+                                "function": {
+                                    "name": "get_weather",
+                                    "arguments": '{"city": "NYC"}',
+                                },
+                            }
+                        ]
+                    },
+                }
+            ],
+        }
+        self.converter.stream_response_from_provider(tool_chunk, context=ctx)
+        # Now finish
+        finish_chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(finish_chunk, context=ctx),
+        )
+        end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(end_events) == 1
+        assert end_events[0]["tool_call_id"] == "call_abc"
+
+    def test_finish_emits_content_block_end_per_tool_call(self):
+        """Finish after multiple tool calls emits one ContentBlockEndEvent per call (#384)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        tool_chunk = {
+            "id": "chatcmpl-001",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "index": 0,
+                                "function": {"name": "func_a", "arguments": ""},
+                            },
+                            {
+                                "id": "call_2",
+                                "type": "function",
+                                "index": 1,
+                                "function": {"name": "func_b", "arguments": ""},
+                            },
+                        ]
+                    },
+                }
+            ],
+        }
+        self.converter.stream_response_from_provider(tool_chunk, context=ctx)
+        finish_chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(finish_chunk, context=ctx),
+        )
+        end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(end_events) == 2
+        assert end_events[0]["tool_call_id"] == "call_1"
+        assert end_events[1]["tool_call_id"] == "call_2"
+
+    def test_finish_without_tool_calls_no_tool_call_id(self):
+        """Finish without tool calls does not include tool_call_id (#384)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        # Simulate a text block by manually setting current_block_index
+        ctx.current_block_index = 0
+        finish_chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(finish_chunk, context=ctx),
+        )
+        end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(end_events) == 1
+        assert "tool_call_id" not in end_events[0]
+
     def test_no_context_no_new_events(self):
         """Without context, no StreamStartEvent or StreamEndEvent are emitted."""
         # First chunk with metadata

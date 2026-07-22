@@ -650,6 +650,7 @@ class AnthropicConverter(BaseConverter):
 
         if context is not None:
             context.next_block_index()
+            context.current_block_type = block_type
             events.append(
                 ContentBlockStartEvent(
                     type="content_block_start",
@@ -746,12 +747,19 @@ class AnthropicConverter(BaseConverter):
         """Handle content_block_stop → ContentBlockEndEvent."""
         if context is not None:
             block_index = chunk.get("index", 0)
-            events.append(
-                ContentBlockEndEvent(
-                    type="content_block_end",
-                    block_index=block_index,
-                )
+            end_event = ContentBlockEndEvent(
+                type="content_block_end",
+                block_index=block_index,
             )
+            # Attach tool_call_id when ending a tool_use block so
+            # downstream consumers can correlate correctly (#384).
+            if (
+                context.current_block_type in ("tool_use", "server_tool_use")
+                and context._tool_call_order
+            ):
+                end_event["tool_call_id"] = context._tool_call_order[-1]
+            events.append(end_event)
+            context.current_block_type = None
 
     def _handle_message_delta_from_p(
         self,

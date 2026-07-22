@@ -998,6 +998,51 @@ class TestStreamResponseFromProviderWithContext:
         )
         assert events[0]["block_index"] == 2
 
+    def test_content_block_stop_includes_tool_call_id(self):
+        """content_block_stop for tool_use block includes tool_call_id (#384)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        # Simulate content_block_start for a tool_use block
+        start_event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc123",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        self.converter.stream_response_from_provider(start_event, context=ctx)
+        # Now stop the block
+        stop_event = {"type": "content_block_stop", "index": 0}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(stop_event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "content_block_end"
+        assert events[0]["tool_call_id"] == "toolu_abc123"
+
+    def test_content_block_stop_text_no_tool_call_id(self):
+        """content_block_stop for text block does not include tool_call_id (#384)."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        # Simulate content_block_start for a text block
+        start_event = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        self.converter.stream_response_from_provider(start_event, context=ctx)
+        stop_event = {"type": "content_block_stop", "index": 0}
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(stop_event, context=ctx),
+        )
+        assert len(events) == 1
+        assert "tool_call_id" not in events[0]
+
     # --- StreamEndEvent ---
 
     def test_message_stop_emits_stream_end_with_context(self):
