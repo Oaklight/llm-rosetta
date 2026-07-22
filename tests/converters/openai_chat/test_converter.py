@@ -7,6 +7,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.types.ir import (
     FinishEvent,
     IRRequest,
@@ -507,6 +508,114 @@ class TestOpenAIChatConverter:
         assert len(events) == 1
         assert events[0]["type"] == "finish"
         assert events[0]["finish_reason"]["reason"] == "stop"
+
+    def test_stream_content_block_end_includes_tool_call_id(self):
+        """content_block_end must carry tool_call_id for tool_use blocks (issue #384)."""
+        ctx = StreamContext()
+        # Simulate stream_start
+        start_chunk = {
+            "id": "chatcmpl-abc",
+            "model": "gpt-4o",
+            "created": 1700000000,
+            "choices": [{"index": 0, "delta": {"role": "assistant"}}],
+        }
+        self.converter.stream_response_from_provider(start_chunk, context=ctx)
+
+        # Tool call start chunk
+        tc_chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_abc123",
+                                "type": "function",
+                                "function": {"name": "get_weather", "arguments": ""},
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(tc_chunk, context=ctx)
+
+        # Tool call args delta
+        args_chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {"index": 0, "function": {"arguments": '{"city":"SF"}'}}
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(args_chunk, context=ctx)
+
+        # Finish chunk
+        finish_chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+        }
+        events = self.converter.stream_response_from_provider(
+            finish_chunk, context=ctx
+        )
+
+        block_end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(block_end_events) == 1
+        assert block_end_events[0]["tool_call_id"] == "call_abc123"
+
+    def test_stream_content_block_end_multiple_tool_calls(self):
+        """content_block_end emits per tool call with correct tool_call_id."""
+        ctx = StreamContext()
+        start_chunk = {
+            "id": "chatcmpl-abc",
+            "model": "gpt-4o",
+            "created": 1700000000,
+            "choices": [{"index": 0, "delta": {"role": "assistant"}}],
+        }
+        self.converter.stream_response_from_provider(start_chunk, context=ctx)
+
+        # Two tool calls in one chunk
+        tc_chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {
+                        "tool_calls": [
+                            {
+                                "index": 0,
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {"name": "tool_a", "arguments": ""},
+                            },
+                            {
+                                "index": 1,
+                                "id": "call_2",
+                                "type": "function",
+                                "function": {"name": "tool_b", "arguments": ""},
+                            },
+                        ]
+                    },
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(tc_chunk, context=ctx)
+
+        finish_chunk = {
+            "choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+        }
+        events = self.converter.stream_response_from_provider(
+            finish_chunk, context=ctx
+        )
+
+        block_end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(block_end_events) == 2
+        assert block_end_events[0]["tool_call_id"] == "call_1"
+        assert block_end_events[1]["tool_call_id"] == "call_2"
 
     def test_stream_response_from_provider_usage(self):
         """Test stream chunk with usage."""

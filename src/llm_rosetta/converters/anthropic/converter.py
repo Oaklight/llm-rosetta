@@ -664,6 +664,11 @@ class AnthropicConverter(BaseConverter):
 
             if context is not None:
                 context.register_tool_call(tool_call_id, tool_name)
+                # Track block_index → tool_call_id for content_block_end
+                block_tc_map = context.metadata.setdefault(
+                    "_block_tool_call_ids", {}
+                )
+                block_tc_map[block_index] = tool_call_id
 
             start_evt = ToolCallStartEvent(
                 type="tool_call_start",
@@ -746,12 +751,16 @@ class AnthropicConverter(BaseConverter):
         """Handle content_block_stop → ContentBlockEndEvent."""
         if context is not None:
             block_index = chunk.get("index", 0)
-            events.append(
-                ContentBlockEndEvent(
-                    type="content_block_end",
-                    block_index=block_index,
-                )
+            end_event = ContentBlockEndEvent(
+                type="content_block_end",
+                block_index=block_index,
             )
+            # Include tool_call_id when ending a tool_use block
+            block_tc_map = context.metadata.get("_block_tool_call_ids", {})
+            tc_id = block_tc_map.get(block_index)
+            if tc_id:
+                end_event["tool_call_id"] = tc_id
+            events.append(end_event)
 
     def _handle_message_delta_from_p(
         self,

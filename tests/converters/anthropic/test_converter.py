@@ -9,6 +9,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.types.ir import (
     FinishEvent,
     IRRequest,
@@ -646,10 +647,81 @@ class TestAnthropicConverter:
         assert len(events) == 0
 
     def test_stream_content_block_stop_ignored(self):
-        """Test content_block_stop is ignored."""
+        """Test content_block_stop is ignored without context."""
         event = {"type": "content_block_stop"}
         events = self.converter.stream_response_from_provider(event)
         assert len(events) == 0
+
+    def test_stream_content_block_end_includes_tool_call_id(self):
+        """content_block_end carries tool_call_id for tool_use blocks (issue #384)."""
+        ctx = StreamContext()
+        # message_start
+        start_chunk = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-20250514",
+                "content": [],
+            },
+        }
+        self.converter.stream_response_from_provider(start_chunk, context=ctx)
+
+        # content_block_start for tool_use
+        block_start = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {
+                "type": "tool_use",
+                "id": "toolu_abc123",
+                "name": "get_weather",
+                "input": {},
+            },
+        }
+        self.converter.stream_response_from_provider(block_start, context=ctx)
+
+        # content_block_stop
+        block_stop = {"type": "content_block_stop", "index": 0}
+        events = self.converter.stream_response_from_provider(
+            block_stop, context=ctx
+        )
+
+        block_end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(block_end_events) == 1
+        assert block_end_events[0]["tool_call_id"] == "toolu_abc123"
+        assert block_end_events[0]["block_index"] == 0
+
+    def test_stream_content_block_end_no_tool_call_id_for_text(self):
+        """content_block_end for text blocks should not have tool_call_id."""
+        ctx = StreamContext()
+        start_chunk = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_abc",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-4-20250514",
+                "content": [],
+            },
+        }
+        self.converter.stream_response_from_provider(start_chunk, context=ctx)
+
+        block_start = {
+            "type": "content_block_start",
+            "index": 0,
+            "content_block": {"type": "text", "text": ""},
+        }
+        self.converter.stream_response_from_provider(block_start, context=ctx)
+
+        block_stop = {"type": "content_block_stop", "index": 0}
+        events = self.converter.stream_response_from_provider(
+            block_stop, context=ctx
+        )
+
+        block_end_events = [e for e in events if e["type"] == "content_block_end"]
+        assert len(block_end_events) == 1
+        assert "tool_call_id" not in block_end_events[0]
 
     def test_stream_message_stop_ignored(self):
         """Test message_stop is ignored."""

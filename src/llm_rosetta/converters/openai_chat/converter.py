@@ -735,13 +735,24 @@ class OpenAIChatConverter(BaseConverter):
         # Close any open content block before emitting FinishEvent.
         # OpenAI doesn't have an explicit content-block-end concept,
         # but downstream formats (e.g. Anthropic) require it.
-        if context is not None and context.current_block_index >= 0:
-            events.append(
-                ContentBlockEndEvent(
-                    type="content_block_end",
-                    block_index=context.current_block_index,
+        if context is not None:
+            # Emit per-tool-call content_block_end events with tool_call_id
+            # so downstream consumers can flush argument buffers.
+            if context._tool_call_order:
+                for tc_id in context._tool_call_order:
+                    end_event = ContentBlockEndEvent(
+                        type="content_block_end",
+                        block_index=context.current_block_index,
+                        tool_call_id=tc_id,
+                    )
+                    events.append(end_event)
+            elif context.current_block_index >= 0:
+                events.append(
+                    ContentBlockEndEvent(
+                        type="content_block_end",
+                        block_index=context.current_block_index,
+                    )
                 )
-            )
 
         events.append(
             FinishEvent(
