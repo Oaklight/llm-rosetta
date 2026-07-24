@@ -45,10 +45,10 @@ def _run(coro: Any) -> Any:
 
 
 class TestNoApiKey:
-    """When no api_key is configured, all requests pass through."""
+    """When no api_key is configured, behavior depends on open_on_no_keys."""
 
-    def test_all_requests_allowed(self):
-        state = AuthState(frozenset(), {}, None)
+    def test_open_on_no_keys_allows_all(self):
+        state = AuthState(frozenset(), {}, None, open_on_no_keys=True)
         hook = create_auth_hook(state)
 
         for path in [
@@ -59,6 +59,21 @@ class TestNoApiKey:
         ]:
             resp = _run(hook(_make_request(path)))
             assert resp is None, f"Expected pass-through for {path}"
+
+    def test_closed_on_no_keys_blocks_api(self):
+        state = AuthState(frozenset(), {}, None, open_on_no_keys=False)
+        hook = create_auth_hook(state)
+
+        resp = _run(hook(_make_request("/v1/chat/completions")))
+        assert resp is not None
+        assert resp.status_code == 403
+
+    def test_closed_on_no_keys_allows_health(self):
+        state = AuthState(frozenset(), {}, None, open_on_no_keys=False)
+        hook = create_auth_hook(state)
+
+        resp = _run(hook(_make_request("/health")))
+        assert resp is None
 
 
 # ---------------------------------------------------------------------------
