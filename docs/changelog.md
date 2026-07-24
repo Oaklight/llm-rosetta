@@ -8,14 +8,30 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.7.3 — 2026-07-25
+
 ### 新增
 
 - **模型启用/禁用开关** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：管理面板中为每个模型添加了 ON/OFF 药丸开关。禁用的模型不参与路由（`_parse_models` 跳过 `enabled: false`）。后端路由：`toggle_model`、`bulk_update_models`（批量启用/禁用/删除）。
 - **Embedding 测试菜单** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：Embedding 模型现在显示专属测试选项——Embedding、批量（文本数组）、套娃 Matryoshka（用户指定维度）、多模态（图片）。Matryoshka 使用自定义 modal 替代原生 `prompt()` 弹窗。
+- **URL 模板管理面板 UI**：可在 provider 和 model 卡片中直接配置自定义上游 URL 模板。
 
 ### 变更
 
 - **模型表格 UI 重构** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：新增 checkbox 列支持多选，顶部显示批量操作栏（启用/禁用/删除）。Clone 和 Delete 收入 ⋯ 下拉菜单。Test 按钮在 LLM 和 embedding 模型间统一宽度。
+- **原子化配置写入** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：`write_config` 改用 `tempfile.mkstemp` + `fsync` + `os.replace` 实现崩溃安全的跨平台原子写入。移除所有平台特定锁代码（`fcntl`/`msvcrt`）。读者永远不会看到写了一半的文件。
+- **跨进程配置串行化** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：新增 `config_lock(path)` 上下文管理器，使用 `.lock` sidecar 文件配合 `fcntl.flock`（Unix）/ `msvcrt.locking`（Windows）实现跨进程互斥。保护多个 gateway 实例共享同一配置文件的场景。14 个 admin route handler 全部包裹以串行化 read-modify-write 周期。
+
+### 修复
+
+- **Windows 兼容性** ([#381](https://github.com/Oaklight/llm-rosetta/pull/381))：Gateway 不再在顶层导入仅 Unix 可用的 `fcntl` 模块。
+- **保留上游 User-Agent 头** ([#385](https://github.com/Oaklight/llm-rosetta/pull/385))：Gateway 现在将客户端的 `User-Agent` 头传递给上游 provider，而非丢弃。
+- 修复 usage token details 中 null 值在 IR 校验前未过滤的问题。
+- 修复 `test_auth` 与 `open_on_no_keys` 行为不一致的问题 ([#388](https://github.com/Oaklight/llm-rosetta/pull/388))。
+
+### 安全
+
+- **无 API key 时拒绝请求** ([#383](https://github.com/Oaklight/llm-rosetta/pull/383))：当 `api_keys` 为空且未设置 `open_on_no_keys` 时，API 请求现在返回 403 而非静默放行。
 
 ## v0.7.2 — 2026-07-20
 
