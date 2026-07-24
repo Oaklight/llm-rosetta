@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-import threading
+import sys
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from typing import Any, Protocol, runtime_checkable
@@ -104,8 +104,18 @@ def write_config(path: str, data: dict[str, Any]) -> None:
 # Config-file read-modify-write serialization
 # ---------------------------------------------------------------------------
 
-_config_locks: dict[str, threading.Lock] = {}
-_config_locks_guard = threading.Lock()
+
+def _lock_exclusive(f: Any) -> None:
+    """Acquire an exclusive lock on an open file (cross-platform)."""
+    if sys.platform == "win32":
+        import msvcrt  # noqa: F811  # Windows-only
+
+        f.seek(0)
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)  # type: ignore[attr-defined]
+    else:
+        import fcntl
+
+        fcntl.flock(f, fcntl.LOCK_EX)
 
 
 @contextmanager
@@ -116,21 +126,16 @@ def config_lock(path: str) -> Generator[None, None, None]:
     with this lock.  Without it, concurrent requests that each load the
     same version can silently overwrite each other's changes.
 
-    The lock is per-resolved-path and process-scoped (``threading.Lock``).
-    This is sufficient because the gateway runs as a single-process async
-    server — concurrency comes from the event loop, not from threads or
-    child processes.
+    Uses a ``.lock`` sidecar file with ``fcntl.flock`` (Unix) or
+    ``msvcrt.locking`` (Windows) for cross-process mutual exclusion.
+    This protects against multiple gateway instances sharing the same
+    config file (e.g. dev + prod on the same host).
     """
-    real = os.path.realpath(path)
-    with _config_locks_guard:
-        if real not in _config_locks:
-            _config_locks[real] = threading.Lock()
-        lock = _config_locks[real]
-    lock.acquire()
-    try:
+    lock_path = os.path.realpath(path) + ".lock"
+    os.makedirs(os.path.dirname(lock_path) or ".", exist_ok=True)
+    with open(lock_path, "a+") as lf:
+        _lock_exclusive(lf)
         yield
-    finally:
-        lock.release()
 
 
 def load_config_raw(path: str) -> dict[str, Any]:
