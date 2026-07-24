@@ -70,22 +70,34 @@ def load_config(path: str) -> dict[str, Any]:
     return json.loads(substituted)
 
 
+def _lock_exclusive(f: Any) -> None:
+    """Acquire an exclusive lock on file *f* (cross-platform)."""
+    import sys
+
+    if sys.platform == "win32":
+        import msvcrt  # type: ignore[import]  # Windows-only
+
+        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+    else:
+        import fcntl
+
+        fcntl.flock(f, fcntl.LOCK_EX)
+
+
 def write_config(path: str, data: dict[str, Any]) -> None:
     """Write a config dict as formatted JSON to *path*.
 
     Creates parent directories if needed.  Uses an exclusive file lock
-    (``fcntl.flock``) to prevent concurrent writes from multiple
-    gateway instances sharing the same config file (e.g. via hard link).
+    to prevent concurrent writes from multiple gateway instances sharing
+    the same config file (e.g. via hard link).
 
     Comments in the original JSONC file (if any) are **not** preserved.
     """
-    import fcntl
-
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     # Use "a+" to create the file if it doesn't exist, then lock.
     # "r+" would fail on a new file; "w" truncates before locking.
     with open(path, "a+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
+        _lock_exclusive(f)
         f.truncate(0)
         f.seek(0)
         json.dump(data, f, indent=2, ensure_ascii=False)
