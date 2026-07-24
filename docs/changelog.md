@@ -8,14 +8,30 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.7.3 — 2026-07-25
+
 ### Added
 
 - **Per-model enable/disable toggle** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Models can now be individually enabled or disabled via an ON/OFF pill toggle in the admin panel. Disabled models are excluded from routing (`_parse_models` skips `enabled: false`). Backend routes: `toggle_model`, `bulk_update_models` (batch enable/disable/delete).
 - **Embedding test menu** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Embedding models now show dedicated test options — Embedding, Batch (array of texts), Matryoshka (user-specified dimensions), and Multimodal (image). Matryoshka uses a custom modal instead of a native `prompt()` dialog.
+- **URL template admin UI** for provider and model cards — configure custom upstream URL templates directly from the admin panel.
 
 ### Changed
 
 - **Model table UI restyle** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Checkbox column for multi-select with bulk action bar (Enable/Disable/Delete). Clone and Delete moved into ⋯ dropdown menu. Test button unified across LLM and embedding models.
+- **Atomic config writes** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387)): `write_config` now uses `tempfile.mkstemp` + `fsync` + `os.replace` for crash-safe, cross-platform atomic writes. Removes all platform-specific locking code (`fcntl`/`msvcrt`). Readers never see a partially-written file.
+- **Cross-process config serialization** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387)): New `config_lock(path)` context manager using `.lock` sidecar files with `fcntl.flock` (Unix) / `msvcrt.locking` (Windows). Protects against multiple gateway instances sharing the same config file. All 14 admin route handlers wrapped to serialize read-modify-write cycles.
+
+### Fixed
+
+- **Windows compatibility** ([#381](https://github.com/Oaklight/llm-rosetta/pull/381)): Gateway no longer imports Unix-only `fcntl` module at top level.
+- **Preserve upstream User-Agent header** ([#385](https://github.com/Oaklight/llm-rosetta/pull/385)): The gateway now passes through the client’s `User-Agent` header to upstream providers instead of dropping it.
+- Filter null values from usage token details before IR validation.
+- Align `test_auth` with `open_on_no_keys` behavior ([#388](https://github.com/Oaklight/llm-rosetta/pull/388)).
+
+### Security
+
+- **Block requests when no API keys configured** ([#383](https://github.com/Oaklight/llm-rosetta/pull/383)): When `api_keys` is empty and `open_on_no_keys` is not set, API requests are now rejected with 403 instead of silently passing through.
 
 ## v0.7.2 — 2026-07-20
 
