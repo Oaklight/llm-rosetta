@@ -129,8 +129,8 @@ async def admin_check(request: Any) -> Response:
 
 async def change_password(request: Any) -> Response:
     """Change the admin password (requires current password)."""
-    from ._shared import _get_config_path, _reload_gateway_config
-    from ._shared import _get_config_io
+    from ...config import config_lock
+    from ._shared import _get_config_io, _get_config_path, _reload_gateway_config
 
     auth_state = request.app.auth_state
     if not auth_state.admin_password:
@@ -176,19 +176,22 @@ async def change_password(request: Any) -> Response:
     # Persist to config file
     config_path = _get_config_path(request)
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    data.setdefault("server", {})["admin_password"] = new_pw
+        data.setdefault("server", {})["admin_password"] = new_pw
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     # Hot-reload config (syncs auth state via _sync_auth_middleware)
     _reload_gateway_config(request, config_path)

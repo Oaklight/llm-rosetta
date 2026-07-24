@@ -9,7 +9,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ...config import GatewayConfig
+from ...config import GatewayConfig, config_lock
 from ._shared import (
     _get_config_io,
     _get_config_path,
@@ -64,28 +64,31 @@ async def create_api_key(request: Any) -> Response:
         "created": datetime.now(timezone.utc).isoformat(),
     }
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    server = data.setdefault("server", {})
+        server = data.setdefault("server", {})
 
-    # Migrate legacy single key → api_keys array
-    if "api_key" in server and "api_keys" not in server:
-        old_key = server.pop("api_key")
-        server["api_keys"] = [
-            {"id": "default", "key": old_key, "label": "default", "created": ""}
-        ]
+        # Migrate legacy single key → api_keys array
+        if "api_key" in server and "api_keys" not in server:
+            old_key = server.pop("api_key")
+            server["api_keys"] = [
+                {"id": "default", "key": old_key, "label": "default", "created": ""}
+            ]
 
-    server.setdefault("api_keys", []).append(entry)
+        server.setdefault("api_keys", []).append(entry)
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -114,30 +117,33 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    keys = data.get("server", {}).get("api_keys", [])
-    target = None
-    for entry in keys:
-        if entry.get("id") == key_id:
-            target = entry
-            break
+        keys = data.get("server", {}).get("api_keys", [])
+        target = None
+        for entry in keys:
+            if entry.get("id") == key_id:
+                target = entry
+                break
 
-    if target is None:
-        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+        if target is None:
+            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    if "label" in body:
-        target["label"] = body["label"]
+        if "label" in body:
+            target["label"] = body["label"]
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -160,24 +166,27 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
 
     key_id = request.path_params["key_id"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    keys = data.get("server", {}).get("api_keys", [])
-    original_len = len(keys)
-    keys[:] = [e for e in keys if e.get("id") != key_id]
+        keys = data.get("server", {}).get("api_keys", [])
+        original_len = len(keys)
+        keys[:] = [e for e in keys if e.get("id") != key_id]
 
-    if len(keys) == original_len:
-        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+        if len(keys) == original_len:
+            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -200,31 +209,34 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
 
     key_id = request.path_params["key_id"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    keys = data.get("server", {}).get("api_keys", [])
-    target = None
-    for entry in keys:
-        if entry.get("id") == key_id:
-            target = entry
-            break
+        keys = data.get("server", {}).get("api_keys", [])
+        target = None
+        for entry in keys:
+            if entry.get("id") == key_id:
+                target = entry
+                break
 
-    if target is None:
-        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
+        if target is None:
+            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    new_key = f"rsk-{secrets.token_hex(24)}"
-    target["key"] = new_key
-    target["rotated"] = datetime.now(timezone.utc).isoformat()
+        new_key = f"rsk-{secrets.token_hex(24)}"
+        target["key"] = new_key
+        target["rotated"] = datetime.now(timezone.utc).isoformat()
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
