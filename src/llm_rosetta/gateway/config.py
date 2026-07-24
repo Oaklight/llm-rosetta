@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import os
 import re
 import threading
-from contextlib import contextmanager
 from collections.abc import Generator
+from contextlib import contextmanager, suppress
 from typing import Any, Protocol, runtime_checkable
 
 from llm_rosetta.auto_detect import ProviderType
@@ -96,7 +95,7 @@ def write_config(path: str, data: dict[str, Any]) -> None:
             os.fsync(f.fileno())
         os.replace(tmp, path)
     except BaseException:
-        with contextlib.suppress(OSError):
+        with suppress(OSError):
             os.unlink(tmp)
         raise
 
