@@ -8,7 +8,7 @@ from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.shims import get_shim, list_shims
 
-from ...config import GatewayConfig
+from ...config import GatewayConfig, config_lock
 from ...providers import known_provider_types
 from ._shared import (
     _build_provider_entry,
@@ -197,42 +197,46 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     api_key = body.get("api_key", "")
     base_url = body.get("base_url", "")
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    existing_providers = data.get("providers", {})
-    resolve_name = body.get("rename_from", name) or name
+        existing_providers = data.get("providers", {})
+        resolve_name = body.get("rename_from", name) or name
 
-    # When api_key is omitted/empty and we're editing, keep the existing key
-    if not api_key and resolve_name in existing_providers:
-        api_key = existing_providers[resolve_name].get("api_key", "")
+        # When api_key is omitted/empty and we're editing, keep the existing key
+        if not api_key and resolve_name in existing_providers:
+            api_key = existing_providers[resolve_name].get("api_key", "")
 
-    if not api_key or not base_url:
-        return JSONResponse(
-            {"error": "Both 'api_key' and 'base_url' are required"}, status_code=400
+        if not api_key or not base_url:
+            return JSONResponse(
+                {"error": "Both 'api_key' and 'base_url' are required"},
+                status_code=400,
+            )
+
+        provider_entry = _build_provider_entry(
+            body, api_key, base_url, existing_providers, resolve_name
         )
 
-    provider_entry = _build_provider_entry(
-        body, api_key, base_url, existing_providers, resolve_name
-    )
+        # Handle rename: remove old entry and update model references
+        rename_from = body.get("rename_from")
+        if rename_from and rename_from != name:
+            rename_err = _handle_provider_rename(data, rename_from, name)
+            if rename_err is not None:
+                return rename_err
 
-    # Handle rename: remove old entry and update model references
-    rename_from = body.get("rename_from")
-    if rename_from and rename_from != name:
-        rename_err = _handle_provider_rename(data, rename_from, name)
-        if rename_err is not None:
-            return rename_err
+        data.setdefault("providers", {})[name] = provider_entry
 
-    data.setdefault("providers", {})[name] = provider_entry
-
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -261,49 +265,54 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
 
     name = request.path_params["name"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    providers = data.get("providers", {})
-    if name not in providers:
-        return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
+        providers = data.get("providers", {})
+        if name not in providers:
+            return JSONResponse(
+                {"error": f"Provider '{name}' not found"}, status_code=404
+            )
 
-    # Check if any model still references this provider
-    models = data.get("models", {})
-    referencing = [
-        m
-        for m, p in models.items()
-        if (p["provider"] if isinstance(p, dict) else p) == name
-    ]
+        # Check if any model still references this provider
+        models = data.get("models", {})
+        referencing = [
+            m
+            for m, p in models.items()
+            if (p["provider"] if isinstance(p, dict) else p) == name
+        ]
 
-    from ._shared import _qp
+        from ._shared import _qp
 
-    cascade = _qp(request, "cascade") in ("true", "1")
-    if referencing and not cascade:
-        return JSONResponse(
-            {
-                "error": f"Cannot delete provider '{name}': referenced by models: {referencing}"
-            },
-            status_code=409,
-        )
+        cascade = _qp(request, "cascade") in ("true", "1")
+        if referencing and not cascade:
+            return JSONResponse(
+                {
+                    "error": f"Cannot delete provider '{name}': referenced by models: {referencing}"
+                },
+                status_code=409,
+            )
 
-    # Cascade: remove referencing models first
-    cascade_deleted: list[str] = []
-    if referencing and cascade:
-        for model_name in referencing:
-            del models[model_name]
-            cascade_deleted.append(model_name)
+        # Cascade: remove referencing models first
+        cascade_deleted: list[str] = []
+        if referencing and cascade:
+            for model_name in referencing:
+                del models[model_name]
+                cascade_deleted.append(model_name)
 
-    del providers[name]
+        del providers[name]
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -333,31 +342,36 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
 
     name = request.path_params["name"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    providers = data.get("providers", {})
-    if name not in providers:
-        return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
+        providers = data.get("providers", {})
+        if name not in providers:
+            return JSONResponse(
+                {"error": f"Provider '{name}' not found"}, status_code=404
+            )
 
-    # Toggle: if currently enabled (or unset → default True), disable; otherwise enable
-    currently_enabled = providers[name].get("enabled", True)
-    new_enabled = not currently_enabled
+        # Toggle: if currently enabled (or unset → default True), disable; otherwise enable
+        currently_enabled = providers[name].get("enabled", True)
+        new_enabled = not currently_enabled
 
-    if new_enabled:
-        # Remove the key entirely when re-enabling (True is the default)
-        providers[name].pop("enabled", None)
-    else:
-        providers[name]["enabled"] = False
+        if new_enabled:
+            # Remove the key entirely when re-enabling (True is the default)
+            providers[name].pop("enabled", None)
+        else:
+            providers[name]["enabled"] = False
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -380,33 +394,36 @@ async def toggle_model(request: Any, **kwargs: Any) -> Response:
 
     name = request.path_params["name"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    models = data.get("models", {})
-    if name not in models:
-        return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+        models = data.get("models", {})
+        if name not in models:
+            return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
 
-    # Normalize string shorthand to dict
-    if isinstance(models[name], str):
-        models[name] = {"provider": models[name]}
+        # Normalize string shorthand to dict
+        if isinstance(models[name], str):
+            models[name] = {"provider": models[name]}
 
-    currently_enabled = models[name].get("enabled", True)
-    new_enabled = not currently_enabled
+        currently_enabled = models[name].get("enabled", True)
+        new_enabled = not currently_enabled
 
-    if new_enabled:
-        models[name].pop("enabled", None)
-    else:
-        models[name]["enabled"] = False
+        if new_enabled:
+            models[name].pop("enabled", None)
+        else:
+            models[name]["enabled"] = False
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -440,35 +457,38 @@ async def bulk_update_models(request: Any) -> Response:
             status_code=400,
         )
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    models = data.get("models", {})
-    affected: list[str] = []
+        models = data.get("models", {})
+        affected: list[str] = []
 
-    for name in names:
-        if name not in models:
-            continue
-        if action == "delete":
-            del models[name]
-            affected.append(name)
-        else:
-            if isinstance(models[name], str):
-                models[name] = {"provider": models[name]}
-            if action == "enable":
-                models[name].pop("enabled", None)
+        for name in names:
+            if name not in models:
+                continue
+            if action == "delete":
+                del models[name]
+                affected.append(name)
             else:
-                models[name]["enabled"] = False
-            affected.append(name)
+                if isinstance(models[name], str):
+                    models[name] = {"provider": models[name]}
+                if action == "enable":
+                    models[name].pop("enabled", None)
+                else:
+                    models[name]["enabled"] = False
+                affected.append(name)
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -507,63 +527,67 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
     if not provider:
         return JSONResponse({"error": "'provider' is required"}, status_code=400)
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
-
-    # Validate that the provider exists
-    providers = data.get("providers", {})
-    if provider not in providers:
-        return JSONResponse(
-            {"error": f"Provider '{provider}' not found in config"}, status_code=400
-        )
-
-    capabilities = body.get("capabilities", ["text"])
-
-    # Handle rename: remove old entry
-    rename_from = body.get("rename_from")
-    if rename_from and rename_from != name:
-        models = data.get("models", {})
-        if rename_from not in models:
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
             return JSONResponse(
-                {"error": f"Original model '{rename_from}' not found"},
-                status_code=404,
+                {"error": f"Failed to read config: {exc}"}, status_code=500
             )
-        if name in models:
+
+        # Validate that the provider exists
+        providers = data.get("providers", {})
+        if provider not in providers:
             return JSONResponse(
-                {"error": f"Model '{name}' already exists"},
-                status_code=409,
+                {"error": f"Provider '{provider}' not found in config"},
+                status_code=400,
             )
-        del models[rename_from]
 
-    model_entry: dict[str, Any] = {
-        "provider": provider,
-        "capabilities": capabilities,
-    }
-    for opt_key in ("upstream_model", "url_template", "stream_url_template"):
-        if body.get(opt_key):
-            model_entry[opt_key] = body[opt_key]
+        capabilities = body.get("capabilities", ["text"])
 
-    # Persist per-model flatten_system flag (if provided)
-    flatten_system = body.get("flatten_system")
-    if flatten_system is not None:
-        model_entry["flatten_system"] = bool(flatten_system)
+        # Handle rename: remove old entry
+        rename_from = body.get("rename_from")
+        if rename_from and rename_from != name:
+            models = data.get("models", {})
+            if rename_from not in models:
+                return JSONResponse(
+                    {"error": f"Original model '{rename_from}' not found"},
+                    status_code=404,
+                )
+            if name in models:
+                return JSONResponse(
+                    {"error": f"Model '{name}' already exists"},
+                    status_code=409,
+                )
+            del models[rename_from]
 
-    # Persist per-model reasoning override (if provided)
-    reasoning_override = body.get("reasoning_override")
-    if isinstance(reasoning_override, dict):
-        cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
-        if cleaned:
-            model_entry["reasoning_override"] = cleaned
-    data.setdefault("models", {})[name] = model_entry
+        model_entry: dict[str, Any] = {
+            "provider": provider,
+            "capabilities": capabilities,
+        }
+        for opt_key in ("upstream_model", "url_template", "stream_url_template"):
+            if body.get(opt_key):
+                model_entry[opt_key] = body[opt_key]
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        # Persist per-model flatten_system flag (if provided)
+        flatten_system = body.get("flatten_system")
+        if flatten_system is not None:
+            model_entry["flatten_system"] = bool(flatten_system)
+
+        # Persist per-model reasoning override (if provided)
+        reasoning_override = body.get("reasoning_override")
+        if isinstance(reasoning_override, dict):
+            cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
+            if cleaned:
+                model_entry["reasoning_override"] = cleaned
+        data.setdefault("models", {})[name] = model_entry
+
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -594,23 +618,26 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
 
     name = request.path_params["name"]
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    models = data.get("models", {})
-    if name not in models:
-        return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+        models = data.get("models", {})
+        if name not in models:
+            return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
 
-    del models[name]
+        del models[name]
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         new_config = _reload_gateway_config(request, config_path)
@@ -642,49 +669,52 @@ async def put_server_settings(request: Any) -> Response:
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    server = data.setdefault("server", {})
+        server = data.setdefault("server", {})
 
-    # Update proxy — empty string removes it
-    if "proxy" in body:
-        proxy = body["proxy"]
-        if proxy:
-            server["proxy"] = proxy
-        else:
-            server.pop("proxy", None)
+        # Update proxy — empty string removes it
+        if "proxy" in body:
+            proxy = body["proxy"]
+            if proxy:
+                server["proxy"] = proxy
+            else:
+                server.pop("proxy", None)
 
-    # Credential visibility toggle
-    if "credential_visible" in body:
-        server["credential_visible"] = bool(body["credential_visible"])
+        # Credential visibility toggle
+        if "credential_visible" in body:
+            server["credential_visible"] = bool(body["credential_visible"])
 
-    # Log retention caps (floor prevents accidental wipe)
-    if "request_log" in body:
-        rl = body["request_log"]
-        rl_cfg = server.setdefault("request_log", {})
-        if "success_max" in rl:
-            rl_cfg["success_max"] = max(50000, int(rl["success_max"]))
-        if "error_max" in rl:
-            rl_cfg["error_max"] = max(5000, int(rl["error_max"]))
+        # Log retention caps (floor prevents accidental wipe)
+        if "request_log" in body:
+            rl = body["request_log"]
+            rl_cfg = server.setdefault("request_log", {})
+            if "success_max" in rl:
+                rl_cfg["success_max"] = max(50000, int(rl["success_max"]))
+            if "error_max" in rl:
+                rl_cfg["error_max"] = max(5000, int(rl["error_max"]))
 
-    # Debug / log level
-    debug = data.setdefault("debug", {})
-    if "verbose" in body:
-        debug["verbose"] = bool(body["verbose"])
-    if "log_bodies" in body:
-        debug["log_bodies"] = bool(body["log_bodies"])
-    if "error_dumps" in body:
-        debug["error_dumps"] = bool(body["error_dumps"])
+        # Debug / log level
+        debug = data.setdefault("debug", {})
+        if "verbose" in body:
+            debug["verbose"] = bool(body["verbose"])
+        if "log_bodies" in body:
+            debug["log_bodies"] = bool(body["log_bodies"])
+        if "error_dumps" in body:
+            debug["error_dumps"] = bool(body["error_dumps"])
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     try:
         _reload_gateway_config(request, config_path)
@@ -850,55 +880,58 @@ async def bulk_add_models(request: Any) -> Response:
             {"error": "'provider' and 'models' are required"}, status_code=400
         )
 
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
+    with config_lock(config_path):
+        try:
+            data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
 
-    # Validate provider exists
-    providers = data.get("providers", {})
-    if provider not in providers:
-        return JSONResponse(
-            {"error": f"Provider '{provider}' not found"}, status_code=400
-        )
+        # Validate provider exists
+        providers = data.get("providers", {})
+        if provider not in providers:
+            return JSONResponse(
+                {"error": f"Provider '{provider}' not found"}, status_code=400
+            )
 
-    models_section = data.setdefault("models", {})
-    added: list[str] = []
-    skipped: list[str] = []
+        models_section = data.setdefault("models", {})
+        added: list[str] = []
+        skipped: list[str] = []
 
-    for model_id in models_to_add:
-        display_name = f"{prefix}{model_id}" if prefix else model_id
-        if display_name in models_section:
-            skipped.append(display_name)
-            continue
-        entry: dict[str, Any] = {
-            "provider": provider,
-            "capabilities": capabilities,
-        }
-        # When a prefix is used, the gateway name differs from the
-        # upstream model id — store the original as upstream_model so the
-        # proxy handler can substitute it before forwarding.
-        if prefix:
-            entry["upstream_model"] = model_id
-        models_section[display_name] = entry
-        added.append(display_name)
-
-    if not added:
-        return JSONResponse(
-            {
-                "ok": True,
-                "added": [],
-                "skipped": skipped,
-                "message": "All models already exist",
+        for model_id in models_to_add:
+            display_name = f"{prefix}{model_id}" if prefix else model_id
+            if display_name in models_section:
+                skipped.append(display_name)
+                continue
+            entry: dict[str, Any] = {
+                "provider": provider,
+                "capabilities": capabilities,
             }
-        )
+            # When a prefix is used, the gateway name differs from the
+            # upstream model id — store the original as upstream_model so the
+            # proxy handler can substitute it before forwarding.
+            if prefix:
+                entry["upstream_model"] = model_id
+            models_section[display_name] = entry
+            added.append(display_name)
 
-    try:
-        _get_config_io(request).save(config_path, data)
-    except Exception as exc:
-        return JSONResponse(
-            {"error": f"Failed to write config: {exc}"}, status_code=500
-        )
+        if not added:
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "added": [],
+                    "skipped": skipped,
+                    "message": "All models already exist",
+                }
+            )
+
+        try:
+            _get_config_io(request).save(config_path, data)
+        except Exception as exc:
+            return JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
 
     new_config = _reload_gateway_config(request, config_path)
 
