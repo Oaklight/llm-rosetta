@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import re
+import threading
+from contextlib import contextmanager
+from collections.abc import Generator
 from typing import Any, Protocol, runtime_checkable
 
 from llm_rosetta.auto_detect import ProviderType
@@ -70,40 +74,64 @@ def load_config(path: str) -> dict[str, Any]:
     return json.loads(substituted)
 
 
-def _lock_exclusive(f: Any) -> None:
-    """Acquire an exclusive lock on file *f* (cross-platform)."""
-    import sys
-
-    if sys.platform == "win32":
-        import msvcrt  # type: ignore[import]  # Windows-only
-
-        msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
-    else:
-        import fcntl
-
-        fcntl.flock(f, fcntl.LOCK_EX)
-
-
 def write_config(path: str, data: dict[str, Any]) -> None:
-    """Write a config dict as formatted JSON to *path*.
+    """Write a config dict as formatted JSON to *path* atomically.
 
-    Creates parent directories if needed.  Uses an exclusive file lock
-    to prevent concurrent writes from multiple gateway instances sharing
-    the same config file (e.g. via hard link).
+    Creates parent directories if needed.  Writes to a temporary file in
+    the same directory, flushes to disk, then atomically replaces the
+    target via ``os.replace``.  Readers never see a partially-written file.
 
     Comments in the original JSONC file (if any) are **not** preserved.
     """
-    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    # Use "a+" to create the file if it doesn't exist, then lock.
-    # "r+" would fail on a new file; "w" truncates before locking.
-    with open(path, "a+") as f:
-        _lock_exclusive(f)
-        f.truncate(0)
-        f.seek(0)
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.write("\n")
-        f.flush()
-        # Lock released automatically when f is closed
+    import tempfile
+
+    dir_ = os.path.dirname(path) or "."
+    os.makedirs(dir_, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# Config-file read-modify-write serialization
+# ---------------------------------------------------------------------------
+
+_config_locks: dict[str, threading.Lock] = {}
+_config_locks_guard = threading.Lock()
+
+
+@contextmanager
+def config_lock(path: str) -> Generator[None, None, None]:
+    """Serialize read-modify-write cycles on the same config file.
+
+    Admin routes must wrap their ``load_raw → modify → save`` sequences
+    with this lock.  Without it, concurrent requests that each load the
+    same version can silently overwrite each other's changes.
+
+    The lock is per-resolved-path and process-scoped (``threading.Lock``).
+    This is sufficient because the gateway runs as a single-process async
+    server — concurrency comes from the event loop, not from threads or
+    child processes.
+    """
+    real = os.path.realpath(path)
+    with _config_locks_guard:
+        if real not in _config_locks:
+            _config_locks[real] = threading.Lock()
+        lock = _config_locks[real]
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
 
 
 def load_config_raw(path: str) -> dict[str, Any]:
