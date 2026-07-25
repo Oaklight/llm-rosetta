@@ -18,6 +18,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **模型 modal 三 tab 布局** ([#389](https://github.com/Oaklight/llm-rosetta/pull/389))：重新设计模型编辑/添加弹窗为三 tab 布局——基本（名称+Provider 并排、分段 LLM/Embedding 控件、药丸样式能力标签）、路由（URL 模板 + 流式展开链接）、转换（展平系统消息 + 推理配置）。替换了原来的长滚动单面板表单。
+
 - **模型表格 UI 重构** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：新增 checkbox 列支持多选，顶部显示批量操作栏（启用/禁用/删除）。Clone 和 Delete 收入 ⋯ 下拉菜单。Test 按钮在 LLM 和 embedding 模型间统一宽度。
 - **原子化配置写入** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：`write_config` 改用 `tempfile.mkstemp` + `fsync` + `os.replace` 实现崩溃安全的跨平台原子写入。移除所有平台特定锁代码（`fcntl`/`msvcrt`）。读者永远不会看到写了一半的文件。
 - **跨进程配置串行化** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：新增 `config_lock(path)` 上下文管理器，使用 `.lock` sidecar 文件配合 `fcntl.flock`（Unix）/ `msvcrt.locking`（Windows）实现跨进程互斥。保护多个 gateway 实例共享同一配置文件的场景。14 个 admin route handler 全部包裹以串行化 read-modify-write 周期。
