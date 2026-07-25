@@ -18,6 +18,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
+- **Model modal three-tab layout** ([#389](https://github.com/Oaklight/llm-rosetta/pull/389)): Redesigned model edit/add modal with tabbed interface — General (name+provider, segmented LLM/Embedding control, pill-style capability chips), Routing (URL template with expand-link for stream), Transforms (flatten system + reasoning config). Replaces long-scroll single-panel form.
+
 - **Model table UI restyle** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Checkbox column for multi-select with bulk action bar (Enable/Disable/Delete). Clone and Delete moved into ⋯ dropdown menu. Test button unified across LLM and embedding models.
 - **Atomic config writes** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387)): `write_config` now uses `tempfile.mkstemp` + `fsync` + `os.replace` for crash-safe, cross-platform atomic writes. Removes all platform-specific locking code (`fcntl`/`msvcrt`). Readers never see a partially-written file.
 - **Cross-process config serialization** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387)): New `config_lock(path)` context manager using `.lock` sidecar files with `fcntl.flock` (Unix) / `msvcrt.locking` (Windows). Protects against multiple gateway instances sharing the same config file. All 14 admin route handlers wrapped to serialize read-modify-write cycles.
