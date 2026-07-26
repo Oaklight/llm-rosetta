@@ -264,6 +264,15 @@ class GatewayConfig:
         self.proxy: str | None = _server.get("proxy")
         self.socket: str | None = _server.get("socket")
         self.credential_visible: bool = _server.get("credential_visible", True)
+
+        # When no API keys are configured, ``open_on_no_keys`` decides whether
+        # the standalone gateway serves /v1/* anonymously (True) or rejects
+        # every request with 403 (False). Defaults to False (secure by
+        # default). Set to True to restore the pre-0.7 behaviour for a
+        # trusted, localhost-only deployment, e.g.:
+        #   "server": { "open_on_no_keys": true }
+        self.open_on_no_keys: bool = bool(_server.get("open_on_no_keys", False))
+
         self.admin_password: str | None = _server.get("admin_password")
         if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
             raise ValueError(
