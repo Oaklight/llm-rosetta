@@ -16,7 +16,7 @@ from typing import Any
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .config import GatewayConfig
-from .headers import build_upstream_extra_headers
+from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
 from .transport import UpstreamConnectionError, UpstreamTransport
 
@@ -39,30 +39,40 @@ async def handle_embeddings(
     Returns:
         The upstream response, forwarded to the client.
     """
+    request_id = get_request_id(request)
+
+    def with_request_id(response: Response) -> Response:
+        response.headers["x-request-id"] = request_id
+        return response
+
     # --- Parse request ---
     try:
         body: dict[str, Any] = request.json()
     except Exception:
-        return JSONResponse(
-            {
-                "error": {
-                    "message": "Invalid JSON body",
-                    "type": "invalid_request_error",
-                }
-            },
-            status_code=400,
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": "Invalid JSON body",
+                        "type": "invalid_request_error",
+                    }
+                },
+                status_code=400,
+            )
         )
 
     model = body.get("model")
     if not model:
-        return JSONResponse(
-            {
-                "error": {
-                    "message": "Missing 'model' in request body",
-                    "type": "invalid_request_error",
-                }
-            },
-            status_code=400,
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": "Missing 'model' in request body",
+                        "type": "invalid_request_error",
+                    }
+                },
+                status_code=400,
+            )
         )
 
     # --- Resolve provider via unified routing ---
@@ -70,14 +80,16 @@ async def handle_embeddings(
         route, provider_info = config.resolve("openai_chat", model)
     except KeyError:
         configured = ", ".join(sorted(config.models.keys()))
-        return JSONResponse(
-            {
-                "error": {
-                    "message": f"Unknown model: '{model}'. Configured models: {configured}",
-                    "type": "model_not_found",
-                }
-            },
-            status_code=404,
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Unknown model: '{model}'. Configured models: {configured}",
+                        "type": "model_not_found",
+                    }
+                },
+                status_code=404,
+            )
         )
 
     # Model alias: replace the model name in the request body with the
@@ -88,7 +100,6 @@ async def handle_embeddings(
     # --- Forward via transport ---
     upstream_url = f"{provider_info.base_url}/embeddings"
     transport: UpstreamTransport = request.app.transport
-    request_id = request.headers.get("x-request-id", "")
     extra_headers = build_upstream_extra_headers(request, request_id)
 
     t0 = time.monotonic()
@@ -106,28 +117,34 @@ async def handle_embeddings(
 
         if resp.is_error:
             error_detail = resp.error_text
-            return Response(
-                body=resp.raw_content,
-                status_code=resp.status_code,
-                content_type="application/json",
+            return with_request_id(
+                Response(
+                    body=resp.raw_content,
+                    status_code=resp.status_code,
+                    content_type="application/json",
+                )
             )
 
-        return Response(
-            body=resp.raw_content,
-            status_code=200,
-            content_type="application/json",
+        return with_request_id(
+            Response(
+                body=resp.raw_content,
+                status_code=200,
+                content_type="application/json",
+            )
         )
     except UpstreamConnectionError as exc:
         error_detail = str(exc)
         status_code = 502
-        return JSONResponse(
-            {
-                "error": {
-                    "message": f"Upstream request failed: {exc}",
-                    "type": "upstream_error",
-                }
-            },
-            status_code=502,
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Upstream request failed: {exc}",
+                        "type": "upstream_error",
+                    }
+                },
+                status_code=502,
+            )
         )
     except Exception as exc:
         error_detail = str(exc)
