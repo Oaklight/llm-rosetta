@@ -146,12 +146,27 @@ class TestEmbeddingUpstreamModel:
         body = json.loads(response.body)
         assert body["model"] == "my-embed"
 
-    def test_user_agent_forwarded_to_passthrough_transport(self):
-        """Embeddings passthrough should preserve the client's User-Agent."""
+    def test_validation_error_includes_generated_request_id(self):
         config = _make_config("https://api.example.com/v1")
+        request = _make_request({"input": "hello"})
+
+        response = asyncio.run(handle_embeddings(request, config))
+
+        assert response.status_code == 400
+        assert response.headers["x-request-id"]
+
+    @pytest.mark.parametrize("client_request_id", ["req-123", None])
+    def test_headers_forwarded_to_passthrough_transport(
+        self, client_request_id: str | None
+    ):
+        """Embeddings passthrough should preserve client headers and assign an ID."""
+        config = _make_config("https://api.example.com/v1")
+        headers = {"user-agent": "codex-cli/1.2.3"}
+        if client_request_id:
+            headers["x-request-id"] = client_request_id
         request = _make_request(
             {"model": "my-embed", "input": "hello"},
-            headers={"user-agent": "codex-cli/1.2.3"},
+            headers=headers,
         )
         request.app.transport = MagicMock()
         request.app.transport.send_passthrough = AsyncMock(
@@ -166,4 +181,9 @@ class TestEmbeddingUpstreamModel:
 
         assert response.status_code == 200
         _, kwargs = request.app.transport.send_passthrough.call_args
-        assert kwargs["extra_headers"]["User-Agent"] == "codex-cli/1.2.3"
+        upstream_headers = kwargs["extra_headers"]
+        assert upstream_headers["User-Agent"] == "codex-cli/1.2.3"
+        assert upstream_headers["x-request-id"]
+        assert response.headers["x-request-id"] == upstream_headers["x-request-id"]
+        if client_request_id:
+            assert upstream_headers["x-request-id"] == client_request_id

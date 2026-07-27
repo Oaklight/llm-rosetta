@@ -18,7 +18,7 @@ from llm_rosetta.auto_detect import ProviderType
 from .auth import AuthState, api_key_label_var, create_auth_hook
 from .config import GatewayConfig
 from .embeddings import handle_embeddings as _handle_embeddings
-from .headers import build_upstream_extra_headers
+from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
 from llm_rosetta.observability.error_dump import dump_error
 
@@ -193,7 +193,7 @@ async def _proxy_handler(
     assert _config is not None
 
     # Generate or honour a request ID for end-to-end traceability.
-    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    request_id = get_request_id(request)
 
     try:
         body: dict[str, Any] = request.json()

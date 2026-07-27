@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 from typing import Any
+import uuid
+
+
+def get_request_id(request: Any) -> str:
+    """Return the client request ID or generate one."""
+    return request.headers.get("x-request-id") or str(uuid.uuid4())
 
 
 def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str]:
