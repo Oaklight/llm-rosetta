@@ -26,6 +26,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 import dotenv
 import requests
 
+from tests.integration._sse_helpers import stream_sse_events
+
 from typing import cast
 
 from examples.tools import available_tools, tools_spec
@@ -107,51 +109,14 @@ def call_api(provider_req: dict, max_retries: int = 3) -> dict:
 def call_api_stream(provider_req: dict, max_retries: int = 3):
     """Call the Anthropic Messages API with streaming and yield SSE events.
 
-    Retries on 429 (rate limit) with exponential backoff.
+    Retries on 429 (rate limit) with exponential backoff.  Transport
+    and SSE parsing are shared with the OpenAI Chat REST tests via
+    :func:`_sse_helpers.stream_sse_events`.
     """
     provider_req["stream"] = True
-    for attempt in range(max_retries):
-        response = requests.post(
-            API_URL, headers=HEADERS, json=provider_req, timeout=60, stream=True
-        )
-        if response.status_code == 429:
-            wait = 2 ** (attempt + 1)
-            print(f"  [Rate limited, retrying in {wait}s...]")
-            time.sleep(wait)
-            continue
-        response.raise_for_status()
-
-        for line in response.iter_lines():
-            if not line:
-                continue
-            decoded = line.decode("utf-8")
-            if decoded.startswith("data: "):
-                data_str = decoded[6:]
-                if data_str.strip() == "[DONE]":
-                    return
-                try:
-                    yield json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
-        return
-
-    # Final attempt
-    response = requests.post(
-        API_URL, headers=HEADERS, json=provider_req, timeout=60, stream=True
+    yield from stream_sse_events(
+        API_URL, HEADERS, provider_req, max_retries=max_retries
     )
-    response.raise_for_status()
-    for line in response.iter_lines():
-        if not line:
-            continue
-        decoded = line.decode("utf-8")
-        if decoded.startswith("data: "):
-            data_str = decoded[6:]
-            if data_str.strip() == "[DONE]":
-                return
-            try:
-                yield json.loads(data_str)
-            except json.JSONDecodeError:
-                continue
 
 
 def execute_tool(tc: ToolCallPart) -> str:

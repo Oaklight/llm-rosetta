@@ -121,81 +121,97 @@ class _Socks5Handler(socketserver.StreamRequestHandler):
         except Exception:
             return
 
-    def _do_handshake(self):  # noqa: C901
-        # Phase 1: method negotiation
-        header = self.rfile.read(2)
-        if len(header) < 2:
+    def _do_handshake(self):
+        methods = self._read_method_negotiation()
+        if methods is None:
             return
-        ver, nmethods = struct.unpack("BB", header)
-        if ver != 0x05:
+        if not self._perform_auth(methods):
             return
-        methods = self.rfile.read(nmethods)
-        if len(methods) < nmethods:
+        target_info = self._read_connect_request()
+        if target_info is None:
             return
-
-        require_auth = self.server.socks5_auth is not None  # type: ignore
-
-        if require_auth:
-            if 0x02 not in methods:
-                self.wfile.write(struct.pack("BB", 0x05, 0xFF))
-                return
-            self.wfile.write(struct.pack("BB", 0x05, 0x02))
-            # Phase 2: username/password auth (RFC 1929)
-            auth_header = self.rfile.read(2)
-            if len(auth_header) < 2:
-                return
-            _auth_ver, ulen = struct.unpack("BB", auth_header)
-            uname = self.rfile.read(ulen)
-            plen_byte = self.rfile.read(1)
-            if not plen_byte:
-                return
-            plen = struct.unpack("B", plen_byte)[0]
-            passwd = self.rfile.read(plen)
-
-            expected_user, expected_pass = self.server.socks5_auth  # type: ignore
-            if uname.decode() != expected_user or passwd.decode() != expected_pass:
-                self.wfile.write(struct.pack("BB", 0x01, 0x01))  # auth failure
-                return
-            self.wfile.write(struct.pack("BB", 0x01, 0x00))  # auth success
-        else:
-            self.wfile.write(struct.pack("BB", 0x05, 0x00))  # no auth
-
-        # Phase 3: connect request
-        req_header = self.rfile.read(4)
-        if len(req_header) < 4:
-            return
-        ver, cmd, _rsv, atype = struct.unpack("BBBB", req_header)
-        if cmd != 0x01:  # only CONNECT supported
-            self._send_reply(0x07)
-            return
-
-        # Parse target address
-        if atype == 0x01:  # IPv4
-            addr_bytes = self.rfile.read(4)
-            target_host = socket.inet_ntoa(addr_bytes)
-        elif atype == 0x03:  # domain
-            addr_len = struct.unpack("B", self.rfile.read(1))[0]
-            target_host = self.rfile.read(addr_len).decode()
-        elif atype == 0x04:  # IPv6
-            addr_bytes = self.rfile.read(16)
-            target_host = socket.inet_ntop(socket.AF_INET6, addr_bytes)
-        else:
-            self._send_reply(0x08)
-            return
-
-        target_port = struct.unpack("!H", self.rfile.read(2))[0]
-
-        # Connect to target
+        target_host, target_port = target_info
         try:
             target = socket.create_connection((target_host, target_port), timeout=10)
         except Exception:
             self._send_reply(0x05)  # connection refused
             return
-
-        # Success reply
         self._send_reply(0x00)
+        self._relay(target)
 
-        # Bidirectional relay
+    def _read_method_negotiation(self):
+        """Phase 1: read version + method list. Returns methods bytes or None."""
+        header = self.rfile.read(2)
+        if len(header) < 2:
+            return None
+        ver, nmethods = struct.unpack("BB", header)
+        if ver != 0x05:
+            return None
+        methods = self.rfile.read(nmethods)
+        if len(methods) < nmethods:
+            return None
+        return methods
+
+    def _perform_auth(self, methods):
+        """Phase 2: select method and optionally authenticate. Returns True on success."""
+        if self.server.socks5_auth is None:  # type: ignore
+            self.wfile.write(struct.pack("BB", 0x05, 0x00))  # no auth
+            return True
+        if 0x02 not in methods:
+            self.wfile.write(struct.pack("BB", 0x05, 0xFF))
+            return False
+        self.wfile.write(struct.pack("BB", 0x05, 0x02))
+        return self._read_userpass_auth()
+
+    def _read_userpass_auth(self):
+        """RFC 1929 username/password sub-negotiation."""
+        auth_header = self.rfile.read(2)
+        if len(auth_header) < 2:
+            return False
+        _auth_ver, ulen = struct.unpack("BB", auth_header)
+        uname = self.rfile.read(ulen)
+        plen_byte = self.rfile.read(1)
+        if not plen_byte:
+            return False
+        plen = struct.unpack("B", plen_byte)[0]
+        passwd = self.rfile.read(plen)
+
+        expected_user, expected_pass = self.server.socks5_auth  # type: ignore
+        if uname.decode() != expected_user or passwd.decode() != expected_pass:
+            self.wfile.write(struct.pack("BB", 0x01, 0x01))  # auth failure
+            return False
+        self.wfile.write(struct.pack("BB", 0x01, 0x00))  # auth success
+        return True
+
+    def _read_connect_request(self):
+        """Phase 3: parse CONNECT request. Returns (host, port) or None on error."""
+        req_header = self.rfile.read(4)
+        if len(req_header) < 4:
+            return None
+        ver, cmd, _rsv, atype = struct.unpack("BBBB", req_header)
+        if cmd != 0x01:  # only CONNECT supported
+            self._send_reply(0x07)
+            return None
+        target_host = self._read_target_host(atype)
+        if target_host is None:
+            return None
+        target_port = struct.unpack("!H", self.rfile.read(2))[0]
+        return target_host, target_port
+
+    def _read_target_host(self, atype):
+        """Parse SOCKS5 address by type. Sends error reply on unsupported type."""
+        if atype == 0x01:  # IPv4
+            return socket.inet_ntoa(self.rfile.read(4))
+        if atype == 0x03:  # domain
+            addr_len = struct.unpack("B", self.rfile.read(1))[0]
+            return self.rfile.read(addr_len).decode()
+        if atype == 0x04:  # IPv6
+            return socket.inet_ntop(socket.AF_INET6, self.rfile.read(16))
+        self._send_reply(0x08)
+        return None
+
+    def _relay(self, target):
+        """Bidirectional non-blocking relay between client and target."""
         client_sock = self.connection
         client_sock.setblocking(False)
         target.setblocking(False)
@@ -204,21 +220,27 @@ class _Socks5Handler(socketserver.StreamRequestHandler):
                 readable, _, _ = select.select([client_sock, target], [], [], 1.0)
                 if not readable:
                     continue
-                for sock in readable:
-                    try:
-                        data = sock.recv(8192)
-                    except (BlockingIOError, ConnectionResetError):
-                        data = b""
-                    if not data:
-                        return
-                    if sock is client_sock:
-                        target.sendall(data)
-                    else:
-                        client_sock.sendall(data)
+                if not self._pump_readable(readable, client_sock, target):
+                    return
         except Exception:
             pass
         finally:
             target.close()
+
+    def _pump_readable(self, readable, client_sock, target):
+        """Forward data for each readable socket. Returns False when EOF hit."""
+        for sock in readable:
+            try:
+                data = sock.recv(8192)
+            except (BlockingIOError, ConnectionResetError):
+                data = b""
+            if not data:
+                return False
+            if sock is client_sock:
+                target.sendall(data)
+            else:
+                client_sock.sendall(data)
+        return True
 
     def _send_reply(self, reply_code):
         """Send a SOCKS5 reply with the given status code."""

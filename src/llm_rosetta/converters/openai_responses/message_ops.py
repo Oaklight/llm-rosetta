@@ -351,52 +351,83 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         current_message: dict[str, Any] | None = None
 
         for item in provider_messages:
-            if isinstance(item, dict) and "type" not in item and "role" in item:
-                item = self._normalize_shorthand_item(item)
-
-            item_type = item.get("type") if isinstance(item, dict) else None
-
-            if item_type == "message":
-                new_message = self._p_message_to_ir(item)
-                if new_message:
-                    if current_message:
-                        ir_input.append(current_message)
-                    current_message = new_message
-
-            elif item_type in self._TOOL_CALL_TYPES:
-                tool_call = self.tool_ops.p_tool_call_to_ir(item)
-                current_message = self._append_or_start(
-                    ir_input, current_message, tool_call, "assistant"
-                )
-
-            elif item_type in self._TOOL_RESULT_TYPES:
-                tool_result = self.tool_ops.p_tool_result_to_ir(item)
-                current_message = self._append_or_start(
-                    ir_input, current_message, tool_result, "tool"
-                )
-
-            elif item_type == "reasoning":
-                reasoning = self.content_ops.p_reasoning_to_ir(item)
-                if reasoning:
-                    current_message = self._append_or_start(
-                        ir_input, current_message, reasoning, "assistant"
-                    )
-
-            elif item_type == "system_event":
-                if current_message:
-                    ir_input.append(current_message)
-                    current_message = None
-                ir_input.append(self._make_system_event(item))
-
-            elif isinstance(item_type, str) and ":" in item_type:
-                current_message = self._handle_p_extension_item(
-                    item, current_message, ir_input
-                )
+            current_message = self._dispatch_p_item(item, current_message, ir_input)
 
         if current_message and current_message.get("content"):
             ir_input.append(current_message)
 
         return ir_input
+
+    def _dispatch_p_item(
+        self,
+        item: Any,
+        current_message: dict[str, Any] | None,
+        ir_input: list[Any],
+    ) -> dict[str, Any] | None:
+        """Route a single Responses input item to its per-type handler.
+
+        Returns the (possibly updated) ``current_message`` accumulator so the
+        caller's flush ordering is preserved.
+        """
+        if isinstance(item, dict) and "type" not in item and "role" in item:
+            item = self._normalize_shorthand_item(item)
+
+        item_type = item.get("type") if isinstance(item, dict) else None
+
+        if item_type == "message":
+            return self._handle_p_message_item(item, current_message, ir_input)
+        if item_type in self._TOOL_CALL_TYPES:
+            return self._append_or_start(
+                ir_input,
+                current_message,
+                self.tool_ops.p_tool_call_to_ir(item),
+                "assistant",
+            )
+        if item_type in self._TOOL_RESULT_TYPES:
+            return self._append_or_start(
+                ir_input,
+                current_message,
+                self.tool_ops.p_tool_result_to_ir(item),
+                "tool",
+            )
+        if item_type == "reasoning":
+            reasoning = self.content_ops.p_reasoning_to_ir(item)
+            if reasoning:
+                return self._append_or_start(
+                    ir_input, current_message, reasoning, "assistant"
+                )
+            return current_message
+        if item_type == "system_event":
+            return self._handle_p_system_event_item(item, current_message, ir_input)
+        if isinstance(item_type, str) and ":" in item_type:
+            return self._handle_p_extension_item(item, current_message, ir_input)
+        return current_message
+
+    def _handle_p_message_item(
+        self,
+        item: dict[str, Any],
+        current_message: dict[str, Any] | None,
+        ir_input: list[Any],
+    ) -> dict[str, Any] | None:
+        """Flush *current_message* and start a new one from a ``message`` item."""
+        new_message = self._p_message_to_ir(item)
+        if not new_message:
+            return current_message
+        if current_message:
+            ir_input.append(current_message)
+        return new_message
+
+    def _handle_p_system_event_item(
+        self,
+        item: dict[str, Any],
+        current_message: dict[str, Any] | None,
+        ir_input: list[Any],
+    ) -> None:
+        """Flush *current_message* and append a ``system_event`` marker to *ir_input*."""
+        if current_message:
+            ir_input.append(current_message)
+        ir_input.append(self._make_system_event(item))
+        return None
 
     @staticmethod
     def _make_system_event(item: dict[str, Any]) -> dict[str, Any]:

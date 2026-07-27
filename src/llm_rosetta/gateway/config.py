@@ -224,41 +224,71 @@ class GatewayConfig:
             self._raw_providers
         )
 
+        raw_models = raw.get("models", {})
         self.models, self.model_capabilities, self.model_upstream_names = (
-            self._parse_models(raw.get("models", {}), self._raw_providers)
+            self._parse_models(raw_models, self._raw_providers)
         )
 
-        # Per-model URL template overrides.
-        self.model_url_templates: dict[str, str] = {}
-        self.model_stream_url_templates: dict[str, str] = {}
-        for model_name, value in raw.get("models", {}).items():
-            if isinstance(value, dict):
-                if "url_template" in value:
-                    self.model_url_templates[model_name] = value["url_template"]
-                if "stream_url_template" in value:
-                    self.model_stream_url_templates[model_name] = value[
-                        "stream_url_template"
-                    ]
+        self.model_url_templates, self.model_stream_url_templates = (
+            self._parse_url_templates(raw_models)
+        )
+        self.model_reasoning_overrides = self._parse_reasoning_overrides(raw_models)
+        self.model_flatten_system = self._parse_flatten_system(raw_models)
 
-        # Per-model reasoning overrides from config.jsonc (admin UI edits).
-        # Keyed by gateway model name (same as self.models keys).
-        self.model_reasoning_overrides: dict[str, dict[str, Any]] = {}
-        for model_name, value in raw.get("models", {}).items():
+        self._apply_server_settings(raw.get("server", {}))
+        self._apply_debug_settings(raw.get("debug", {}))
+
+        self._validate()
+
+        # Build ProviderInfo objects (with key rotation support)
+        self.providers: dict[str, ProviderInfo] = {
+            name: build_provider_info(
+                self.provider_types[name], cfg, global_proxy=self.proxy
+            )
+            for name, cfg in self._raw_providers.items()
+        }
+
+    @staticmethod
+    def _parse_url_templates(
+        raw_models: dict[str, Any],
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """Extract per-model url_template / stream_url_template overrides."""
+        url_templates: dict[str, str] = {}
+        stream_url_templates: dict[str, str] = {}
+        for model_name, value in raw_models.items():
+            if not isinstance(value, dict):
+                continue
+            if "url_template" in value:
+                url_templates[model_name] = value["url_template"]
+            if "stream_url_template" in value:
+                stream_url_templates[model_name] = value["stream_url_template"]
+        return url_templates, stream_url_templates
+
+    @staticmethod
+    def _parse_reasoning_overrides(
+        raw_models: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        """Extract per-model reasoning_override blocks (admin UI edits)."""
+        overrides: dict[str, dict[str, Any]] = {}
+        for model_name, value in raw_models.items():
             if isinstance(value, dict) and value.get("reasoning_override"):
-                self.model_reasoning_overrides[model_name] = value["reasoning_override"]
+                overrides[model_name] = value["reasoning_override"]
+        return overrides
 
-        # Per-model flatten_system flag (explicit config or auto-detected).
-        # When True, system message content arrays are flattened to plain
-        # strings before sending upstream.
-        self.model_flatten_system: dict[str, bool] = {}
-        for model_name, value in raw.get("models", {}).items():
+    @staticmethod
+    def _parse_flatten_system(raw_models: dict[str, Any]) -> dict[str, bool]:
+        """Extract per-model flatten_system (explicit or gemini auto-detect)."""
+        flatten: dict[str, bool] = {}
+        for model_name, value in raw_models.items():
             if isinstance(value, dict) and "flatten_system" in value:
-                self.model_flatten_system[model_name] = bool(value["flatten_system"])
+                flatten[model_name] = bool(value["flatten_system"])
             elif re.search(r"gemini", model_name, re.IGNORECASE):
                 # Auto-detect: gemini models default to flatten_system=True
-                self.model_flatten_system[model_name] = True
+                flatten[model_name] = True
+        return flatten
 
-        _server = raw.get("server", {})
+    def _apply_server_settings(self, _server: dict[str, Any]) -> None:
+        """Populate server, auth, and admin attributes from ``server`` block."""
         self.host: str = _server.get("host", "0.0.0.0")
         self.port: int = _server.get("port", 8765)
         self.proxy: str | None = _server.get("proxy")
@@ -292,6 +322,10 @@ class GatewayConfig:
         # a raw dict here so admin layer owns the resolution policy.
         self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
 
+        self._apply_api_keys(_server)
+
+    def _apply_api_keys(self, _server: dict[str, Any]) -> None:
+        """Populate api_keys/api_key_set/api_key_labels from server block."""
         # Multi-key auth: server.api_keys takes precedence over server.api_key
         self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
         if not self.api_keys and _server.get("api_key"):
@@ -312,8 +346,8 @@ class GatewayConfig:
             entry["key"]: entry.get("label", "") for entry in self.api_keys
         }
 
-        # Debug / logging options (config + env-var overrides)
-        _debug = raw.get("debug", {})
+    def _apply_debug_settings(self, _debug: dict[str, Any]) -> None:
+        """Populate verbose/log_bodies/error_dumps (config + env overrides)."""
         self.verbose: bool = _debug.get("verbose", False) or os.environ.get(
             "LLM_ROSETTA_VERBOSE", ""
         ).lower() in ("1", "true", "yes")
@@ -321,16 +355,6 @@ class GatewayConfig:
             "LLM_ROSETTA_LOG_BODIES", ""
         ).lower() in ("1", "true", "yes")
         self.error_dumps_enabled: bool = _debug.get("error_dumps", True)
-
-        self._validate()
-
-        # Build ProviderInfo objects (with key rotation support)
-        self.providers: dict[str, ProviderInfo] = {
-            name: build_provider_info(
-                self.provider_types[name], cfg, global_proxy=self.proxy
-            )
-            for name, cfg in self._raw_providers.items()
-        }
 
     def _validate(self) -> None:
         if not self._raw_providers:

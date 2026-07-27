@@ -432,3 +432,59 @@ class TestPluginEntryPoints:
         )
         result = _load_plugin_shims()
         assert result == []
+
+
+class TestGroupedLayoutAndOverrides:
+    """Grouped layout scanning and per-model reasoning overrides."""
+
+    def test_grouped_layout_registers_children(self, tmp_path):
+
+        group = tmp_path / "vendor"
+        group.mkdir()
+        # Group has no provider.yaml itself
+        leaf_a = group / "openai_chat"
+        leaf_a.mkdir()
+        (leaf_a / "provider.yaml").write_text(
+            "name: vendor-openai\nbase: openai_chat\n"
+        )
+        leaf_b = group / "anthropic"
+        leaf_b.mkdir()
+        (leaf_b / "provider.yaml").write_text("name: vendor-anth\nbase: anthropic\n")
+        # Sibling dot/underscore dirs are skipped
+        (group / "_hidden").mkdir()
+        (group / ".skip").mkdir()
+
+        shims = load_providers_from_dir(tmp_path)
+        names = {s.name for s in shims}
+        assert {"vendor-openai", "vendor-anth"} <= names
+
+    def test_model_reasoning_overrides_inherit_defaults(self, tmp_path):
+        d = tmp_path / "provider_with_overrides"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: pwo\n"
+            "base: anthropic\n"
+            "reasoning:\n"
+            "  disabled: omit\n"
+            "  effort_field: reasoning_effort\n"
+            "  max_effort: high\n"
+            "  unsigned_reasoning_blocks: strip\n"
+            "  model_overrides:\n"
+            "    claudeopus47:\n"
+            "      unsigned_reasoning_blocks: preserve\n"
+            "    bad-entry: not-a-dict\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        shim = next(s for s in shims if s.name == "pwo")
+        assert shim.reasoning is not None
+        assert shim.reasoning.disabled == "omit"
+        assert shim.model_reasoning is not None
+        # Non-dict override entry is silently skipped
+        assert "bad-entry" not in shim.model_reasoning
+        assert "claudeopus47" in shim.model_reasoning
+        m = shim.model_reasoning["claudeopus47"]
+        # Overrides applied
+        assert m.unsigned_reasoning_blocks == "preserve"
+        # Inherited defaults
+        assert m.disabled == "omit"
+        assert m.max_effort == "high"

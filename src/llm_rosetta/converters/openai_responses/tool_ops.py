@@ -32,6 +32,22 @@ from ..base.helpers import extract_part_ids, log_orphan_warnings, sanitize_schem
 
 logger = logging.getLogger(__name__)
 
+# IR ToolDefinition.type is restricted to Literal["function", "mcp"];
+# see types/ir/tools.py.
+_IR_ALLOWED_TOOL_TYPES = frozenset({"function", "mcp"})
+
+# Responses API item types handled by the shared "extended" tool-call parser.
+_EXTENDED_CALL_ITEM_TYPES = frozenset(
+    {"shell_call", "computer_call", "code_interpreter_call"}
+)
+
+# Mapping from Responses extended item type → IR tool_type.
+_EXTENDED_CALL_TYPE_MAP = {
+    "shell_call": "code_interpreter",
+    "computer_call": "computer_use",
+    "code_interpreter_call": "code_interpreter",
+}
+
 
 # ==================== Orphaned Tool Call Fix ====================
 
@@ -181,19 +197,11 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             IR ToolDefinition.
         """
-        # IR ToolDefinition.type is restricted to Literal["function", "mcp"];
-        # see types/ir/tools.py.
-        _IR_ALLOWED_TYPES = {"function", "mcp"}
-
         # Handle nested format ({"type": "function", "function": {...}})
         if "function" in provider_tool and isinstance(provider_tool["function"], dict):
-            func = provider_tool["function"]
-            result: dict[str, Any] = {
-                "type": "function",
-                "name": func.get("name", ""),
-                "description": func.get("description", ""),
-                "parameters": func.get("parameters", {}),
-            }
+            result = OpenAIResponsesToolOps._p_nested_definition_to_ir(
+                provider_tool["function"]
+            )
         else:
             tool_type = provider_tool.get("type", "function")
             # Non-function tools outside the IR type set (e.g. web_search or
@@ -201,66 +209,99 @@ class OpenAIResponsesToolOps(BaseToolOps):
             # lossy conversion. IR ``type`` is forced to "function" to
             # satisfy validation; ``ir_tool_definition_to_p`` restores the
             # original payload on the outbound leg.
-            if tool_type != "function" and tool_type not in _IR_ALLOWED_TYPES:
-                # Synthesize a minimal JSON Schema for cross-provider
-                # degradation so other providers see "a function that
-                # accepts one text input" instead of an empty schema.
-                synth_params: dict[str, Any] = {}
-                if provider_tool.get("name"):
-                    synth_params = {
-                        "type": "object",
-                        "properties": {
-                            "input": {
-                                "type": "string",
-                                "description": "Free-form text input",
-                            }
-                        },
-                        "required": ["input"],
-                    }
-                # Append format constraint info to description so
-                # cross-provider models get a hint about the expected
-                # output shape (best-effort, not enforced).
-                desc = provider_tool.get("description", "")
-                fmt = provider_tool.get("format")
-                if fmt:
-                    fmt_type = fmt.get("type", "unknown")
-                    fmt_syntax = fmt.get("syntax", "")
-                    hint = f"[Output format: {fmt_type}"
-                    if fmt_syntax:
-                        hint += f", syntax: {fmt_syntax}"
-                    hint += "]"
-                    desc = f"{desc}\n\n{hint}" if desc else hint
-                result = {
-                    "type": "function",
-                    "name": provider_tool.get("name", tool_type),
-                    "description": desc,
-                    "parameters": synth_params,
-                    "_passthrough": dict(provider_tool),
-                }
-                result["metadata"] = {"provider_type": tool_type}
-                result["required_parameters"] = (
-                    synth_params.get("required", []) if synth_params else []
+            if tool_type != "function" and tool_type not in _IR_ALLOWED_TOOL_TYPES:
+                return OpenAIResponsesToolOps._p_extended_definition_to_ir(
+                    provider_tool, tool_type
                 )
-                return cast(ToolDefinition, result)
+            result = OpenAIResponsesToolOps._p_flat_definition_to_ir(
+                provider_tool, tool_type
+            )
 
-            # Flat format (Responses API native).
-            # Custom tools use "schema" instead of "parameters".
-            params = provider_tool.get("parameters", {})
-            if tool_type != "function" and not params:
-                params = provider_tool.get("schema", {})
-            # Downgrade unknown provider tool types (e.g. Codex "custom") to
-            # IR "function" so the request passes IR validation.
-            ir_type = tool_type if tool_type in _IR_ALLOWED_TYPES else "function"
-            result = {
-                "type": ir_type,
-                "name": provider_tool.get("name", ""),
-                "description": provider_tool.get("description", ""),
-                "parameters": params,
+        OpenAIResponsesToolOps._finalize_ir_tool_definition(result)
+        return cast(ToolDefinition, result)
+
+    @staticmethod
+    def _p_nested_definition_to_ir(func: dict[str, Any]) -> dict[str, Any]:
+        """Nested ``{"function": {...}}`` provider tool → intermediate IR dict."""
+        return {
+            "type": "function",
+            "name": func.get("name", ""),
+            "description": func.get("description", ""),
+            "parameters": func.get("parameters", {}),
+        }
+
+    @staticmethod
+    def _p_flat_definition_to_ir(
+        provider_tool: dict[str, Any], tool_type: str
+    ) -> dict[str, Any]:
+        """Flat Responses-native tool → intermediate IR dict (with downgrade tag)."""
+        # Custom tools use "schema" instead of "parameters".
+        params = provider_tool.get("parameters", {})
+        if tool_type != "function" and not params:
+            params = provider_tool.get("schema", {})
+        # Downgrade unknown provider tool types (e.g. Codex "custom") to
+        # IR "function" so the request passes IR validation.
+        ir_type = tool_type if tool_type in _IR_ALLOWED_TOOL_TYPES else "function"
+        result: dict[str, Any] = {
+            "type": ir_type,
+            "name": provider_tool.get("name", ""),
+            "description": provider_tool.get("description", ""),
+            "parameters": params,
+        }
+        if ir_type != tool_type:
+            result["_downgraded_from"] = tool_type
+        return result
+
+    @staticmethod
+    def _p_extended_definition_to_ir(
+        provider_tool: dict[str, Any], tool_type: str
+    ) -> ToolDefinition:
+        """Non-function extended tool (e.g. Codex custom) → passthrough IR."""
+        # Synthesize a minimal JSON Schema for cross-provider degradation.
+        synth_params: dict[str, Any] = {}
+        if provider_tool.get("name"):
+            synth_params = {
+                "type": "object",
+                "properties": {
+                    "input": {
+                        "type": "string",
+                        "description": "Free-form text input",
+                    }
+                },
+                "required": ["input"],
             }
-            if ir_type != tool_type:
-                result["_downgraded_from"] = tool_type
+        desc = OpenAIResponsesToolOps._decorate_extended_description(
+            provider_tool.get("description", ""), provider_tool.get("format")
+        )
+        result: dict[str, Any] = {
+            "type": "function",
+            "name": provider_tool.get("name", tool_type),
+            "description": desc,
+            "parameters": synth_params,
+            "_passthrough": dict(provider_tool),
+            "metadata": {"provider_type": tool_type},
+            "required_parameters": (
+                synth_params.get("required", []) if synth_params else []
+            ),
+        }
+        return cast(ToolDefinition, result)
 
-        # Extract required_parameters from JSON Schema if available
+    @staticmethod
+    def _decorate_extended_description(desc: str, fmt: Any) -> str:
+        """Append format-hint suffix to *desc* when *fmt* metadata is present."""
+        if not fmt:
+            return desc
+        fmt_type = fmt.get("type", "unknown")
+        fmt_syntax = fmt.get("syntax", "")
+        hint = f"[Output format: {fmt_type}"
+        if fmt_syntax:
+            hint += f", syntax: {fmt_syntax}"
+        hint += "]"
+        return f"{desc}\n\n{hint}" if desc else hint
+
+    @staticmethod
+    def _finalize_ir_tool_definition(result: dict[str, Any]) -> None:
+        """In-place: fill required_parameters and metadata for a flat/nested IR tool."""
         parameters = result.get("parameters", {})
         if isinstance(parameters, dict) and "required" in parameters:
             result["required_parameters"] = parameters["required"]
@@ -271,7 +312,6 @@ class OpenAIResponsesToolOps(BaseToolOps):
         result["metadata"] = (
             {"provider_type": downgraded_from} if downgraded_from else {}
         )
-        return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
 
@@ -376,100 +416,128 @@ class OpenAIResponsesToolOps(BaseToolOps):
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
         )
 
-        # Detect MCP call
-        if tool_name and tool_name.startswith("mcp://"):
-            return {
-                "type": "mcp_call",
-                "id": tool_call_id,
-                "name": tool_name,
-                "arguments": arguments,
-                "server_label": ir_tool_call.get("server_name", "default"),
-                "status": "calling",
-            }
-        elif tool_type == "mcp":
-            return {
-                "type": "mcp_call",
-                "id": tool_call_id,
-                "name": tool_name,
-                "arguments": arguments,
-                "server_label": ir_tool_call.get("server_name", "default"),
-                "status": "calling",
-            }
-        elif tool_type == "function":
-            # Recover Responses API item ID from provider_metadata if available;
-            # the API requires 'id' to start with 'fc_' prefix.
-            metadata = ir_tool_call.get("provider_metadata") or {}
-            item_id = metadata.get("responses_item_id")
-            if not item_id:
-                # Cross-format: ensure fc_ prefix required by Responses API
-                if tool_call_id and tool_call_id.startswith("fc_"):
-                    item_id = tool_call_id
-                elif tool_call_id and tool_call_id.startswith("call_"):
-                    item_id = "fc_" + tool_call_id[5:]
-                else:
-                    # Other prefixes (e.g. toolu_ from Anthropic)
-                    item_id = "fc_" + tool_call_id
-            return {
-                "type": "function_call",
-                "id": item_id,
-                "call_id": tool_call_id,
-                "name": tool_name,
-                "arguments": arguments,
-                "status": "completed",
-            }
-        elif tool_type == "custom":
-            # Custom tool calls use plain text 'input' instead of JSON
-            # 'arguments'.  If tool_input has a single "input" key, unwrap
-            # it to plain text; otherwise JSON-serialize the dict.
-            if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
-                input_str = str(tool_input["input"])
-            else:
-                input_str = (
-                    json.dumps(tool_input)
-                    if isinstance(tool_input, dict)
-                    else str(tool_input)
-                )
-            return {
-                "type": "custom_tool_call",
-                "call_id": tool_call_id,
-                "name": tool_name,
-                "input": input_str,
-            }
-        elif tool_type == "web_search":
-            return {
-                "type": "function_web_search",
-                "call_id": tool_call_id,
-                "query": tool_input.get("query", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
-        elif tool_type == "code_interpreter":
-            return {
-                "type": "code_interpreter_call",
-                "call_id": tool_call_id,
-                "code": tool_input.get("code", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
-        elif tool_type == "file_search":
-            return {
-                "type": "file_search_call",
-                "call_id": tool_call_id,
-                "query": tool_input.get("query", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
+        # MCP call detected by either scheme prefix or explicit tool_type.
+        if (tool_name and tool_name.startswith("mcp://")) or tool_type == "mcp":
+            return OpenAIResponsesToolOps._build_p_mcp_call(
+                tool_call_id, tool_name, arguments, ir_tool_call
+            )
+        if tool_type == "function":
+            return OpenAIResponsesToolOps._build_p_function_call(
+                tool_call_id, tool_name, arguments, ir_tool_call
+            )
+        if tool_type == "custom":
+            return OpenAIResponsesToolOps._build_p_custom_call(
+                tool_call_id, tool_name, tool_input
+            )
+        if tool_type == "web_search":
+            return OpenAIResponsesToolOps._build_p_query_call(
+                "function_web_search", tool_call_id, tool_input, arguments, "query"
+            )
+        if tool_type == "code_interpreter":
+            return OpenAIResponsesToolOps._build_p_query_call(
+                "code_interpreter_call", tool_call_id, tool_input, arguments, "code"
+            )
+        if tool_type == "file_search":
+            return OpenAIResponsesToolOps._build_p_query_call(
+                "file_search_call", tool_call_id, tool_input, arguments, "query"
+            )
+        # Default to function_call
+        return {
+            "type": "function_call",
+            "call_id": tool_call_id,
+            "name": f"{tool_type}_{tool_name}",
+            "arguments": arguments,
+        }
+
+    @staticmethod
+    def _build_p_mcp_call(
+        tool_call_id: str,
+        tool_name: str,
+        arguments: str,
+        ir_tool_call: ToolCallPart,
+    ) -> dict:
+        """Build a Responses API ``mcp_call`` item."""
+        return {
+            "type": "mcp_call",
+            "id": tool_call_id,
+            "name": tool_name,
+            "arguments": arguments,
+            "server_label": ir_tool_call.get("server_name", "default"),
+            "status": "calling",
+        }
+
+    @staticmethod
+    def _build_p_function_call(
+        tool_call_id: str,
+        tool_name: str,
+        arguments: str,
+        ir_tool_call: ToolCallPart,
+    ) -> dict:
+        """Build a Responses API ``function_call`` item."""
+        metadata = ir_tool_call.get("provider_metadata") or {}
+        item_id = metadata.get("responses_item_id") or (
+            OpenAIResponsesToolOps._derive_function_item_id(tool_call_id)
+        )
+        return {
+            "type": "function_call",
+            "id": item_id,
+            "call_id": tool_call_id,
+            "name": tool_name,
+            "arguments": arguments,
+            "status": "completed",
+        }
+
+    @staticmethod
+    def _derive_function_item_id(tool_call_id: str) -> str:
+        """Ensure the Responses-API-required ``fc_`` prefix on function item IDs."""
+        # The API requires 'id' to start with 'fc_' prefix. Convert
+        # Chat-Completions/Anthropic prefixes appropriately.
+        if tool_call_id and tool_call_id.startswith("fc_"):
+            return tool_call_id
+        if tool_call_id and tool_call_id.startswith("call_"):
+            return "fc_" + tool_call_id[5:]
+        # Other prefixes (e.g. toolu_ from Anthropic)
+        return "fc_" + tool_call_id
+
+    @staticmethod
+    def _build_p_custom_call(
+        tool_call_id: str, tool_name: str, tool_input: Any
+    ) -> dict:
+        """Build a Responses API ``custom_tool_call`` item."""
+        # Custom tool calls use plain text 'input' instead of JSON 'arguments'.
+        # If tool_input has a single "input" key, unwrap it to plain text;
+        # otherwise JSON-serialize the dict.
+        if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
+            input_str = str(tool_input["input"])
+        elif isinstance(tool_input, dict):
+            input_str = json.dumps(tool_input)
         else:
-            # Default to function_call
-            return {
-                "type": "function_call",
-                "call_id": tool_call_id,
-                "name": f"{tool_type}_{tool_name}",
-                "arguments": arguments,
-            }
+            input_str = str(tool_input)
+        return {
+            "type": "custom_tool_call",
+            "call_id": tool_call_id,
+            "name": tool_name,
+            "input": input_str,
+        }
+
+    @staticmethod
+    def _build_p_query_call(
+        item_type: str,
+        tool_call_id: str,
+        tool_input: Any,
+        arguments: str,
+        field_key: str,
+    ) -> dict:
+        """Build a Responses API extended-tool call (web_search / code_interpreter / file_search)."""
+        field_value = (
+            tool_input.get(field_key, "") if isinstance(tool_input, dict) else ""
+        )
+        return {
+            "type": item_type,
+            "call_id": tool_call_id,
+            field_key: field_value,
+            "arguments": arguments,
+        }
 
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
@@ -485,97 +553,121 @@ class OpenAIResponsesToolOps(BaseToolOps):
             IR ToolCallPart.
         """
         item_type = provider_tool_call.get("type")
-
-        # Parse arguments
-        arguments = provider_tool_call.get("arguments", {})
-        if isinstance(arguments, dict):
-            tool_input = arguments
-        elif isinstance(arguments, str):
-            try:
-                tool_input = json.loads(arguments) if arguments else {}
-            except json.JSONDecodeError:
-                tool_input = {"input": arguments}
-        else:
-            tool_input = {}
+        tool_input = OpenAIResponsesToolOps._parse_tool_arguments(
+            provider_tool_call.get("arguments", {})
+        )
 
         if item_type == "function_call":
-            # Responses API has both 'id' (item ID, fc_ prefix) and
-            # 'call_id' (correlation ID, call_ prefix). Store call_id as
-            # tool_call_id for correlation, preserve 'id' in provider_metadata
-            # for lossless round-trip.
-            call_id = provider_tool_call.get("call_id")
-            item_id = provider_tool_call.get("id", "")
-            if not call_id:
-                # Fallback: derive call_ prefix from fc_ prefix
-                if item_id.startswith("fc_"):
-                    call_id = "call_" + item_id[3:]
-                else:
-                    call_id = item_id
-            part = ToolCallPart(
-                type="tool_call",
-                tool_call_id=call_id,
-                tool_name=provider_tool_call.get("name", ""),
-                tool_input=tool_input,
-                tool_type="function",
+            return OpenAIResponsesToolOps._p_function_call_to_ir(
+                provider_tool_call, tool_input
             )
-            if item_id and item_id != call_id:
-                part["provider_metadata"] = {"responses_item_id": item_id}
-            return part
-        elif item_type == "mcp_call":
-            # MCP call may use server/tool fields or name field
-            server = provider_tool_call.get("server", "")
-            tool = provider_tool_call.get("tool", provider_tool_call.get("name", ""))
-            tool_name = f"mcp://{server}/{tool}" if server and tool else tool
+        if item_type == "mcp_call":
+            return OpenAIResponsesToolOps._p_mcp_call_to_ir(
+                provider_tool_call, tool_input
+            )
+        if item_type in _EXTENDED_CALL_ITEM_TYPES:
+            return OpenAIResponsesToolOps._p_extended_call_to_ir(
+                provider_tool_call, tool_input, item_type
+            )
+        if item_type == "custom_tool_call":
+            return OpenAIResponsesToolOps._p_custom_call_to_ir(provider_tool_call)
+        raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")
 
-            return ToolCallPart(
-                type="tool_call",
-                tool_call_id=provider_tool_call.get("id", ""),
-                tool_name=tool_name,
-                tool_input=tool_input,
-                tool_type="mcp",
-            )
-        elif item_type in ("shell_call", "computer_call", "code_interpreter_call"):
-            tool_type_map = {
-                "shell_call": "code_interpreter",
-                "computer_call": "computer_use",
-                "code_interpreter_call": "code_interpreter",
-            }
-            return cast(
-                ToolCallPart,
-                {
-                    "type": "tool_call",
-                    "tool_call_id": provider_tool_call.get(
-                        "call_id", provider_tool_call.get("id", "")
-                    ),
-                    "tool_name": provider_tool_call.get("name", item_type),
-                    "tool_input": tool_input,
-                    "tool_type": tool_type_map.get(item_type, "function"),
-                },
-            )
-        elif item_type == "custom_tool_call":
-            # custom_tool_call uses plain text 'input' instead of JSON
-            # 'arguments'.  Wrap as {"input": str} for IR compatibility
-            # (tool_input must be dict).  If the input happens to be valid
-            # JSON, parse it so cross-provider converters can inspect fields.
-            input_str = provider_tool_call.get("input", "")
+    @staticmethod
+    def _parse_tool_arguments(arguments: Any) -> dict:
+        """Parse Responses API ``arguments`` field into a dict tool_input."""
+        if isinstance(arguments, dict):
+            return arguments
+        if isinstance(arguments, str):
             try:
-                parsed_input = json.loads(input_str) if input_str else {}
-            except (json.JSONDecodeError, TypeError):
-                parsed_input = {"input": input_str}
-            # Ensure tool_input is always a dict
-            if not isinstance(parsed_input, dict):
-                parsed_input = {"input": parsed_input}
-            return ToolCallPart(
-                type="tool_call",
-                tool_call_id=provider_tool_call.get(
+                return json.loads(arguments) if arguments else {}
+            except json.JSONDecodeError:
+                return {"input": arguments}
+        return {}
+
+    @staticmethod
+    def _p_function_call_to_ir(
+        provider_tool_call: dict[str, Any], tool_input: dict
+    ) -> ToolCallPart:
+        """Responses API ``function_call`` item → IR ToolCallPart."""
+        # Responses API has both 'id' (item ID, fc_ prefix) and
+        # 'call_id' (correlation ID, call_ prefix). Store call_id as
+        # tool_call_id for correlation, preserve 'id' in provider_metadata
+        # for lossless round-trip.
+        call_id = provider_tool_call.get("call_id")
+        item_id = provider_tool_call.get("id", "")
+        if not call_id:
+            # Fallback: derive call_ prefix from fc_ prefix
+            call_id = "call_" + item_id[3:] if item_id.startswith("fc_") else item_id
+        part = ToolCallPart(
+            type="tool_call",
+            tool_call_id=call_id,
+            tool_name=provider_tool_call.get("name", ""),
+            tool_input=tool_input,
+            tool_type="function",
+        )
+        if item_id and item_id != call_id:
+            part["provider_metadata"] = {"responses_item_id": item_id}
+        return part
+
+    @staticmethod
+    def _p_mcp_call_to_ir(
+        provider_tool_call: dict[str, Any], tool_input: dict
+    ) -> ToolCallPart:
+        """Responses API ``mcp_call`` item → IR ToolCallPart."""
+        # MCP call may use server/tool fields or name field
+        server = provider_tool_call.get("server", "")
+        tool = provider_tool_call.get("tool", provider_tool_call.get("name", ""))
+        tool_name = f"mcp://{server}/{tool}" if server and tool else tool
+        return ToolCallPart(
+            type="tool_call",
+            tool_call_id=provider_tool_call.get("id", ""),
+            tool_name=tool_name,
+            tool_input=tool_input,
+            tool_type="mcp",
+        )
+
+    @staticmethod
+    def _p_extended_call_to_ir(
+        provider_tool_call: dict[str, Any], tool_input: dict, item_type: str
+    ) -> ToolCallPart:
+        """Responses API shell/computer/code_interpreter call → IR ToolCallPart."""
+        return cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": provider_tool_call.get(
                     "call_id", provider_tool_call.get("id", "")
                 ),
-                tool_name=provider_tool_call.get("name", ""),
-                tool_input=parsed_input,
-                tool_type="custom",
-            )
-        else:
-            raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")
+                "tool_name": provider_tool_call.get("name", item_type),
+                "tool_input": tool_input,
+                "tool_type": _EXTENDED_CALL_TYPE_MAP.get(item_type, "function"),
+            },
+        )
+
+    @staticmethod
+    def _p_custom_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
+        """Responses API ``custom_tool_call`` item → IR ToolCallPart."""
+        # custom_tool_call uses plain text 'input' instead of JSON 'arguments'.
+        # Wrap as {"input": str} for IR compatibility (tool_input must be dict).
+        # If the input happens to be valid JSON, parse it so cross-provider
+        # converters can inspect fields.
+        input_str = provider_tool_call.get("input", "")
+        try:
+            parsed_input = json.loads(input_str) if input_str else {}
+        except (json.JSONDecodeError, TypeError):
+            parsed_input = {"input": input_str}
+        if not isinstance(parsed_input, dict):
+            parsed_input = {"input": parsed_input}
+        return ToolCallPart(
+            type="tool_call",
+            tool_call_id=provider_tool_call.get(
+                "call_id", provider_tool_call.get("id", "")
+            ),
+            tool_name=provider_tool_call.get("name", ""),
+            tool_input=parsed_input,
+            tool_type="custom",
+        )
 
     # ==================== Tool Result ====================
 

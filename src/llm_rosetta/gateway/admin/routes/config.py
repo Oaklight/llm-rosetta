@@ -769,6 +769,61 @@ def _format_connection_error(exc: Exception, url: str) -> str:
     return f"Failed to connect to upstream: {err_str}"
 
 
+def _build_models_url(ptype: str, base_url: str) -> str:
+    """Return the upstream models-listing URL for a given API standard."""
+    if ptype == "google":
+        return f"{base_url}/v1beta/models"
+    if ptype == "anthropic":
+        return f"{base_url}/v1/models"
+    # OpenAI-compatible (openai_chat, openai_responses, etc.)
+    return f"{base_url}/models"
+
+
+def _extract_google_model_ids(body: dict[str, Any], id_field: str | None) -> list[str]:
+    """Extract model IDs from a Google-format ``/models`` response."""
+    ids: list[str] = []
+    for m in body.get("models", []):
+        name = m.get("name", "")
+        if name.startswith("models/"):
+            name = name[len("models/") :]
+        ids.append(m.get(id_field, name) if id_field else name)
+    return ids
+
+
+def _extract_openai_model_ids(body: dict[str, Any], id_field: str | None) -> list[str]:
+    """Extract model IDs from an OpenAI/Anthropic-format ``/models`` response."""
+    ids: list[str] = []
+    for m in body.get("data", []):
+        ids.append(m.get(id_field, m.get("id", "")) if id_field else m.get("id", ""))
+    return ids
+
+
+def _extract_model_ids(
+    body: dict[str, Any], ptype: str, id_field: str | None
+) -> list[str]:
+    """Normalize an upstream ``/models`` response to a sorted list of IDs."""
+    if ptype == "google":
+        ids = _extract_google_model_ids(body, id_field)
+    else:
+        ids = _extract_openai_model_ids(body, id_field)
+    ids = [m for m in ids if m]
+    ids.sort()
+    return ids
+
+
+async def _fetch_upstream_models_response(
+    pinfo: Any, models_url: str, headers: dict[str, str]
+) -> HttpResponse:
+    """Issue the GET to the upstream, returning the raw HTTP response."""
+    client = AsyncClient(timeout=10.0, proxy=pinfo.proxy_url)
+    try:
+        raw_resp = await client.get(models_url, headers=headers)
+    finally:
+        await client.aclose()
+    assert isinstance(raw_resp, HttpResponse), "Expected non-streaming response"
+    return raw_resp
+
+
 async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     """Fetch the model list from an upstream provider's /v1/models endpoint."""
     from llm_rosetta.shims import get_shim
@@ -785,24 +840,11 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
 
     pinfo = config.providers[provider_name]
     ptype = config.provider_types.get(provider_name, "unknown")
-
-    # Build the models listing URL based on provider type
-    if ptype == "google":
-        models_url = f"{pinfo.base_url}/v1beta/models"
-    elif ptype == "anthropic":
-        models_url = f"{pinfo.base_url}/v1/models"
-    else:
-        # OpenAI-compatible (openai_chat, openai_responses, etc.)
-        models_url = f"{pinfo.base_url}/models"
+    models_url = _build_models_url(ptype, pinfo.base_url)
 
     headers = pinfo.auth_headers()
-
     try:
-        client = AsyncClient(timeout=10.0, proxy=pinfo.proxy_url)
-        raw_resp = await client.get(models_url, headers=headers)
-        assert isinstance(raw_resp, HttpResponse), "Expected non-streaming response"
-        resp: HttpResponse = raw_resp
-        await client.aclose()
+        resp = await _fetch_upstream_models_response(pinfo, models_url, headers)
     except Exception as exc:
         logger.warning("Failed to fetch models from %s: %s", provider_name, exc)
         msg = _format_connection_error(exc, models_url)
@@ -833,24 +875,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     shim = get_shim(shim_name) if shim_name else None
     id_field = shim.model_id_field if shim and shim.model_id_field else None
 
-    # Normalize response — different providers return different formats
-    model_ids: list[str] = []
-    if ptype == "google":
-        # Google: {"models": [{"name": "models/gemini-...", ...}]}
-        for m in body.get("models", []):
-            name = m.get("name", "")
-            if name.startswith("models/"):
-                name = name[len("models/") :]
-            model_ids.append(m.get(id_field, name) if id_field else name)
-    else:
-        # Anthropic & OpenAI-compatible: {"data": [{"id": "...", ...}]}
-        for m in body.get("data", []):
-            model_ids.append(
-                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
-            )
-
-    model_ids = [m for m in model_ids if m]
-    model_ids.sort()
+    model_ids = _extract_model_ids(body, ptype, id_field)
 
     return JSONResponse(
         {

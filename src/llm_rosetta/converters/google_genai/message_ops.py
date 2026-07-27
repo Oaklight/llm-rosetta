@@ -245,8 +245,19 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Args:
             ir_messages: IR messages list (modified in-place).
         """
-        # Build ordered list of (tool_call_id, tool_name) from tool_call parts.
-        call_queue: dict[str, list[str]] = {}  # tool_name → [tool_call_ids]
+        call_queue = GoogleGenAIMessageOps._build_tool_call_queue(ir_messages)
+        if not call_queue:
+            return
+        GoogleGenAIMessageOps._apply_tool_call_id_reconciliation(
+            ir_messages, call_queue
+        )
+
+    @staticmethod
+    def _build_tool_call_queue(
+        ir_messages: Sequence[Message | ExtensionItem],
+    ) -> dict[str, list[str]]:
+        """Return ordered ``tool_name → [tool_call_id, ...]`` from assistant messages."""
+        call_queue: dict[str, list[str]] = {}
         for msg in ir_messages:
             if not is_message(msg) or msg.get("role") != "assistant":
                 continue
@@ -254,35 +265,38 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                 if is_tool_call_part(part):
                     name = part.get("tool_name", "")
                     call_queue.setdefault(name, []).append(part.get("tool_call_id", ""))
+        return call_queue
 
-        if not call_queue:
-            return
+    @staticmethod
+    def _resolve_tool_name_for_result(
+        result_id: str, call_queue: dict[str, list[str]]
+    ) -> str:
+        """Find the queued tool_name matching ``result_id`` (exact or ``name_...``)."""
+        for name in call_queue:
+            # Match if the result_id starts with the tool name
+            # (Gemini CLI format: "<name>_<timestamp>_<index>")
+            # or equals the tool name exactly.
+            if result_id == name or result_id.startswith(name + "_"):
+                return name
+        return result_id  # default guess
 
-        # Track which tool_call_ids have already been consumed.
-        consumed: dict[str, int] = {}  # tool_name → next index in call_queue
-
+    @staticmethod
+    def _apply_tool_call_id_reconciliation(
+        ir_messages: Sequence[Message | ExtensionItem],
+        call_queue: dict[str, list[str]],
+    ) -> None:
+        """Rewrite each ``tool_result.tool_call_id`` to the FIFO-matched call id."""
+        consumed: dict[str, int] = {}
         for msg in ir_messages:
             if not is_message(msg) or msg.get("role") != "tool":
                 continue
             for part in msg.get("content", []):
                 if not is_tool_result_part(part):
                     continue
-                # Determine the function name for this result.
-                # The tool_call_id in the result may actually be the
-                # function name (Google convention) or a client-generated
-                # ID.  We need to find the matching tool_call by name.
                 result_id = part.get("tool_call_id", "")
-                # Try to identify the function name: check if result_id
-                # matches any known tool_name directly.
-                tool_name = result_id  # default guess
-                for name in call_queue:
-                    # Match if the result_id starts with the tool name
-                    # (Gemini CLI format: "<name>_<timestamp>_<index>")
-                    # or equals the tool name exactly.
-                    if result_id == name or result_id.startswith(name + "_"):
-                        tool_name = name
-                        break
-
+                tool_name = GoogleGenAIMessageOps._resolve_tool_name_for_result(
+                    result_id, call_queue
+                )
                 ids = call_queue.get(tool_name)
                 if not ids:
                     continue

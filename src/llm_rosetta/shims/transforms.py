@@ -352,6 +352,37 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
 # ---------------------------------------------------------------------------
 
 
+def _flatten_system_part(part: Any) -> str:
+    """Reduce one content part to its text form."""
+    if isinstance(part, dict):
+        return part.get("text", "")
+    return str(part)
+
+
+def _flatten_system_message(msg: Any) -> None:
+    """Flatten a single system message's list-content in place."""
+    if not isinstance(msg, dict) or msg.get("role") != "system":
+        return
+    content = msg.get("content")
+    if not isinstance(content, list):
+        return
+    msg["content"] = " ".join(_flatten_system_part(p) for p in content)
+
+
+def _flatten_system_body(
+    body: dict[str, Any], compiled: re.Pattern[str] | None
+) -> dict[str, Any]:
+    """Apply system-message flattening to *body* if the model matches."""
+    if compiled is not None and not compiled.search(body.get("model", "")):
+        return body
+    messages = body.get("messages")
+    if not messages or not isinstance(messages, list):
+        return body
+    for msg in messages:
+        _flatten_system_message(msg)
+    return body
+
+
 def flatten_system_content(pattern: str | None = None) -> Transform:
     """Return a body-level transform that flattens system message content
     arrays to plain strings.
@@ -371,27 +402,7 @@ def flatten_system_content(pattern: str | None = None) -> Transform:
     compiled = re.compile(pattern) if pattern else None
 
     def _flatten(body: dict[str, Any]) -> dict[str, Any]:
-        if compiled is not None:
-            model = body.get("model", "")
-            if not compiled.search(model):
-                return body
-
-        messages = body.get("messages")
-        if not messages or not isinstance(messages, list):
-            return body
-
-        for msg in messages:
-            if not isinstance(msg, dict) or msg.get("role") != "system":
-                continue
-            content = msg.get("content")
-            if isinstance(content, list):
-                text = " ".join(
-                    p.get("text", "") if isinstance(p, dict) else str(p)
-                    for p in content
-                )
-                msg["content"] = text
-
-        return body
+        return _flatten_system_body(body, compiled)
 
     label = "flatten_system_content("
     if pattern:

@@ -236,27 +236,37 @@ def load_providers_from_dir(
     """
     builtin = providers_dir == _PROVIDERS_DIR
     shims: list[ProviderShim] = []
-    for d in sorted(providers_dir.iterdir()):
-        if not d.is_dir() or d.name.startswith(("_", ".")):
-            continue
-        yaml_path = d / "provider.yaml"
-        if yaml_path.exists():
-            shim = _load_single_provider(d, group=group, _builtin=builtin)
-            if shim is not None:
-                shims.append(shim)
+    for d in _iter_shim_dirs(providers_dir):
+        if (d / "provider.yaml").exists():
+            _append_leaf_shim(shims, d, group=group, builtin=builtin)
         else:
-            # Potential group folder — scan children.
             child_group = f"{group}.{d.name}" if group else d.name
-            for sub in sorted(d.iterdir()):
-                if not sub.is_dir() or sub.name.startswith(("_", ".")):
-                    continue
+            for sub in _iter_shim_dirs(d):
                 if (sub / "provider.yaml").exists():
-                    shim = _load_single_provider(
-                        sub, group=child_group, _builtin=builtin
-                    )
-                    if shim is not None:
-                        shims.append(shim)
+                    _append_leaf_shim(shims, sub, group=child_group, builtin=builtin)
     return shims
+
+
+def _iter_shim_dirs(root: Path) -> list[Path]:
+    """Return sorted subdirectories of *root* eligible as provider dirs."""
+    return [
+        d
+        for d in sorted(root.iterdir())
+        if d.is_dir() and not d.name.startswith(("_", "."))
+    ]
+
+
+def _append_leaf_shim(
+    shims: list[ProviderShim],
+    provider_dir: Path,
+    *,
+    group: str | None,
+    builtin: bool,
+) -> None:
+    """Load a leaf provider directory and append the shim if successful."""
+    shim = _load_single_provider(provider_dir, group=group, _builtin=builtin)
+    if shim is not None:
+        shims.append(shim)
 
 
 def load_providers() -> list[ProviderShim]:

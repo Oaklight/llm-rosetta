@@ -190,6 +190,29 @@ class OpenAIResponsesConverter(BaseConverter):
             "messages": [],
         }
 
+        # Stage 1: input surface (instructions + input items → IR messages).
+        self._convert_input_stage_from_p(provider_request, ir_request)
+
+        # Stage 2: tools surface (tool defs, choice, config).
+        self._convert_tools_stage_from_p(provider_request, ir_request)
+
+        # Stage 3: generation / reasoning / response_format / stream.
+        self._convert_sampling_stage_from_p(provider_request, ir_request)
+
+        # Stage 4: cache + provider extensions passthrough.
+        self._convert_extensions_stage_from_p(provider_request, ir_request)
+
+        # Preserve mode: capture request fields for echo-back in response
+        self._maybe_capture_request_echo(provider_request, context)
+
+        return self._validate_ir_request(ir_request)
+
+    def _convert_input_stage_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Populate system_instruction and messages on ``ir_request``."""
         # 1. Instructions → system_instruction (list[TextPart])
         instructions = provider_request.get("instructions")
         if instructions:
@@ -208,11 +231,16 @@ class OpenAIResponsesConverter(BaseConverter):
                 }
             ]
         if isinstance(input_items, list):
-            ir_messages = self.message_ops.p_messages_to_ir(input_items)
-            ir_request["messages"] = ir_messages
+            ir_request["messages"] = self.message_ops.p_messages_to_ir(input_items)
 
-        # 3. Tools (with process-level cache)
-        # Filter out disabled tools before caching (external_web_access=False)
+    def _convert_tools_stage_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Populate tools, tool_choice and tool_config on ``ir_request``."""
+        # 3. Tools (with process-level cache). Filter out tools whose
+        # external_web_access=False before caching.
         tools = provider_request.get("tools")
         if tools:
             active_tools = [
@@ -228,6 +256,12 @@ class OpenAIResponsesConverter(BaseConverter):
         # 4-5. Tool choice + tool config
         self._convert_tool_config_from_p(provider_request, ir_request)
 
+    def _convert_sampling_stage_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Populate generation, response_format, reasoning, and stream config."""
         # 6. Generation config
         gen_config = self.config_ops.p_generation_config_to_ir(provider_request)
         if gen_config:
@@ -253,6 +287,12 @@ class OpenAIResponsesConverter(BaseConverter):
                 {"stream": stream, "stream_options": stream_options}
             )
 
+    def _convert_extensions_stage_from_p(
+        self,
+        provider_request: dict[str, Any],
+        ir_request: dict[str, Any],
+    ) -> None:
+        """Populate cache config and provider extensions passthrough."""
         # 10. Cache config
         self._convert_cache_from_p(provider_request, ir_request)
 
@@ -263,18 +303,20 @@ class OpenAIResponsesConverter(BaseConverter):
                 allowed_tools
             )
 
-        # Preserve mode: capture request fields for echo-back in response
+    @staticmethod
+    def _maybe_capture_request_echo(
+        provider_request: dict[str, Any],
+        context: ConversionContext | None,
+    ) -> None:
+        """In preserve mode, snapshot request-side echo fields onto *context*."""
         ctx = context if context is not None else ConversionContext()
-        if ctx.metadata_mode == "preserve":
-            echo = {
-                k: v
-                for k, v in provider_request.items()
-                if k in RESPONSES_PRESERVE_FIELDS
-            }
-            if echo:
-                ctx.store_request_echo(echo)
-
-        return self._validate_ir_request(ir_request)
+        if ctx.metadata_mode != "preserve":
+            return
+        echo = {
+            k: v for k, v in provider_request.items() if k in RESPONSES_PRESERVE_FIELDS
+        }
+        if echo:
+            ctx.store_request_echo(echo)
 
     def response_from_provider(
         self,
@@ -543,7 +585,6 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx: ConversionContext,
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
-        output_items = provider_response.get("output", [])
         extras = {
             k: v
             for k, v in provider_response.items()
@@ -552,32 +593,43 @@ class OpenAIResponsesConverter(BaseConverter):
         if extras:
             ctx.store_response_extras(extras)
 
-        items_meta: list[dict[str, Any]] = []
-        for item in output_items:
-            if not isinstance(item, dict):
-                continue
-            meta: dict[str, Any] = {}
-            if "id" in item:
-                meta["id"] = item["id"]
-            if "status" in item:
-                meta["status"] = item["status"]
-            content = item.get("content", [])
-            if isinstance(content, list):
-                parts_meta: list[dict[str, Any]] = []
-                for cp in content:
-                    if not isinstance(cp, dict):
-                        continue
-                    pm: dict[str, Any] = {}
-                    if "annotations" in cp:
-                        pm["annotations"] = cp["annotations"]
-                    if "logprobs" in cp:
-                        pm["logprobs"] = cp["logprobs"]
-                    parts_meta.append(pm)
-                if parts_meta:
-                    meta["content_meta"] = parts_meta
-            items_meta.append(meta)
+        items_meta = [
+            OpenAIResponsesConverter._capture_output_item_meta(item)
+            for item in provider_response.get("output", [])
+            if isinstance(item, dict)
+        ]
         if items_meta:
             ctx.store_output_items_meta(items_meta)
+
+    @staticmethod
+    def _capture_output_item_meta(item: dict[str, Any]) -> dict[str, Any]:
+        """Snapshot ``id``/``status`` plus per-content-part metadata for one output item."""
+        meta: dict[str, Any] = {}
+        if "id" in item:
+            meta["id"] = item["id"]
+        if "status" in item:
+            meta["status"] = item["status"]
+
+        content = item.get("content", [])
+        if isinstance(content, list):
+            parts_meta = [
+                OpenAIResponsesConverter._capture_content_part_meta(cp)
+                for cp in content
+                if isinstance(cp, dict)
+            ]
+            if parts_meta:
+                meta["content_meta"] = parts_meta
+        return meta
+
+    @staticmethod
+    def _capture_content_part_meta(cp: dict[str, Any]) -> dict[str, Any]:
+        """Snapshot ``annotations`` and ``logprobs`` for one content part."""
+        pm: dict[str, Any] = {}
+        if "annotations" in cp:
+            pm["annotations"] = cp["annotations"]
+        if "logprobs" in cp:
+            pm["logprobs"] = cp["logprobs"]
+        return pm
 
     @staticmethod
     def _apply_preserve_metadata(
@@ -585,50 +637,61 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx: ConversionContext,
     ) -> None:
         """Re-inject captured metadata fields in *preserve* mode."""
-        echo = ctx.get_echo_fields()
-        core_keys = {
-            "id",
-            "object",
-            "created_at",
-            "model",
-            "output",
-            "status",
-            "usage",
-        }
+        OpenAIResponsesConverter._restore_response_echo(provider_response, ctx)
+        OpenAIResponsesConverter._patch_echoed_tool_strict(provider_response)
+        OpenAIResponsesConverter._restore_output_items_meta(provider_response, ctx)
+
+    _CORE_RESPONSE_KEYS = frozenset(
+        {"id", "object", "created_at", "model", "output", "status", "usage"}
+    )
+
+    @staticmethod
+    def _restore_response_echo(
+        provider_response: dict[str, Any], ctx: ConversionContext
+    ) -> None:
+        """Apply required defaults, then overlay captured echo fields (non-core only)."""
+        core_keys = OpenAIResponsesConverter._CORE_RESPONSE_KEYS
         # Apply required defaults first, then override with actual echo
         for k, v in RESPONSES_REQUIRED_DEFAULTS.items():
             if k not in core_keys and k not in provider_response:
                 provider_response[k] = v
-        for k, v in echo.items():
+        for k, v in ctx.get_echo_fields().items():
             if k not in core_keys:
                 provider_response[k] = v
 
-        # Ensure echoed tools have required 'strict' field
+    @staticmethod
+    def _patch_echoed_tool_strict(provider_response: dict[str, Any]) -> None:
+        """Ensure echoed function tools have the required ``strict`` field present."""
         for tool in provider_response.get("tools", []):
             if isinstance(tool, dict) and tool.get("type") == "function":
                 tool.setdefault("strict", None)
 
-        # Restore per-output-item metadata
-        items_meta = ctx.get_output_items_meta()
+    @staticmethod
+    def _restore_output_items_meta(
+        provider_response: dict[str, Any], ctx: ConversionContext
+    ) -> None:
+        """Restore per-output-item metadata (id/status/content-part fields)."""
         output = provider_response.get("output", [])
-        for i, meta in enumerate(items_meta):
-            if i >= len(output):
-                break
-            item = output[i]
+        for meta, item in zip(ctx.get_output_items_meta(), output):
             if "id" in meta:
                 item["id"] = meta["id"]
             if "status" in meta:
                 item["status"] = meta["status"]
-            # Restore per-content-part metadata
-            content_meta = meta.get("content_meta", [])
-            content = item.get("content", [])
-            for j, pm in enumerate(content_meta):
-                if j >= len(content):
-                    break
-                if "annotations" in pm:
-                    content[j]["annotations"] = pm["annotations"]
-                if "logprobs" in pm:
-                    content[j]["logprobs"] = pm["logprobs"]
+            OpenAIResponsesConverter._restore_content_meta(
+                meta.get("content_meta", []), item.get("content", [])
+            )
+
+    @staticmethod
+    def _restore_content_meta(
+        content_meta: list[dict[str, Any]],
+        content: list[Any],
+    ) -> None:
+        """Restore ``annotations``/``logprobs`` on each content part in *content*."""
+        for pm, part in zip(content_meta, content):
+            if "annotations" in pm:
+                part["annotations"] = pm["annotations"]
+            if "logprobs" in pm:
+                part["logprobs"] = pm["logprobs"]
 
     def messages_to_provider(
         self,

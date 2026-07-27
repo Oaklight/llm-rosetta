@@ -56,6 +56,34 @@ def _collect_anthropic_tool_ids(
     return known_use_ids, answered_ids
 
 
+def _filter_anthropic_user_msg(
+    msg: dict[str, Any],
+    known_use_ids: set[str],
+    orphaned_result_ids: list[str],
+) -> dict[str, Any] | None:
+    """Remove orphaned tool_result blocks from a user message.
+
+    Returns:
+        The original message if no orphaned blocks; a new message with
+        orphaned blocks removed; or ``None`` if the entire message was orphaned.
+    """
+    content = msg.get("content", [])
+    if not isinstance(content, list):
+        return msg
+    orphaned = extract_part_ids(content, "tool_result", "tool_use_id") - known_use_ids
+    if not orphaned:
+        return msg
+    orphaned_result_ids.extend(orphaned)
+    filtered = [
+        b
+        for b in content
+        if not (isinstance(b, dict) and b.get("tool_use_id") in orphaned)
+    ]
+    if not filtered:
+        return None  # entire message was orphaned
+    return {**msg, "content": filtered}
+
+
 def fix_orphaned_tool_calls(
     messages: list[dict[str, Any]],
     *,
@@ -104,21 +132,10 @@ def fix_orphaned_tool_calls(
         msg_role = msg.get("role")
         content = msg.get("content", [])
 
-        # Filter orphaned tool_result blocks from user messages
-        if msg_role == "user" and isinstance(content, list):
-            orphaned = (
-                extract_part_ids(content, "tool_result", "tool_use_id") - known_use_ids
-            )
-            if orphaned:
-                orphaned_result_ids.extend(orphaned)
-                filtered = [
-                    b
-                    for b in content
-                    if not (isinstance(b, dict) and b.get("tool_use_id") in orphaned)
-                ]
-                if not filtered:
-                    continue  # entire message was orphaned
-                msg = {**msg, "content": filtered}
+        if msg_role == "user":
+            msg = _filter_anthropic_user_msg(msg, known_use_ids, orphaned_result_ids)
+            if msg is None:
+                continue
 
         patched.append(msg)
 

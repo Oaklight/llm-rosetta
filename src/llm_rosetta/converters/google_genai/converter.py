@@ -224,27 +224,35 @@ class GoogleGenAIConverter(BaseConverter):
         )
         result: dict[str, Any] = {"model": ir_request["model"]}
 
-        # 1. Handle system_instruction
+        self._build_contents_section(ir_request, result, ctx)
+
+        # Tools/tool_config (writes into result["config"])
+        self._apply_tool_config(ir_request, result, ctx)
+
+        # Generation / response_format / reasoning / stream / cache / extensions
+        self._apply_generation_sections(ir_request, result, ctx)
+
+        if output_format == "rest":
+            return self._to_rest_body(result), ctx.warnings
+
+        return result, ctx.warnings
+
+    def _build_contents_section(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Build ``contents`` + ``system_instruction`` in-place on ``result``."""
         system_instruction = self._build_system_instruction(ir_request)
 
-        # 2. Handle messages — fix orphaned tool_calls/results and strip
-        #    orphaned tool_choice/tool_config at IR level before conversion.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
 
-        # Extract system messages from message list
-        for item in ir_messages:
-            if is_message(item) and item.get("role") == "system":
-                msg_parts = []
-                for part in item.get("content", []):
-                    if is_text_part(part):
-                        msg_parts.append({"text": part["text"]})
-                if system_instruction is None:
-                    system_instruction = {"role": "user", "parts": msg_parts}
-                else:
-                    cast(list, system_instruction["parts"]).extend(msg_parts)
+        system_instruction = self._merge_inline_system_messages(
+            ir_messages, system_instruction
+        )
 
-        # Convert non-system messages
         contents, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
         ctx.warnings.extend(msg_warnings)
         result["contents"] = contents
@@ -252,23 +260,43 @@ class GoogleGenAIConverter(BaseConverter):
         if system_instruction:
             result["system_instruction"] = system_instruction
 
-        # 3. Build config dict (tools written by _apply_tool_config)
-        self._apply_tool_config(ir_request, result, ctx)
+    @staticmethod
+    def _merge_inline_system_messages(
+        ir_messages: list[Any],
+        system_instruction: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Fold any ``role=system`` messages in ``ir_messages`` into system_instruction."""
+        for item in ir_messages:
+            if not (is_message(item) and item.get("role") == "system"):
+                continue
+            msg_parts = [
+                {"text": part["text"]}
+                for part in item.get("content", [])
+                if is_text_part(part)
+            ]
+            if system_instruction is None:
+                system_instruction = {"role": "user", "parts": msg_parts}
+            else:
+                cast(list, system_instruction["parts"]).extend(msg_parts)
+        return system_instruction
+
+    def _apply_generation_sections(
+        self,
+        ir_request: IRRequest,
+        result: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Write generation / response_format / reasoning / stream / cache / extensions."""
         config = result.setdefault("config", {})
 
-        # Generation config
         gen_config = ir_request.get("generation")
         if gen_config:
-            gen_fields = self.config_ops.ir_generation_config_to_p(gen_config)
-            config.update(gen_fields)
+            config.update(self.config_ops.ir_generation_config_to_p(gen_config))
 
-        # Response format
         resp_format = ir_request.get("response_format")
         if resp_format:
-            rf_fields = self.config_ops.ir_response_format_to_p(resp_format)
-            config.update(rf_fields)
+            config.update(self.config_ops.ir_response_format_to_p(resp_format))
 
-        # Reasoning config
         reasoning = ir_request.get("reasoning")
         if reasoning:
             rc_kw = (
@@ -276,32 +304,19 @@ class GoogleGenAIConverter(BaseConverter):
                 if ctx and "reasoning_cap" in ctx.options
                 else {}
             )
-            reasoning_fields = self.config_ops.ir_reasoning_config_to_p(
-                reasoning, **rc_kw
-            )
-            config.update(reasoning_fields)
+            config.update(self.config_ops.ir_reasoning_config_to_p(reasoning, **rc_kw))
 
-        # Stream config
         stream = ir_request.get("stream")
         if stream:
-            stream_fields = self.config_ops.ir_stream_config_to_p(stream)
-            config.update(stream_fields)
+            config.update(self.config_ops.ir_stream_config_to_p(stream))
 
-        # Cache config
         cache = ir_request.get("cache")
         if cache:
-            cache_fields = self.config_ops.ir_cache_config_to_p(cache)
-            config.update(cache_fields)
+            config.update(self.config_ops.ir_cache_config_to_p(cache))
 
-        # Provider extensions
         extensions = ir_request.get("provider_extensions")
         if extensions:
             config.update(extensions)
-
-        if output_format == "rest":
-            return self._to_rest_body(result), ctx.warnings
-
-        return result, ctx.warnings
 
     def request_from_provider(
         self,

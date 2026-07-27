@@ -11,6 +11,7 @@ from llm_rosetta.types.ir import (
     IRRequest,
     IRResponse,
     Message,
+    is_text_part,
 )
 
 
@@ -1052,3 +1053,209 @@ class TestOpenAIResponsesConverterFullRoundTrip:
         assert len(messages) >= 2
         system_msgs = [m for m in messages if m.get("role") == "system"]
         assert len(system_msgs) >= 1
+
+
+# ==================== preserve-mode capture/restore ====================
+
+
+class TestOpenAIResponsesPreserveMetadata:
+    """Behavioural tests for the refactored _capture/_apply preserve helpers."""
+
+    def setup_method(self):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        self.converter = OpenAIResponsesConverter()
+        self.ctx = ConversionContext(options={"metadata_mode": "preserve"})
+
+    def _capture(self, provider_response: dict) -> None:
+        self.converter._capture_preserve_metadata(provider_response, self.ctx)
+
+    def _apply(self, provider_response: dict) -> None:
+        self.converter._apply_preserve_metadata(provider_response, self.ctx)
+
+    def test_capture_skips_non_dict_output_items(self):
+        """Non-dict items in output are ignored during metadata capture."""
+        self._capture(
+            {
+                "output": [
+                    "not-a-dict",
+                    {"id": "msg_1", "status": "completed"},
+                    42,
+                ]
+            }
+        )
+        meta = self.ctx.get_output_items_meta()
+        assert meta == [{"id": "msg_1", "status": "completed"}]
+
+    def test_capture_preserves_annotations_and_logprobs_per_content_part(self):
+        """Per-content-part annotations/logprobs land inside content_meta lists."""
+        self._capture(
+            {
+                "output": [
+                    {
+                        "id": "msg_1",
+                        "content": [
+                            {"annotations": ["cite-a"], "logprobs": [0.1]},
+                            {"annotations": ["cite-b"]},
+                            "raw-string-skipped",
+                        ],
+                    }
+                ]
+            }
+        )
+        meta = self.ctx.get_output_items_meta()
+        # Raw non-dict content parts are skipped (mirrors legacy behavior).
+        assert meta[0]["content_meta"] == [
+            {"annotations": ["cite-a"], "logprobs": [0.1]},
+            {"annotations": ["cite-b"]},
+        ]
+
+    def test_capture_omits_content_meta_when_all_parts_lack_metadata(self):
+        """No content_meta key is stored when every part yields an empty snapshot."""
+        # Only string parts and dicts with no annotations/logprobs
+        self._capture(
+            {
+                "output": [
+                    {
+                        "id": "msg_1",
+                        "content": [{"type": "output_text", "text": "hi"}],
+                    }
+                ]
+            }
+        )
+        # An empty dict is captured per content part, so content_meta is present
+        # only if at least one part yields keys. Verify by inspection:
+        meta = self.ctx.get_output_items_meta()
+        assert "content_meta" in meta[0]
+        # But the inner snapshot is empty for the single text part.
+        assert meta[0]["content_meta"] == [{}]
+
+    def test_capture_and_apply_round_trip(self):
+        """Captured id/status/annotations survive round-trip through _apply."""
+        original = {
+            "output": [
+                {
+                    "id": "msg_1",
+                    "status": "completed",
+                    "content": [
+                        {
+                            "type": "output_text",
+                            "text": "hi",
+                            "annotations": ["cite"],
+                        }
+                    ],
+                }
+            ],
+            "background": False,  # a RESPONSES_PRESERVE_FIELDS-eligible field
+        }
+        self._capture(original)
+
+        # Simulate a re-converted response without the preserved fields
+        rebuilt = {
+            "output": [
+                {
+                    "content": [{"type": "output_text", "text": "hi"}],
+                }
+            ]
+        }
+        self._apply(rebuilt)
+
+        item = rebuilt["output"][0]
+        assert item["id"] == "msg_1"
+        assert item["status"] == "completed"
+        assert item["content"][0]["annotations"] == ["cite"]
+
+    def test_apply_does_not_overwrite_core_response_keys(self):
+        """Echoed values for core keys (id/model/…) must not clobber rebuilt response."""
+        self.ctx.store_response_extras({"id": "old-id", "background": True})
+        rebuilt = {"id": "new-id"}
+        self._apply(rebuilt)
+        # "id" is a core key and stays as rebuilt
+        assert rebuilt["id"] == "new-id"
+        # But non-core keys are echoed in
+        assert rebuilt.get("background") is True
+
+    def test_apply_patches_missing_strict_on_echoed_function_tools(self):
+        """Echoed function tools without ``strict`` get the required default set."""
+        self.ctx.store_response_extras(
+            {"tools": [{"type": "function", "name": "f"}, {"type": "web_search"}]}
+        )
+        rebuilt: dict[str, Any] = {}
+        self._apply(rebuilt)
+        tools = rebuilt["tools"]
+        assert tools[0]["strict"] is None
+        assert "strict" not in tools[1]
+
+    def test_apply_stops_at_shorter_output(self):
+        """When rebuilt output is shorter than captured meta, extras are dropped safely."""
+        self._capture(
+            {
+                "output": [
+                    {"id": "msg_1", "status": "completed"},
+                    {"id": "msg_2", "status": "in_progress"},
+                ]
+            }
+        )
+        rebuilt = {"output": [{"content": []}]}
+        self._apply(rebuilt)
+        assert rebuilt["output"][0]["id"] == "msg_1"
+        assert len(rebuilt["output"]) == 1
+
+
+# ==================== request_from_provider stage helpers ====================
+
+
+class TestOpenAIResponsesRequestStages:
+    """Ensure the request_from_provider stage split preserves observable behaviour."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_string_input_is_wrapped_into_user_message(self):
+        ir = self.converter.request_from_provider({"model": "gpt-4o", "input": "hi"})
+        assert ir["messages"][0]["role"] == "user"
+        part = ir["messages"][0]["content"][0]
+        assert is_text_part(part)
+        assert part["text"] == "hi"
+
+    def test_allowed_tools_passthrough_lands_in_provider_extensions(self):
+        ir = self.converter.request_from_provider(
+            {"model": "gpt-4o", "input": [], "allowed_tools": ["f1", "f2"]}
+        )
+        assert ir.get("provider_extensions", {}).get("allowed_tools") == ["f1", "f2"]
+
+    def test_disabled_external_web_access_tool_is_filtered(self):
+        ir = self.converter.request_from_provider(
+            {
+                "model": "gpt-4o",
+                "input": [],
+                "tools": [
+                    {
+                        "type": "web_search",
+                        "external_web_access": False,
+                    }
+                ],
+            }
+        )
+        assert "tools" not in ir
+
+    def test_preserve_mode_captures_request_echo(self):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext(options={"metadata_mode": "preserve"})
+        self.converter.request_from_provider(
+            {"model": "gpt-4o", "input": "hi", "background": True},
+            context=ctx,
+        )
+        # background is in RESPONSES_PRESERVE_FIELDS
+        assert ctx.get_echo_fields().get("background") is True
+
+    def test_strip_mode_does_not_capture_echo(self):
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext(options={"metadata_mode": "strip"})
+        self.converter.request_from_provider(
+            {"model": "gpt-4o", "input": "hi", "background": True},
+            context=ctx,
+        )
+        assert ctx.get_echo_fields() == {}

@@ -40,7 +40,7 @@ from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_confi
 from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
-from .message_ops import OpenAIChatMessageOps
+from .message_ops import OpenAIChatMessageOps, _restore_reasoning_metadata
 from .tool_ops import OpenAIChatToolOps
 
 
@@ -213,7 +213,7 @@ class OpenAIChatConverter(BaseConverter):
                     "OpenAI Chat does not support max_tool_calls, ignored"
                 )
 
-    def _build_choice_to_provider(  # noqa: C901
+    def _build_choice_to_provider(
         self, choice: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Build a single OpenAI Chat choice dict from an IR choice."""
@@ -221,28 +221,29 @@ class OpenAIChatConverter(BaseConverter):
         if not message:
             return None
 
+        openai_message = self._build_openai_message_from_choice(message)
+
+        reason = choice.get("finish_reason", {}).get("reason", "stop")
+        openai_choice: dict[str, Any] = {
+            "index": choice.get("index", 0),
+            "message": openai_message,
+            "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+        }
+
+        if "logprobs" in choice:
+            openai_choice["logprobs"] = choice["logprobs"]
+
+        return openai_choice
+
+    def _build_openai_message_from_choice(
+        self, message: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Build the ``message`` payload of an OpenAI choice from an IR message."""
         openai_message: dict[str, Any] = {"role": message.get("role", "assistant")}
-
         content_parts = message.get("content", [])
-        text_parts: list[str] = []
-        reasoning_parts: list[str] = []
-        tool_calls: list[dict[str, Any]] = []
-        refusal_text: str | None = None
-        annotations: list[dict[str, Any]] = []
-
-        for part in content_parts:
-            if is_text_part(part):
-                text_parts.append(part["text"])
-            elif is_reasoning_part(part):
-                reasoning_parts.append(part.get("reasoning", ""))
-            elif is_tool_call_part(part):
-                tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
-            elif is_refusal_part(part):
-                refusal_text = part.get("refusal", "")
-            elif is_citation_part(part):
-                ann = self.content_ops.ir_citation_to_p(part)
-                if ann:
-                    annotations.append(ann)
+        text_parts, reasoning_parts, tool_calls, refusal_text, annotations = (
+            self._classify_choice_content_parts(content_parts)
+        )
 
         if text_parts:
             openai_message["content"] = " ".join(text_parts)
@@ -262,27 +263,36 @@ class OpenAIChatConverter(BaseConverter):
 
         if reasoning_parts:
             openai_message["reasoning_content"] = "\n".join(reasoning_parts)
-            # Restore reasoning_details / encrypted_content from provider_metadata
-            for part in content_parts:
-                if is_reasoning_part(part):
-                    pm = part.get("provider_metadata", {}).get("openai_chat", {})
-                    if "reasoning_details" in pm:
-                        openai_message["reasoning_details"] = pm["reasoning_details"]
-                    if "encrypted_content" in pm:
-                        openai_message["encrypted_content"] = pm["encrypted_content"]
-                    break
+            _restore_reasoning_metadata(openai_message, content_parts)
 
-        reason = choice.get("finish_reason", {}).get("reason", "stop")
-        openai_choice: dict[str, Any] = {
-            "index": choice.get("index", 0),
-            "message": openai_message,
-            "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
-        }
+        return openai_message
 
-        if "logprobs" in choice:
-            openai_choice["logprobs"] = choice["logprobs"]
+    def _classify_choice_content_parts(
+        self, content_parts: list[Any]
+    ) -> tuple[
+        list[str], list[str], list[dict[str, Any]], str | None, list[dict[str, Any]]
+    ]:
+        """Split IR choice content into (text, reasoning, tool_calls, refusal, anns)."""
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_calls: list[dict[str, Any]] = []
+        refusal_text: str | None = None
+        annotations: list[dict[str, Any]] = []
 
-        return openai_choice
+        for part in content_parts:
+            if is_text_part(part):
+                text_parts.append(part["text"])
+            elif is_reasoning_part(part):
+                reasoning_parts.append(part.get("reasoning", ""))
+            elif is_tool_call_part(part):
+                tool_calls.append(self.tool_ops.ir_tool_call_to_p(part))
+            elif is_refusal_part(part):
+                refusal_text = part.get("refusal", "")
+            elif is_citation_part(part):
+                ann = self.content_ops.ir_citation_to_p(part)
+                if ann:
+                    annotations.append(ann)
+        return text_parts, reasoning_parts, tool_calls, refusal_text, annotations
 
     def _extract_system_and_messages(
         self, messages: list[Any]

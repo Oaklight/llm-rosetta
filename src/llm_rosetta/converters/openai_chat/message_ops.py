@@ -54,6 +54,83 @@ def _has_multimodal_content(result: Any) -> bool:
     )
 
 
+def _restore_reasoning_metadata(
+    target: dict[str, Any], content_parts: Sequence[Any]
+) -> None:
+    """Copy openai_chat reasoning_details / encrypted_content onto ``target``.
+
+    Scans ``content_parts`` for the first reasoning part carrying
+    ``provider_metadata["openai_chat"]`` and mutates ``target`` in-place so
+    the assistant message / choice payload preserves upstream reasoning
+    context on IR → provider conversion.
+    """
+    for part in content_parts:
+        if not is_reasoning_part(part):
+            continue
+        pm = part.get("provider_metadata", {}).get("openai_chat", {})
+        if "reasoning_details" in pm:
+            target["reasoning_details"] = pm["reasoning_details"]
+        if "encrypted_content" in pm:
+            target["encrypted_content"] = pm["encrypted_content"]
+        return
+
+
+def _parse_synthetic_tool_content_msg(
+    msg: dict[str, Any],
+    unpacked: dict[str, list[dict[str, Any]]],
+) -> None:
+    """Parse a single synthetic ``<tool-content>`` message into ``unpacked``.
+
+    Walks the message's content parts, tracks the current ``call_id``
+    section, and appends non-tag blocks to ``unpacked[call_id]``.  Handles
+    unclosed sections defensively.
+    """
+    content = msg.get("content", [])
+    current_call_id: str | None = None
+    current_blocks: list[dict[str, Any]] = []
+
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+        section_change = _handle_synthetic_tag(
+            part, unpacked, current_call_id, current_blocks
+        )
+        if section_change is not None:
+            current_call_id, current_blocks = section_change
+            continue
+        if current_call_id is not None:
+            current_blocks.append(part)
+
+    if current_call_id and current_blocks:
+        unpacked[current_call_id] = current_blocks
+
+
+def _handle_synthetic_tag(
+    part: dict[str, Any],
+    unpacked: dict[str, list[dict[str, Any]]],
+    current_call_id: str | None,
+    current_blocks: list[dict[str, Any]],
+) -> tuple[str | None, list[dict[str, Any]]] | None:
+    """Return the new (call_id, blocks) state if ``part`` is an open/close tag.
+
+    Returns ``None`` when the part is not a synthetic tag, signalling the
+    caller to treat it as a regular content block.
+    """
+    if part.get("type") != "text":
+        return None
+    text = part.get("text", "")
+    open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
+    if open_match:
+        if current_call_id and current_blocks:
+            unpacked[current_call_id] = current_blocks
+        return open_match.group(1), []
+    if text == TOOL_CONTENT_CLOSE_TAG:
+        if current_call_id and current_blocks:
+            unpacked[current_call_id] = current_blocks
+        return None, []
+    return None
+
+
 class OpenAIChatMessageOps(BaseMessageOps):
     """OpenAI Chat Completions message conversion operations.
 
@@ -134,6 +211,27 @@ class OpenAIChatMessageOps(BaseMessageOps):
         Returns:
             Reordered message list.
         """
+        tool_msgs, non_tool = OpenAIChatMessageOps._split_tool_and_non_tool(messages)
+        if not tool_msgs:
+            return messages
+
+        tool_by_id = OpenAIChatMessageOps._index_tools_by_call_id(tool_msgs)
+        result = OpenAIChatMessageOps._rebuild_with_tool_pairing(
+            non_tool, tool_by_id, tool_msgs, warnings
+        )
+
+        if result != messages:
+            warnings.append(
+                "Reordered tool messages to follow assistant tool_calls "
+                "(workaround for Codex CLI item ordering)"
+            )
+        return result
+
+    @staticmethod
+    def _split_tool_and_non_tool(
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Partition ``messages`` into (tool-role, non-tool-role) preserving order."""
         tool_msgs: list[dict[str, Any]] = []
         non_tool: list[dict[str, Any]] = []
         for m in messages:
@@ -141,47 +239,51 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 tool_msgs.append(m)
             else:
                 non_tool.append(m)
+        return tool_msgs, non_tool
 
-        if not tool_msgs:
-            return messages
-
-        # Group tool messages by tool_call_id
+    @staticmethod
+    def _index_tools_by_call_id(
+        tool_msgs: list[dict[str, Any]],
+    ) -> dict[str, list[dict[str, Any]]]:
+        """Group tool messages by ``tool_call_id`` (skipping entries without one)."""
         tool_by_id: dict[str, list[dict[str, Any]]] = {}
         for tm in tool_msgs:
             tcid = tm.get("tool_call_id")
             if tcid:
                 tool_by_id.setdefault(tcid, []).append(tm)
+        return tool_by_id
 
-        # Rebuild: after each assistant message with tool_calls, insert
-        # matching tool messages in tool_calls order.
+    @staticmethod
+    def _rebuild_with_tool_pairing(
+        non_tool: list[dict[str, Any]],
+        tool_by_id: dict[str, list[dict[str, Any]]],
+        tool_msgs: list[dict[str, Any]],
+        warnings: list[str],
+    ) -> list[dict[str, Any]]:
+        """Reassemble message list, placing tool results after their assistant call."""
         result: list[dict[str, Any]] = []
         matched_ids: set[int] = set()
         for m in non_tool:
             result.append(m)
-            if m.get("role") == "assistant" and "tool_calls" in m:
-                for tc in m["tool_calls"]:
-                    tcid = tc.get("id")
-                    if tcid and tcid in tool_by_id:
-                        for tool_msg in tool_by_id[tcid]:
-                            result.append(tool_msg)
-                            matched_ids.add(id(tool_msg))
+            if m.get("role") != "assistant" or "tool_calls" not in m:
+                continue
+            for tc in m["tool_calls"]:
+                tcid = tc.get("id")
+                if not tcid or tcid not in tool_by_id:
+                    continue
+                for tool_msg in tool_by_id[tcid]:
+                    result.append(tool_msg)
+                    matched_ids.add(id(tool_msg))
 
-        # Append unmatched tool messages at end (don't silently drop them)
         for tm in tool_msgs:
-            if id(tm) not in matched_ids:
-                tcid = tm.get("tool_call_id")
-                warnings.append(
-                    f"Tool message with tool_call_id='{tcid}' has no matching "
-                    "assistant tool_calls entry"
-                )
-                result.append(tm)
-
-        if result != messages:
+            if id(tm) in matched_ids:
+                continue
+            tcid = tm.get("tool_call_id")
             warnings.append(
-                "Reordered tool messages to follow assistant tool_calls "
-                "(workaround for Codex CLI item ordering)"
+                f"Tool message with tool_call_id='{tcid}' has no matching "
+                "assistant tool_calls entry"
             )
-
+            result.append(tm)
         return result
 
     def _ir_message_to_p(
@@ -285,16 +387,46 @@ class OpenAIChatMessageOps(BaseMessageOps):
         result_messages.extend(tool_messages)
         return result_messages, warnings
 
-    def _ir_assistant_to_p(  # noqa: C901
+    def _ir_assistant_to_p(
         self, content: list, warnings: list[str]
     ) -> tuple[dict[str, Any], list[str]]:
         """Convert IR assistant message content to OpenAI assistant message.
 
         Text parts are concatenated. Tool calls are collected into tool_calls list.
         """
+        text_parts, tool_calls, refusal_text, reasoning_text = (
+            self._classify_assistant_parts(content, warnings)
+        )
+
+        openai_message: dict[str, Any] = {"role": "assistant"}
+
+        if reasoning_text is not None:
+            openai_message["reasoning_content"] = reasoning_text
+            _restore_reasoning_metadata(openai_message, content)
+
+        if text_parts:
+            openai_message["content"] = " ".join(text_parts)
+
+        if tool_calls:
+            openai_message["tool_calls"] = tool_calls
+            if not text_parts:
+                openai_message["content"] = None
+
+        if not text_parts and not tool_calls:
+            openai_message["content"] = ""
+
+        if refusal_text is not None:
+            openai_message["refusal"] = refusal_text
+
+        return openai_message, warnings
+
+    def _classify_assistant_parts(
+        self, content: list, warnings: list[str]
+    ) -> tuple[list[str], list[dict[str, Any]], str | None, str | None]:
+        """Split IR assistant content into (text, tool_calls, refusal, reasoning)."""
         text_parts: list[str] = []
         tool_calls: list[dict[str, Any]] = []
-        refusal_text = None
+        refusal_text: str | None = None
         reasoning_text: str | None = None
 
         for part in content:
@@ -313,41 +445,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 warnings.append(
                     f"Unsupported content part type in assistant message: {part.get('type')}"
                 )
-
-        openai_message: dict[str, Any] = {"role": "assistant"}
-
-        # Set reasoning content (DeepSeek / extended OpenAI Chat providers)
-        if reasoning_text is not None:
-            openai_message["reasoning_content"] = reasoning_text
-            # Restore reasoning_details / encrypted_content from provider_metadata
-            for part in content:
-                if is_reasoning_part(part):
-                    pm = part.get("provider_metadata", {}).get("openai_chat", {})
-                    if "reasoning_details" in pm:
-                        openai_message["reasoning_details"] = pm["reasoning_details"]
-                    if "encrypted_content" in pm:
-                        openai_message["encrypted_content"] = pm["encrypted_content"]
-                    break
-
-        # Set text content
-        if text_parts:
-            openai_message["content"] = " ".join(text_parts)
-
-        # Set tool calls
-        if tool_calls:
-            openai_message["tool_calls"] = tool_calls
-            if not text_parts:
-                openai_message["content"] = None
-
-        # OpenAI requires assistant messages to have content or tool_calls
-        if not text_parts and not tool_calls:
-            openai_message["content"] = ""
-
-        # Set refusal if present
-        if refusal_text is not None:
-            openai_message["refusal"] = refusal_text
-
-        return openai_message, warnings
+        return text_parts, tool_calls, refusal_text, reasoning_text
 
     def _ir_tool_messages_to_p(
         self,
@@ -772,44 +870,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             if not OpenAIChatMessageOps._is_synthetic_tool_content_msg(msg):
                 clean.append(msg)
                 continue
-
-            # Parse <tool-content call-id="..."> sections
-            content = msg.get("content", [])
-            current_call_id: str | None = None
-            current_blocks: list[dict[str, Any]] = []
-
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-
-                if part.get("type") == "text":
-                    text = part.get("text", "")
-
-                    # Check for open tag
-                    open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
-                    if open_match:
-                        # Save previous section if any
-                        if current_call_id and current_blocks:
-                            unpacked[current_call_id] = current_blocks
-                        current_call_id = open_match.group(1)
-                        current_blocks = []
-                        continue
-
-                    # Check for close tag
-                    if text == TOOL_CONTENT_CLOSE_TAG:
-                        if current_call_id and current_blocks:
-                            unpacked[current_call_id] = current_blocks
-                        current_call_id = None
-                        current_blocks = []
-                        continue
-
-                # Content block within a section
-                if current_call_id is not None:
-                    current_blocks.append(part)
-
-            # Handle unclosed section
-            if current_call_id and current_blocks:
-                unpacked[current_call_id] = current_blocks
+            _parse_synthetic_tool_content_msg(msg, unpacked)
 
         return unpacked, clean
 

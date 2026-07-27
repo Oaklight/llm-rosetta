@@ -262,14 +262,8 @@ def sanitize_schema(
 # ---- nullable → type-array conversion ----
 
 
-def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
-    """Recursively convert ``"nullable": true`` to standard JSON Schema type arrays.
-
-    Transforms ``{"type": "string", "nullable": true}`` into
-    ``{"type": ["string", "null"]}`` and removes the ``nullable`` key.
-    When ``type`` is already a list, appends ``"null"`` if absent.
-    When ``type`` is missing, only strips the ``nullable`` key.
-    """
+def _rewrite_nullable_children(schema: dict[str, Any]) -> dict[str, Any]:
+    """Rewrite child schemas while stripping the current nullable marker."""
     result: dict[str, Any] = {}
     for key, value in schema.items():
         if key == "nullable":
@@ -283,23 +277,38 @@ def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
             ]
         else:
             result[key] = value
+    return result
 
+
+def _apply_nullable_marker(result: dict[str, Any]) -> None:
+    """Fold a nullable marker into a type or union schema."""
+    if "type" in result:
+        current_type = result["type"]
+        if isinstance(current_type, str):
+            result["type"] = [current_type, "null"]
+        elif isinstance(current_type, list) and "null" not in current_type:
+            result["type"] = [*current_type, "null"]
+        return
+    for kw in ("anyOf", "oneOf"):
+        if kw in result and isinstance(result[kw], list):
+            null_variant = {"type": "null"}
+            if null_variant not in result[kw]:
+                result[kw] = [*result[kw], null_variant]
+            break
+
+
+def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
+    """Recursively convert ``"nullable": true`` to standard JSON Schema type arrays.
+
+    Transforms ``{"type": "string", "nullable": true}`` into
+    ``{"type": ["string", "null"]}`` and removes the ``nullable`` key.
+    When ``type`` is already a list, appends ``"null"`` if absent.
+    When ``type`` is missing, only strips the ``nullable`` key (but injects a
+    null variant into ``anyOf``/``oneOf`` if one is present).
+    """
+    result = _rewrite_nullable_children(schema)
     if schema.get("nullable") is True:
-        if "type" in result:
-            current_type = result["type"]
-            if isinstance(current_type, str):
-                result["type"] = [current_type, "null"]
-            elif isinstance(current_type, list) and "null" not in current_type:
-                result["type"] = [*current_type, "null"]
-        else:
-            # No type field — inject null variant into anyOf/oneOf if present
-            for kw in ("anyOf", "oneOf"):
-                if kw in result and isinstance(result[kw], list):
-                    null_variant = {"type": "null"}
-                    if null_variant not in result[kw]:
-                        result[kw] = [*result[kw], null_variant]
-                    break
-
+        _apply_nullable_marker(result)
     return result
 
 
