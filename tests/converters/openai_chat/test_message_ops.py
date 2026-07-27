@@ -331,6 +331,39 @@ class TestOpenAIChatMessageOps:
         assert parts[1]["type"] == "text"
         assert parts[1]["text"] == "The answer is 42"
 
+    def test_empty_reasoning_content_tool_call_round_trip(self):
+        """Test explicit empty reasoning_content survives a tool call round-trip."""
+        provider_messages = [
+            {
+                "role": "assistant",
+                "reasoning_content": "",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "get_weather",
+                            "arguments": '{"city": "NYC"}',
+                        },
+                    }
+                ],
+            }
+        ]
+
+        ir_messages = cast(
+            list[Message], self.message_ops.p_messages_to_ir(provider_messages)
+        )
+        restored, warnings = self.message_ops.ir_messages_to_p(ir_messages)
+
+        assert warnings == []
+        assert ir_messages[0]["content"][0] == {
+            "type": "reasoning",
+            "reasoning": "",
+        }
+        assert restored[0]["reasoning_content"] == ""
+        assert restored[0]["tool_calls"][0]["id"] == "call_1"
+
     def test_reasoning_content_p_to_ir_no_reasoning(self):
         """Test standard assistant message without reasoning_content."""
         messages = [{"role": "assistant", "content": "Hello"}]

@@ -619,7 +619,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         # Handle reasoning_content (DeepSeek / extended OpenAI Chat providers)
         # Prepend before text content to match convention (reasoning first)
         reasoning_content = msg.get("reasoning_content")
-        if reasoning_content:
+        if reasoning_content is not None:
             reasoning_part = self.content_ops.p_reasoning_to_ir(reasoning_content)
             # Preserve reasoning_details and encrypted_content in provider_metadata
             meta: dict[str, Any] = {}
