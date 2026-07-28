@@ -639,11 +639,13 @@ class TestAnthropicConverter:
         assert events[0]["type"] == "usage"
         assert events[0]["usage"]["prompt_tokens"] == 100
 
-    def test_stream_ping_ignored(self):
-        """Test ping event is ignored."""
+    def test_stream_ping_passthrough(self):
+        """Ping is preserved as a provider passthrough event."""
         event = {"type": "ping"}
         events = self.converter.stream_response_from_provider(event)
-        assert len(events) == 0
+        assert events == [
+            {"type": "provider_passthrough", "provider": "anthropic", "payload": event}
+        ]
 
     def test_stream_content_block_stop_ignored(self):
         """Test content_block_stop is ignored."""

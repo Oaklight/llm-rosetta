@@ -260,11 +260,17 @@ class TestStreamResponseFromProvider:
         events = self.converter.stream_response_from_provider(event)
         assert events == []
 
-    def test_response_in_progress_ignored(self):
-        """response.in_progress produces no events."""
+    def test_response_in_progress_passthrough(self):
+        """response.in_progress is preserved as a passthrough event."""
         event = {"type": "response.in_progress", "response": {}}
         events = self.converter.stream_response_from_provider(event)
-        assert events == []
+        assert events == [
+            {
+                "type": "provider_passthrough",
+                "provider": "openai_responses",
+                "payload": event,
+            }
+        ]
 
     def test_output_item_done_ignored(self):
         """response.output_item.done produces no events."""

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import cast
+from typing import Any, cast
 
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.converters.base import BaseConverter
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.base.context import ConversionContext, StreamContext
+from llm_rosetta.pipeline import StreamProcessor
 from llm_rosetta.converters.base.helpers.tool_orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
@@ -15,7 +16,9 @@ from llm_rosetta.converters.google_genai.converter import GoogleGenAIConverter
 from llm_rosetta.types.ir import (
     IRInputItem,
     IRResponse,
+    ProviderPassthroughEvent,
     ProviderPassthroughItem,
+    is_provider_passthrough_event,
     is_provider_passthrough_item,
 )
 from llm_rosetta.types.ir.validation import (
@@ -35,6 +38,15 @@ def _item(provider: str = "openai_responses", position: int = 1):
 
 
 class TestPassthroughTypes:
+    def test_event_type_guard(self):
+        event = ProviderPassthroughEvent(
+            type="provider_passthrough",
+            provider="anthropic",
+            payload={"type": "ping"},
+        )
+        assert is_provider_passthrough_event(event)
+        assert not is_provider_passthrough_event({"type": "text_delta", "text": "x"})
+
     def test_item_type_guard(self):
         item = _item()
         assert is_provider_passthrough_item(item)
@@ -66,6 +78,74 @@ class TestPassthroughTypes:
         assert (
             response["provider_passthrough_items"][0]["provider"] == "openai_responses"
         )
+
+
+class TestStreamPassthrough:
+    def test_anthropic_ping_emits_passthrough(self):
+        chunk = {"type": "ping"}
+        events = AnthropicConverter().stream_response_from_provider(chunk)
+        assert events == [
+            {
+                "type": "provider_passthrough",
+                "provider": "anthropic",
+                "payload": chunk,
+            }
+        ]
+        passthrough = cast(ProviderPassthroughEvent, events[0])
+        assert passthrough["payload"] is not chunk
+
+    def test_responses_in_progress_emits_passthrough(self):
+        chunk = {
+            "type": "response.in_progress",
+            "sequence_number": 3,
+            "response": {"id": "resp_1", "status": "in_progress"},
+        }
+        events = OpenAIResponsesConverter().stream_response_from_provider(chunk)
+        assert events == [
+            {
+                "type": "provider_passthrough",
+                "provider": "openai_responses",
+                "payload": chunk,
+            }
+        ]
+        passthrough = cast(ProviderPassthroughEvent, events[0])
+        assert passthrough["payload"] is not chunk
+
+    def test_same_format_restores_copy(self):
+        converter = AnthropicConverter()
+        event = ProviderPassthroughEvent(
+            type="provider_passthrough",
+            provider="anthropic",
+            payload={"type": "ping"},
+        )
+        restored = converter.stream_response_to_provider(event)
+        assert restored == {"type": "ping"}
+        assert restored is not event["payload"]
+
+    def test_cross_format_drops_event(self):
+        event = ProviderPassthroughEvent(
+            type="provider_passthrough",
+            provider="anthropic",
+            payload={"type": "ping"},
+        )
+        ctx = StreamContext()
+        assert OpenAIResponsesConverter().stream_response_to_provider(event, ctx) == {}
+        upgraded = ctx.metadata.get("_responses_stream_ctx")
+        assert upgraded is None or upgraded._sequence_number == 0
+
+    def test_responses_same_format_rewrites_sequence_number(self):
+        converter = OpenAIResponsesConverter()
+        ctx = converter.create_stream_context()
+        event = ProviderPassthroughEvent(
+            type="provider_passthrough",
+            provider="openai_responses",
+            payload={"type": "response.in_progress", "sequence_number": 99},
+        )
+        restored = cast(
+            dict[str, Any], converter.stream_response_to_provider(event, ctx)
+        )
+        assert restored["sequence_number"] == 1
+        assert event["payload"]["sequence_number"] == 99
 
 
 class TestNonStreamPassthroughHelpers:
@@ -326,3 +406,42 @@ class TestNonStreamPassthroughHelpers:
         )
         assert [entry["type"] for entry in merged] == ["message", "vendor_event"]
         assert warnings == []
+
+
+class TestStreamProcessorPassthrough:
+    def test_same_format_forwards_passthrough(self):
+        target = OpenAIResponsesConverter()
+        source = OpenAIResponsesConverter()
+        processor = StreamProcessor(
+            target_converter=target,
+            source_converter=source,
+            from_ctx=target.create_stream_context(),
+            to_ctx=source.create_stream_context(),
+        )
+        result = processor.process_chunk(
+            {
+                "type": "response.in_progress",
+                "sequence_number": 8,
+                "response": {"id": "resp_1", "status": "in_progress"},
+            }
+        )
+        assert result[0]["type"] == "response.in_progress"
+        assert result[0]["sequence_number"] == 1
+
+    def test_cross_format_drops_passthrough(self):
+        target = OpenAIResponsesConverter()
+        source = AnthropicConverter()
+        processor = StreamProcessor(
+            target_converter=target,
+            source_converter=source,
+            from_ctx=target.create_stream_context(),
+            to_ctx=source.create_stream_context(),
+        )
+        result = processor.process_chunk(
+            {
+                "type": "response.in_progress",
+                "sequence_number": 8,
+                "response": {"id": "resp_1", "status": "in_progress"},
+            }
+        )
+        assert result == []

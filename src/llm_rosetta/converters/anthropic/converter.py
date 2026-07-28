@@ -804,6 +804,7 @@ class AnthropicConverter(BaseConverter):
             events.append(StreamEndEvent(type="stream_end"))
 
     _FROM_P_DISPATCH: dict[str, str] = {
+        AnthropicEventType.PING: "_handle_provider_passthrough_from_p",
         AnthropicEventType.MESSAGE_START: "_handle_message_start_from_p",
         AnthropicEventType.CONTENT_BLOCK_START: "_handle_content_block_start_from_p",
         AnthropicEventType.CONTENT_BLOCK_DELTA: "_handle_content_block_delta_from_p",

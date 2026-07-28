@@ -86,7 +86,7 @@ from .messages import (
 )
 
 # 内容部分类型 Content part types
-from .passthrough import ProviderPassthroughItem
+from .passthrough import ProviderPassthroughEvent, ProviderPassthroughItem
 from .parts import (
     AssistantContentPart,
     AudioData,
@@ -160,6 +160,7 @@ from .type_guards import (  # noqa: F401
     is_tool_call_start_event,
     is_tool_result_part,
     is_usage_event,
+    is_provider_passthrough_event,
     is_provider_passthrough_item,
     isinstance_part,
 )
@@ -227,11 +228,13 @@ __all__ = [
     "IRResponse",
     "ExtensionItem",
     "ProviderPassthroughItem",
+    "ProviderPassthroughEvent",
     "UsageInfo",
     "FinishReason",
     "ChoiceInfo",
     # ========== 流式事件类型 Stream event types ==========
     "IRStreamEvent",
+    "is_provider_passthrough_event",
     "is_provider_passthrough_item",
     "StreamStartEvent",
     "StreamEndEvent",

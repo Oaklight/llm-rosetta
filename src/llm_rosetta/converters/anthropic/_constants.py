@@ -25,6 +25,7 @@ ANTHROPIC_REASON_TO_PROVIDER: dict[str, str] = {
 class AnthropicEventType:
     """Anthropic Messages API server-sent event type constants."""
 
+    PING = "ping"
     MESSAGE_START = "message_start"
     CONTENT_BLOCK_START = "content_block_start"
     CONTENT_BLOCK_DELTA = "content_block_delta"

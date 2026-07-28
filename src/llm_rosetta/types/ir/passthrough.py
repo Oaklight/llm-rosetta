@@ -11,6 +11,14 @@ else:
     from typing_extensions import NotRequired, Required, TypedDict
 
 
+class ProviderPassthroughEvent(TypedDict):
+    """Opaque provider-native streaming event."""
+
+    type: Required[Literal["provider_passthrough"]]
+    provider: Required[str]
+    payload: Required[dict[str, Any]]
+
+
 class ProviderPassthroughItem(TypedDict):
     """Opaque provider-native non-streaming item."""
 
@@ -20,4 +28,4 @@ class ProviderPassthroughItem(TypedDict):
     position: NotRequired[int]
 
 
-__all__ = ["ProviderPassthroughItem"]
+__all__ = ["ProviderPassthroughEvent", "ProviderPassthroughItem"]
