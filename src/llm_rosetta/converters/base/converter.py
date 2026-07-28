@@ -305,7 +305,11 @@ class BaseConverter(ABC):
         event: ProviderPassthroughEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
-        """Restore opaque events only for the originating converter dialect."""
+        """Restore opaque events only for the originating converter dialect.
+
+        Cross-format drops return an empty dict by convention; StreamProcessor
+        filters falsy provider chunks from its output list.
+        """
         if event["provider"] != self._CONVERTER_TAG:
             return {}
         return dict(event["payload"])

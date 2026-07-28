@@ -341,7 +341,11 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     @classmethod
     def is_portable_response_output_item(cls, item: Any) -> bool:
-        """Return whether non-stream response conversion rebuilds this item."""
+        """Return whether non-stream response conversion rebuilds this item.
+
+        Add newly portable Responses output item types here; otherwise they
+        are deliberately captured as ``ProviderPassthroughItem`` values.
+        """
         if not isinstance(item, dict):
             return False
         item_type = item.get("type")
