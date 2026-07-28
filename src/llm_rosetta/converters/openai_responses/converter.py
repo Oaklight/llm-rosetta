@@ -1089,6 +1089,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(StreamEndEvent(type="stream_end"))
 
     _FROM_P_DISPATCH: dict[str, str] = {
+        ResponsesEventType.RESPONSE_IN_PROGRESS: "_handle_provider_passthrough_from_p",
         ResponsesEventType.RESPONSE_CREATED: "_handle_response_created_from_p",
         ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_output_text_delta_from_p",
         ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_reasoning_delta_from_p",

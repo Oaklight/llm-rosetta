@@ -52,6 +52,7 @@ from .ir import (
     # Response types
     IRResponse,
     ProviderPassthroughItem,
+    ProviderPassthroughEvent,
     ExtensionItem,
     UsageInfo,
     FinishReason,
@@ -119,6 +120,7 @@ __all__ = [
     # Response types
     "IRResponse",
     "ProviderPassthroughItem",
+    "ProviderPassthroughEvent",
     "ExtensionItem",
     "UsageInfo",
     "FinishReason",

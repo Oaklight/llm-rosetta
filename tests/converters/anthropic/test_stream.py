@@ -239,11 +239,13 @@ class TestStreamResponseFromProvider:
         events = self.converter.stream_response_from_provider(event)
         assert events == []
 
-    def test_ping_ignored(self):
-        """ping produces no events."""
+    def test_ping_passthrough(self):
+        """Ping is preserved as a provider passthrough event."""
         event = {"type": "ping"}
         events = self.converter.stream_response_from_provider(event)
-        assert events == []
+        assert events == [
+            {"type": "provider_passthrough", "provider": "anthropic", "payload": event}
+        ]
 
     # --- SDK object normalization ---
 

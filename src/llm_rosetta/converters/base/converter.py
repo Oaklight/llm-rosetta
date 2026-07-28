@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
+from ...types.ir.passthrough import ProviderPassthroughEvent
 from ...types.ir.request import IRInputItem, IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import IRStreamEvent
@@ -71,6 +72,7 @@ class BaseConverter(ABC):
         "tool_call_delta": "_handle_tool_call_delta_to_p",
         "finish": "_handle_finish_to_p",
         "usage": "_handle_usage_to_p",
+        "provider_passthrough": "_handle_provider_passthrough_to_p",
     }
 
     # ==================== 顶层转换接口 Top-level conversion interface ====================
@@ -282,6 +284,31 @@ class BaseConverter(ABC):
             return {}
         result = getattr(self, handler_name)(event, context)
         return self._post_process_to_provider(result, event, context)
+
+    def _handle_provider_passthrough_from_p(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Wrap a provider-native chunk in a generic passthrough event."""
+        events.append(
+            ProviderPassthroughEvent(
+                type="provider_passthrough",
+                provider=self._CONVERTER_TAG,
+                payload=dict(chunk),
+            )
+        )
+
+    def _handle_provider_passthrough_to_p(
+        self,
+        event: ProviderPassthroughEvent,
+        context: StreamContext | None,
+    ) -> dict[str, Any]:
+        """Restore opaque events only for the originating converter dialect."""
+        if event["provider"] != self._CONVERTER_TAG:
+            return {}
+        return dict(event["payload"])
 
     def _post_process_to_provider(
         self,

@@ -37,6 +37,7 @@ if sys.version_info >= (3, 11):
 else:
     from typing_extensions import NotRequired, Required, TypedDict
 
+from .passthrough import ProviderPassthroughEvent
 from .response import FinishReason, UsageInfo
 
 # ============================================================================
@@ -186,6 +187,7 @@ IRStreamEvent = Union[
     ToolCallDeltaEvent,
     FinishEvent,
     UsageEvent,
+    ProviderPassthroughEvent,
 ]
 
 # ============================================================================
@@ -203,5 +205,6 @@ __all__ = [
     "ToolCallDeltaEvent",
     "FinishEvent",
     "UsageEvent",
+    "ProviderPassthroughEvent",
     "IRStreamEvent",
 ]
