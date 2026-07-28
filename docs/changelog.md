@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增
+
+- **通用 provider passthrough IR carrier**：`ProviderPassthroughEvent` 保留 provider 原生流式 chunk；`ProviderPassthroughItem` 保留非流式请求/历史 item；`IRResponse.provider_passthrough_items` 按原始位置保留独立输出 item。目标 converter dialect 相同时恢复 payload 副本，跨格式转换会安全丢弃不支持的 item。`ConversionContext` 继续作为单次管线内的临时 metadata/state side channel。
+
 ## v0.7.3 — 2026-07-25
 
 ### 新增
