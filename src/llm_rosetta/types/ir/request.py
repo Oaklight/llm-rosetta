@@ -11,7 +11,7 @@ Unified request parameter types based on sdk_body_structures.md
 """
 
 import sys
-from typing import Any
+from typing import Any, Union
 
 if sys.version_info >= (3, 11):
     from typing import NotRequired, Required, TypedDict
@@ -25,9 +25,13 @@ from .configs import (
     ResponseFormatConfig,
     StreamConfig,
 )
+from .extensions_experimental import ExtensionItem
 from .messages import Message
+from .passthrough import ProviderPassthroughItem
 from .parts import TextPart
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition
+
+IRInputItem = Union[Message, ExtensionItem, ProviderPassthroughItem]
 
 # ============================================================================
 # 主请求类型 Main Request Type
@@ -56,7 +60,7 @@ class IRRequest(TypedDict):
 
     # ========== 必需字段 Required Fields ==========
     model: Required[str]
-    messages: Required[list[Message]]
+    messages: Required[list[IRInputItem]]
 
     # ========== 系统指令 System Instruction ==========
     # 映射关系:
@@ -106,5 +110,6 @@ class IRRequest(TypedDict):
 
 __all__ = [
     # 主请求类型
+    "IRInputItem",
     "IRRequest",
 ]

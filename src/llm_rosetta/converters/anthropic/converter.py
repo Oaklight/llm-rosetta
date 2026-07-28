@@ -19,8 +19,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
-    ExtensionItem,
-    Message,
+    IRInputItem,
     TextPart,
     is_text_part,
     is_tool_call_part,
@@ -125,6 +124,7 @@ class AnthropicConverter(BaseConverter):
         message_kwargs: dict[str, Any] = {}
         if ctx and "reasoning_cap" in ctx.options:
             message_kwargs["reasoning_cap"] = ctx.options["reasoning_cap"]
+        message_kwargs["target_provider"] = self._CONVERTER_TAG
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
             ir_messages, **message_kwargs
         )
@@ -372,6 +372,12 @@ class AnthropicConverter(BaseConverter):
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
             self._apply_preserve_metadata(provider_response, ctx)
+        self._restore_response_passthrough_items(
+            provider_response,
+            ir_response,
+            output_key="content",
+            context=ctx,
+        )
 
         return provider_response
 
@@ -538,7 +544,7 @@ class AnthropicConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Sequence[Message | ExtensionItem],
+        messages: Sequence[IRInputItem],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -553,6 +559,7 @@ class AnthropicConverter(BaseConverter):
         Returns:
             Tuple of (converted messages, warnings).
         """
+        kwargs["target_provider"] = self._CONVERTER_TAG
         return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
@@ -561,7 +568,7 @@ class AnthropicConverter(BaseConverter):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Convert Anthropic messages to IR message list.
 
         Delegates to message_ops.

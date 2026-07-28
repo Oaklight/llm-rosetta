@@ -47,9 +47,11 @@ from .ir import (
     ReasoningConfig,
     CacheConfig,
     # Request types
+    IRInputItem,
     IRRequest,
     # Response types
     IRResponse,
+    ProviderPassthroughItem,
     ExtensionItem,
     UsageInfo,
     FinishReason,
@@ -112,9 +114,11 @@ __all__ = [
     "ReasoningConfig",
     "CacheConfig",
     # Request types
+    "IRInputItem",
     "IRRequest",
     # Response types
     "IRResponse",
+    "ProviderPassthroughItem",
     "ExtensionItem",
     "UsageInfo",
     "FinishReason",

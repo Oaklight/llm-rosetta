@@ -17,7 +17,7 @@ from typing import Any, cast
 
 from ...types.ir import (
     ContentPart,
-    ExtensionItem,
+    IRInputItem,
     Message,
     TextPart,
     is_extension_item,
@@ -54,7 +54,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Sequence[Message | ExtensionItem],
+        ir_messages: Sequence[IRInputItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Responses input items.
@@ -73,6 +73,14 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         warnings: list[str] = []
 
         for item in ir_messages:
+            passthrough_warnings = self._restore_provider_passthrough_item(
+                item,
+                items,
+                target_provider=kwargs.get("target_provider", ""),
+            )
+            if passthrough_warnings is not None:
+                warnings.extend(passthrough_warnings)
+                continue
             if is_message(item):
                 converted, msg_warnings = self._ir_message_to_p(cast(Message, item))
                 warnings.extend(msg_warnings)
@@ -331,11 +339,21 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
     _TOOL_RESULT_TYPES = frozenset({"function_call_output", "mcp_call_output"})
 
+    @classmethod
+    def is_portable_response_output_item(cls, item: Any) -> bool:
+        """Return whether non-stream response conversion rebuilds this item."""
+        if not isinstance(item, dict):
+            return False
+        item_type = item.get("type")
+        return (
+            item_type in {"message", "reasoning"} or item_type in cls._TOOL_CALL_TYPES
+        )
+
     def p_messages_to_ir(
         self,
         provider_messages: list[Any],
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """OpenAI Responses items → IR Messages.
 
         Converts a flat list of Responses API items to IR messages.

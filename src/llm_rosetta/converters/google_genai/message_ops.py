@@ -19,7 +19,7 @@ from typing import Any, cast
 
 from ...types.ir import (
     ContentPart,
-    ExtensionItem,
+    IRInputItem,
     Message,
     is_audio_part,
     is_extension_item,
@@ -72,7 +72,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Sequence[Message | ExtensionItem],
+        ir_messages: Sequence[IRInputItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → Google GenAI Content list + system_instruction.
@@ -105,6 +105,14 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         )
 
         for item in ir_input_list:
+            passthrough_warnings = self._restore_provider_passthrough_item(
+                item,
+                contents,
+                target_provider=kwargs.get("target_provider", ""),
+            )
+            if passthrough_warnings is not None:
+                warnings_list.extend(passthrough_warnings)
+                continue
             if is_message(item):
                 msg = cast(Message, item)
                 role = msg.get("role")
@@ -191,7 +199,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         self,
         provider_messages: list[Any],
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Google GenAI Content list → IR Messages.
 
         Converts each Google Content to the appropriate IR message type.
@@ -207,7 +215,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: list[Message | ExtensionItem] = []
+        ir_messages: list[IRInputItem] = []
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)
@@ -226,7 +234,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     @staticmethod
     def _reconcile_tool_call_ids(
-        ir_messages: Sequence[Message | ExtensionItem],
+        ir_messages: Sequence[IRInputItem],
     ) -> None:
         """Match tool_result tool_call_ids to tool_call tool_call_ids by name.
 
@@ -377,8 +385,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     @staticmethod
     def extract_system_instruction(
-        ir_messages: Sequence[Message | ExtensionItem],
-    ) -> tuple[Any, list[Message | ExtensionItem]]:
+        ir_messages: Sequence[IRInputItem],
+    ) -> tuple[Any, list[IRInputItem]]:
         """Extract system messages from IR message list.
 
         Returns the system_instruction Content dict and the remaining
@@ -391,7 +399,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             Tuple of (system_instruction Content dict or None, remaining messages).
         """
         system_instruction: dict[str, Any] | None = None
-        remaining: list[Message | ExtensionItem] = []
+        remaining: list[IRInputItem] = []
 
         for item in ir_messages:
             if is_message(item) and item.get("role") == "system":

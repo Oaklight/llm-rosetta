@@ -141,7 +141,7 @@ class TestOpenAIChatConverter:
         result = self.converter.request_from_provider(provider_request)
         assert result["model"] == "gpt-4o"
         assert result["system_instruction"] == [{"type": "text", "text": "Be helpful"}]
-        messages = list(result["messages"])
+        messages = cast(list[Message], result["messages"])
         assert len(messages) == 1
         assert messages[0]["role"] == "user"
 

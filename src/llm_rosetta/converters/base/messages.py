@@ -18,11 +18,12 @@ Note: This layer will call methods from content.py and tools.py to handle messag
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Union
+from typing import Any
 
 from ..._vendor.validate import ValidationError, validate
-from ...types.ir.extensions_experimental import ExtensionItem
-from ...types.ir.messages import Message
+from ...types.ir.request import IRInputItem
+from ...types.ir.type_guards import is_provider_passthrough_item
+from .passthrough import restore_provider_passthrough_item
 
 
 class BaseMessageOps(ABC):
@@ -33,12 +34,29 @@ class BaseMessageOps(ABC):
     Handles conversion of complete messages (role + content), serving as a bridge between content layer and request/response layer.
     """
 
+    def _restore_provider_passthrough_item(
+        self,
+        item: IRInputItem,
+        output: list[Any],
+        *,
+        target_provider: str,
+    ) -> list[str] | None:
+        """Restore a matching provider item, or return None if not passthrough."""
+        if not is_provider_passthrough_item(item):
+            return None
+        payload, warning = restore_provider_passthrough_item(
+            item, target_provider=target_provider
+        )
+        if payload is not None:
+            output.append(payload)
+        return [warning] if warning is not None else []
+
     # ==================== 批量消息转换 Batch message conversion ====================
 
     @staticmethod
     @abstractmethod
     def ir_messages_to_p(
-        ir_messages: Sequence[Message | ExtensionItem], **kwargs: Any
+        ir_messages: Sequence[IRInputItem], **kwargs: Any
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → Provider Messages
         将IR消息列表转换为Provider消息列表
@@ -68,7 +86,7 @@ class BaseMessageOps(ABC):
     @abstractmethod
     def p_messages_to_ir(
         provider_messages: list[Any], **kwargs: Any
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Provider Messages → IR Messages
         将Provider消息列表转换为IR消息列表
 
@@ -96,7 +114,7 @@ class BaseMessageOps(ABC):
     # ==================== 单个消息转换（可选的便利方法） Single message conversion (optional convenience methods) ====================
 
     def ir_message_to_p(
-        self, ir_message: Message | ExtensionItem, **kwargs: Any
+        self, ir_message: IRInputItem, **kwargs: Any
     ) -> tuple[Any, list[str]]:
         """IR Message → Provider Message（便利方法）
         将单个IR消息转换为Provider消息（便利方法）
@@ -119,7 +137,7 @@ class BaseMessageOps(ABC):
 
     def p_message_to_ir(
         self, provider_message: Any, **kwargs: Any
-    ) -> Message | ExtensionItem | None:
+    ) -> IRInputItem | None:
         """Provider Message → IR Message（便利方法）
         将Provider消息转换为IR消息（便利方法）
 
@@ -141,9 +159,7 @@ class BaseMessageOps(ABC):
 
     # ==================== 辅助方法（子类可选实现） Helper methods (optional for subclasses) ====================
 
-    def validate_messages(
-        self, messages: Sequence[Message | ExtensionItem]
-    ) -> list[str]:
+    def validate_messages(self, messages: Sequence[IRInputItem]) -> list[str]:
         """Validate message list against IR Message/ExtensionItem types.
 
         Uses zerodep validate for structural validation against TypedDict
@@ -156,7 +172,7 @@ class BaseMessageOps(ABC):
             List of validation error strings; empty list means valid.
         """
         try:
-            validate(list(messages), list[Union[Message, ExtensionItem]])
+            validate(list(messages), list[IRInputItem])
             return []
         except ValidationError as e:
             return [err.message for err in e.errors]

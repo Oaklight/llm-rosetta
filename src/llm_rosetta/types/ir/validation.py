@@ -9,12 +9,10 @@ downstream in converters.
 
 from __future__ import annotations
 
-from typing import Any, Union
+from typing import Any
 
 from ..._vendor.validate import ValidationError, validate
-from .extensions_experimental import ExtensionItem
-from .messages import Message
-from .request import IRRequest
+from .request import IRInputItem, IRRequest
 from .response import IRResponse
 from .tools import ToolDefinition
 
@@ -51,7 +49,7 @@ def validate_ir_response(data: dict[str, Any]) -> IRResponse:
 
 def validate_messages(
     messages: list[Any],
-) -> list[Message | ExtensionItem]:
+) -> list[IRInputItem]:
     """Validate a message list against IR Message/ExtensionItem types.
 
     Args:
@@ -63,7 +61,7 @@ def validate_messages(
     Raises:
         ValidationError: If any message doesn't match expected structure.
     """
-    return validate(messages, list[Union[Message, ExtensionItem]])
+    return validate(messages, list[IRInputItem])
 
 
 def validate_tools(

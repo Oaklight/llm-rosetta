@@ -13,7 +13,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....types.ir import Message
+from ....types.ir import IRInputItem, is_message
 from ....types.ir.request import IRRequest
 
 logger = logging.getLogger(__name__)
@@ -82,12 +82,14 @@ def log_orphan_warnings(
 
 
 def _collect_ir_tool_ids(
-    messages: Sequence[Message],
+    messages: Sequence[IRInputItem],
 ) -> tuple[set[str], set[str]]:
     """Collect all tool_call IDs and answered (tool_result) IDs from IR messages."""
     known_call_ids: set[str] = set()
     answered_ids: set[str] = set()
     for msg in messages:
+        if not is_message(msg):
+            continue
         content = msg.get("content", [])
         role = msg.get("role")
         if role == "assistant":
@@ -98,10 +100,10 @@ def _collect_ir_tool_ids(
 
 
 def fix_orphaned_tool_calls_ir(
-    messages: Sequence[Message],
+    messages: Sequence[IRInputItem],
     *,
     placeholder: str = "[No output available yet]",
-) -> list[Message]:
+) -> list[IRInputItem]:
     """Fix mismatched tool_calls and tool results at IR level.
 
     Both the OpenAI Chat Completions API and the Responses API **strictly
@@ -143,11 +145,14 @@ def fix_orphaned_tool_calls_ir(
     if not known_call_ids and not answered_ids:
         return msg_list
 
-    patched: list[Message] = []
+    patched: list[IRInputItem] = []
     orphaned_call_ids: list[str] = []
     orphaned_result_ids: list[str] = []
 
     for msg in msg_list:
+        if not is_message(msg):
+            patched.append(msg)
+            continue
         role = msg.get("role")
         content = msg.get("content", [])
 

@@ -18,7 +18,7 @@ from typing import Any, cast
 from ...shims.provider_shim import ReasoningCapability
 from ...types.ir import (
     ContentPart,
-    ExtensionItem,
+    IRInputItem,
     Message,
     ReasoningPart,
     TextPart,
@@ -58,7 +58,7 @@ class AnthropicMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Sequence[Message | ExtensionItem],
+        ir_messages: Sequence[IRInputItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → Anthropic messages.
@@ -79,6 +79,14 @@ class AnthropicMessageOps(BaseMessageOps):
             reasoning_cap = None
 
         for item in ir_messages:
+            passthrough_warnings = self._restore_provider_passthrough_item(
+                item,
+                messages,
+                target_provider=kwargs.get("target_provider", ""),
+            )
+            if passthrough_warnings is not None:
+                warnings.extend(passthrough_warnings)
+                continue
             if is_message(item):
                 msg = cast(Message, item)
                 role = msg.get("role")
@@ -294,7 +302,7 @@ class AnthropicMessageOps(BaseMessageOps):
         self,
         provider_messages: list[Any],
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Anthropic messages → IR Messages.
 
         Converts each Anthropic message to the appropriate IR message type.
@@ -305,7 +313,7 @@ class AnthropicMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        ir_messages: list[Message | ExtensionItem] = []
+        ir_messages: list[IRInputItem] = []
 
         for msg in provider_messages:
             converted = self._p_message_to_ir(msg)

@@ -1,8 +1,11 @@
 """Tests for IR validation utilities."""
 
+from typing import cast
+
 import pytest
 
 from llm_rosetta._vendor.validate import ValidationError
+from llm_rosetta.types.ir import Message
 from llm_rosetta.types.ir.validation import (
     validate_ir_request,
     validate_ir_response,
@@ -139,7 +142,8 @@ class TestValidateIRRequest:
                 ]
             )
         )
-        assert result["messages"][1]["role"] == "tool"
+        messages = cast(list[Message], result["messages"])
+        assert messages[1]["role"] == "tool"
 
 
 # ============================================================================
