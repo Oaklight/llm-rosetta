@@ -30,6 +30,7 @@ from llm_rosetta.types.ir import (
     CacheConfig,
     CitationPart,
     ExtensionItem,
+    IRInputItem,
     FilePart,
     # Configs
     GenerationConfig,
@@ -147,7 +148,7 @@ class MockMessageOps(BaseMessageOps):
 
     @staticmethod
     def ir_messages_to_p(
-        ir_messages: Sequence[Union[Message, ExtensionItem]], **kwargs: Any
+        ir_messages: Sequence[IRInputItem], **kwargs: Any
     ) -> tuple[list[Any], list[str]]:
         provider_messages = []
         warnings = []
@@ -412,7 +413,7 @@ class MockConverter(BaseConverter):
 
         if "messages" in provider_request:
             ir_request["messages"] = cast(
-                list[Message],
+                list[IRInputItem],
                 self.message_ops_class.p_messages_to_ir(
                     provider_request["messages"], **kwargs
                 ),
@@ -446,7 +447,7 @@ class MockConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Sequence[Union[Message, ExtensionItem]],
+        messages: Sequence[IRInputItem],
         *,
         context=None,
         **kwargs: Any,
@@ -455,7 +456,7 @@ class MockConverter(BaseConverter):
 
     def messages_from_provider(
         self, provider_messages: list[Any], *, context=None, **kwargs: Any
-    ) -> list[Union[Message, ExtensionItem]]:
+    ) -> list[IRInputItem]:
         return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
 
     def stream_response_from_provider(
@@ -796,7 +797,7 @@ class TestBaseMessageOps:
 
     def test_extension_item_handling(self):
         """测试扩展项处理"""
-        items: list[Message | ExtensionItem] = [
+        items: list[IRInputItem] = [
             cast(
                 UserMessage,
                 {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
@@ -821,7 +822,7 @@ class TestBaseMessageOps:
     def test_validate_messages(self):
         """测试消息验证"""
         # 有效消息
-        valid_messages: list[Message | ExtensionItem] = [
+        valid_messages: list[IRInputItem] = [
             cast(
                 UserMessage,
                 {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
@@ -832,13 +833,13 @@ class TestBaseMessageOps:
 
         # 无效消息 - 不是列表
         errors = self.message_ops.validate_messages(
-            cast(Sequence[Union[Message, ExtensionItem]], "not a list")
+            cast(Sequence[IRInputItem], "not a list")
         )
         assert len(errors) > 0
 
         # 无效消息 - 缺少role或type
         errors = self.message_ops.validate_messages(
-            cast(Sequence[Union[Message, ExtensionItem]], [{"some_field": "value"}])
+            cast(Sequence[IRInputItem], [{"some_field": "value"}])
         )
         assert len(errors) > 0
 

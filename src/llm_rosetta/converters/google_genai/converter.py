@@ -21,9 +21,8 @@ from typing import Any, cast
 
 
 from ...types.ir import (
-    ExtensionItem,
+    IRInputItem,
     IRInput,
-    Message,
     TextPart,
     ToolChoice,
     ToolDefinition,
@@ -245,7 +244,9 @@ class GoogleGenAIConverter(BaseConverter):
                     cast(list, system_instruction["parts"]).extend(msg_parts)
 
         # Convert non-system messages
-        contents, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
+        contents, msg_warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, target_provider=self._CONVERTER_TAG
+        )
         ctx.warnings.extend(msg_warnings)
         result["contents"] = contents
 
@@ -500,6 +501,13 @@ class GoogleGenAIConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)
+        ctx = context if context is not None else ConversionContext()
+        self._restore_response_passthrough_items(
+            provider_response,
+            ir_response,
+            output_key="candidates",
+            context=ctx,
+        )
 
         return provider_response
 
@@ -638,7 +646,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Sequence[Message | ExtensionItem],
+        messages: Sequence[IRInputItem],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -653,6 +661,7 @@ class GoogleGenAIConverter(BaseConverter):
         Returns:
             Tuple of (converted Content list, warnings).
         """
+        kwargs["target_provider"] = self._CONVERTER_TAG
         return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
@@ -661,7 +670,7 @@ class GoogleGenAIConverter(BaseConverter):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Convert Google GenAI Content list to IR message list.
 
         Delegates to message_ops.
@@ -726,7 +735,7 @@ class GoogleGenAIConverter(BaseConverter):
             return self.request_to_provider(cast(IRRequest, ir_input))
 
         # Handle IRInput (message list)
-        ir_input_list: list[Message | ExtensionItem] = list(cast(IRInput, ir_input))
+        ir_input_list: list[IRInputItem] = list(cast(IRInput, ir_input))
         warnings_list: list[str] = []
 
         # Extract system messages
@@ -735,7 +744,9 @@ class GoogleGenAIConverter(BaseConverter):
         )
 
         # Convert non-system messages
-        contents, msg_warnings = self.message_ops.ir_messages_to_p(remaining)
+        contents, msg_warnings = self.message_ops.ir_messages_to_p(
+            remaining, target_provider=self._CONVERTER_TAG
+        )
         warnings_list.extend(msg_warnings)
 
         # Build result

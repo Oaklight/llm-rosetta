@@ -10,8 +10,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
-    ExtensionItem,
-    Message,
+    IRInputItem,
     TextPart,
     is_citation_part,
     is_reasoning_part,
@@ -109,7 +108,9 @@ class OpenAIChatConverter(BaseConverter):
         # tool_calls from interrupted sessions.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
-        converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
+        converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, target_provider=self._CONVERTER_TAG
+        )
         messages.extend(converted_msgs)
         ctx.warnings.extend(msg_warnings)
         result["messages"] = messages
@@ -496,6 +497,13 @@ class OpenAIChatConverter(BaseConverter):
 
         if "system_fingerprint" in ir_response:
             provider_response["system_fingerprint"] = ir_response["system_fingerprint"]
+        ctx = context if context is not None else ConversionContext()
+        self._restore_response_passthrough_items(
+            provider_response,
+            ir_response,
+            output_key="choices",
+            context=ctx,
+        )
 
         return provider_response
 
@@ -526,7 +534,7 @@ class OpenAIChatConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Sequence[Message | ExtensionItem],
+        messages: Sequence[IRInputItem],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -541,6 +549,7 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             Tuple of (converted messages, warnings).
         """
+        kwargs["target_provider"] = self._CONVERTER_TAG
         return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
@@ -549,7 +558,7 @@ class OpenAIChatConverter(BaseConverter):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Convert OpenAI Chat messages to IR message list.
 
         Delegates to message_ops.

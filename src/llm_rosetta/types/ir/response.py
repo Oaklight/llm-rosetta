@@ -15,6 +15,7 @@ else:
 
 from .extensions_experimental import ExtensionItem, is_extension_item
 from .messages import Message
+from .passthrough import ProviderPassthroughItem
 
 # ============================================================================
 # 响应统计信息 Response statistics
@@ -118,6 +119,7 @@ class IRResponse(TypedDict):
     usage: NotRequired[UsageInfo]  # Token使用统计 Token usage statistics
     service_tier: NotRequired[str]  # 服务等级 Service tier
     system_fingerprint: NotRequired[str | None]  # 系统指纹 System fingerprint
+    provider_passthrough_items: NotRequired[list[ProviderPassthroughItem]]
 
 
 # ============================================================================

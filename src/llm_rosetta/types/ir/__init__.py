@@ -86,6 +86,7 @@ from .messages import (
 )
 
 # 内容部分类型 Content part types
+from .passthrough import ProviderPassthroughItem
 from .parts import (
     AssistantContentPart,
     AudioData,
@@ -107,7 +108,7 @@ from .parts import (
 )
 
 # 请求类型 Request types
-from .request import IRRequest
+from .request import IRInputItem, IRRequest
 
 # 响应类型 Response types
 from .response import (
@@ -159,6 +160,7 @@ from .type_guards import (  # noqa: F401
     is_tool_call_start_event,
     is_tool_result_part,
     is_usage_event,
+    is_provider_passthrough_item,
     isinstance_part,
 )
 
@@ -166,7 +168,7 @@ from .type_guards import (  # noqa: F401
 # For backward compatibility, define old type aliases
 from collections.abc import Sequence
 
-IRInput = Sequence[Message | ExtensionItem]
+IRInput = Sequence[IRInputItem]
 IRInputSimple = Sequence[Message]
 
 # Experimental extension types — imported on demand, not in default namespace
@@ -219,15 +221,18 @@ __all__ = [
     "ReasoningEffortLevel",
     "CacheConfig",
     # ========== 请求类型 Request types ==========
+    "IRInputItem",
     "IRRequest",
     # ========== 响应类型 Response types ==========
     "IRResponse",
     "ExtensionItem",
+    "ProviderPassthroughItem",
     "UsageInfo",
     "FinishReason",
     "ChoiceInfo",
     # ========== 流式事件类型 Stream event types ==========
     "IRStreamEvent",
+    "is_provider_passthrough_item",
     "StreamStartEvent",
     "StreamEndEvent",
     "ContentBlockStartEvent",

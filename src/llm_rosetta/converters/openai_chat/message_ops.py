@@ -14,7 +14,7 @@ from typing import Any, cast
 
 from ...types.ir import (
     ContentPart,
-    ExtensionItem,
+    IRInputItem,
     FileData,
     FilePart,
     Message,
@@ -73,7 +73,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
     def ir_messages_to_p(
         self,
-        ir_messages: Sequence[Message | ExtensionItem],
+        ir_messages: Sequence[IRInputItem],
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Chat messages.
@@ -93,6 +93,14 @@ class OpenAIChatMessageOps(BaseMessageOps):
         multimodal_packs: dict[str, list[dict[str, Any]]] = {}
 
         for item in ir_messages:
+            passthrough_warnings = self._restore_provider_passthrough_item(
+                item,
+                messages,
+                target_provider=kwargs.get("target_provider", ""),
+            )
+            if passthrough_warnings is not None:
+                warnings.extend(passthrough_warnings)
+                continue
             if is_message(item):
                 converted, msg_warnings = self._ir_message_to_p(
                     cast(Message, item), multimodal_packs
@@ -527,7 +535,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         self,
         provider_messages: list[Any],
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """OpenAI Chat messages → IR Messages.
 
         Pre-processes synthetic user messages (from dual encoding packing)
@@ -541,7 +549,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         """
         unpacked_content, clean_messages = self._unpack_tool_content(provider_messages)
 
-        ir_messages: list[Message | ExtensionItem] = []
+        ir_messages: list[IRInputItem] = []
         for msg in clean_messages:
             converted = self._p_message_to_ir(msg, unpacked_content)
             if converted is not None:

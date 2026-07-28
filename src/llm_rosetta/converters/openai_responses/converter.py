@@ -14,13 +14,13 @@ from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
 from ...types.ir import (
-    ExtensionItem,
-    Message,
+    IRInputItem,
     TextPart,
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
 )
+from ...types.ir.passthrough import ProviderPassthroughItem
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
@@ -119,7 +119,9 @@ class OpenAIResponsesConverter(BaseConverter):
         # function_call to have a matching function_call_output.
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
-        items, msg_warnings = self.message_ops.ir_messages_to_p(ir_messages)
+        items, msg_warnings = self.message_ops.ir_messages_to_p(
+            ir_messages, target_provider=self._CONVERTER_TAG
+        )
         ctx.warnings.extend(msg_warnings)
         result["input"] = items
 
@@ -341,6 +343,19 @@ class OpenAIResponsesConverter(BaseConverter):
             "model": provider_response.get("model", ""),
             "choices": choices,
         }
+        passthrough_items = [
+            ProviderPassthroughItem(
+                type="provider_passthrough_item",
+                provider=self._CONVERTER_TAG,
+                payload=dict(item),
+                position=position,
+            )
+            for position, item in enumerate(output_items)
+            if isinstance(item, dict)
+            and not self.message_ops.is_portable_response_output_item(item)
+        ]
+        if passthrough_items:
+            ir_response["provider_passthrough_items"] = passthrough_items
 
         # Handle usage
         p_usage = provider_response.get("usage")
@@ -442,6 +457,12 @@ class OpenAIResponsesConverter(BaseConverter):
         ctx = context if context is not None else ConversionContext()
         if ctx.metadata_mode == "preserve":
             self._apply_preserve_metadata(provider_response, ctx)
+        self._restore_response_passthrough_items(
+            provider_response,
+            ir_response,
+            output_key="output",
+            context=ctx,
+        )
 
         return provider_response
 
@@ -554,7 +575,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         items_meta: list[dict[str, Any]] = []
         for item in output_items:
-            if not isinstance(item, dict):
+            if not OpenAIResponsesMessageOps.is_portable_response_output_item(item):
                 continue
             meta: dict[str, Any] = {}
             if "id" in item:
@@ -632,7 +653,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     def messages_to_provider(
         self,
-        messages: Sequence[Message | ExtensionItem],
+        messages: Sequence[IRInputItem],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -647,6 +668,7 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             Tuple of (converted items, warnings).
         """
+        kwargs["target_provider"] = self._CONVERTER_TAG
         return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
@@ -655,7 +677,7 @@ class OpenAIResponsesConverter(BaseConverter):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """Convert OpenAI Responses items to IR message list.
 
         Delegates to message_ops.
@@ -689,7 +711,9 @@ class OpenAIResponsesConverter(BaseConverter):
             return self.request_to_provider(ir_input, **kwargs)
 
         # It's a plain message list - wrap in a minimal request
-        items, warnings = self.message_ops.ir_messages_to_p(ir_input)
+        items, warnings = self.message_ops.ir_messages_to_p(
+            ir_input, target_provider=self._CONVERTER_TAG
+        )
         result: dict[str, Any] = {"input": items}
 
         if tools:

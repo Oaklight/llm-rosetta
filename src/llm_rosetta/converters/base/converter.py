@@ -9,9 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from ...types.ir.extensions_experimental import ExtensionItem
-from ...types.ir.messages import Message
-from ...types.ir.request import IRRequest
+from ...types.ir.request import IRInputItem, IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import IRStreamEvent
 from ...types.ir.validation import (
@@ -21,6 +19,7 @@ from ...types.ir.validation import (
     validate_tools,
 )
 from .context import ConversionContext, StreamContext
+from .passthrough import merge_provider_output_items
 
 
 class BaseConverter(ABC):
@@ -186,7 +185,7 @@ class BaseConverter(ABC):
     @abstractmethod
     def messages_to_provider(
         self,
-        messages: Sequence[Message | ExtensionItem],
+        messages: Sequence[IRInputItem],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -214,7 +213,7 @@ class BaseConverter(ABC):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> list[Message | ExtensionItem]:
+    ) -> list[IRInputItem]:
         """将provider消息转换为IR消息列表
         Convert provider messages to IR message list
 
@@ -305,6 +304,30 @@ class BaseConverter(ABC):
             The (possibly modified) result.
         """
         return result
+
+    def _restore_response_passthrough_items(
+        self,
+        provider_response: dict[str, Any],
+        ir_response: IRResponse,
+        *,
+        output_key: str,
+        context: ConversionContext | None,
+    ) -> None:
+        """Restore matching opaque output items into a provider list field."""
+        passthrough_items = ir_response.get("provider_passthrough_items")
+        if not passthrough_items:
+            return
+        portable_items = provider_response.get(output_key, [])
+        if not isinstance(portable_items, list):
+            portable_items = []
+        merged, warnings = merge_provider_output_items(
+            portable_items,
+            passthrough_items,
+            target_provider=self._CONVERTER_TAG,
+        )
+        provider_response[output_key] = merged
+        if context is not None:
+            context.warnings.extend(warnings)
 
     # ==================== Provider-specific helpers (abstract) ====================
 
@@ -671,7 +694,7 @@ class BaseConverter(ABC):
 
     def message_to_provider(
         self,
-        message: Message | ExtensionItem,
+        message: IRInputItem,
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
@@ -698,7 +721,7 @@ class BaseConverter(ABC):
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> Message | ExtensionItem:
+    ) -> IRInputItem:
         """将provider消息转换为IR格式（便利方法）
         Convert provider message to IR format (convenience method)
 
@@ -713,4 +736,4 @@ class BaseConverter(ABC):
         result = self.messages_from_provider(
             [provider_message], context=context, **kwargs
         )
-        return result[0] if result else cast(Message, {})
+        return result[0] if result else cast(IRInputItem, {})

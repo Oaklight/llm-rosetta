@@ -10,6 +10,7 @@ from collections.abc import Mapping
 
 from typing import TypeGuard
 
+from .passthrough import ProviderPassthroughItem
 from .parts import (
     AudioPart,
     CitationPart,
@@ -161,6 +162,11 @@ def is_usage_event(event: IRStreamEvent) -> TypeGuard[UsageEvent]:
     return isinstance(event, dict) and event.get("type") == "usage"
 
 
+def is_provider_passthrough_item(item: Any) -> TypeGuard[ProviderPassthroughItem]:
+    """Check if an item is a ProviderPassthroughItem."""
+    return isinstance(item, dict) and item.get("type") == "provider_passthrough_item"
+
+
 # ============================================================================
 # Generic type checking (backward compatible)
 # ============================================================================
@@ -292,6 +298,7 @@ __all__ = [
     "is_tool_call_delta_event",
     "is_finish_event",
     "is_usage_event",
+    "is_provider_passthrough_item",
     # Generic functions
     "is_part_type",
     "isinstance_part",
