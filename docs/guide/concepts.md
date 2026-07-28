@@ -52,6 +52,22 @@ The `metadata_mode` option (`"strip"` or `"preserve"`) controls whether provider
 
 The base `stream_response_to_provider()` implementation uses a class-level dispatch table (`_TO_P_DISPATCH`) to route IR stream events to handler methods. Provider converters customize behavior through the `_post_process_to_provider()` hook rather than reimplementing the dispatch logic.
 
+## Provider-Specific Data Preservation
+
+LLM-Rosetta separates portable IR data, durable provider passthrough data, and per-conversion context state:
+
+| Layer | Lifetime | Purpose |
+|-------|----------|---------|
+| Portable IR (`Message`, content parts, tools, reasoning) | Serializable and reusable | Semantics that can be translated between provider formats |
+| `ProviderPassthroughEvent` / `ProviderPassthroughItem` | Serializable and reusable | Opaque provider-native chunks or items that have no portable representation |
+| `ConversionContext` / `StreamContext` | One conversion pipeline | Warnings, options, echo fields, original IDs/status/annotations, and state used while reconstructing a response |
+
+`ProviderPassthroughEvent` carries provider-native streaming chunks. `ProviderPassthroughItem` carries non-stream request/history items, while `IRResponse.provider_passthrough_items` stores independent non-stream output items together with their original positions.
+
+Passthrough data is tagged with a converter dialect such as `openai_responses` or `anthropic`. A matching target dialect restores a copied native payload. A different target format drops the item; semantic items produce a conversion warning, while lifecycle/heartbeat stream events are dropped silently to avoid warning floods.
+
+`ConversionContext` remains necessary because it serves a different role. It is an ephemeral side channel for a single request/response pipeline and is not serialized into conversation history. Provider passthrough carriers are durable IR data that can survive caching, persistence, and a later HTTP request.
+
 ## IR Message Types
 
 The IR defines four message roles:

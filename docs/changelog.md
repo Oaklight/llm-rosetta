@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Generic provider passthrough IR carriers**: `ProviderPassthroughEvent` preserves opaque provider-native stream chunks; `ProviderPassthroughItem` preserves non-stream request/history items; `IRResponse.provider_passthrough_items` preserves independent output items with their original positions. Matching converter dialects restore copied payloads; cross-format conversions safely drop unsupported items. `ConversionContext` remains the ephemeral metadata/state side channel for one pipeline.
+
 ## v0.7.3 — 2026-07-25
 
 ### Added
