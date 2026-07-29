@@ -55,6 +55,8 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
     pip install llm-rosetta
     ```
 
+    [Library Quick Start →](getting-started/library-quickstart.md){ .md-button }
+
 === "As a Gateway"
 
     Run a local HTTP proxy that translates between formats in real time:
@@ -72,6 +74,8 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
 
     Drop-in backend for **Claude Code**, **Gemini CLI**, **OpenAI Codex CLI**, **Kilo Code**, and **Ollama**. See [CLI Integrations](gateway/cli-integrations.md).
 
+    [Gateway Quick Start →](getting-started/gateway-quickstart.md){ .md-button }
+
 ---
 
 ## Supported API Standards
@@ -84,7 +88,7 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
 
-See [API Standards](guide/api-standards.md) for detailed format comparisons.
+See [API Standards](guide/api-standards.md) for detailed format comparisons, and [Provider Compatibility](guide/compatibility.md) for the full provider support matrix.
 
 ---
 
@@ -117,12 +121,12 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons.
 
 ## Documentation
 
-- **[Getting Started](getting-started/installation.md)** — Installation and first steps
-- **[Guide](guide/concepts.md)** — Core concepts, converters, IR types, streaming
-- **[API Standards](guide/api-standards.md)** — Detailed comparison of supported formats
-- **[Gateway](gateway/index.md)** — HTTP proxy setup, configuration, CLI integrations
-- **[Examples](examples/)** — Cross-provider conversations, tool calling
-- **[API Reference](api/)** — Complete API documentation
+- **[Getting Started](getting-started/installation.md)** — Installation, core concepts, and quick starts
+- **[Library](guide/converters.md)** — Converters, IR types, providers, streaming
+- **[Gateway](gateway/index.md)** — HTTP proxy, configuration, CLI integrations, admin panel
+- **[API Reference](api/index.md)** — Library and gateway API documentation
+- **[Examples](examples/index.md)** — Cross-provider conversations, tool calling
+- **[Contributing](contributing/naming-conventions.md)** — Naming conventions and developer guidelines
 - **[Changelog](changelog.md)** — Version history
 
 ## Citation

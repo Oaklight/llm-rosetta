@@ -71,7 +71,7 @@ plugins:
           - index.md
         Getting Started:
           - getting-started/installation.md
-          - getting-started/quickstart.md
+          - getting-started/library-quickstart.md
         Library Guide:
           - guide/concepts.md
           - guide/converters.md
@@ -150,20 +150,23 @@ nav:
   - Home: index.md
   - Getting Started:
       - Installation: getting-started/installation.md
-      - Quick Start: getting-started/quickstart.md
-  - Library Guide:
       - Core Concepts: guide/concepts.md
-      - Using Converters: guide/converters.md
-      - IR Types: guide/ir-types.md
-      - Streaming: guide/streaming.md
-      - Auto Detection: guide/auto-detection.md
-      - API Layers: guide/api-layers.md
-      - API Standards: guide/api-standards.md
-      - Reasoning / Thinking: guide/reasoning.md
-      - Provider Reasoning Behavior: guide/provider-reasoning.md
-      - Provider Shims: guide/shims.md
+      - Library Quick Start: getting-started/library-quickstart.md
+      - Gateway Quick Start: getting-started/gateway-quickstart.md
+  - Library:
       - Provider Compatibility: guide/compatibility.md
-      - Naming Conventions: guide/naming-conventions.md
+      - Converters:
+          - Using Converters: guide/converters.md
+          - Streaming: guide/streaming.md
+          - Auto Detection: guide/auto-detection.md
+      - IR & Type System:
+          - IR Types: guide/ir-types.md
+          - API Layers: guide/api-layers.md
+          - API Standards: guide/api-standards.md
+      - Providers:
+          - Provider Shims: guide/shims.md
+          - Reasoning / Thinking: guide/reasoning.md
+          - Provider Reasoning Behavior: guide/provider-reasoning.md
       - Examples:
           - examples/index.md
           - Cross-Provider Conversation: examples/cross-provider.md
@@ -171,8 +174,9 @@ nav:
   - Gateway:
       - gateway/index.md
       - Configuration: gateway/configuration.md
-      - CLI Reference: gateway/cli.md
-      - CLI Integrations: gateway/cli-integrations.md
+      - CLI:
+          - CLI Reference: gateway/cli.md
+          - CLI Integrations: gateway/cli-integrations.md
       - Admin:
           - Admin Panel: gateway/admin-panel.md
           - Admin API: api/admin.md
@@ -183,11 +187,16 @@ nav:
           - SDK & Integration Tests: gateway/validation-sdk.md
   - API Reference:
       - api/index.md
-      - Converters: api/converters.md
-      - IR Types: api/types.md
-      - Tool Ops: api/tool-ops.md
-      - Shims: api/shims.md
-      - Utilities: api/utils.md
-      - Observability: api/observability.md
+      - Library API:
+          - Converters: api/converters.md
+          - IR Types: api/types.md
+          - Tool Ops: api/tool-ops.md
+          - Shims: api/shims.md
+          - Utilities: api/utils.md
+      - Gateway API:
+          - Admin API: api/admin.md
+          - Observability: api/observability.md
+  - Contributing:
+      - Naming Conventions: contributing/naming-conventions.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md
