@@ -10,7 +10,17 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
-- **Generic provider passthrough IR carriers**: `ProviderPassthroughEvent` preserves opaque provider-native stream chunks; `ProviderPassthroughItem` preserves non-stream request/history items; `IRResponse.provider_passthrough_items` preserves independent output items with their original positions. Matching converter dialects restore copied payloads; cross-format conversions safely drop unsupported items. `ConversionContext` remains the ephemeral metadata/state side channel for one pipeline.
+- **Generic provider passthrough IR carriers**: `ProviderPassthroughEvent` preserves opaque provider-native stream chunks; `ProviderPassthroughItem` preserves non-stream request/history items; `IRResponse.provider_passthrough_items` preserves independent output items with their original positions. Matching converter dialects restore copied payloads; cross-format conversions safely drop unsupported items.
+
+### Changed
+
+- **Unified internal converter function naming** ([#400](https://github.com/Oaklight/llm-rosetta/pull/400)): Standardize all internal converter functions to `{source}_X_to_{target}` pattern — `_to_` always points toward the target, prefix always identifies the source domain (`ir_` or `p_`). Eliminates the ambiguous `_from_p` suffix from internal functions. Public API unchanged.
+
+### Fixed
+
+- **Preserve empty reasoning content in OpenAI Chat converter**: `_ir_assistant_to_p` no longer drops assistant messages that contain an empty `reasoning_content` field — the field is now retained in the output.
+- **Align embedding request IDs**: Gateway embedding endpoint now generates consistent request IDs and propagates them through the proxy pipeline.
+- **Admin modal CSS polish**: Fix checkbox group alignment, hint popup transparent background, and flatten-system-content tooltip. Correct "System Options" label to "System Message" in EN/ZH i18n.
 
 ## v0.7.3 — 2026-07-25
 
