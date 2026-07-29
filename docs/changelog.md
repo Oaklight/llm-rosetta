@@ -10,7 +10,18 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
-- **通用 provider passthrough IR carrier**：`ProviderPassthroughEvent` 保留 provider 原生流式 chunk；`ProviderPassthroughItem` 保留非流式请求/历史 item；`IRResponse.provider_passthrough_items` 按原始位置保留独立输出 item。目标 converter dialect 相同时恢复 payload 副本，跨格式转换会安全丢弃不支持的 item。`ConversionContext` 继续作为单次管线内的临时 metadata/state side channel。
+- **通用 provider passthrough IR carrier**：`ProviderPassthroughEvent` 保留 provider 原生流式 chunk；`ProviderPassthroughItem` 保留非流式请求/历史 item；`IRResponse.provider_passthrough_items` 按原始位置保留独立输出 item。目标 converter dialect 相同时恢复 payload 副本，跨格式转换会安全丢弃不支持的 item。
+
+### 变更
+
+- **统一内部转换器函数命名** ([#400](https://github.com/Oaklight/llm-rosetta/pull/400))：所有内部转换器函数统一为 `{source}_X_to_{target}` 模式——`_to_` 始终指向目标，前缀标识来源域（`ir_` 或 `p_`）。消除了内部函数中歧义的 `_from_p` 后缀。公开 API 保持不变。
+
+### 修复
+
+- **保留 OpenAI Chat 转换器中的空 reasoning content**：`_ir_assistant_to_p` 不再丢弃包含空 `reasoning_content` 字段的 assistant 消息——该字段现在保留在输出中。
+- **对齐 embedding 请求 ID**：Gateway embedding 端点现在生成一致的请求 ID 并在代理管线中传递。
+- **管理面板 modal CSS 修缮**：修复 checkbox 组对齐、提示弹窗透明背景、以及展平系统消息 tooltip。将 "System Options" 标签修正为 "System Message"（EN/ZH i18n）。
+
 
 ## v0.7.3 — 2026-07-25
 
