@@ -216,7 +216,7 @@ class AnthropicConverter(BaseConverter):
         # 3. Tools (with process-level cache)
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_tools_from_p(tools)
+            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
 
         # 4. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -299,7 +299,7 @@ class AnthropicConverter(BaseConverter):
 
         # Usage (always present — downstream clients may crash without it)
         p_usage = provider_response.get("usage") or {}
-        ir_response["usage"] = self._build_ir_usage(p_usage)
+        ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
         # Preserve mode: capture extra fields for lossless round-trip
         ctx = context if context is not None else ConversionContext()
@@ -366,7 +366,7 @@ class AnthropicConverter(BaseConverter):
 
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}
-        provider_response["usage"] = self._build_provider_usage(ir_usage)
+        provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
 
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
@@ -416,7 +416,7 @@ class AnthropicConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_tools_to_p(tools)
+            result["tools"] = self._get_cached_ir_tools_to_p(tools)
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
@@ -435,7 +435,7 @@ class AnthropicConverter(BaseConverter):
                 )
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+    def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Anthropic usage."""
         input_tokens = p_usage.get("input_tokens") or 0
         output_tokens = p_usage.get("output_tokens") or 0
@@ -451,7 +451,7 @@ class AnthropicConverter(BaseConverter):
         return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Anthropic usage dict from IR usage."""
         usage: dict[str, Any] = {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -602,13 +602,13 @@ class AnthropicConverter(BaseConverter):
         events: list[IRStreamEvent] = []
 
         event_type = chunk.get("type", "")
-        handler_name = self._FROM_P_DISPATCH.get(event_type)
+        handler_name = self._P_TO_IR_DISPATCH.get(event_type)
         if handler_name is not None:
             getattr(self, handler_name)(chunk, context, events)
 
         return events
 
-    def _handle_message_start_from_p(
+    def _handle_p_message_start_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -640,11 +640,11 @@ class AnthropicConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=self._build_ir_usage(start_usage),
+                    usage=self._build_p_usage_to_ir(start_usage),
                 )
             )
 
-    def _handle_content_block_start_from_p(
+    def _handle_p_content_block_start_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -681,7 +681,7 @@ class AnthropicConverter(BaseConverter):
                 start_evt["tool_call_index"] = len(context._tool_call_order) - 1
             events.append(start_evt)
 
-    def _handle_content_block_delta_from_p(
+    def _handle_p_content_block_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -744,7 +744,7 @@ class AnthropicConverter(BaseConverter):
                 evt_s["block_index"] = chunk_block_index
             events.append(evt_s)
 
-    def _handle_content_block_stop_from_p(
+    def _handle_p_content_block_stop_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -760,7 +760,7 @@ class AnthropicConverter(BaseConverter):
                 )
             )
 
-    def _handle_message_delta_from_p(
+    def _handle_p_message_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -776,7 +776,7 @@ class AnthropicConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=self._build_ir_usage(usage),
+                    usage=self._build_p_usage_to_ir(usage),
                 )
             )
 
@@ -792,7 +792,7 @@ class AnthropicConverter(BaseConverter):
                 )
             )
 
-    def _handle_message_stop_from_p(
+    def _handle_p_message_stop_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -803,19 +803,19 @@ class AnthropicConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-    _FROM_P_DISPATCH: dict[str, str] = {
-        AnthropicEventType.PING: "_handle_provider_passthrough_from_p",
-        AnthropicEventType.MESSAGE_START: "_handle_message_start_from_p",
-        AnthropicEventType.CONTENT_BLOCK_START: "_handle_content_block_start_from_p",
-        AnthropicEventType.CONTENT_BLOCK_DELTA: "_handle_content_block_delta_from_p",
-        AnthropicEventType.CONTENT_BLOCK_STOP: "_handle_content_block_stop_from_p",
-        AnthropicEventType.MESSAGE_DELTA: "_handle_message_delta_from_p",
-        AnthropicEventType.MESSAGE_STOP: "_handle_message_stop_from_p",
+    _P_TO_IR_DISPATCH: dict[str, str] = {
+        AnthropicEventType.PING: "_handle_p_passthrough_to_ir",
+        AnthropicEventType.MESSAGE_START: "_handle_p_message_start_to_ir",
+        AnthropicEventType.CONTENT_BLOCK_START: "_handle_p_content_block_start_to_ir",
+        AnthropicEventType.CONTENT_BLOCK_DELTA: "_handle_p_content_block_delta_to_ir",
+        AnthropicEventType.CONTENT_BLOCK_STOP: "_handle_p_content_block_stop_to_ir",
+        AnthropicEventType.MESSAGE_DELTA: "_handle_p_message_delta_to_ir",
+        AnthropicEventType.MESSAGE_STOP: "_handle_p_message_stop_to_ir",
     }
 
     # --- to_provider ---
 
-    def _handle_stream_start_to_p(
+    def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → message_start."""
@@ -850,7 +850,7 @@ class AnthropicConverter(BaseConverter):
             },
         }
 
-    def _handle_stream_end_to_p(
+    def _handle_ir_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle StreamEndEvent → message_stop (with optional pending finish flush)."""
@@ -874,7 +874,7 @@ class AnthropicConverter(BaseConverter):
         results.append({"type": AnthropicEventType.MESSAGE_STOP})
         return results if len(results) > 1 else results[0]
 
-    def _handle_content_block_start_to_p(
+    def _handle_ir_content_block_start_to_p(
         self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockStartEvent → content_block_start."""
@@ -903,7 +903,7 @@ class AnthropicConverter(BaseConverter):
         else:
             return {}
 
-    def _handle_content_block_end_to_p(
+    def _handle_ir_content_block_end_to_p(
         self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → content_block_stop."""
@@ -915,7 +915,7 @@ class AnthropicConverter(BaseConverter):
             "index": event["block_index"],
         }
 
-    def _handle_text_delta_to_p(
+    def _handle_ir_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle TextDeltaEvent → content_block_delta (with synthetic start if needed)."""
@@ -964,7 +964,7 @@ class AnthropicConverter(BaseConverter):
             result["index"] = context.current_block_index
         return result
 
-    def _handle_reasoning_delta_to_p(
+    def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle ReasoningDeltaEvent → content_block_delta (thinking or signature)."""
@@ -1023,7 +1023,7 @@ class AnthropicConverter(BaseConverter):
             rd_result["index"] = context.current_block_index
         return rd_result
 
-    def _handle_tool_call_start_to_p(
+    def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle ToolCallStartEvent → content_block_start for tool_use."""
@@ -1060,7 +1060,7 @@ class AnthropicConverter(BaseConverter):
                 return preamble
         return result
 
-    def _handle_tool_call_delta_to_p(
+    def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → content_block_delta with input_json_delta."""
@@ -1085,7 +1085,7 @@ class AnthropicConverter(BaseConverter):
             result["index"] = context.current_block_index
         return result
 
-    def _handle_finish_to_p(
+    def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Handle FinishEvent → buffered message_delta + optional content_block_stop."""
@@ -1122,7 +1122,7 @@ class AnthropicConverter(BaseConverter):
             "usage": {"output_tokens": 0},
         }
 
-    def _handle_usage_to_p(
+    def _handle_ir_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle UsageEvent → message_delta (merged with pending finish).

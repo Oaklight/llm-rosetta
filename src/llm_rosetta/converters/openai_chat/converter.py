@@ -166,7 +166,7 @@ class OpenAIChatConverter(BaseConverter):
         return result, ctx.warnings
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+    def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from OpenAI Chat usage."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get("prompt_tokens") or 0,
@@ -201,7 +201,7 @@ class OpenAIChatConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_tools_to_p(tools)
+            result["tools"] = self._get_cached_ir_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
@@ -214,7 +214,7 @@ class OpenAIChatConverter(BaseConverter):
                     "OpenAI Chat does not support max_tool_calls, ignored"
                 )
 
-    def _build_choice_to_provider(  # noqa: C901
+    def _build_ir_choice_to_p(  # noqa: C901
         self, choice: dict[str, Any]
     ) -> dict[str, Any] | None:
         """Build a single OpenAI Chat choice dict from an IR choice."""
@@ -346,7 +346,7 @@ class OpenAIChatConverter(BaseConverter):
         # 2. Tools (with process-level cache)
         tools = provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_tools_from_p(tools)
+            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
 
         # 3. Tool choice
         tool_choice = provider_request.get("tool_choice")
@@ -449,7 +449,7 @@ class OpenAIChatConverter(BaseConverter):
         # Usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            ir_response["usage"] = self._build_ir_usage(p_usage)
+            ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
@@ -483,14 +483,14 @@ class OpenAIChatConverter(BaseConverter):
         }
 
         for choice in ir_response.get("choices", []):
-            openai_choice = self._build_choice_to_provider(choice)  # ty: ignore[invalid-argument-type]
+            openai_choice = self._build_ir_choice_to_p(choice)  # ty: ignore[invalid-argument-type]
             if openai_choice is not None:
                 provider_response["choices"].append(openai_choice)
 
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)
+            provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -508,7 +508,7 @@ class OpenAIChatConverter(BaseConverter):
         return provider_response
 
     @staticmethod
-    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build OpenAI Chat usage dict from IR usage."""
         usage: dict[str, Any] = {
             "prompt_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -600,21 +600,21 @@ class OpenAIChatConverter(BaseConverter):
         events: list[IRStreamEvent] = []
 
         if context is not None and not context.is_started:
-            self._handle_stream_start_from_p(chunk, context, events)
+            self._handle_p_stream_start_to_ir(chunk, context, events)
 
         choices = chunk.get("choices", [])
         for p_choice in choices:
-            self._handle_choice_from_p(p_choice, context, events)
+            self._handle_p_choice_to_ir(p_choice, context, events)
 
         usage = chunk.get("usage")
         if usage:
-            self._handle_usage_from_p(usage, events)
+            self._handle_p_usage_to_ir(usage, events)
 
-        self._handle_stream_end_from_p(choices, events, usage, context)
+        self._handle_p_stream_end_to_ir(choices, events, usage, context)
 
         return events
 
-    def _handle_stream_start_from_p(
+    def _handle_p_stream_start_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext,
@@ -639,7 +639,7 @@ class OpenAIChatConverter(BaseConverter):
                 start_event["created"] = created
             events.append(start_event)
 
-    def _handle_choice_from_p(
+    def _handle_p_choice_to_ir(
         self,
         p_choice: dict[str, Any],
         context: StreamContext | None,
@@ -674,16 +674,16 @@ class OpenAIChatConverter(BaseConverter):
         # Tool call deltas
         tool_calls = delta.get("tool_calls")
         if tool_calls:
-            self._handle_tool_calls_from_p(tool_calls, choice_index, context, events)
+            self._handle_p_tool_calls_to_ir(tool_calls, choice_index, context, events)
 
         # Finish reason
         finish_reason = p_choice.get("finish_reason")
         if finish_reason:
-            self._handle_finish_reason_from_p(
+            self._handle_p_finish_reason_to_ir(
                 finish_reason, choice_index, context, events
             )
 
-    def _handle_tool_calls_from_p(
+    def _handle_p_tool_calls_to_ir(
         self,
         tool_calls: list[dict[str, Any]],
         choice_index: int,
@@ -733,7 +733,7 @@ class OpenAIChatConverter(BaseConverter):
                 if context is not None and effective_tc_id:
                     context.append_tool_call_args(effective_tc_id, arguments)
 
-    def _handle_finish_reason_from_p(
+    def _handle_p_finish_reason_to_ir(
         self,
         finish_reason: str,
         choice_index: int,
@@ -764,7 +764,7 @@ class OpenAIChatConverter(BaseConverter):
             )
         )
 
-    def _handle_usage_from_p(
+    def _handle_p_usage_to_ir(
         self,
         usage: dict[str, Any],
         events: list[IRStreamEvent],
@@ -773,11 +773,11 @@ class OpenAIChatConverter(BaseConverter):
         events.append(
             UsageEvent(
                 type="usage",
-                usage=self._build_ir_usage(usage),
+                usage=self._build_p_usage_to_ir(usage),
             )
         )
 
-    def _handle_stream_end_from_p(
+    def _handle_p_stream_end_to_ir(
         self,
         choices: list[dict[str, Any]],
         events: list[IRStreamEvent],
@@ -814,7 +814,7 @@ class OpenAIChatConverter(BaseConverter):
 
     # --- to_provider ---
 
-    def _post_process_to_provider(
+    def _post_process_ir_to_p(
         self,
         result: dict[str, Any] | list[dict[str, Any]],
         event: IRStreamEvent,
@@ -833,7 +833,7 @@ class OpenAIChatConverter(BaseConverter):
             result.setdefault("created", context.created)
         return result
 
-    def _handle_stream_start_to_p(
+    def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → initial chunk with role delta.
@@ -867,7 +867,7 @@ class OpenAIChatConverter(BaseConverter):
             return {}
         return chunk
 
-    def _handle_stream_end_to_p(
+    def _handle_ir_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamEndEvent → usage chunk (if buffered) or empty.
@@ -886,7 +886,7 @@ class OpenAIChatConverter(BaseConverter):
                     "model": context.model,
                     "created": context.created,
                     "choices": [],
-                    "usage": self._build_provider_usage(usage),
+                    "usage": self._build_ir_usage_to_p(usage),
                 }
             return {}
         return {
@@ -897,13 +897,13 @@ class OpenAIChatConverter(BaseConverter):
             "choices": [],
         }
 
-    def _handle_content_block_start_to_p(
+    def _handle_ir_content_block_start_to_p(
         self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockStartEvent → no-op for OpenAI Chat."""
         return {}
 
-    def _handle_content_block_end_to_p(
+    def _handle_ir_content_block_end_to_p(
         self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → no-op for OpenAI Chat."""
@@ -931,7 +931,7 @@ class OpenAIChatConverter(BaseConverter):
             chunk["choices"][0].setdefault("delta", {})["role"] = "assistant"
         return chunk
 
-    def _handle_text_delta_to_p(
+    def _handle_ir_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle TextDeltaEvent → content delta chunk."""
@@ -946,7 +946,7 @@ class OpenAIChatConverter(BaseConverter):
         }
         return self._merge_pending_role(chunk, context)
 
-    def _handle_reasoning_delta_to_p(
+    def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ReasoningDeltaEvent → reasoning_content delta chunk."""
@@ -960,7 +960,7 @@ class OpenAIChatConverter(BaseConverter):
             ]
         }
 
-    def _handle_tool_call_start_to_p(
+    def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallStartEvent → tool_calls delta with id and name."""
@@ -985,7 +985,7 @@ class OpenAIChatConverter(BaseConverter):
         }
         return self._merge_pending_role(chunk, context)
 
-    def _handle_tool_call_delta_to_p(
+    def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → tool_calls delta with arguments."""
@@ -1006,7 +1006,7 @@ class OpenAIChatConverter(BaseConverter):
             ]
         }
 
-    def _handle_finish_to_p(
+    def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle FinishEvent → finish_reason chunk."""
@@ -1022,7 +1022,7 @@ class OpenAIChatConverter(BaseConverter):
             ]
         }
 
-    def _handle_usage_to_p(
+    def _handle_ir_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle UsageEvent → buffer for StreamEndEvent merge.
@@ -1037,5 +1037,5 @@ class OpenAIChatConverter(BaseConverter):
             return {}
         return {
             "choices": [],
-            "usage": self._build_provider_usage(usage),
+            "usage": self._build_ir_usage_to_p(usage),
         }

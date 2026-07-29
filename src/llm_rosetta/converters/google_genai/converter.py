@@ -349,7 +349,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Tools — check SDK config first, then REST top-level (with cache)
         tools = config.get("tools") or provider_request.get("tools")
         if tools:
-            ir_request["tools"] = self._get_cached_tools_from_p(tools)
+            ir_request["tools"] = self._get_cached_p_tools_to_ir(tools)
 
         # Tool choice — check SDK/REST snake_case/camelCase
         tool_config = (
@@ -445,7 +445,7 @@ class GoogleGenAIConverter(BaseConverter):
             "usageMetadata"
         )
         if p_usage:
-            ir_response["usage"] = self._build_ir_usage(p_usage)
+            ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
         return self._validate_ir_response(ir_response)
 
@@ -500,7 +500,7 @@ class GoogleGenAIConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usageMetadata"] = self._build_provider_usage(ir_usage)
+            provider_response["usageMetadata"] = self._build_ir_usage_to_p(ir_usage)
         ctx = context if context is not None else ConversionContext()
         self._restore_response_passthrough_items(
             provider_response,
@@ -525,7 +525,7 @@ class GoogleGenAIConverter(BaseConverter):
         config = result.setdefault("config", {})
         tools = ir_request.get("tools")
         if tools:
-            config["tools"] = self._get_cached_tools_to_p(tools)
+            config["tools"] = self._get_cached_ir_tools_to_p(tools)
 
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
@@ -534,7 +534,7 @@ class GoogleGenAIConverter(BaseConverter):
                 config["tool_config"] = tc_p
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+    def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Google usage metadata."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get(
@@ -584,7 +584,7 @@ class GoogleGenAIConverter(BaseConverter):
         return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Google usage metadata dict from IR usage."""
         usage_metadata: dict[str, Any] = {
             "promptTokenCount": ir_usage.get("prompt_tokens") or 0,
@@ -796,7 +796,7 @@ class GoogleGenAIConverter(BaseConverter):
         events: list[IRStreamEvent] = []
 
         if context is not None and not context.is_started:
-            self._handle_stream_start_from_p(chunk, context, events)
+            self._handle_p_stream_start_to_ir(chunk, context, events)
 
         has_finish_reason = False
         deferred_finish: FinishEvent | None = None
@@ -815,10 +815,10 @@ class GoogleGenAIConverter(BaseConverter):
             pre_parts_len = len(events)
 
             for part in content.get("parts", []):
-                self._handle_part_from_p(part, choice_index, context, events)
+                self._handle_p_part_to_ir(part, choice_index, context, events)
 
             # When a compound chunk has both text and finishReason,
-            # defer the text into context so _handle_finish_to_p can
+            # defer the text into context so _handle_ir_finish_to_p can
             # merge it into the finish candidate's parts, avoiding
             # an extra output event.
             if finish_reason and context is not None:
@@ -844,7 +844,7 @@ class GoogleGenAIConverter(BaseConverter):
                     choice_index=choice_index,
                 )
 
-        self._handle_usage_from_p(chunk, events)
+        self._handle_p_usage_to_ir(chunk, events)
 
         if deferred_finish is not None:
             events.append(deferred_finish)
@@ -855,7 +855,7 @@ class GoogleGenAIConverter(BaseConverter):
 
         return events
 
-    def _handle_stream_start_from_p(
+    def _handle_p_stream_start_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext,
@@ -875,7 +875,7 @@ class GoogleGenAIConverter(BaseConverter):
             )
         )
 
-    def _handle_part_from_p(
+    def _handle_p_part_to_ir(
         self,
         part: dict[str, Any],
         choice_index: int,
@@ -905,11 +905,11 @@ class GoogleGenAIConverter(BaseConverter):
 
         func_call = part.get("function_call") or part.get("functionCall")
         if func_call:
-            self._handle_function_call_from_p(
+            self._handle_p_function_call_to_ir(
                 func_call, part, choice_index, context, events
             )
 
-    def _handle_function_call_from_p(
+    def _handle_p_function_call_to_ir(
         self,
         func_call: dict[str, Any],
         part: dict[str, Any],
@@ -955,7 +955,7 @@ class GoogleGenAIConverter(BaseConverter):
         if context is not None:
             context.append_tool_call_args(tool_call_id, args_json)
 
-    def _handle_usage_from_p(
+    def _handle_p_usage_to_ir(
         self,
         chunk: dict[str, Any],
         events: list[IRStreamEvent],
@@ -997,7 +997,7 @@ class GoogleGenAIConverter(BaseConverter):
 
     # --- to_provider ---
 
-    def _handle_stream_start_to_p(
+    def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → store metadata, no output."""
@@ -1007,7 +1007,7 @@ class GoogleGenAIConverter(BaseConverter):
             context.mark_started()
         return {}
 
-    def _handle_stream_end_to_p(
+    def _handle_ir_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamEndEvent → mark ended, no output."""
@@ -1015,19 +1015,19 @@ class GoogleGenAIConverter(BaseConverter):
             context.mark_ended()
         return {}
 
-    def _handle_content_block_start_to_p(
+    def _handle_ir_content_block_start_to_p(
         self, event: ContentBlockStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockStartEvent → no-op for Google GenAI."""
         return {}
 
-    def _handle_content_block_end_to_p(
+    def _handle_ir_content_block_end_to_p(
         self, event: ContentBlockEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → no-op for Google GenAI."""
         return {}
 
-    def _handle_text_delta_to_p(
+    def _handle_ir_text_delta_to_p(
         self, event: TextDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle TextDeltaEvent → text part chunk.
@@ -1050,7 +1050,7 @@ class GoogleGenAIConverter(BaseConverter):
             ]
         }
 
-    def _handle_reasoning_delta_to_p(
+    def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ReasoningDeltaEvent → thought text part chunk."""
@@ -1067,7 +1067,7 @@ class GoogleGenAIConverter(BaseConverter):
             ]
         }
 
-    def _handle_tool_call_start_to_p(
+    def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallStartEvent → register in context, no output."""
@@ -1075,7 +1075,7 @@ class GoogleGenAIConverter(BaseConverter):
             context.register_tool_call(event["tool_call_id"], event["tool_name"])
         return {}
 
-    def _handle_tool_call_delta_to_p(
+    def _handle_ir_tool_call_delta_to_p(
         self, event: ToolCallDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → accumulate args, no output."""
@@ -1085,7 +1085,7 @@ class GoogleGenAIConverter(BaseConverter):
             )
         return {}
 
-    def _handle_finish_to_p(
+    def _handle_ir_finish_to_p(
         self, event: FinishEvent, context: StreamContext | None
     ) -> list[dict[str, Any]]:
         """Handle FinishEvent → flush tool calls + finish chunk."""
@@ -1143,7 +1143,7 @@ class GoogleGenAIConverter(BaseConverter):
 
         return chunks
 
-    def _handle_usage_to_p(
+    def _handle_ir_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle UsageEvent → buffer for FinishEvent merge.

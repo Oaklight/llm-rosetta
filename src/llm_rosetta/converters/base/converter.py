@@ -61,18 +61,18 @@ class BaseConverter(ABC):
     # Default dispatch table for stream_response_to_provider.
     # Maps IR stream event types to handler method names.
     # Subclasses may override to extend or customise the mapping.
-    _TO_P_DISPATCH: dict[str, str] = {
-        "stream_start": "_handle_stream_start_to_p",
-        "stream_end": "_handle_stream_end_to_p",
-        "content_block_start": "_handle_content_block_start_to_p",
-        "content_block_end": "_handle_content_block_end_to_p",
-        "text_delta": "_handle_text_delta_to_p",
-        "reasoning_delta": "_handle_reasoning_delta_to_p",
-        "tool_call_start": "_handle_tool_call_start_to_p",
-        "tool_call_delta": "_handle_tool_call_delta_to_p",
-        "finish": "_handle_finish_to_p",
-        "usage": "_handle_usage_to_p",
-        "provider_passthrough": "_handle_provider_passthrough_to_p",
+    _IR_TO_P_DISPATCH: dict[str, str] = {
+        "stream_start": "_handle_ir_stream_start_to_p",
+        "stream_end": "_handle_ir_stream_end_to_p",
+        "content_block_start": "_handle_ir_content_block_start_to_p",
+        "content_block_end": "_handle_ir_content_block_end_to_p",
+        "text_delta": "_handle_ir_text_delta_to_p",
+        "reasoning_delta": "_handle_ir_reasoning_delta_to_p",
+        "tool_call_start": "_handle_ir_tool_call_start_to_p",
+        "tool_call_delta": "_handle_ir_tool_call_delta_to_p",
+        "finish": "_handle_ir_finish_to_p",
+        "usage": "_handle_ir_usage_to_p",
+        "provider_passthrough": "_handle_ir_passthrough_to_p",
     }
 
     # ==================== 顶层转换接口 Top-level conversion interface ====================
@@ -123,7 +123,7 @@ class BaseConverter(ABC):
         """将provider请求转换为IRRequest
         Convert provider request to IRRequest
 
-        Subclass helper: call ``self._convert_tools_from_p(tools)`` to convert
+        Subclass helper: call ``self._convert_p_tools_to_ir(tools)`` to convert
         provider tool definitions to IR format.
 
         Args:
@@ -147,7 +147,7 @@ class BaseConverter(ABC):
         """将provider响应转换为IRResponse
         Convert provider response to IRResponse
 
-        Subclass helper: call ``self._build_ir_usage(p_usage)`` to convert
+        Subclass helper: call ``self._build_p_usage_to_ir(p_usage)`` to convert
         provider usage to IR format.
 
         Args:
@@ -171,7 +171,7 @@ class BaseConverter(ABC):
         """将IRResponse转换为provider响应
         Convert IRResponse to provider response
 
-        Subclass helper: call ``self._build_provider_usage(ir_usage)`` to convert
+        Subclass helper: call ``self._build_ir_usage_to_p(ir_usage)`` to convert
         IR usage to provider format.
 
         Args:
@@ -263,8 +263,8 @@ class BaseConverter(ABC):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Convert an IR stream event to provider-native stream chunk(s).
 
-        Uses ``_TO_P_DISPATCH`` to route each event type to its handler,
-        then applies ``_post_process_to_provider`` for any provider-specific
+        Uses ``_IR_TO_P_DISPATCH`` to route each event type to its handler,
+        then applies ``_post_process_ir_to_p`` for any provider-specific
         decoration of the result.
 
         Subclasses that need pre-dispatch logic (e.g., context upgrades)
@@ -279,13 +279,13 @@ class BaseConverter(ABC):
             A single provider-native stream chunk dict, or a list of chunk
             dicts when the event maps to multiple provider-level messages.
         """
-        handler_name = self._TO_P_DISPATCH.get(event.get("type", ""))
+        handler_name = self._IR_TO_P_DISPATCH.get(event.get("type", ""))
         if handler_name is None:
             return {}
         result = getattr(self, handler_name)(event, context)
-        return self._post_process_to_provider(result, event, context)
+        return self._post_process_ir_to_p(result, event, context)
 
-    def _handle_provider_passthrough_from_p(
+    def _handle_p_passthrough_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -300,7 +300,7 @@ class BaseConverter(ABC):
             )
         )
 
-    def _handle_provider_passthrough_to_p(
+    def _handle_ir_passthrough_to_p(
         self,
         event: ProviderPassthroughEvent,
         context: StreamContext | None,
@@ -314,7 +314,7 @@ class BaseConverter(ABC):
             return {}
         return dict(event["payload"])
 
-    def _post_process_to_provider(
+    def _post_process_ir_to_p(
         self,
         result: dict[str, Any] | list[dict[str, Any]],
         event: IRStreamEvent,
@@ -364,7 +364,7 @@ class BaseConverter(ABC):
 
     @staticmethod
     @abstractmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+    def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
         """Convert provider usage dict to IR usage format.
 
         Called by ``response_from_provider`` to normalize provider-specific
@@ -375,7 +375,7 @@ class BaseConverter(ABC):
 
     @staticmethod
     @abstractmethod
-    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Convert IR usage dict to provider-specific usage format.
 
         Called by ``response_to_provider`` to map IR token usage fields
@@ -384,7 +384,7 @@ class BaseConverter(ABC):
         """
         ...
 
-    def _convert_tools_from_p(self, tools: list[Any]) -> list[Any]:
+    def _convert_p_tools_to_ir(self, tools: list[Any]) -> list[Any]:
         """Convert provider tool definitions to IR ToolDefinition list.
 
         Default implementation iterates *tools* and calls
@@ -393,7 +393,7 @@ class BaseConverter(ABC):
 
         .. note::
             This is the **uncached** fallback.  In normal operation,
-            ``_get_cached_tools_from_p`` calls ``tool_ops`` directly
+            ``_get_cached_p_tools_to_ir`` calls ``tool_ops`` directly
             with per-entry caching.  This method is retained for
             direct use in tests or subclass customisation.
         """
@@ -628,7 +628,7 @@ class BaseConverter(ABC):
 
     # ==================== Per-entry conversion caching ====================
 
-    def _get_cached_tools_from_p(self, tools: list[Any]) -> list[Any]:
+    def _get_cached_p_tools_to_ir(self, tools: list[Any]) -> list[Any]:
         """Per-entry provider→IR tool conversion with caching.
 
         Looks up each tool individually in the conversion cache (spoke).
@@ -689,7 +689,7 @@ class BaseConverter(ABC):
 
         return ir_tools
 
-    def _get_cached_tools_to_p(self, ir_tools: list[Any]) -> list[Any]:
+    def _get_cached_ir_tools_to_p(self, ir_tools: list[Any]) -> list[Any]:
         """Per-entry IR→provider tool conversion with caching.
 
         Looks up each IR tool individually.  On miss, converts and

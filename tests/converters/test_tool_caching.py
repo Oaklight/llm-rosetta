@@ -185,7 +185,7 @@ CONVERTER_CONFIGS = [
 
 @pytest.mark.parametrize("conv_cls,tools,make_req", CONVERTER_CONFIGS)
 class TestFromProviderCache:
-    """Tests for _convert_tools_from_p caching in request_from_provider."""
+    """Tests for _convert_p_tools_to_ir caching in request_from_provider."""
 
     def test_cache_hit_on_second_call(self, conv_cls, tools, make_req):
         """Second call with same tools should hit the per-entry cache."""
@@ -319,7 +319,7 @@ def test_cache_survives_new_instance():
 def test_invalid_tools_not_cached():
     """Invalid tools should raise on the first call and not be cached.
 
-    Uses a non-dict tool entry which triggers ValueError in _convert_tools_from_p.
+    Uses a non-dict tool entry which triggers ValueError in _convert_p_tools_to_ir.
     """
     clear_all_caches()
 
