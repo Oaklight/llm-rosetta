@@ -163,6 +163,7 @@ nav:
       - Provider Reasoning Behavior: guide/provider-reasoning.md
       - Provider Shims: guide/shims.md
       - Provider Compatibility: guide/compatibility.md
+      - Naming Conventions: guide/naming-conventions.md
       - Examples:
           - examples/index.md
           - Cross-Provider Conversation: examples/cross-provider.md
