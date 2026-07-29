@@ -290,7 +290,7 @@ class OpenAIChatToolOps(BaseToolOps):
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
         )
 
-        return {
+        result: dict[str, Any] = {
             "id": ir_tool_call["tool_call_id"],
             "type": "function",
             "function": {
@@ -298,6 +298,9 @@ class OpenAIChatToolOps(BaseToolOps):
                 "arguments": arguments,
             },
         }
+        if "provider_metadata" in ir_tool_call:
+            result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+        return result
 
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
@@ -319,13 +322,17 @@ class OpenAIChatToolOps(BaseToolOps):
         except (json.JSONDecodeError, TypeError):
             tool_input = {"raw_arguments": arguments_str}
 
-        return ToolCallPart(
+        part = ToolCallPart(
             type="tool_call",
             tool_call_id=provider_tool_call.get("id", ""),
             tool_name=func.get("name", ""),
             tool_input=tool_input,
             tool_type="function",
         )
+        pm = provider_tool_call.get("_provider_metadata")
+        if pm:
+            part["provider_metadata"] = pm
+        return part
 
     # ==================== Tool Result ====================
 

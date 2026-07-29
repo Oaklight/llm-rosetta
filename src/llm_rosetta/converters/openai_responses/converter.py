@@ -871,6 +871,10 @@ class OpenAIResponsesConverter(BaseConverter):
                     tool_name=item.get("name", ""),
                     tool_type=tool_type,
                 )
+                if item_id and item_id != call_id:
+                    start_event_tc["provider_metadata"] = {
+                        "responses_item_id": item_id,
+                    }
                 output_index = chunk.get("output_index")
                 if output_index is not None:
                     start_event_tc["tool_call_index"] = output_index
@@ -1338,7 +1342,8 @@ class OpenAIResponsesConverter(BaseConverter):
         call_id = event["tool_call_id"]
         tool_name = event["tool_name"]
         tool_type = event.get("tool_type", "function")
-        item_id = call_id
+        pm = event.get("provider_metadata") or {}
+        item_id = pm.get("responses_item_id") or call_id
 
         # Register in context for later done events
         if context is not None and call_id:

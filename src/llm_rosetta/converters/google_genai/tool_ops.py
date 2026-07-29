@@ -236,12 +236,12 @@ class GoogleGenAIToolOps(BaseToolOps):
             }
         }
 
-        # Preserve thought_signature from provider_metadata
         preserve_metadata = kwargs.get("preserve_metadata", True)
         if preserve_metadata and "provider_metadata" in ir_tool_call:
             metadata = ir_tool_call["provider_metadata"]
             if "google" in metadata and "thought_signature" in metadata["google"]:
                 part["thoughtSignature"] = metadata["google"]["thought_signature"]
+            part["_provider_metadata"] = metadata
 
         return part
 
@@ -277,16 +277,17 @@ class GoogleGenAIToolOps(BaseToolOps):
             "tool_type": "function",
         }
 
-        # Preserve thought_signature to provider_metadata
         preserve_metadata = kwargs.get("preserve_metadata", True)
         if preserve_metadata:
+            pm = provider_tool_call.get("_provider_metadata")
+            if pm:
+                tool_call_kwargs["provider_metadata"] = pm
             thought_sig = provider_tool_call.get(
                 "thoughtSignature"
             ) or provider_tool_call.get("thought_signature")
             if thought_sig:
-                tool_call_kwargs["provider_metadata"] = {
-                    "google": {"thought_signature": thought_sig}
-                }
+                pm = tool_call_kwargs.setdefault("provider_metadata", {})
+                pm.setdefault("google", {})["thought_signature"] = thought_sig
 
         return cast(ToolCallPart, tool_call_kwargs)
 

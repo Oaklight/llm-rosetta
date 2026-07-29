@@ -319,3 +319,69 @@ class TestOpenAIChatToolOps:
         provider = OpenAIChatToolOps.ir_tool_config_to_p(original)
         restored = OpenAIChatToolOps.p_tool_config_to_ir(provider)
         assert restored["disable_parallel"] == original["disable_parallel"]
+
+
+class TestProviderMetadataPreservation:
+    """Tests for generic provider_metadata round-trip through Chat format.
+
+    Covers issue #401: responses_item_id must survive Chat converter boundary.
+    """
+
+    def test_ir_to_p_preserves_provider_metadata(self):
+        """ir_tool_call_to_p stashes provider_metadata as _provider_metadata."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_xyz",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "London"},
+                "tool_type": "function",
+                "provider_metadata": {"responses_item_id": "fc_abc123"},
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
+        assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
+
+    def test_p_to_ir_restores_provider_metadata(self):
+        """p_tool_call_to_ir restores _provider_metadata to provider_metadata."""
+        p_call = {
+            "id": "call_xyz",
+            "type": "function",
+            "function": {"name": "get_weather", "arguments": '{"city": "London"}'},
+            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+        }
+        result = OpenAIChatToolOps.p_tool_call_to_ir(p_call)
+        assert result.get("provider_metadata") == {"responses_item_id": "fc_abc123"}
+
+    def test_no_metadata_when_absent(self):
+        """No _provider_metadata when IR part has no provider_metadata."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_xyz",
+                "tool_name": "get_weather",
+                "tool_input": {},
+                "tool_type": "function",
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
+        assert "_provider_metadata" not in result
+
+    def test_provider_metadata_round_trip(self):
+        """provider_metadata survives IR → Chat → IR round-trip."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_xyz",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "London"},
+                "tool_type": "function",
+                "provider_metadata": {"responses_item_id": "fc_abc123"},
+            },
+        )
+        chat_call = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
+        restored = OpenAIChatToolOps.p_tool_call_to_ir(chat_call)
+        assert restored.get("provider_metadata") == {"responses_item_id": "fc_abc123"}

@@ -479,3 +479,69 @@ class TestGoogleGenAIToolOps:
         result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
         params = result["function_declarations"][0]["parameters"]
         assert params["properties"]["field"]["nullable"] is True
+
+
+class TestProviderMetadataPreservation:
+    """Tests for generic provider_metadata round-trip through Google format.
+
+    Covers issue #401: responses_item_id must survive Google converter boundary.
+    """
+
+    def test_ir_to_p_preserves_full_provider_metadata(self):
+        """ir_tool_call_to_p stashes entire provider_metadata as _provider_metadata."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_xyz",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "London"},
+                "tool_type": "function",
+                "provider_metadata": {"responses_item_id": "fc_abc123"},
+            },
+        )
+        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_part)
+        assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
+
+    def test_p_to_ir_restores_provider_metadata(self):
+        """p_tool_call_to_ir restores _provider_metadata to provider_metadata."""
+        p_call = {
+            "functionCall": {"name": "get_weather", "args": {"city": "London"}},
+            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+        }
+        result = GoogleGenAIToolOps.p_tool_call_to_ir(p_call)
+        assert (
+            result.get("provider_metadata", {}).get("responses_item_id") == "fc_abc123"
+        )
+
+    def test_thought_signature_merged_with_provider_metadata(self):
+        """thought_signature is merged into existing provider_metadata."""
+        p_call = {
+            "functionCall": {"name": "get_weather", "args": {}},
+            "thoughtSignature": "sig_123",
+            "_provider_metadata": {"responses_item_id": "fc_abc123"},
+        }
+        result = GoogleGenAIToolOps.p_tool_call_to_ir(p_call)
+        pm = result.get("provider_metadata", {})
+        assert pm.get("responses_item_id") == "fc_abc123"
+        assert pm.get("google", {}).get("thought_signature") == "sig_123"
+
+    def test_provider_metadata_round_trip(self):
+        """provider_metadata survives IR → Google → IR round-trip."""
+        ir_part = cast(
+            ToolCallPart,
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_xyz",
+                "tool_name": "get_weather",
+                "tool_input": {"city": "London"},
+                "tool_type": "function",
+                "provider_metadata": {"responses_item_id": "fc_abc123"},
+            },
+        )
+        google_call = GoogleGenAIToolOps.ir_tool_call_to_p(ir_part)
+        restored = GoogleGenAIToolOps.p_tool_call_to_ir(google_call)
+        assert (
+            restored.get("provider_metadata", {}).get("responses_item_id")
+            == "fc_abc123"
+        )
