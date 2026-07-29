@@ -1618,3 +1618,200 @@ class TestCustomToolCallStreaming:
         )
         assert restored["type"] == "response.custom_tool_call_input.delta"
         assert restored["delta"] == "search query"
+
+
+class TestFunctionCallItemIdPreservation:
+    """Tests for preserving Responses function_call item id (fc_ prefix)
+    through streaming round-trip, distinct from call_id (call_ prefix).
+
+    Covers issue #401.
+    """
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    # --- from_p: ToolCallStartEvent carries responses_item_id ---
+
+    def test_from_p_carries_item_id_in_provider_metadata(self):
+        """output_item.added with distinct id/call_id stores responses_item_id."""
+        chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "fc_abc123",
+                "call_id": "call_xyz789",
+                "name": "get_weather",
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert len(events) == 1
+        event = events[0]
+        assert event["type"] == "tool_call_start"
+        assert event["tool_call_id"] == "call_xyz789"
+        pm = event.get("provider_metadata", {})
+        assert pm.get("responses_item_id") == "fc_abc123"
+
+    def test_from_p_no_metadata_when_ids_equal(self):
+        """output_item.added where id == call_id does not set provider_metadata."""
+        chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "call_abc",
+                "call_id": "call_abc",
+                "name": "search",
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert "provider_metadata" not in events[0]
+
+    def test_from_p_no_metadata_when_id_empty(self):
+        """output_item.added with empty id does not set provider_metadata."""
+        chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "",
+                "call_id": "call_abc",
+                "name": "search",
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(chunk))
+        assert "provider_metadata" not in events[0]
+
+    # --- to_p: restores fc_ item id from provider_metadata ---
+
+    def test_to_p_restores_fc_item_id(self):
+        """ToolCallStartEvent with provider_metadata restores fc_ item id."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_001"
+        ctx.model = "gpt-4"
+        ctx.mark_started()
+
+        event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id="call_xyz789",
+            tool_name="get_weather",
+            provider_metadata={"responses_item_id": "fc_abc123"},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["item"]["id"] == "fc_abc123"
+        assert result["item"]["call_id"] == "call_xyz789"
+
+    def test_to_p_fallback_without_metadata(self):
+        """ToolCallStartEvent without provider_metadata uses call_id as id."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_001"
+        ctx.model = "gpt-4"
+        ctx.mark_started()
+
+        event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id="call_xyz789",
+            tool_name="get_weather",
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(event, context=ctx),
+        )
+        assert result["item"]["id"] == "call_xyz789"
+        assert result["item"]["call_id"] == "call_xyz789"
+
+    # --- Full round-trip ---
+
+    def test_round_trip_preserves_fc_item_id(self):
+        """Full streaming round-trip preserves distinct fc_ item id."""
+        ctx_from = OpenAIResponsesStreamContext()
+        ctx_to = OpenAIResponsesStreamContext()
+        ctx_to.response_id = "resp_001"
+        ctx_to.model = "gpt-4"
+        ctx_to.mark_started()
+
+        added_chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "fc_abc123",
+                "call_id": "call_xyz789",
+                "name": "get_weather",
+                "arguments": "",
+                "status": "in_progress",
+            },
+        }
+        ir_events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(added_chunk, context=ctx_from),
+        )
+        restored = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(ir_events[0], context=ctx_to),
+        )
+        assert restored["item"]["id"] == "fc_abc123"
+        assert restored["item"]["call_id"] == "call_xyz789"
+
+    def test_done_and_completed_use_fc_item_id(self):
+        """Done and completed events use the fc_ item id from start event."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_001"
+        ctx.model = "gpt-4"
+        ctx.mark_started()
+
+        # Register tool call with distinct ids via start event
+        start_event = ToolCallStartEvent(
+            type="tool_call_start",
+            tool_call_id="call_xyz789",
+            tool_name="get_weather",
+            provider_metadata={"responses_item_id": "fc_abc123"},
+        )
+        self.converter.stream_response_to_provider(start_event, context=ctx)
+
+        # Delta should use fc_ item_id
+        delta_event = ToolCallDeltaEvent(
+            type="tool_call_delta",
+            tool_call_id="call_xyz789",
+            arguments_delta='{"city": "London"}',
+        )
+        delta_result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(delta_event, context=ctx),
+        )
+        assert delta_result["item_id"] == "fc_abc123"
+
+        # Finish triggers done events
+        finish_event = FinishEvent(
+            type="finish",
+            finish_reason={"reason": "tool_calls"},
+        )
+        results = self.converter.stream_response_to_provider(finish_event, context=ctx)
+        result_list = results if isinstance(results, list) else [results]
+
+        # output_item.done should have fc_ id
+        done_events = [
+            e
+            for e in result_list
+            if isinstance(e, dict) and e.get("type") == "response.output_item.done"
+        ]
+        assert len(done_events) == 1
+        assert done_events[0]["item"]["id"] == "fc_abc123"
+        assert done_events[0]["item"]["call_id"] == "call_xyz789"
+
+        # response.completed output should have fc_ id
+        assert ctx.pending_response is not None
+        output = ctx.pending_response.get("output", [])
+        fc_items = [o for o in output if o.get("type") == "function_call"]
+        assert len(fc_items) == 1
+        assert fc_items[0]["id"] == "fc_abc123"
+        assert fc_items[0]["call_id"] == "call_xyz789"
