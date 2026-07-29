@@ -158,6 +158,7 @@ nav:
       - Converters:
           - Using Converters: guide/converters.md
           - Streaming: guide/streaming.md
+          - Multi-Turn State Bridge: guide/turn-bridge.md
           - Auto Detection: guide/auto-detection.md
       - IR & Type System:
           - IR Types: guide/ir-types.md
