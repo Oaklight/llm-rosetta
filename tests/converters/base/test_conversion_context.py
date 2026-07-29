@@ -180,10 +180,10 @@ class TestStreamContextBufferMethods:
 
 
 class TestBaseConverterDispatch:
-    """Test BaseConverter._TO_P_DISPATCH and dispatch skeleton."""
+    """Test BaseConverter._IR_TO_P_DISPATCH and dispatch skeleton."""
 
     def test_dispatch_table_has_11_entries(self):
-        assert len(BaseConverter._TO_P_DISPATCH) == 11
+        assert len(BaseConverter._IR_TO_P_DISPATCH) == 11
 
     def test_dispatch_table_keys(self):
         expected = {
@@ -199,13 +199,13 @@ class TestBaseConverterDispatch:
             "usage",
             "provider_passthrough",
         }
-        assert set(BaseConverter._TO_P_DISPATCH.keys()) == expected
+        assert set(BaseConverter._IR_TO_P_DISPATCH.keys()) == expected
 
     def test_post_process_noop(self):
-        # Google inherits base _post_process_to_provider without override
+        # Google inherits base _post_process_ir_to_p without override
         converter = GoogleGenAIConverter()
         result: dict[str, Any] = {"test": True}
-        out = converter._post_process_to_provider(
+        out = converter._post_process_ir_to_p(
             result,
             {"type": "text_delta"},  # ty: ignore[invalid-argument-type]
             None,

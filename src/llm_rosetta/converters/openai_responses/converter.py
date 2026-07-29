@@ -223,12 +223,12 @@ class OpenAIResponsesConverter(BaseConverter):
                 if not (isinstance(t, dict) and t.get("external_web_access") is False)
             ]
             if active_tools:
-                ir_tools = self._get_cached_tools_from_p(active_tools)
+                ir_tools = self._get_cached_p_tools_to_ir(active_tools)
                 if ir_tools:
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
-        self._convert_tool_config_from_p(provider_request, ir_request)
+        self._convert_p_tool_config_to_ir(provider_request, ir_request)
 
         # 6. Generation config
         gen_config = self.config_ops.p_generation_config_to_ir(provider_request)
@@ -256,7 +256,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         # 10. Cache config
-        self._convert_cache_from_p(provider_request, ir_request)
+        self._convert_p_cache_to_ir(provider_request, ir_request)
 
         # 11. Provider extensions (passthrough fields like allowed_tools)
         allowed_tools = provider_request.get("allowed_tools")
@@ -360,7 +360,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Handle usage
         p_usage = provider_response.get("usage")
         if p_usage:
-            ir_response["usage"] = self._build_ir_usage(p_usage)
+            ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
@@ -448,7 +448,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Usage
         ir_usage = ir_response.get("usage")
         if ir_usage:
-            provider_response["usage"] = self._build_provider_usage(ir_usage)
+            provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
@@ -471,7 +471,7 @@ class OpenAIResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_ir_usage(p_usage: dict[str, Any]) -> UsageInfo:
+    def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
         """Build IR usage dict from Responses API usage."""
         usage_info: dict[str, Any] = {
             "prompt_tokens": p_usage.get("input_tokens") or 0,
@@ -489,7 +489,7 @@ class OpenAIResponsesConverter(BaseConverter):
         return cast(UsageInfo, usage_info)
 
     @staticmethod
-    def _build_provider_usage(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
+    def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Responses API usage dict from IR usage."""
         return {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
@@ -512,7 +512,7 @@ class OpenAIResponsesConverter(BaseConverter):
         """Apply tools, tool_choice, and tool_config to provider request."""
         tools = ir_request.get("tools")
         if tools:
-            result["tools"] = self._get_cached_tools_to_p(tools)
+            result["tools"] = self._get_cached_ir_tools_to_p(tools)
         tool_choice = ir_request.get("tool_choice")
         if tool_choice:
             result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
@@ -521,7 +521,7 @@ class OpenAIResponsesConverter(BaseConverter):
             tc_fields = self.tool_ops.ir_tool_config_to_p(tool_config)
             result.update(tc_fields)
 
-    def _convert_tool_config_from_p(
+    def _convert_p_tool_config_to_ir(
         self,
         provider_request: dict[str, Any],
         ir_request: dict[str, Any],
@@ -542,7 +542,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 tool_config_fields
             )
 
-    def _convert_cache_from_p(
+    def _convert_p_cache_to_ir(
         self,
         provider_request: dict[str, Any],
         ir_request: dict[str, Any],
@@ -726,19 +726,19 @@ class OpenAIResponsesConverter(BaseConverter):
 
     # ==================== Compatibility Aliases ====================
 
-    def _convert_image_to_responses(self, image_part):
+    def _convert_ir_image_to_p(self, image_part):
         """Convert IR image to Responses API format (compatibility alias)."""
         return self.content_ops.ir_image_to_p(image_part)
 
-    def _convert_file_to_responses(self, file_part):
+    def _convert_ir_file_to_p(self, file_part):
         """Convert IR file to Responses API format (compatibility alias)."""
         return self.content_ops.ir_file_to_p(file_part)
 
-    def _convert_image_from_responses(self, image_part):
+    def _convert_p_image_to_ir(self, image_part):
         """Convert Responses API image to IR format (compatibility alias)."""
         return self.content_ops.p_image_to_ir(image_part)
 
-    def _convert_file_from_responses(self, file_part):
+    def _convert_p_file_to_ir(self, file_part):
         """Convert Responses API file to IR format (compatibility alias)."""
         return self.content_ops.p_file_to_ir(file_part)
 
@@ -776,7 +776,7 @@ class OpenAIResponsesConverter(BaseConverter):
         events: list[IRStreamEvent] = []
         event_type = chunk.get("type", "")
 
-        handler_name = self._FROM_P_DISPATCH.get(event_type)
+        handler_name = self._P_TO_IR_DISPATCH.get(event_type)
         if handler_name is not None:
             getattr(self, handler_name)(chunk, context, events)
 
@@ -787,7 +787,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     # --- from_provider handlers ---
 
-    def _handle_response_created_from_p(
+    def _handle_p_response_created_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -819,7 +819,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 if extras:
                     context.store_response_extras(extras)
 
-    def _handle_output_text_delta_from_p(
+    def _handle_p_output_text_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -832,7 +832,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
         )
 
-    def _handle_reasoning_delta_from_p(
+    def _handle_p_reasoning_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -845,7 +845,7 @@ class OpenAIResponsesConverter(BaseConverter):
             )
         )
 
-    def _handle_output_item_added_from_p(
+    def _handle_p_output_item_added_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -885,7 +885,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 # ``response.content_part.added`` events on round-trip.
                 pass
 
-    def _handle_content_part_added_from_p(
+    def _handle_p_content_part_added_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -908,7 +908,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
             )
 
-    def _handle_content_part_done_from_p(
+    def _handle_p_content_part_done_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -922,7 +922,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 )
             )
 
-    def _handle_output_item_done_from_p(
+    def _handle_p_output_item_done_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -946,7 +946,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 if call_id:
                     context.set_tool_call_args(call_id, item.get("input", ""))
 
-    def _handle_function_call_args_delta_from_p(
+    def _handle_p_function_call_args_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -969,7 +969,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         events.append(delta_event)
 
-    def _handle_function_call_args_done_from_p(
+    def _handle_p_function_call_args_done_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -981,7 +981,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if context is not None and call_id:
             context.set_tool_call_args(call_id, arguments)
 
-    def _handle_custom_tool_call_input_delta_from_p(
+    def _handle_p_custom_tool_call_input_delta_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -1005,7 +1005,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         events.append(delta_event)
 
-    def _handle_custom_tool_call_input_done_from_p(
+    def _handle_p_custom_tool_call_input_done_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -1017,7 +1017,7 @@ class OpenAIResponsesConverter(BaseConverter):
         if context is not None and call_id:
             context.set_tool_call_args(call_id, input_text)
 
-    def _handle_response_completed_from_p(
+    def _handle_p_response_completed_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -1054,7 +1054,7 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(
                 UsageEvent(
                     type="usage",
-                    usage=self._build_ir_usage(usage),
+                    usage=self._build_p_usage_to_ir(usage),
                 )
             )
 
@@ -1070,7 +1070,7 @@ class OpenAIResponsesConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-    def _handle_response_failed_from_p(
+    def _handle_p_response_failed_to_ir(
         self,
         chunk: dict[str, Any],
         context: StreamContext | None,
@@ -1088,21 +1088,21 @@ class OpenAIResponsesConverter(BaseConverter):
             context.mark_ended()
             events.append(StreamEndEvent(type="stream_end"))
 
-    _FROM_P_DISPATCH: dict[str, str] = {
-        ResponsesEventType.RESPONSE_IN_PROGRESS: "_handle_provider_passthrough_from_p",
-        ResponsesEventType.RESPONSE_CREATED: "_handle_response_created_from_p",
-        ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_output_text_delta_from_p",
-        ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_reasoning_delta_from_p",
-        ResponsesEventType.OUTPUT_ITEM_ADDED: "_handle_output_item_added_from_p",
-        ResponsesEventType.CONTENT_PART_ADDED: "_handle_content_part_added_from_p",
-        ResponsesEventType.CONTENT_PART_DONE: "_handle_content_part_done_from_p",
-        ResponsesEventType.OUTPUT_ITEM_DONE: "_handle_output_item_done_from_p",
-        ResponsesEventType.FUNCTION_CALL_ARGS_DELTA: "_handle_function_call_args_delta_from_p",
-        ResponsesEventType.FUNCTION_CALL_ARGS_DONE: "_handle_function_call_args_done_from_p",
-        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA: "_handle_custom_tool_call_input_delta_from_p",
-        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE: "_handle_custom_tool_call_input_done_from_p",
-        ResponsesEventType.RESPONSE_COMPLETED: "_handle_response_completed_from_p",
-        ResponsesEventType.RESPONSE_FAILED: "_handle_response_failed_from_p",
+    _P_TO_IR_DISPATCH: dict[str, str] = {
+        ResponsesEventType.RESPONSE_IN_PROGRESS: "_handle_p_passthrough_to_ir",
+        ResponsesEventType.RESPONSE_CREATED: "_handle_p_response_created_to_ir",
+        ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_p_output_text_delta_to_ir",
+        ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_p_reasoning_delta_to_ir",
+        ResponsesEventType.OUTPUT_ITEM_ADDED: "_handle_p_output_item_added_to_ir",
+        ResponsesEventType.CONTENT_PART_ADDED: "_handle_p_content_part_added_to_ir",
+        ResponsesEventType.CONTENT_PART_DONE: "_handle_p_content_part_done_to_ir",
+        ResponsesEventType.OUTPUT_ITEM_DONE: "_handle_p_output_item_done_to_ir",
+        ResponsesEventType.FUNCTION_CALL_ARGS_DELTA: "_handle_p_function_call_args_delta_to_ir",
+        ResponsesEventType.FUNCTION_CALL_ARGS_DONE: "_handle_p_function_call_args_done_to_ir",
+        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DELTA: "_handle_p_custom_tool_call_input_delta_to_ir",
+        ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE: "_handle_p_custom_tool_call_input_done_to_ir",
+        ResponsesEventType.RESPONSE_COMPLETED: "_handle_p_response_completed_to_ir",
+        ResponsesEventType.RESPONSE_FAILED: "_handle_p_response_failed_to_ir",
     }
 
     def stream_response_to_provider(
@@ -1129,7 +1129,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return super().stream_response_to_provider(event, context)
 
-    def _post_process_to_provider(
+    def _post_process_ir_to_p(
         self,
         result: dict[str, Any] | list[dict[str, Any]],
         event: IRStreamEvent,
@@ -1149,7 +1149,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
     # --- to_provider handlers ---
 
-    def _handle_stream_start_to_p(
+    def _handle_ir_stream_start_to_p(
         self,
         event: StreamStartEvent,
         context: StreamContext | None,
@@ -1197,7 +1197,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "response": response,
         }
 
-    def _handle_stream_end_to_p(
+    def _handle_ir_stream_end_to_p(
         self,
         event: StreamEndEvent,
         context: StreamContext | None,
@@ -1221,7 +1221,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 }
         return {}
 
-    def _handle_content_block_start_to_p(
+    def _handle_ir_content_block_start_to_p(
         self,
         event: ContentBlockStartEvent,
         context: OpenAIResponsesStreamContext | None,
@@ -1251,7 +1251,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # Other block types are no-ops for now
         return {}
 
-    def _handle_content_block_end_to_p(
+    def _handle_ir_content_block_end_to_p(
         self,
         event: ContentBlockEndEvent,
         context: OpenAIResponsesStreamContext | None,
@@ -1291,7 +1291,7 @@ class OpenAIResponsesConverter(BaseConverter):
             },
         }
 
-    def _handle_text_delta_to_p(
+    def _handle_ir_text_delta_to_p(
         self,
         event: TextDeltaEvent,
         context: OpenAIResponsesStreamContext | None,
@@ -1320,7 +1320,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return delta_event
 
-    def _handle_reasoning_delta_to_p(
+    def _handle_ir_reasoning_delta_to_p(
         self,
         event: ReasoningDeltaEvent,
         context: StreamContext | None,
@@ -1330,7 +1330,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "delta": event["reasoning"],
         }
 
-    def _handle_tool_call_start_to_p(
+    def _handle_ir_tool_call_start_to_p(
         self,
         event: ToolCallStartEvent,
         context: StreamContext | None,
@@ -1374,7 +1374,7 @@ class OpenAIResponsesConverter(BaseConverter):
         }
         return result
 
-    def _handle_tool_call_delta_to_p(
+    def _handle_ir_tool_call_delta_to_p(
         self,
         event: ToolCallDeltaEvent,
         context: StreamContext | None,
@@ -1423,7 +1423,7 @@ class OpenAIResponsesConverter(BaseConverter):
         }
         return result
 
-    def _handle_finish_to_p(
+    def _handle_ir_finish_to_p(
         self,
         event: FinishEvent,
         context: OpenAIResponsesStreamContext | None,
@@ -1710,7 +1710,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     }
                 )
 
-    def _handle_usage_to_p(
+    def _handle_ir_usage_to_p(
         self,
         event: UsageEvent,
         context: StreamContext | None,
