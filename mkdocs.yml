@@ -158,6 +158,7 @@ nav:
       - 转换器:
           - 使用转换器: guide/converters.md
           - 流式处理: guide/streaming.md
+          - 多轮状态桥接: guide/turn-bridge.md
           - 自动检测: guide/auto-detection.md
       - IR 与类型系统:
           - IR 类型: guide/ir-types.md
