@@ -71,7 +71,7 @@ plugins:
           - index.md
         快速入门:
           - getting-started/installation.md
-          - getting-started/quickstart.md
+          - getting-started/library-quickstart.md
         库指南:
           - guide/concepts.md
           - guide/converters.md
@@ -150,20 +150,23 @@ nav:
   - 首页: index.md
   - 快速入门:
       - 安装: getting-started/installation.md
-      - 快速开始: getting-started/quickstart.md
-  - 库指南:
       - 核心概念: guide/concepts.md
-      - 使用转换器: guide/converters.md
-      - IR 类型: guide/ir-types.md
-      - 流式处理: guide/streaming.md
-      - 自动检测: guide/auto-detection.md
-      - API 分层: guide/api-layers.md
-      - API 标准: guide/api-standards.md
-      - 推理 / 思考参数: guide/reasoning.md
-      - 提供商推理行为: guide/provider-reasoning.md
-      - 提供商 Shim: guide/shims.md
+      - 库快速开始: getting-started/library-quickstart.md
+      - 网关快速开始: getting-started/gateway-quickstart.md
+  - 库:
       - 提供商兼容性: guide/compatibility.md
-      - 命名约定: guide/naming-conventions.md
+      - 转换器:
+          - 使用转换器: guide/converters.md
+          - 流式处理: guide/streaming.md
+          - 自动检测: guide/auto-detection.md
+      - IR 与类型系统:
+          - IR 类型: guide/ir-types.md
+          - API 分层: guide/api-layers.md
+          - API 标准: guide/api-standards.md
+      - 提供商:
+          - 提供商 Shim: guide/shims.md
+          - 推理 / 思考参数: guide/reasoning.md
+          - 提供商推理行为: guide/provider-reasoning.md
       - 示例:
           - examples/index.md
           - 跨提供商对话: examples/cross-provider.md
@@ -171,8 +174,9 @@ nav:
   - 网关:
       - gateway/index.md
       - 配置: gateway/configuration.md
-      - CLI 参考: gateway/cli.md
-      - CLI 工具集成: gateway/cli-integrations.md
+      - CLI:
+          - CLI 参考: gateway/cli.md
+          - CLI 工具集成: gateway/cli-integrations.md
       - 管理:
           - 管理面板: gateway/admin-panel.md
           - Admin API: api/admin.md
@@ -183,11 +187,16 @@ nav:
           - SDK 与集成测试: gateway/validation-sdk.md
   - API 参考:
       - api/index.md
-      - 转换器: api/converters.md
-      - IR 类型: api/types.md
-      - Tool Ops: api/tool-ops.md
-      - Shims: api/shims.md
-      - 工具函数: api/utils.md
-      - 可观测性: api/observability.md
+      - 库 API:
+          - 转换器: api/converters.md
+          - IR 类型: api/types.md
+          - Tool Ops: api/tool-ops.md
+          - Shims: api/shims.md
+          - 工具函数: api/utils.md
+      - 网关 API:
+          - Admin API: api/admin.md
+          - 可观测性: api/observability.md
+  - 贡献:
+      - 命名约定: contributing/naming-conventions.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md

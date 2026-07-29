@@ -12,85 +12,7 @@ LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供商 AP
 客户端 (Google 格式) ──→ 网关 ──→ 任意提供商
 ```
 
-## 安装
-
-```bash
-pip install "llm-rosetta[gateway]"
-```
-
-网关 **无外部运行时依赖** — 使用内嵌的 [zerodep](https://github.com/Oaklight/zerodep) `httpserver` 和 `httpclient` 模块（仅依赖标准库，单文件）。
-
-## 快速开始
-
-### 1. 创建配置文件
-
-创建 `config.jsonc`（支持注释的 JSON）：
-
-```jsonc
-{
-  "providers": {
-    "my-openai":    { "type": "openai_chat",      "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
-    "my-anthropic": { "type": "anthropic",         "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
-    "my-google":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" }
-  },
-  "models": {
-    "gpt-4o": "my-openai",
-    "gpt-4o-mini": "my-openai",
-    "claude-sonnet-4-20250514": "my-anthropic",
-    "gemini-2.0-flash": "my-google"
-  },
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8765
-  }
-}
-```
-
-提供商名称是用户自定义的字符串。`type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。详见[配置](configuration.md)页面。
-
-### 2. 启动网关
-
-```bash
-# CLI 命令（pip install 后可用）
-llm-rosetta-gateway
-
-# 或显式指定配置文件
-llm-rosetta-gateway --config /path/to/config.jsonc
-
-# 或作为 Python 模块运行
-python -m llm_rosetta.gateway
-```
-
-网关会按以下顺序自动搜索配置文件（首个匹配生效）：
-
-1. `./config.jsonc`（当前目录）
-2. `~/.config/llm-rosetta-gateway/config.jsonc`
-3. `~/.llm-rosetta-gateway/config.jsonc`
-
-也可以使用 `init` 或 `add` 子命令快速创建配置文件。详见 [CLI 参考](cli.md)页面。
-
-### 3. 发送请求
-
-使用任意提供商格式 — 网关根据模型名称自动路由：
-
-```bash
-# 发送 OpenAI 格式请求，路由到 Anthropic
-curl http://localhost:8765/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "claude-sonnet-4-20250514",
-    "messages": [{"role": "user", "content": "Hello!"}]
-  }'
-
-# 发送 Anthropic 格式请求，路由到 OpenAI
-curl http://localhost:8765/v1/messages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o-mini",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100
-  }'
-```
+初次使用？从[网关快速开始](../getting-started/gateway-quickstart.md)入手。
 
 ## 端点
 
@@ -114,7 +36,6 @@ curl http://localhost:8765/v1/messages \
 所有提供商组合均支持流式传输。请求方式与原生 API 相同：
 
 ```bash
-# OpenAI 格式流式请求，路由到任意提供商
 curl http://localhost:8765/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
@@ -135,35 +56,6 @@ curl http://localhost:8765/v1/chat/completions \
 ```
 
 请求必须以对应 API 标准的原生格式提供 Key（Bearer token、`x-api-key` 头部等）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
-
-## Docker 部署
-
-网关镜像已发布至 DockerHub：
-
-```bash
-# 从 DockerHub 拉取并运行
-docker pull oaklight/llm-rosetta-gateway:latest
-docker run -p 8765:8765 -v /path/to/config:/config oaklight/llm-rosetta-gateway
-
-# 或使用 Docker Compose（见 docker/docker-compose.yaml）
-cd docker && docker compose up -d
-```
-
-从源码构建：
-
-```bash
-# 通过 Makefile 构建（优先使用本地 wheel，否则从 PyPI 安装）
-make build-docker
-
-# 或手动构建
-docker build -t llm-rosetta-gateway .
-```
-
-设置 `PUID`/`PGID` 环境变量以匹配宿主机用户的 UID/GID。完整配置示例见 `docker/docker-compose.yaml`。
-
-## 管理面板
-
-网关内置了 Web 管理面板，访问地址为 `/admin/`，支持配置管理、实时指标监控和请求日志查看。详见[管理面板](admin-panel.md)页面。
 
 ## 工作原理
 

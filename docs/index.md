@@ -55,6 +55,8 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
     pip install llm-rosetta
     ```
 
+    [库快速开始 →](getting-started/library-quickstart.md){ .md-button }
+
 === "作为网关使用"
 
     运行本地 HTTP 代理，实时在格式之间转换：
@@ -72,6 +74,8 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
     可直接作为 **Claude Code**、**Gemini CLI**、**OpenAI Codex CLI**、**Kilo Code** 和 **Ollama** 的后端。详见 [CLI 工具集成](gateway/cli-integrations.md)。
 
+    [网关快速开始 →](getting-started/gateway-quickstart.md){ .md-button }
+
 ---
 
 ## 支持的 API 标准
@@ -84,7 +88,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
 
-详见 [API 标准](guide/api-standards.md)了解各格式的详细对比。
+详见 [API 标准](guide/api-standards.md)了解各格式的详细对比，以及[提供商兼容性](guide/compatibility.md)查看完整的提供商支持矩阵。
 
 ---
 
@@ -117,12 +121,12 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 ## 文档目录
 
-- **[快速上手](getting-started/installation.md)** — 安装和入门
-- **[指南](guide/concepts.md)** — 核心概念、转换器、IR 类型、流式处理
-- **[API 标准](guide/api-standards.md)** — 支持格式的详细对比
-- **[网关](gateway/index.md)** — HTTP 代理设置、配置、CLI 工具集成
-- **[示例](examples/)** — 跨提供商对话、工具调用
-- **[API 参考](api/)** — 完整 API 文档
+- **[快速入门](getting-started/installation.md)** — 安装、核心概念和快速开始
+- **[库](guide/converters.md)** — 转换器、IR 类型、提供商、流式处理
+- **[网关](gateway/index.md)** — HTTP 代理、配置、CLI 工具集成、管理面板
+- **[API 参考](api/index.md)** — 库和网关 API 文档
+- **[示例](examples/index.md)** — 跨提供商对话、工具调用
+- **[贡献](contributing/naming-conventions.md)** — 命名约定和开发者指南
 - **[更新日志](changelog.md)** — 版本历史
 
 ## 引用
