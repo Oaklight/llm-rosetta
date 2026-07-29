@@ -163,6 +163,7 @@ nav:
       - 提供商推理行为: guide/provider-reasoning.md
       - 提供商 Shim: guide/shims.md
       - 提供商兼容性: guide/compatibility.md
+      - 命名约定: guide/naming-conventions.md
       - 示例:
           - examples/index.md
           - 跨提供商对话: examples/cross-provider.md
