@@ -2167,6 +2167,7 @@ class TestStreamingResponseIdPrefix:
             "created": 1700000000,
         }
         result = self.converter.stream_response_to_provider(ir_event, context=ctx)
+        assert isinstance(result, dict)
         assert result["response"]["id"] == "resp_abc123"
         # Context stores the stem (without prefix)
         assert ctx.response_id == "abc123"
@@ -2192,15 +2193,11 @@ class TestStreamingResponseIdPrefix:
             "type": "finish",
             "finish_reason": {"reason": "stop"},
         }
-        self.converter.stream_response_to_provider(
-            finish_event, context=ctx
-        )
+        self.converter.stream_response_to_provider(finish_event, context=ctx)
 
         # stream_end triggers the deferred response.completed
         end_event: StreamEndEvent = {"type": "stream_end"}
-        end_result = self.converter.stream_response_to_provider(
-            end_event, context=ctx
-        )
+        end_result = self.converter.stream_response_to_provider(end_event, context=ctx)
         # Find response.completed event
         completed = None
         for r in [end_result] if isinstance(end_result, dict) else end_result:
@@ -2226,15 +2223,11 @@ class TestStreamingResponseIdPrefix:
             "type": "finish",
             "finish_reason": {"reason": "stop"},
         }
-        self.converter.stream_response_to_provider(
-            finish_event, context=ctx
-        )
+        self.converter.stream_response_to_provider(finish_event, context=ctx)
 
         # stream_end triggers the deferred response.completed
         end_event: StreamEndEvent = {"type": "stream_end"}
-        end_result = self.converter.stream_response_to_provider(
-            end_event, context=ctx
-        )
+        end_result = self.converter.stream_response_to_provider(end_event, context=ctx)
         completed = None
         for r in [end_result] if isinstance(end_result, dict) else end_result:
             if isinstance(r, dict) and r.get("type") == "response.completed":
