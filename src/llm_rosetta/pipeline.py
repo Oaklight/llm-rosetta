@@ -225,13 +225,9 @@ class ConversionPipeline:
         # to the target provider name); the source prefix is resolved
         # from the source provider name.
         target_shim = resolved or resolve_shim(target_provider)
-        self._target_id_prefix = (
-            target_shim.response_id_prefix if target_shim else ""
-        )
+        self._target_id_prefix = target_shim.response_id_prefix if target_shim else ""
         source_shim = resolve_shim(source_provider)
-        self._source_id_prefix = (
-            source_shim.response_id_prefix if source_shim else ""
-        )
+        self._source_id_prefix = source_shim.response_id_prefix if source_shim else ""
 
         # Set after convert_request()
         self._ctx: ConversionContext | None = None

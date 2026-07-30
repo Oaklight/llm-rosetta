@@ -622,9 +622,7 @@ class TestConversionPipeline:
         """Pipeline sets response_id_prefix from shim on context."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_responses"
-        )
+        pipeline = ConversionPipeline("openai_chat", "openai_responses")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -636,9 +634,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         # openai_responses → openai_responses round-trip through pipeline
-        pipeline = ConversionPipeline(
-            "openai_responses", "openai_responses"
-        )
+        pipeline = ConversionPipeline("openai_responses", "openai_responses")
         body = {
             "model": "gpt-4o",
             "input": [{"role": "user", "content": "hi"}],
