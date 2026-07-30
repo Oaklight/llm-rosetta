@@ -35,22 +35,22 @@ def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str
 
 def build_message_preamble_events(
     context: OpenAIResponsesStreamContext,
-    output_index: int = 0,
 ) -> list[dict[str, Any]]:
     """Build output_item.added + content_part.added for a new message item.
 
-    Marks the context as having emitted the output item and generates
-    the item_id.  Must only be called when ``context.output_item_emitted``
-    is ``False``.
+    Allocates the next output_index from the unified counter and marks
+    the context as having emitted the message output item.  Must only
+    be called when ``context.output_item_emitted`` is ``False``.
 
     Args:
         context: Responses stream context.
-        output_index: The output array index for the item.
 
     Returns:
         Two-element list of SSE event dicts.
     """
     context.output_item_emitted = True
+    output_index = context.next_output_index()
+    context._message_output_index = output_index
     item_id = generate_message_id(context.response_id)
     context.item_id = item_id
     return [

@@ -23,6 +23,7 @@ from ...types.ir import (
     TextPart,
 )
 from ..base import BaseContentOps
+from ._constants import generate_reasoning_id
 
 
 class OpenAIResponsesContentOps(BaseContentOps):
@@ -260,8 +261,12 @@ class OpenAIResponsesContentOps(BaseContentOps):
         # Recover the original reasoning item id for round-trip fidelity.
         metadata = ir_reasoning.get("provider_metadata") or {}
         item_id = metadata.get("responses_reasoning_id")
-        if item_id:
-            result["id"] = item_id
+        if not item_id:
+            response_id = kwargs.get("response_id", "")
+            reasoning_index = kwargs.get("reasoning_index", 0)
+            item_id = generate_reasoning_id(response_id, reasoning_index)
+        result["id"] = item_id
+        result["status"] = "completed"
 
         # Recover structured summary if available, otherwise use flat content.
         summary = metadata.get("responses_reasoning_summary")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import uuid
 from typing import Any
 
 # --- SSE event types ---
@@ -22,6 +24,9 @@ class ResponsesEventType:
     OUTPUT_TEXT_DELTA = "response.output_text.delta"
     OUTPUT_TEXT_DONE = "response.output_text.done"
     REASONING_SUMMARY_TEXT_DELTA = "response.reasoning_summary_text.delta"
+    REASONING_SUMMARY_TEXT_DONE = "response.reasoning_summary_text.done"
+    REASONING_SUMMARY_PART_ADDED = "response.reasoning_summary.part.added"
+    REASONING_SUMMARY_PART_DONE = "response.reasoning_summary.part.done"
     FUNCTION_CALL_ARGS_DELTA = "response.function_call_arguments.delta"
     FUNCTION_CALL_ARGS_DONE = "response.function_call_arguments.done"
     CUSTOM_TOOL_CALL_INPUT_DELTA = "response.custom_tool_call_input.delta"
@@ -67,6 +72,21 @@ RESPONSES_REASON_TO_INCOMPLETE_REASON: dict[str, str] = {
 def generate_message_id(response_id: str) -> str:
     """Generate a message item ID from the response ID."""
     return f"msg_{response_id or ''}"
+
+
+def generate_reasoning_id(response_id: str, index: int = 0) -> str:
+    """Generate a deterministic reasoning item ID.
+
+    Uses SHA-256 to derive a stable ID from the response ID and
+    reasoning item position, ensuring idempotent output across
+    repeated conversions of the same IR response.
+
+    Falls back to a random UUID when no response_id is available.
+    """
+    if response_id:
+        seed = f"{response_id}:reasoning:{index}"
+        return f"rs_{hashlib.sha256(seed.encode()).hexdigest()[:24]}"
+    return f"rs_{uuid.uuid4().hex[:24]}"
 
 
 # --- Preserve-mode echo fields ---
