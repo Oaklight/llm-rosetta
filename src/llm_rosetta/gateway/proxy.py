@@ -446,7 +446,7 @@ async def _stream_event_generator(
                 for source_event in processor.process_chunk(chunk):
                     yield format_sse(source_event)
 
-        if source_provider == "openai_chat":
+        if source_provider in ("openai_chat", "openai_responses", "open_responses"):
             yield format_sse_done()
 
         log_stream_summary(
