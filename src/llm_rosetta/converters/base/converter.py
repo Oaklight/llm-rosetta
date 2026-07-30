@@ -75,6 +75,31 @@ class BaseConverter(ABC):
         "provider_passthrough": "_handle_ir_passthrough_to_p",
     }
 
+    # ==================== ID prefix utilities ====================
+
+    @staticmethod
+    def strip_response_id_prefix(raw_id: str, prefix: str) -> str:
+        """Strip a provider-specific prefix from a response ID.
+
+        Returns the stem (the ID without the prefix).  If the prefix is
+        empty or the ID does not start with it, the ID is returned
+        unchanged.
+        """
+        if prefix:
+            return raw_id.removeprefix(prefix)
+        return raw_id
+
+    @staticmethod
+    def add_response_id_prefix(stem: str, prefix: str) -> str:
+        """Add a provider-specific prefix to a response ID stem.
+
+        If the stem already starts with the prefix, it is returned
+        unchanged to avoid double-prefixing.
+        """
+        if prefix and not stem.startswith(prefix):
+            return f"{prefix}{stem}"
+        return stem
+
     # ==================== 顶层转换接口 Top-level conversion interface ====================
 
     @abstractmethod

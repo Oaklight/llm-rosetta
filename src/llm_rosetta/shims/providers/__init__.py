@@ -200,6 +200,7 @@ def _load_single_provider(
         ir_transforms=ir_t,
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
+        response_id_prefix=cfg.get("response_id_prefix", ""),
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

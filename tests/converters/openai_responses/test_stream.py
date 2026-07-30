@@ -629,10 +629,11 @@ class TestStreamResponseFromProviderWithContext:
         )
         assert len(events) == 1
         assert events[0]["type"] == "stream_start"
-        assert events[0]["response_id"] == "resp_abc123"
+        # IR stores the stem (prefix stripped)
+        assert events[0]["response_id"] == "abc123"
         assert events[0]["model"] == "gpt-4o"
         assert events[0]["created"] == 1700000000
-        assert ctx.response_id == "resp_abc123"
+        assert ctx.response_id == "abc123"
         assert ctx.model == "gpt-4o"
         assert ctx.is_started is True
 
@@ -2130,3 +2131,116 @@ class TestReasoningStreamingLifecycle:
         ]
         assert len(deltas) == 2
         assert deltas[0]["item_id"] == deltas[1]["item_id"]
+
+
+class TestStreamingResponseIdPrefix:
+    """Tests for response ID prefix handling in streaming path."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_from_provider_strips_prefix_in_stream_start(self):
+        """stream_response_from_provider strips resp_ prefix."""
+        ctx = OpenAIResponsesStreamContext()
+        event = {
+            "type": "response.created",
+            "response": {
+                "id": "resp_stream_test_123",
+                "model": "gpt-4o",
+                "created_at": 1700000000,
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert events[0]["response_id"] == "stream_test_123"
+        assert ctx.response_id == "stream_test_123"
+
+    def test_to_provider_adds_prefix_in_response_created(self):
+        """stream_response_to_provider adds resp_ prefix."""
+        ctx = OpenAIResponsesStreamContext()
+        ir_event: StreamStartEvent = {
+            "type": "stream_start",
+            "response_id": "abc123",
+            "model": "gpt-4o",
+            "created": 1700000000,
+        }
+        result = self.converter.stream_response_to_provider(ir_event, context=ctx)
+        assert result["response"]["id"] == "resp_abc123"
+        # Context stores the stem (without prefix)
+        assert ctx.response_id == "abc123"
+
+    def test_finish_response_has_prefixed_id(self):
+        """response.completed event includes prefixed response ID."""
+        ctx = OpenAIResponsesStreamContext()
+        # Simulate stream start
+        start_event: StreamStartEvent = {
+            "type": "stream_start",
+            "response_id": "finish_test",
+            "model": "gpt-4o",
+            "created": 1700000000,
+        }
+        self.converter.stream_response_to_provider(start_event, context=ctx)
+
+        # Send a text delta so there's content
+        delta_event: TextDeltaEvent = {"type": "text_delta", "text": "Hello"}
+        self.converter.stream_response_to_provider(delta_event, context=ctx)
+
+        # Finish
+        finish_event: FinishEvent = {
+            "type": "finish",
+            "finish_reason": {"reason": "stop"},
+        }
+        self.converter.stream_response_to_provider(
+            finish_event, context=ctx
+        )
+
+        # stream_end triggers the deferred response.completed
+        end_event: StreamEndEvent = {"type": "stream_end"}
+        end_result = self.converter.stream_response_to_provider(
+            end_event, context=ctx
+        )
+        # Find response.completed event
+        completed = None
+        for r in [end_result] if isinstance(end_result, dict) else end_result:
+            if isinstance(r, dict) and r.get("type") == "response.completed":
+                completed = r
+                break
+        assert completed is not None
+        assert completed["response"]["id"] == "resp_finish_test"
+
+    def test_finish_response_has_completed_at(self):
+        """response.completed event includes completed_at timestamp."""
+        ctx = OpenAIResponsesStreamContext()
+        start_event: StreamStartEvent = {
+            "type": "stream_start",
+            "response_id": "ts_test",
+            "model": "gpt-4o",
+            "created": 1700000000,
+        }
+        self.converter.stream_response_to_provider(start_event, context=ctx)
+        delta_event: TextDeltaEvent = {"type": "text_delta", "text": "Hi"}
+        self.converter.stream_response_to_provider(delta_event, context=ctx)
+        finish_event: FinishEvent = {
+            "type": "finish",
+            "finish_reason": {"reason": "stop"},
+        }
+        self.converter.stream_response_to_provider(
+            finish_event, context=ctx
+        )
+
+        # stream_end triggers the deferred response.completed
+        end_event: StreamEndEvent = {"type": "stream_end"}
+        end_result = self.converter.stream_response_to_provider(
+            end_event, context=ctx
+        )
+        completed = None
+        for r in [end_result] if isinstance(end_result, dict) else end_result:
+            if isinstance(r, dict) and r.get("type") == "response.completed":
+                completed = r
+                break
+        assert completed is not None
+        assert "completed_at" in completed["response"]
+        assert isinstance(completed["response"]["completed_at"], int)
+        assert completed["response"]["completed_at"] > 0

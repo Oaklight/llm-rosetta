@@ -278,7 +278,8 @@ class TestOpenAIResponsesConverter:
             },
         }
         result = self.converter.response_from_provider(provider_response)
-        assert result["id"] == "resp_123"
+        # IR stores the stem (prefix stripped)
+        assert result["id"] == "123"
         assert result["object"] == "response"
         assert result["model"] == "gpt-4o"
         assert len(result["choices"]) == 1
@@ -1052,3 +1053,184 @@ class TestOpenAIResponsesConverterFullRoundTrip:
         assert len(messages) >= 2
         system_msgs = [m for m in messages if m.get("role") == "system"]
         assert len(system_msgs) >= 1
+
+
+class TestResponseIdPrefix:
+    """Tests for response ID prefix stripping and adding."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_from_provider_strips_resp_prefix(self):
+        """response_from_provider strips 'resp_' prefix in IR."""
+        provider_response = {
+            "id": "resp_abc123def456",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hi"}],
+                }
+            ],
+        }
+        result = self.converter.response_from_provider(provider_response)
+        assert result["id"] == "abc123def456"
+
+    def test_from_provider_no_prefix(self):
+        """response_from_provider handles IDs without resp_ prefix."""
+        provider_response = {
+            "id": "chatcmpl-abc123",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hi"}],
+                }
+            ],
+        }
+        result = self.converter.response_from_provider(provider_response)
+        # No resp_ prefix — ID passes through unchanged
+        assert result["id"] == "chatcmpl-abc123"
+
+    def test_to_provider_adds_resp_prefix(self):
+        """response_to_provider adds 'resp_' prefix to IR stem."""
+        ir_response: IRResponse = {
+            "id": "abc123def456",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert result["id"] == "resp_abc123def456"
+
+    def test_to_provider_no_double_prefix(self):
+        """response_to_provider does not double-prefix IDs."""
+        ir_response: IRResponse = {
+            "id": "resp_already_prefixed",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert result["id"] == "resp_already_prefixed"
+
+    def test_round_trip_preserves_id(self):
+        """Round-trip from_provider → to_provider preserves original ID."""
+        provider_response = {
+            "id": "resp_round_trip_test",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hello"}],
+                }
+            ],
+        }
+        ir_response = self.converter.response_from_provider(provider_response)
+        assert ir_response["id"] == "round_trip_test"
+        restored = self.converter.response_to_provider(ir_response)
+        assert restored["id"] == "resp_round_trip_test"
+
+    def test_cross_format_prefix(self):
+        """Cross-format: Chat stem gets resp_ prefix in to_provider."""
+        ir_response: IRResponse = {
+            "id": "chatcmpl-E7KHTOWBGTyw",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert result["id"] == "resp_chatcmpl-E7KHTOWBGTyw"
+
+
+class TestCompletedAt:
+    """Tests for completed_at timestamp."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_completed_response_has_timestamp(self):
+        """Completed responses include completed_at as Unix timestamp."""
+        ir_response: IRResponse = {
+            "id": "test",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert "completed_at" in result
+        assert isinstance(result["completed_at"], int)
+        assert result["completed_at"] > 0
+
+    def test_incomplete_response_null_completed_at(self):
+        """Incomplete responses have completed_at=None."""
+        ir_response: IRResponse = {
+            "id": "test",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "length"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert result["completed_at"] is None
