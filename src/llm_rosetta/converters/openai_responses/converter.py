@@ -75,9 +75,27 @@ class OpenAIResponsesConverter(BaseConverter):
     config_ops_class = OpenAIResponsesConfigOps
     _CONVERTER_TAG = "openai_responses"
 
-    # Response ID prefix for the OpenAI Responses format.
-    # Used to strip/add the ``resp_`` prefix during conversion.
+    # Default response ID prefix for the OpenAI Responses format.
+    # Used as fallback when no shim-driven prefix is available in the
+    # conversion context.
     _RESPONSE_ID_PREFIX = "resp_"
+
+    def _get_response_id_prefix(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> str:
+        """Return the response ID prefix from context or class default.
+
+        Reads ``response_id_prefix`` from ``context.options`` if set by
+        the conversion pipeline (populated from the provider shim's
+        ``response_id_prefix`` field).  Falls back to the class constant
+        ``_RESPONSE_ID_PREFIX`` for direct converter usage without a
+        pipeline.
+        """
+        if context is not None:
+            prefix = context.options.get("response_id_prefix")
+            if prefix is not None:
+                return prefix
+        return self._RESPONSE_ID_PREFIX
 
     @staticmethod
     def _completion_timestamp() -> int:
@@ -348,7 +366,8 @@ class OpenAIResponsesConverter(BaseConverter):
 
         ir_response: dict[str, Any] = {
             "id": self.strip_response_id_prefix(
-                provider_response.get("id", ""), self._RESPONSE_ID_PREFIX
+                provider_response.get("id", ""),
+                self._get_response_id_prefix(context),
             ),
             "object": "response",
             "created": int(provider_response.get("created_at", 0)),
@@ -402,7 +421,8 @@ class OpenAIResponsesConverter(BaseConverter):
         response_id_stem = ir_response.get("id", "")
         provider_response: dict[str, Any] = {
             "id": self.add_response_id_prefix(
-                response_id_stem, self._RESPONSE_ID_PREFIX
+                response_id_stem,
+                self._get_response_id_prefix(context),
             ),
             "object": "response",
             "created_at": ir_response.get("created", 0),
@@ -823,7 +843,8 @@ class OpenAIResponsesConverter(BaseConverter):
         if context is not None:
             response = chunk.get("response", {})
             response_id = self.strip_response_id_prefix(
-                response.get("id", ""), self._RESPONSE_ID_PREFIX
+                response.get("id", ""),
+                self._get_response_id_prefix(context),
             )
             model = response.get("model", "")
             created = int(response.get("created_at", 0))
@@ -1197,7 +1218,7 @@ class OpenAIResponsesConverter(BaseConverter):
             context.mark_started()
 
         prefixed_id = self.add_response_id_prefix(
-            response_id_stem, self._RESPONSE_ID_PREFIX
+            response_id_stem, self._get_response_id_prefix(context)
         )
         response: dict[str, Any] = {
             "id": prefixed_id,
@@ -1566,7 +1587,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # parse the completed response envelope.
         if context is not None:
             response["id"] = self.add_response_id_prefix(
-                context.response_id, self._RESPONSE_ID_PREFIX
+                context.response_id, self._get_response_id_prefix(context)
             )
             response["object"] = "response"
             response["model"] = context.model

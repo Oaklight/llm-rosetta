@@ -617,3 +617,47 @@ class TestConversionPipeline:
         # Callback should have been called at least once if IR events were produced
         if events:
             assert len(captured) > 0
+
+    def test_pipeline_sets_response_id_prefix_on_context(self):
+        """Pipeline sets response_id_prefix from shim on context."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline(
+            "openai_chat", "openai_responses"
+        )
+        pipeline.convert_request(
+            {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
+        )
+        # Verify the pipeline resolved the target prefix
+        assert pipeline._target_id_prefix == "resp_"
+
+    def test_pipeline_response_uses_shim_prefix(self):
+        """Pipeline response conversion applies shim-driven prefix."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        # openai_responses → openai_responses round-trip through pipeline
+        pipeline = ConversionPipeline(
+            "openai_responses", "openai_responses"
+        )
+        body = {
+            "model": "gpt-4o",
+            "input": [{"role": "user", "content": "hi"}],
+        }
+        pipeline.convert_request(body)
+        upstream_response = {
+            "id": "resp_pipeline_test_123",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hello"}],
+                }
+            ],
+        }
+        result = pipeline.convert_response(upstream_response)
+        # Source converter adds resp_ prefix back
+        assert result["id"] == "resp_pipeline_test_123"
