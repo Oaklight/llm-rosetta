@@ -208,15 +208,20 @@ def create_auth_hook(auth_state: AuthState) -> Any:
     """
 
     async def auth_hook(request: Any) -> Response | None:
+        # Reset per-request label before any early return so downstream
+        # hooks never see a stale value from a previous request.
+        api_key_label_var.set(None)
+
         # CORS preflight must bypass auth — browsers send no credentials
         # on OPTIONS and need CORS headers back to proceed with the
-        # actual request.  The downstream cors_preflight route handler
-        # returns 204 with the appropriate Access-Control-* headers.
-        if request.method == "OPTIONS":
+        # actual request.  Only skip auth for genuine preflights (Origin
+        # + Access-Control-Request-Method present per Fetch spec §3.2.2).
+        if (
+            request.method == "OPTIONS"
+            and request.headers.get("origin")
+            and request.headers.get("access-control-request-method")
+        ):
             return None
-
-        # Reset per-request label
-        api_key_label_var.set(None)
 
         path = request.path
 
