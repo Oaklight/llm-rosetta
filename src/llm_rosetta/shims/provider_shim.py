@@ -122,6 +122,10 @@ class ProviderShim:
         model_reasoning: Per-model reasoning overrides keyed by
             **upstream model ID** (post-alias).  Each entry inherits
             from the provider-level ``reasoning`` for unset fields.
+        response_id_prefix: Provider-specific prefix for response IDs
+            (e.g. ``"resp_"`` for OpenAI Responses, ``"chatcmpl-"`` for
+            OpenAI Chat).  Default ``""`` means passthrough (no
+            prefix stripping or adding).
     """
 
     name: str
@@ -135,6 +139,7 @@ class ProviderShim:
     ir_transforms: tuple[IRTransform, ...] = ()
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
+    response_id_prefix: str = ""
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -179,6 +184,7 @@ class ProviderShim:
             "ir_transforms": (),
             "reasoning": None,
             "model_reasoning": None,
+            "response_id_prefix": "",
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

@@ -75,6 +75,10 @@ class OpenAIResponsesConverter(BaseConverter):
     config_ops_class = OpenAIResponsesConfigOps
     _CONVERTER_TAG = "openai_responses"
 
+    # Response ID prefix for the OpenAI Responses format.
+    # Used to strip/add the ``resp_`` prefix during conversion.
+    _RESPONSE_ID_PREFIX = "resp_"
+
     def __init__(self):
         self.content_ops = self.content_ops_class()
         self.tool_ops = self.tool_ops_class()
@@ -338,7 +342,9 @@ class OpenAIResponsesConverter(BaseConverter):
             )
 
         ir_response: dict[str, Any] = {
-            "id": provider_response.get("id", ""),
+            "id": self.strip_response_id_prefix(
+                provider_response.get("id", ""), self._RESPONSE_ID_PREFIX
+            ),
             "object": "response",
             "created": int(provider_response.get("created_at", 0)),
             "model": provider_response.get("model", ""),
@@ -388,8 +394,11 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns:
             OpenAI Responses response dict.
         """
+        response_id_stem = ir_response.get("id", "")
         provider_response: dict[str, Any] = {
-            "id": ir_response.get("id", ""),
+            "id": self.add_response_id_prefix(
+                response_id_stem, self._RESPONSE_ID_PREFIX
+            ),
             "object": "response",
             "created_at": ir_response.get("created", 0),
             "model": ir_response.get("model", ""),
@@ -397,7 +406,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "status": "completed",
         }
 
-        msg_item_id = generate_message_id(ir_response.get("id", ""))
+        msg_item_id = generate_message_id(response_id_stem)
 
         for choice in ir_response.get("choices", []):
             message = choice.get("message")
@@ -459,6 +468,12 @@ class OpenAIResponsesConverter(BaseConverter):
 
         if "service_tier" in ir_response:
             provider_response["service_tier"] = ir_response["service_tier"]
+
+        # Set completed_at for completed responses
+        if provider_response.get("status") == "completed":
+            provider_response["completed_at"] = int(time.time())
+        else:
+            provider_response["completed_at"] = None
 
         # Preserve mode: inject captured extra fields
         ctx = context if context is not None else ConversionContext()
@@ -802,7 +817,9 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> None:
         if context is not None:
             response = chunk.get("response", {})
-            response_id = response.get("id", "")
+            response_id = self.strip_response_id_prefix(
+                response.get("id", ""), self._RESPONSE_ID_PREFIX
+            )
             model = response.get("model", "")
             created = int(response.get("created_at", 0))
             context.response_id = response_id
@@ -1165,15 +1182,20 @@ class OpenAIResponsesConverter(BaseConverter):
         event: StreamStartEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
-        # Store metadata in context if provided
+        response_id_stem = event["response_id"]
+
+        # Store metadata in context if provided (stem, without prefix)
         if context is not None:
-            context.response_id = event["response_id"]
+            context.response_id = response_id_stem
             context.model = event["model"]
             context.created = event.get("created", 0)
             context.mark_started()
 
+        prefixed_id = self.add_response_id_prefix(
+            response_id_stem, self._RESPONSE_ID_PREFIX
+        )
         response: dict[str, Any] = {
-            "id": event["response_id"],
+            "id": prefixed_id,
             "object": "response",
             "model": event["model"],
             "status": "in_progress",
@@ -1538,10 +1560,18 @@ class OpenAIResponsesConverter(BaseConverter):
         # Populate id, object, model, created_at from context so clients can
         # parse the completed response envelope.
         if context is not None:
-            response["id"] = context.response_id
+            response["id"] = self.add_response_id_prefix(
+                context.response_id, self._RESPONSE_ID_PREFIX
+            )
             response["object"] = "response"
             response["model"] = context.model
             response["created_at"] = context.created or int(time.time())
+
+        # Set completed_at timestamp for completed responses.
+        if status == "completed":
+            response["completed_at"] = int(time.time())
+        else:
+            response["completed_at"] = None
 
         if status == "incomplete":
             incomplete_reason = RESPONSES_REASON_TO_INCOMPLETE_REASON.get(
