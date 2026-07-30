@@ -18,8 +18,8 @@ class OpenAIResponsesStreamContext(StreamContext):
     Attributes:
         item_id_to_call_id: Reverse mapping from Responses item_id to
             tool call_id for function call argument delta resolution.
-        output_item_emitted: Whether the initial output_item.added and
-            content_part.added events have been emitted.
+        output_item_emitted: Whether the initial message output_item.added
+            and content_part.added events have been emitted.
         item_id: Current output item ID for the response message.
         accumulated_text: Accumulated text deltas for the final
             response.completed payload.
@@ -27,12 +27,37 @@ class OpenAIResponsesStreamContext(StreamContext):
             emitted (prevents duplicate emission).
     """
 
+    # Message item tracking
     item_id_to_call_id: dict[str, str] = field(default_factory=dict)
     output_item_emitted: bool = False
     item_id: str = ""
     accumulated_text: str = ""
     content_part_done_emitted: bool = False
     _sequence_number: int = 0
+
+    # Unified output item counter — allocates output_index for all item
+    # types (reasoning, message, tool call).  Call next_output_index()
+    # ONLY when emitting output_item.added.
+    _output_item_counter: int = 0
+    _message_output_index: int = -1
+
+    # Tool call output_index storage (call_id → assigned index)
+    _tool_call_output_indices: dict[str, int] = field(default_factory=dict, repr=False)
+
+    # Reasoning item tracking
+    _reasoning_item_id: str = ""
+    _reasoning_output_index: int = -1
+    _reasoning_accumulated_text: str = ""
+
+    def next_output_index(self) -> int:
+        """Allocate the next output_index.
+
+        Call ONLY when emitting an output_item.added event.  Delta and
+        done events must reference the index stored at added-time.
+        """
+        idx = self._output_item_counter
+        self._output_item_counter += 1
+        return idx
 
     @classmethod
     def from_base(cls, base: StreamContext) -> OpenAIResponsesStreamContext:

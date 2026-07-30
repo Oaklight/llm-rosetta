@@ -87,12 +87,19 @@ class TestBuildMessagePreambleEvents:
         build_message_preamble_events(self.ctx)
         assert self.ctx.item_id == "msg_resp_123"
 
-    def test_respects_output_index(self):
-        events = build_message_preamble_events(self.ctx, output_index=2)
-        assert events[0]["output_index"] == 2
-        assert events[1]["output_index"] == 2
+    def test_output_index_from_counter(self):
+        # Simulate reasoning item already allocated index 0
+        self.ctx.next_output_index()  # reasoning takes 0
+        events = build_message_preamble_events(self.ctx)
+        assert events[0]["output_index"] == 1
+        assert events[1]["output_index"] == 1
 
     def test_default_output_index_is_zero(self):
         events = build_message_preamble_events(self.ctx)
         assert events[0]["output_index"] == 0
         assert events[1]["output_index"] == 0
+
+    def test_stores_message_output_index(self):
+        self.ctx.next_output_index()  # reasoning takes 0
+        build_message_preamble_events(self.ctx)
+        assert self.ctx._message_output_index == 1

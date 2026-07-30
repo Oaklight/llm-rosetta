@@ -4,6 +4,7 @@ OpenAI Responses API stream converter unit tests.
 
 from typing import Any, cast
 
+from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.openai_responses.stream_context import (
     OpenAIResponsesStreamContext,
@@ -341,14 +342,17 @@ class TestStreamResponseToProvider:
         assert result["delta"] == "Hello"
 
     def test_reasoning_delta(self):
-        """ReasoningDeltaEvent → response.reasoning_summary_text.delta."""
+        """ReasoningDeltaEvent → response.reasoning_summary_text.delta with lifecycle."""
         event = cast(
             ReasoningDeltaEvent,
             {"type": "reasoning_delta", "reasoning": "thinking..."},
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.reasoning_summary_text.delta"
-        assert result["delta"] == "thinking..."
+        result = self.converter.stream_response_to_provider(event)
+        assert isinstance(result, list)
+        # Without context: just the delta event
+        delta = result[-1]
+        assert delta["type"] == "response.reasoning_summary_text.delta"
+        assert delta["delta"] == "thinking..."
 
     def test_tool_call_start(self):
         """ToolCallStartEvent → response.output_item.added."""
@@ -558,11 +562,11 @@ class TestStreamRoundTrip:
             "delta": "step 1",
         }
         events = cast(list[Any], self.converter.stream_response_from_provider(original))
-        restored = cast(
-            dict[str, Any], self.converter.stream_response_to_provider(events[0])
-        )
-        assert restored["type"] == "response.reasoning_summary_text.delta"
-        assert restored["delta"] == "step 1"
+        result = self.converter.stream_response_to_provider(events[0])
+        assert isinstance(result, list)
+        delta = result[-1]
+        assert delta["type"] == "response.reasoning_summary_text.delta"
+        assert delta["delta"] == "step 1"
 
     def test_tool_call_start_round_trip(self):
         """Tool call start round-trip preserves id and name."""
@@ -1815,3 +1819,314 @@ class TestFunctionCallItemIdPreservation:
         assert len(fc_items) == 1
         assert fc_items[0]["id"] == "fc_abc123"
         assert fc_items[0]["call_id"] == "call_xyz789"
+
+
+class TestUnifiedOutputIndex:
+    """Tests for unified output_index management (#418)."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def _run_stream(self, ir_events):
+        """Run a sequence of IR events through the converter and collect output."""
+        ctx = StreamContext()
+        ctx.response_id = "resp_test"
+        ctx.model = "test-model"
+        results = []
+        for ev in ir_events:
+            out = self.converter.stream_response_to_provider(ev, context=ctx)
+            if isinstance(out, list):
+                results.extend(out)
+            elif isinstance(out, dict) and out:
+                results.append(out)
+        return results
+
+    def _get_output_indices(self, events):
+        """Extract (type, output_index) from output_item.added events."""
+        return [
+            (ev["item"]["type"], ev["output_index"])
+            for ev in events
+            if ev.get("type") == "response.output_item.added"
+        ]
+
+    def test_message_only(self):
+        """[message] → output_index [0]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "text_delta", "text": "hi"},
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [("message", 0)]
+
+    def test_reasoning_then_message(self):
+        """[reasoning, message] → output_index [0, 1]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "think"},
+                {"type": "text_delta", "text": "hi"},
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [("reasoning", 0), ("message", 1)]
+
+    def test_reasoning_then_tool_call(self):
+        """[reasoning, fc] → output_index [0, 1]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "think"},
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_1",
+                    "tool_name": "search",
+                    "tool_call_index": 0,
+                },
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [("reasoning", 0), ("function_call", 1)]
+
+    def test_reasoning_then_parallel_tools(self):
+        """[reasoning, fc, fc, fc] → output_index [0, 1, 2, 3]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "think"},
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_1",
+                    "tool_name": "fn1",
+                    "tool_call_index": 0,
+                },
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_2",
+                    "tool_name": "fn2",
+                    "tool_call_index": 1,
+                },
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_3",
+                    "tool_name": "fn3",
+                    "tool_call_index": 2,
+                },
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [
+            ("reasoning", 0),
+            ("function_call", 1),
+            ("function_call", 2),
+            ("function_call", 3),
+        ]
+
+    def test_reasoning_message_then_tools(self):
+        """[reasoning, message, fc, fc] → output_index [0, 1, 2, 3]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "think"},
+                {"type": "text_delta", "text": "hi"},
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_1",
+                    "tool_name": "fn1",
+                    "tool_call_index": 0,
+                },
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_2",
+                    "tool_name": "fn2",
+                    "tool_call_index": 1,
+                },
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [
+            ("reasoning", 0),
+            ("message", 1),
+            ("function_call", 2),
+            ("function_call", 3),
+        ]
+
+    def test_no_reasoning_backward_compat(self):
+        """[message, fc, fc] → output_index [0, 1, 2] (no reasoning)."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "text_delta", "text": "hi"},
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_1",
+                    "tool_name": "fn1",
+                    "tool_call_index": 0,
+                },
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_2",
+                    "tool_name": "fn2",
+                    "tool_call_index": 1,
+                },
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [
+            ("message", 0),
+            ("function_call", 1),
+            ("function_call", 2),
+        ]
+
+    def test_tools_only_no_message(self):
+        """[fc, fc] → output_index [0, 1]."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_1",
+                    "tool_name": "fn1",
+                    "tool_call_index": 0,
+                },
+                {
+                    "type": "tool_call_start",
+                    "tool_call_id": "call_2",
+                    "tool_name": "fn2",
+                    "tool_call_index": 1,
+                },
+            ]
+        )
+        indices = self._get_output_indices(events)
+        assert indices == [
+            ("function_call", 0),
+            ("function_call", 1),
+        ]
+
+
+class TestReasoningStreamingLifecycle:
+    """Tests for reasoning streaming lifecycle events (#408)."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def _run_stream(self, ir_events):
+        ctx = StreamContext()
+        ctx.response_id = "resp_test"
+        ctx.model = "test-model"
+        results = []
+        for ev in ir_events:
+            out = self.converter.stream_response_to_provider(ev, context=ctx)
+            if isinstance(out, list):
+                results.extend(out)
+            elif isinstance(out, dict) and out:
+                results.append(out)
+        return results
+
+    def test_reasoning_delta_has_lifecycle_preamble(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+            ]
+        )
+        types = [e.get("type") for e in events]
+        assert "response.output_item.added" in types
+        assert "response.reasoning_summary.part.added" in types
+        assert "response.reasoning_summary_text.delta" in types
+
+    def test_reasoning_item_added_has_id_and_status(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+            ]
+        )
+        added = [e for e in events if e.get("type") == "response.output_item.added"]
+        assert len(added) == 1
+        item = added[0]["item"]
+        assert item["type"] == "reasoning"
+        assert item["id"].startswith("rs_")
+        assert item["status"] == "in_progress"
+
+    def test_reasoning_delta_has_required_fields(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+            ]
+        )
+        deltas = [
+            e
+            for e in events
+            if e.get("type") == "response.reasoning_summary_text.delta"
+        ]
+        assert len(deltas) == 1
+        d = deltas[0]
+        assert "item_id" in d
+        assert d["item_id"].startswith("rs_")
+        assert "output_index" in d
+        assert d["summary_index"] == 0
+        assert d["delta"] == "step 1"
+
+    def test_reasoning_done_events_at_finish(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+                {"type": "text_delta", "text": "result"},
+                {
+                    "type": "finish",
+                    "finish_reason": {"reason": "stop"},
+                },
+            ]
+        )
+        types = [e.get("type") for e in events]
+        assert "response.reasoning_summary_text.done" in types
+        assert "response.reasoning_summary.part.done" in types
+        # output_item.done should appear for both reasoning and message
+        done_events = [
+            e for e in events if e.get("type") == "response.output_item.done"
+        ]
+        done_types = [e["item"]["type"] for e in done_events]
+        assert "reasoning" in done_types
+        assert "message" in done_types
+
+    def test_reasoning_in_response_completed_output(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "thinking"},
+                {"type": "text_delta", "text": "answer"},
+                {
+                    "type": "finish",
+                    "finish_reason": {"reason": "stop"},
+                },
+                {"type": "stream_end"},
+            ]
+        )
+        completed = [e for e in events if e.get("type") == "response.completed"]
+        assert len(completed) == 1
+        output = completed[0]["response"]["output"]
+        output_types = [item["type"] for item in output]
+        assert "reasoning" in output_types
+        assert "message" in output_types
+
+    def test_second_reasoning_delta_no_duplicate_preamble(self):
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+                {"type": "reasoning_delta", "reasoning": "step 2"},
+            ]
+        )
+        added = [e for e in events if e.get("type") == "response.output_item.added"]
+        assert len(added) == 1
+        deltas = [
+            e
+            for e in events
+            if e.get("type") == "response.reasoning_summary_text.delta"
+        ]
+        assert len(deltas) == 2
+        assert deltas[0]["item_id"] == deltas[1]["item_id"]

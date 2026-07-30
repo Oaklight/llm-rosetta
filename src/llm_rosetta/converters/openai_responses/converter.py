@@ -49,6 +49,7 @@ from ._constants import (
     RESPONSES_STATUS_TO_REASON,
     ResponsesEventType,
     generate_message_id,
+    generate_reasoning_id,
 )
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
@@ -405,6 +406,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
             content_parts = message.get("content", [])
             text_parts: list[dict[str, Any]] = []
+            reasoning_index = 0
 
             for part in content_parts:
                 if is_text_part(part):
@@ -422,8 +424,13 @@ class OpenAIResponsesConverter(BaseConverter):
                     )
                 elif is_reasoning_part(part):
                     provider_response["output"].append(
-                        self.content_ops.ir_reasoning_to_p(part)
+                        self.content_ops.ir_reasoning_to_p(
+                            part,
+                            response_id=ir_response.get("id", ""),
+                            reasoning_index=reasoning_index,
+                        )
                     )
+                    reasoning_index += 1
 
             if text_parts:
                 provider_response["output"].insert(
@@ -1236,14 +1243,15 @@ class OpenAIResponsesConverter(BaseConverter):
             # and mark the item as emitted so the first TextDelta doesn't
             # re-emit them.
             if context is not None and not context.output_item_emitted:
-                return build_message_preamble_events(context, output_index=0)
+                return build_message_preamble_events(context)
             # Fallback: just emit content_part.added (e.g. no context, or
             # output item already emitted by a prior ContentBlockStartEvent)
             item_id = context.item_id if context is not None else ""
+            msg_idx = context._message_output_index if context is not None else 0
             return {
                 "type": ResponsesEventType.CONTENT_PART_ADDED,
                 "item_id": item_id,
-                "output_index": 0,
+                "output_index": msg_idx,
                 "content_index": 0,
                 "part": {
                     "type": "output_text",
@@ -1266,11 +1274,12 @@ class OpenAIResponsesConverter(BaseConverter):
             # Emit output_text.done before content_part.done (matches
             # OpenAI's event ordering)
             item_id = context.item_id
+            msg_idx = context._message_output_index
             return [
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
                     "item_id": item_id,
-                    "output_index": 0,
+                    "output_index": msg_idx,
                     "content_index": 0,
                     "text": accumulated,
                     "logprobs": [],
@@ -1278,7 +1287,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 {
                     "type": ResponsesEventType.CONTENT_PART_DONE,
                     "item_id": item_id,
-                    "output_index": 0,
+                    "output_index": msg_idx,
                     "content_index": 0,
                     "part": {
                         "type": "output_text",
@@ -1300,39 +1309,85 @@ class OpenAIResponsesConverter(BaseConverter):
         event: TextDeltaEvent,
         context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
-        choice_index = event.get("choice_index", 0)
         text = event["text"]
-        item_id = context.item_id if context is not None else ""
-        delta_event: dict[str, Any] = {
-            "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
-            "item_id": item_id,
-            "output_index": choice_index,
-            "content_index": 0,
-            "delta": text,
-            "logprobs": [],
-        }
+
+        # Emit output_item.added + content_part.added before the first
+        # text delta so clients (e.g. Codex CLI) can register the item.
+        preamble: list[dict[str, Any]] = []
+        if context is not None and not context.output_item_emitted:
+            preamble = build_message_preamble_events(context)
 
         # Accumulate text in context for response.completed output
         if context is not None:
             context.accumulated_text += text
 
-        # Emit output_item.added + content_part.added before the first
-        # text delta so clients (e.g. Codex CLI) can register the item.
-        if context is not None and not context.output_item_emitted:
-            preamble = build_message_preamble_events(context, output_index=choice_index)
-            return preamble + [delta_event]
+        msg_idx = context._message_output_index if context is not None else 0
+        item_id = context.item_id if context is not None else ""
+        delta_event: dict[str, Any] = {
+            "type": ResponsesEventType.OUTPUT_TEXT_DELTA,
+            "item_id": item_id,
+            "output_index": msg_idx,
+            "content_index": 0,
+            "delta": text,
+            "logprobs": [],
+        }
 
+        if preamble:
+            return preamble + [delta_event]
         return delta_event
 
     def _handle_ir_reasoning_delta_to_p(
         self,
         event: ReasoningDeltaEvent,
         context: StreamContext | None,
-    ) -> dict[str, Any]:
-        return {
-            "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
-            "delta": event["reasoning"],
-        }
+    ) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        ctx = context if isinstance(context, OpenAIResponsesStreamContext) else None
+
+        if ctx is not None and ctx._reasoning_item_id == "":
+            output_index = ctx.next_output_index()
+            ctx._reasoning_output_index = output_index
+            item_id = generate_reasoning_id(ctx.response_id, output_index)
+            ctx._reasoning_item_id = item_id
+
+            results.append(
+                {
+                    "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
+                    "output_index": output_index,
+                    "item": {
+                        "id": item_id,
+                        "type": "reasoning",
+                        "summary": [],
+                        "status": "in_progress",
+                    },
+                }
+            )
+            results.append(
+                {
+                    "type": ResponsesEventType.REASONING_SUMMARY_PART_ADDED,
+                    "item_id": item_id,
+                    "output_index": output_index,
+                    "summary_index": 0,
+                    "part": {"type": "summary_text", "text": ""},
+                }
+            )
+
+        reasoning_text = event["reasoning"]
+        if ctx is not None:
+            ctx._reasoning_accumulated_text += reasoning_text
+
+        item_id = ctx._reasoning_item_id if ctx is not None else ""
+        r_idx = ctx._reasoning_output_index if ctx is not None else 0
+        results.append(
+            {
+                "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
+                "item_id": item_id,
+                "output_index": r_idx,
+                "summary_index": 0,
+                "delta": reasoning_text,
+            }
+        )
+        return results
 
     def _handle_ir_tool_call_start_to_p(
         self,
@@ -1350,8 +1405,12 @@ class OpenAIResponsesConverter(BaseConverter):
             context.register_tool_call(call_id, tool_name, tool_type)
             context.register_tool_call_item(call_id, item_id)
 
-        tc_index = event.get("tool_call_index")
-        output_index = tc_index if tc_index is not None else 0
+        if isinstance(context, OpenAIResponsesStreamContext):
+            output_index = context.next_output_index()
+            context._tool_call_output_indices[call_id] = output_index
+        else:
+            tc_index = event.get("tool_call_index")
+            output_index = tc_index if tc_index is not None else 0
 
         if tool_type == "custom":
             item: dict[str, Any] = {
@@ -1406,7 +1465,10 @@ class OpenAIResponsesConverter(BaseConverter):
         if not item_id and call_id:
             item_id = call_id
 
-        output_index = tc_index if tc_index is not None else 0
+        if isinstance(context, OpenAIResponsesStreamContext) and call_id:
+            output_index = context._tool_call_output_indices.get(call_id, 0)
+        else:
+            output_index = tc_index if tc_index is not None else 0
 
         # Determine event type based on tool type (custom vs function)
         tool_type = (
@@ -1442,6 +1504,7 @@ class OpenAIResponsesConverter(BaseConverter):
         results: list[dict[str, Any]] = []
 
         if context is not None:
+            self._emit_reasoning_done_events(context, results)
             self._emit_text_done_events(context, results)
             self._emit_tool_call_done_events(context, results)
 
@@ -1503,6 +1566,22 @@ class OpenAIResponsesConverter(BaseConverter):
         output: list[dict[str, Any]] = []
         if context is None:
             return output
+
+        # Reasoning item comes first in output array
+        if context._reasoning_item_id:
+            output.append(
+                {
+                    "id": context._reasoning_item_id,
+                    "type": "reasoning",
+                    "summary": [
+                        {
+                            "type": "summary_text",
+                            "text": context._reasoning_accumulated_text,
+                        }
+                    ],
+                    "status": "completed",
+                }
+            )
 
         accumulated = context.accumulated_text
         if accumulated:
@@ -1589,6 +1668,49 @@ class OpenAIResponsesConverter(BaseConverter):
             if k not in core_keys:
                 response[k] = v
 
+    def _emit_reasoning_done_events(
+        self,
+        context: OpenAIResponsesStreamContext,
+        results: list[dict[str, Any]],
+    ) -> None:
+        """Emit reasoning lifecycle done events."""
+        if not context._reasoning_item_id:
+            return
+        item_id = context._reasoning_item_id
+        output_index = context._reasoning_output_index
+        accumulated = context._reasoning_accumulated_text
+
+        results.append(
+            {
+                "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DONE,
+                "item_id": item_id,
+                "output_index": output_index,
+                "summary_index": 0,
+                "text": accumulated,
+            }
+        )
+        results.append(
+            {
+                "type": ResponsesEventType.REASONING_SUMMARY_PART_DONE,
+                "item_id": item_id,
+                "output_index": output_index,
+                "summary_index": 0,
+                "part": {"type": "summary_text", "text": accumulated},
+            }
+        )
+        results.append(
+            {
+                "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                "output_index": output_index,
+                "item": {
+                    "id": item_id,
+                    "type": "reasoning",
+                    "summary": [{"type": "summary_text", "text": accumulated}],
+                    "status": "completed",
+                },
+            }
+        )
+
     def _emit_text_done_events(
         self,
         context: OpenAIResponsesStreamContext,
@@ -1600,6 +1722,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         accumulated = context.accumulated_text
         item_id = context.item_id
+        msg_idx = context._message_output_index
 
         # Only emit output_text.done + content_part.done if not
         # already emitted by a prior ContentBlockEndEvent
@@ -1608,7 +1731,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
                     "item_id": item_id,
-                    "output_index": 0,
+                    "output_index": msg_idx,
                     "content_index": 0,
                     "text": accumulated,
                     "logprobs": [],
@@ -1618,7 +1741,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 {
                     "type": ResponsesEventType.CONTENT_PART_DONE,
                     "item_id": item_id,
-                    "output_index": 0,
+                    "output_index": msg_idx,
                     "content_index": 0,
                     "part": {
                         "type": "output_text",
@@ -1631,7 +1754,7 @@ class OpenAIResponsesConverter(BaseConverter):
         results.append(
             {
                 "type": ResponsesEventType.OUTPUT_ITEM_DONE,
-                "output_index": 0,
+                "output_index": msg_idx,
                 "item": {
                     "id": item_id,
                     "type": "message",
@@ -1659,7 +1782,7 @@ class OpenAIResponsesConverter(BaseConverter):
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             item_id = context.get_tool_call_item_id(call_id) or call_id
-            output_index = tc_idx + (1 if context.output_item_emitted else 0)
+            output_index = context._tool_call_output_indices.get(call_id, tc_idx)
             tool_type = context.get_tool_type(call_id)
 
             if tool_type == "custom":
