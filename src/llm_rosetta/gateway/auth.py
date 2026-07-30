@@ -208,6 +208,13 @@ def create_auth_hook(auth_state: AuthState) -> Any:
     """
 
     async def auth_hook(request: Any) -> Response | None:
+        # CORS preflight must bypass auth — browsers send no credentials
+        # on OPTIONS and need CORS headers back to proceed with the
+        # actual request.  The downstream cors_preflight route handler
+        # returns 204 with the appropriate Access-Control-* headers.
+        if request.method == "OPTIONS":
+            return None
+
         # Reset per-request label
         api_key_label_var.set(None)
 
