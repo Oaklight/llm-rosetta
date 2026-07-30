@@ -1262,9 +1262,7 @@ class TestResponseIdPrefixFromContext:
                 }
             ],
         }
-        result = self.converter.response_from_provider(
-            provider_response, context=ctx
-        )
+        result = self.converter.response_from_provider(provider_response, context=ctx)
         assert result["id"] == "abc123"
 
     def test_to_provider_uses_context_prefix(self):
