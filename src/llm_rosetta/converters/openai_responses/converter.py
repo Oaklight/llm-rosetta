@@ -79,6 +79,11 @@ class OpenAIResponsesConverter(BaseConverter):
     # Used to strip/add the ``resp_`` prefix during conversion.
     _RESPONSE_ID_PREFIX = "resp_"
 
+    @staticmethod
+    def _completion_timestamp() -> int:
+        """Current Unix timestamp for completed_at fields."""
+        return int(time.time())
+
     def __init__(self):
         self.content_ops = self.content_ops_class()
         self.tool_ops = self.tool_ops_class()
@@ -403,7 +408,7 @@ class OpenAIResponsesConverter(BaseConverter):
             "created_at": ir_response.get("created", 0),
             "model": ir_response.get("model", ""),
             "output": [],
-            "status": "completed",
+            "status": "completed",  # may be overwritten by finish_reason below
         }
 
         msg_item_id = generate_message_id(response_id_stem)
@@ -471,7 +476,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Set completed_at for completed responses
         if provider_response.get("status") == "completed":
-            provider_response["completed_at"] = int(time.time())
+            provider_response["completed_at"] = self._completion_timestamp()
         else:
             provider_response["completed_at"] = None
 
@@ -1569,7 +1574,7 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Set completed_at timestamp for completed responses.
         if status == "completed":
-            response["completed_at"] = int(time.time())
+            response["completed_at"] = self._completion_timestamp()
         else:
             response["completed_at"] = None
 
