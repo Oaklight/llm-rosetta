@@ -1234,3 +1234,106 @@ class TestCompletedAt:
         }
         result = self.converter.response_to_provider(ir_response)
         assert result["completed_at"] is None
+
+
+class TestResponseIdPrefixFromContext:
+    """Tests for reading response_id_prefix from ConversionContext."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_from_provider_uses_context_prefix(self):
+        """response_from_provider reads prefix from context.options."""
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        ctx.options["response_id_prefix"] = "custom_"
+        provider_response = {
+            "id": "custom_abc123",
+            "object": "response",
+            "created_at": 1700000000,
+            "model": "gpt-4o",
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hi"}],
+                }
+            ],
+        }
+        result = self.converter.response_from_provider(
+            provider_response, context=ctx
+        )
+        assert result["id"] == "abc123"
+
+    def test_to_provider_uses_context_prefix(self):
+        """response_to_provider reads prefix from context.options."""
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        ctx.options["response_id_prefix"] = "custom_"
+        ir_response: IRResponse = {
+            "id": "abc123",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response, context=ctx)
+        assert result["id"] == "custom_abc123"
+
+    def test_falls_back_to_class_constant_without_context(self):
+        """Without context, converter uses _RESPONSE_ID_PREFIX fallback."""
+        ir_response: IRResponse = {
+            "id": "abc123",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)
+        assert result["id"] == "resp_abc123"
+
+    def test_empty_prefix_in_context_passes_through(self):
+        """Empty string prefix in context means no prefix added."""
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        ctx.options["response_id_prefix"] = ""
+        ir_response: IRResponse = {
+            "id": "plain_uuid_123",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gpt-4o",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hi"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response, context=ctx)
+        assert result["id"] == "plain_uuid_123"

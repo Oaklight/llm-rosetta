@@ -2237,3 +2237,71 @@ class TestStreamingResponseIdPrefix:
         assert "completed_at" in completed["response"]
         assert isinstance(completed["response"]["completed_at"], int)
         assert completed["response"]["completed_at"] > 0
+
+
+class TestStreamingPrefixFromContext:
+    """Tests for reading response_id_prefix from StreamContext options."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_from_provider_uses_context_prefix(self):
+        """stream_response_from_provider strips prefix from context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.options["response_id_prefix"] = "custom_"
+        event = {
+            "type": "response.created",
+            "response": {
+                "id": "custom_stream_abc",
+                "model": "gpt-4o",
+                "created_at": 1700000000,
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert events[0]["response_id"] == "stream_abc"
+        assert ctx.response_id == "stream_abc"
+
+    def test_to_provider_uses_context_prefix(self):
+        """stream_response_to_provider adds prefix from context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.options["response_id_prefix"] = "custom_"
+        ir_event: StreamStartEvent = {
+            "type": "stream_start",
+            "response_id": "abc123",
+            "model": "gpt-4o",
+            "created": 1700000000,
+        }
+        result = self.converter.stream_response_to_provider(ir_event, context=ctx)
+        assert isinstance(result, dict)
+        assert result["response"]["id"] == "custom_abc123"
+
+    def test_finish_uses_context_prefix(self):
+        """Finish response uses prefix from context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.options["response_id_prefix"] = "custom_"
+        start_event: StreamStartEvent = {
+            "type": "stream_start",
+            "response_id": "ctx_test",
+            "model": "gpt-4o",
+            "created": 1700000000,
+        }
+        self.converter.stream_response_to_provider(start_event, context=ctx)
+        delta_event: TextDeltaEvent = {"type": "text_delta", "text": "Hi"}
+        self.converter.stream_response_to_provider(delta_event, context=ctx)
+        finish_event: FinishEvent = {
+            "type": "finish",
+            "finish_reason": {"reason": "stop"},
+        }
+        self.converter.stream_response_to_provider(finish_event, context=ctx)
+        end_event: StreamEndEvent = {"type": "stream_end"}
+        end_result = self.converter.stream_response_to_provider(end_event, context=ctx)
+        completed = None
+        for r in [end_result] if isinstance(end_result, dict) else end_result:
+            if isinstance(r, dict) and r.get("type") == "response.completed":
+                completed = r
+                break
+        assert completed is not None
+        assert completed["response"]["id"] == "custom_ctx_test"

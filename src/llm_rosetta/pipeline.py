@@ -220,6 +220,19 @@ class ConversionPipeline:
             self._pre_ir_transforms = _EMPTY_TRANSFORMS
             self._post_ir_transforms = _EMPTY_TRANSFORMS
 
+        # Resolve response_id_prefix for each converter from its shim.
+        # The target prefix comes from the upstream shim (falling back
+        # to the target provider name); the source prefix is resolved
+        # from the source provider name.
+        target_shim = resolved or resolve_shim(target_provider)
+        self._target_id_prefix = (
+            target_shim.response_id_prefix if target_shim else ""
+        )
+        source_shim = resolve_shim(source_provider)
+        self._source_id_prefix = (
+            source_shim.response_id_prefix if source_shim else ""
+        )
+
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
         self._ir_request: dict[str, Any] | None = None
@@ -437,6 +450,7 @@ class ConversionPipeline:
 
         # Phase 4b: Target response → IR
         t0 = time.perf_counter()
+        ctx.options["response_id_prefix"] = self._target_id_prefix
         try:
             ir_response = self._target_converter.response_from_provider(
                 response, context=ctx
@@ -456,6 +470,7 @@ class ConversionPipeline:
 
         # Phase 4c: IR → Source response
         t0 = time.perf_counter()
+        ctx.options["response_id_prefix"] = self._source_id_prefix
         try:
             source_response = self._source_converter.response_to_provider(
                 ir_response, context=ctx
@@ -502,9 +517,11 @@ class ConversionPipeline:
         from_ctx = self._target_converter.create_stream_context()
         to_ctx = self._source_converter.create_stream_context()
 
-        # Bridge preserve-mode metadata from request phase
+        # Bridge preserve-mode metadata and shim-driven prefix
         to_ctx.options["metadata_mode"] = "preserve"
         from_ctx.options["metadata_mode"] = "preserve"
+        from_ctx.options["response_id_prefix"] = self._target_id_prefix
+        to_ctx.options["response_id_prefix"] = self._source_id_prefix
         if "_request_echo" in ctx.metadata:
             to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
 
