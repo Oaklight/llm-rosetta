@@ -795,10 +795,11 @@ class TestStreamResponseFromProviderWithContext:
         types = [e["type"] for e in events]
         assert "stream_start" in types
         assert "usage" in types
-        # StreamStartEvent should come before UsageEvent
+        # UsageEvent emitted before StreamStartEvent so ir→p has
+        # pending_usage available for message_start.input_tokens.
         start_idx = types.index("stream_start")
         usage_idx = types.index("usage")
-        assert start_idx < usage_idx
+        assert usage_idx < start_idx
 
     def test_message_start_stream_start_before_usage(self):
         """StreamStartEvent is emitted before UsageEvent from message_start."""
@@ -818,8 +819,8 @@ class TestStreamResponseFromProviderWithContext:
             list[Any],
             self.converter.stream_response_from_provider(event, context=ctx),
         )
-        assert events[0]["type"] == "stream_start"
-        assert events[1]["type"] == "usage"
+        assert events[0]["type"] == "usage"
+        assert events[1]["type"] == "stream_start"
 
     # --- ContentBlockStartEvent ---
 
@@ -1585,3 +1586,53 @@ class TestStreamBlockTypeTransition:
         # No synthetic block starts should be emitted for explicit indexes
         block_starts = [e for e in output if e.get("type") == "content_block_start"]
         assert len(block_starts) == 0
+
+
+class TestStreamingInputTokensFix:
+    """Tests for streaming input_tokens fix (#424)."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    def test_same_format_input_tokens_in_message_start(self):
+        """Anthropic→Anthropic: message_start has correct input_tokens."""
+        ctx = StreamContext()
+
+        # Simulate p→ir→p for a message_start with usage
+        chunk = {
+            "type": "message_start",
+            "message": {
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "content": [],
+                "model": "claude-3",
+                "usage": {"input_tokens": 42, "output_tokens": 0},
+            },
+        }
+        ir_events = self.converter.stream_response_from_provider(chunk, context=ctx)
+
+        # Process each IR event through ir→p
+        results = []
+        for ev in ir_events:
+            out = self.converter.stream_response_to_provider(ev, context=ctx)
+            if isinstance(out, dict) and out:
+                results.append(out)
+
+        # Find message_start in results
+        msg_starts = [r for r in results if r.get("type") == "message_start"]
+        assert len(msg_starts) == 1
+        assert msg_starts[0]["message"]["usage"]["input_tokens"] == 42
+
+    def test_no_usage_returns_zero(self):
+        """Without pending_usage, input_tokens defaults to 0."""
+        ctx = StreamContext()
+
+        from llm_rosetta.types.ir.stream import StreamStartEvent
+
+        start = StreamStartEvent(
+            type="stream_start", response_id="msg_test", model="gpt-4"
+        )
+        result = self.converter.stream_response_to_provider(start, context=ctx)
+        assert isinstance(result, dict)
+        assert result["message"]["usage"]["input_tokens"] == 0

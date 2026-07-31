@@ -614,8 +614,26 @@ class AnthropicConverter(BaseConverter):
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        """Handle message_start → StreamStartEvent + optional UsageEvent."""
+        """Handle message_start → UsageEvent + StreamStartEvent.
+
+        UsageEvent is emitted first so that downstream ir→p converters
+        have ``pending_usage`` populated when they process the
+        StreamStartEvent (needed for ``message_start.usage.input_tokens``).
+        """
         message = chunk.get("message", {})
+
+        # Emit usage BEFORE stream_start so ir→p can read input_tokens
+        # from context.pending_usage when building message_start.
+        usage = message.get("usage")
+        if usage:
+            start_usage = dict(usage)
+            start_usage["output_tokens"] = 0
+            events.append(
+                UsageEvent(
+                    type="usage",
+                    usage=self._build_p_usage_to_ir(start_usage),
+                )
+            )
 
         if context is not None:
             response_id = message.get("id", "")
@@ -628,19 +646,6 @@ class AnthropicConverter(BaseConverter):
                     type="stream_start",
                     response_id=response_id,
                     model=model,
-                )
-            )
-
-        usage = message.get("usage")
-        if usage:
-            # message_start.usage reports initial output_tokens (often 1);
-            # zero it out here — the real output count comes from message_delta.
-            start_usage = dict(usage)
-            start_usage["output_tokens"] = 0
-            events.append(
-                UsageEvent(
-                    type="usage",
-                    usage=self._build_p_usage_to_ir(start_usage),
                 )
             )
 
@@ -825,7 +830,9 @@ class AnthropicConverter(BaseConverter):
             context.response_id = event["response_id"]
             context.model = event["model"]
             context.mark_started()
-            # Use real input_tokens from buffered usage if available
+            # Use real input_tokens from buffered usage if available,
+            # otherwise fall back to the pipeline's len/3 estimate
+            # (cross-format upstreams only report usage at stream end).
             if context.pending_usage is not None:
                 input_tokens = context.pending_usage.get("prompt_tokens") or 0
                 p_usage["input_tokens"] = input_tokens
@@ -837,6 +844,7 @@ class AnthropicConverter(BaseConverter):
                     p_usage["cache_creation_input_tokens"] = context.pending_usage[
                         "cache_creation_tokens"
                     ]
+
         return {
             "type": AnthropicEventType.MESSAGE_START,
             "message": {
