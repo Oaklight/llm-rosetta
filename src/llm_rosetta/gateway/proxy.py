@@ -237,6 +237,26 @@ _default_metadata_store = ProviderMetadataStore()
 # ---------------------------------------------------------------------------
 
 
+def _strip_internal_metadata(body: dict) -> None:
+    """Recursively remove ``_provider_metadata`` from an outbound request body.
+
+    Converters attach ``_provider_metadata`` to provider-format objects
+    for cross-converter round-trip fidelity.  This must be stripped
+    before sending to upstream providers, which do not recognise it.
+
+    Operates in-place for zero-copy overhead.
+    """
+    for key in list(body.keys()):
+        if key == "_provider_metadata":
+            del body[key]
+        elif isinstance(body[key], dict):
+            _strip_internal_metadata(body[key])
+        elif isinstance(body[key], list):
+            for item in body[key]:
+                if isinstance(item, dict):
+                    _strip_internal_metadata(item)
+
+
 async def handle_non_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -290,6 +310,7 @@ async def handle_non_streaming(
         target_body = flatten_system_content()(target_body)
 
     log_converted_request(target_body)
+    _strip_internal_metadata(target_body)
 
     # Phase 3: Forward to upstream via transport
     t_upstream = time.perf_counter()
@@ -542,6 +563,7 @@ async def handle_streaming(
         target_body = flatten_system_content()(target_body)
 
     log_converted_request(target_body)
+    _strip_internal_metadata(target_body)
 
     # Phase 3: Open upstream connection and check for immediate errors
     # *before* committing to a 200 StreamingResponse.
