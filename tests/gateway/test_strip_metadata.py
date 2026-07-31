@@ -77,3 +77,14 @@ class TestStripInternalMetadata:
         body = {}
         _strip_internal_metadata(body)
         assert body == {}
+
+    def test_list_of_list(self):
+        body = {"nested": [[{"_provider_metadata": {"x": 1}, "keep": 2}]]}
+        _strip_internal_metadata(body)
+        assert body["nested"][0][0] == {"keep": 2}
+
+    def test_non_dict_input(self):
+        items = [{"_provider_metadata": {"a": 1}, "id": "x"}, {"id": "y"}]
+        _strip_internal_metadata(items)
+        assert items[0] == {"id": "x"}
+        assert items[1] == {"id": "y"}

@@ -237,24 +237,25 @@ _default_metadata_store = ProviderMetadataStore()
 # ---------------------------------------------------------------------------
 
 
-def _strip_internal_metadata(body: dict) -> None:
+def _strip_internal_metadata(obj: dict | list) -> None:
     """Recursively remove ``_provider_metadata`` from an outbound request body.
 
     Converters attach ``_provider_metadata`` to provider-format objects
     for cross-converter round-trip fidelity.  This must be stripped
     before sending to upstream providers, which do not recognise it.
 
-    Operates in-place for zero-copy overhead.
+    Operates in-place for zero-copy overhead.  Accepts both dict and
+    list inputs for natural recursion through nested structures.
     """
-    for key in list(body.keys()):
-        if key == "_provider_metadata":
-            del body[key]
-        elif isinstance(body[key], dict):
-            _strip_internal_metadata(body[key])
-        elif isinstance(body[key], list):
-            for item in body[key]:
-                if isinstance(item, dict):
-                    _strip_internal_metadata(item)
+    if isinstance(obj, dict):
+        for key in list(obj.keys()):
+            if key == "_provider_metadata":
+                del obj[key]
+            else:
+                _strip_internal_metadata(obj[key])
+    elif isinstance(obj, list):
+        for item in obj:
+            _strip_internal_metadata(item)
 
 
 async def handle_non_streaming(
