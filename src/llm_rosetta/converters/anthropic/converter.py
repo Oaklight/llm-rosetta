@@ -820,16 +820,21 @@ class AnthropicConverter(BaseConverter):
             )
 
         if stop_reason:
-            events.append(
-                FinishEvent(
-                    type="finish",
-                    finish_reason={
-                        "reason": ANTHROPIC_REASON_FROM_PROVIDER.get(  # ty: ignore[invalid-argument-type]
-                            stop_reason, "stop"
-                        )
-                    },
-                )
-            )
+            reason = ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop")
+            finish: dict[str, Any] = {
+                "type": "finish",
+                "finish_reason": {"reason": reason},
+            }
+            # Structured refusal: extract explanation and category
+            if stop_reason == "refusal":
+                stop_details = delta.get("stop_details") or {}
+                explanation = stop_details.get("explanation", "")
+                category = stop_details.get("category")
+                pm: dict[str, Any] = {"refusal_text": explanation}
+                if category:
+                    pm["anthropic_refusal_category"] = category
+                finish["provider_metadata"] = pm
+            events.append(finish)  # ty: ignore[invalid-argument-type]
 
     def _handle_p_message_stop_to_ir(
         self,
@@ -1131,6 +1136,17 @@ class AnthropicConverter(BaseConverter):
         """Handle FinishEvent → buffered message_delta + optional content_block_stop."""
         reason = event["finish_reason"]["reason"]
         stop_reason = ANTHROPIC_REASON_TO_PROVIDER.get(reason, "end_turn")
+
+        # Build stop_details for structured refusal
+        stop_details = None
+        if reason == "refusal":
+            pm = event.get("provider_metadata") or {}
+            stop_details = {
+                "type": "refusal",
+                "category": pm.get("anthropic_refusal_category"),
+                "explanation": pm.get("refusal_text", ""),
+            }
+
         if context is not None:
             results: list[dict[str, Any]] = []
             if context.current_block_index >= 0:
@@ -1145,16 +1161,22 @@ class AnthropicConverter(BaseConverter):
             if usage is not None:
                 # Usage already buffered — merge and emit immediately.
                 output_tokens = usage.get("completion_tokens") or 0
+                delta_payload: dict[str, Any] = {"stop_reason": stop_reason}
+                if stop_details:
+                    delta_payload["stop_details"] = stop_details
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
-                        "delta": {"stop_reason": stop_reason},
+                        "delta": delta_payload,
                         "usage": {"output_tokens": output_tokens},
                     }
                 )
             else:
                 # Buffer finish for later UsageEvent or StreamEnd flush.
-                context.buffer_finish({"stop_reason": stop_reason})
+                finish_delta: dict[str, Any] = {"stop_reason": stop_reason}
+                if stop_details:
+                    finish_delta["stop_details"] = stop_details
+                context.buffer_finish(finish_delta)
             return results if results else {}
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,

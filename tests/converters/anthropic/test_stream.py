@@ -1636,3 +1636,67 @@ class TestStreamingInputTokensFix:
         result = self.converter.stream_response_to_provider(start, context=ctx)
         assert isinstance(result, dict)
         assert result["message"]["usage"]["input_tokens"] == 0
+
+
+class TestStreamingRefusal:
+    """Tests for streaming structured refusal (#432)."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    def test_p_to_ir_streaming_refusal(self):
+        """message_delta with stop_reason=refusal extracts stop_details."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        chunk = {
+            "type": "message_delta",
+            "delta": {
+                "stop_reason": "refusal",
+                "stop_details": {
+                    "type": "refusal",
+                    "category": "bio",
+                    "explanation": "Request declined.",
+                },
+            },
+            "usage": {"output_tokens": 0},
+        }
+        events = cast(
+            list, self.converter.stream_response_from_provider(chunk, context=ctx)
+        )
+        finish_events = [e for e in events if e.get("type") == "finish"]
+        assert len(finish_events) == 1
+        fe = dict(finish_events[0])
+        assert fe["finish_reason"]["reason"] == "refusal"
+        assert fe["provider_metadata"]["refusal_text"] == "Request declined."
+        assert fe["provider_metadata"]["anthropic_refusal_category"] == "bio"
+
+    def test_ir_to_p_streaming_refusal_emits_stop_details(self):
+        """FinishEvent with reason=refusal emits stop_details in message_delta."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.buffer_usage(
+            {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10}
+        )
+        finish: dict = {
+            "type": "finish",
+            "finish_reason": {"reason": "refusal"},
+            "provider_metadata": {
+                "refusal_text": "Declined.",
+                "anthropic_refusal_category": "cyber",
+            },
+        }
+        result = self.converter.stream_response_to_provider(finish, context=ctx)  # ty: ignore[invalid-argument-type]
+        if isinstance(result, list):
+            deltas = [
+                r
+                for r in result
+                if isinstance(r, dict) and r.get("type") == "message_delta"
+            ]
+        else:
+            deltas = [result] if result.get("type") == "message_delta" else []
+        assert len(deltas) >= 1
+        d = deltas[-1]
+        assert d["delta"]["stop_reason"] == "refusal"
+        assert d["delta"]["stop_details"]["type"] == "refusal"
+        assert d["delta"]["stop_details"]["category"] == "cyber"
+        assert d["delta"]["stop_details"]["explanation"] == "Declined."
