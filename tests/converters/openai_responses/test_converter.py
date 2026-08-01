@@ -1335,3 +1335,117 @@ class TestResponseIdPrefixFromContext:
         }
         result = self.converter.response_to_provider(ir_response, context=ctx)
         assert result["id"] == "plain_uuid_123"
+
+
+class TestMessagePhase:
+    """Tests for message phase preservation (#440)."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_non_streaming_phase_round_trip(self):
+        """phase preserved through Responses → IR → Responses."""
+        response = {
+            "id": "resp_test",
+            "object": "response",
+            "model": "gpt-5.3-codex",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "phase": "commentary",
+                    "content": [{"type": "output_text", "text": "Let me check."}],
+                },
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir = self.converter.response_from_provider(response)
+        restored = self.converter.response_to_provider(ir)
+        msg = [i for i in restored["output"] if i.get("type") == "message"][0]
+        assert msg.get("phase") == "commentary"
+
+    def test_non_streaming_final_answer_phase(self):
+        """phase=final_answer preserved."""
+        response = {
+            "id": "resp_test",
+            "object": "response",
+            "model": "gpt-5.3-codex",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "phase": "final_answer",
+                    "content": [{"type": "output_text", "text": "The answer is 42."}],
+                },
+            ],
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir = self.converter.response_from_provider(response)
+        restored = self.converter.response_to_provider(ir)
+        msg = [i for i in restored["output"] if i.get("type") == "message"][0]
+        assert msg.get("phase") == "final_answer"
+
+    def test_no_phase_does_not_add_phase(self):
+        """Messages without phase do not get a phase field."""
+        response = {
+            "id": "resp_test",
+            "object": "response",
+            "model": "gpt-5-nano",
+            "output": [
+                {
+                    "type": "message",
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": [{"type": "output_text", "text": "Hello."}],
+                },
+            ],
+            "usage": {"input_tokens": 5, "output_tokens": 3},
+        }
+        ir = self.converter.response_from_provider(response)
+        restored = self.converter.response_to_provider(ir)
+        msg = [i for i in restored["output"] if i.get("type") == "message"][0]
+        assert "phase" not in msg
+
+    def test_request_phase_round_trip(self):
+        """phase preserved on input assistant messages."""
+        request = {
+            "model": "gpt-5.3-codex",
+            "input": [
+                {"role": "user", "content": "Check weather"},
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "phase": "commentary",
+                    "content": [{"type": "output_text", "text": "Let me check."}],
+                },
+                {
+                    "type": "function_call",
+                    "name": "get_weather",
+                    "arguments": "{}",
+                    "call_id": "call_1",
+                    "id": "fc_1",
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "sunny",
+                },
+            ],
+        }
+        ir = self.converter.request_from_provider(request)
+        restored = self.converter.request_to_provider(ir)
+        if isinstance(restored, tuple):
+            restored = restored[0]
+        # Find assistant message in restored input
+        assistant_msgs = [
+            i
+            for i in restored.get("input", [])
+            if isinstance(i, dict) and i.get("role") == "assistant"
+        ]
+        assert len(assistant_msgs) >= 1
+        assert assistant_msgs[0].get("phase") == "commentary"

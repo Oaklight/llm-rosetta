@@ -113,7 +113,12 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         if role in ("system", "user", "developer"):
             return self._ir_input_message_to_p(role, content, warnings)
         elif role == "assistant":
-            return self._ir_assistant_to_p(content, warnings, metadata=metadata)
+            return self._ir_assistant_to_p(
+                content,
+                warnings,
+                metadata=metadata,
+                provider_metadata=message.get("provider_metadata"),
+            )
         elif role == "tool":
             return self._ir_tool_messages_to_p(content, warnings)
 
@@ -176,6 +181,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         warnings: list[str],
         *,
         metadata: MessageMetadata | None = None,
+        provider_metadata: dict | None = None,
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR assistant message to Responses API items.
 
@@ -227,13 +233,17 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         # Add assistant message if there are text content parts
         if content_parts:
-            result_items.append(
-                {
-                    "type": "message",
-                    "role": "assistant",
-                    "content": content_parts,
-                }
-            )
+            msg_item: dict[str, Any] = {
+                "type": "message",
+                "role": "assistant",
+                "content": content_parts,
+            }
+            # Restore phase from provider_metadata
+            if provider_metadata:
+                phase = provider_metadata.get("responses_phase")
+                if phase:
+                    msg_item["phase"] = phase
+            result_items.append(msg_item)
 
         # Add tool call items
         result_items.extend(tool_items)
@@ -480,7 +490,14 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         # Empty messages are also created because subsequent tool calls
         # may need to be appended
-        return {"role": ir_role, "content": ir_content}
+        ir_msg: dict = {"role": ir_role, "content": ir_content}
+
+        # Preserve message phase for Responses round-trip
+        phase = provider_message.get("phase")
+        if phase:
+            ir_msg.setdefault("provider_metadata", {})["responses_phase"] = phase
+
+        return ir_msg
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single Responses API content part to IR content part(s).
