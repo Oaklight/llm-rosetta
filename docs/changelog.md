@@ -10,17 +10,29 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
-- **Generic provider passthrough IR carriers**: `ProviderPassthroughEvent` preserves opaque provider-native stream chunks; `ProviderPassthroughItem` preserves non-stream request/history items; `IRResponse.provider_passthrough_items` preserves independent output items with their original positions. Matching converter dialects restore copied payloads; cross-format conversions safely drop unsupported items.
-
-### Changed
-
-- **Unified internal converter function naming** ([#400](https://github.com/Oaklight/llm-rosetta/pull/400)): Standardize all internal converter functions to `{source}_X_to_{target}` pattern — `_to_` always points toward the target, prefix always identifies the source domain (`ir_` or `p_`). Eliminates the ambiguous `_from_p` suffix from internal functions. Public API unchanged.
+- **Shim-driven response ID prefix** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410), PR [#420](https://github.com/Oaklight/llm-rosetta/pull/420)): `ProviderShim` declares `response_id_prefix` in `provider.yaml`. Converter strips source prefix on ingest, adds target prefix on output. Enables clean cross-format response ID mapping (e.g. `chatcmpl-xxx` ↔ `resp_xxx`). OpenAI (`chatcmpl-`), Anthropic (`msg_`), and OpenAI Responses (`resp_`) prefixes declared.
+- **`completed_at` timestamp** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410)): Responses converter sets `completed_at` to Unix timestamp on completed responses (previously always `null`).
+- **Message phase preservation** ([#440](https://github.com/Oaklight/llm-rosetta/issues/440), PR [#441](https://github.com/Oaklight/llm-rosetta/pull/441)): Responses API `phase` field (`commentary`/`final_answer`) on assistant messages is preserved through all conversion paths — p→ir, ir→p response/request, and streaming. Pipeline bridges phase across streaming contexts.
 
 ### Fixed
 
-- **Preserve empty reasoning content in OpenAI Chat converter**: `_ir_assistant_to_p` no longer drops assistant messages that contain an empty `reasoning_content` field — the field is now retained in the output.
-- **Align embedding request IDs**: Gateway embedding endpoint now generates consistent request IDs and propagates them through the proxy pipeline.
-- **Admin modal CSS polish**: Fix checkbox group alignment, hint popup transparent background, and flatten-system-content tooltip. Correct "System Options" label to "System Message" in EN/ZH i18n.
+- **Unified output_index for Responses streaming** ([#418](https://github.com/Oaklight/llm-rosetta/issues/418), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Replace fragmented per-handler output_index calculation with a single monotonic counter on `OpenAIResponsesStreamContext`. All output item types (reasoning, message, tool call) now allocate indices through `next_output_index()`.
+- **Reasoning output items spec compliance** ([#407](https://github.com/Oaklight/llm-rosetta/issues/407), [#408](https://github.com/Oaklight/llm-rosetta/issues/408), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Non-streaming reasoning items always include `id` and `status` fields. Streaming reasoning has full `output_item.added → part.added → deltas → part.done → output_item.done` lifecycle. Deterministic reasoning ID generation via SHA-256 hash.
+- **Reasoning item order preserved** ([#437](https://github.com/Oaklight/llm-rosetta/issues/437), PR [#438](https://github.com/Oaklight/llm-rosetta/pull/438)): Fix `response_to_provider` output ordering — reasoning items now correctly precede message items instead of being pushed after by `insert(0)`.
+- **SSE `[DONE]` terminator** ([#409](https://github.com/Oaklight/llm-rosetta/issues/409)): Gateway emits `[DONE]` as the final SSE event after `response.completed`, per Open Responses spec.
+- **Cross-format refusal handling** ([#429](https://github.com/Oaklight/llm-rosetta/issues/429)): Complete refusal support across all 4 converters:
+    - OpenAI Chat ([#430](https://github.com/Oaklight/llm-rosetta/issues/430)): `refusal` field always present (nullable), streaming `delta.refusal` accumulated.
+    - Anthropic ([#432](https://github.com/Oaklight/llm-rosetta/issues/432)): Structured `stop_reason: "refusal"` + `stop_details` (category/explanation) handled bidirectionally, including streaming.
+    - Open Responses ([#431](https://github.com/Oaklight/llm-rosetta/issues/431)): `RefusalContent` type parsed and produced.
+    - Google ([#433](https://github.com/Oaklight/llm-rosetta/issues/433)): `promptFeedback.blockReason` handling, missing `finishReason` values added (`BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, `IMAGE_SAFETY`), refusal round-trip via `_provider_metadata` marker.
+- **IR RefusalPart in AssistantContentPart** ([#427](https://github.com/Oaklight/llm-rosetta/pull/427)): `RefusalPart` added to `AssistantContentPart` union — refusal responses no longer fail IR validation with 502.
+- **Streaming `message_start.input_tokens`** ([#424](https://github.com/Oaklight/llm-rosetta/issues/424), PR [#425](https://github.com/Oaklight/llm-rosetta/pull/425)): Fix Anthropic streaming `message_start` always reporting `input_tokens=0` by swapping `UsageEvent`/`StreamStartEvent` emission order.
+- **Strip `_provider_metadata` at HTTP boundary** ([#422](https://github.com/Oaklight/llm-rosetta/issues/422), PR [#423](https://github.com/Oaklight/llm-rosetta/pull/423)): Internal `_provider_metadata` fields no longer leak into outbound HTTP requests to upstream providers.
+- **CORS preflight auth bypass** (PR [#404](https://github.com/Oaklight/llm-rosetta/pull/404), [#405](https://github.com/Oaklight/llm-rosetta/pull/405)): Gateway skips auth on CORS preflight requests; hardened to require both `Origin` + `Access-Control-Request-Method` headers.
+- **Google camelCase `systemInstruction`**: Accept camelCase `systemInstruction` from REST API clients.
+- **Google `FunctionCall.id` / `FunctionResponse.id`**: Write function call/response IDs in to-provider output.
+- **Gateway Bearer token fallback**: Accept `Bearer` token as fallback for all auth strategies.
+- **CORS headers on auth errors**: Add CORS headers to auth error responses.
 
 ## v0.7.3 — 2026-07-25
 
