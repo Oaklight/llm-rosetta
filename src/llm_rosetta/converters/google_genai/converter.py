@@ -1148,12 +1148,15 @@ class GoogleGenAIConverter(BaseConverter):
             context.pending_text = None
 
         if context is not None:
-            for _call_id, tool_name, args_str in context.get_pending_tool_calls():
+            for call_id, tool_name, args_str in context.get_pending_tool_calls():
                 try:
                     args = json.loads(args_str) if args_str else {}
                 except (json.JSONDecodeError, TypeError):
                     args = {}
-                parts.append({"functionCall": {"name": tool_name, "args": args}})
+                fc: dict[str, Any] = {"name": tool_name, "args": args}
+                if call_id:
+                    fc["id"] = call_id
+                parts.append({"functionCall": fc})
 
         finish_chunk: dict[str, Any] = {
             "candidates": [

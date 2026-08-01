@@ -289,6 +289,56 @@ class TestGoogleGenAIToolOps:
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
 
+    def test_ir_tool_call_to_p_includes_id(self):
+        """Test that functionCall output includes the id field."""
+        ir = ToolCallPart(
+            type="tool_call",
+            tool_call_id="fyh071wz",
+            tool_name="get_weather",
+            tool_input={"location": "Tokyo"},
+            tool_type="function",
+        )
+        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir)
+        assert result["functionCall"]["id"] == "fyh071wz"
+        assert result["functionCall"]["name"] == "get_weather"
+
+    def test_p_tool_call_to_ir_with_provider_id(self):
+        """Test that provider-supplied id (Gemini 3.x) is preserved."""
+        provider_part = {
+            "functionCall": {
+                "name": "get_weather",
+                "args": {"location": "Tokyo"},
+                "id": "fyh071wz",
+            }
+        }
+        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
+        assert ir["tool_call_id"] == "fyh071wz"
+
+    def test_tool_call_id_round_trip(self):
+        """Test that functionCall.id round-trips through IR."""
+        provider_part = {
+            "functionCall": {
+                "name": "get_weather",
+                "args": {"location": "London"},
+                "id": "wak1n9ou",
+            }
+        }
+        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
+        restored = GoogleGenAIToolOps.ir_tool_call_to_p(ir)
+        assert restored["functionCall"]["id"] == "wak1n9ou"
+        assert restored["functionCall"]["name"] == "get_weather"
+
+    def test_tool_call_without_id_generates_one(self):
+        """Test that missing id (Gemini 2.5) gets a generated call_ id."""
+        provider_part = {
+            "functionCall": {
+                "name": "get_weather",
+                "args": {"location": "Tokyo"},
+            }
+        }
+        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
+        assert ir["tool_call_id"].startswith("call_")
+
     # ==================== Tool Result ====================
 
     def test_ir_tool_result_to_p(self):
@@ -350,6 +400,53 @@ class TestGoogleGenAIToolOps:
                 ir_tr, ir_input
             )
         assert result["functionResponse"]["name"] == "nonexistent"
+
+    def test_ir_tool_result_to_p_includes_id(self):
+        """Test that functionResponse output includes the id field."""
+        ir = ToolResultPart(
+            type="tool_result",
+            tool_call_id="fyh071wz",
+            result="Sunny, 25C",
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir)
+        assert result["functionResponse"]["id"] == "fyh071wz"
+
+    def test_ir_tool_result_to_p_with_context_includes_id(self):
+        """Test that functionResponse with context includes the id field."""
+        ir_input = [
+            {
+                "role": "assistant",
+                "content": [
+                    ToolCallPart(
+                        type="tool_call",
+                        tool_call_id="fyh071wz",
+                        tool_name="get_weather",
+                        tool_input={"location": "Tokyo"},
+                        tool_type="function",
+                    )
+                ],
+            }
+        ]
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="fyh071wz",
+            result="Sunny, 25C",
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        assert result["functionResponse"]["name"] == "get_weather"
+        assert result["functionResponse"]["id"] == "fyh071wz"
+
+    def test_p_tool_result_to_ir_with_id(self):
+        """Test that functionResponse.id is used as tool_call_id."""
+        provider = {
+            "functionResponse": {
+                "name": "get_weather",
+                "id": "fyh071wz",
+                "response": {"output": "Sunny"},
+            }
+        }
+        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        assert result["tool_call_id"] == "fyh071wz"
 
     def test_p_tool_result_to_ir(self):
         """Test Google function_response Part → IR ToolResultPart."""

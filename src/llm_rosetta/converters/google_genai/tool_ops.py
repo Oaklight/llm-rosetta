@@ -229,12 +229,15 @@ class GoogleGenAIToolOps(BaseToolOps):
         tool_name = ir_tool_call.get("tool_name", ir_tool_call.get("name", ""))
         tool_input = ir_tool_call.get("tool_input", ir_tool_call.get("arguments", {}))
 
-        part: dict[str, Any] = {
-            "functionCall": {
-                "name": tool_name,
-                "args": tool_input,
-            }
+        func_call: dict[str, Any] = {
+            "name": tool_name,
+            "args": tool_input,
         }
+        tool_call_id = ir_tool_call.get("tool_call_id")
+        if tool_call_id:
+            func_call["id"] = tool_call_id
+
+        part: dict[str, Any] = {"functionCall": func_call}
 
         preserve_metadata = kwargs.get("preserve_metadata", True)
         if preserve_metadata and "provider_metadata" in ir_tool_call:
@@ -328,12 +331,15 @@ class GoogleGenAIToolOps(BaseToolOps):
         if ir_tool_result.get("is_error"):
             response_data = {"error": result_content}
 
-        return {
-            "functionResponse": {
-                "name": tool_name,
-                "response": response_data,
-            }
+        func_response: dict[str, Any] = {
+            "name": tool_name,
+            "response": response_data,
         }
+        tool_call_id = ir_tool_result.get("tool_call_id")
+        if tool_call_id:
+            func_response["id"] = tool_call_id
+
+        return {"functionResponse": func_response}
 
     @staticmethod
     def ir_tool_result_to_p_with_context(
@@ -394,12 +400,15 @@ class GoogleGenAIToolOps(BaseToolOps):
         if ir_tool_result.get("is_error"):
             response_data = {"error": result_content}
 
-        return {
-            "functionResponse": {
-                "name": tool_name,
-                "response": response_data,
-            }
+        func_response: dict[str, Any] = {
+            "name": tool_name,
+            "response": response_data,
         }
+        tool_call_id = ir_tool_result.get("tool_call_id")
+        if tool_call_id:
+            func_response["id"] = tool_call_id
+
+        return {"functionResponse": func_response}
 
     @staticmethod
     def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
