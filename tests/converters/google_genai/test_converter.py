@@ -1174,3 +1174,34 @@ class TestGooglePromptBlockHandling:
         assert "stream_end" in types
         finish = [e for e in events if e["type"] == "finish"][0]
         assert finish["finish_reason"]["reason"] == "content_filter"
+
+    def test_refusal_round_trip(self):
+        """IR refusal → Google → IR preserves refusal via _provider_metadata marker."""
+        ir = {
+            "id": "test",
+            "object": "response",
+            "created": 1700000000,
+            "model": "gemini",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "refusal", "refusal": "I cannot help."}],
+                    },
+                    "finish_reason": {"reason": "content_filter"},
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+        }
+        google_resp = self.converter.response_to_provider(ir)  # ty: ignore[invalid-argument-type]
+        parts = google_resp["candidates"][0]["content"]["parts"]
+        assert len(parts) == 1
+        assert parts[0]["text"] == "I cannot help."
+        assert parts[0]["_provider_metadata"]["is_refusal"] is True
+
+        ir2 = self.converter.response_from_provider(google_resp)
+        content = ir2["choices"][0]["message"]["content"]
+        assert len(content) == 1
+        assert content[0]["type"] == "refusal"
+        assert content[0]["refusal"] == "I cannot help."
