@@ -347,20 +347,29 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Collect all content parts into a single assistant message
         message_content: list[dict[str, Any]] = []
+        message_metadata: dict[str, Any] = {}
         for ir_item in ir_items:
             if isinstance(ir_item, dict) and "role" in ir_item:
-                # It's a message - extract content
                 content = ir_item.get("content", [])
                 message_content.extend(cast(list, content))
+                # Capture provider_metadata from first assistant message
+                pm = ir_item.get("provider_metadata")
+                if pm and not message_metadata:
+                    message_metadata = pm
             elif isinstance(ir_item, dict) and "type" in ir_item:
-                # It's an extension item (system_event etc.) - skip for choices
                 pass
 
         if message_content:
+            ir_msg: dict[str, Any] = {
+                "role": "assistant",
+                "content": message_content,
+            }
+            if message_metadata:
+                ir_msg["provider_metadata"] = message_metadata
             choices.append(
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": message_content},
+                    "message": ir_msg,
                     "finish_reason": {"reason": finish_reason_val},
                 }
             )
@@ -471,16 +480,18 @@ class OpenAIResponsesConverter(BaseConverter):
 
             msg_insert_pos = len(provider_response["output"])
             if text_parts:
-                provider_response["output"].insert(
-                    msg_insert_pos,
-                    {
-                        "id": msg_item_id,
-                        "type": "message",
-                        "role": "assistant",
-                        "status": "completed",
-                        "content": text_parts,
-                    },
-                )
+                msg_item: dict[str, Any] = {
+                    "id": msg_item_id,
+                    "type": "message",
+                    "role": "assistant",
+                    "status": "completed",
+                    "content": text_parts,
+                }
+                # Restore phase from IR message provider_metadata
+                phase = message.get("provider_metadata", {}).get("responses_phase")
+                if phase:
+                    msg_item["phase"] = phase
+                provider_response["output"].insert(msg_insert_pos, msg_item)
 
             # Set finish reason
             finish_reason = choice.get("finish_reason", {}).get("reason", "stop")
@@ -941,7 +952,11 @@ class OpenAIResponsesConverter(BaseConverter):
                 # own ``ContentBlockStartEvent``.  Emitting a
                 # ``ContentBlockStartEvent`` here would cause duplicate
                 # ``response.content_part.added`` events on round-trip.
-                pass
+                #
+                # Capture phase for streaming round-trip.
+                phase = item.get("phase")
+                if phase and context is not None:
+                    context.metadata["_responses_phase"] = phase
 
     def _handle_p_content_part_added_to_ir(
         self,
@@ -1651,6 +1666,10 @@ class OpenAIResponsesConverter(BaseConverter):
                 "role": "assistant",
                 "content": [{"type": "output_text", "text": accumulated}],
             }
+            # Restore phase from context if available
+            phase = context.metadata.get("_responses_phase")
+            if phase:
+                msg_item["phase"] = phase
             if context.metadata_mode == "preserve":
                 msg_item["status"] = "completed"
                 for part in msg_item.get("content", []):

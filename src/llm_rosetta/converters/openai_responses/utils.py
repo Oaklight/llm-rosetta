@@ -33,6 +33,24 @@ def resolve_call_id(chunk: dict[str, Any], context: StreamContext | None) -> str
     return call_id
 
 
+def _build_message_item_skeleton(
+    item_id: str,
+    context: OpenAIResponsesStreamContext,
+) -> dict[str, Any]:
+    """Build message item dict for output_item.added, including phase if available."""
+    item: dict[str, Any] = {
+        "id": item_id,
+        "type": "message",
+        "role": "assistant",
+        "status": "in_progress",
+        "content": [],
+    }
+    phase = context.metadata.get("_responses_phase")
+    if phase:
+        item["phase"] = phase
+    return item
+
+
 def build_message_preamble_events(
     context: OpenAIResponsesStreamContext,
 ) -> list[dict[str, Any]]:
@@ -57,13 +75,7 @@ def build_message_preamble_events(
         {
             "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
             "output_index": output_index,
-            "item": {
-                "id": item_id,
-                "type": "message",
-                "role": "assistant",
-                "status": "in_progress",
-                "content": [],
-            },
+            "item": _build_message_item_skeleton(item_id, context),
         },
         {
             "type": ResponsesEventType.CONTENT_PART_ADDED,
