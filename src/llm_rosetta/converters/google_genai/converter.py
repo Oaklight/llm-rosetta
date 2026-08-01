@@ -328,7 +328,9 @@ class GoogleGenAIConverter(BaseConverter):
         }
 
         # 1. System instruction
-        system_instruction = provider_request.get("system_instruction")
+        system_instruction = provider_request.get(
+            "system_instruction"
+        ) or provider_request.get("systemInstruction")
         if system_instruction:
             parsed = self._parse_system_instruction(system_instruction)
             if parsed:

@@ -254,6 +254,18 @@ class TestGoogleGenAIConverter:
             {"type": "text", "text": "Be helpful."}
         ]
 
+    def test_request_from_provider_with_system_instruction_camelcase(self):
+        """Test request from provider with camelCase systemInstruction (REST API)."""
+        provider_request = {
+            "model": "gemini-2.0-flash",
+            "contents": [{"role": "user", "parts": [{"text": "Hi"}]}],
+            "systemInstruction": {"parts": [{"text": "Be concise."}]},
+        }
+        ir_request = self.converter.request_from_provider(provider_request)
+        assert ir_request["system_instruction"] == [
+            {"type": "text", "text": "Be concise."}
+        ]
+
     def test_request_from_provider_with_tools(self):
         """Test request from provider with tools."""
         provider_request = {
