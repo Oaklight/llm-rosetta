@@ -1112,3 +1112,49 @@ class TestRefusalFieldAlwaysPresent:
         result, _ = self.ops.ir_messages_to_p(ir_messages)
         assistant = [m for m in result if m["role"] == "assistant"][0]
         assert assistant["refusal"] == "I cannot do that"
+
+
+class TestRefusalBuildResponseMessage:
+    """Tests for refusal in _build_response_message (response path, #430)."""
+
+    def setup_method(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        self.converter = OpenAIChatConverter()
+
+    def test_response_message_always_has_refusal(self):
+        """_build_response_message outputs refusal: None for normal response."""
+        ir_response = {
+            "id": "test",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": "Hello"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
+        msg = result["choices"][0]["message"]
+        assert "refusal" in msg
+        assert msg["refusal"] is None
+
+    def test_response_message_refusal_has_text(self):
+        """_build_response_message outputs refusal text when present."""
+        ir_response = {
+            "id": "test",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "refusal", "refusal": "Cannot do that"}],
+                    },
+                    "finish_reason": {"reason": "stop"},
+                }
+            ],
+        }
+        result = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
+        msg = result["choices"][0]["message"]
+        assert msg["refusal"] == "Cannot do that"

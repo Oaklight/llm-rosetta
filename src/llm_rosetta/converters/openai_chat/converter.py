@@ -255,8 +255,7 @@ class OpenAIChatConverter(BaseConverter):
             if not text_parts:
                 openai_message["content"] = None
 
-        if refusal_text is not None:
-            openai_message["refusal"] = refusal_text
+        openai_message["refusal"] = refusal_text
 
         if annotations:
             openai_message["annotations"] = annotations
@@ -676,6 +675,12 @@ class OpenAIChatConverter(BaseConverter):
         if tool_calls:
             self._handle_p_tool_calls_to_ir(tool_calls, choice_index, context, events)
 
+        # Refusal delta — accumulate on context for finish-time RefusalPart
+        refusal = delta.get("refusal")
+        if refusal and context is not None:
+            prev = context.metadata.get("_refusal_text", "")
+            context.metadata["_refusal_text"] = prev + refusal
+
         # Finish reason
         finish_reason = p_choice.get("finish_reason")
         if finish_reason:
@@ -752,17 +757,22 @@ class OpenAIChatConverter(BaseConverter):
                 )
             )
 
-        events.append(
-            FinishEvent(
-                type="finish",
-                finish_reason={
-                    "reason": OPENAI_CHAT_REASON_FROM_PROVIDER.get(  # ty: ignore[invalid-argument-type]
-                        finish_reason, "stop"
-                    )
-                },
-                choice_index=choice_index,
-            )
+        reason = OPENAI_CHAT_REASON_FROM_PROVIDER.get(finish_reason, "stop")
+        # If refusal text accumulated from streaming deltas, mark as refusal
+        refusal_text = (
+            context.metadata.get("_refusal_text") if context is not None else None
         )
+        if refusal_text:
+            reason = "refusal"
+
+        finish: dict[str, Any] = {
+            "type": "finish",
+            "finish_reason": {"reason": reason},
+            "choice_index": choice_index,
+        }
+        if refusal_text:
+            finish["provider_metadata"] = {"refusal_text": refusal_text}
+        events.append(finish)  # ty: ignore[invalid-argument-type]
 
     def _handle_p_usage_to_ir(
         self,
@@ -851,7 +861,7 @@ class OpenAIChatConverter(BaseConverter):
             "choices": [
                 {
                     "index": 0,
-                    "delta": {"role": "assistant"},
+                    "delta": {"role": "assistant", "refusal": None},
                     "finish_reason": None,
                 }
             ],
