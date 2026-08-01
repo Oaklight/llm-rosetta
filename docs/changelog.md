@@ -10,18 +10,29 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
-- **通用 provider passthrough IR carrier**：`ProviderPassthroughEvent` 保留 provider 原生流式 chunk；`ProviderPassthroughItem` 保留非流式请求/历史 item；`IRResponse.provider_passthrough_items` 按原始位置保留独立输出 item。目标 converter dialect 相同时恢复 payload 副本，跨格式转换会安全丢弃不支持的 item。
-
-### 变更
-
-- **统一内部转换器函数命名** ([#400](https://github.com/Oaklight/llm-rosetta/pull/400))：所有内部转换器函数统一为 `{source}_X_to_{target}` 模式——`_to_` 始终指向目标，前缀标识来源域（`ir_` 或 `p_`）。消除了内部函数中歧义的 `_from_p` 后缀。公开 API 保持不变。
+- **Shim 驱动的 response ID 前缀** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410)，PR [#420](https://github.com/Oaklight/llm-rosetta/pull/420))：`ProviderShim` 在 `provider.yaml` 中声明 `response_id_prefix`。Converter 在输入时 strip 源前缀，输出时添加目标前缀。OpenAI (`chatcmpl-`)、Anthropic (`msg_`)、OpenAI Responses (`resp_`) 前缀已声明。
+- **`completed_at` 时间戳** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410))：Responses converter 在 completed 状态时设置 `completed_at` 为 Unix 时间戳（之前始终为 `null`）。
+- **消息阶段（phase）保留** ([#440](https://github.com/Oaklight/llm-rosetta/issues/440)，PR [#441](https://github.com/Oaklight/llm-rosetta/pull/441))：Responses API 的 `phase` 字段（`commentary`/`final_answer`）在所有转换路径中被保留——p→ir、ir→p response/request、以及流式。Pipeline 在流式 context 之间桥接 phase。
 
 ### 修复
 
-- **保留 OpenAI Chat 转换器中的空 reasoning content**：`_ir_assistant_to_p` 不再丢弃包含空 `reasoning_content` 字段的 assistant 消息——该字段现在保留在输出中。
-- **对齐 embedding 请求 ID**：Gateway embedding 端点现在生成一致的请求 ID 并在代理管线中传递。
-- **管理面板 modal CSS 修缮**：修复 checkbox 组对齐、提示弹窗透明背景、以及展平系统消息 tooltip。将 "System Options" 标签修正为 "System Message"（EN/ZH i18n）。
-
+- **统一 Responses 流式 output_index** ([#418](https://github.com/Oaklight/llm-rosetta/issues/418)，PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419))：用 `OpenAIResponsesStreamContext` 上的单一递增计数器替代分散的 handler 各自计算。所有输出项类型（reasoning、message、tool call）统一通过 `next_output_index()` 分配索引。
+- **Reasoning 输出项 spec 合规** ([#407](https://github.com/Oaklight/llm-rosetta/issues/407)、[#408](https://github.com/Oaklight/llm-rosetta/issues/408)，PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419))：非流式 reasoning 项始终包含 `id` 和 `status` 字段。流式 reasoning 具备完整的 `output_item.added → part.added → deltas → part.done → output_item.done` 生命周期。使用 SHA-256 哈希确定性生成 reasoning ID。
+- **Reasoning 项顺序保留** ([#437](https://github.com/Oaklight/llm-rosetta/issues/437)，PR [#438](https://github.com/Oaklight/llm-rosetta/pull/438))：修复 `response_to_provider` 输出顺序——reasoning 项现在正确排在 message 项之前。
+- **SSE `[DONE]` 终止符** ([#409](https://github.com/Oaklight/llm-rosetta/issues/409))：Gateway 在 `response.completed` 后发送 `[DONE]` 作为最终 SSE 事件，符合 Open Responses spec。
+- **跨格式 refusal 处理** ([#429](https://github.com/Oaklight/llm-rosetta/issues/429))：所有 4 个 converter 的完整 refusal 支持：
+    - OpenAI Chat ([#430](https://github.com/Oaklight/llm-rosetta/issues/430))：`refusal` 字段始终存在（nullable），流式 `delta.refusal` 累积。
+    - Anthropic ([#432](https://github.com/Oaklight/llm-rosetta/issues/432))：结构化 `stop_reason: "refusal"` + `stop_details`（category/explanation）双向处理，包括流式。
+    - Open Responses ([#431](https://github.com/Oaklight/llm-rosetta/issues/431))：`RefusalContent` 类型解析和生成。
+    - Google ([#433](https://github.com/Oaklight/llm-rosetta/issues/433))：`promptFeedback.blockReason` 处理，补全缺失的 `finishReason` 值（`BLOCKLIST`、`PROHIBITED_CONTENT`、`SPII`、`IMAGE_SAFETY`），通过 `_provider_metadata` 标记实现 refusal round-trip。
+- **IR RefusalPart 加入 AssistantContentPart** ([#427](https://github.com/Oaklight/llm-rosetta/pull/427))：`RefusalPart` 加入 `AssistantContentPart` union——refusal 响应不再因 IR 验证失败而返回 502。
+- **流式 `message_start.input_tokens` 修复** ([#424](https://github.com/Oaklight/llm-rosetta/issues/424)，PR [#425](https://github.com/Oaklight/llm-rosetta/pull/425))：修复 Anthropic 流式 `message_start` 始终报告 `input_tokens=0`，通过交换 `UsageEvent`/`StreamStartEvent` 的发送顺序。
+- **HTTP 边界 strip `_provider_metadata`** ([#422](https://github.com/Oaklight/llm-rosetta/issues/422)，PR [#423](https://github.com/Oaklight/llm-rosetta/pull/423))：内部 `_provider_metadata` 字段不再泄漏到发给上游 provider 的出站 HTTP 请求中。
+- **CORS 预检 auth 绕过** (PR [#404](https://github.com/Oaklight/llm-rosetta/pull/404)、[#405](https://github.com/Oaklight/llm-rosetta/pull/405))：Gateway 对 CORS 预检请求跳过认证；加强为要求同时具备 `Origin` + `Access-Control-Request-Method` 头部。
+- **Google camelCase `systemInstruction`**：接受 REST API 客户端的 camelCase `systemInstruction`。
+- **Google `FunctionCall.id` / `FunctionResponse.id`**：在 to-provider 输出中写入函数调用/响应 ID。
+- **Gateway Bearer token 降级**：对所有认证策略接受 `Bearer` token 作为降级方式。
+- **auth 错误响应添加 CORS 头部**：auth 错误响应中添加 CORS 头部。
 
 ## v0.7.3 — 2026-07-25
 
