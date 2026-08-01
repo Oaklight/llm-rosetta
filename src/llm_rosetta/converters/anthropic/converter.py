@@ -293,7 +293,9 @@ class AnthropicConverter(BaseConverter):
         # Extract structured refusal into RefusalPart
         if stop_reason_val == "refusal":
             stop_details = provider_response.get("stop_details") or {}
-            explanation = stop_details.get("explanation", "")
+            explanation = (
+                stop_details.get("explanation", "") or "Request refused by model."
+            )
             category = stop_details.get("category")
             refusal_part: dict[str, Any] = {
                 "type": "refusal",
@@ -828,7 +830,9 @@ class AnthropicConverter(BaseConverter):
             # Structured refusal: extract explanation and category
             if stop_reason == "refusal":
                 stop_details = delta.get("stop_details") or {}
-                explanation = stop_details.get("explanation", "")
+                explanation = (
+                    stop_details.get("explanation", "") or "Request refused by model."
+                )
                 category = stop_details.get("category")
                 pm: dict[str, Any] = {"refusal_text": explanation}
                 if category:
