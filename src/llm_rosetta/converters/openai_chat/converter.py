@@ -951,6 +951,7 @@ class OpenAIChatConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {"content": event["text"]},
+                    "finish_reason": None,
                 }
             ]
         }
@@ -966,6 +967,7 @@ class OpenAIChatConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {"reasoning_content": event["reasoning"]},
+                    "finish_reason": None,
                 }
             ]
         }
@@ -990,6 +992,7 @@ class OpenAIChatConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {"tool_calls": [tc_entry]},
+                    "finish_reason": None,
                 }
             ]
         }
@@ -1012,6 +1015,7 @@ class OpenAIChatConverter(BaseConverter):
                 {
                     "index": choice_index,
                     "delta": {"tool_calls": [tc_delta_entry]},
+                    "finish_reason": None,
                 }
             ]
         }
