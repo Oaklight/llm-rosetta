@@ -28,8 +28,6 @@ from ..base import BaseToolOps
 from ..base.helpers import sanitize_schema
 from ._constants import generate_tool_call_id
 
-_GOOGLE_SCHEMA_TYPES = {"STRING", "NUMBER", "INTEGER", "BOOLEAN", "ARRAY", "OBJECT"}
-
 
 def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
     """Recursively normalize ``type`` values in a JSON Schema dict.
