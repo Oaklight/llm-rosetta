@@ -24,6 +24,7 @@ from ...types.ir import (
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
+    is_refusal_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
@@ -289,6 +290,25 @@ class AnthropicConverter(BaseConverter):
                 "stop_sequence"
             ]
 
+        # Extract structured refusal into RefusalPart
+        if stop_reason_val == "refusal":
+            stop_details = provider_response.get("stop_details") or {}
+            explanation = stop_details.get("explanation", "")
+            category = stop_details.get("category")
+            refusal_part: dict[str, Any] = {
+                "type": "refusal",
+                "refusal": explanation or "Request refused by model.",
+            }
+            if category:
+                refusal_part["provider_metadata"] = {
+                    "anthropic_refusal_category": category
+                }
+            msg_content = ir_message.get("content")  # ty: ignore[unresolved-attribute]
+            if isinstance(msg_content, list):
+                msg_content.append(refusal_part)  # ty: ignore[invalid-argument-type]
+            else:
+                ir_message["content"] = [refusal_part]  # ty: ignore[invalid-assignment]
+
         ir_response: dict[str, Any] = {
             "id": provider_response.get("id", ""),
             "object": "response",
@@ -342,6 +362,7 @@ class AnthropicConverter(BaseConverter):
                 content_parts = message.get("content", [])
                 anthropic_content: list[dict[str, Any]] = []
 
+                refusal_part = None
                 for part in content_parts:
                     if is_text_part(part):
                         anthropic_content.append(self.content_ops.ir_text_to_p(part))
@@ -351,6 +372,8 @@ class AnthropicConverter(BaseConverter):
                         anthropic_content.append(
                             self.content_ops.ir_reasoning_to_p(part)
                         )
+                    elif is_refusal_part(part):
+                        refusal_part = part
 
                 provider_response["content"] = anthropic_content
 
@@ -363,6 +386,17 @@ class AnthropicConverter(BaseConverter):
 
             if "stop_sequence" in finish_reason:
                 provider_response["stop_sequence"] = finish_reason["stop_sequence"]
+
+            # Structured refusal: set stop_reason + stop_details
+            if refusal_part is not None:
+                provider_response["stop_reason"] = "refusal"
+                pm = refusal_part.get("provider_metadata") or {}
+                category = pm.get("anthropic_refusal_category")
+                provider_response["stop_details"] = {
+                    "type": "refusal",
+                    "category": category,
+                    "explanation": refusal_part.get("refusal", ""),
+                }
 
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}

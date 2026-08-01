@@ -814,3 +814,137 @@ class TestAnthropicConverterFullRoundTrip:
             self.converter.stream_response_to_provider(events[0]),
         )
         assert restored["delta"]["text"] == "Hello"
+
+
+class TestAnthropicStructuredRefusal:
+    """Tests for structured refusal handling (#432)."""
+
+    def setup_method(self):
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        self.converter = AnthropicConverter()
+
+    def test_p_to_ir_refusal_creates_refusal_part(self):
+        response = {
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "content": [],
+            "stop_reason": "refusal",
+            "stop_details": {
+                "type": "refusal",
+                "category": "bio",
+                "explanation": "This request was declined.",
+            },
+            "usage": {"input_tokens": 10, "output_tokens": 0},
+        }
+        ir = self.converter.response_from_provider(response)
+        parts = ir["choices"][0]["message"]["content"]
+        refusal_parts = [p for p in parts if p.get("type") == "refusal"]
+        assert len(refusal_parts) == 1
+        assert dict(refusal_parts[0])["refusal"] == "This request was declined."
+        assert ir["choices"][0]["finish_reason"]["reason"] == "refusal"
+
+    def test_p_to_ir_refusal_preserves_category(self):
+        response = {
+            "id": "msg_test",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-sonnet-4-6",
+            "content": [],
+            "stop_reason": "refusal",
+            "stop_details": {
+                "type": "refusal",
+                "category": "cyber",
+                "explanation": "Declined.",
+            },
+            "usage": {"input_tokens": 10, "output_tokens": 0},
+        }
+        ir = self.converter.response_from_provider(response)
+        refusal = dict(
+            [
+                p
+                for p in ir["choices"][0]["message"]["content"]
+                if p.get("type") == "refusal"
+            ][0]
+        )
+        refusal_d: dict = dict(refusal)
+        assert (
+            refusal_d.get("provider_metadata", {}).get("anthropic_refusal_category")
+            == "cyber"
+        )
+
+    def test_ir_to_p_refusal_sets_stop_details(self):
+        ir_response = {
+            "id": "msg_test",
+            "model": "claude-sonnet-4-6",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "refusal",
+                                "refusal": "Cannot help.",
+                                "provider_metadata": {
+                                    "anthropic_refusal_category": "bio"
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": {"reason": "refusal"},
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+        }
+        result = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
+        assert result["stop_reason"] == "refusal"
+        assert result["stop_details"]["type"] == "refusal"
+        assert result["stop_details"]["category"] == "bio"
+        assert result["stop_details"]["explanation"] == "Cannot help."
+
+    def test_ir_to_p_refusal_no_category(self):
+        ir_response = {
+            "id": "msg_test",
+            "model": "claude-sonnet-4-6",
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "refusal", "refusal": "Declined."}],
+                    },
+                    "finish_reason": {"reason": "refusal"},
+                }
+            ],
+            "usage": {"prompt_tokens": 10, "completion_tokens": 0, "total_tokens": 10},
+        }
+        result = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
+        assert result["stop_reason"] == "refusal"
+        assert result["stop_details"]["category"] is None
+        assert result["stop_details"]["explanation"] == "Declined."
+
+    def test_cross_format_refusal_round_trip(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        chat = OpenAIChatConverter()
+        ir_msg = chat.message_ops._p_message_to_ir(
+            {"role": "assistant", "content": None, "refusal": "I cannot help."}
+        )
+        ir_response = {
+            "id": "test",
+            "model": "claude-3",
+            "choices": [{"message": ir_msg, "finish_reason": {"reason": "refusal"}}],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 0, "total_tokens": 5},
+        }
+        anth = self.converter.response_to_provider(ir_response)  # ty: ignore[invalid-argument-type]
+        assert anth["stop_reason"] == "refusal"
+        assert anth["stop_details"]["explanation"] == "I cannot help."
+        ir2 = self.converter.response_from_provider(anth)
+        refusal_parts = [
+            p
+            for p in ir2["choices"][0]["message"]["content"]
+            if p.get("type") == "refusal"
+        ]
+        assert len(refusal_parts) == 1
+        assert dict(refusal_parts[0])["refusal"] == "I cannot help."

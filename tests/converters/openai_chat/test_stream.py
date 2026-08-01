@@ -1092,3 +1092,73 @@ class TestStreamResponseToProviderWithContext:
         assert result == {}
         assert ctx.pending_usage is not None
         assert ctx.pending_usage["total_tokens"] == 15
+
+
+class TestStreamingRefusal:
+    """Tests for streaming refusal handling (#430)."""
+
+    def setup_method(self):
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        self.converter = OpenAIChatConverter()
+
+    def test_streaming_role_chunk_has_refusal_null(self):
+        """First streaming delta includes refusal: null."""
+        from llm_rosetta.types.ir.stream import StreamStartEvent
+
+        ctx = StreamContext()
+        event = StreamStartEvent(type="stream_start", response_id="test", model="gpt-4")
+        self.converter.stream_response_to_provider(event, context=ctx)
+        # Role chunk is buffered in context.pending_response
+        assert ctx.pending_response is not None
+        delta = ctx.pending_response["choices"][0]["delta"]
+        assert "refusal" in delta
+        assert delta["refusal"] is None
+
+    def test_streaming_p_to_ir_accumulates_refusal(self):
+        """delta.refusal is accumulated on context metadata."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.response_id = "test"
+        ctx.model = "gpt-4"
+
+        chunk = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"refusal": "I cannot "},
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(chunk, context=ctx)
+
+        chunk2 = {
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"refusal": "help with that."},
+                }
+            ]
+        }
+        self.converter.stream_response_from_provider(chunk2, context=ctx)
+
+        assert ctx.metadata.get("_refusal_text") == "I cannot help with that."
+
+    def test_streaming_refusal_finish_reason(self):
+        """Accumulated refusal sets finish_reason to refusal in IR."""
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.response_id = "test"
+        ctx.model = "gpt-4"
+        ctx.metadata["_refusal_text"] = "I cannot help."
+
+        chunk = {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+        events = self.converter.stream_response_from_provider(chunk, context=ctx)
+        finish_events = [e for e in events if e.get("type") == "finish"]
+        assert len(finish_events) == 1
+        fe: dict = dict(finish_events[0])
+        assert fe["finish_reason"]["reason"] == "refusal"
+        assert (
+            finish_events[0].get("provider_metadata", {}).get("refusal_text")
+            == "I cannot help."
+        )
