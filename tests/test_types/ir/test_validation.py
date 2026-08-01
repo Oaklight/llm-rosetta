@@ -233,6 +233,43 @@ class TestValidateMessages:
         result = validate_messages([_user_message(), _assistant_message()])
         assert len(result) == 2
 
+    def test_assistant_message_accepts_refusal_part(self):
+        """A refusal is a valid assistant content part.
+
+        Converters emit RefusalPart whenever an upstream returns a refusal, so
+        it has to be a member of AssistantContentPart. When it was missing,
+        every refusal failed IR validation and the gateway turned a normal
+        safety refusal into a 502.
+        """
+        result = validate_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "refusal", "refusal": "I cannot help with that."}
+                    ],
+                }
+            ]
+        )
+        msg = cast(dict, result[0])
+        assert msg["content"][0]["type"] == "refusal"
+
+    def test_assistant_message_accepts_text_and_refusal(self):
+        """Partial output followed by a refusal must also validate."""
+        result = validate_messages(
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        _text_part("here is what I can say"),
+                        {"type": "refusal", "refusal": "but not the rest"},
+                    ],
+                }
+            ]
+        )
+        msg = cast(dict, result[0])
+        assert [part["type"] for part in msg["content"]] == ["text", "refusal"]
+
     def test_valid_system_message(self):
         result = validate_messages(
             [{"role": "system", "content": [_text_part("system prompt")]}]
