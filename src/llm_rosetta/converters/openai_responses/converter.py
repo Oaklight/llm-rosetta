@@ -19,6 +19,7 @@ from ...types.ir import (
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
+    is_refusal_part,
 )
 from ...types.ir.passthrough import ProviderPassthroughItem
 from ...types.ir.request import IRRequest
@@ -465,6 +466,10 @@ class OpenAIResponsesConverter(BaseConverter):
                         )
                     )
                     reasoning_index += 1
+                elif is_refusal_part(part):
+                    refusal_content = self.content_ops.ir_refusal_to_p(part)
+                    if refusal_content:
+                        text_parts.append(refusal_content)
 
             if text_parts:
                 provider_response["output"].insert(

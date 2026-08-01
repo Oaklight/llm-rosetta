@@ -506,6 +506,8 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             return [self.content_ops.p_image_to_ir(provider_part)]
         elif part_type == "input_file":
             return [self.content_ops.p_file_to_ir(provider_part)]
+        elif part_type == "refusal":
+            return [self.content_ops.p_refusal_to_ir(provider_part)]
 
         # Slug-prefixed content part (e.g. "openai:summary_text") — preserve opaquely
         if isinstance(part_type, str) and ":" in part_type:

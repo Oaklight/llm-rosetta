@@ -9,7 +9,6 @@ and input_file for files. Images and files are always input-only.
 """
 
 import re
-import warnings
 from typing import Any
 
 from ...types.ir import (
@@ -358,34 +357,32 @@ class OpenAIResponsesContentOps(BaseContentOps):
     # ==================== Refusal ====================
 
     @staticmethod
-    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict | None:
-        """IR RefusalPart → OpenAI Responses refusal content.
-
-        OpenAI Responses API does not have a dedicated refusal format.
-        Returns None and emits a warning.
+    def ir_refusal_to_p(ir_refusal: RefusalPart, **kwargs: Any) -> dict:
+        """IR RefusalPart → OpenAI Responses RefusalContent.
 
         Args:
             ir_refusal: IR refusal part.
 
         Returns:
-            None (refusal is dropped with a warning).
+            OpenAI Responses RefusalContent dict.
         """
-        warnings.warn(
-            "Refusal content not directly supported in OpenAI Responses API, ignored",
-            stacklevel=2,
-        )
-        return None
+        return {"type": "refusal", "refusal": ir_refusal["refusal"]}
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> RefusalPart:
-        """OpenAI Responses refusal content → IR RefusalPart.
+        """OpenAI Responses RefusalContent → IR RefusalPart.
 
-        Raises:
-            NotImplementedError: OpenAI Responses API does not produce refusal parts.
+        Args:
+            provider_refusal: RefusalContent dict with type and refusal fields.
+
+        Returns:
+            IR RefusalPart.
         """
-        raise NotImplementedError(
-            "OpenAI Responses API does not produce refusal content parts."
-        )
+        if isinstance(provider_refusal, dict):
+            return RefusalPart(
+                type="refusal", refusal=provider_refusal.get("refusal", "")
+            )
+        return RefusalPart(type="refusal", refusal=str(provider_refusal))
 
     # ==================== Citation ====================
 

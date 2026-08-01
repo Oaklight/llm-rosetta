@@ -10,6 +10,7 @@ from llm_rosetta.converters.openai_responses.content_ops import (
 from typing import cast
 
 from llm_rosetta.types.ir import (
+    RefusalPart,
     CitationPart,
     FilePart,
     ImagePart,
@@ -363,20 +364,27 @@ class TestOpenAIResponsesContentOps:
 
     # ==================== Refusal ====================
 
-    def test_ir_refusal_to_p_returns_none(self):
-        """Test ir_refusal_to_p returns None with warning."""
-        with pytest.warns(UserWarning, match="Refusal content not directly supported"):
-            result = OpenAIResponsesContentOps.ir_refusal_to_p(
-                {"type": "refusal", "refusal": "I cannot do that"}
-            )
-        assert result is None
+    def test_ir_refusal_to_p(self):
+        """Test ir_refusal_to_p produces RefusalContent."""
+        result = OpenAIResponsesContentOps.ir_refusal_to_p(
+            {"type": "refusal", "refusal": "I cannot do that"}
+        )
+        assert result == {"type": "refusal", "refusal": "I cannot do that"}
 
-    def test_p_refusal_to_ir_raises(self):
-        """Test p_refusal_to_ir raises NotImplementedError."""
-        with pytest.raises(
-            NotImplementedError, match="does not produce refusal content"
-        ):
-            OpenAIResponsesContentOps.p_refusal_to_ir("I cannot do that")
+    def test_p_refusal_to_ir(self):
+        """Test p_refusal_to_ir parses RefusalContent."""
+        result = OpenAIResponsesContentOps.p_refusal_to_ir(
+            {"type": "refusal", "refusal": "I cannot do that"}
+        )
+        assert result["type"] == "refusal"
+        assert result["refusal"] == "I cannot do that"
+
+    def test_refusal_round_trip(self):
+        """Test refusal round-trip: IR → Provider → IR."""
+        original = RefusalPart(type="refusal", refusal="Cannot help.")
+        provider = OpenAIResponsesContentOps.ir_refusal_to_p(original)
+        restored = OpenAIResponsesContentOps.p_refusal_to_ir(provider)
+        assert restored["refusal"] == original["refusal"]
 
     # ==================== Citation ====================
 
