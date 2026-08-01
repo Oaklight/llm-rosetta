@@ -467,9 +467,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     )
                     reasoning_index += 1
                 elif is_refusal_part(part):
-                    refusal_content = self.content_ops.ir_refusal_to_p(part)
-                    if refusal_content:
-                        text_parts.append(refusal_content)
+                    text_parts.append(self.content_ops.ir_refusal_to_p(part))
 
             if text_parts:
                 provider_response["output"].insert(
