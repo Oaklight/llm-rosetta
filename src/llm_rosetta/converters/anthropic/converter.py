@@ -864,9 +864,7 @@ class AnthropicConverter(BaseConverter):
             context.response_id = event["response_id"]
             context.model = event["model"]
             context.mark_started()
-            # Use real input_tokens from buffered usage if available,
-            # otherwise fall back to the pipeline's len/3 estimate
-            # (cross-format upstreams only report usage at stream end).
+            # Use real input_tokens from buffered usage if available.
             if context.pending_usage is not None:
                 input_tokens = context.pending_usage.get("prompt_tokens") or 0
                 p_usage["input_tokens"] = input_tokens
