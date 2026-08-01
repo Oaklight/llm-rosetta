@@ -51,21 +51,23 @@ def _extract_key(request: Any) -> str | None:
             strategy = strat
             break
 
+    # Always extract Bearer token as a fallback — gateway clients may
+    # use a single Authorization header regardless of API format.
+    auth = request.headers.get("authorization", "")
+    bearer_key = auth[7:] if auth.startswith("Bearer ") else None
+
     if strategy == "anthropic":
-        return request.headers.get("x-api-key")
+        return request.headers.get("x-api-key") or bearer_key
     elif strategy == "google":
-        # Google uses x-goog-api-key header or ?key= query param
         google_key = request.headers.get("x-goog-api-key")
         if google_key:
             return google_key
         vals = request.query_params.get("key")
-        return vals[0] if vals else None
+        if vals:
+            return vals[0]
+        return bearer_key
     else:
-        # OpenAI-style Bearer token
-        auth = request.headers.get("authorization", "")
-        if auth.startswith("Bearer "):
-            return auth[7:]
-        return None
+        return bearer_key
 
 
 def _is_admin_path(path: str) -> bool:
