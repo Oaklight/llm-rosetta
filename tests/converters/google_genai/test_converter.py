@@ -1095,3 +1095,82 @@ class TestGoogleGenAIConverterFullRoundTrip:
         assert list(r0["content"])[0]["text"] == "Hello"
         assert r1["role"] == "assistant"
         assert list(r1["content"])[0]["text"] == "Hi!"
+
+
+class TestGooglePromptBlockHandling:
+    """Tests for promptFeedback.blockReason and missing finishReason values (#433)."""
+
+    def setup_method(self):
+        from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+
+        self.converter = GoogleGenAIConverter()
+
+    def test_prompt_block_produces_content_filter(self):
+        """promptFeedback.blockReason with no candidates → content_filter finish."""
+        response = {
+            "promptFeedback": {"blockReason": "PROHIBITED_CONTENT"},
+            "usageMetadata": {"promptTokenCount": 14, "totalTokenCount": 14},
+        }
+        ir = self.converter.response_from_provider(response)
+        assert len(ir["choices"]) == 1
+        assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+        assert ir["choices"][0]["message"]["content"] == []
+
+    def test_safety_finish_reason(self):
+        """finishReason=SAFETY → content_filter."""
+        response = {
+            "candidates": [
+                {
+                    "finishReason": "SAFETY",
+                    "content": {"role": "model", "parts": []},
+                }
+            ],
+        }
+        ir = self.converter.response_from_provider(response)
+        assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+
+    def test_blocklist_finish_reason(self):
+        """finishReason=BLOCKLIST → content_filter."""
+        response = {
+            "candidates": [
+                {
+                    "finishReason": "BLOCKLIST",
+                    "content": {"role": "model", "parts": [{"text": ""}]},
+                }
+            ],
+        }
+        ir = self.converter.response_from_provider(response)
+        assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+
+    def test_spii_finish_reason(self):
+        """finishReason=SPII → content_filter."""
+        response = {
+            "candidates": [
+                {
+                    "finishReason": "SPII",
+                    "content": {"role": "model", "parts": []},
+                }
+            ],
+        }
+        ir = self.converter.response_from_provider(response)
+        assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+
+    def test_streaming_prompt_block(self):
+        """Streaming chunk with promptFeedback.blockReason → finish + stream_end."""
+        from llm_rosetta.converters.base.context import StreamContext
+
+        ctx = StreamContext()
+        ctx.mark_started()
+        ctx.response_id = "test"
+        ctx.model = "gemini"
+
+        chunk = {
+            "promptFeedback": {"blockReason": "PROHIBITED_CONTENT"},
+            "usageMetadata": {"promptTokenCount": 14, "totalTokenCount": 14},
+        }
+        events = self.converter.stream_response_from_provider(chunk, context=ctx)
+        types = [e["type"] for e in events]
+        assert "finish" in types
+        assert "stream_end" in types
+        finish = [e for e in events if e["type"] == "finish"][0]
+        assert finish["finish_reason"]["reason"] == "content_filter"
