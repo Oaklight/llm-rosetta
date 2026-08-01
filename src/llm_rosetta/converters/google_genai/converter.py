@@ -30,6 +30,7 @@ from ...types.ir import (
     is_text_part,
     is_tool_call_part,
     is_reasoning_part,
+    is_refusal_part,
 )
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
@@ -509,6 +510,8 @@ class GoogleGenAIConverter(BaseConverter):
                     parts.append(self.tool_ops.ir_tool_call_to_p(part))
                 elif is_reasoning_part(part):
                     parts.append(self.content_ops.ir_reasoning_to_p(part))
+                elif is_refusal_part(part):
+                    parts.append(self.content_ops.ir_refusal_to_p(part))
 
             finish_reason = choice.get("finish_reason", {})
             reason = finish_reason.get("reason", "stop")
