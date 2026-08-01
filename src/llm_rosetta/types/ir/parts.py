@@ -276,11 +276,14 @@ UserContentPart = Union[
     # AudioPart,
 ]
 
-# 助手消息内容类型 - 文本、工具调用、推理、引用，未来支持音频、图像
+# 助手消息内容类型 - 文本、工具调用、推理、拒绝、引用，未来支持音频、图像
+# Assistant message content types - text, tool calls, reasoning, refusal,
+# citations, future support for audio and images.
 AssistantContentPart = Union[
     TextPart,
     ToolCallPart,
     ReasoningPart,
+    RefusalPart,
     CitationPart,
     # 未来支持 Future support:
     # AudioPart,

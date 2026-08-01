@@ -4,6 +4,7 @@ OpenAI Chat MessageOps unit tests.
 
 from typing import Any, Union, cast
 
+from llm_rosetta._vendor.validate import validate
 from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
 from llm_rosetta.converters.openai_chat.message_ops import (
     OpenAIChatMessageOps,
@@ -209,6 +210,27 @@ class TestOpenAIChatMessageOps:
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
         assert result[0]["refusal"] == "I cannot do that"
+
+    def test_p_assistant_refusal_to_ir_validates(self):
+        """Provider refusal → IR must satisfy IR validation.
+
+        OpenAI returns `content: null` with a populated `refusal` field when a
+        request is declined. The converter turns that into a RefusalPart, so
+        the resulting message has to validate as an IR Message. Previously it
+        did not, and the gateway answered a plain refusal with a 502.
+        """
+        ir = self.message_ops._p_message_to_ir(
+            {
+                "role": "assistant",
+                "content": None,
+                "refusal": "I cannot help with that.",
+            }
+        )
+        assert ir["content"][0] == {
+            "type": "refusal",
+            "refusal": "I cannot help with that.",
+        }
+        validate(ir, Message)
 
     def test_tool_message_to_p(self):
         """Test IR tool message → OpenAI tool role message."""
