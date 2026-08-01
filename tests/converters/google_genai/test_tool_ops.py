@@ -577,6 +577,98 @@ class TestGoogleGenAIToolOps:
         params = result["function_declarations"][0]["parameters"]
         assert params["properties"]["field"]["nullable"] is True
 
+    def test_p_tool_definition_uppercase_types_normalized(self):
+        """Google-native uppercase types (STRING, OBJECT) are lowercased to IR."""
+        provider_tool = {
+            "functionDeclarations": [
+                {
+                    "name": "get_weather",
+                    "description": "Get weather",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "location": {"type": "STRING"},
+                            "days": {"type": "INTEGER"},
+                            "detailed": {"type": "BOOLEAN"},
+                        },
+                        "required": ["location"],
+                    },
+                }
+            ]
+        }
+        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(result, dict)
+        params = result["parameters"]
+        assert params["type"] == "object"
+        assert params["properties"]["location"]["type"] == "string"
+        assert params["properties"]["days"]["type"] == "integer"
+        assert params["properties"]["detailed"]["type"] == "boolean"
+
+    def test_ir_tool_definition_uppercases_types_for_google(self):
+        """IR lowercase types are uppercased when emitting to Google format."""
+        ir_tool: ToolDefinition = {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get weather",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string"},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["location"],
+            },
+        }
+        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        params = result["function_declarations"][0]["parameters"]
+        assert params["type"] == "OBJECT"
+        assert params["properties"]["location"]["type"] == "STRING"
+        assert params["properties"]["tags"]["type"] == "ARRAY"
+        assert params["properties"]["tags"]["items"]["type"] == "STRING"
+
+    def test_schema_type_round_trip(self):
+        """Uppercase Google types → IR lowercase → Google uppercase round-trip."""
+        provider_tool = {
+            "functionDeclarations": [
+                {
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {
+                        "type": "OBJECT",
+                        "properties": {
+                            "query": {"type": "STRING"},
+                            "limit": {"type": "NUMBER"},
+                        },
+                    },
+                }
+            ]
+        }
+        ir = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(ir, dict)
+        assert ir["parameters"]["properties"]["query"]["type"] == "string"
+        restored = GoogleGenAIToolOps.ir_tool_definition_to_p(ir)
+        params = restored["function_declarations"][0]["parameters"]
+        assert params["properties"]["query"]["type"] == "STRING"
+        assert params["properties"]["limit"]["type"] == "NUMBER"
+
+    def test_p_tool_definition_bare_decl_uppercase_normalized(self):
+        """Bare function declaration with uppercase types also normalized."""
+        bare = {
+            "name": "lookup",
+            "description": "Look up",
+            "parameters": {
+                "type": "OBJECT",
+                "properties": {"id": {"type": "INTEGER"}},
+            },
+        }
+        result = GoogleGenAIToolOps.p_tool_definition_to_ir(bare)
+        assert isinstance(result, dict)
+        assert result["parameters"]["type"] == "object"
+        assert result["parameters"]["properties"]["id"]["type"] == "integer"
+
 
 class TestProviderMetadataPreservation:
     """Tests for generic provider_metadata round-trip through Google format.

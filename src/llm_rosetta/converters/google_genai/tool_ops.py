@@ -28,6 +28,37 @@ from ..base import BaseToolOps
 from ..base.helpers import sanitize_schema
 from ._constants import generate_tool_call_id
 
+_GOOGLE_SCHEMA_TYPES = {"STRING", "NUMBER", "INTEGER", "BOOLEAN", "ARRAY", "OBJECT"}
+
+
+def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
+    """Recursively normalize ``type`` values in a JSON Schema dict.
+
+    Google's API uses uppercase type names (``STRING``, ``OBJECT``, …)
+    while JSON Schema / other providers use lowercase.
+
+    Args:
+        schema: A JSON Schema dict (or sub-schema value).
+        to_upper: If True, convert to Google uppercase; otherwise lowercase.
+    """
+    if not isinstance(schema, dict):
+        return schema
+    result: dict[str, Any] = {}
+    for key, value in schema.items():
+        if key == "type" and isinstance(value, str):
+            result[key] = value.upper() if to_upper else value.lower()
+        elif key == "properties" and isinstance(value, dict):
+            result[key] = {
+                k: _normalize_schema_types(v, to_upper) for k, v in value.items()
+            }
+        elif key == "items":
+            result[key] = _normalize_schema_types(value, to_upper)
+        elif key in ("anyOf", "oneOf", "allOf") and isinstance(value, list):
+            result[key] = [_normalize_schema_types(v, to_upper) for v in value]
+        else:
+            result[key] = value
+    return result
+
 
 class GoogleGenAIToolOps(BaseToolOps):
     """Google GenAI tool conversion operations.
@@ -57,7 +88,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         }
         parameters = ir_tool.get("parameters")
         if parameters:
-            func_decl["parameters"] = (
+            sanitized = (
                 sanitize_schema(
                     parameters,
                     extra_strip_keys={"additionalProperties", "title"},
@@ -65,6 +96,7 @@ class GoogleGenAIToolOps(BaseToolOps):
                 if isinstance(parameters, dict)
                 else parameters
             )
+            func_decl["parameters"] = _normalize_schema_types(sanitized, to_upper=True)
 
         return {"function_declarations": [func_decl]}
 
@@ -102,7 +134,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         if func_decls:
             results: list[ToolDefinition] = []
             for func in func_decls:
-                parameters = func.get("parameters", {})
+                parameters = _normalize_schema_types(func.get("parameters", {}))
                 td: dict[str, Any] = {
                     "type": "function",
                     "name": func.get("name", ""),
@@ -123,7 +155,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         func = provider_tool
         if not func.get("name"):
             return None
-        parameters = func.get("parameters", {})
+        parameters = _normalize_schema_types(func.get("parameters", {}))
         result: dict[str, Any] = {
             "type": "function",
             "name": func["name"],
