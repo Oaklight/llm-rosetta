@@ -1052,3 +1052,63 @@ class TestMultimodalToolResultPacking:
         )
         assert _has_multimodal_content([]) is False
         assert _has_multimodal_content(None) is False
+
+
+class TestRefusalFieldAlwaysPresent:
+    """Tests for refusal field always present on assistant messages (#427 follow-up)."""
+
+    def setup_method(self):
+        content_ops = OpenAIChatContentOps()
+        tool_ops = OpenAIChatToolOps()
+        self.ops = OpenAIChatMessageOps(content_ops, tool_ops)
+
+    def test_normal_response_has_refusal_null(self):
+        """Normal assistant message includes refusal: None."""
+        ir_messages = cast(
+            list,
+            [
+                {"role": "assistant", "content": [{"type": "text", "text": "Hello"}]},
+            ],
+        )
+        result, _ = self.ops.ir_messages_to_p(ir_messages)
+        assistant = [m for m in result if m["role"] == "assistant"][0]
+        assert "refusal" in assistant
+        assert assistant["refusal"] is None
+
+    def test_tool_call_response_has_refusal_null(self):
+        """Assistant with tool calls includes refusal: None."""
+        ir_messages = cast(
+            list,
+            [
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_1",
+                            "tool_name": "fn",
+                            "tool_input": {},
+                        }
+                    ],
+                },
+            ],
+        )
+        result, _ = self.ops.ir_messages_to_p(ir_messages)
+        assistant = [m for m in result if m["role"] == "assistant"][0]
+        assert "refusal" in assistant
+        assert assistant["refusal"] is None
+
+    def test_refusal_response_has_refusal_text(self):
+        """Assistant with refusal includes the refusal text."""
+        ir_messages = cast(
+            list,
+            [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "refusal", "refusal": "I cannot do that"}],
+                },
+            ],
+        )
+        result, _ = self.ops.ir_messages_to_p(ir_messages)
+        assistant = [m for m in result if m["role"] == "assistant"][0]
+        assert assistant["refusal"] == "I cannot do that"

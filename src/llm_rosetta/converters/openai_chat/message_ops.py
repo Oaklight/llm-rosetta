@@ -351,9 +351,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
         if not text_parts and not tool_calls:
             openai_message["content"] = ""
 
-        # Set refusal if present
-        if refusal_text is not None:
-            openai_message["refusal"] = refusal_text
+        # OpenAI spec requires refusal field on assistant messages (nullable)
+        openai_message["refusal"] = refusal_text
 
         return openai_message, warnings
 
