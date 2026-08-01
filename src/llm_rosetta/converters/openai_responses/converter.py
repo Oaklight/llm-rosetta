@@ -469,9 +469,10 @@ class OpenAIResponsesConverter(BaseConverter):
                 elif is_refusal_part(part):
                     text_parts.append(self.content_ops.ir_refusal_to_p(part))
 
+            msg_insert_pos = len(provider_response["output"])
             if text_parts:
                 provider_response["output"].insert(
-                    0,
+                    msg_insert_pos,
                     {
                         "id": msg_item_id,
                         "type": "message",
