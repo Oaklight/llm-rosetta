@@ -599,6 +599,12 @@ class StreamProcessor:
                 "_response_extras"
             ]
 
+        # Bridge message phase for Responses streaming round-trip
+        if "_responses_phase" in self._from_ctx.metadata:
+            self._to_ctx.metadata["_responses_phase"] = self._from_ctx.metadata[
+                "_responses_phase"
+            ]
+
         # IR → Source events
         result: list[dict[str, Any]] = []
         for ir_event in ir_events:

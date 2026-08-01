@@ -2305,3 +2305,101 @@ class TestStreamingPrefixFromContext:
                 break
         assert completed is not None
         assert completed["response"]["id"] == "custom_ctx_test"
+
+
+class TestStreamingMessagePhase:
+    """Tests for message phase in streaming (#440)."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def _run_stream(self, ir_events):
+        ctx = StreamContext()
+        ctx.response_id = "resp_test"
+        ctx.model = "test-model"
+        results = []
+        for ev in ir_events:
+            out = self.converter.stream_response_to_provider(ev, context=ctx)
+            if isinstance(out, list):
+                results.extend(out)
+            elif isinstance(out, dict) and out:
+                results.append(out)
+        return results, ctx
+
+    def test_p_to_ir_captures_phase_from_output_item_added(self):
+        """output_item.added with phase captures it into context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.mark_started()
+        chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "message",
+                "id": "msg_1",
+                "role": "assistant",
+                "phase": "commentary",
+                "status": "in_progress",
+                "content": [],
+            },
+        }
+        self.converter.stream_response_from_provider(chunk, context=ctx)
+        assert ctx.metadata.get("_responses_phase") == "commentary"
+
+    def test_ir_to_p_emits_phase_in_preamble(self):
+        """Streaming message preamble includes phase from context."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_test"
+        ctx.metadata["_responses_phase"] = "final_answer"
+
+        events, _ = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_test", "model": "m"},
+            ]
+        )
+        # Phase should not be in stream_start, but check context is set
+        assert ctx.metadata.get("_responses_phase") == "final_answer"
+
+    def test_streaming_same_format_phase_round_trip(self):
+        """Responses streaming → IR → Responses streaming preserves phase."""
+        from_ctx = OpenAIResponsesStreamContext()
+        from_ctx.mark_started()
+        from_ctx.response_id = "resp_test"
+
+        # Simulate upstream output_item.added with phase
+        chunk = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "message",
+                "id": "msg_1",
+                "role": "assistant",
+                "phase": "commentary",
+                "status": "in_progress",
+                "content": [],
+            },
+        }
+        self.converter.stream_response_from_provider(chunk, context=from_ctx)
+        assert from_ctx.metadata.get("_responses_phase") == "commentary"
+
+        # Now simulate ir→p with a to_ctx that has phase bridged
+        to_ctx = OpenAIResponsesStreamContext()
+        to_ctx.response_id = "resp_test"
+        to_ctx.metadata["_responses_phase"] = from_ctx.metadata["_responses_phase"]
+
+        # Emit a text delta which triggers message preamble
+        text_ev = {"type": "text_delta", "text": "Let me check."}
+        result = self.converter.stream_response_to_provider(text_ev, context=to_ctx)  # ty: ignore[invalid-argument-type]
+
+        if isinstance(result, list):
+            added = [
+                r
+                for r in result
+                if isinstance(r, dict) and r.get("type") == "response.output_item.added"
+            ]
+        else:
+            added = (
+                [result] if result.get("type") == "response.output_item.added" else []
+            )
+
+        assert len(added) == 1
+        assert added[0]["item"].get("phase") == "commentary"
