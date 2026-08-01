@@ -27,6 +27,7 @@ from ...types.ir import (
     is_image_part,
     is_message,
     is_reasoning_part,
+    is_refusal_part,
     is_text_part,
     is_tool_call_part,
     is_tool_result_part,
@@ -181,6 +182,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
             return self.content_ops.ir_audio_to_p(content_part)
         elif is_reasoning_part(content_part):
             return self.content_ops.ir_reasoning_to_p(content_part)
+        elif is_refusal_part(content_part):
+            return self.content_ops.ir_refusal_to_p(content_part)
         elif is_tool_call_part(content_part):
             return self.tool_ops.ir_tool_call_to_p(content_part)
         elif is_tool_result_part(content_part):

@@ -331,26 +331,36 @@ class GoogleGenAIContentOps(BaseContentOps):
         """IR RefusalPart → Google GenAI text Part.
 
         Google does not have a native refusal type. Refusals are converted
-        to text parts with a prefix.
+        to text parts with a `_provider_metadata` marker so they can be
+        recognized and restored on the return path.
 
         Args:
             ir_refusal: IR refusal part.
 
         Returns:
-            Google text Part dict.
+            Google text Part dict with refusal marker.
         """
-        return {"text": f"[Refusal] {ir_refusal['refusal']}"}
+        return {
+            "text": ir_refusal["refusal"],
+            "_provider_metadata": {"is_refusal": True},
+        }
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> RefusalPart:
-        """Google GenAI text → IR RefusalPart.
+        """Google GenAI text Part → IR RefusalPart.
 
-        Raises:
-            NotImplementedError: Google does not produce native refusal parts.
+        Converts a text part that was marked as a refusal (via
+        `_provider_metadata.is_refusal`) back to an IR RefusalPart.
+
+        Args:
+            provider_refusal: Google text Part dict with refusal marker.
+
+        Returns:
+            IR RefusalPart.
         """
-        raise NotImplementedError(
-            "Google GenAI does not produce native refusal content parts."
-        )
+        if isinstance(provider_refusal, dict):
+            return RefusalPart(type="refusal", refusal=provider_refusal.get("text", ""))
+        return RefusalPart(type="refusal", refusal=str(provider_refusal))
 
     # ==================== Citation (not natively supported in parts) ====================
 
@@ -405,13 +415,17 @@ class GoogleGenAIContentOps(BaseContentOps):
         """
         ir_parts: list[ContentPart] = []
 
-        # Handle text
+        # Handle text (check for refusal marker first)
         if (
             "text" in provider_part
             and provider_part["text"] is not None
             and provider_part["text"] != ""
         ):
-            ir_parts.append(GoogleGenAIContentOps.p_text_to_ir(provider_part))
+            pm = provider_part.get("_provider_metadata") or {}
+            if pm.get("is_refusal"):
+                ir_parts.append(GoogleGenAIContentOps.p_refusal_to_ir(provider_part))
+            else:
+                ir_parts.append(GoogleGenAIContentOps.p_text_to_ir(provider_part))
 
         # Handle inline_data / inlineData (image, audio, or file based on mime_type)
         raw_inline = provider_part.get("inline_data") or provider_part.get("inlineData")
