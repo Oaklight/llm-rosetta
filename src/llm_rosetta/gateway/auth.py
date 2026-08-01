@@ -68,8 +68,16 @@ def _extract_key(request: Any) -> str | None:
         return None
 
 
+def _is_admin_path(path: str) -> bool:
+    return path.startswith("/admin/") or path == "/admin"
+
+
 def _error_for_path(path: str, status: int, message: str) -> Response:
-    """Return an error response in the format matching the API standard."""
+    """Return an error response in the format matching the API standard.
+
+    Non-admin responses include CORS headers because before_request
+    short-circuits bypass after_request where they would normally be set.
+    """
     for prefix, strategy in _ROUTE_EXTRACTORS:
         if path.startswith(prefix):
             break
@@ -77,7 +85,7 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
         strategy = "openai"
 
     if strategy == "anthropic":
-        return JSONResponse(
+        resp = JSONResponse(
             {
                 "type": "error",
                 "error": {"type": "authentication_error", "message": message},
@@ -85,7 +93,7 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
             status_code=status,
         )
     elif strategy == "google":
-        return JSONResponse(
+        resp = JSONResponse(
             {
                 "error": {
                     "code": status,
@@ -96,7 +104,7 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
             status_code=status,
         )
     else:
-        return JSONResponse(
+        resp = JSONResponse(
             {
                 "error": {
                     "message": message,
@@ -106,6 +114,13 @@ def _error_for_path(path: str, status: int, message: str) -> Response:
             },
             status_code=status,
         )
+
+    if not _is_admin_path(path):
+        resp.headers["Access-Control-Allow-Origin"] = "*"
+        resp.headers["Access-Control-Allow-Methods"] = "*"
+        resp.headers["Access-Control-Allow-Headers"] = "*"
+
+    return resp
 
 
 def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
