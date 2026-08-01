@@ -277,10 +277,8 @@ class OpenAIChatConverter(BaseConverter):
             "index": choice.get("index", 0),
             "message": openai_message,
             "finish_reason": OPENAI_CHAT_REASON_TO_PROVIDER.get(reason, "stop"),
+            "logprobs": choice.get("logprobs"),
         }
-
-        if "logprobs" in choice:
-            openai_choice["logprobs"] = choice["logprobs"]
 
         return openai_choice
 
