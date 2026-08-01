@@ -9,6 +9,11 @@ GOOGLE_REASON_FROM_PROVIDER: dict[str, str] = {
     "MAX_TOKENS": "length",
     "SAFETY": "content_filter",
     "RECITATION": "content_filter",
+    "BLOCKLIST": "content_filter",
+    "PROHIBITED_CONTENT": "content_filter",
+    "SPII": "content_filter",
+    "IMAGE_SAFETY": "content_filter",
+    "LANGUAGE": "error",
     "MALFORMED_FUNCTION_CALL": "error",
     "OTHER": "error",
 }

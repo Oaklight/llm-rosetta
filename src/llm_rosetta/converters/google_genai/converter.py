@@ -428,6 +428,29 @@ class GoogleGenAIConverter(BaseConverter):
             }
             choices.append(choice_info)
 
+        # Handle prompt-level blocks (no candidates returned)
+        if not choices:
+            prompt_feedback = (
+                provider_response.get("prompt_feedback")
+                or provider_response.get("promptFeedback")
+                or {}
+            )
+            block_reason = prompt_feedback.get("block_reason") or prompt_feedback.get(
+                "blockReason"
+            )
+            if block_reason:
+                choices.append(
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": []},
+                        "finish_reason": {
+                            "reason": GOOGLE_REASON_FROM_PROVIDER.get(
+                                block_reason, "content_filter"
+                            )
+                        },
+                    }
+                )
+
         ir_response: dict[str, Any] = {
             "id": provider_response.get("response_id")
             or provider_response.get("responseId")
@@ -842,6 +865,25 @@ class GoogleGenAIConverter(BaseConverter):
                         "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
                     },
                     choice_index=choice_index,
+                )
+
+        # Handle prompt-level blocks in streaming (no candidates)
+        if not has_finish_reason and not chunk.get("candidates"):
+            prompt_feedback = (
+                chunk.get("prompt_feedback") or chunk.get("promptFeedback") or {}
+            )
+            block_reason = prompt_feedback.get("block_reason") or prompt_feedback.get(
+                "blockReason"
+            )
+            if block_reason:
+                has_finish_reason = True
+                deferred_finish = FinishEvent(
+                    type="finish",
+                    finish_reason={
+                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(
+                            block_reason, "content_filter"
+                        )  # ty: ignore[invalid-argument-type]
+                    },
                 )
 
         self._handle_p_usage_to_ir(chunk, events)
