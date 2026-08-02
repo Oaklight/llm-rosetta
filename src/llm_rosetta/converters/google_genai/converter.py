@@ -75,7 +75,7 @@ def _modality_list_to_dict(modality_list: list[dict]) -> dict[str, int]:
     return result
 
 
-_GOOGLE_MODALITIES = {"TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT"}
+_GOOGLE_MODALITIES = frozenset({"TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT"})
 
 
 def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
