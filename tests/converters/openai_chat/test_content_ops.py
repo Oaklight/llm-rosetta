@@ -200,7 +200,7 @@ class TestOpenAIChatContentOps:
         result = OpenAIChatContentOps.ir_citation_to_p(ir_citation)
         assert result is not None
         assert result["type"] == "url_citation"
-        assert result["url"] == "https://example.com"
+        assert result["url_citation"]["url"] == "https://example.com"
 
     def test_ir_citation_to_p_no_url(self):
         """Test ir_citation_to_p returns None when no url_citation."""
@@ -211,10 +211,12 @@ class TestOpenAIChatContentOps:
         """Test OpenAI annotation → IR CitationPart."""
         provider = {
             "type": "url_citation",
-            "start_index": 5,
-            "end_index": 15,
-            "title": "Source",
-            "url": "https://example.com/source",
+            "url_citation": {
+                "start_index": 5,
+                "end_index": 15,
+                "title": "Source",
+                "url": "https://example.com/source",
+            },
         }
         result = OpenAIChatContentOps.p_citation_to_ir(provider)
         assert result["type"] == "citation"

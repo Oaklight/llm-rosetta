@@ -269,8 +269,7 @@ class OpenAIChatConverter(BaseConverter):
 
         openai_message["refusal"] = refusal_text
 
-        if annotations:
-            openai_message["annotations"] = annotations
+        openai_message["annotations"] = annotations
 
         if reasoning_parts:
             openai_message["reasoning_content"] = "\n".join(reasoning_parts)
