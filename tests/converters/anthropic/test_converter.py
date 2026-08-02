@@ -1089,3 +1089,142 @@ class TestAnthropicUsageCompliance:
         assert result["type"] == "message_delta"
         assert self._DELTA_USAGE_REQUIRED_KEYS == set(result["usage"].keys())
         assert result["usage"]["output_tokens"] == 20
+
+
+class TestAnthropicUsageRoundTrip:
+    """Usage field preservation across A→IR→A and cross-format conversions (#414)."""
+
+    def setup_method(self):
+        self.anthropic = AnthropicConverter()
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        self.openai_chat = OpenAIChatConverter()
+
+    _ANTHROPIC_RESPONSE = {
+        "id": "msg_usage_rt",
+        "type": "message",
+        "role": "assistant",
+        "model": "claude-haiku-4-5-20251001",
+        "content": [
+            {"type": "thinking", "thinking": "Let me think...", "signature": "sig123"},
+            {"type": "text", "text": "The answer is 4."},
+        ],
+        "stop_reason": "end_turn",
+        "stop_sequence": None,
+        "stop_details": None,
+        "usage": {
+            "input_tokens": 43,
+            "output_tokens": 37,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+                "ephemeral_5m_input_tokens": 0,
+                "ephemeral_1h_input_tokens": 0,
+            },
+            "output_tokens_details": {"thinking_tokens": 22},
+            "service_tier": "standard",
+            "inference_geo": "not_available",
+        },
+    }
+
+    _USAGE_REQUIRED_KEYS = {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+        "cache_creation",
+        "output_tokens_details",
+        "service_tier",
+        "inference_geo",
+        "server_tool_use",
+    }
+
+    def test_anthropic_to_ir_to_anthropic_usage(self):
+        """A→IR→A: usage fields survive round-trip."""
+        ir = self.anthropic.response_from_provider(self._ANTHROPIC_RESPONSE)
+        restored = self.anthropic.response_to_provider(ir)
+
+        usage = restored["usage"]
+        assert self._USAGE_REQUIRED_KEYS == set(usage.keys())
+        assert usage["input_tokens"] == 43
+        assert usage["output_tokens"] == 37
+        assert usage["cache_read_input_tokens"] == 0
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["output_tokens_details"] == {"thinking_tokens": 22}
+
+    def test_anthropic_to_ir_to_anthropic_thinking_tokens_preserved(self):
+        """A→IR→A: thinking_tokens round-trips through IR reasoning_tokens."""
+        ir = self.anthropic.response_from_provider(self._ANTHROPIC_RESPONSE)
+        assert ir["usage"]["reasoning_tokens"] == 22
+
+        restored = self.anthropic.response_to_provider(ir)
+        assert restored["usage"]["output_tokens_details"] == {"thinking_tokens": 22}
+
+    def test_openai_chat_to_ir_to_anthropic_usage_complete(self):
+        """B→IR→A: OpenAI Chat response converted to Anthropic has all required usage fields."""
+        openai_response = {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Hello!"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "prompt_tokens_details": {"cached_tokens": 3},
+            },
+        }
+        ir = self.openai_chat.response_from_provider(openai_response)
+        anthropic_out = self.anthropic.response_to_provider(ir)
+
+        usage = anthropic_out["usage"]
+        assert self._USAGE_REQUIRED_KEYS == set(usage.keys())
+        assert usage["input_tokens"] == 10
+        assert usage["output_tokens"] == 5
+        assert usage["cache_read_input_tokens"] == 3
+        assert usage["cache_creation_input_tokens"] == 0
+        assert usage["output_tokens_details"] is None
+
+    def test_anthropic_to_ir_to_openai_chat_usage(self):
+        """A→IR→B: Anthropic usage maps correctly to OpenAI Chat format."""
+        ir = self.anthropic.response_from_provider(self._ANTHROPIC_RESPONSE)
+        openai_out = self.openai_chat.response_to_provider(ir)
+
+        usage = openai_out["usage"]
+        assert usage["prompt_tokens"] == 43
+        assert usage["completion_tokens"] == 37
+        assert "prompt_tokens_details" in usage
+        assert usage["prompt_tokens_details"]["cached_tokens"] == 0
+
+    def test_openai_chat_reasoning_to_anthropic_thinking_tokens(self):
+        """B→IR→A: OpenAI reasoning_tokens maps to output_tokens_details.thinking_tokens."""
+        openai_response = {
+            "id": "chatcmpl-456",
+            "object": "chat.completion",
+            "model": "o1",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "42"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {
+                "prompt_tokens": 20,
+                "completion_tokens": 100,
+                "total_tokens": 120,
+                "completion_tokens_details": {"reasoning_tokens": 80},
+            },
+        }
+        ir = self.openai_chat.response_from_provider(openai_response)
+        anthropic_out = self.anthropic.response_to_provider(ir)
+
+        usage = anthropic_out["usage"]
+        assert self._USAGE_REQUIRED_KEYS == set(usage.keys())
+        assert usage["output_tokens_details"] == {"thinking_tokens": 80}
