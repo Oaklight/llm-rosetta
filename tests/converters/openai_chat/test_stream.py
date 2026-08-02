@@ -674,7 +674,7 @@ class TestStreamResponseFromProviderWithContext:
             ],
         }
         self.converter.stream_response_from_provider(chunk, context=ctx)
-        assert ctx.response_id == "chatcmpl-abc123"
+        assert ctx.response_id == "abc123"
         assert ctx.model == "gpt-4"
         assert ctx.created == 1700000000
         assert ctx.is_started is True
@@ -894,13 +894,13 @@ class TestStreamResponseToProviderWithContext:
             StreamStartEvent,
             {
                 "type": "stream_start",
-                "response_id": "chatcmpl-abc123",
+                "response_id": "abc123",
                 "model": "gpt-4",
                 "created": 1700000000,
             },
         )
         self.converter.stream_response_to_provider(event, context=ctx)
-        assert ctx.response_id == "chatcmpl-abc123"
+        assert ctx.response_id == "abc123"
         assert ctx.model == "gpt-4"
         assert ctx.created == 1700000000
         assert ctx.is_started is True

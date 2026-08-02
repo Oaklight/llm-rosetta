@@ -56,6 +56,7 @@ from .tool_ops import AnthropicToolOps
 
 
 class AnthropicConverter(BaseConverter):
+    _RESPONSE_ID_PREFIX = "msg_"
     """Anthropic Messages API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter,
@@ -248,6 +249,16 @@ class AnthropicConverter(BaseConverter):
 
         return self._validate_ir_request(ir_request)
 
+    def _get_response_id_prefix(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> str:
+        """Return the response ID prefix from context or class default."""
+        if context is not None:
+            prefix = context.options.get("response_id_prefix")
+            if prefix is not None:
+                return prefix
+        return self._RESPONSE_ID_PREFIX
+
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -311,8 +322,11 @@ class AnthropicConverter(BaseConverter):
             else:
                 ir_message["content"] = [refusal_part]  # ty: ignore[invalid-assignment]
 
+        prefix = self._get_response_id_prefix(context)
         ir_response: dict[str, Any] = {
-            "id": provider_response.get("id", ""),
+            "id": self.strip_response_id_prefix(
+                provider_response.get("id", ""), prefix
+            ),
             "object": "response",
             "created": int(time.time()),  # Anthropic doesn't provide timestamp
             "model": provider_response.get("model", ""),
@@ -346,8 +360,9 @@ class AnthropicConverter(BaseConverter):
             Anthropic response dict.
         """
         # Anthropic response is a single message
+        prefix = self._get_response_id_prefix(context)
         provider_response: dict[str, Any] = {
-            "id": ir_response.get("id", ""),
+            "id": self.add_response_id_prefix(ir_response.get("id", ""), prefix),
             "type": "message",
             "model": ir_response.get("model", ""),
             "content": [],
@@ -674,7 +689,8 @@ class AnthropicConverter(BaseConverter):
         if context is not None:
             response_id = message.get("id", "")
             model = message.get("model", "")
-            context.response_id = response_id
+            prefix = self._get_response_id_prefix(context)
+            context.response_id = self.strip_response_id_prefix(response_id, prefix)
             context.model = model
             context.mark_started()
             events.append(
@@ -889,7 +905,9 @@ class AnthropicConverter(BaseConverter):
         return {
             "type": AnthropicEventType.MESSAGE_START,
             "message": {
-                "id": event["response_id"],
+                "id": self.add_response_id_prefix(
+                    event["response_id"], self._get_response_id_prefix(context)
+                ),
                 "type": "message",
                 "role": "assistant",
                 "model": event["model"],
