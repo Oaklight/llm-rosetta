@@ -20,6 +20,7 @@ OPENAI_CHAT_REASON_TO_PROVIDER: dict[str, str] = {
     "length": "length",
     "tool_calls": "tool_calls",
     "content_filter": "content_filter",
+    "refusal": "stop",
 }
 
 # --- Tool content packing (Phase 2: multimodal tool result dual encoding) ---

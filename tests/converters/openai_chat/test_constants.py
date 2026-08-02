@@ -38,7 +38,16 @@ class TestOpenAIChatReasonMaps:
             f"FROM_PROVIDER produces {missing} but TO_PROVIDER has no mapping for them"
         )
 
-    def test_identity_mapping(self):
-        """TO_PROVIDER is an identity mapping since IR reasons match OpenAI Chat."""
+    def test_identity_or_valid_openai_reason(self):
+        """TO_PROVIDER values must be valid OpenAI Chat finish_reason enum values."""
+        valid_openai_reasons = {
+            "stop",
+            "length",
+            "tool_calls",
+            "content_filter",
+            "function_call",
+        }
         for key, val in OPENAI_CHAT_REASON_TO_PROVIDER.items():
-            assert key == val
+            assert val in valid_openai_reasons, (
+                f"'{key}' maps to '{val}' which is not a valid OpenAI Chat finish_reason"
+            )
