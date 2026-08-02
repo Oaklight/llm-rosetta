@@ -89,6 +89,7 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
 
 
 class GoogleGenAIConverter(BaseConverter):
+    _RESPONSE_ID_PREFIX = ""
     """Google GenAI API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter.
@@ -392,6 +393,16 @@ class GoogleGenAIConverter(BaseConverter):
 
         return self._validate_ir_request(ir_request)
 
+    def _get_response_id_prefix(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> str:
+        """Return the response ID prefix from context or class default."""
+        if context is not None:
+            prefix = context.options.get("response_id_prefix")
+            if prefix is not None:
+                return prefix
+        return self._RESPONSE_ID_PREFIX
+
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -455,9 +466,12 @@ class GoogleGenAIConverter(BaseConverter):
                 )
 
         ir_response: dict[str, Any] = {
-            "id": provider_response.get("response_id")
-            or provider_response.get("responseId")
-            or "",
+            "id": self.strip_response_id_prefix(
+                provider_response.get("response_id")
+                or provider_response.get("responseId")
+                or "",
+                self._get_response_id_prefix(context),
+            ),
             "object": "response",
             "created": int(time.time()),  # Google doesn't provide timestamp
             "model": provider_response.get("model_version")
@@ -491,7 +505,9 @@ class GoogleGenAIConverter(BaseConverter):
             Google response dict.
         """
         provider_response: dict[str, Any] = {
-            "responseId": ir_response.get("id", ""),
+            "responseId": self.add_response_id_prefix(
+                ir_response.get("id", ""), self._get_response_id_prefix(context)
+            ),
             "modelVersion": ir_response.get("model", ""),
             "candidates": [],
         }
@@ -911,7 +927,8 @@ class GoogleGenAIConverter(BaseConverter):
         """Emit StreamStartEvent on the first chunk."""
         response_id = chunk.get("response_id") or chunk.get("responseId") or ""
         model = chunk.get("model_version") or chunk.get("modelVersion") or ""
-        context.response_id = response_id
+        prefix = self._get_response_id_prefix(context)
+        context.response_id = self.strip_response_id_prefix(response_id, prefix)
         context.model = model
         context.mark_started()
         events.append(

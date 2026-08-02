@@ -216,7 +216,7 @@ class TestOpenAIChatConverter:
             "system_fingerprint": "fp_abc",
         }
         result = self.converter.response_from_provider(provider_response)
-        assert result["id"] == "chatcmpl-123"
+        assert result["id"] == "123"
         assert result["object"] == "response"
         assert result["model"] == "gpt-4o"
         assert len(result["choices"]) == 1

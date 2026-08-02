@@ -770,7 +770,7 @@ class TestStreamResponseFromProviderWithContext:
             },
         }
         self.converter.stream_response_from_provider(event, context=ctx)
-        assert ctx.response_id == "msg_abc123"
+        assert ctx.response_id == "abc123"
         assert ctx.model == "claude-sonnet-4-20250514"
         assert ctx.is_started is True
 
@@ -1135,7 +1135,7 @@ class TestStreamResponseToProviderWithContext:
             StreamStartEvent,
             {
                 "type": "stream_start",
-                "response_id": "msg_abc123",
+                "response_id": "abc123",
                 "model": "claude-sonnet-4-20250514",
             },
         )
@@ -1156,12 +1156,12 @@ class TestStreamResponseToProviderWithContext:
             StreamStartEvent,
             {
                 "type": "stream_start",
-                "response_id": "msg_abc123",
+                "response_id": "abc123",
                 "model": "claude-sonnet-4-20250514",
             },
         )
         self.converter.stream_response_to_provider(event, context=ctx)
-        assert ctx.response_id == "msg_abc123"
+        assert ctx.response_id == "abc123"
         assert ctx.model == "claude-sonnet-4-20250514"
         assert ctx.is_started is True
 
@@ -1190,7 +1190,7 @@ class TestStreamResponseToProviderWithContext:
             StreamStartEvent,
             {
                 "type": "stream_start",
-                "response_id": "msg_abc123",
+                "response_id": "abc123",
                 "model": "claude-sonnet-4-20250514",
             },
         )

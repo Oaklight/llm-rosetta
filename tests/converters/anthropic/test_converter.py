@@ -294,7 +294,7 @@ class TestAnthropicConverter:
             },
         }
         result = self.converter.response_from_provider(provider_response)
-        assert result["id"] == "msg_01XFD67890"
+        assert result["id"] == "01XFD67890"
         assert result["object"] == "response"
         assert result["model"] == "claude-3-5-sonnet-20241022"
         assert len(result["choices"]) == 1
@@ -394,7 +394,7 @@ class TestAnthropicConverter:
         result = self.converter.response_from_provider(
             cast(dict[str, Any], MockResponse())
         )
-        assert result["id"] == "msg_pydantic"
+        assert result["id"] == "pydantic"
 
     def test_response_from_provider_missing_usage(self):
         """Test response without usage field still produces zero-filled usage."""
@@ -441,7 +441,7 @@ class TestAnthropicConverter:
             },
         )
         result = self.converter.response_to_provider(ir_response)
-        assert result["id"] == "resp_123"
+        assert result["id"] == "msg_resp_123"
         assert result["type"] == "message"
         assert result["role"] == "assistant"
         assert result["content"][0]["type"] == "text"

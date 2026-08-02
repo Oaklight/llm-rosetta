@@ -44,6 +44,7 @@ from .tool_ops import OpenAIChatToolOps
 
 
 class OpenAIChatConverter(BaseConverter):
+    _RESPONSE_ID_PREFIX = "chatcmpl-"
     """OpenAI Chat Completions API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter,
@@ -213,6 +214,16 @@ class OpenAIChatConverter(BaseConverter):
                 ctx.warnings.append(
                     "OpenAI Chat does not support max_tool_calls, ignored"
                 )
+
+    def _get_response_id_prefix(
+        self, context: ConversionContext | StreamContext | None = None
+    ) -> str:
+        """Return the response ID prefix from context or class default."""
+        if context is not None:
+            prefix = context.options.get("response_id_prefix")
+            if prefix is not None:
+                return prefix
+        return self._RESPONSE_ID_PREFIX
 
     def _build_ir_choice_to_p(  # noqa: C901
         self, choice: dict[str, Any]
@@ -435,8 +446,11 @@ class OpenAIChatConverter(BaseConverter):
 
             choices.append(choice_info)
 
+        prefix = self._get_response_id_prefix(context)
         ir_response: dict[str, Any] = {
-            "id": provider_response.get("id", ""),
+            "id": self.strip_response_id_prefix(
+                provider_response.get("id", ""), prefix
+            ),
             "object": "response",
             "created": provider_response.get("created", 0),
             "model": provider_response.get("model", ""),
@@ -471,8 +485,9 @@ class OpenAIChatConverter(BaseConverter):
         Returns:
             OpenAI response dict.
         """
+        prefix = self._get_response_id_prefix(context)
         provider_response: dict[str, Any] = {
-            "id": ir_response.get("id", ""),
+            "id": self.add_response_id_prefix(ir_response.get("id", ""), prefix),
             "object": "chat.completion",
             "created": ir_response.get("created", 0),
             "model": ir_response.get("model", ""),
@@ -622,7 +637,8 @@ class OpenAIChatConverter(BaseConverter):
         model = chunk.get("model")
         created = chunk.get("created")
         if response_id and model:
-            context.response_id = response_id
+            prefix = self._get_response_id_prefix(context)
+            context.response_id = self.strip_response_id_prefix(response_id, prefix)
             context.model = model
             if created is not None:
                 context.created = created
@@ -835,7 +851,12 @@ class OpenAIChatConverter(BaseConverter):
             and isinstance(result, dict)
             and result
         ):
-            result.setdefault("id", context.response_id)
+            result.setdefault(
+                "id",
+                self.add_response_id_prefix(
+                    context.response_id, self._get_response_id_prefix(context)
+                ),
+            )
             result.setdefault("object", "chat.completion.chunk")
             result.setdefault("model", context.model)
             result.setdefault("created", context.created)
@@ -851,8 +872,9 @@ class OpenAIChatConverter(BaseConverter):
         call start), matching the original OpenAI format where the first
         chunk carries both ``role`` and the first content delta.
         """
+        prefix = self._get_response_id_prefix(context)
         chunk = {
-            "id": event["response_id"],
+            "id": self.add_response_id_prefix(event["response_id"], prefix),
             "object": "chat.completion.chunk",
             "model": event["model"],
             "created": event.get("created", 0),
