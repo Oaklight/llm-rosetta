@@ -500,20 +500,52 @@ class AnthropicConverter(BaseConverter):
             usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
         if "cache_creation_input_tokens" in p_usage:
             usage_info["cache_creation_tokens"] = p_usage["cache_creation_input_tokens"]
+        otd = p_usage.get("output_tokens_details")
+        if isinstance(otd, dict):
+            thinking = otd.get("thinking_tokens")
+            if thinking:
+                usage_info["reasoning_tokens"] = thinking
         return cast(UsageInfo, usage_info)
 
     @staticmethod
     def _build_ir_usage_to_p(ir_usage: Mapping[str, Any]) -> dict[str, Any]:
         """Build Anthropic usage dict from IR usage."""
+        reasoning = ir_usage.get("reasoning_tokens")
         usage: dict[str, Any] = {
             "input_tokens": ir_usage.get("prompt_tokens") or 0,
             "output_tokens": ir_usage.get("completion_tokens") or 0,
+            "cache_read_input_tokens": ir_usage.get("cache_read_tokens") or 0,
+            "cache_creation_input_tokens": ir_usage.get("cache_creation_tokens") or 0,
+            "cache_creation": None,
+            "output_tokens_details": (
+                {"thinking_tokens": reasoning} if reasoning else None
+            ),
+            "service_tier": None,
+            "inference_geo": None,
+            "server_tool_use": None,
         }
-        if "cache_read_tokens" in ir_usage:
-            usage["cache_read_input_tokens"] = ir_usage["cache_read_tokens"]
-        if "cache_creation_tokens" in ir_usage:
-            usage["cache_creation_input_tokens"] = ir_usage["cache_creation_tokens"]
         return usage
+
+    @staticmethod
+    def _build_message_delta_usage(
+        ir_usage: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build Anthropic MessageDeltaUsage dict from IR usage."""
+        if ir_usage is None:
+            ir_usage = {}
+        output_tokens = ir_usage.get("completion_tokens") or 0
+        reasoning = ir_usage.get("reasoning_tokens")
+        return {
+            "output_tokens": output_tokens,
+            "input_tokens": ir_usage.get("prompt_tokens") or None,
+            "cache_creation_input_tokens": ir_usage.get("cache_creation_tokens")
+            or None,
+            "cache_read_input_tokens": ir_usage.get("cache_read_tokens") or None,
+            "output_tokens_details": (
+                {"thinking_tokens": reasoning} if reasoning else None
+            ),
+            "server_tool_use": None,
+        }
 
     @staticmethod
     def _capture_preserve_metadata(
@@ -539,6 +571,12 @@ class AnthropicConverter(BaseConverter):
             "input_tokens",
             "output_tokens",
             "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+            "cache_creation",
+            "output_tokens_details",
+            "service_tier",
+            "inference_geo",
+            "server_tool_use",
         }
         if p_usage:
             usage_extras = {
@@ -884,24 +922,15 @@ class AnthropicConverter(BaseConverter):
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle StreamStartEvent → message_start."""
-        input_tokens = 0
-        p_usage: dict[str, Any] = {"input_tokens": 0, "output_tokens": 0}
+        ir_usage: Mapping[str, Any] = {}
         if context is not None:
             context.response_id = event["response_id"]
             context.model = event["model"]
             context.mark_started()
-            # Use real input_tokens from buffered usage if available.
             if context.pending_usage is not None:
-                input_tokens = context.pending_usage.get("prompt_tokens") or 0
-                p_usage["input_tokens"] = input_tokens
-                if "cache_read_tokens" in context.pending_usage:
-                    p_usage["cache_read_input_tokens"] = context.pending_usage[
-                        "cache_read_tokens"
-                    ]
-                if "cache_creation_tokens" in context.pending_usage:
-                    p_usage["cache_creation_input_tokens"] = context.pending_usage[
-                        "cache_creation_tokens"
-                    ]
+                ir_usage = context.pending_usage
+
+        p_usage = self._build_ir_usage_to_p(ir_usage)
 
         return {
             "type": AnthropicEventType.MESSAGE_START,
@@ -927,15 +956,12 @@ class AnthropicConverter(BaseConverter):
             # Flush any buffered finish that never got a UsageEvent
             finish = context.pop_pending_finish()
             if finish is not None:
-                output_tokens = 0
                 usage = context.pop_pending_usage()
-                if usage is not None:
-                    output_tokens = usage.get("completion_tokens") or 0
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
                         "delta": finish,
-                        "usage": {"output_tokens": output_tokens},
+                        "usage": self._build_message_delta_usage(usage),
                     }
                 )
             context.mark_ended()
@@ -1182,8 +1208,6 @@ class AnthropicConverter(BaseConverter):
                 context.current_block_index = -1
             usage = context.pop_pending_usage()
             if usage is not None:
-                # Usage already buffered — merge and emit immediately.
-                output_tokens = usage.get("completion_tokens") or 0
                 delta_payload: dict[str, Any] = {"stop_reason": stop_reason}
                 if stop_details:
                     delta_payload["stop_details"] = stop_details
@@ -1191,7 +1215,7 @@ class AnthropicConverter(BaseConverter):
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
                         "delta": delta_payload,
-                        "usage": {"output_tokens": output_tokens},
+                        "usage": self._build_message_delta_usage(usage),
                     }
                 )
             else:
@@ -1204,7 +1228,7 @@ class AnthropicConverter(BaseConverter):
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
             "delta": {"stop_reason": stop_reason},
-            "usage": {"output_tokens": 0},
+            "usage": self._build_message_delta_usage(),
         }
 
     def _handle_ir_usage_to_p(
@@ -1221,19 +1245,16 @@ class AnthropicConverter(BaseConverter):
         if context is not None:
             delta = context.pop_pending_finish()
             if delta is not None:
-                # Merge with buffered finish and emit.
-                output_tokens = usage.get("completion_tokens") or 0
                 return {
                     "type": AnthropicEventType.MESSAGE_DELTA,
                     "delta": delta,
-                    "usage": {"output_tokens": output_tokens},
+                    "usage": self._build_message_delta_usage(usage),
                 }
             # No pending finish — buffer for later merge.
             context.buffer_usage(usage)
             return {}
-        output_tokens = usage.get("completion_tokens") or 0
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
             "delta": {},
-            "usage": {"output_tokens": output_tokens},
+            "usage": self._build_message_delta_usage(usage),
         }
