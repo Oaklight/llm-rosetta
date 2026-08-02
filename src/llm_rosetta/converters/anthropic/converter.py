@@ -487,7 +487,7 @@ class AnthropicConverter(BaseConverter):
         otd = p_usage.get("output_tokens_details")
         if isinstance(otd, dict):
             thinking = otd.get("thinking_tokens")
-            if thinking:
+            if thinking is not None:
                 usage_info["reasoning_tokens"] = thinking
         return cast(UsageInfo, usage_info)
 

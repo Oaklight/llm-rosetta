@@ -948,3 +948,144 @@ class TestAnthropicStructuredRefusal:
         ]
         assert len(refusal_parts) == 1
         assert dict(refusal_parts[0])["refusal"] == "I cannot help."
+
+
+class TestAnthropicUsageCompliance:
+    """Tests for Anthropic spec-required usage fields (#414)."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    _USAGE_REQUIRED_KEYS = {
+        "input_tokens",
+        "output_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+        "cache_creation",
+        "output_tokens_details",
+        "service_tier",
+        "inference_geo",
+        "server_tool_use",
+    }
+
+    def test_build_ir_usage_to_p_all_keys_present(self):
+        """_build_ir_usage_to_p must emit all 9 spec-required keys."""
+        result = self.converter._build_ir_usage_to_p({})
+        assert self._USAGE_REQUIRED_KEYS == set(result.keys())
+
+    def test_build_ir_usage_to_p_minimal(self):
+        """Minimal IR usage produces zeros for token counts, None for nullable."""
+        result = self.converter._build_ir_usage_to_p(
+            {"prompt_tokens": 10, "completion_tokens": 5}
+        )
+        assert result["input_tokens"] == 10
+        assert result["output_tokens"] == 5
+        assert result["cache_read_input_tokens"] == 0
+        assert result["cache_creation_input_tokens"] == 0
+        assert result["cache_creation"] is None
+        assert result["output_tokens_details"] is None
+        assert result["service_tier"] is None
+        assert result["inference_geo"] is None
+        assert result["server_tool_use"] is None
+
+    def test_build_ir_usage_to_p_with_cache_and_thinking(self):
+        """Cache and reasoning tokens map to Anthropic-specific fields."""
+        result = self.converter._build_ir_usage_to_p(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "cache_read_tokens": 10,
+                "cache_creation_tokens": 5,
+                "reasoning_tokens": 22,
+            }
+        )
+        assert result["cache_read_input_tokens"] == 10
+        assert result["cache_creation_input_tokens"] == 5
+        assert result["output_tokens_details"] == {"thinking_tokens": 22}
+
+    def test_thinking_tokens_round_trip(self):
+        """output_tokens_details.thinking_tokens survives p→IR→p round-trip."""
+        p_usage = {
+            "input_tokens": 43,
+            "output_tokens": 37,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "output_tokens_details": {"thinking_tokens": 22},
+        }
+        ir = self.converter._build_p_usage_to_ir(p_usage)
+        assert ir["reasoning_tokens"] == 22
+
+        back = self.converter._build_ir_usage_to_p(ir)
+        assert back["output_tokens_details"] == {"thinking_tokens": 22}
+
+    def test_thinking_tokens_zero_preserved(self):
+        """thinking_tokens: 0 should NOT be dropped."""
+        p_usage = {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "output_tokens_details": {"thinking_tokens": 0},
+        }
+        ir = self.converter._build_p_usage_to_ir(p_usage)
+        assert ir["reasoning_tokens"] == 0
+
+    _DELTA_USAGE_REQUIRED_KEYS = {
+        "output_tokens",
+        "input_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
+        "output_tokens_details",
+        "server_tool_use",
+    }
+
+    def test_build_message_delta_usage_all_keys(self):
+        """_build_message_delta_usage must emit all MessageDeltaUsage keys."""
+        result = self.converter._build_message_delta_usage()
+        assert self._DELTA_USAGE_REQUIRED_KEYS == set(result.keys())
+
+    def test_build_message_delta_usage_with_values(self):
+        """MessageDeltaUsage uses real values from IR when available."""
+        result = self.converter._build_message_delta_usage(
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 50,
+                "cache_read_tokens": 10,
+                "cache_creation_tokens": 5,
+                "reasoning_tokens": 20,
+            }
+        )
+        assert result["output_tokens"] == 50
+        assert result["input_tokens"] == 100
+        assert result["cache_read_input_tokens"] == 10
+        assert result["cache_creation_input_tokens"] == 5
+        assert result["output_tokens_details"] == {"thinking_tokens": 20}
+
+    def test_stream_message_start_has_complete_usage(self):
+        """message_start event must contain all spec-required usage fields."""
+        from llm_rosetta.types.ir import StreamStartEvent
+
+        event = cast(
+            StreamStartEvent,
+            {"type": "stream_start", "response_id": "msg_123", "model": "test"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_start"
+        usage = result["message"]["usage"]
+        assert self._USAGE_REQUIRED_KEYS == set(usage.keys())
+
+    def test_stream_usage_event_has_delta_usage_fields(self):
+        """UsageEvent → message_delta must have all MessageDeltaUsage fields."""
+        event = cast(
+            UsageEvent,
+            {
+                "type": "usage",
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 20,
+                    "total_tokens": 30,
+                },
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_delta"
+        assert self._DELTA_USAGE_REQUIRED_KEYS == set(result["usage"].keys())
+        assert result["usage"]["output_tokens"] == 20
