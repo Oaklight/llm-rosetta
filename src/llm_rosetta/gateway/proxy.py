@@ -425,6 +425,7 @@ async def handle_non_streaming(
             )
         )
 
+    _strip_internal_metadata(source_response)
     return JSONResponse(source_response), profile
 
 
