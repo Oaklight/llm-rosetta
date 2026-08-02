@@ -258,10 +258,12 @@ class OpenAIChatContentOps(BaseContentOps):
         if url_citation:
             return {
                 "type": "url_citation",
-                "start_index": url_citation.get("start_index", 0),
-                "end_index": url_citation.get("end_index", 0),
-                "title": url_citation.get("title", ""),
-                "url": url_citation.get("url", ""),
+                "url_citation": {
+                    "start_index": url_citation.get("start_index", 0),
+                    "end_index": url_citation.get("end_index", 0),
+                    "title": url_citation.get("title", ""),
+                    "url": url_citation.get("url", ""),
+                },
             }
         return None
 
@@ -277,13 +279,14 @@ class OpenAIChatContentOps(BaseContentOps):
         """
         citation_type = provider_citation.get("type", "")
         if citation_type == "url_citation":
+            nested = provider_citation.get("url_citation", {})
             return CitationPart(
                 type="citation",
                 url_citation={
-                    "start_index": provider_citation.get("start_index", 0),
-                    "end_index": provider_citation.get("end_index", 0),
-                    "title": provider_citation.get("title", ""),
-                    "url": provider_citation.get("url", ""),
+                    "start_index": nested.get("start_index", 0),
+                    "end_index": nested.get("end_index", 0),
+                    "title": nested.get("title", ""),
+                    "url": nested.get("url", ""),
                 },
             )
         # Fallback: store raw data
