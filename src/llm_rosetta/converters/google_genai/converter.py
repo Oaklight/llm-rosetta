@@ -89,13 +89,14 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
 
 
 class GoogleGenAIConverter(BaseConverter):
-    _RESPONSE_ID_PREFIX = ""
     """Google GenAI API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter.
 
     Uses composition of Ops classes for modular, testable conversion logic.
     """
+
+    _RESPONSE_ID_PREFIX = ""
 
     content_ops_class = GoogleGenAIContentOps
     tool_ops_class = GoogleGenAIToolOps
