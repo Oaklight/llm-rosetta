@@ -1072,6 +1072,22 @@ class GoogleGenAIConverter(BaseConverter):
 
     # --- to_provider ---
 
+    @staticmethod
+    def _inject_stream_metadata(
+        chunk: dict[str, Any], context: StreamContext | None
+    ) -> dict[str, Any]:
+        """Inject ``responseId`` and ``modelVersion`` into a non-empty chunk.
+
+        Google's streaming API includes these fields on every chunk.
+        """
+        if not chunk or context is None:
+            return chunk
+        if context.response_id:
+            chunk["responseId"] = context.response_id
+        if context.model:
+            chunk["modelVersion"] = context.model
+        return chunk
+
     def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
@@ -1113,34 +1129,40 @@ class GoogleGenAIConverter(BaseConverter):
         if not event["text"]:
             return {}
         choice_index = event.get("choice_index", 0)
-        return {
-            "candidates": [
-                {
-                    "index": choice_index,
-                    "content": {
-                        "role": "model",
-                        "parts": [{"text": event["text"]}],
-                    },
-                }
-            ]
-        }
+        return self._inject_stream_metadata(
+            {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [{"text": event["text"]}],
+                        },
+                    }
+                ]
+            },
+            context,
+        )
 
     def _handle_ir_reasoning_delta_to_p(
         self, event: ReasoningDeltaEvent, context: StreamContext | None
     ) -> dict[str, Any]:
         """Handle ReasoningDeltaEvent → thought text part chunk."""
         choice_index = event.get("choice_index", 0)
-        return {
-            "candidates": [
-                {
-                    "index": choice_index,
-                    "content": {
-                        "role": "model",
-                        "parts": [{"thought": True, "text": event["reasoning"]}],
-                    },
-                }
-            ]
-        }
+        return self._inject_stream_metadata(
+            {
+                "candidates": [
+                    {
+                        "index": choice_index,
+                        "content": {
+                            "role": "model",
+                            "parts": [{"thought": True, "text": event["reasoning"]}],
+                        },
+                    }
+                ]
+            },
+            context,
+        )
 
     def _handle_ir_tool_call_start_to_p(
         self, event: ToolCallStartEvent, context: StreamContext | None
@@ -1217,7 +1239,7 @@ class GoogleGenAIConverter(BaseConverter):
                 usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
             finish_chunk["usageMetadata"] = usage_metadata
 
-        chunks.append(finish_chunk)
+        chunks.append(self._inject_stream_metadata(finish_chunk, context))
 
         return chunks
 

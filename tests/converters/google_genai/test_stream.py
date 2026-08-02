@@ -1245,3 +1245,103 @@ class TestStreamResponseToProviderWithContext:
         event = cast(StreamEndEvent, {"type": "stream_end"})
         result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
         assert result == {}
+
+    def test_text_delta_includes_response_id_and_model_version(self):
+        """Text delta chunks include responseId and modelVersion from context."""
+        context = StreamContext()
+        start = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_abc",
+                "model": "gemini-3.5-flash",
+            },
+        )
+        self.converter.stream_response_to_provider(start, context=context)
+
+        delta = cast(
+            TextDeltaEvent,
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(delta, context=context),
+        )
+        assert result["responseId"] == "resp_abc"
+        assert result["modelVersion"] == "gemini-3.5-flash"
+        assert result["candidates"][0]["content"]["parts"][0]["text"] == "Hello"
+
+    def test_reasoning_delta_includes_response_id_and_model_version(self):
+        """Reasoning delta chunks include responseId and modelVersion."""
+        context = StreamContext()
+        start = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_xyz",
+                "model": "gemini-2.5-flash",
+            },
+        )
+        self.converter.stream_response_to_provider(start, context=context)
+
+        delta = cast(
+            ReasoningDeltaEvent,
+            {"type": "reasoning_delta", "reasoning": "Let me think", "choice_index": 0},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(delta, context=context),
+        )
+        assert result["responseId"] == "resp_xyz"
+        assert result["modelVersion"] == "gemini-2.5-flash"
+
+    def test_finish_chunk_includes_response_id_and_model_version(self):
+        """Finish chunk includes responseId and modelVersion."""
+        context = StreamContext()
+        start = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "resp_fin",
+                "model": "gemini-3.5-flash",
+            },
+        )
+        self.converter.stream_response_to_provider(start, context=context)
+
+        finish = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "stop"}, "choice_index": 0},
+        )
+        results = self.converter.stream_response_to_provider(finish, context=context)
+        # _handle_ir_finish_to_p returns a list
+        assert isinstance(results, list)
+        chunk = results[0]
+        assert chunk["responseId"] == "resp_fin"
+        assert chunk["modelVersion"] == "gemini-3.5-flash"
+
+    def test_cross_format_stream_carries_metadata(self):
+        """IR from another provider (OpenAI) → Google streaming includes metadata."""
+        context = StreamContext()
+        # Simulate IR stream events that originated from an OpenAI response
+        start = cast(
+            StreamStartEvent,
+            {
+                "type": "stream_start",
+                "response_id": "chatcmpl-abc123",
+                "model": "gpt-4o",
+            },
+        )
+        self.converter.stream_response_to_provider(start, context=context)
+
+        delta = cast(
+            TextDeltaEvent,
+            {"type": "text_delta", "text": "Hi there", "choice_index": 0},
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(delta, context=context),
+        )
+        # Cross-format: responseId/modelVersion come from the original provider
+        assert result["responseId"] == "chatcmpl-abc123"
+        assert result["modelVersion"] == "gpt-4o"
+        assert result["candidates"][0]["content"]["parts"][0]["text"] == "Hi there"
