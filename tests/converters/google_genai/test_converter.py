@@ -790,6 +790,57 @@ class TestGoogleGenAIConverter:
         assert comp_details[0]["modality"] == "TEXT"
         assert comp_details[0]["tokenCount"] == 20
 
+    def test_response_to_provider_modality_filters_non_standard(self):
+        """Non-standard modality keys (cached, reasoning) excluded from details array."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_filter",
+                "object": "response",
+                "created": 1700000000,
+                "model": "gemini-2.0-flash",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hi"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 50,
+                    "total_tokens": 150,
+                    "reasoning_tokens": 30,
+                    "cache_read_tokens": 20,
+                    "prompt_tokens_details": {
+                        "text_tokens": 80,
+                        "cached_tokens": 20,
+                    },
+                    "completion_tokens_details": {
+                        "text_tokens": 20,
+                        "reasoning_tokens": 30,
+                    },
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        usage = result["usageMetadata"]
+        # Dedicated fields should be present
+        assert usage["thoughtsTokenCount"] == 30
+        assert usage["cachedContentTokenCount"] == 20
+        # Details arrays should only have valid modalities
+        prompt_details = usage["promptTokensDetails"]
+        modalities = {d["modality"] for d in prompt_details}
+        assert "TEXT" in modalities
+        assert "CACHED" not in modalities
+        comp_details = usage["candidatesTokensDetails"]
+        modalities = {d["modality"] for d in comp_details}
+        assert "TEXT" in modalities
+        assert "REASONING" not in modalities
+
     def test_response_to_provider_finish_reasons(self):
         """Test finish reason mapping to provider."""
         reason_map = {
