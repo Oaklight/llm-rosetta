@@ -56,7 +56,6 @@ from .tool_ops import AnthropicToolOps
 
 
 class AnthropicConverter(BaseConverter):
-    _RESPONSE_ID_PREFIX = "msg_"
     """Anthropic Messages API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter,
@@ -64,6 +63,8 @@ class AnthropicConverter(BaseConverter):
 
     Uses composition of Ops classes for modular, testable conversion logic.
     """
+
+    _RESPONSE_ID_PREFIX = "msg_"
 
     content_ops_class = AnthropicContentOps
     tool_ops_class = AnthropicToolOps

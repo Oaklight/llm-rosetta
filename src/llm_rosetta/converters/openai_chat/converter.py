@@ -44,7 +44,6 @@ from .tool_ops import OpenAIChatToolOps
 
 
 class OpenAIChatConverter(BaseConverter):
-    _RESPONSE_ID_PREFIX = "chatcmpl-"
     """OpenAI Chat Completions API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter,
@@ -52,6 +51,8 @@ class OpenAIChatConverter(BaseConverter):
 
     Uses composition of Ops classes for modular, testable conversion logic.
     """
+
+    _RESPONSE_ID_PREFIX = "chatcmpl-"
 
     content_ops_class = OpenAIChatContentOps
     tool_ops_class = OpenAIChatToolOps
