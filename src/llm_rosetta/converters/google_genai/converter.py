@@ -75,8 +75,16 @@ def _modality_list_to_dict(modality_list: list[dict]) -> dict[str, int]:
     return result
 
 
+_GOOGLE_MODALITIES = {"TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT"}
+
+
 def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
     """Convert IR ``dict[str, int]`` back to Google's ``list[ModalityTokenCount]``.
+
+    Only emits entries whose modality is in Google's ``Modality`` enum.
+    IR keys like ``cached_tokens`` or ``reasoning_tokens`` are handled by
+    dedicated fields (``cachedContentTokenCount``, ``thoughtsTokenCount``)
+    and must not appear as ``ModalityTokenCount`` entries.
 
     Example: ``{"text_tokens": 42}``
     → ``[{"modality": "TEXT", "tokenCount": 42}]``
@@ -84,6 +92,8 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for key, count in details.items():
         modality = key.removesuffix("_tokens").upper()
+        if modality not in _GOOGLE_MODALITIES:
+            continue
         result.append({"modality": modality, "tokenCount": count})
     return result
 
