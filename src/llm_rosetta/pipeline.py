@@ -21,6 +21,7 @@ the caller (gateway, argo-proxy, etc.) owns the transport.
 
 from __future__ import annotations
 
+import json
 import logging
 import time
 from collections.abc import Callable
@@ -157,6 +158,69 @@ class ConversionError(Exception):
 _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
 
+def _collect_custom_tool_names(ir_request: dict[str, Any]) -> frozenset[str]:
+    """Names of tools the client declared with a non-function provider type.
+
+    ``p_tool_definition_to_ir`` downgrades those to IR ``function`` so the
+    request passes validation and records the original in
+    ``metadata.provider_type``.  Only the request knows the true type, so it
+    has to be carried forward for the response leg.
+    """
+    names = {
+        tool["name"]
+        for tool in ir_request.get("tools") or []
+        if isinstance(tool, dict)
+        and tool.get("name")
+        and (tool.get("metadata") or {}).get("provider_type") == "custom"
+    }
+    return frozenset(names)
+
+
+def _unwrap_custom_tool_input(raw: str) -> str:
+    """Recover a custom tool's raw text from the downgraded JSON wrapper.
+
+    The synthesized schema is ``{"input": string}``, so a well-formed call
+    arrives as ``{"input": "..."}``.  Anything else is returned untouched
+    rather than guessed at.
+    """
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
+    if isinstance(parsed, dict) and list(parsed.keys()) == ["input"]:
+        value = parsed["input"]
+        return value if isinstance(value, str) else json.dumps(value)
+    return raw
+
+
+def _restore_custom_tool_calls(
+    ir_response: dict[str, Any], custom_tool_names: frozenset[str]
+) -> None:
+    """Re-tag tool calls the upstream format could not express as custom.
+
+    A Chat Completions upstream has no notion of a custom tool, so every call
+    comes back as ``tool_type: "function"``.  Without this the response is
+    emitted as ``function_call`` and a client that declared the tool as custom
+    rejects it.  Mutates *ir_response* in place.
+    """
+    if not custom_tool_names:
+        return
+    messages = list(ir_response.get("messages") or [])
+    for choice in ir_response.get("choices") or []:
+        if isinstance(choice, dict) and isinstance(choice.get("message"), dict):
+            messages.append(choice["message"])
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        for part in message.get("content") or []:
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "tool_call"
+                and part.get("tool_name") in custom_tool_names
+            ):
+                part["tool_type"] = "custom"
+
+
 class ConversionPipeline:
     """Orchestrates format conversion between LLM API standards.
 
@@ -210,6 +274,7 @@ class ConversionPipeline:
 
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
+        self._custom_tool_names: frozenset[str] = frozenset()
 
         # Resolve body-level transforms from shim
         resolved = resolve_shim(shim)
@@ -384,6 +449,7 @@ class ConversionPipeline:
         )
         self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
         self._ir_request = ir_request
+        self._custom_tool_names = _collect_custom_tool_names(ir_request)
 
         # Phase 2b: IR → Target
         t0 = time.perf_counter()
@@ -460,6 +526,9 @@ class ConversionPipeline:
             (time.perf_counter() - t0) * 1000, 2
         )
 
+        # Phase 4b2: restore tool types the upstream format cannot express.
+        _restore_custom_tool_calls(ir_response, self._custom_tool_names)
+
         # Hook: let caller cache metadata from IR response
         if on_ir_ready is not None:
             on_ir_ready(ir_response)
@@ -527,6 +596,7 @@ class ConversionPipeline:
             from_ctx=from_ctx,
             to_ctx=to_ctx,
             pre_ir_transforms=self._pre_ir_transforms,
+            custom_tool_names=self._custom_tool_names,
             on_ir_event=on_ir_event,
         )
 
@@ -566,6 +636,7 @@ class StreamProcessor:
         to_ctx: Any,
         pre_ir_transforms: tuple[Transform, ...] = (),
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
+        custom_tool_names: frozenset[str] = frozenset(),
     ) -> None:
         self._target_converter = target_converter
         self._source_converter = source_converter
@@ -573,6 +644,63 @@ class StreamProcessor:
         self._to_ctx = to_ctx
         self._pre_ir_transforms = pre_ir_transforms
         self._on_ir_event = on_ir_event
+        self._custom_tool_names = custom_tool_names
+        self._custom_call_ids: set[str] = set()
+        self._custom_arg_buffers: dict[str, str] = {}
+
+    def _restore_custom_tool_events(
+        self, ir_events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Re-tag streamed tool calls the upstream format flattened to functions.
+
+        Mirrors :func:`_restore_custom_tool_calls` for the streaming path, and
+        additionally reassembles the arguments.  A custom tool's input is raw
+        text, but a downgraded definition asks the upstream for JSON, so the
+        fragments can only be unwrapped once the whole string has arrived.
+        Fragments are therefore held back and replayed as a single delta before
+        the finish event.
+        """
+        staged: list[dict[str, Any]] = []
+        for event in ir_events:
+            if not isinstance(event, dict):
+                staged.append(event)
+                continue
+            etype = event.get("type")
+
+            if etype == "tool_call_start" and event.get("tool_name") in (
+                self._custom_tool_names
+            ):
+                event["tool_type"] = "custom"
+                call_id = event.get("tool_call_id")
+                if call_id:
+                    self._custom_call_ids.add(call_id)
+                    self._custom_arg_buffers[call_id] = ""
+                    self._from_ctx.register_tool_call(
+                        call_id, event["tool_name"], "custom"
+                    )
+                staged.append(event)
+                continue
+
+            if etype == "tool_call_delta" and (
+                event.get("tool_call_id") in self._custom_call_ids
+            ):
+                call_id = event["tool_call_id"]
+                self._custom_arg_buffers[call_id] += event.get("arguments_delta") or ""
+                continue
+
+            if etype == "finish" and self._custom_arg_buffers:
+                for call_id, raw in list(self._custom_arg_buffers.items()):
+                    staged.append(
+                        {
+                            "type": "tool_call_delta",
+                            "tool_call_id": call_id,
+                            "arguments_delta": _unwrap_custom_tool_input(raw),
+                        }
+                    )
+                    del self._custom_arg_buffers[call_id]
+
+            staged.append(event)
+        return staged
 
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert one upstream chunk to source-format events.
@@ -592,6 +720,9 @@ class StreamProcessor:
         ir_events = self._target_converter.stream_response_from_provider(
             chunk, context=self._from_ctx
         )
+
+        if self._custom_tool_names:
+            ir_events = self._restore_custom_tool_events(ir_events)
 
         # Bridge response extras
         if "_response_extras" in self._from_ctx.metadata:
