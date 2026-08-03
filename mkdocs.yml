@@ -200,7 +200,7 @@ nav:
           - Admin API: api/admin.md
           - 可观测性: api/observability.md
   - 贡献:
-      - contributing/index.md
+      - 贡献指南: contributing/guide.md
       - 命名约定: contributing/naming-conventions.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md
