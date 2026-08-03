@@ -8,31 +8,62 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
-### Added
+### Spec Compliance
+
+Systematic pass across all four converters to ensure output matches official API specs. Driven by [llm-comply](https://github.com/Oaklight/llm-comply) compliance testing.
+
+- **Anthropic usage fields** — emit all spec-required usage fields (`input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`). Always emit `stop_sequence` and `stop_details` on responses.
+- **Anthropic caller, citations, container** — add `caller`, `citations`, and `container` fields to Anthropic response output.
+- **Anthropic streaming `message_start.input_tokens`** ([#424](https://github.com/Oaklight/llm-rosetta/issues/424), PR [#425](https://github.com/Oaklight/llm-rosetta/pull/425)): Fix `message_start` always reporting `input_tokens=0` by swapping `UsageEvent`/`StreamStartEvent` emission order.
+- **OpenAI Chat `logprobs`** — always emit `logprobs` on response choices (required nullable field).
+- **OpenAI Chat `finish_reason`** — include `finish_reason: null` on all streaming chunks; map IR refusal reason to `stop` explicitly.
+- **OpenAI Chat `annotations`** — nest annotations under `url_citation` and always emit the field.
+- **OpenAI Responses `response.in_progress`** — emit `response.in_progress` streaming event per spec.
+- **Google `responseId` / `modelVersion`** — include `responseId` and `modelVersion` in streaming chunks.
+- **Google `ModalityTokenCount`** — filter non-standard modality values; normalize schema type case between Google and IR formats.
+- **Google streaming usage** — flush pending usage on `stream_end` for cross-format streaming; extract `_build_stream_usage_metadata` helper.
+
+### Cross-Format Refusal Handling
+
+- **Complete refusal support** ([#429](https://github.com/Oaklight/llm-rosetta/issues/429)): All 4 converters handle refusal bidirectionally:
+    - OpenAI Chat ([#430](https://github.com/Oaklight/llm-rosetta/issues/430)): `refusal` field always present (nullable), streaming `delta.refusal` accumulated.
+    - Anthropic ([#432](https://github.com/Oaklight/llm-rosetta/issues/432)): Structured `stop_reason: "refusal"` + `stop_details` (category/explanation), including streaming.
+    - Open Responses ([#431](https://github.com/Oaklight/llm-rosetta/issues/431)): `RefusalContent` type parsed and produced.
+    - Google ([#433](https://github.com/Oaklight/llm-rosetta/issues/433)): `promptFeedback.blockReason` handling, missing `finishReason` values (`BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, `IMAGE_SAFETY`), refusal round-trip via `_provider_metadata` marker.
+- **IR RefusalPart** ([#427](https://github.com/Oaklight/llm-rosetta/pull/427)): `RefusalPart` added to `AssistantContentPart` union — refusal responses no longer fail IR validation with 502.
+
+### Response Identity & Metadata
 
 - **Shim-driven response ID prefix** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410), PR [#420](https://github.com/Oaklight/llm-rosetta/pull/420)): `ProviderShim` declares `response_id_prefix` in `provider.yaml`. Converter strips source prefix on ingest, adds target prefix on output. Enables clean cross-format response ID mapping (e.g. `chatcmpl-xxx` ↔ `resp_xxx`). OpenAI (`chatcmpl-`), Anthropic (`msg_`), and OpenAI Responses (`resp_`) prefixes declared.
 - **`completed_at` timestamp** ([#410](https://github.com/Oaklight/llm-rosetta/issues/410)): Responses converter sets `completed_at` to Unix timestamp on completed responses (previously always `null`).
-- **Message phase preservation** ([#440](https://github.com/Oaklight/llm-rosetta/issues/440), PR [#441](https://github.com/Oaklight/llm-rosetta/pull/441)): Responses API `phase` field (`commentary`/`final_answer`) on assistant messages is preserved through all conversion paths — p→ir, ir→p response/request, and streaming. Pipeline bridges phase across streaming contexts.
+- **Function call item ID preservation** — preserve `function_call` item ID across all conversion paths.
+- **Strip `_provider_metadata` at HTTP boundary** ([#422](https://github.com/Oaklight/llm-rosetta/issues/422), PR [#423](https://github.com/Oaklight/llm-rosetta/pull/423)): Internal `_provider_metadata` fields no longer leak into outbound HTTP requests or downstream responses.
 
-### Fixed
+### Responses API Streaming
 
-- **Unified output_index for Responses streaming** ([#418](https://github.com/Oaklight/llm-rosetta/issues/418), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Replace fragmented per-handler output_index calculation with a single monotonic counter on `OpenAIResponsesStreamContext`. All output item types (reasoning, message, tool call) now allocate indices through `next_output_index()`.
-- **Reasoning output items spec compliance** ([#407](https://github.com/Oaklight/llm-rosetta/issues/407), [#408](https://github.com/Oaklight/llm-rosetta/issues/408), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Non-streaming reasoning items always include `id` and `status` fields. Streaming reasoning has full `output_item.added → part.added → deltas → part.done → output_item.done` lifecycle. Deterministic reasoning ID generation via SHA-256 hash.
-- **Reasoning item order preserved** ([#437](https://github.com/Oaklight/llm-rosetta/issues/437), PR [#438](https://github.com/Oaklight/llm-rosetta/pull/438)): Fix `response_to_provider` output ordering — reasoning items now correctly precede message items instead of being pushed after by `insert(0)`.
-- **SSE `[DONE]` terminator** ([#409](https://github.com/Oaklight/llm-rosetta/issues/409)): Gateway emits `[DONE]` as the final SSE event after `response.completed`, per Open Responses spec.
-- **Cross-format refusal handling** ([#429](https://github.com/Oaklight/llm-rosetta/issues/429)): Complete refusal support across all 4 converters:
-    - OpenAI Chat ([#430](https://github.com/Oaklight/llm-rosetta/issues/430)): `refusal` field always present (nullable), streaming `delta.refusal` accumulated.
-    - Anthropic ([#432](https://github.com/Oaklight/llm-rosetta/issues/432)): Structured `stop_reason: "refusal"` + `stop_details` (category/explanation) handled bidirectionally, including streaming.
-    - Open Responses ([#431](https://github.com/Oaklight/llm-rosetta/issues/431)): `RefusalContent` type parsed and produced.
-    - Google ([#433](https://github.com/Oaklight/llm-rosetta/issues/433)): `promptFeedback.blockReason` handling, missing `finishReason` values added (`BLOCKLIST`, `PROHIBITED_CONTENT`, `SPII`, `IMAGE_SAFETY`), refusal round-trip via `_provider_metadata` marker.
-- **IR RefusalPart in AssistantContentPart** ([#427](https://github.com/Oaklight/llm-rosetta/pull/427)): `RefusalPart` added to `AssistantContentPart` union — refusal responses no longer fail IR validation with 502.
-- **Streaming `message_start.input_tokens`** ([#424](https://github.com/Oaklight/llm-rosetta/issues/424), PR [#425](https://github.com/Oaklight/llm-rosetta/pull/425)): Fix Anthropic streaming `message_start` always reporting `input_tokens=0` by swapping `UsageEvent`/`StreamStartEvent` emission order.
-- **Strip `_provider_metadata` at HTTP boundary** ([#422](https://github.com/Oaklight/llm-rosetta/issues/422), PR [#423](https://github.com/Oaklight/llm-rosetta/pull/423)): Internal `_provider_metadata` fields no longer leak into outbound HTTP requests to upstream providers.
-- **CORS preflight auth bypass** (PR [#404](https://github.com/Oaklight/llm-rosetta/pull/404), [#405](https://github.com/Oaklight/llm-rosetta/pull/405)): Gateway skips auth on CORS preflight requests; hardened to require both `Origin` + `Access-Control-Request-Method` headers.
-- **Google camelCase `systemInstruction`**: Accept camelCase `systemInstruction` from REST API clients.
-- **Google `FunctionCall.id` / `FunctionResponse.id`**: Write function call/response IDs in to-provider output.
-- **Gateway Bearer token fallback**: Accept `Bearer` token as fallback for all auth strategies.
-- **CORS headers on auth errors**: Add CORS headers to auth error responses.
+- **Unified `output_index`** ([#418](https://github.com/Oaklight/llm-rosetta/issues/418), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Single monotonic counter on `OpenAIResponsesStreamContext` replaces fragmented per-handler calculation. All output item types allocate indices through `next_output_index()`.
+- **Reasoning output items** ([#407](https://github.com/Oaklight/llm-rosetta/issues/407), [#408](https://github.com/Oaklight/llm-rosetta/issues/408), PR [#419](https://github.com/Oaklight/llm-rosetta/pull/419)): Non-streaming reasoning items always include `id` and `status` fields. Streaming reasoning has full lifecycle events. Deterministic reasoning ID generation via SHA-256 hash.
+- **Reasoning item order** ([#437](https://github.com/Oaklight/llm-rosetta/issues/437), PR [#438](https://github.com/Oaklight/llm-rosetta/pull/438)): Fix `response_to_provider` output ordering — reasoning items now correctly precede message items.
+- **Message phase preservation** ([#440](https://github.com/Oaklight/llm-rosetta/issues/440), PR [#441](https://github.com/Oaklight/llm-rosetta/pull/441)): Responses API `phase` field (`commentary`/`final_answer`) preserved through all conversion paths and streaming. Pipeline bridges phase across streaming contexts.
+- **SSE `[DONE]` terminator** ([#409](https://github.com/Oaklight/llm-rosetta/issues/409)): Gateway emits `[DONE]` as the final SSE event after `response.completed`.
+
+### IR & Architecture
+
+- **Provider passthrough events** — new IR types for non-stream and streaming provider passthrough items, allowing converters to forward provider-specific data without loss.
+- **Empty reasoning content** — OpenAI Chat converter preserves empty reasoning content instead of dropping it.
+
+### Gateway
+
+- **CORS preflight auth bypass** (PR [#404](https://github.com/Oaklight/llm-rosetta/pull/404), [#405](https://github.com/Oaklight/llm-rosetta/pull/405)): Skip auth on CORS preflight requests; hardened to require both `Origin` + `Access-Control-Request-Method` headers.
+- **CORS headers on auth errors** — add CORS headers to auth error responses.
+- **Bearer token fallback** — accept `Bearer` token as fallback for all auth strategies.
+- **Embedding request IDs** — align embedding request IDs with upstream format.
+- **Admin modal polish** — CSS fixes, flatten hint tooltip, i18n alignment.
+
+### CI & Documentation
+
+- **On-demand compliance testing** — add [llm-comply](https://github.com/Oaklight/llm-comply) GitHub Actions workflow for schema/spec-based compliance testing against the gateway.
+- **Compliance Testing section in README** — link to llm-comply, hosted service, and CI workflow.
 
 ## v0.7.3 — 2026-07-25
 
