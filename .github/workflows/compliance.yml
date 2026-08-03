@@ -1,0 +1,114 @@
+name: Compliance
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "API base URL"
+        required: true
+        default: "https://rosetta-dev.service.oaklight.top/v1"
+      api_key:
+        description: "API key"
+        required: true
+      model:
+        description: "Model name"
+        required: true
+        default: "deepseek-v4-flash"
+      formats:
+        description: "Space-separated formats (open-responses openai-chat anthropic google-genai)"
+        required: true
+        default: "open-responses openai-chat"
+      timeout:
+        description: "Per-request timeout in seconds"
+        required: false
+        default: "60"
+
+jobs:
+  compliance-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install llm-comply
+        run: pip install llm-comply
+
+      - name: Run compliance tests
+        env:
+          BASE_URL: ${{ github.event.inputs.base_url }}
+          API_KEY: ${{ github.event.inputs.api_key }}
+          MODEL: ${{ github.event.inputs.model }}
+          FORMATS: ${{ github.event.inputs.formats }}
+          TIMEOUT: ${{ github.event.inputs.timeout }}
+        run: |
+          mkdir -p results
+          overall_pass=0
+          overall_fail=0
+
+          for fmt in $FORMATS; do
+            echo "::group::Testing $fmt"
+            llm-comply run \
+              --base-url "$BASE_URL" \
+              --api-key "$API_KEY" \
+              --model "$MODEL" \
+              --format "$fmt" \
+              --timeout "$TIMEOUT" \
+              --json \
+              > "results/${fmt}.json" 2>&1 || true
+
+            # Parse results
+            passed=$(python3 -c "import json; d=json.load(open('results/${fmt}.json')); print(d['summary']['passed'])" 2>/dev/null || echo 0)
+            failed=$(python3 -c "import json; d=json.load(open('results/${fmt}.json')); print(d['summary']['failed'])" 2>/dev/null || echo 0)
+            total=$(python3 -c "import json; d=json.load(open('results/${fmt}.json')); print(d['summary']['total'])" 2>/dev/null || echo 0)
+            overall_pass=$((overall_pass + passed))
+            overall_fail=$((overall_fail + failed))
+
+            if [ "$failed" -eq 0 ] 2>/dev/null; then
+              echo "✅ $fmt: $passed/$total passed"
+            else
+              echo "❌ $fmt: $passed/$total passed ($failed failed)"
+            fi
+            echo "::endgroup::"
+          done
+
+          echo "## Overall: $overall_pass passed, $overall_fail failed" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Generate summary
+        if: always()
+        run: |
+          python3 << 'PYEOF'
+          import json, os, glob
+
+          print("## Compliance Test Results\n", file=open(os.environ["GITHUB_STEP_SUMMARY"], "a"))
+
+          for path in sorted(glob.glob("results/*.json")):
+              fmt = os.path.basename(path).replace(".json", "")
+              try:
+                  with open(path) as f:
+                      data = json.load(f)
+                  s = data["summary"]
+                  icon = "✅" if s["failed"] == 0 else "❌"
+                  line = f"### {icon} {fmt} — {s['passed']}/{s['total']} passed\n"
+                  line += "\n| Test | Status | Duration |\n|------|--------|----------|\n"
+                  for r in data["results"]:
+                      st = "✅" if r["status"] == "passed" else "❌"
+                      dur = f"{r.get('duration_ms', 0):.0f}ms"
+                      errs = " — " + "; ".join(r.get("errors", []))[:60] if r.get("errors") else ""
+                      line += f"| {r['name']} | {st} | {dur}{errs} |\n"
+                  print(line, file=open(os.environ["GITHUB_STEP_SUMMARY"], "a"))
+              except Exception as e:
+                  print(f"### ⚠️ {fmt} — parse error: {e}\n", file=open(os.environ["GITHUB_STEP_SUMMARY"], "a"))
+          PYEOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compliance-results
+          path: results/
+          retention-days: 30
