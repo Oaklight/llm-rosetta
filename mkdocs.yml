@@ -201,6 +201,8 @@ nav:
           - Observability: api/observability.md
   - Contributing:
       - Contributing Guide: contributing/guide.md
+      - Style Guide: contributing/style-guide.md
+      - Architecture Guide: contributing/architecture.md
       - Naming Conventions: contributing/naming-conventions.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md
