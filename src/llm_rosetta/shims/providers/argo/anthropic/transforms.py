@@ -18,7 +18,7 @@ import copy
 import json
 from typing import Any
 
-from llm_rosetta.shims.transforms import _NamedTransform
+from llm_rosetta.shims.transforms import _NamedTransform, auto_cache_breakpoints
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -127,3 +127,4 @@ post_ir_transforms = ()
 pre_ir_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )
+ir_transforms = (auto_cache_breakpoints(),)

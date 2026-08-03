@@ -23,6 +23,7 @@ from llm_rosetta.shims.provider_shim import (
     unregister_shim,
 )
 from llm_rosetta.shims.transforms import (
+    auto_cache_breakpoints,
     strip_non_vision_images,
     truncate_images as truncate_images_transform,
     unwind_parallel_tool_calls as unwind_transform,
@@ -59,7 +60,7 @@ def _make_shim(**kwargs: Any) -> ProviderShim:
 def _register_cleanup():
     """Ensure test shims are cleaned up after each test."""
     yield
-    for name in ("test-shim", "test-shim-img", "test-shim-unwind"):
+    for name in ("test-shim", "test-shim-img", "test-shim-unwind", "test-shim-cache"):
         unregister_shim(name)
 
 
@@ -389,6 +390,65 @@ class TestApplyIrTransforms:
         content = result["messages"][0]["content"]
         image_parts = [p for p in content if p.get("type") == "image"]
         assert len(image_parts) <= 2
+
+    def test_auto_cache_breakpoints_injects(self):
+        """auto_cache_breakpoints should inject cache_hint on IR parts."""
+        ir = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "q1"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "a1"}]},
+                {"role": "user", "content": [{"type": "text", "text": "q2"}]},
+            ],
+            "system_instruction": [{"type": "text", "text": "Be helpful."}],
+            "tools": [
+                {
+                    "type": "function",
+                    "name": "search",
+                    "description": "Search",
+                    "parameters": {"type": "object"},
+                }
+            ],
+        }
+        shim = _make_shim(
+            name="test-shim-cache", ir_transforms=(auto_cache_breakpoints(),)
+        )
+        result = apply_ir_transforms(ir, shim)
+        # Should have cache_hint on: tool, system, 2 user messages = 4
+        hints = 0
+        if result["tools"][-1].get("cache_hint"):
+            hints += 1
+        if result["system_instruction"][-1].get("cache_hint"):
+            hints += 1
+        for msg in result["messages"]:
+            if msg.get("role") == "user":
+                for part in msg.get("content", []):
+                    if part.get("cache_hint"):
+                        hints += 1
+        assert hints == 4
+
+    def test_auto_cache_breakpoints_noop_when_hints_exist(self):
+        """auto_cache_breakpoints should not inject when hints already present."""
+        ir = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "q1"}]},
+            ],
+            "system_instruction": [
+                {"type": "text", "text": "sys", "cache_hint": {"type": "ephemeral"}}
+            ],
+            "tools": [],
+        }
+        original = copy.deepcopy(ir)
+        shim = _make_shim(
+            name="test-shim-cache", ir_transforms=(auto_cache_breakpoints(),)
+        )
+        result = apply_ir_transforms(ir, shim)
+        assert result == original
+
+    def test_auto_cache_breakpoints_repr(self):
+        t = auto_cache_breakpoints()
+        assert "auto_cache_breakpoints()" in repr(t)
+        t2 = auto_cache_breakpoints(mode="fill_gaps")
+        assert "fill_gaps" in repr(t2)
 
 
 # ---------------------------------------------------------------------------

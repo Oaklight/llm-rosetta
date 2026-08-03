@@ -347,6 +347,38 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
     return _NamedIRTransform(_unwind, label)
 
 
+def auto_cache_breakpoints(mode: str = "none_only") -> IRTransform:
+    """Return an IR transform that injects ``cache_hint`` breakpoints.
+
+    Targets cross-format requests (OpenAI/Gemini → Anthropic) where the
+    source format has no explicit cache semantics.  Injects up to 4
+    ``cache_hint`` markers matching Anthropic's breakpoint limit.
+
+    Args:
+        mode: ``"none_only"`` (default) skips injection if any
+            ``cache_hint`` already exists.  ``"fill_gaps"`` fills each
+            segment (tools, system, messages) independently.
+
+    Example::
+
+        auto_cache_breakpoints()                  # conservative
+        auto_cache_breakpoints(mode="fill_gaps")  # per-segment
+    """
+
+    def _inject(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        from llm_rosetta.converters.base.helpers.cache_breakpoints import (
+            inject_cache_breakpoints,
+        )
+
+        return inject_cache_breakpoints(body, mode=mode, request_id=context.request_id)
+
+    label = "auto_cache_breakpoints("
+    if mode != "none_only":
+        label += f"mode={mode!r}"
+    label += ")"
+    return _NamedIRTransform(_inject, label)
+
+
 # ---------------------------------------------------------------------------
 # Body-level: system message flattening
 # ---------------------------------------------------------------------------
