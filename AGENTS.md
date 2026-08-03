@@ -137,6 +137,18 @@ Tooling config (ruff, ty, complexipy) lives in `pyproject.toml`.
 4. Google-style docstrings on public APIs; comments in English
 5. No manual edits to `_vendor/` — update upstream, re-vendor
 6. Python ≥ 3.10 compatibility
+7. Converter changes must pass round-trip tests (A→IR→A, A→IR→B,
+   A→IR→B→IR→A) — see the
+   [Architecture Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/architecture/)
+
+## Contributing guidelines
+
+Full contributing docs on ReadTheDocs — read before making converter
+or architectural changes:
+
+- [Contributing Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/guide/) — workflow, branches, PRs
+- [Style Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/style-guide/) — code style, tooling
+- [Architecture Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/architecture/) — converter ops modules, shim layer, round-trip compatibility
 
 ## Integration testing with agentabi
 
