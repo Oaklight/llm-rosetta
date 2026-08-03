@@ -416,6 +416,10 @@ class AnthropicConverter(BaseConverter):
                     "explanation": refusal_part.get("refusal", ""),
                 }
 
+        # Ensure nullable required fields are always present (spec compliance)
+        provider_response.setdefault("stop_sequence", None)
+        provider_response.setdefault("stop_details", None)
+
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}
         provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
@@ -943,6 +947,8 @@ class AnthropicConverter(BaseConverter):
                 "model": event["model"],
                 "content": [],
                 "stop_reason": None,
+                "stop_sequence": None,
+                "stop_details": None,
                 "usage": p_usage,
             },
         }
@@ -1211,6 +1217,8 @@ class AnthropicConverter(BaseConverter):
                 delta_payload: dict[str, Any] = {"stop_reason": stop_reason}
                 if stop_details:
                     delta_payload["stop_details"] = stop_details
+                delta_payload.setdefault("stop_sequence", None)
+                delta_payload.setdefault("stop_details", None)
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
@@ -1223,11 +1231,17 @@ class AnthropicConverter(BaseConverter):
                 finish_delta: dict[str, Any] = {"stop_reason": stop_reason}
                 if stop_details:
                     finish_delta["stop_details"] = stop_details
+                finish_delta.setdefault("stop_sequence", None)
+                finish_delta.setdefault("stop_details", None)
                 context.buffer_finish(finish_delta)
             return results if results else {}
         return {
             "type": AnthropicEventType.MESSAGE_DELTA,
-            "delta": {"stop_reason": stop_reason},
+            "delta": {
+                "stop_reason": stop_reason,
+                "stop_sequence": None,
+                "stop_details": None,
+            },
             "usage": self._build_message_delta_usage(),
         }
 

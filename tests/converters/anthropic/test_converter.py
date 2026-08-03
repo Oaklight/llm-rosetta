@@ -1228,3 +1228,138 @@ class TestAnthropicUsageRoundTrip:
         usage = anthropic_out["usage"]
         assert self._USAGE_REQUIRED_KEYS == set(usage.keys())
         assert usage["output_tokens_details"] == {"thinking_tokens": 80}
+
+
+class TestAnthropicStopFieldsCompliance:
+    """Tests for stop_sequence/stop_details always present (#414)."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    def test_response_to_provider_stop_fields_default_null(self):
+        """stop_sequence and stop_details default to null when not set."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_stop",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hi"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 3,
+                    "total_tokens": 8,
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        assert result["stop_sequence"] is None
+        assert result["stop_details"] is None
+
+    def test_response_to_provider_stop_sequence_preserved(self):
+        """stop_sequence is preserved when present in IR finish_reason."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_seq",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hello"}],
+                        },
+                        "finish_reason": {"reason": "stop", "stop_sequence": "\n\n"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 3,
+                    "total_tokens": 8,
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        assert result["stop_sequence"] == "\n\n"
+        assert result["stop_details"] is None
+
+    def test_response_round_trip_stop_fields(self):
+        """A→IR→A: stop_sequence/stop_details always present."""
+        provider_response = {
+            "id": "msg_rt_stop",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3",
+            "content": [{"type": "text", "text": "Hello!"}],
+            "stop_reason": "end_turn",
+            "stop_sequence": None,
+            "stop_details": None,
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir)
+        assert restored["stop_sequence"] is None
+        assert restored["stop_details"] is None
+
+    def test_cross_format_stop_fields_present(self):
+        """B→IR→A: stop_sequence/stop_details present even from OpenAI source."""
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        openai = OpenAIChatConverter()
+        openai_response = {
+            "id": "chatcmpl-x",
+            "object": "chat.completion",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": "Hi"},
+                    "finish_reason": "stop",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+        }
+        ir = openai.response_from_provider(openai_response)
+        anthropic_out = self.converter.response_to_provider(ir)
+        assert anthropic_out["stop_sequence"] is None
+        assert anthropic_out["stop_details"] is None
+
+    def test_stream_message_start_has_stop_fields(self):
+        """message_start scaffold includes stop_sequence and stop_details."""
+        from llm_rosetta.types.ir import StreamStartEvent
+
+        event = cast(
+            StreamStartEvent,
+            {"type": "stream_start", "response_id": "msg_s", "model": "test"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        msg = result["message"]
+        assert msg["stop_sequence"] is None
+        assert msg["stop_details"] is None
+
+    def test_stream_message_delta_has_stop_fields(self):
+        """message_delta delta includes stop_sequence and stop_details."""
+        event = cast(
+            FinishEvent,
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "stop"},
+            },
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "message_delta"
+        assert result["delta"]["stop_sequence"] is None
+        assert result["delta"]["stop_details"] is None
