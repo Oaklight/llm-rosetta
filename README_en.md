@@ -58,6 +58,19 @@ Other compatible servers include [HuggingFace TGI](https://github.com/huggingfac
 - Support for text, images, tool calls, and tool results
 - Zero required dependencies (only `typing_extensions`); provider SDKs are optional
 
+## Compliance Testing
+
+[llm-comply](https://github.com/Oaklight/llm-comply) is a companion tool that validates LLM API endpoints against official specs. Use it to verify that a gateway or proxy correctly implements the OpenAI Chat, Open Responses, Anthropic Messages, and Google GenAI formats.
+
+```bash
+pip install llm-comply
+
+# Test your gateway endpoint
+llm-comply -u https://your-gateway/v1 -k $API_KEY -m your-model --format openai-chat
+```
+
+A hosted version is available at [llm-comply.service.oaklight.top](https://llm-comply.service.oaklight.top). An on-demand [Compliance workflow](https://github.com/Oaklight/llm-rosetta/actions/workflows/compliance.yml) is also included in CI.
+
 ## Installation
 
 ### Basic Installation

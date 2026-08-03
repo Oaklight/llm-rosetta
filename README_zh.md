@@ -58,6 +58,19 @@ LLM-Rosetta 可直接与任何提供 OpenAI 兼容接口的服务配合使用。
 - 支持文本、图片、工具调用和工具结果
 - 零必需依赖（仅需 `typing_extensions`）；提供商 SDK 为可选依赖
 
+## 合规性测试
+
+[llm-comply](https://github.com/Oaklight/llm-comply) 是一个配套工具，用于验证 LLM API 端点是否符合官方规范。可用来检验网关或代理是否正确实现了 OpenAI Chat、Open Responses、Anthropic Messages 和 Google GenAI 格式。
+
+```bash
+pip install llm-comply
+
+# 测试你的网关端点
+llm-comply -u https://your-gateway/v1 -k $API_KEY -m your-model --format openai-chat
+```
+
+在线体验版：[llm-comply.service.oaklight.top](https://llm-comply.service.oaklight.top)。CI 中还包含了按需触发的 [Compliance 工作流](https://github.com/Oaklight/llm-rosetta/actions/workflows/compliance.yml)。
+
 ## 安装
 
 ### 基本安装
