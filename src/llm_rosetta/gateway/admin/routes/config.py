@@ -660,7 +660,22 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
     )
 
 
-async def put_server_settings(request: Any) -> Response:
+def _apply_log_format(debug: dict, raw_value: Any) -> Response | None:
+    """Validate and apply a log_format value; return error Response or None."""
+    fmt = str(raw_value).strip().lower()
+    if fmt not in ("json", "text", "auto"):
+        return JSONResponse(
+            {
+                "error": f"Invalid log_format: {raw_value!r} "
+                "(expected 'json', 'text', or 'auto')"
+            },
+            status_code=400,
+        )
+    debug["log_format"] = fmt
+    return None
+
+
+async def put_server_settings(request: Any) -> Response:  # noqa: C901
     """Update server settings (e.g. global proxy)."""
     config_path = _get_config_path(request)
 
@@ -708,6 +723,10 @@ async def put_server_settings(request: Any) -> Response:
             debug["log_bodies"] = bool(body["log_bodies"])
         if "error_dumps" in body:
             debug["error_dumps"] = bool(body["error_dumps"])
+        if "log_format" in body:
+            err = _apply_log_format(debug, body["log_format"])
+            if err is not None:
+                return err
 
         try:
             _get_config_io(request).save(config_path, data)

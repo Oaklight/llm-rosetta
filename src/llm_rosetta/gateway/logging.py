@@ -7,6 +7,7 @@ logging, truncation, and sanitization.  Ported from argo-proxy's logger module.
 from __future__ import annotations
 
 import copy
+import datetime
 import json
 import logging
 import os
@@ -96,6 +97,86 @@ def _supports_color() -> bool:
 # ---------------------------------------------------------------------------
 
 
+# Standard LogRecord attributes to exclude from JSON extra fields
+_STANDARD_LOG_ATTRS: frozenset[str] = frozenset(
+    {
+        "args",
+        "created",
+        "exc_info",
+        "exc_text",
+        "filename",
+        "funcName",
+        "levelname",
+        "levelno",
+        "lineno",
+        "message",
+        "module",
+        "msecs",
+        "msg",
+        "name",
+        "pathname",
+        "process",
+        "processName",
+        "relativeCreated",
+        "stack_info",
+        "thread",
+        "threadName",
+        "taskName",
+    }
+)
+
+
+class JsonFormatter(logging.Formatter):
+    """Structured JSON formatter — one JSON object per line.
+
+    Output schema::
+
+        {"timestamp": "...", "level": "INFO", "logger": "...",
+         "message": "...", ...extra_fields}
+
+    Any *extra* dict entries on the :class:`~logging.LogRecord` that are
+    **not** standard Python logging attributes are promoted to top-level
+    JSON keys.  This lets callers do::
+
+        logger.info("handled request", extra={"request_id": rid, "model": m})
+
+    and get ``{"request_id": "...", "model": "...", ...}`` in the output.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+        record.message = record.getMessage()
+
+        ct = datetime.datetime.fromtimestamp(record.created, tz=datetime.timezone.utc)
+        entry: dict[str, Any] = {
+            "timestamp": ct.strftime("%Y-%m-%dT%H:%M:%S.")
+            + f"{int(record.msecs):03d}Z",
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.message,
+        }
+
+        # Promote non-standard extra fields.
+        # We use a denylist of known stdlib LogRecord attributes rather than
+        # an allowlist so that callers can attach arbitrary structured fields
+        # via ``extra={...}``.  The denylist is exhaustive for Python 3.12+
+        # stdlib attrs; any new stdlib attr added in future versions should
+        # be added to ``_STANDARD_LOG_ATTRS``.
+        for key, value in record.__dict__.items():
+            if key.startswith("_"):  # skip private/internal attrs
+                continue
+            if key not in _STANDARD_LOG_ATTRS and key not in entry:
+                entry[key] = value
+
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
+        if record.exc_text:
+            entry["exception"] = record.exc_text
+        if record.stack_info:
+            entry["stack_info"] = record.stack_info
+
+        return json.dumps(entry, default=str, ensure_ascii=False)
+
+
 class ColoredFormatter(logging.Formatter):
     """Loguru-style coloured formatter: ``YYYY-MM-DD HH:MM:SS.mmm | LEVEL | msg``."""
 
@@ -156,6 +237,8 @@ _logger.propagate = False
 
 # Whether body logging is enabled (set by ``setup_logging``)
 _log_bodies: bool = False
+# Resolved log format: "json" or "text" (set by ``setup_logging``)
+_log_format: str = "text"
 
 
 def get_logger() -> logging.Logger:
@@ -168,10 +251,22 @@ def get_logger() -> logging.Logger:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_log_format(log_format: str) -> str:
+    """Resolve ``'auto'`` to ``'json'`` or ``'text'`` based on TTY status."""
+    if log_format == "auto":
+        return (
+            "text"
+            if (hasattr(sys.stderr, "isatty") and sys.stderr.isatty())
+            else "json"
+        )
+    return log_format
+
+
 def setup_logging(
     verbose: bool = False,
     use_colors: bool = True,
     log_bodies: bool = False,
+    log_format: str = "auto",
 ) -> logging.Logger:
     """Configure the gateway logger.
 
@@ -179,12 +274,15 @@ def setup_logging(
         verbose: If *True*, set handler level to DEBUG; otherwise INFO.
         use_colors: Whether to use ANSI colours in output.
         log_bodies: If *True*, enable request/response body logging at DEBUG level.
+        log_format: ``'json'``, ``'text'``, or ``'auto'`` (default).  When
+            ``'auto'``, JSON is used for non-TTY stderr, text for interactive.
 
     Returns:
         The configured logger.
     """
-    global _handler, _log_bodies
+    global _handler, _log_bodies, _log_format
     _log_bodies = log_bodies
+    _log_format = _resolve_log_format(log_format)
 
     logger = get_logger()
 
@@ -195,10 +293,13 @@ def setup_logging(
     _handler = logging.StreamHandler(sys.stderr)
     _handler.setLevel(logging.DEBUG if verbose else logging.INFO)
 
-    formatter = ColoredFormatter(
-        datefmt="%Y-%m-%d %H:%M:%S.%f",
-        use_colors=use_colors,
-    )
+    if _log_format == "json":
+        formatter: logging.Formatter = JsonFormatter()
+    else:
+        formatter = ColoredFormatter(
+            datefmt="%Y-%m-%d %H:%M:%S.%f",
+            use_colors=use_colors,
+        )
 
     _handler.setFormatter(formatter)
     logger.addHandler(_handler)
@@ -322,6 +423,14 @@ def create_request_summary(data: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _structured_extra(**kwargs: Any) -> dict[str, Any]:
+    """Build an ``extra`` dict for :meth:`logging.Logger.info` & friends.
+
+    Only non-``None`` values are included so JSON output stays clean.
+    """
+    return {k: v for k, v in kwargs.items() if v is not None}
+
+
 def _make_bar(message: str = "", bar_length: int = 60) -> str:
     message = message.strip()
     if message:
@@ -344,17 +453,31 @@ def log_request(
     sanitize: bool = True,
     max_content_length: int = 500,
     truncate_tools: bool = True,
+    request_id: str | None = None,
+    model: str | None = None,
+    source_provider: str | None = None,
+    target_provider: str | None = None,
 ) -> None:
     """Log a request with configurable verbosity.
 
     *show_full* defaults to the module-level ``_log_bodies`` flag when *None*.
+    Structured fields (*request_id*, *model*, etc.) are attached as ``extra``
+    for JSON log consumers.
     """
     if show_full is None:
         show_full = _log_bodies
 
+    extra = _structured_extra(
+        request_id=request_id,
+        model=model,
+        source_provider=source_provider,
+        target_provider=target_provider,
+        label=label,
+    )
+
     if show_summary:
         summary = create_request_summary(data)
-        _logger.info("[%s] %s", label, summary)
+        _logger.info("[%s] %s", label, summary, extra=extra)
 
     if show_full:
         log_data = (
@@ -366,9 +489,9 @@ def log_request(
             if sanitize
             else data
         )
-        _logger.debug(_make_bar(f"[{label}]"))
-        _logger.debug(json.dumps(log_data, indent=2, ensure_ascii=False))
-        _logger.debug(_make_bar())
+        _logger.debug(_make_bar(f"[{label}]"), extra=extra)
+        _logger.debug(json.dumps(log_data, indent=2, ensure_ascii=False), extra=extra)
+        _logger.debug(_make_bar(), extra=extra)
 
 
 def log_original_request(
@@ -405,10 +528,22 @@ def log_response(
     *,
     sanitize: bool = True,
     max_content_length: int = 500,
+    request_id: str | None = None,
+    model: str | None = None,
+    duration_ms: int | None = None,
+    status: str | None = None,
 ) -> None:
     """Log a response body (sanitized & truncated at DEBUG level)."""
     if not _log_bodies:
         return
+
+    extra = _structured_extra(
+        request_id=request_id,
+        model=model,
+        duration_ms=duration_ms,
+        status=status,
+        label=label,
+    )
 
     log_data = (
         sanitize_request_data(
@@ -419,9 +554,9 @@ def log_response(
         if sanitize
         else data
     )
-    _logger.debug(_make_bar(f"[{label}]"))
-    _logger.debug(json.dumps(log_data, indent=2, ensure_ascii=False))
-    _logger.debug(_make_bar())
+    _logger.debug(_make_bar(f"[{label}]"), extra=extra)
+    _logger.debug(json.dumps(log_data, indent=2, ensure_ascii=False), extra=extra)
+    _logger.debug(_make_bar(), extra=extra)
 
 
 def log_stream_summary(
@@ -429,13 +564,27 @@ def log_stream_summary(
     model: str,
     duration_s: float,
     chunk_count: int,
+    request_id: str | None = None,
+    source_provider: str | None = None,
+    target_provider: str | None = None,
+    status: str = "success",
 ) -> None:
     """Log a streaming-session summary (no per-chunk spam)."""
+    extra = _structured_extra(
+        request_id=request_id,
+        model=model,
+        source_provider=source_provider,
+        target_provider=target_provider,
+        duration_ms=round(duration_s * 1000),
+        chunk_count=chunk_count,
+        status=status,
+    )
     _logger.info(
         "[STREAM COMPLETE] model=%s chunks=%d duration=%.2fs",
         model,
         chunk_count,
         duration_s,
+        extra=extra,
     )
 
 
@@ -445,13 +594,23 @@ def log_upstream_error(
     *,
     endpoint: str = "unknown",
     is_streaming: bool = False,
+    request_id: str | None = None,
+    model: str | None = None,
 ) -> None:
     """Log an upstream API error in a structured format."""
     request_type = "streaming" if is_streaming else "non-streaming"
+    extra = _structured_extra(
+        request_id=request_id,
+        model=model,
+        status=status_code,
+        endpoint=endpoint,
+        request_type=request_type,
+    )
     _logger.error(
         "[UPSTREAM ERROR] endpoint=%s, type=%s, status=%d, error=%s",
         endpoint,
         request_type,
         status_code,
         error_text,
+        extra=extra,
     )

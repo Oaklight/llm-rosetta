@@ -335,6 +335,20 @@ class GatewayConfig:
         ).lower() in ("1", "true", "yes")
         self.error_dumps_enabled: bool = _debug.get("error_dumps", True)
 
+        # Log format: "text" (colourised, default for TTY), "json" (structured
+        # one-line JSON, default for non-TTY), or "auto" (detect from stderr
+        # TTY status).  Env var LLM_ROSETTA_LOG_FORMAT overrides config.
+        _env_log_format = os.environ.get("LLM_ROSETTA_LOG_FORMAT", "").strip().lower()
+        _cfg_log_format = _debug.get("log_format", "auto")
+        raw_log_format = _env_log_format or _cfg_log_format
+        if raw_log_format not in ("json", "text", "auto"):
+            logger.warning(
+                "config: invalid log_format %r, falling back to 'auto'",
+                raw_log_format,
+            )
+            raw_log_format = "auto"
+        self.log_format: str = raw_log_format  # resolved later by setup_logging
+
         self._validate()
 
         # Build ProviderInfo objects (with key rotation support)

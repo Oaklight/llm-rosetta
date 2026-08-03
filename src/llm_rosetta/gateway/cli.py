@@ -407,6 +407,7 @@ def main() -> None:
     setup_logging(
         verbose=verbose,
         log_bodies=config.log_bodies,
+        log_format=config.log_format,
     )
 
     host = args.host or config.host
