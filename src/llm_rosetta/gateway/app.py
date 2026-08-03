@@ -546,6 +546,16 @@ def _flush_now(app: App) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _install_root_redirect(app: App, target: str | None) -> None:
+    """Register a GET / → *target* redirect when *target* is set."""
+    if not target:
+        return
+
+    @app.route("/", methods=["GET"])
+    async def root_redirect(request: Any) -> Response:
+        return Response(body=b"", status_code=307, headers={"Location": target})
+
+
 def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     """Create the httpserver application."""
     global _config
@@ -577,6 +587,8 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     app.route("/health", methods=["GET"])(handle_health)
     app.route("/health/live", methods=["GET"])(handle_health_live)
     app.route("/health/ready", methods=["GET"])(handle_health_ready)
+
+    _install_root_redirect(app, config.root_redirect)
 
     # --- Auth ---
     import secrets

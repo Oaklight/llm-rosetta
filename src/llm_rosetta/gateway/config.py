@@ -288,6 +288,10 @@ class GatewayConfig:
         #   }
         self.admin_cors_origins: list[str] = _server.get("admin_cors_origins", []) or []
 
+        # Optional root redirect: when set, GET / returns a 307 to the given
+        # path (e.g. "/admin").  Disabled by default (no redirect).
+        self.root_redirect: str | None = _server.get("root_redirect")
+
         # Request-log retention knobs (consumed by setup_admin).  Kept as
         # a raw dict here so admin layer owns the resolution policy.
         self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
