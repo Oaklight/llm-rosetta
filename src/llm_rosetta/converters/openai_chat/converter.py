@@ -6,6 +6,7 @@ Composes ContentOps, ToolOps, MessageOps, and ConfigOps for full bidirectional
 conversion between IR and OpenAI Chat Completions API format.
 """
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
@@ -41,6 +42,8 @@ from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
 from .message_ops import OpenAIChatMessageOps
 from .tool_ops import OpenAIChatToolOps
+
+logger = logging.getLogger(__name__)
 
 
 class OpenAIChatConverter(BaseConverter):
@@ -1058,6 +1061,11 @@ class OpenAIChatConverter(BaseConverter):
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
 
+        if context is None:
+            logger.debug(
+                "tool_call_delta without context — cannot resolve tool_type for %s",
+                event["tool_call_id"],
+            )
         is_custom = (
             context is not None
             and context.get_tool_type(event["tool_call_id"]) == "custom"
