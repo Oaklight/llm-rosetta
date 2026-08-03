@@ -1,3 +1,21 @@
+# On-demand LLM API compliance testing via llm-comply.
+#
+# Usage (CLI):
+#   gh workflow run Compliance \
+#     -f base_url=https://rosetta-dev.service.oaklight.top/v1 \
+#     -f api_key=rsk-xxxxx \
+#     -f model=deepseek-v4-flash \
+#     -f formats="open-responses openai-chat" \
+#     -f timeout=60
+#
+# Usage (GitHub UI):
+#   Actions → Compliance → Run workflow → fill inputs
+#
+# Available formats: open-responses, openai-chat, anthropic, google-genai
+# Multiple formats: space-separated in the formats field
+#
+# Results: summary table in workflow run + JSON artifacts (30-day retention)
+
 name: Compliance
 
 on:
