@@ -296,8 +296,10 @@ class GatewayConfig:
         # upstream HTTP lifecycle: connect, header-read, and per-chunk
         # streaming reads.  read_timeout governs how long the inbound
         # httpserver waits for the client to send a complete request.
-        self.upstream_timeout: float = float(_server.get("upstream_timeout", 300.0))
-        self.read_timeout: float = float(_server.get("read_timeout", 300.0))
+        self.upstream_timeout: float = max(
+            1.0, float(_server.get("upstream_timeout", 300.0))
+        )
+        self.read_timeout: float = max(1.0, float(_server.get("read_timeout", 300.0)))
 
         # Request-log retention knobs (consumed by setup_admin).  Kept as
         # a raw dict here so admin layer owns the resolution policy.

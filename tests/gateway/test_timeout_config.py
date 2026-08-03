@@ -50,6 +50,16 @@ class TestTimeoutConfig:
         assert cfg.upstream_timeout == 450.0
         assert cfg.read_timeout == 90.0
 
+    def test_clamp_zero(self):
+        cfg = GatewayConfig(_minimal_raw(upstream_timeout=0, read_timeout=0))
+        assert cfg.upstream_timeout == 1.0
+        assert cfg.read_timeout == 1.0
+
+    def test_clamp_negative(self):
+        cfg = GatewayConfig(_minimal_raw(upstream_timeout=-10, read_timeout=-5))
+        assert cfg.upstream_timeout == 1.0
+        assert cfg.read_timeout == 1.0
+
 
 class TestTimeoutWiring:
     def test_transport_receives_upstream_timeout(self):
