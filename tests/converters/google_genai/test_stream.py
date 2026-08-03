@@ -1345,3 +1345,76 @@ class TestStreamResponseToProviderWithContext:
         assert result["responseId"] == "chatcmpl-abc123"
         assert result["modelVersion"] == "gpt-4o"
         assert result["candidates"][0]["content"]["parts"][0]["text"] == "Hi there"
+
+    def test_stream_end_flushes_pending_usage(self):
+        """Usage buffered after finish is emitted on stream_end."""
+        context = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                StreamStartEvent,
+                {"type": "stream_start", "response_id": "resp_u", "model": "gemini-x"},
+            ),
+            context=context,
+        )
+        # Finish without usage (usage hasn't arrived yet)
+        self.converter.stream_response_to_provider(
+            cast(
+                FinishEvent,
+                {
+                    "type": "finish",
+                    "finish_reason": {"reason": "stop"},
+                    "choice_index": 0,
+                },
+            ),
+            context=context,
+        )
+        # Usage arrives late (cross-format: OpenAI sends it after finish)
+        self.converter.stream_response_to_provider(
+            cast(
+                UsageEvent,
+                {
+                    "type": "usage",
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15,
+                        "reasoning_tokens": 3,
+                    },
+                },
+            ),
+            context=context,
+        )
+        # stream_end should flush the buffered usage
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=context,
+            ),
+        )
+        assert result["usageMetadata"]["promptTokenCount"] == 10
+        assert result["usageMetadata"]["candidatesTokenCount"] == 5
+        assert result["usageMetadata"]["totalTokenCount"] == 15
+        assert result["usageMetadata"]["thoughtsTokenCount"] == 3
+        assert result["responseId"] == "resp_u"
+        assert result["modelVersion"] == "gemini-x"
+        assert context.pending_usage is None
+
+    def test_stream_end_no_usage_returns_empty(self):
+        """stream_end without pending usage returns empty dict."""
+        context = StreamContext()
+        self.converter.stream_response_to_provider(
+            cast(
+                StreamStartEvent,
+                {"type": "stream_start", "response_id": "r", "model": "m"},
+            ),
+            context=context,
+        )
+        result = cast(
+            dict[str, Any],
+            self.converter.stream_response_to_provider(
+                cast(StreamEndEvent, {"type": "stream_end"}),
+                context=context,
+            ),
+        )
+        assert result == {}

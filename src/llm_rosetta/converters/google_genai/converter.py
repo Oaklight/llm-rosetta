@@ -1088,6 +1088,24 @@ class GoogleGenAIConverter(BaseConverter):
             chunk["modelVersion"] = context.model
         return chunk
 
+    @staticmethod
+    def _build_stream_usage_metadata(usage: Mapping[str, Any]) -> dict[str, Any]:
+        """Build a Google ``usageMetadata`` dict from IR usage for streaming.
+
+        Lighter than ``_build_ir_usage_to_p`` — omits the details arrays
+        which are not typically present in streaming usage events.
+        """
+        usage_metadata: dict[str, Any] = {
+            "promptTokenCount": usage.get("prompt_tokens") or 0,
+            "candidatesTokenCount": usage.get("completion_tokens") or 0,
+            "totalTokenCount": usage.get("total_tokens") or 0,
+        }
+        if "reasoning_tokens" in usage:
+            usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+        if "cache_read_tokens" in usage:
+            usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
+        return usage_metadata
+
     def _handle_ir_stream_start_to_p(
         self, event: StreamStartEvent, context: StreamContext | None
     ) -> dict[str, Any]:
@@ -1111,19 +1129,9 @@ class GoogleGenAIConverter(BaseConverter):
             usage = context.pop_pending_usage()
             context.mark_ended()
             if usage is not None:
-                usage_metadata: dict[str, Any] = {
-                    "promptTokenCount": usage.get("prompt_tokens") or 0,
-                    "candidatesTokenCount": usage.get("completion_tokens") or 0,
-                    "totalTokenCount": usage.get("total_tokens") or 0,
-                }
-                if "reasoning_tokens" in usage:
-                    usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
-                if "cache_read_tokens" in usage:
-                    usage_metadata["cachedContentTokenCount"] = usage[
-                        "cache_read_tokens"
-                    ]
                 return self._inject_stream_metadata(
-                    {"usageMetadata": usage_metadata}, context
+                    {"usageMetadata": self._build_stream_usage_metadata(usage)},
+                    context,
                 )
         return {}
 
@@ -1249,16 +1257,7 @@ class GoogleGenAIConverter(BaseConverter):
         else:
             usage = None
         if usage is not None:
-            usage_metadata: dict[str, Any] = {
-                "promptTokenCount": usage.get("prompt_tokens") or 0,
-                "candidatesTokenCount": usage.get("completion_tokens") or 0,
-                "totalTokenCount": usage.get("total_tokens") or 0,
-            }
-            if "reasoning_tokens" in usage:
-                usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
-            if "cache_read_tokens" in usage:
-                usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
-            finish_chunk["usageMetadata"] = usage_metadata
+            finish_chunk["usageMetadata"] = self._build_stream_usage_metadata(usage)
 
         chunks.append(self._inject_stream_metadata(finish_chunk, context))
 
@@ -1278,18 +1277,7 @@ class GoogleGenAIConverter(BaseConverter):
         if context is not None:
             context.buffer_usage(usage)
             return {}
-        usage_metadata: dict[str, Any] = {
-            "promptTokenCount": usage.get("prompt_tokens") or 0,
-            "candidatesTokenCount": usage.get("completion_tokens") or 0,
-            "totalTokenCount": usage.get("total_tokens") or 0,
-        }
-
-        if "reasoning_tokens" in usage:
-            usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
-        if "cache_read_tokens" in usage:
-            usage_metadata["cachedContentTokenCount"] = usage["cache_read_tokens"]
-
-        return {"usageMetadata": usage_metadata}
+        return {"usageMetadata": self._build_stream_usage_metadata(usage)}
 
 
 # Backward compatibility alias
