@@ -711,23 +711,38 @@ class OpenAIChatConverter(BaseConverter):
     ) -> None:
         """Process tool call deltas from a choice."""
         for tc in tool_calls:
-            tc_func = tc.get("function", {})
+            tc_type = tc.get("type", "function")
             tc_id = tc.get("id")
             tc_index = tc.get("index")
+
+            if tc_type == "custom":
+                tc_custom = tc.get("custom", {})
+                tc_name = tc_custom.get("name", "")
+                tc_input = tc_custom.get("input", "")
+            else:
+                tc_func = tc.get("function", {})
+                tc_name = tc_func.get("name", "")
+                tc_input = tc_func.get("arguments", "")
 
             if tc_id:
                 start_event_tc = ToolCallStartEvent(
                     type="tool_call_start",
                     tool_call_id=tc_id,
-                    tool_name=tc_func.get("name", ""),
+                    tool_name=tc_name,
                     choice_index=choice_index,
                 )
+                if tc_type == "custom":
+                    start_event_tc["tool_type"] = "custom"
                 if tc_index is not None:
                     start_event_tc["tool_call_index"] = tc_index
                 events.append(start_event_tc)
 
                 if context is not None:
-                    context.register_tool_call(tc_id, tc_func.get("name", ""))
+                    context.register_tool_call(
+                        tc_id,
+                        tc_name,
+                        "custom" if tc_type == "custom" else "function",
+                    )
 
             # Resolve the effective call ID for delta-only chunks
             # (they carry index but no id).
@@ -737,12 +752,11 @@ class OpenAIChatConverter(BaseConverter):
                 if 0 <= tc_index < len(order):
                     effective_tc_id = order[tc_index]
 
-            arguments = tc_func.get("arguments")
-            if arguments:
+            if tc_input:
                 delta_event = ToolCallDeltaEvent(
                     type="tool_call_delta",
                     tool_call_id=effective_tc_id or "",
-                    arguments_delta=arguments,
+                    arguments_delta=tc_input,
                     choice_index=choice_index,
                 )
                 if tc_index is not None:
@@ -750,7 +764,7 @@ class OpenAIChatConverter(BaseConverter):
                 events.append(delta_event)
 
                 if context is not None and effective_tc_id:
-                    context.append_tool_call_args(effective_tc_id, arguments)
+                    context.append_tool_call_args(effective_tc_id, tc_input)
 
     def _handle_p_finish_reason_to_ir(
         self,
@@ -998,15 +1012,34 @@ class OpenAIChatConverter(BaseConverter):
         """Handle ToolCallStartEvent → tool_calls delta with id and name."""
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
-        tc_entry: dict[str, Any] = {
-            "index": tc_index,
-            "id": event["tool_call_id"],
-            "type": "function",
-            "function": {
-                "name": event["tool_name"],
-                "arguments": "",
-            },
-        }
+        tool_type = event.get("tool_type", "function")
+
+        if tool_type == "custom":
+            tc_entry: dict[str, Any] = {
+                "index": tc_index,
+                "id": event["tool_call_id"],
+                "type": "custom",
+                "custom": {
+                    "name": event["tool_name"],
+                    "input": "",
+                },
+            }
+        else:
+            tc_entry = {
+                "index": tc_index,
+                "id": event["tool_call_id"],
+                "type": "function",
+                "function": {
+                    "name": event["tool_name"],
+                    "arguments": "",
+                },
+            }
+
+        if context is not None:
+            context.register_tool_call(
+                event["tool_call_id"], event["tool_name"], tool_type
+            )
+
         chunk = {
             "choices": [
                 {
@@ -1024,12 +1057,22 @@ class OpenAIChatConverter(BaseConverter):
         """Handle ToolCallDeltaEvent → tool_calls delta with arguments."""
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
-        tc_delta_entry: dict[str, Any] = {
-            "index": tc_index,
-            "function": {
-                "arguments": event["arguments_delta"],
-            },
-        }
+
+        is_custom = (
+            context is not None
+            and context.get_tool_type(event["tool_call_id"]) == "custom"
+        )
+        if is_custom:
+            tc_delta_entry: dict[str, Any] = {
+                "index": tc_index,
+                "custom": {"input": event["arguments_delta"]},
+            }
+        else:
+            tc_delta_entry = {
+                "index": tc_index,
+                "function": {"arguments": event["arguments_delta"]},
+            }
+
         return {
             "choices": [
                 {

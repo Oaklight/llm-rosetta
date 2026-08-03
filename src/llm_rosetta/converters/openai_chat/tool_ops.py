@@ -145,7 +145,22 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             OpenAI Chat tool definition dict.
         """
-        if ir_tool.get("type", "function") == "function":
+        tool_type = ir_tool.get("type", "function")
+        metadata = ir_tool.get("metadata") or {}
+
+        if tool_type == "custom" or metadata.get("provider_type") == "custom":
+            custom: dict[str, Any] = {
+                "name": ir_tool["name"],
+            }
+            desc = ir_tool.get("description", "")
+            if desc:
+                custom["description"] = desc
+            fmt = metadata.get("format")
+            if fmt:
+                custom["format"] = fmt
+            return {"type": "custom", "custom": custom}
+
+        if tool_type == "function":
             func_def: dict[str, Any] = {
                 "name": ir_tool["name"],
                 "description": ir_tool.get("description", ""),
@@ -157,9 +172,7 @@ class OpenAIChatToolOps(BaseToolOps):
                 func_def["parameters"] = parameters
             return {"type": "function", "function": func_def}
 
-        # Non-function tool types (e.g. Codex apply_patch with type="custom"):
-        # wrap as Chat Completions function, preserving the original name so
-        # the client can match tool_call responses back to the tool.
+        # Unknown tool types: wrap as Chat Completions function.
         raw_params = ir_tool.get("parameters", {})
         params = (
             sanitize_schema(raw_params) if isinstance(raw_params, dict) else raw_params
@@ -185,6 +198,24 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             IR ToolDefinition.
         """
+        if provider_tool.get("type") == "custom":
+            custom = provider_tool.get("custom", {})
+            metadata: dict[str, Any] = {}
+            fmt = custom.get("format")
+            if fmt:
+                metadata["format"] = fmt
+            return cast(
+                ToolDefinition,
+                {
+                    "type": "custom",
+                    "name": custom.get("name", ""),
+                    "description": custom.get("description", ""),
+                    "parameters": {},
+                    "required_parameters": [],
+                    "metadata": metadata,
+                },
+            )
+
         func = provider_tool.get("function", {})
         result: dict[str, Any] = {
             "type": "function",
@@ -232,6 +263,8 @@ class OpenAIChatToolOps(BaseToolOps):
         elif mode == "tool":
             tool_name = ir_tool_choice.get("tool_name")
             if tool_name:
+                if ir_tool_choice.get("tool_type") == "custom":
+                    return {"type": "custom", "custom": {"name": tool_name}}
                 return {"type": "function", "function": {"name": tool_name}}
             return "required"
 
@@ -263,6 +296,16 @@ class OpenAIChatToolOps(BaseToolOps):
             return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         if isinstance(provider_tool_choice, dict):
+            if provider_tool_choice.get("type") == "custom":
+                custom = provider_tool_choice.get("custom", {})
+                return cast(
+                    ToolChoice,
+                    {
+                        "mode": "tool",
+                        "tool_name": custom.get("name", ""),
+                        "tool_type": "custom",
+                    },
+                )
             if provider_tool_choice.get("type") == "function":
                 func = provider_tool_choice.get("function", {})
                 return cast(
@@ -285,12 +328,34 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             OpenAI Chat tool call dict.
         """
+        tool_type = ir_tool_call.get("tool_type", "function")
         tool_input = ir_tool_call.get("tool_input", {})
+
+        if tool_type == "custom":
+            if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
+                input_str = str(tool_input["input"])
+            else:
+                input_str = (
+                    json.dumps(tool_input)
+                    if isinstance(tool_input, dict)
+                    else str(tool_input)
+                )
+            result: dict[str, Any] = {
+                "id": ir_tool_call["tool_call_id"],
+                "type": "custom",
+                "custom": {
+                    "name": ir_tool_call["tool_name"],
+                    "input": input_str,
+                },
+            }
+            if "provider_metadata" in ir_tool_call:
+                result["_provider_metadata"] = ir_tool_call["provider_metadata"]
+            return result
+
         arguments = (
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
         )
-
-        result: dict[str, Any] = {
+        result = {
             "id": ir_tool_call["tool_call_id"],
             "type": "function",
             "function": {
@@ -314,6 +379,21 @@ class OpenAIChatToolOps(BaseToolOps):
         Returns:
             IR ToolCallPart.
         """
+        if provider_tool_call.get("type") == "custom":
+            custom = provider_tool_call.get("custom", {})
+            input_str = custom.get("input", "")
+            part = ToolCallPart(
+                type="tool_call",
+                tool_call_id=provider_tool_call.get("id", ""),
+                tool_name=custom.get("name", ""),
+                tool_input={"input": input_str},
+                tool_type="custom",
+            )
+            pm = provider_tool_call.get("_provider_metadata")
+            if pm:
+                part["provider_metadata"] = pm
+            return part
+
         func = provider_tool_call.get("function", {})
         arguments_str = func.get("arguments", "{}")
 

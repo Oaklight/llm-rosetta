@@ -44,26 +44,45 @@ class TestOpenAIChatToolOps:
         assert result["function"]["description"] == "Get current weather"
         assert "parameters" in result["function"]
 
-    def test_ir_tool_definition_to_p_non_function_preserves_name(self):
-        """Non-function tool type preserves original name (no type prefix)."""
+    def test_ir_tool_definition_to_p_custom(self):
+        """Custom tool type emits native Chat custom format."""
         ir_tool = cast(
             ToolDefinition,
             {
                 "type": "custom",
                 "name": "apply_patch",
                 "description": "Apply a patch",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"patch": {"type": "string"}},
-                },
+                "parameters": {},
                 "required_parameters": [],
-                "metadata": {},
+                "metadata": {
+                    "format": {
+                        "type": "grammar",
+                        "grammar": {"definition": "start: /.+/s", "syntax": "lark"},
+                    }
+                },
             },
         )
         result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
-        assert result["type"] == "function"
-        assert result["function"]["name"] == "apply_patch"
-        assert result["function"]["description"] == "Apply a patch"
+        assert result["type"] == "custom"
+        assert result["custom"]["name"] == "apply_patch"
+        assert result["custom"]["description"] == "Apply a patch"
+        assert result["custom"]["format"]["type"] == "grammar"
+
+    def test_ir_tool_definition_to_p_custom_via_metadata(self):
+        """Custom tool detected from metadata.provider_type fallback."""
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "apply_patch",
+                "description": "",
+                "parameters": {},
+                "metadata": {"provider_type": "custom"},
+            },
+        )
+        result = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        assert result["type"] == "custom"
+        assert result["custom"]["name"] == "apply_patch"
 
     def test_p_tool_definition_to_ir(self):
         """Test OpenAI tool definition → IR ToolDefinition."""
@@ -385,3 +404,133 @@ class TestProviderMetadataPreservation:
         chat_call = OpenAIChatToolOps.ir_tool_call_to_p(ir_part)
         restored = OpenAIChatToolOps.p_tool_call_to_ir(chat_call)
         assert restored.get("provider_metadata") == {"responses_item_id": "fc_abc123"}
+
+
+class TestCustomToolSupport:
+    """Tests for native Chat Completions custom tool support."""
+
+    # --- Definition ---
+
+    def test_p_tool_definition_to_ir_custom(self):
+        """Chat CustomToolChatCompletions → IR custom ToolDefinition."""
+        provider_tool = {
+            "type": "custom",
+            "custom": {
+                "name": "apply_patch",
+                "description": "Apply a V4A patch",
+                "format": {
+                    "type": "grammar",
+                    "grammar": {"definition": "start: /.+/s", "syntax": "lark"},
+                },
+            },
+        }
+        result = OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool)
+        assert result["type"] == "custom"
+        assert result["name"] == "apply_patch"
+        assert result["description"] == "Apply a V4A patch"
+        assert result["metadata"]["format"]["type"] == "grammar"
+
+    def test_p_tool_definition_to_ir_custom_minimal(self):
+        """Custom tool with only name."""
+        provider_tool = {"type": "custom", "custom": {"name": "my_tool"}}
+        result = OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool)
+        assert result["type"] == "custom"
+        assert result["name"] == "my_tool"
+        assert result["parameters"] == {}
+
+    def test_custom_tool_definition_round_trip(self):
+        """Custom tool definition survives IR → Chat → IR."""
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "custom",
+                "name": "apply_patch",
+                "description": "Apply a patch",
+                "parameters": {},
+                "metadata": {"format": {"type": "text"}},
+            },
+        )
+        provider = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
+        assert provider["type"] == "custom"
+        restored = OpenAIChatToolOps.p_tool_definition_to_ir(provider)
+        assert restored["type"] == "custom"
+        assert restored["name"] == "apply_patch"
+        assert restored["metadata"]["format"] == {"type": "text"}
+
+    # --- Tool Call ---
+
+    def test_ir_tool_call_to_p_custom(self):
+        """IR custom tool call → Chat ChatCompletionMessageCustomToolCall."""
+        ir_tc = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_1",
+            tool_name="apply_patch",
+            tool_input={"input": "*** Begin Patch\n+hi\n*** End Patch"},
+            tool_type="custom",
+        )
+        result = OpenAIChatToolOps.ir_tool_call_to_p(ir_tc)
+        assert result["type"] == "custom"
+        assert result["custom"]["name"] == "apply_patch"
+        assert result["custom"]["input"] == "*** Begin Patch\n+hi\n*** End Patch"
+        assert result["id"] == "call_1"
+
+    def test_p_tool_call_to_ir_custom(self):
+        """Chat ChatCompletionMessageCustomToolCall → IR custom tool call."""
+        provider_tc = {
+            "id": "call_1",
+            "type": "custom",
+            "custom": {
+                "name": "apply_patch",
+                "input": "*** Begin Patch\n+hi\n*** End Patch",
+            },
+        }
+        result = OpenAIChatToolOps.p_tool_call_to_ir(provider_tc)
+        assert result["tool_type"] == "custom"
+        assert result["tool_name"] == "apply_patch"
+        assert result["tool_input"] == {"input": "*** Begin Patch\n+hi\n*** End Patch"}
+        assert result["tool_call_id"] == "call_1"
+
+    def test_custom_tool_call_round_trip(self):
+        """Custom tool call survives IR → Chat → IR."""
+        ir_tc = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_rt",
+            tool_name="apply_patch",
+            tool_input={"input": "patch content"},
+            tool_type="custom",
+        )
+        provider = OpenAIChatToolOps.ir_tool_call_to_p(ir_tc)
+        restored = OpenAIChatToolOps.p_tool_call_to_ir(provider)
+        assert restored["tool_type"] == "custom"
+        assert restored["tool_name"] == "apply_patch"
+        assert restored["tool_input"] == {"input": "patch content"}
+
+    # --- Tool Choice ---
+
+    def test_ir_tool_choice_to_p_custom(self):
+        """IR tool choice with tool_type=custom → Chat custom tool choice."""
+        result = OpenAIChatToolOps.ir_tool_choice_to_p(
+            {"mode": "tool", "tool_name": "apply_patch", "tool_type": "custom"}
+        )
+        assert result == {"type": "custom", "custom": {"name": "apply_patch"}}
+
+    def test_p_tool_choice_to_ir_custom(self):
+        """Chat custom tool choice → IR with tool_type=custom."""
+        result = OpenAIChatToolOps.p_tool_choice_to_ir(
+            {"type": "custom", "custom": {"name": "apply_patch"}}
+        )
+        assert result["mode"] == "tool"
+        assert result["tool_name"] == "apply_patch"
+        assert result["tool_type"] == "custom"
+
+    def test_custom_tool_choice_round_trip(self):
+        """Custom tool choice survives IR → Chat → IR."""
+        ir = cast(
+            ToolChoice,
+            {"mode": "tool", "tool_name": "apply_patch", "tool_type": "custom"},
+        )
+        provider = OpenAIChatToolOps.ir_tool_choice_to_p(ir)
+        restored = OpenAIChatToolOps.p_tool_choice_to_ir(provider)
+        assert restored["mode"] == "tool"
+        assert restored["tool_name"] == "apply_patch"
+        assert restored["tool_type"] == "custom"
