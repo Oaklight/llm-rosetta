@@ -332,7 +332,11 @@ class OpenAIChatToolOps(BaseToolOps):
         tool_input = ir_tool_call.get("tool_input", {})
 
         if tool_type == "custom":
-            if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
+            if (
+                isinstance(tool_input, dict)
+                and len(tool_input) == 1
+                and "input" in tool_input
+            ):
                 input_str = str(tool_input["input"])
             else:
                 input_str = (
