@@ -129,6 +129,11 @@ make build-docker  # Build gateway Docker image
 
 Tooling config (ruff, ty, complexipy) lives in `pyproject.toml`.
 
+## Contributing guidelines
+
+Read `CONTRIBUTING.md` before making changes — it links to the full
+contributing guide, style guide, and architecture guide on ReadTheDocs.
+
 ## Definition of done
 
 1. `make lint` and `make test` exit 0
@@ -140,15 +145,6 @@ Tooling config (ruff, ty, complexipy) lives in `pyproject.toml`.
 7. Converter changes must pass round-trip tests (A→IR→A, A→IR→B,
    A→IR→B→IR→A) — see the
    [Architecture Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/architecture/)
-
-## Contributing guidelines
-
-Full contributing docs on ReadTheDocs — read before making converter
-or architectural changes:
-
-- [Contributing Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/guide/) — workflow, branches, PRs
-- [Style Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/style-guide/) — code style, tooling
-- [Architecture Guide](https://llm-rosetta.readthedocs.io/en/latest/contributing/architecture/) — converter ops modules, shim layer, round-trip compatibility
 
 ## Integration testing with agentabi
 
