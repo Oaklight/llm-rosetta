@@ -842,8 +842,10 @@ class OpenAIResponsesConverter(BaseConverter):
         if handler_name is not None:
             getattr(self, handler_name)(chunk, context, events)
 
-        # All other event types (response.in_progress,
-        # response.output_text.done, etc.) are ignored.
+        # All other event types (response.in_progress, response.queued,
+        # response.output_text.done, etc.) are dropped — response.in_progress
+        # is redundant with response.created and is re-synthesised by
+        # _handle_ir_stream_start_to_p on the to_provider side.
 
         return events
 
@@ -1162,7 +1164,6 @@ class OpenAIResponsesConverter(BaseConverter):
             events.append(StreamEndEvent(type="stream_end"))
 
     _P_TO_IR_DISPATCH: dict[str, str] = {
-        ResponsesEventType.RESPONSE_IN_PROGRESS: "_handle_p_passthrough_to_ir",
         ResponsesEventType.RESPONSE_CREATED: "_handle_p_response_created_to_ir",
         ResponsesEventType.OUTPUT_TEXT_DELTA: "_handle_p_output_text_delta_to_ir",
         ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA: "_handle_p_reasoning_delta_to_ir",
@@ -1226,7 +1227,7 @@ class OpenAIResponsesConverter(BaseConverter):
         self,
         event: StreamStartEvent,
         context: StreamContext | None,
-    ) -> dict[str, Any]:
+    ) -> list[dict[str, Any]]:
         response_id_stem = event["response_id"]
 
         # Store metadata in context if provided (stem, without prefix)
@@ -1270,10 +1271,18 @@ class OpenAIResponsesConverter(BaseConverter):
             # response.created must include usage: null (not yet available)
             response.setdefault("usage", None)
 
-        return {
-            "type": ResponsesEventType.RESPONSE_CREATED,
-            "response": response,
-        }
+        # Both events share the same response snapshot — safe because
+        # nothing between here and json.dumps serialisation mutates it.
+        return [
+            {
+                "type": ResponsesEventType.RESPONSE_CREATED,
+                "response": response,
+            },
+            {
+                "type": ResponsesEventType.RESPONSE_IN_PROGRESS,
+                "response": response,
+            },
+        ]
 
     def _handle_ir_stream_end_to_p(
         self,
