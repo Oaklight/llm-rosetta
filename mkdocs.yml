@@ -200,7 +200,7 @@ nav:
           - Admin API: api/admin.md
           - Observability: api/observability.md
   - Contributing:
-      - contributing/index.md
+      - Contributing Guide: contributing/guide.md
       - Naming Conventions: contributing/naming-conventions.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md
