@@ -68,7 +68,11 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
     # Hot-reload log level
     from llm_rosetta.gateway.logging import setup_logging as _setup_logging
 
-    _setup_logging(verbose=new_config.verbose, log_bodies=new_config.log_bodies)
+    _setup_logging(
+        verbose=new_config.verbose,
+        log_bodies=new_config.log_bodies,
+        log_format=new_config.log_format,
+    )
 
     # Hot-reload log retention caps
     persistence = getattr(request.app, "persistence", None)
