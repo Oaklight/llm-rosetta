@@ -71,19 +71,21 @@ plugins:
           - index.md
         Getting Started:
           - getting-started/installation.md
-          - getting-started/library-quickstart.md
-        Library Guide:
           - guide/concepts.md
+          - getting-started/library-quickstart.md
+          - getting-started/gateway-quickstart.md
+        Library Guide:
+          - guide/compatibility.md
           - guide/converters.md
-          - guide/ir-types.md
           - guide/streaming.md
+          - guide/turn-bridge.md
           - guide/auto-detection.md
+          - guide/ir-types.md
           - guide/api-layers.md
           - guide/api-standards.md
+          - guide/shims.md
           - guide/reasoning.md
           - guide/provider-reasoning.md
-          - guide/shims.md
-          - guide/compatibility.md
           - examples/index.md
           - examples/cross-provider.md
           - examples/tool-calling.md
@@ -105,8 +107,13 @@ plugins:
           - api/tool-ops.md
           - api/shims.md
           - api/utils.md
-          - api/observability.md
           - api/admin.md
+          - api/observability.md
+        Contributing:
+          - contributing/guide.md
+          - contributing/style-guide.md
+          - contributing/architecture.md
+          - contributing/naming-conventions.md
         Roadmap:
           - roadmap.md
         Changelog:
