@@ -97,6 +97,7 @@ plugins:
           - gateway/validation.md
           - gateway/validation-cli.md
           - gateway/validation-sdk.md
+          - gateway/validation-comply.md
         API 参考:
           - api/index.md
           - api/converters.md
@@ -186,6 +187,7 @@ nav:
           - gateway/validation.md
           - CLI 跨格式测试: gateway/validation-cli.md
           - SDK 与集成测试: gateway/validation-sdk.md
+          - 合规性测试: gateway/validation-comply.md
   - API 参考:
       - api/index.md
       - 库 API:
@@ -198,6 +200,7 @@ nav:
           - Admin API: api/admin.md
           - 可观测性: api/observability.md
   - 贡献:
+      - contributing/index.md
       - 命名约定: contributing/naming-conventions.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md

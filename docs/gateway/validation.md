@@ -11,15 +11,15 @@ title: 网关验证报告
 
 ## 跨格式路由矩阵
 
-argo-proxy 将 Claude 模型路由到原生 Anthropic 上游，其他模型（GPT、Gemini）路由到 OpenAI Chat 上游。网关自动在不同认证凭证格式之间转换（`Authorization: Bearer`、`x-api-key`、`x-goog-api-key`）。
+argo-proxy 将 Claude 模型路由到原生 Anthropic 上游，其他模型（GPT、Gemini）路由到 OpenAI Chat 上游。网关始终执行完整的 IR 转换——即使客户端格式与上游格式相同，请求也会经过完整的 Source → IR → Target 管线。认证凭证格式（`Authorization: Bearer`、`x-api-key`、`x-goog-api-key`）会自动转换。
 
 ### 文本生成（9/9 ✓）
 
 | 客户端（API 格式） | Claude 模型 | GPT 模型 | Gemini 模型 |
 |-------------------|:----------:|:--------:|:----------:|
-| **Claude Code**（Anthropic） | ✓ 透传 | ✓ anthropic→openai_chat | ✓ anthropic→openai_chat |
-| **Codex CLI**（OpenAI Responses） | ✓ responses→anthropic | ✓ 透传 | ✓ 透传 |
-| **Gemini CLI**（Google GenAI） | ✓ google→anthropic | ✓ google→openai_chat | ✓ google→openai_chat |
+| **Claude Code**（Anthropic） | ✓ anthropic→IR→anthropic | ✓ anthropic→IR→openai_chat | ✓ anthropic→IR→openai_chat |
+| **Codex CLI**（OpenAI Responses） | ✓ responses→IR→anthropic | ✓ responses→IR→openai_chat | ✓ responses→IR→openai_chat |
+| **Gemini CLI**（Google GenAI） | ✓ google→IR→anthropic | ✓ google→IR→openai_chat | ✓ google→IR→openai_chat |
 
 ### 图像理解（9/9 ✓）
 
@@ -31,7 +31,7 @@ argo-proxy 将 Claude 模型路由到原生 Anthropic 上游，其他模型（GP
 
 ¹ 需要 GPT-5.4+；GPT-4.1-nano 可能无法正确解读 Read 工具返回的图像结果。
 
-可复现命令和详细测试步骤参见 [CLI 跨格式测试](validation-cli.md)。
+可复现命令和详细测试步骤参见 [CLI 跨格式测试](validation-cli.md)。Schema 级别的 API 合规性测试参见[合规性测试](validation-comply.md)。
 
 ---
 
