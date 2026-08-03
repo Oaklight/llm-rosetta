@@ -201,6 +201,8 @@ nav:
           - 可观测性: api/observability.md
   - 贡献:
       - 贡献指南: contributing/guide.md
+      - 风格指南: contributing/style-guide.md
+      - 架构指南: contributing/architecture.md
       - 命名约定: contributing/naming-conventions.md
   - 路线图: roadmap.md
   - 更新日志: changelog.md
