@@ -94,22 +94,15 @@ class TestStreamPassthrough:
         passthrough = cast(ProviderPassthroughEvent, events[0])
         assert passthrough["payload"] is not chunk
 
-    def test_responses_in_progress_emits_passthrough(self):
+    def test_responses_in_progress_dropped(self):
+        """response.in_progress is dropped (re-synthesised on the to_provider side)."""
         chunk = {
             "type": "response.in_progress",
             "sequence_number": 3,
             "response": {"id": "resp_1", "status": "in_progress"},
         }
         events = OpenAIResponsesConverter().stream_response_from_provider(chunk)
-        assert events == [
-            {
-                "type": "provider_passthrough",
-                "provider": "openai_responses",
-                "payload": chunk,
-            }
-        ]
-        passthrough = cast(ProviderPassthroughEvent, events[0])
-        assert passthrough["payload"] is not chunk
+        assert events == []
 
     def test_same_format_restores_copy(self):
         converter = AnthropicConverter()
@@ -410,23 +403,17 @@ class TestNonStreamPassthroughHelpers:
 
 class TestStreamProcessorPassthrough:
     def test_same_format_forwards_passthrough(self):
-        target = OpenAIResponsesConverter()
-        source = OpenAIResponsesConverter()
+        """Anthropic ping events pass through same-format round-trip."""
+        target = AnthropicConverter()
+        source = AnthropicConverter()
         processor = StreamProcessor(
             target_converter=target,
             source_converter=source,
             from_ctx=target.create_stream_context(),
             to_ctx=source.create_stream_context(),
         )
-        result = processor.process_chunk(
-            {
-                "type": "response.in_progress",
-                "sequence_number": 8,
-                "response": {"id": "resp_1", "status": "in_progress"},
-            }
-        )
-        assert result[0]["type"] == "response.in_progress"
-        assert result[0]["sequence_number"] == 1
+        result = processor.process_chunk({"type": "ping"})
+        assert result[0]["type"] == "ping"
 
     def test_cross_format_drops_passthrough(self):
         target = OpenAIResponsesConverter()

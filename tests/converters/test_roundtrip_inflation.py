@@ -461,6 +461,17 @@ OPENAI_RESPONSES_BASIC: list[dict[str, Any]] = [
         },
     },
     {
+        "type": "response.in_progress",
+        "response": {
+            "id": "resp_001",
+            "object": "response",
+            "model": "gpt-4o",
+            "status": "in_progress",
+            "output": [],
+            "usage": None,
+        },
+    },
+    {
         "type": "response.output_item.added",
         "output_index": 0,
         "item": {
@@ -558,6 +569,17 @@ OPENAI_RESPONSES_BASIC: list[dict[str, Any]] = [
 OPENAI_RESPONSES_TOOL_CALL: list[dict[str, Any]] = [
     {
         "type": "response.created",
+        "response": {
+            "id": "resp_002",
+            "object": "response",
+            "model": "gpt-4o",
+            "status": "in_progress",
+            "output": [],
+            "usage": None,
+        },
+    },
+    {
+        "type": "response.in_progress",
         "response": {
             "id": "resp_002",
             "object": "response",

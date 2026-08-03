@@ -261,17 +261,11 @@ class TestStreamResponseFromProvider:
         events = self.converter.stream_response_from_provider(event)
         assert events == []
 
-    def test_response_in_progress_passthrough(self):
-        """response.in_progress is preserved as a passthrough event."""
+    def test_response_in_progress_dropped(self):
+        """response.in_progress is dropped (re-synthesised on the to_provider side)."""
         event = {"type": "response.in_progress", "response": {}}
         events = self.converter.stream_response_from_provider(event)
-        assert events == [
-            {
-                "type": "provider_passthrough",
-                "provider": "openai_responses",
-                "payload": event,
-            }
-        ]
+        assert events == []
 
     def test_output_item_done_ignored(self):
         """response.output_item.done produces no events."""
@@ -875,7 +869,7 @@ class TestStreamResponseToProviderWithContext:
         self.converter = OpenAIResponsesConverter()
 
     def test_stream_start_event(self):
-        """StreamStartEvent → response.created."""
+        """StreamStartEvent → [response.created, response.in_progress]."""
         ctx = OpenAIResponsesStreamContext()
         event = cast(
             StreamStartEvent,
@@ -885,21 +879,22 @@ class TestStreamResponseToProviderWithContext:
                 "model": "gpt-4o",
             },
         )
-        result = cast(
-            dict[str, Any],
-            self.converter.stream_response_to_provider(event, context=ctx),
-        )
-        assert result["type"] == "response.created"
-        assert result["response"]["id"] == "resp_abc123"
-        assert result["response"]["model"] == "gpt-4o"
-        assert result["response"]["status"] == "in_progress"
-        assert result["response"]["output"] == []
+        result = self.converter.stream_response_to_provider(event, context=ctx)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "response.created"
+        assert result[0]["response"]["id"] == "resp_abc123"
+        assert result[0]["response"]["model"] == "gpt-4o"
+        assert result[0]["response"]["status"] == "in_progress"
+        assert result[0]["response"]["output"] == []
+        assert result[1]["type"] == "response.in_progress"
+        assert result[1]["response"] is result[0]["response"]
         assert ctx.response_id == "resp_abc123"
         assert ctx.model == "gpt-4o"
         assert ctx.is_started is True
 
     def test_stream_start_without_context(self):
-        """StreamStartEvent without context still produces response.created."""
+        """StreamStartEvent without context still produces [created, in_progress]."""
         event = cast(
             StreamStartEvent,
             {
@@ -908,9 +903,12 @@ class TestStreamResponseToProviderWithContext:
                 "model": "gpt-4o",
             },
         )
-        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
-        assert result["type"] == "response.created"
-        assert result["response"]["id"] == "resp_abc123"
+        result = self.converter.stream_response_to_provider(event)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "response.created"
+        assert result[0]["response"]["id"] == "resp_abc123"
+        assert result[1]["type"] == "response.in_progress"
 
     def test_stream_end_event(self):
         """StreamEndEvent → empty dict."""
@@ -1142,22 +1140,22 @@ class TestStreamResponseToProviderWithContext:
         """Full stream sequence produces correct events with no duplicates."""
         ctx = OpenAIResponsesStreamContext()
 
-        # 1. StreamStartEvent
-        start_result = cast(
-            dict[str, Any],
-            self.converter.stream_response_to_provider(
-                cast(
-                    StreamStartEvent,
-                    {
-                        "type": "stream_start",
-                        "response_id": "resp_123",
-                        "model": "gpt-4o",
-                    },
-                ),
-                context=ctx,
+        # 1. StreamStartEvent → [response.created, response.in_progress]
+        start_results = self.converter.stream_response_to_provider(
+            cast(
+                StreamStartEvent,
+                {
+                    "type": "stream_start",
+                    "response_id": "resp_123",
+                    "model": "gpt-4o",
+                },
             ),
+            context=ctx,
         )
-        assert start_result["type"] == "response.created"
+        assert isinstance(start_results, list)
+        assert len(start_results) == 2
+        assert start_results[0]["type"] == "response.created"
+        assert start_results[1]["type"] == "response.in_progress"
 
         # 2. ContentBlockStartEvent — with context, first text block emits
         # both output_item.added and content_part.added as a list.
@@ -1251,7 +1249,7 @@ class TestStreamResponseToProviderWithContext:
 
         # Verify: only ONE response.completed was produced in the entire sequence
         all_results: list[Any] = [
-            start_result,
+            *start_results,
             usage_result,
             end_result,
         ]
@@ -2167,8 +2165,10 @@ class TestStreamingResponseIdPrefix:
             "created": 1700000000,
         }
         result = self.converter.stream_response_to_provider(ir_event, context=ctx)
-        assert isinstance(result, dict)
-        assert result["response"]["id"] == "resp_abc123"
+        assert isinstance(result, list)
+        assert result[0]["type"] == "response.created"
+        assert result[0]["response"]["id"] == "resp_abc123"
+        assert result[1]["type"] == "response.in_progress"
         # Context stores the stem (without prefix)
         assert ctx.response_id == "abc123"
 
@@ -2275,8 +2275,8 @@ class TestStreamingPrefixFromContext:
             "created": 1700000000,
         }
         result = self.converter.stream_response_to_provider(ir_event, context=ctx)
-        assert isinstance(result, dict)
-        assert result["response"]["id"] == "custom_abc123"
+        assert isinstance(result, list)
+        assert result[0]["response"]["id"] == "custom_abc123"
 
     def test_finish_uses_context_prefix(self):
         """Finish response uses prefix from context."""
