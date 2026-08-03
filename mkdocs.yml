@@ -97,6 +97,7 @@ plugins:
           - gateway/validation.md
           - gateway/validation-cli.md
           - gateway/validation-sdk.md
+          - gateway/validation-comply.md
         API Reference:
           - api/index.md
           - api/converters.md
@@ -186,6 +187,7 @@ nav:
           - gateway/validation.md
           - CLI Cross-Format Testing: gateway/validation-cli.md
           - SDK & Integration Tests: gateway/validation-sdk.md
+          - Compliance Testing: gateway/validation-comply.md
   - API Reference:
       - api/index.md
       - Library API:
@@ -198,6 +200,7 @@ nav:
           - Admin API: api/admin.md
           - Observability: api/observability.md
   - Contributing:
+      - contributing/index.md
       - Naming Conventions: contributing/naming-conventions.md
   - Roadmap: roadmap.md
   - Changelog: changelog.md

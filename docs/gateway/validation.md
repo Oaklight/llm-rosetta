@@ -11,15 +11,15 @@ This page summarizes end-to-end validation of the LLM-Rosetta Gateway (via [argo
 
 ## Cross-Format Routing Matrix
 
-Argo-proxy routes Claude models to the native Anthropic upstream and all other models (GPT, Gemini) to the OpenAI Chat upstream. The gateway automatically translates between auth credential formats (`Authorization: Bearer`, `x-api-key`, `x-goog-api-key`).
+Argo-proxy routes Claude models to the native Anthropic upstream and all other models (GPT, Gemini) to the OpenAI Chat upstream. The gateway always performs full IR conversion — even when the client format matches the upstream format, the request goes through the complete Source → IR → Target pipeline. Auth credential formats (`Authorization: Bearer`, `x-api-key`, `x-goog-api-key`) are translated automatically.
 
 ### Text Generation (9/9 ✓)
 
 | Client (API Format) | Claude Model | GPT Model | Gemini Model |
 |---------------------|:------------:|:---------:|:------------:|
-| **Claude Code** (Anthropic) | ✓ passthrough | ✓ anthropic→openai_chat | ✓ anthropic→openai_chat |
-| **Codex CLI** (OpenAI Responses) | ✓ responses→anthropic | ✓ passthrough | ✓ passthrough |
-| **Gemini CLI** (Google GenAI) | ✓ google→anthropic | ✓ google→openai_chat | ✓ google→openai_chat |
+| **Claude Code** (Anthropic) | ✓ anthropic→IR→anthropic | ✓ anthropic→IR→openai_chat | ✓ anthropic→IR→openai_chat |
+| **Codex CLI** (OpenAI Responses) | ✓ responses→IR→anthropic | ✓ responses→IR→openai_chat | ✓ responses→IR→openai_chat |
+| **Gemini CLI** (Google GenAI) | ✓ google→IR→anthropic | ✓ google→IR→openai_chat | ✓ google→IR→openai_chat |
 
 ### Image Understanding (9/9 ✓)
 
@@ -31,7 +31,7 @@ Argo-proxy routes Claude models to the native Anthropic upstream and all other m
 
 ¹ Requires GPT-5.4+; GPT-4.1-nano may fail to interpret Read tool image results.
 
-For reproducible commands and detailed test procedures, see [CLI Cross-Format Testing](validation-cli.md).
+For reproducible commands and detailed test procedures, see [CLI Cross-Format Testing](validation-cli.md). For schema-level API compliance testing, see [Compliance Testing](validation-comply.md).
 
 ---
 
