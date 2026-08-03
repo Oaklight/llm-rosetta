@@ -30,20 +30,23 @@ class ToolDefinition(TypedDict):
 
     Source converter contract:
     Provider tool types that fall outside the ``type`` Literal below
-    (e.g. OpenAI Responses' ``"custom"`` hosted tools, or unnamed hosted
-    tools like ``"web_search"``) MUST be coerced to ``"function"`` at the
-    provider→IR boundary so that runtime IR validation
-    (``validate_ir_request``) accepts the result.  Provider-specific
-    information may be retained in ``metadata`` (e.g.
-    ``{"provider_type": "custom"}``) or in the ``_passthrough`` extension
-    for round-tripping.  Target converters' downgrade fallbacks (e.g.
-    ``openai_chat/tool_ops.py``) are defensive only — IR is guaranteed
-    valid by validation.
+    (e.g. unnamed hosted tools like ``"web_search"``) MUST be coerced to
+    ``"function"`` at the provider→IR boundary so that runtime IR
+    validation (``validate_ir_request``) accepts the result.
+    Provider-specific information may be retained in ``metadata`` or in
+    the ``_passthrough`` extension for round-tripping.
+
+    ``"custom"`` is a first-class IR type supported natively by both
+    OpenAI Chat Completions and Responses APIs.  Custom tools accept
+    free-form text input (not JSON); ``parameters`` carries a synthesized
+    ``{"input": string}`` schema for providers that require JSON Schema.
+    Custom tool format info (text/grammar) is stored in ``metadata``.
     """
 
     type: Literal[
         "function",
         "mcp",
+        "custom",
         # 未来陆续支持 Future supports
         # "web_search",
         # "code_interpreter",
@@ -75,6 +78,7 @@ class ToolChoice(TypedDict):
 
     mode: Literal["none", "auto", "any", "tool"]
     tool_name: NotRequired[str]  # 当mode为"tool"时必需
+    tool_type: NotRequired[str]  # "function" (default) or "custom"
 
 
 # ============================================================================

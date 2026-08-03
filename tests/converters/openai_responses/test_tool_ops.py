@@ -108,13 +108,11 @@ class TestOpenAIResponsesToolOps:
         assert result["required_parameters"] == ["query"]
 
     def test_p_tool_definition_to_ir_codex_custom_apply_patch(self):
-        """Codex ``"custom"`` tools (e.g. apply_patch) downgrade to IR function.
+        """Codex ``"custom"`` tools pass through as IR type ``"custom"``.
 
-        Regression test for the IR validation gap introduced in v0.3.0:
-        the IR ToolDefinition.type Literal only accepts ``"function"`` and
-        ``"mcp"``, so the source converter must coerce provider ``"custom"``
-        tools to ``"function"`` rather than carrying the provider type into
-        IR.  See ``types/ir/tools.py`` for the converter contract.
+        Since ``"custom"`` is now a first-class IR type, the source
+        converter preserves it directly.  Format info is stored in
+        ``metadata["format"]`` for cross-format round-trip.
         """
         provider_tool = {
             "type": "custom",
@@ -127,21 +125,15 @@ class TestOpenAIResponsesToolOps:
             },
         }
         result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
-        assert result["type"] == "function"
+        assert result["type"] == "custom"
         assert result["name"] == "apply_patch"
-        # Description is enriched with format hint for cross-provider.
-        assert "Apply a unified-diff style patch." in result["description"]
-        assert "[Output format: grammar, syntax: lark]" in result["description"]
-        # Synthesized parameters for cross-provider degradation.
-        params = result["parameters"]
-        assert params["type"] == "object"
-        assert "input" in params["properties"]
-        assert params["properties"]["input"]["type"] == "string"
-        assert result["required_parameters"] == ["input"]
-        # provider_type is preserved in metadata for diagnostics.
-        assert result["metadata"]["provider_type"] == "custom"
-        assert cast(Any, result)["_passthrough"] == provider_tool
-        assert OpenAIResponsesToolOps.ir_tool_definition_to_p(result) == provider_tool
+        assert result["description"] == "Apply a unified-diff style patch."
+        assert result["metadata"]["format"] == provider_tool["format"]
+        # Round-trip: IR → provider restores original shape.
+        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(result)
+        assert restored["type"] == "custom"
+        assert restored["name"] == "apply_patch"
+        assert restored["format"] == provider_tool["format"]
 
     def test_tool_definition_round_trip(self):
         """Test tool definition round-trip."""

@@ -146,13 +146,26 @@ class OpenAIResponsesToolOps(BaseToolOps):
         if passthrough is not None:
             return dict(passthrough)
 
-        # After #177, all non-function tools entering IR are coerced to
-        # type="function" and carry _passthrough (handled above).  Only
-        # genuine function tools reach here.
+        tool_type = ir_tool.get("type", "function")
+
+        if tool_type == "custom":
+            result: dict[str, Any] = {
+                "type": "custom",
+                "name": ir_tool["name"],
+            }
+            desc = ir_tool.get("description", "")
+            if desc:
+                result["description"] = desc
+            metadata = ir_tool.get("metadata") or {}
+            fmt = metadata.get("format")
+            if fmt:
+                result["format"] = fmt
+            return result
+
         parameters = ir_tool.get("parameters", {})
         if isinstance(parameters, dict):
             parameters = sanitize_schema(parameters)
-        result: dict[str, Any] = {
+        result = {
             "type": "function",
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
@@ -181,9 +194,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             IR ToolDefinition.
         """
-        # IR ToolDefinition.type is restricted to Literal["function", "mcp"];
-        # see types/ir/tools.py.
-        _IR_ALLOWED_TYPES = {"function", "mcp"}
+        _IR_ALLOWED_TYPES = {"function", "mcp", "custom"}
 
         # Handle nested format ({"type": "function", "function": {...}})
         if "function" in provider_tool and isinstance(provider_tool["function"], dict):
@@ -268,9 +279,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
             result["required_parameters"] = []
 
         downgraded_from = result.pop("_downgraded_from", None)
-        result["metadata"] = (
+        meta: dict[str, Any] = (
             {"provider_type": downgraded_from} if downgraded_from else {}
         )
+        fmt = provider_tool.get("format")
+        if fmt:
+            meta["format"] = fmt
+        result["metadata"] = meta
         return cast(ToolDefinition, result)
 
     # ==================== Tool Choice ====================
@@ -308,8 +323,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
             if not tool_name and "function" in ir_tool_choice:
                 tool_name = cast(dict, ir_tool_choice)["function"].get("name")
             if tool_name:
-                # Responses API format: {"type": "function", "name": "..."}
-                # (NOT Chat Completions format which nests under "function" key)
+                if ir_tool_choice.get("tool_type") == "custom":
+                    return {"type": "custom", "name": tool_name}
                 return {"type": "function", "name": tool_name}
             return "required"
 
@@ -341,9 +356,16 @@ class OpenAIResponsesToolOps(BaseToolOps):
             return cast(ToolChoice, {"mode": "auto", "tool_name": ""})
 
         if isinstance(provider_tool_choice, dict):
+            if provider_tool_choice.get("type") == "custom":
+                return cast(
+                    ToolChoice,
+                    {
+                        "mode": "tool",
+                        "tool_name": provider_tool_choice.get("name", ""),
+                        "tool_type": "custom",
+                    },
+                )
             if provider_tool_choice.get("type") == "function":
-                # Support both Responses format {"name": "..."} and
-                # Chat Completions format {"function": {"name": "..."}}
                 tool_name = provider_tool_choice.get("name", "")
                 if not tool_name:
                     func = provider_tool_choice.get("function", {})

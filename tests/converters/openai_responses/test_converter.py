@@ -194,11 +194,8 @@ class TestOpenAIResponsesConverter:
     def test_request_from_provider_codex_custom_tool_passes_validation(self):
         """End-to-end: a Codex ``"custom"`` apply_patch tool passes IR validation.
 
-        Regression test for the IR validator added in v0.3.0 (commit 5dc1b94)
-        rejecting ``tools[i].type == "custom"`` because IR's ToolDefinition
-        Literal only allows ``"function"`` and ``"mcp"``.  The source
-        converter must downgrade unknown provider tool types to ``"function"``
-        so the request reaches the target converter.
+        ``"custom"`` is now a first-class IR type, so the source converter
+        preserves it directly instead of downgrading to ``"function"``.
         """
         provider_request = {
             "model": "gpt-5.4",
@@ -228,16 +225,14 @@ class TestOpenAIResponsesConverter:
                 },
             ],
         }
-        # Must not raise — pre-fix this raised ValidationError with
-        # "Expected one of ('function', 'mcp') at 'tools[1].type', got 'custom'".
         result = self.converter.request_from_provider(provider_request)
         tools = list(result["tools"])
         assert len(tools) == 2
         assert tools[0]["type"] == "function"
         assert tools[0]["name"] == "shell"
-        assert tools[1]["type"] == "function"
+        assert tools[1]["type"] == "custom"
         assert tools[1]["name"] == "apply_patch"
-        assert tools[1]["metadata"]["provider_type"] == "custom"
+        assert tools[1]["metadata"]["format"]["type"] == "grammar"
 
     def test_request_from_provider_malformed_tool_raises_with_context(self):
         """Test that malformed tools raise clear errors with tool type/name context."""
