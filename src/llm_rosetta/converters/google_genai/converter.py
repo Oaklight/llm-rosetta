@@ -1101,9 +1101,30 @@ class GoogleGenAIConverter(BaseConverter):
     def _handle_ir_stream_end_to_p(
         self, event: StreamEndEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        """Handle StreamEndEvent → mark ended, no output."""
+        """Handle StreamEndEvent → flush any buffered usage, mark ended.
+
+        When usage arrives after the finish chunk (e.g. OpenAI streaming
+        sends usage in a separate final chunk), pending_usage won't have
+        been merged into the finish chunk. Emit it here so it's not lost.
+        """
         if context is not None:
+            usage = context.pop_pending_usage()
             context.mark_ended()
+            if usage is not None:
+                usage_metadata: dict[str, Any] = {
+                    "promptTokenCount": usage.get("prompt_tokens") or 0,
+                    "candidatesTokenCount": usage.get("completion_tokens") or 0,
+                    "totalTokenCount": usage.get("total_tokens") or 0,
+                }
+                if "reasoning_tokens" in usage:
+                    usage_metadata["thoughtsTokenCount"] = usage["reasoning_tokens"]
+                if "cache_read_tokens" in usage:
+                    usage_metadata["cachedContentTokenCount"] = usage[
+                        "cache_read_tokens"
+                    ]
+                return self._inject_stream_metadata(
+                    {"usageMetadata": usage_metadata}, context
+                )
         return {}
 
     def _handle_ir_content_block_start_to_p(
