@@ -572,9 +572,9 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     from .transport import HttpTransport
 
     metadata_store = ProviderMetadataStore()
-    transport = HttpTransport()
+    transport = HttpTransport(timeout=config.upstream_timeout)
 
-    app = App(max_body_size=50_000_000, read_timeout=300.0)
+    app = App(max_body_size=50_000_000, read_timeout=config.read_timeout)
 
     # --- Routes ---
     app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)

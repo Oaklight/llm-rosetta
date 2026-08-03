@@ -292,6 +292,13 @@ class GatewayConfig:
         # path (e.g. "/admin").  Disabled by default (no redirect).
         self.root_redirect: str | None = _server.get("root_redirect")
 
+        # Timeout settings (seconds).  upstream_timeout governs the entire
+        # upstream HTTP lifecycle: connect, header-read, and per-chunk
+        # streaming reads.  read_timeout governs how long the inbound
+        # httpserver waits for the client to send a complete request.
+        self.upstream_timeout: float = float(_server.get("upstream_timeout", 300.0))
+        self.read_timeout: float = float(_server.get("read_timeout", 300.0))
+
         # Request-log retention knobs (consumed by setup_admin).  Kept as
         # a raw dict here so admin layer owns the resolution policy.
         self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
