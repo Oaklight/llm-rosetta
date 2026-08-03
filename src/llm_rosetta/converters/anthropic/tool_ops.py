@@ -332,6 +332,12 @@ class AnthropicToolOps(BaseToolOps):
         if "provider_metadata" in ir_tool_call:
             result["_provider_metadata"] = ir_tool_call["provider_metadata"]
 
+        # Restore caller from provider_metadata or default to direct
+        pm = ir_tool_call.get("provider_metadata") or {}
+        caller = pm.get("anthropic_caller", {"type": "direct"})
+        if result["type"] == "tool_use":
+            result["caller"] = caller
+
         # Preserve cache_hint → cache_control
         cache_hint = ir_tool_call.get("cache_hint")
         if cache_hint is not None:
@@ -371,6 +377,11 @@ class AnthropicToolOps(BaseToolOps):
         pm = provider_tool_call.get("_provider_metadata")
         if pm:
             part["provider_metadata"] = pm
+
+        # Preserve non-default caller for Anthropic round-trip
+        caller = provider_tool_call.get("caller")
+        if isinstance(caller, dict) and caller.get("type") != "direct":
+            part.setdefault("provider_metadata", {})["anthropic_caller"] = caller
 
         # Read cache_control → cache_hint
         cache_control = provider_tool_call.get("cache_control")

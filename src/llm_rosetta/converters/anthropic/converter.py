@@ -393,6 +393,10 @@ class AnthropicConverter(BaseConverter):
                     elif is_refusal_part(part):
                         refusal_part = part
 
+                # Add citations: null to text blocks (spec requires it on ResponseTextBlock)
+                for block in anthropic_content:
+                    if block.get("type") == "text":
+                        block.setdefault("citations", None)
                 provider_response["content"] = anthropic_content
 
             # Map finish_reason back to stop_reason
@@ -419,6 +423,7 @@ class AnthropicConverter(BaseConverter):
         # Ensure nullable required fields are always present (spec compliance)
         provider_response.setdefault("stop_sequence", None)
         provider_response.setdefault("stop_details", None)
+        provider_response.setdefault("container", None)
 
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}
@@ -566,6 +571,8 @@ class AnthropicConverter(BaseConverter):
             "model",
             "stop_reason",
             "stop_sequence",
+            "stop_details",
+            "container",
             "usage",
         }
         extras = {
@@ -622,6 +629,8 @@ class AnthropicConverter(BaseConverter):
             "model",
             "stop_reason",
             "stop_sequence",
+            "stop_details",
+            "container",
             "usage",
         }
         for k, v in echo.items():
@@ -949,6 +958,7 @@ class AnthropicConverter(BaseConverter):
                 "stop_reason": None,
                 "stop_sequence": None,
                 "stop_details": None,
+                "container": None,
                 "usage": p_usage,
             },
         }
@@ -1219,6 +1229,7 @@ class AnthropicConverter(BaseConverter):
                     delta_payload["stop_details"] = stop_details
                 delta_payload.setdefault("stop_sequence", None)
                 delta_payload.setdefault("stop_details", None)
+                delta_payload.setdefault("container", None)
                 results.append(
                     {
                         "type": AnthropicEventType.MESSAGE_DELTA,
@@ -1233,6 +1244,7 @@ class AnthropicConverter(BaseConverter):
                     finish_delta["stop_details"] = stop_details
                 finish_delta.setdefault("stop_sequence", None)
                 finish_delta.setdefault("stop_details", None)
+                finish_delta.setdefault("container", None)
                 context.buffer_finish(finish_delta)
             return results if results else {}
         return {
@@ -1241,6 +1253,7 @@ class AnthropicConverter(BaseConverter):
                 "stop_reason": stop_reason,
                 "stop_sequence": None,
                 "stop_details": None,
+                "container": None,
             },
             "usage": self._build_message_delta_usage(),
         }

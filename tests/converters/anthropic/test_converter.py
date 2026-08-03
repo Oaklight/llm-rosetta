@@ -1363,3 +1363,234 @@ class TestAnthropicStopFieldsCompliance:
         assert result["type"] == "message_delta"
         assert result["delta"]["stop_sequence"] is None
         assert result["delta"]["stop_details"] is None
+
+
+class TestAnthropicContentBlockCompliance:
+    """Tests for caller, citations, container spec compliance (#414)."""
+
+    def setup_method(self):
+        self.converter = AnthropicConverter()
+
+    # --- ToolUseBlock.caller ---
+
+    def test_tool_use_has_caller_default(self):
+        """IR→A: tool_use block includes caller: {"type": "direct"} by default."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_caller",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_call",
+                                    "tool_call_id": "toolu_123",
+                                    "tool_name": "get_weather",
+                                    "tool_input": {"city": "Tokyo"},
+                                }
+                            ],
+                        },
+                        "finish_reason": {"reason": "tool_calls"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 5,
+                    "total_tokens": 15,
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        tool_block = result["content"][0]
+        assert tool_block["caller"] == {"type": "direct"}
+
+    def test_caller_round_trip_direct(self):
+        """A→IR→A: direct caller round-trips."""
+        provider_response = {
+            "id": "msg_caller_rt",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_abc",
+                    "name": "search",
+                    "input": {"q": "hello"},
+                    "caller": {"type": "direct"},
+                }
+            ],
+            "stop_reason": "tool_use",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir)
+        assert restored["content"][0]["caller"] == {"type": "direct"}
+
+    def test_caller_round_trip_code_execution(self):
+        """A→IR→A: non-direct caller preserved via provider_metadata."""
+        provider_response = {
+            "id": "msg_caller_ce",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3",
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "toolu_xyz",
+                    "name": "run_code",
+                    "input": {},
+                    "caller": {
+                        "type": "code_execution_20250825",
+                        "tool_id": "srvtoolu_abc123",
+                    },
+                }
+            ],
+            "stop_reason": "tool_use",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+        ir = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir)
+        assert restored["content"][0]["caller"] == {
+            "type": "code_execution_20250825",
+            "tool_id": "srvtoolu_abc123",
+        }
+
+    def test_cross_format_tool_use_has_caller(self):
+        """B→IR→A: OpenAI tool call gets default caller."""
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        openai = OpenAIChatConverter()
+        openai_response = {
+            "id": "chatcmpl-c",
+            "object": "chat.completion",
+            "model": "gpt-4",
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_1",
+                                "type": "function",
+                                "function": {
+                                    "name": "search",
+                                    "arguments": '{"q":"hi"}',
+                                },
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ],
+            "usage": {"prompt_tokens": 5, "completion_tokens": 3, "total_tokens": 8},
+        }
+        ir = openai.response_from_provider(openai_response)
+        anthropic_out = self.converter.response_to_provider(ir)
+        tool_block = [b for b in anthropic_out["content"] if b["type"] == "tool_use"][0]
+        assert tool_block["caller"] == {"type": "direct"}
+
+    # --- TextBlock.citations ---
+
+    def test_text_block_has_citations_null(self):
+        """IR→A: text block includes citations: null."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_cite",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hello"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        assert result["content"][0]["citations"] is None
+
+    def test_citations_round_trip_null(self):
+        """A→IR→A: citations: null round-trips."""
+        provider_response = {
+            "id": "msg_cite_rt",
+            "type": "message",
+            "role": "assistant",
+            "model": "claude-3",
+            "content": [{"type": "text", "text": "Hi"}],
+            "stop_reason": "end_turn",
+            "usage": {"input_tokens": 5, "output_tokens": 2},
+        }
+        ir = self.converter.response_from_provider(provider_response)
+        restored = self.converter.response_to_provider(ir)
+        assert restored["content"][0]["citations"] is None
+
+    # --- container ---
+
+    def test_response_has_container_null(self):
+        """IR→A: response includes container: null."""
+        ir_response = cast(
+            IRResponse,
+            {
+                "id": "resp_cont",
+                "object": "response",
+                "created": 1700000000,
+                "model": "claude-3",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "Hi"}],
+                        },
+                        "finish_reason": {"reason": "stop"},
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 5,
+                    "completion_tokens": 2,
+                    "total_tokens": 7,
+                },
+            },
+        )
+        result = self.converter.response_to_provider(ir_response)
+        assert result["container"] is None
+
+    def test_stream_message_start_has_container(self):
+        """message_start scaffold includes container: null."""
+        from llm_rosetta.types.ir import StreamStartEvent
+
+        event = cast(
+            StreamStartEvent,
+            {"type": "stream_start", "response_id": "msg_c", "model": "test"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["message"]["container"] is None
+
+    def test_stream_message_delta_has_container(self):
+        """message_delta delta includes container: null."""
+        event = cast(
+            FinishEvent,
+            {"type": "finish", "finish_reason": {"reason": "stop"}},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["delta"]["container"] is None
