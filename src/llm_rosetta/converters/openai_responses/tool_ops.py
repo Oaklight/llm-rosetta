@@ -603,13 +603,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
 
     @staticmethod
     def ir_tool_result_to_p(ir_tool_result: ToolResultPart, **kwargs: Any) -> dict:
-        """IR ToolResultPart → OpenAI Responses function_call_output item.
+        """IR ToolResultPart → OpenAI Responses tool call output item.
 
-        Args:
-            ir_tool_result: IR tool result part.
-
-        Returns:
-            OpenAI Responses function_call_output item dict.
+        Emits ``custom_tool_call_output`` when the context indicates the
+        tool call was custom, otherwise ``function_call_output``.
         """
         result_content = ir_tool_result.get("result") or ir_tool_result.get(
             "content", ""
@@ -628,17 +625,28 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             output = str(result_content)
 
+        call_id = ir_tool_result["tool_call_id"]
+        ctx = kwargs.get("context")
+        tool_type = ctx.get_tool_type(call_id) if ctx is not None else "function"
+
+        if tool_type == "custom":
+            return {
+                "type": "custom_tool_call_output",
+                "call_id": call_id,
+                "output": output,
+            }
         return {
             "type": "function_call_output",
-            "call_id": ir_tool_result["tool_call_id"],
+            "call_id": call_id,
             "output": output,
         }
 
     @staticmethod
     def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
-        """OpenAI Responses function_call_output → IR ToolResultPart.
+        """OpenAI Responses tool call output → IR ToolResultPart.
 
-        Handles both function_call_output and mcp_call_output.
+        Handles function_call_output, custom_tool_call_output, and
+        mcp_call_output.
 
         Args:
             provider_tool_result: OpenAI Responses tool result item dict.

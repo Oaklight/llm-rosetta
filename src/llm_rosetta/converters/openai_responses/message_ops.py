@@ -347,7 +347,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         }
     )
 
-    _TOOL_RESULT_TYPES = frozenset({"function_call_output", "mcp_call_output"})
+    _TOOL_RESULT_TYPES = frozenset(
+        {"function_call_output", "custom_tool_call_output", "mcp_call_output"}
+    )
 
     @classmethod
     def is_portable_response_output_item(cls, item: Any) -> bool:
