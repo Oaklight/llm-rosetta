@@ -57,11 +57,19 @@ class BaseConverter(ABC):
     _CONVERTER_TAG: str = ""
 
     # Provider response list field for passthrough item restoration.
-    # Subclasses MUST set this (e.g. "choices", "output", "content", "candidates").
+    # Concrete subclasses MUST set this (enforced by __init_subclass__).
     _PASSTHROUGH_RESTORE_KEY: str = ""
 
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        if (
+            not getattr(cls, "__abstractmethods__", set())
+            and not cls._PASSTHROUGH_RESTORE_KEY
+        ):
+            raise TypeError(f"{cls.__name__} must set _PASSTHROUGH_RESTORE_KEY")
 
     # Default dispatch table for stream_response_to_provider.
     # Maps IR stream event types to handler method names.
