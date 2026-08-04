@@ -36,7 +36,6 @@ from ..base import BaseMessageOps
 from ..base.helpers.multimodal_tool_patch import (
     has_multimodal_content,
     inject_packed_tool_content,
-    is_synthetic_tool_content_msg,
     pack_multimodal_tool_result,
     unpack_tool_content,
 )
@@ -109,8 +108,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 warnings.extend(ext_warnings)
 
         messages = self._reorder_tool_messages(messages, warnings)
-        if multimodal_packs:
-            messages = self._inject_packed_tool_content(messages, multimodal_packs)
+        if multimodal_packs and not kwargs.get(
+            "supports_multimodal_tool_result", False
+        ):
+            messages = inject_packed_tool_content(messages, multimodal_packs)
         return messages, warnings
 
     @staticmethod
@@ -432,11 +433,6 @@ class OpenAIChatMessageOps(BaseMessageOps):
         )
         return self.tool_ops.ir_tool_result_to_p(part)
 
-    @staticmethod
-    def _inject_packed_tool_content(messages, multimodal_packs):
-        """Thin wrapper around shared ``inject_packed_tool_content``."""
-        return inject_packed_tool_content(messages, multimodal_packs)
-
     # ==================== Provider → IR ====================
 
     def p_messages_to_ir(
@@ -455,7 +451,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         Returns:
             List of IR messages.
         """
-        unpacked_content, clean_messages = self._unpack_tool_content(provider_messages)
+        unpacked_content, clean_messages = unpack_tool_content(provider_messages)
 
         ir_messages: list[IRInputItem] = []
         for msg in clean_messages:
@@ -639,18 +635,6 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 )
             ],
         }
-
-    # ==================== Multimodal Unpacking ====================
-
-    @staticmethod
-    def _is_synthetic_tool_content_msg(msg):
-        """Thin wrapper around shared ``is_synthetic_tool_content_msg``."""
-        return is_synthetic_tool_content_msg(msg)
-
-    @staticmethod
-    def _unpack_tool_content(messages):
-        """Thin wrapper around shared ``unpack_tool_content``."""
-        return unpack_tool_content(messages)
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single OpenAI content part to IR content part(s).
