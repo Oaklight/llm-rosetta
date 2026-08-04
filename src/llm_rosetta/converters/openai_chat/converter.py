@@ -62,6 +62,7 @@ class OpenAIChatConverter(BaseConverter):
     config_ops_class = OpenAIChatConfigOps
     _CONVERTER_TAG = "openai_chat"
     _PASSTHROUGH_RESTORE_KEY = "choices"
+    SUPPORTS_MULTIMODAL_TOOL_RESULT = False
 
     def __init__(self):
         self.content_ops = self.content_ops_class()

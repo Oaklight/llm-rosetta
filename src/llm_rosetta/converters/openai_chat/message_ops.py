@@ -33,25 +33,17 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from ._constants import TOOL_CONTENT_CLOSE_TAG, TOOL_CONTENT_OPEN_TAG_RE
+from ..base.helpers.multimodal_tool_patch import (
+    has_multimodal_content,
+    inject_packed_tool_content,
+    is_synthetic_tool_content_msg,
+    pack_multimodal_tool_result,
+    unpack_tool_content,
+)
 from .content_ops import OpenAIChatContentOps
 from .tool_ops import OpenAIChatToolOps
 
 logger = logging.getLogger(__name__)
-
-
-def _has_multimodal_content(result: Any) -> bool:
-    """Check if a tool result contains multimodal content blocks.
-
-    Returns True if ``result`` is a list containing at least one
-    non-text content block (image, file, etc.).
-    """
-    if not isinstance(result, list):
-        return False
-    return any(
-        isinstance(block, dict) and block.get("type") not in ("text", None)
-        for block in result
-    )
 
 
 class OpenAIChatMessageOps(BaseMessageOps):
@@ -420,12 +412,9 @@ class OpenAIChatMessageOps(BaseMessageOps):
     ) -> dict[str, Any]:
         """Convert an IR ToolResultPart, packing multimodal content for dual encoding.
 
-        If the result contains multimodal content (images, files, etc.), the
-        visual content blocks are extracted and stored in ``multimodal_packs``
-        for later injection as a synthetic user message. The tool message itself
-        keeps ``json.dumps(result)`` as content (Phase 1 fallback).
-
-        Text-only results delegate directly to ``tool_ops.ir_tool_result_to_p()``.
+        Delegates to the shared ``pack_multimodal_tool_result`` helper for
+        multimodal extraction; text-only results go straight through
+        ``tool_ops.ir_tool_result_to_p()``.
 
         Args:
             part: IR tool result part.
@@ -436,97 +425,17 @@ class OpenAIChatMessageOps(BaseMessageOps):
             OpenAI tool role message dict.
         """
         result = part.get("result", "")
-        if not _has_multimodal_content(result):
+        if not has_multimodal_content(result):
             return self.tool_ops.ir_tool_result_to_p(part)
-
-        # Multimodal: extract visual content for synthetic user message
-        call_id = part["tool_call_id"]
-        packed_parts: list[dict[str, Any]] = []
-
-        for block in result:
-            if not isinstance(block, dict):
-                continue
-            block_type = block.get("type")
-            if block_type == "text":
-                packed_parts.append(self.content_ops.ir_text_to_p(block))
-            elif block_type == "image":
-                try:
-                    packed_parts.append(self.content_ops.ir_image_to_p(block))
-                except ValueError as e:
-                    warnings.append(f"Skipped image in tool result packing: {e}")
-            elif block_type == "file":
-                warnings.append(
-                    "File content not supported in OpenAI Chat tool result packing, "
-                    "skipped"
-                )
-            else:
-                warnings.append(
-                    f"Unsupported block type in tool result packing: {block_type}"
-                )
-
-        if packed_parts:
-            multimodal_packs[call_id] = packed_parts
-
-        # Tool message keeps json.dumps fallback (existing Phase 1 behavior)
+        pack_multimodal_tool_result(
+            result, self.content_ops, multimodal_packs, part["tool_call_id"], warnings
+        )
         return self.tool_ops.ir_tool_result_to_p(part)
 
     @staticmethod
-    def _inject_packed_tool_content(
-        messages: list[dict[str, Any]],
-        multimodal_packs: dict[str, list[dict[str, Any]]],
-    ) -> list[dict[str, Any]]:
-        """Inject synthetic user message with packed multimodal tool content.
-
-        Walks the reordered message list and, after each group of consecutive
-        tool messages following an assistant, inserts a synthetic user message
-        containing ``<tool-content call-id="...">`` tagged content blocks for
-        any tool results that have multimodal content.
-
-        Args:
-            messages: Reordered OpenAI Chat messages.
-            multimodal_packs: Mapping of call_id → provider content blocks.
-
-        Returns:
-            Messages list with synthetic user messages injected.
-        """
-        if not multimodal_packs:
-            return messages
-
-        result: list[dict[str, Any]] = []
-        i = 0
-
-        while i < len(messages):
-            msg = messages[i]
-            result.append(msg)
-            i += 1
-
-            # After tool messages group, check for packed content
-            if msg.get("role") != "tool":
-                continue
-
-            # Collect consecutive tool messages (already appended first one)
-            tool_call_ids = [msg.get("tool_call_id")]
-            while i < len(messages) and messages[i].get("role") == "tool":
-                result.append(messages[i])
-                tool_call_ids.append(messages[i].get("tool_call_id"))
-                i += 1
-
-            # Build synthetic user message for packed call_ids
-            synthetic_parts: list[dict[str, Any]] = []
-            for tcid in tool_call_ids:
-                if tcid and tcid in multimodal_packs:
-                    synthetic_parts.append(
-                        {"type": "text", "text": f'<tool-content call-id="{tcid}">'}
-                    )
-                    synthetic_parts.extend(multimodal_packs[tcid])
-                    synthetic_parts.append(
-                        {"type": "text", "text": TOOL_CONTENT_CLOSE_TAG}
-                    )
-
-            if synthetic_parts:
-                result.append({"role": "user", "content": synthetic_parts})
-
-        return result
+    def _inject_packed_tool_content(messages, multimodal_packs):
+        """Thin wrapper around shared ``inject_packed_tool_content``."""
+        return inject_packed_tool_content(messages, multimodal_packs)
 
     # ==================== Provider → IR ====================
 
@@ -734,91 +643,14 @@ class OpenAIChatMessageOps(BaseMessageOps):
     # ==================== Multimodal Unpacking ====================
 
     @staticmethod
-    def _is_synthetic_tool_content_msg(msg: dict[str, Any]) -> bool:
-        """Check if a user message is a synthetic tool content message.
-
-        A synthetic message has ``role: "user"`` and its content list starts
-        with a text part matching the ``<tool-content call-id="...">`` tag.
-
-        Args:
-            msg: OpenAI message dict.
-
-        Returns:
-            True if the message is a synthetic tool content message.
-        """
-        if msg.get("role") != "user":
-            return False
-        content = msg.get("content")
-        if not isinstance(content, list) or not content:
-            return False
-        first = content[0]
-        if isinstance(first, dict) and first.get("type") == "text":
-            return bool(TOOL_CONTENT_OPEN_TAG_RE.match(first.get("text", "")))
-        return False
+    def _is_synthetic_tool_content_msg(msg):
+        """Thin wrapper around shared ``is_synthetic_tool_content_msg``."""
+        return is_synthetic_tool_content_msg(msg)
 
     @staticmethod
-    def _unpack_tool_content(
-        messages: list[dict[str, Any]],
-    ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
-        """Extract multimodal content from synthetic user messages.
-
-        Scans for synthetic user messages containing ``<tool-content>`` tags,
-        parses the tags to extract ``call_id → content blocks`` mapping, and
-        removes the synthetic messages from the message list.
-
-        Args:
-            messages: OpenAI Chat messages (may contain synthetic user messages).
-
-        Returns:
-            Tuple of (unpacked_content mapping, clean message list).
-        """
-        unpacked: dict[str, list[dict[str, Any]]] = {}
-        clean: list[dict[str, Any]] = []
-
-        for msg in messages:
-            if not OpenAIChatMessageOps._is_synthetic_tool_content_msg(msg):
-                clean.append(msg)
-                continue
-
-            # Parse <tool-content call-id="..."> sections
-            content = msg.get("content", [])
-            current_call_id: str | None = None
-            current_blocks: list[dict[str, Any]] = []
-
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-
-                if part.get("type") == "text":
-                    text = part.get("text", "")
-
-                    # Check for open tag
-                    open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
-                    if open_match:
-                        # Save previous section if any
-                        if current_call_id and current_blocks:
-                            unpacked[current_call_id] = current_blocks
-                        current_call_id = open_match.group(1)
-                        current_blocks = []
-                        continue
-
-                    # Check for close tag
-                    if text == TOOL_CONTENT_CLOSE_TAG:
-                        if current_call_id and current_blocks:
-                            unpacked[current_call_id] = current_blocks
-                        current_call_id = None
-                        current_blocks = []
-                        continue
-
-                # Content block within a section
-                if current_call_id is not None:
-                    current_blocks.append(part)
-
-            # Handle unclosed section
-            if current_call_id and current_blocks:
-                unpacked[current_call_id] = current_blocks
-
-        return unpacked, clean
+    def _unpack_tool_content(messages):
+        """Thin wrapper around shared ``unpack_tool_content``."""
+        return unpack_tool_content(messages)
 
     def _p_content_part_to_ir(self, provider_part: Any) -> list[ContentPart]:
         """Convert a single OpenAI content part to IR content part(s).
