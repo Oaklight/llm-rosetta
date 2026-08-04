@@ -50,10 +50,15 @@ class BaseConverter(ABC):
     # Instance-level ops (set by subclass __init__).
     # Declared here so the type checker sees them on BaseConverter.
     tool_ops: Any
+    message_ops: Any
 
     # Converter identity tag for cache key namespacing.
     # Subclasses MUST set this to a unique string (e.g. "anthropic").
     _CONVERTER_TAG: str = ""
+
+    # Provider response list field for passthrough item restoration.
+    # Subclasses MUST set this (e.g. "choices", "output", "content", "candidates").
+    _PASSTHROUGH_RESTORE_KEY: str = ""
 
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
@@ -100,9 +105,8 @@ class BaseConverter(ABC):
             return f"{prefix}{stem}"
         return stem
 
-    # ==================== 顶层转换接口 Top-level conversion interface ====================
+    # ==================== Template methods (public API) ====================
 
-    @abstractmethod
     def request_to_provider(
         self,
         ir_request: IRRequest,
@@ -110,34 +114,15 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[dict[str, Any], list[str]]:
-        """将IRRequest转换为provider请求参数
-        Convert IRRequest to provider request parameters
+        """Convert IRRequest to provider request parameters.
 
-        这是最高层的转换方法，会调用各个功能域的ops类来完成转换：
-        - 使用message_ops处理messages字段
-        - 使用config_ops处理generation、stream等配置字段
-        - 使用tool_ops处理tools、tool_choice等工具字段
-
-        This is the highest-level conversion method that calls ops classes from various functional domains:
-        - Uses message_ops to handle messages field
-        - Uses config_ops to handle generation, stream and other config fields
-        - Uses tool_ops to handle tools, tool_choice and other tool fields
-
-        Subclass helper: call ``self._apply_tool_config(ir_request, result, ctx)``
-        to handle the tools / tool_choice / tool_config fields.
-
-        Args:
-            ir_request: IR格式的完整请求
-            context: Optional conversion context for carrying warnings,
-                options, and metadata through the pipeline.
-            **kwargs: 额外参数
-
-        Returns:
-            Tuple[转换后的请求参数, 警告信息列表]
+        Template method: creates a fallback ConversionContext, delegates to
+        ``_do_request_to_provider``, and returns ``(result, ctx.warnings)``.
         """
-        pass
+        ctx = context if context is not None else ConversionContext()
+        result = self._do_request_to_provider(ir_request, context=ctx, **kwargs)
+        return result, ctx.warnings
 
-    @abstractmethod
     def request_from_provider(
         self,
         provider_request: dict[str, Any],
@@ -145,23 +130,17 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRRequest:
-        """将provider请求转换为IRRequest
-        Convert provider request to IRRequest
+        """Convert provider request to IRRequest.
 
-        Subclass helper: call ``self._convert_p_tools_to_ir(tools)`` to convert
-        provider tool definitions to IR format.
-
-        Args:
-            provider_request: Provider格式的请求
-            context: Optional conversion context.
-            **kwargs: 额外参数
-
-        Returns:
-            IR格式的请求
+        Template method: normalizes input, delegates to
+        ``_do_request_from_provider``, and validates the IR output.
         """
-        pass
+        provider_request = self._normalize(provider_request)
+        ir_request = self._do_request_from_provider(
+            provider_request, context=context, **kwargs
+        )
+        return self._validate_ir_request(ir_request)
 
-    @abstractmethod
     def response_from_provider(
         self,
         provider_response: dict[str, Any],
@@ -169,23 +148,20 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> IRResponse:
-        """将provider响应转换为IRResponse
-        Convert provider response to IRResponse
+        """Convert provider response to IRResponse.
 
-        Subclass helper: call ``self._build_p_usage_to_ir(p_usage)`` to convert
-        provider usage to IR format.
-
-        Args:
-            provider_response: Provider格式的响应
-            context: Optional conversion context.
-            **kwargs: 额外参数
-
-        Returns:
-            IR格式的响应
+        Template method: normalizes input, delegates to
+        ``_do_response_from_provider``, runs preserve-mode capture,
+        and validates the IR output.
         """
-        pass
+        provider_response = self._normalize(provider_response)
+        ctx = context if context is not None else ConversionContext()
+        ir_response = self._do_response_from_provider(
+            provider_response, context=ctx, **kwargs
+        )
+        self._capture_preserve_metadata(provider_response, ir_response, ctx)
+        return self._validate_ir_response(ir_response)
 
-    @abstractmethod
     def response_to_provider(
         self,
         ir_response: IRResponse,
@@ -193,23 +169,27 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """将IRResponse转换为provider响应
-        Convert IRResponse to provider response
+        """Convert IRResponse to provider response.
 
-        Subclass helper: call ``self._build_ir_usage_to_p(ir_usage)`` to convert
-        IR usage to provider format.
-
-        Args:
-            ir_response: IR格式的响应
-            context: Optional conversion context.
-            **kwargs: 额外参数
-
-        Returns:
-            Provider格式的响应
+        Template method: creates a fallback ConversionContext, delegates to
+        ``_do_response_to_provider``, runs preserve-mode apply,
+        and restores passthrough items.
         """
-        pass
+        ctx = context if context is not None else ConversionContext()
+        provider_response = self._do_response_to_provider(
+            ir_response, context=ctx, **kwargs
+        )
+        self._apply_preserve_metadata(
+            provider_response, cast(dict[str, Any], ir_response), ctx
+        )
+        self._restore_response_passthrough_items(
+            provider_response,
+            ir_response,
+            output_key=self._PASSTHROUGH_RESTORE_KEY,
+            context=ctx,
+        )
+        return provider_response
 
-    @abstractmethod
     def messages_to_provider(
         self,
         messages: Sequence[IRInputItem],
@@ -217,23 +197,14 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
-        """将消息列表转换为provider消息格式
-        Convert message list to provider message format
+        """Convert IR messages to provider format.
 
-        这个方法通常会委托给message_ops_class来处理。
-        This method typically delegates to message_ops_class for processing.
-
-        Args:
-            messages: IR格式的消息列表（可包含扩展项）
-            context: Optional conversion context.
-            **kwargs: 额外参数
-
-        Returns:
-            Tuple[转换后的消息列表, 警告信息列表]
+        Default implementation delegates to ``message_ops.ir_messages_to_p``.
+        Override if the converter needs custom pre/post processing.
         """
-        pass
+        kwargs["target_provider"] = self._CONVERTER_TAG
+        return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
-    @abstractmethod
     def messages_from_provider(
         self,
         provider_messages: list[Any],
@@ -241,18 +212,102 @@ class BaseConverter(ABC):
         context: ConversionContext | None = None,
         **kwargs: Any,
     ) -> list[IRInputItem]:
-        """将provider消息转换为IR消息列表
-        Convert provider messages to IR message list
+        """Convert provider messages to IR format.
 
-        Args:
-            provider_messages: Provider格式的消息列表
-            context: Optional conversion context.
-            **kwargs: 额外参数
-
-        Returns:
-            IR格式的消息列表
+        Default implementation delegates to ``message_ops.p_messages_to_ir``.
+        Override if the converter needs custom pre/post processing.
         """
-        pass
+        return self.message_ops.p_messages_to_ir(provider_messages, **kwargs)
+
+    # ==================== Abstract hooks (subclass implements) ====================
+
+    @abstractmethod
+    def _do_request_to_provider(
+        self,
+        ir_request: IRRequest,
+        *,
+        context: ConversionContext,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Format-specific IR → provider request conversion.
+
+        Context is guaranteed non-None. Warnings should be added to
+        ``context.warnings``. Return the provider request dict only.
+        """
+        ...
+
+    @abstractmethod
+    def _do_request_from_provider(
+        self,
+        provider_request: dict[str, Any],
+        *,
+        context: ConversionContext | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Format-specific provider → IR request conversion.
+
+        Input is already normalized. Do not call ``_normalize()`` or
+        ``_validate_ir_request()``.
+        """
+        ...
+
+    @abstractmethod
+    def _do_response_from_provider(
+        self,
+        provider_response: dict[str, Any],
+        *,
+        context: ConversionContext,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Format-specific provider → IR response conversion.
+
+        Input is already normalized. Context is guaranteed non-None.
+        Do not call ``_normalize()`` or ``_validate_ir_response()``.
+        """
+        ...
+
+    @abstractmethod
+    def _do_response_to_provider(
+        self,
+        ir_response: IRResponse,
+        *,
+        context: ConversionContext,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """Format-specific IR → provider response conversion.
+
+        Context is guaranteed non-None. Do not call
+        ``_restore_response_passthrough_items()`` or preserve-mode hooks.
+        """
+        ...
+
+    # ==================== Preserve-mode hooks (override in subclass) ====================
+
+    def _capture_preserve_metadata(
+        self,
+        provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Capture provider-specific fields for lossless round-trip.
+
+        Called by ``response_from_provider`` after the ``_do_*`` hook.
+        Override in converters that support preserve-mode metadata
+        (currently Anthropic and OpenAI Responses).
+        """
+
+    def _apply_preserve_metadata(
+        self,
+        provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
+        ctx: ConversionContext,
+    ) -> None:
+        """Re-inject captured metadata for lossless round-trip.
+
+        Called by ``response_to_provider`` after the ``_do_*`` hook.
+        Override in converters that support preserve-mode metadata
+        (currently Anthropic and OpenAI Responses).
+        """
 
     # ==================== Stream转换接口 Stream conversion interface ====================
 
@@ -461,13 +516,6 @@ class BaseConverter(ABC):
         warnings to ``ctx`` for unsupported options.
         """
         ...
-
-    # Optional preserve-mode hooks (implement if provider supports lossless
-    # round-trip, currently anthropic and openai_responses):
-    #   _capture_preserve_metadata(provider_response: dict, ctx) -> None
-    #       Called in response_from_provider to capture non-core fields.
-    #   _apply_preserve_metadata(provider_response: dict, ctx) -> None
-    #       Called in response_to_provider to re-inject captured metadata.
 
     # ==================== Normalization ====================
 
