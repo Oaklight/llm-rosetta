@@ -168,7 +168,7 @@ class AnthropicConverter(BaseConverter):
         self,
         provider_request: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {

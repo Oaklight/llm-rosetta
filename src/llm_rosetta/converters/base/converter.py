@@ -136,8 +136,9 @@ class BaseConverter(ABC):
         ``_do_request_from_provider``, and validates the IR output.
         """
         provider_request = self._normalize(provider_request)
+        ctx = context if context is not None else ConversionContext()
         ir_request = self._do_request_from_provider(
-            provider_request, context=context, **kwargs
+            provider_request, context=ctx, **kwargs
         )
         return self._validate_ir_request(ir_request)
 
@@ -159,7 +160,8 @@ class BaseConverter(ABC):
         ir_response = self._do_response_from_provider(
             provider_response, context=ctx, **kwargs
         )
-        self._capture_preserve_metadata(provider_response, ir_response, ctx)
+        if getattr(ctx, "metadata_mode", None) == "preserve":
+            self._capture_preserve_metadata(provider_response, ir_response, ctx)
         return self._validate_ir_response(ir_response)
 
     def response_to_provider(
@@ -179,9 +181,10 @@ class BaseConverter(ABC):
         provider_response = self._do_response_to_provider(
             ir_response, context=ctx, **kwargs
         )
-        self._apply_preserve_metadata(
-            provider_response, cast(dict[str, Any], ir_response), ctx
-        )
+        if getattr(ctx, "metadata_mode", None) == "preserve":
+            self._apply_preserve_metadata(
+                provider_response, cast(dict[str, Any], ir_response), ctx
+            )
         self._restore_response_passthrough_items(
             provider_response,
             ir_response,
@@ -241,13 +244,13 @@ class BaseConverter(ABC):
         self,
         provider_request: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Format-specific provider → IR request conversion.
 
-        Input is already normalized. Do not call ``_normalize()`` or
-        ``_validate_ir_request()``.
+        Input is already normalized. Context is guaranteed non-None.
+        Do not call ``_normalize()`` or ``_validate_ir_request()``.
         """
         ...
 
