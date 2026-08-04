@@ -409,7 +409,11 @@ class MockConverter(BaseConverter):
         return provider_request
 
     def _do_request_from_provider(
-        self, provider_request: dict[str, Any], *, context=None, **kwargs: Any
+        self,
+        provider_request: dict[str, Any],
+        *,
+        context: ConversionContext,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {
             "model": provider_request["model"],
