@@ -23,9 +23,24 @@ logger = logging.getLogger(__name__)
 _EPHEMERAL: dict[str, str] = {"type": "ephemeral"}
 
 
+def _count_cache_hints_in_parts(parts: list[dict[str, Any]]) -> int:
+    """Count parts in a list that carry ``cache_hint``."""
+    return sum(1 for p in parts if p.get("cache_hint") is not None)
+
+
 def _has_cache_hint_in_parts(parts: list[dict[str, Any]]) -> bool:
     """Check if any part in a list carries ``cache_hint``."""
     return any(p.get("cache_hint") is not None for p in parts)
+
+
+def _count_cache_hints_in_messages(messages: list[dict[str, Any]]) -> int:
+    """Count cache hints across all message content parts."""
+    total = 0
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            total += _count_cache_hints_in_parts(content)
+    return total
 
 
 def _has_cache_hint_in_messages(messages: list[dict[str, Any]]) -> bool:
@@ -88,6 +103,24 @@ def _mark_last_user_messages(messages: list[dict[str, Any]], count: int) -> int:
     return placed
 
 
+def _remaining_budget(tools: Any, system: Any, messages: Any, mode: str) -> int:
+    """Compute how many breakpoints can still be placed.
+
+    Anthropic allows 4 total, so pre-existing hints reduce the budget
+    available for injection in ``fill_gaps`` mode.
+    """
+    if mode != "fill_gaps":
+        return 4
+    used = 0
+    if isinstance(tools, list):
+        used += _count_cache_hints_in_parts(tools)
+    if isinstance(system, list):
+        used += _count_cache_hints_in_parts(system)
+    if isinstance(messages, list):
+        used += _count_cache_hints_in_messages(messages)
+    return max(4 - used, 0)
+
+
 def inject_cache_breakpoints(
     ir_request: dict[str, Any],
     *,
@@ -109,11 +142,14 @@ def inject_cache_breakpoints(
         logger.debug("[%s] cache hints already present, skipping injection", request_id)
         return ir_request
 
-    remaining = 4
+    tools = ir_request.get("tools")
+    system = ir_request.get("system_instruction")
+    messages = ir_request.get("messages")
+
+    remaining = _remaining_budget(tools, system, messages, mode)
     placed_segments: list[str] = []
 
     # 1. Last tool definition
-    tools = ir_request.get("tools")
     if isinstance(tools, list) and tools and remaining > 0:
         if mode == "fill_gaps" and _has_cache_hint_in_parts(tools):
             pass
@@ -122,7 +158,6 @@ def inject_cache_breakpoints(
             placed_segments.append("tools")
 
     # 2. System instruction tail
-    system = ir_request.get("system_instruction")
     if isinstance(system, list) and system and remaining > 0:
         if mode == "fill_gaps" and _has_cache_hint_in_parts(system):
             pass
@@ -131,7 +166,6 @@ def inject_cache_breakpoints(
             placed_segments.append("system")
 
     # 3 & 4. Last two user messages
-    messages = ir_request.get("messages")
     if isinstance(messages, list) and messages and remaining > 0:
         if mode == "fill_gaps" and _has_cache_hint_in_messages(messages):
             pass
