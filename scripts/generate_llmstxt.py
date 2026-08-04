@@ -155,12 +155,16 @@ a.insertBefore(f,a.firstChild);a.insertBefore(e,a.firstChild);
 });</script>"""
 
 
+# Unique sentinel so pages that merely mention "llms.txt" are not skipped.
+LLMSTXT_MARKER = 'e.title="View page source"'
+
+
 def inject_links_into_html(site_dir: Path) -> int:
     """Inject llms.txt link buttons into all HTML pages."""
     count = 0
     for html_file in site_dir.rglob("*.html"):
         content = html_file.read_text(encoding="utf-8")
-        if "</head>" in content and "llms.txt" not in content:
+        if "</head>" in content and LLMSTXT_MARKER not in content:
             content = content.replace("</head>", LLMSTXT_LINKS_JS + "\n</head>")
             html_file.write_text(content, encoding="utf-8")
             count += 1
