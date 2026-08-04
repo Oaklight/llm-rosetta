@@ -1,6 +1,9 @@
 """OpenAI Chat converter constants — reason mappings and tool content packing."""
 
-import re
+from ..base.helpers.multimodal_tool_patch import (  # noqa: F401  # re-export
+    TOOL_CONTENT_CLOSE_TAG,
+    TOOL_CONTENT_OPEN_TAG_RE,
+)
 
 # --- Reason mappings ---
 
@@ -22,8 +25,3 @@ OPENAI_CHAT_REASON_TO_PROVIDER: dict[str, str] = {
     "content_filter": "content_filter",
     "refusal": "stop",
 }
-
-# --- Tool content packing (Phase 2: multimodal tool result dual encoding) ---
-
-TOOL_CONTENT_OPEN_TAG_RE = re.compile(r'^<tool-content\s+call-id="([^"]+)">$')
-TOOL_CONTENT_CLOSE_TAG = "</tool-content>"

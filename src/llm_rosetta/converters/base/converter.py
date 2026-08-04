@@ -60,6 +60,10 @@ class BaseConverter(ABC):
     # Concrete subclasses MUST set this (enforced by __init_subclass__).
     _PASSTHROUGH_RESTORE_KEY: str = ""
 
+    # Whether the provider format supports multimodal content in tool results.
+    # Chat Completions overrides to False (tool messages are text-only).
+    SUPPORTS_MULTIMODAL_TOOL_RESULT: bool = True
+
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
 
@@ -319,6 +323,22 @@ class BaseConverter(ABC):
         Override in converters that support preserve-mode metadata
         (currently Anthropic and OpenAI Responses).
         """
+
+    # ==================== Capability queries ====================
+
+    def _supports_multimodal_tool_result(
+        self, context: ConversionContext | None = None
+    ) -> bool:
+        """Whether this converter's target format supports multimodal tool results.
+
+        Checks shim override in context.options first, then falls back to
+        the class-level ``SUPPORTS_MULTIMODAL_TOOL_RESULT`` default.
+        """
+        if context is not None:
+            override = context.options.get("multimodal_tool_result")
+            if override is not None:
+                return bool(override)
+        return self.SUPPORTS_MULTIMODAL_TOOL_RESULT
 
     # ==================== Stream转换接口 Stream conversion interface ====================
 

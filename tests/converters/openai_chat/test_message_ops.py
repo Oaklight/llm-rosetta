@@ -5,11 +5,11 @@ OpenAI Chat MessageOps unit tests.
 from typing import Any, Union, cast
 
 from llm_rosetta._vendor.validate import validate
-from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
-from llm_rosetta.converters.openai_chat.message_ops import (
-    OpenAIChatMessageOps,
-    _has_multimodal_content,
+from llm_rosetta.converters.base.helpers.multimodal_tool_patch import (
+    has_multimodal_content,
 )
+from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
+from llm_rosetta.converters.openai_chat.message_ops import OpenAIChatMessageOps
 from llm_rosetta.converters.openai_chat.tool_ops import OpenAIChatToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
@@ -1040,18 +1040,18 @@ class TestMultimodalToolResultPacking:
         assert "file" not in types
 
     def test_has_multimodal_content_helper(self):
-        """_has_multimodal_content correctly detects multimodal vs text-only."""
-        assert _has_multimodal_content("just a string") is False
-        assert _has_multimodal_content([{"type": "text", "text": "hi"}]) is False
-        assert _has_multimodal_content([{"type": "image", "image_url": "x"}]) is True
+        """has_multimodal_content correctly detects multimodal vs text-only."""
+        assert has_multimodal_content("just a string") is False
+        assert has_multimodal_content([{"type": "text", "text": "hi"}]) is False
+        assert has_multimodal_content([{"type": "image", "image_url": "x"}]) is True
         assert (
-            _has_multimodal_content(
+            has_multimodal_content(
                 [{"type": "text", "text": "hi"}, {"type": "image", "image_url": "x"}]
             )
             is True
         )
-        assert _has_multimodal_content([]) is False
-        assert _has_multimodal_content(None) is False
+        assert has_multimodal_content([]) is False
+        assert has_multimodal_content(None) is False
 
 
 class TestRefusalFieldAlwaysPresent:
