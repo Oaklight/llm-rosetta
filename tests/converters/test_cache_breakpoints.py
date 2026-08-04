@@ -233,6 +233,26 @@ class TestFillGapsMode:
         inject_cache_breakpoints(ir, mode="fill_gaps")
         assert _count_cache_hints(ir) == 4
 
+    def test_existing_hints_count_against_budget(self):
+        """Pre-existing hints must not push the total past Anthropic's limit."""
+        ir = _full_ir_request()
+        # Two hints already present in tools — budget drops to 2.
+        ir["tools"][0]["cache_hint"] = dict(_EPHEMERAL)
+        ir["tools"][1]["cache_hint"] = dict(_EPHEMERAL)
+        inject_cache_breakpoints(ir, mode="fill_gaps")
+        assert _count_cache_hints(ir) <= 4
+
+    def test_budget_exhausted_by_existing_hints(self):
+        """Four pre-existing hints leave no budget for injection."""
+        ir = _full_ir_request()
+        for i in range(3):
+            ir["tools"][i]["cache_hint"] = dict(_EPHEMERAL)
+        ir["system_instruction"][0]["cache_hint"] = dict(_EPHEMERAL)
+        original = copy.deepcopy(ir)
+        inject_cache_breakpoints(ir, mode="fill_gaps")
+        assert ir == original
+        assert _count_cache_hints(ir) == 4
+
 
 # ---------------------------------------------------------------------------
 # Edge cases
