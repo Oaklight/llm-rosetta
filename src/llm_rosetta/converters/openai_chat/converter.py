@@ -7,11 +7,10 @@ conversion between IR and OpenAI Chat Completions API format.
 """
 
 import logging
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, cast
 
 from ...types.ir import (
-    IRInputItem,
     TextPart,
     is_citation_part,
     is_reasoning_part,
@@ -62,6 +61,7 @@ class OpenAIChatConverter(BaseConverter):
     message_ops_class = OpenAIChatMessageOps
     config_ops_class = OpenAIChatConfigOps
     _CONVERTER_TAG = "openai_chat"
+    _PASSTHROUGH_RESTORE_KEY = "choices"
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -71,24 +71,14 @@ class OpenAIChatConverter(BaseConverter):
 
     # ==================== Top-level Interfaces ====================
 
-    def request_to_provider(
+    def _do_request_to_provider(
         self,
         ir_request: IRRequest,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IRRequest to OpenAI Chat Completions request parameters.
-
-        Orchestrates all Ops classes to build the complete provider request.
-
-        Args:
-            ir_request: IR request.
-
-        Returns:
-            Tuple of (provider request dict, warnings list).
-        """
-        ctx = context if context is not None else ConversionContext()
+    ) -> dict[str, Any]:
+        ctx = context
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → system message (structured content array)
@@ -168,7 +158,7 @@ class OpenAIChatConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
-        return result, ctx.warnings
+        return result
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
@@ -325,23 +315,13 @@ class OpenAIChatConverter(BaseConverter):
                     ir_messages.append(converted)
         return ir_messages, system_parts
 
-    def request_from_provider(
+    def _do_request_from_provider(
         self,
         provider_request: dict[str, Any],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> IRRequest:
-        """Convert OpenAI Chat Completions request to IRRequest.
-
-        Args:
-            provider_request: OpenAI request dict (or SDK object).
-
-        Returns:
-            IR request.
-        """
-        provider_request = self._normalize(provider_request)
-
+    ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
@@ -407,24 +387,15 @@ class OpenAIChatConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-        return self._validate_ir_request(ir_request)
+        return ir_request
 
-    def response_from_provider(
+    def _do_response_from_provider(
         self,
         provider_response: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> IRResponse:
-        """Convert OpenAI Chat Completions response to IRResponse.
-
-        Args:
-            provider_response: OpenAI response dict (or SDK object).
-
-        Returns:
-            IR response.
-        """
-        provider_response = self._normalize(provider_response)
+    ) -> dict[str, Any]:
 
         choices = []
         for p_choice in provider_response.get("choices", []):
@@ -471,23 +442,15 @@ class OpenAIChatConverter(BaseConverter):
         if provider_response.get("system_fingerprint") is not None:
             ir_response["system_fingerprint"] = provider_response["system_fingerprint"]
 
-        return self._validate_ir_response(ir_response)
+        return ir_response
 
-    def response_to_provider(
+    def _do_response_to_provider(
         self,
         ir_response: IRResponse,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Convert IRResponse to OpenAI Chat Completions response.
-
-        Args:
-            ir_response: IR response.
-
-        Returns:
-            OpenAI response dict.
-        """
         prefix = self._get_response_id_prefix(context)
         provider_response: dict[str, Any] = {
             "id": self.add_response_id_prefix(ir_response.get("id", ""), prefix),
@@ -512,13 +475,6 @@ class OpenAIChatConverter(BaseConverter):
 
         if "system_fingerprint" in ir_response:
             provider_response["system_fingerprint"] = ir_response["system_fingerprint"]
-        ctx = context if context is not None else ConversionContext()
-        self._restore_response_passthrough_items(
-            provider_response,
-            ir_response,
-            output_key="choices",
-            context=ctx,
-        )
 
         return provider_response
 
@@ -546,45 +502,6 @@ class OpenAIChatConverter(BaseConverter):
             )
 
         return usage
-
-    def messages_to_provider(
-        self,
-        messages: Sequence[IRInputItem],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> tuple[list[Any], list[str]]:
-        """Convert IR message list to OpenAI Chat message format.
-
-        Delegates to message_ops.
-
-        Args:
-            messages: IR messages (may contain ExtensionItems).
-
-        Returns:
-            Tuple of (converted messages, warnings).
-        """
-        kwargs["target_provider"] = self._CONVERTER_TAG
-        return self.message_ops.ir_messages_to_p(messages, **kwargs)
-
-    def messages_from_provider(
-        self,
-        provider_messages: list[Any],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> list[IRInputItem]:
-        """Convert OpenAI Chat messages to IR message list.
-
-        Delegates to message_ops.
-
-        Args:
-            provider_messages: OpenAI Chat messages.
-
-        Returns:
-            IR messages.
-        """
-        return self.message_ops.p_messages_to_ir(provider_messages, **kwargs)
 
     # ==================== Stream Support ====================
 

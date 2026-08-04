@@ -10,11 +10,10 @@ nested messages. The converter handles this structural difference.
 """
 
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, cast
 
 from ...types.ir import (
-    IRInputItem,
     TextPart,
     is_text_part,
     is_tool_call_part,
@@ -75,6 +74,7 @@ class OpenAIResponsesConverter(BaseConverter):
     message_ops_class = OpenAIResponsesMessageOps
     config_ops_class = OpenAIResponsesConfigOps
     _CONVERTER_TAG = "openai_responses"
+    _PASSTHROUGH_RESTORE_KEY = "output"
 
     # Default response ID prefix for the OpenAI Responses format.
     # Used as fallback when no shim-driven prefix is available in the
@@ -116,24 +116,14 @@ class OpenAIResponsesConverter(BaseConverter):
 
     # ==================== Top-level Interfaces ====================
 
-    def request_to_provider(
+    def _do_request_to_provider(
         self,
         ir_request: IRRequest,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IRRequest to OpenAI Responses API request parameters.
-
-        Orchestrates all Ops classes to build the complete provider request.
-
-        Args:
-            ir_request: IR request.
-
-        Returns:
-            Tuple of (provider request dict, warnings list).
-        """
-        ctx = context if context is not None else ConversionContext()
+    ) -> dict[str, Any]:
+        ctx = context
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → instructions field (plain string)
@@ -197,25 +187,15 @@ class OpenAIResponsesConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
-        return result, ctx.warnings
+        return result
 
-    def request_from_provider(
+    def _do_request_from_provider(
         self,
         provider_request: dict[str, Any],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> IRRequest:
-        """Convert OpenAI Responses API request to IRRequest.
-
-        Args:
-            provider_request: OpenAI Responses request dict (or SDK object).
-
-        Returns:
-            IR request.
-        """
-        provider_request = self._normalize(provider_request)
-
+    ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
@@ -305,24 +285,15 @@ class OpenAIResponsesConverter(BaseConverter):
             if echo:
                 ctx.store_request_echo(echo)
 
-        return self._validate_ir_request(ir_request)
+        return ir_request
 
-    def response_from_provider(
+    def _do_response_from_provider(
         self,
         provider_response: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> IRResponse:
-        """Convert OpenAI Responses API response to IRResponse.
-
-        Args:
-            provider_response: OpenAI Responses response dict (or SDK object).
-
-        Returns:
-            IR response.
-        """
-        provider_response = self._normalize(provider_response)
+    ) -> dict[str, Any]:
 
         choices = []
         output_items = provider_response.get("output", [])
@@ -406,28 +377,15 @@ class OpenAIResponsesConverter(BaseConverter):
         if provider_response.get("service_tier") is not None:
             ir_response["service_tier"] = provider_response["service_tier"]
 
-        # Preserve mode: capture extra fields for lossless round-trip
-        ctx = context if context is not None else ConversionContext()
-        if ctx.metadata_mode == "preserve":
-            self._capture_preserve_metadata(provider_response, ctx)
+        return ir_response
 
-        return self._validate_ir_response(ir_response)
-
-    def response_to_provider(
+    def _do_response_to_provider(
         self,
         ir_response: IRResponse,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Convert IRResponse to OpenAI Responses API response.
-
-        Args:
-            ir_response: IR response.
-
-        Returns:
-            OpenAI Responses response dict.
-        """
         response_id_stem = ir_response.get("id", "")
         provider_response: dict[str, Any] = {
             "id": self.add_response_id_prefix(
@@ -514,17 +472,6 @@ class OpenAIResponsesConverter(BaseConverter):
             provider_response["completed_at"] = self._completion_timestamp()
         else:
             provider_response["completed_at"] = None
-
-        # Preserve mode: inject captured extra fields
-        ctx = context if context is not None else ConversionContext()
-        if ctx.metadata_mode == "preserve":
-            self._apply_preserve_metadata(provider_response, ctx)
-        self._restore_response_passthrough_items(
-            provider_response,
-            ir_response,
-            output_key="output",
-            context=ctx,
-        )
 
         return provider_response
 
@@ -620,9 +567,10 @@ class OpenAIResponsesConverter(BaseConverter):
         if cache_fields:
             ir_request["cache"] = self.config_ops.p_cache_config_to_ir(cache_fields)
 
-    @staticmethod
     def _capture_preserve_metadata(
+        self,
         provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
         ctx: ConversionContext,
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
@@ -662,9 +610,10 @@ class OpenAIResponsesConverter(BaseConverter):
         if items_meta:
             ctx.store_output_items_meta(items_meta)
 
-    @staticmethod
     def _apply_preserve_metadata(
+        self,
         provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
         ctx: ConversionContext,
     ) -> None:
         """Re-inject captured metadata fields in *preserve* mode."""
@@ -712,45 +661,6 @@ class OpenAIResponsesConverter(BaseConverter):
                     content[j]["annotations"] = pm["annotations"]
                 if "logprobs" in pm:
                     content[j]["logprobs"] = pm["logprobs"]
-
-    def messages_to_provider(
-        self,
-        messages: Sequence[IRInputItem],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> tuple[list[Any], list[str]]:
-        """Convert IR message list to OpenAI Responses input items.
-
-        Delegates to message_ops.
-
-        Args:
-            messages: IR messages (may contain ExtensionItems).
-
-        Returns:
-            Tuple of (converted items, warnings).
-        """
-        kwargs["target_provider"] = self._CONVERTER_TAG
-        return self.message_ops.ir_messages_to_p(messages, **kwargs)
-
-    def messages_from_provider(
-        self,
-        provider_messages: list[Any],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> list[IRInputItem]:
-        """Convert OpenAI Responses items to IR message list.
-
-        Delegates to message_ops.
-
-        Args:
-            provider_messages: OpenAI Responses items.
-
-        Returns:
-            IR messages.
-        """
-        return self.message_ops.p_messages_to_ir(provider_messages, **kwargs)
 
     # ==================== Backward Compatibility ====================
     # These methods maintain backward compatibility with the old API

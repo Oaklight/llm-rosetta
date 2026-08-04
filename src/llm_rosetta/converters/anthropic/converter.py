@@ -15,11 +15,10 @@ Key Anthropic differences from OpenAI:
 """
 
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, cast
 
 from ...types.ir import (
-    IRInputItem,
     TextPart,
     is_text_part,
     is_tool_call_part,
@@ -71,6 +70,7 @@ class AnthropicConverter(BaseConverter):
     message_ops_class = AnthropicMessageOps
     config_ops_class = AnthropicConfigOps
     _CONVERTER_TAG = "anthropic"
+    _PASSTHROUGH_RESTORE_KEY = "content"
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -80,24 +80,14 @@ class AnthropicConverter(BaseConverter):
 
     # ==================== Top-level Interfaces ====================
 
-    def request_to_provider(
+    def _do_request_to_provider(
         self,
         ir_request: IRRequest,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IRRequest to Anthropic Messages API request parameters.
-
-        Orchestrates all Ops classes to build the complete provider request.
-
-        Args:
-            ir_request: IR request.
-
-        Returns:
-            Tuple of (provider request dict, warnings list).
-        """
-        ctx = context if context is not None else ConversionContext()
+    ) -> dict[str, Any]:
+        ctx = context
         result: dict[str, Any] = {"model": ir_request["model"]}
 
         # 1. System instruction → top-level system parameter
@@ -172,25 +162,15 @@ class AnthropicConverter(BaseConverter):
         if extensions:
             result.update(extensions)
 
-        return result, ctx.warnings
+        return result
 
-    def request_from_provider(
+    def _do_request_from_provider(
         self,
         provider_request: dict[str, Any],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> IRRequest:
-        """Convert Anthropic Messages API request to IRRequest.
-
-        Args:
-            provider_request: Anthropic request dict (or SDK object).
-
-        Returns:
-            IR request.
-        """
-        provider_request = self._normalize(provider_request)
-
+    ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
@@ -248,7 +228,7 @@ class AnthropicConverter(BaseConverter):
                 {"stream": stream}
             )
 
-        return self._validate_ir_request(ir_request)
+        return ir_request
 
     def _get_response_id_prefix(
         self, context: ConversionContext | StreamContext | None = None
@@ -260,25 +240,13 @@ class AnthropicConverter(BaseConverter):
                 return prefix
         return self._RESPONSE_ID_PREFIX
 
-    def response_from_provider(
+    def _do_response_from_provider(
         self,
         provider_response: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> IRResponse:
-        """Convert Anthropic Messages API response to IRResponse.
-
-        Anthropic returns a single message (not choices list).
-        We wrap it as ``choices[0]``.
-
-        Args:
-            provider_response: Anthropic response dict (or SDK object).
-
-        Returns:
-            IR response.
-        """
-        provider_response = self._normalize(provider_response)
+    ) -> dict[str, Any]:
 
         # Convert the response message to IR
         ir_message = self.message_ops._p_message_to_ir(provider_response)
@@ -317,11 +285,11 @@ class AnthropicConverter(BaseConverter):
                 refusal_part["provider_metadata"] = {
                     "anthropic_refusal_category": category
                 }
-            msg_content = ir_message.get("content")  # ty: ignore[unresolved-attribute]
+            msg_content = ir_message.get("content")
             if isinstance(msg_content, list):
-                msg_content.append(refusal_part)  # ty: ignore[invalid-argument-type]
+                msg_content.append(refusal_part)
             else:
-                ir_message["content"] = [refusal_part]  # ty: ignore[invalid-assignment]
+                ir_message["content"] = [refusal_part]
 
         prefix = self._get_response_id_prefix(context)
         ir_response: dict[str, Any] = {
@@ -338,29 +306,15 @@ class AnthropicConverter(BaseConverter):
         p_usage = provider_response.get("usage") or {}
         ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
-        # Preserve mode: capture extra fields for lossless round-trip
-        ctx = context if context is not None else ConversionContext()
-        if ctx.metadata_mode == "preserve":
-            self._capture_preserve_metadata(provider_response, ctx)
+        return ir_response
 
-        return self._validate_ir_response(ir_response)
-
-    def response_to_provider(
+    def _do_response_to_provider(
         self,
         ir_response: IRResponse,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Convert IRResponse to Anthropic Messages API response.
-
-        Args:
-            ir_response: IR response.
-
-        Returns:
-            Anthropic response dict.
-        """
-        # Anthropic response is a single message
         prefix = self._get_response_id_prefix(context)
         provider_response: dict[str, Any] = {
             "id": self.add_response_id_prefix(ir_response.get("id", ""), prefix),
@@ -428,17 +382,6 @@ class AnthropicConverter(BaseConverter):
         # Usage (always present — Anthropic responses require usage field)
         ir_usage = ir_response.get("usage") or {}
         provider_response["usage"] = self._build_ir_usage_to_p(ir_usage)
-
-        # Preserve mode: inject captured extra fields
-        ctx = context if context is not None else ConversionContext()
-        if ctx.metadata_mode == "preserve":
-            self._apply_preserve_metadata(provider_response, ctx)
-        self._restore_response_passthrough_items(
-            provider_response,
-            ir_response,
-            output_key="content",
-            context=ctx,
-        )
 
         return provider_response
 
@@ -556,9 +499,10 @@ class AnthropicConverter(BaseConverter):
             "server_tool_use": None,
         }
 
-    @staticmethod
     def _capture_preserve_metadata(
+        self,
         provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
         ctx: ConversionContext,
     ) -> None:
         """Capture extra fields from provider response for lossless round-trip."""
@@ -611,9 +555,10 @@ class AnthropicConverter(BaseConverter):
         if any(m for m in items_meta):
             ctx.store_output_items_meta(items_meta)
 
-    @staticmethod
     def _apply_preserve_metadata(
+        self,
         provider_response: dict[str, Any],
+        ir_response: dict[str, Any],
         ctx: ConversionContext,
     ) -> None:
         """Re-inject captured metadata fields in preserve mode."""
@@ -644,45 +589,6 @@ class AnthropicConverter(BaseConverter):
                 break
             for k, v in meta.items():
                 content[i][k] = v
-
-    def messages_to_provider(
-        self,
-        messages: Sequence[IRInputItem],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> tuple[list[Any], list[str]]:
-        """Convert IR message list to Anthropic message format.
-
-        Delegates to message_ops.
-
-        Args:
-            messages: IR messages (may contain ExtensionItems).
-
-        Returns:
-            Tuple of (converted messages, warnings).
-        """
-        kwargs["target_provider"] = self._CONVERTER_TAG
-        return self.message_ops.ir_messages_to_p(messages, **kwargs)
-
-    def messages_from_provider(
-        self,
-        provider_messages: list[Any],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> list[IRInputItem]:
-        """Convert Anthropic messages to IR message list.
-
-        Delegates to message_ops.
-
-        Args:
-            provider_messages: Anthropic messages.
-
-        Returns:
-            IR messages.
-        """
-        return self.message_ops.p_messages_to_ir(provider_messages, **kwargs)
 
     # ==================== Stream Support ====================
 

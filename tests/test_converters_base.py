@@ -376,27 +376,29 @@ class MockConfigOps(BaseConfigOps):
 class MockConverter(BaseConverter):
     """Mock implementation of BaseConverter for testing"""
 
-    # 指定使用的ops类
     content_ops_class = MockContentOps
     message_ops_class = MockMessageOps
     tool_ops_class = MockToolOps
     config_ops_class = MockConfigOps
+    _CONVERTER_TAG = "mock"
+    _PASSTHROUGH_RESTORE_KEY = "choices"
 
-    def request_to_provider(
-        self, ir_request: IRRequest, *, context=None, **kwargs: Any
-    ) -> tuple[dict[str, Any], list[str]]:
-        ctx = context if context is not None else ConversionContext()
+    def __init__(self):
+        self.message_ops = self.message_ops_class()
+        self.tool_ops = self.tool_ops_class()
+
+    def _do_request_to_provider(
+        self, ir_request: IRRequest, *, context: ConversionContext, **kwargs: Any
+    ) -> dict[str, Any]:
         provider_request: dict[str, Any] = {"model": ir_request["model"]}
 
-        # 转换消息
         if "messages" in ir_request:
             messages, msg_warnings = self.message_ops_class.ir_messages_to_p(
                 ir_request["messages"], **kwargs
             )
             provider_request["messages"] = messages
-            ctx.warnings.extend(msg_warnings)
+            context.warnings.extend(msg_warnings)
 
-        # 转换生成配置
         if "generation" in ir_request:
             provider_request.update(
                 self.config_ops_class.ir_generation_config_to_p(
@@ -404,26 +406,30 @@ class MockConverter(BaseConverter):
                 )
             )
 
-        return provider_request, ctx.warnings
+        return provider_request
 
-    def request_from_provider(
+    def _do_request_from_provider(
         self, provider_request: dict[str, Any], *, context=None, **kwargs: Any
-    ) -> IRRequest:
-        ir_request: IRRequest = {"model": provider_request["model"], "messages": []}
+    ) -> dict[str, Any]:
+        ir_request: dict[str, Any] = {
+            "model": provider_request["model"],
+            "messages": [],
+        }
 
         if "messages" in provider_request:
-            ir_request["messages"] = cast(
-                list[IRInputItem],
-                self.message_ops_class.p_messages_to_ir(
-                    provider_request["messages"], **kwargs
-                ),
+            ir_request["messages"] = self.message_ops_class.p_messages_to_ir(
+                provider_request["messages"], **kwargs
             )
 
         return ir_request
 
-    def response_from_provider(
-        self, provider_response: dict[str, Any], *, context=None, **kwargs: Any
-    ) -> IRResponse:
+    def _do_response_from_provider(
+        self,
+        provider_response: dict[str, Any],
+        *,
+        context: ConversionContext,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         return {
             "id": provider_response.get("id", ""),
             "object": provider_response.get("object", ""),
@@ -433,8 +439,8 @@ class MockConverter(BaseConverter):
             "usage": provider_response.get("usage", {}),
         }
 
-    def response_to_provider(
-        self, ir_response: IRResponse, *, context=None, **kwargs: Any
+    def _do_response_to_provider(
+        self, ir_response: IRResponse, *, context: ConversionContext, **kwargs: Any
     ) -> dict[str, Any]:
         return {
             "id": ir_response["id"],
@@ -444,20 +450,6 @@ class MockConverter(BaseConverter):
             "choices": ir_response["choices"],
             "usage": ir_response["usage"],
         }
-
-    def messages_to_provider(
-        self,
-        messages: Sequence[IRInputItem],
-        *,
-        context=None,
-        **kwargs: Any,
-    ) -> tuple[list[Any], list[str]]:
-        return self.message_ops_class.ir_messages_to_p(messages, **kwargs)
-
-    def messages_from_provider(
-        self, provider_messages: list[Any], *, context=None, **kwargs: Any
-    ) -> list[IRInputItem]:
-        return self.message_ops_class.p_messages_to_ir(provider_messages, **kwargs)
 
     def stream_response_from_provider(
         self,

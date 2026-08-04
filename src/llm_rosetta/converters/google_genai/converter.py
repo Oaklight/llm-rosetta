@@ -21,8 +21,8 @@ from typing import Any, cast
 
 
 from ...types.ir import (
-    IRInputItem,
     IRInput,
+    IRInputItem,
     TextPart,
     ToolChoice,
     ToolDefinition,
@@ -113,6 +113,7 @@ class GoogleGenAIConverter(BaseConverter):
     message_ops_class = GoogleGenAIMessageOps
     config_ops_class = GoogleGenAIConfigOps
     _CONVERTER_TAG = "google_genai"
+    _PASSTHROUGH_RESTORE_KEY = "candidates"
 
     def __init__(self):
         self.content_ops = self.content_ops_class()
@@ -206,30 +207,14 @@ class GoogleGenAIConverter(BaseConverter):
 
         return body
 
-    def request_to_provider(
+    def _do_request_to_provider(
         self,
         ir_request: IRRequest,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IRRequest to Google GenAI request parameters.
-
-        Orchestrates all Ops classes to build the complete provider request.
-
-        Args:
-            ir_request: IR request.
-            **kwargs: Optional keyword arguments.
-
-                - ``output_format``: ``"sdk"`` (default) produces a dict with
-                  a nested ``config`` suitable for the Google GenAI Python SDK.
-                  ``"rest"`` flattens the config so the result can be sent
-                  directly to the Google REST API via ``httpx`` / ``requests``.
-
-        Returns:
-            Tuple of (provider request dict, warnings list).
-        """
-        ctx = context if context is not None else ConversionContext()
+    ) -> dict[str, Any]:
+        ctx = context
         output_format: str = kwargs.pop(
             "output_format",
             ctx.options.get("output_format", "sdk"),
@@ -313,27 +298,17 @@ class GoogleGenAIConverter(BaseConverter):
             config.update(extensions)
 
         if output_format == "rest":
-            return self._to_rest_body(result), ctx.warnings
+            return self._to_rest_body(result)
 
-        return result, ctx.warnings
+        return result
 
-    def request_from_provider(
+    def _do_request_from_provider(
         self,
         provider_request: dict[str, Any],
         *,
         context: ConversionContext | None = None,
         **kwargs: Any,
-    ) -> IRRequest:
-        """Convert Google GenAI request to IRRequest.
-
-        Args:
-            provider_request: Google request dict (or SDK object).
-
-        Returns:
-            IR request.
-        """
-        provider_request = self._normalize(provider_request)
-
+    ) -> dict[str, Any]:
         ir_request: dict[str, Any] = {
             "model": provider_request.get("model", ""),
             "messages": [],
@@ -402,7 +377,7 @@ class GoogleGenAIConverter(BaseConverter):
         if "thinking_config" in config or "thinkingConfig" in config:
             ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
 
-        return self._validate_ir_request(ir_request)
+        return ir_request
 
     def _get_response_id_prefix(
         self, context: ConversionContext | StreamContext | None = None
@@ -414,23 +389,13 @@ class GoogleGenAIConverter(BaseConverter):
                 return prefix
         return self._RESPONSE_ID_PREFIX
 
-    def response_from_provider(
+    def _do_response_from_provider(
         self,
         provider_response: dict[str, Any],
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
-    ) -> IRResponse:
-        """Convert Google GenAI response to IRResponse.
-
-        Args:
-            provider_response: Google response dict (or SDK object).
-
-        Returns:
-            IR response.
-        """
-        provider_response = self._normalize(provider_response)
-
+    ) -> dict[str, Any]:
         choices = []
         candidates = provider_response.get("candidates", [])
 
@@ -498,23 +463,15 @@ class GoogleGenAIConverter(BaseConverter):
         if p_usage:
             ir_response["usage"] = self._build_p_usage_to_ir(p_usage)
 
-        return self._validate_ir_response(ir_response)
+        return ir_response
 
-    def response_to_provider(
+    def _do_response_to_provider(
         self,
         ir_response: IRResponse,
         *,
-        context: ConversionContext | None = None,
+        context: ConversionContext,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        """Convert IRResponse to Google GenAI response.
-
-        Args:
-            ir_response: IR response.
-
-        Returns:
-            Google response dict.
-        """
         provider_response: dict[str, Any] = {
             "responseId": self.add_response_id_prefix(
                 ir_response.get("id", ""), self._get_response_id_prefix(context)
@@ -556,13 +513,6 @@ class GoogleGenAIConverter(BaseConverter):
         ir_usage = ir_response.get("usage")
         if ir_usage:
             provider_response["usageMetadata"] = self._build_ir_usage_to_p(ir_usage)
-        ctx = context if context is not None else ConversionContext()
-        self._restore_response_passthrough_items(
-            provider_response,
-            ir_response,
-            output_key="candidates",
-            context=ctx,
-        )
 
         return provider_response
 
@@ -698,45 +648,6 @@ class GoogleGenAIConverter(BaseConverter):
             ]
             return text_parts or None
         return None
-
-    def messages_to_provider(
-        self,
-        messages: Sequence[IRInputItem],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> tuple[list[Any], list[str]]:
-        """Convert IR message list to Google GenAI Content format.
-
-        Delegates to message_ops.
-
-        Args:
-            messages: IR messages (may contain ExtensionItems).
-
-        Returns:
-            Tuple of (converted Content list, warnings).
-        """
-        kwargs["target_provider"] = self._CONVERTER_TAG
-        return self.message_ops.ir_messages_to_p(messages, **kwargs)
-
-    def messages_from_provider(
-        self,
-        provider_messages: list[Any],
-        *,
-        context: ConversionContext | None = None,
-        **kwargs: Any,
-    ) -> list[IRInputItem]:
-        """Convert Google GenAI Content list to IR message list.
-
-        Delegates to message_ops.
-
-        Args:
-            provider_messages: Google Content list.
-
-        Returns:
-            IR messages.
-        """
-        return self.message_ops.p_messages_to_ir(provider_messages, **kwargs)
 
     # ==================== Backward Compatibility ====================
 
