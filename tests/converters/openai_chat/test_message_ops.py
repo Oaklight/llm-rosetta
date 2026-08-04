@@ -7,6 +7,7 @@ from typing import Any, Union, cast
 from llm_rosetta._vendor.validate import validate
 from llm_rosetta.converters.base.helpers.multimodal_tool_patch import (
     has_multimodal_content,
+    is_synthetic_tool_content_msg,
 )
 from llm_rosetta.converters.openai_chat.content_ops import OpenAIChatContentOps
 from llm_rosetta.converters.openai_chat.message_ops import OpenAIChatMessageOps
@@ -1003,13 +1004,10 @@ class TestMultimodalToolResultPacking:
         }
         assistant = {"role": "assistant", "content": "Hi!"}
 
-        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(synthetic) is True
-        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(normal_user) is False
-        assert (
-            OpenAIChatMessageOps._is_synthetic_tool_content_msg(normal_user_list)
-            is False
-        )
-        assert OpenAIChatMessageOps._is_synthetic_tool_content_msg(assistant) is False
+        assert is_synthetic_tool_content_msg(synthetic) is True
+        assert is_synthetic_tool_content_msg(normal_user) is False
+        assert is_synthetic_tool_content_msg(normal_user_list) is False
+        assert is_synthetic_tool_content_msg(assistant) is False
 
     def test_file_part_skipped_with_warning(self):
         """File parts in multimodal tool result produce warning, skipped during packing."""

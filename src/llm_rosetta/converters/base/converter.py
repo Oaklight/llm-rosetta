@@ -62,7 +62,7 @@ class BaseConverter(ABC):
 
     # Whether the provider format supports multimodal content in tool results.
     # Chat Completions overrides to False (tool messages are text-only).
-    SUPPORTS_MULTIMODAL_TOOL_RESULT: bool = True
+    _SUPPORTS_MULTIMODAL_TOOL_RESULT: bool = True
 
     # Enable/disable IR validation on from_provider output
     validate_output: bool = True
@@ -218,6 +218,10 @@ class BaseConverter(ABC):
         Override if the converter needs custom pre/post processing.
         """
         kwargs["target_provider"] = self._CONVERTER_TAG
+        kwargs.setdefault(
+            "supports_multimodal_tool_result",
+            self._supports_multimodal_tool_result(context),
+        )
         return self.message_ops.ir_messages_to_p(messages, **kwargs)
 
     def messages_from_provider(
@@ -338,7 +342,7 @@ class BaseConverter(ABC):
             override = context.options.get("multimodal_tool_result")
             if override is not None:
                 return bool(override)
-        return self.SUPPORTS_MULTIMODAL_TOOL_RESULT
+        return self._SUPPORTS_MULTIMODAL_TOOL_RESULT
 
     # ==================== Stream转换接口 Stream conversion interface ====================
 
