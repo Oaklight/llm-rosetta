@@ -125,6 +125,9 @@ def _build_provider_entry(
         if existing_enabled is not None:
             entry["enabled"] = existing_enabled
 
+    if "supports_custom_tools" in body:
+        entry["supports_custom_tools"] = bool(body["supports_custom_tools"])
+
     return entry
 
 

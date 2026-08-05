@@ -158,6 +158,7 @@ def enforce_custom_tools(
     ir_request: dict[str, Any],
     *,
     shim: ProviderShim | str | None = None,
+    config_override: bool | None = None,
 ) -> dict[str, Any]:
     """Downgrade custom tools to functions for providers that lack support.
 
@@ -168,18 +169,31 @@ def enforce_custom_tools(
     The original type is preserved in ``metadata["provider_type"]`` so
     the response path can restore it.
 
-    No-op when *shim* is ``None`` or supports custom tools natively.
+    Resolution priority (highest first):
+
+    1. *config_override* — explicit override from gateway config / admin UI.
+    2. shim.supports_custom_tools — shim-level default from provider YAML.
+    3. Fall back to False (downgrade) if no shim is found.
+
+    No-op when the effective value is True.
 
     Args:
         ir_request: The IR request dict — **always use the return value**.
         shim: Provider shim (name or object).
+        config_override: Explicit override (highest priority).  When
+            True custom tools pass through; when False they are
+            downgraded.  None defers to the shim default.
 
     Returns:
         The IR request with custom tools downgraded, or the original
         request unchanged.
     """
-    resolved = resolve_shim(shim) if isinstance(shim, str) else shim
-    if resolved is None or resolved.supports_custom_tools:
+    if config_override is not None:
+        supports = config_override
+    else:
+        resolved = resolve_shim(shim) if isinstance(shim, str) else shim
+        supports = resolved.supports_custom_tools if resolved is not None else False
+    if supports:
         return ir_request
 
     tools = ir_request.get("tools")

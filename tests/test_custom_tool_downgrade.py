@@ -64,10 +64,10 @@ class TestEnforceCustomTools:
         result = enforce_custom_tools(ir, shim=shim)
         assert result["tools"][0]["type"] == "custom"
 
-    def test_noop_when_shim_is_none(self):
+    def test_downgrades_when_shim_is_none(self):
         ir = {"tools": [dict(CUSTOM_TOOL_IR)]}
         result = enforce_custom_tools(ir, shim=None)
-        assert result["tools"][0]["type"] == "custom"
+        assert result["tools"][0]["type"] == "function"
 
     def test_noop_when_no_custom_tools(self):
         shim = _make_shim(supports=False)
@@ -141,6 +141,31 @@ class TestEnforceCustomTools:
         assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
         assert result["tools"][1]["type"] == "function"
         assert "_downgraded_from" not in (result["tools"][1].get("metadata") or {})
+
+    def test_config_override_true_bypasses_shim_false(self):
+        shim = _make_shim(supports=False)
+        tool = dict(CUSTOM_TOOL_IR)
+        tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
+        ir = {"tools": [tool]}
+        result = enforce_custom_tools(ir, shim=shim, config_override=True)
+        assert result["tools"][0]["type"] == "custom"
+
+    def test_config_override_false_forces_downgrade(self):
+        shim = _make_shim(supports=True)
+        tool = dict(CUSTOM_TOOL_IR)
+        tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
+        ir = {"tools": [tool]}
+        result = enforce_custom_tools(ir, shim=shim, config_override=False)
+        assert result["tools"][0]["type"] == "function"
+        assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
+
+    def test_config_override_none_defers_to_shim(self):
+        shim = _make_shim(supports=False)
+        tool = dict(CUSTOM_TOOL_IR)
+        tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
+        ir = {"tools": [tool]}
+        result = enforce_custom_tools(ir, shim=shim, config_override=None)
+        assert result["tools"][0]["type"] == "function"
 
 
 # ---------------------------------------------------------------------------
