@@ -26,7 +26,14 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from llm_rosetta.capabilities import enforce_reasoning, enforce_vision
+from llm_rosetta.capabilities import (
+    enforce_custom_tools,
+    enforce_reasoning,
+    enforce_vision,
+    get_custom_tool_names,
+    restore_custom_tool_calls,
+    unwrap_custom_tool_input,
+)
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.shims.provider_shim import ProviderShim, resolve_shim
 from llm_rosetta.shims.transforms import (
@@ -374,6 +381,9 @@ class ConversionPipeline:
             request_id=request_id,
         )
 
+        # Capability enforcement: custom tools (post-IR)
+        ir_request = enforce_custom_tools(ir_request, shim=self._shim)
+
         # Phase 2a: Shim-driven IR transforms
         ir_request = apply_ir_transforms(
             ir_request,
@@ -464,6 +474,12 @@ class ConversionPipeline:
         if on_ir_ready is not None:
             on_ir_ready(ir_response)
 
+        # Restore custom tool types downgraded by enforce_custom_tools
+        if self._ir_request is not None:
+            custom_names = get_custom_tool_names(self._ir_request)
+            if custom_names:
+                restore_custom_tool_calls(ir_response, custom_tool_names=custom_names)
+
         # Phase 4c: IR → Source response
         t0 = time.perf_counter()
         ctx.options["response_id_prefix"] = self._source_id_prefix
@@ -521,12 +537,20 @@ class ConversionPipeline:
         if "_request_echo" in ctx.metadata:
             to_ctx.metadata["_request_echo"] = ctx.metadata["_request_echo"]
 
+        # Custom tool names downgraded by enforce_custom_tools
+        custom_names = (
+            get_custom_tool_names(self._ir_request)
+            if self._ir_request is not None
+            else frozenset()
+        )
+
         return StreamProcessor(
             target_converter=self._target_converter,
             source_converter=self._source_converter,
             from_ctx=from_ctx,
             to_ctx=to_ctx,
             pre_ir_transforms=self._pre_ir_transforms,
+            custom_tool_names=custom_names,
             on_ir_event=on_ir_event,
         )
 
@@ -554,6 +578,8 @@ class StreamProcessor:
         from_ctx: StreamContext for upstream→IR conversion.
         to_ctx: StreamContext for IR→source conversion.
         pre_ir_transforms: Shim pre_ir_transforms to apply before conversion.
+        custom_tool_names: Names of tools downgraded from custom to
+            function by :func:.
         on_ir_event: Optional callback for each IR event.
     """
 
@@ -565,6 +591,7 @@ class StreamProcessor:
         from_ctx: Any,
         to_ctx: Any,
         pre_ir_transforms: tuple[Transform, ...] = (),
+        custom_tool_names: frozenset[str] = frozenset(),
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._target_converter = target_converter
@@ -572,6 +599,8 @@ class StreamProcessor:
         self._from_ctx = from_ctx
         self._to_ctx = to_ctx
         self._pre_ir_transforms = pre_ir_transforms
+        self._custom_tool_names = custom_tool_names
+        self._custom_arg_buffers: dict[str, str] = {}
         self._on_ir_event = on_ir_event
 
     @property
@@ -615,6 +644,10 @@ class StreamProcessor:
                 "_responses_phase"
             ]
 
+        # Restore custom tool types for downgraded tools
+        if self._custom_tool_names:
+            ir_events = self._restore_custom_tool_events(ir_events)
+
         # IR → Source events
         result: list[dict[str, Any]] = []
         for ir_event in ir_events:
@@ -630,3 +663,58 @@ class StreamProcessor:
                 result.append(source_chunks)
 
         return result
+
+    def _restore_custom_tool_events(
+        self, ir_events: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Re-tag streamed tool calls that were downgraded from custom.
+
+        - tool_call_start: set tool_type to "custom" and
+          fix the from_ctx registration.
+        - tool_call_delta: buffer JSON argument fragments for
+          custom tool calls (they contain JSON wrapping that needs to
+          be unwrapped before the client sees them).
+        - finish: flush buffered arguments as a single unwrapped
+          delta before emitting the finish event.
+        """
+        staged: list[dict[str, Any]] = []
+        for event in ir_events:
+            if not isinstance(event, dict):
+                staged.append(event)
+                continue
+            etype = event.get("type")
+
+            if (
+                etype == "tool_call_start"
+                and event.get("tool_name") in self._custom_tool_names
+            ):
+                event["tool_type"] = "custom"
+                call_id = event.get("tool_call_id", "")
+                if call_id:
+                    self._custom_arg_buffers[call_id] = ""
+                    if call_id in self._from_ctx._tool_call_types:
+                        self._from_ctx._tool_call_types[call_id] = "custom"
+                staged.append(event)
+                continue
+
+            if (
+                etype == "tool_call_delta"
+                and event.get("tool_call_id") in self._custom_arg_buffers
+            ):
+                call_id = event["tool_call_id"]
+                self._custom_arg_buffers[call_id] += event.get("arguments_delta") or ""
+                continue
+
+            if etype == "finish" and self._custom_arg_buffers:
+                for call_id, raw in list(self._custom_arg_buffers.items()):
+                    staged.append(
+                        {
+                            "type": "tool_call_delta",
+                            "tool_call_id": call_id,
+                            "arguments_delta": unwrap_custom_tool_input(raw),
+                        }
+                    )
+                self._custom_arg_buffers.clear()
+
+            staged.append(event)
+        return staged
