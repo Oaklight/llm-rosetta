@@ -59,6 +59,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **auth 错误响应 CORS 头部** — auth 错误响应中添加 CORS 头部。
 - **Bearer token 降级** — 对所有认证策略接受 `Bearer` token 作为降级方式。
 - **Embedding 请求 ID** — 对齐 embedding 请求 ID 与上游格式。
+- **上游流式中断时发送终止事件** ([#481](https://github.com/Oaklight/llm-rosetta/issues/481)、PR [#483](https://github.com/Oaklight/llm-rosetta/pull/483))：上游连接在流式传输中途断开时，网关会直接关闭 SSE 连接而不发送任何终止事件 —— 等待终止事件的客户端只能得到一句 `stream closed before response.completed`，无从得知原因。现在网关会发送符合目标格式的终止事件并携带上游原因（Responses 为 `response.failed` + `[DONE]`，Chat 为 error chunk + `[DONE]`，Anthropic 为 `event: error`，Google 为 error 对象）。流已正常结束或客户端已断开时跳过。新增 `StreamProcessor.source_context`，以及 `StreamContext.next_sequence_number` 和 `StreamContext.outbound_response_id`。
 - **管理面板 modal 优化** — CSS 修复、展平提示 tooltip、i18n 对齐。
 
 ### CI 与文档
