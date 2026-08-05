@@ -574,6 +574,16 @@ class StreamProcessor:
         self._pre_ir_transforms = pre_ir_transforms
         self._on_ir_event = on_ir_event
 
+    @property
+    def source_context(self) -> Any:
+        """The IR→source StreamContext.
+
+        Exposed so transports can inspect stream state (e.g. whether the
+        stream already ended, the assigned response ID) when synthesizing
+        a terminal event after an upstream failure.
+        """
+        return self._to_ctx
+
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert one upstream chunk to source-format events.
 
