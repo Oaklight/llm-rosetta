@@ -293,6 +293,7 @@ async def handle_non_streaming(
         upstream_model=model,
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
+        supports_custom_tools_override=route.supports_custom_tools,
     )
 
     # Phase 1+2: Source → IR → Target
@@ -597,6 +598,7 @@ async def handle_streaming(
         upstream_model=model,
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
+        supports_custom_tools_override=route.supports_custom_tools,
     )
 
     # Phase 1+2: Source → IR → Target

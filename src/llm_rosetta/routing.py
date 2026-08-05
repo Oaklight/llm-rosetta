@@ -53,6 +53,7 @@ class ResolvedRoute:
     model_capabilities: list[str] = field(default_factory=lambda: ["text"])
     reasoning_override: dict[str, Any] | None = None
     flatten_system: bool = False
+    supports_custom_tools: bool | None = None
 
 
 class Router(Protocol):

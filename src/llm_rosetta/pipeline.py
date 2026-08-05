@@ -205,6 +205,7 @@ class ConversionPipeline:
         upstream_model: str | None = None,
         model_capabilities: list[str] | None = None,
         reasoning_config_override: dict[str, Any] | None = None,
+        supports_custom_tools_override: bool | None = None,
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
@@ -214,6 +215,7 @@ class ConversionPipeline:
         self._upstream_model = upstream_model
         self._model_capabilities = model_capabilities
         self._reasoning_config_override = reasoning_config_override
+        self._supports_custom_tools_override = supports_custom_tools_override
 
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
@@ -382,7 +384,11 @@ class ConversionPipeline:
         )
 
         # Capability enforcement: custom tools (post-IR)
-        ir_request = enforce_custom_tools(ir_request, shim=self._shim)
+        ir_request = enforce_custom_tools(
+            ir_request,
+            shim=self._shim,
+            config_override=self._supports_custom_tools_override,
+        )
 
         # Phase 2a: Shim-driven IR transforms
         ir_request = apply_ir_transforms(

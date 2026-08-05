@@ -903,6 +903,12 @@ body { padding-bottom: 26px; }
       <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
       <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
     </div>
+    <div class="form-group">
+      <div class="checkbox-group">
+        <input type="checkbox" id="provCustomTools">
+        <label for="provCustomTools" data-i18n="label.supportsCustomTools">Supports custom tool definitions</label>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
@@ -1220,7 +1226,7 @@ const I18N = {
     'label.selectOne':'— select —',
     'label.baseUrl':'Base URL',
     'label.apiKey':'API Key (or ${ENV_VAR} placeholder)', 'label.keyUnchangedHint':'Leave blank to keep current key',
-    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.selected':'selected', 'btn.enable':'Enable', 'btn.disable':'Disable', 'model.enabled':'Enabled', 'model.disabled':'Disabled', 'label.on':'ON', 'label.off':'OFF', 'test.embedding':'Embedding', 'test.embedBatch':'Batch', 'test.matryoshka':'Matryoshka', 'test.embedMultimodal':'Multimodal (image)', 'test.matryoshkaDimPrompt':'Enter dimensions for matryoshka embedding:', 'btn.ok':'OK', 'tab.general':'General', 'tab.routing':'Routing', 'tab.transforms':'Transforms', 'label.diffStreamUrl':'Use a different URL for streaming', 'label.urlPrecedenceHint':'When blank, the provider\'s default URL template is used. Per-model overrides take precedence over per-provider overrides.', 'error.invalidDimension':'Invalid dimension value', 'confirm.bulkDelete':'Delete {count} model(s)?', 'toast.bulkDone':'{action} applied to {count} model(s)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}',
+    'label.proxyUrl':'Proxy URL (optional, overrides global)', 'label.selected':'selected', 'btn.enable':'Enable', 'btn.disable':'Disable', 'model.enabled':'Enabled', 'model.disabled':'Disabled', 'label.on':'ON', 'label.off':'OFF', 'test.embedding':'Embedding', 'test.embedBatch':'Batch', 'test.matryoshka':'Matryoshka', 'test.embedMultimodal':'Multimodal (image)', 'test.matryoshkaDimPrompt':'Enter dimensions for matryoshka embedding:', 'btn.ok':'OK', 'tab.general':'General', 'tab.routing':'Routing', 'tab.transforms':'Transforms', 'label.diffStreamUrl':'Use a different URL for streaming', 'label.urlPrecedenceHint':'When blank, the provider\'s default URL template is used. Per-model overrides take precedence over per-provider overrides.', 'error.invalidDimension':'Invalid dimension value', 'confirm.bulkDelete':'Delete {count} model(s)?', 'toast.bulkDone':'{action} applied to {count} model(s)', 'label.urlTemplate':'URL Template', 'label.streamUrlTemplate':'Stream URL Template', 'label.urlTemplateHint':'Override the endpoint path. Placeholders: {base_url}, {model}', 'label.supportsCustomTools':'Supports custom tool definitions',
     'label.modelName':'Model Name', 'label.provider':'Provider', 'label.upstreamModel':'Upstream Model', 'label.capabilities':'Capabilities', 'label.systemOptions':'System Message', 'label.flattenSystem':'Flatten system content', 'label.flattenSystemHint':'Flatten system message content arrays to plain strings for upstream compatibility.', 'hint.flattenSystem':'Converts structured system content to a plain string.<br><br><b>Before:</b><br><code>[{"type":"text","text":"You are..."},{"type":"text","text":"Rules:..."}]</code><br><br><b>After:</b><br><code>"You are...\\nRules:..."</code><br><br>Some upstream providers don\'t support content arrays in system messages.',
     'label.reasoningConfig':'Reasoning Config', 'label.thinkingType':'Thinking Type', 'label.budgetRatio':'Budget Tokens Ratio', 'label.disabledStrategy':'Disabled Strategy', 'opt.enabled':'enabled', 'opt.adaptive':'adaptive', 'opt.omit':'omit', 'opt.thinkingDisabled':'thinking_disabled', 'opt.thinkingBudgetZero':'thinking_budget_zero', 'label.inheritProvider':'(inherit from provider)', 'label.inherited':'inherited',
     'modal.addProvider':'Add Provider', 'modal.editProvider':'Edit Provider',
@@ -1911,6 +1917,11 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     _prevShimUrl = s.default_base_url || '';
     const keyInput = document.getElementById('provApiKey');
     if (!keyInput.value && s.default_api_key_env) keyInput.value = '${' + s.default_api_key_env + '}';
+    // Update custom tools checkbox to match new shim default
+    const provCfg = _editingProviderName && configData ? configData.providers[_editingProviderName] : null;
+    if (!provCfg || !('supports_custom_tools' in provCfg)) {
+      document.getElementById('provCustomTools').checked = !!s.supports_custom_tools;
+    }
   };
 
   document.getElementById('provBaseUrl').value = baseUrl || '';
@@ -1935,6 +1946,14 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   const provCfg = name && configData ? configData.providers[name] : null;
   document.getElementById('provUrlTemplate').value = (provCfg && provCfg.url_template) || '';
   document.getElementById('provStreamUrlTemplate').value = (provCfg && provCfg.stream_url_template) || '';
+  // Custom tools checkbox: config value > shim default
+  const customToolsCb = document.getElementById('provCustomTools');
+  if (provCfg && 'supports_custom_tools' in provCfg) {
+    customToolsCb.checked = !!provCfg.supports_custom_tools;
+  } else {
+    const shimDefault = (shimMap[provType || ''] || {}).supports_custom_tools;
+    customToolsCb.checked = !!shimDefault;
+  }
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
@@ -2382,6 +2401,7 @@ async function saveProvider() {
   const body = {type: provType, base_url: baseUrl, proxy};
   if (urlTemplate) body.url_template = urlTemplate;
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
+  body.supports_custom_tools = document.getElementById('provCustomTools').checked;
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references

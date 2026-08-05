@@ -224,6 +224,14 @@ class GatewayConfig:
             self._raw_providers
         )
 
+        # Per-provider supports_custom_tools override from config.
+        self.provider_supports_custom_tools: dict[str, bool] = {}
+        for pname, pcfg in self._raw_providers.items():
+            if isinstance(pcfg, dict) and "supports_custom_tools" in pcfg:
+                self.provider_supports_custom_tools[pname] = bool(
+                    pcfg["supports_custom_tools"]
+                )
+
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
@@ -491,6 +499,7 @@ class GatewayConfig:
         caps = self.model_capabilities.get(model, list(self.DEFAULT_CAPABILITIES))
         reasoning = self.model_reasoning_overrides.get(model)
         flatten_system = self.model_flatten_system.get(model, False)
+        custom_tools = self.provider_supports_custom_tools.get(provider_name)
 
         route = ResolvedRoute(
             source_provider=source_provider,
@@ -501,6 +510,7 @@ class GatewayConfig:
             model_capabilities=caps,
             reasoning_override=reasoning,
             flatten_system=flatten_system,
+            supports_custom_tools=custom_tools,
         )
 
         pinfo = self.providers[provider_name]
