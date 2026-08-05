@@ -163,8 +163,10 @@ endif
 		'zstd -d | docker load && \
 		 cd $(DEVTEST_STACK) && \
 		 docker compose up -d --force-recreate && \
-		 sleep 3 && \
-		 curl -sS http://127.0.0.1:54982/health && echo && \
+		 for i in 1 2 3 4 5 6 7 8 9 10; do \
+		   curl -sS http://127.0.0.1:54982/health && break; \
+		   echo "  waiting for gateway ($$i/10)..."; sleep 3; \
+		 done && echo && \
 		 docker exec $(DEVTEST_CONTAINER) python -c "import llm_rosetta; print(llm_rosetta.__version__)"'; \
 	echo "==> Dev-test deployed successfully."
 
