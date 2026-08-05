@@ -178,6 +178,15 @@ class StreamContext(ConversionContext):
         """
         return self._tool_call_types.get(tool_call_id, "function")
 
+    def set_tool_call_type(self, tool_call_id: str, tool_type: str) -> None:
+        """Update the tool type for an already-registered call.
+
+        Args:
+            tool_call_id: The unique identifier for the tool call.
+            tool_type: The new tool type ("function" or "custom").
+        """
+        self._tool_call_types[tool_call_id] = tool_type
+
     def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
         """Register the Responses output item ID for a tool call.
 
