@@ -47,7 +47,7 @@ def pack_multimodal_tool_result(
     multimodal_packs: dict[str, list[dict[str, Any]]],
     call_id: str,
     warnings: list[str],
-) -> None:
+) -> list[Any]:
     """Extract visual content blocks from a multimodal tool result.
 
     Converted blocks are stored in ``multimodal_packs[call_id]`` for
@@ -59,31 +59,45 @@ def pack_multimodal_tool_result(
         multimodal_packs: Accumulator mapping call_id → provider content blocks.
         call_id: The tool call ID.
         warnings: Warning accumulator.
+
+    Returns:
+        The residual result with successfully packed blocks removed. Callers
+        should serialize this instead of ``result`` so packed payloads (which
+        may be multi-megabyte base64 images) are not also emitted as inert
+        text in the tool message.
     """
     packed_parts: list[dict[str, Any]] = []
+    residual: list[Any] = []
 
     for block in result:
         if not isinstance(block, dict):
+            residual.append(block)
             continue
         block_type = block.get("type")
         if block_type == "text":
             packed_parts.append(content_ops.ir_text_to_p(block))
+            residual.append(block)
         elif block_type == "image":
             try:
                 packed_parts.append(content_ops.ir_image_to_p(block))
             except ValueError as e:
                 warnings.append(f"Skipped image in tool result packing: {e}")
+                residual.append(block)
         elif block_type == "file":
             warnings.append(
                 "File content not supported in tool result packing, skipped"
             )
+            residual.append(block)
         else:
             warnings.append(
                 f"Unsupported block type in tool result packing: {block_type}"
             )
+            residual.append(block)
 
     if packed_parts:
         multimodal_packs[call_id] = packed_parts
+
+    return residual
 
 
 def inject_packed_tool_content(
