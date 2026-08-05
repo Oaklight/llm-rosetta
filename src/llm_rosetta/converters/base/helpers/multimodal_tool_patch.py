@@ -8,8 +8,9 @@ these helpers implement a dual-encoding strategy:
 from the tool result and stored in a ``multimodal_packs`` dict keyed by
 ``call_id``.  After all messages are converted, ``inject_packed_tool_content``
 inserts a synthetic ``role: "user"`` message containing the visual content
-wrapped in ``<tool-content call-id="...">`` XML tags.  The original tool
-message keeps ``json.dumps(result)`` as a fallback.
+wrapped in ``<tool-content call-id="...">`` XML tags.  The tool message keeps
+``json.dumps(residual)`` — the result minus the blocks that were packed — so
+large payloads are not carried twice.
 
 **Unpacking (provider → IR)**: ``unpack_tool_content`` detects synthetic user
 messages, parses the XML tags, and extracts ``call_id → content blocks``
