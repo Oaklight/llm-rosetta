@@ -12,6 +12,7 @@ Functions follow the ``enforce_*`` naming convention:
 
 - :func:`enforce_reasoning` — configure reasoning output mode (pre-IR)
 - :func:`enforce_vision` — strip images for non-vision models (post-IR)
+- :func:`enforce_custom_tools` — downgrade custom tools for non-supporting providers (post-IR)
 
 Called by :class:`~llm_rosetta.pipeline.ConversionPipeline` at the
 appropriate pipeline stages.
@@ -135,3 +136,173 @@ def enforce_vision(
     )
 
     return strip_images_for_non_vision(ir_request, model=model, request_id=request_id)
+
+
+# ---------------------------------------------------------------------------
+# Custom tool enforcement
+# ---------------------------------------------------------------------------
+
+_CUSTOM_TOOL_SYNTH_PARAMS: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "input": {
+            "type": "string",
+            "description": "Free-form text input for the tool.",
+        },
+    },
+    "required": ["input"],
+}
+
+
+def enforce_custom_tools(
+    ir_request: dict[str, Any],
+    *,
+    shim: ProviderShim | str | None = None,
+) -> dict[str, Any]:
+    """Downgrade custom tools to functions for providers that lack support.
+
+    Must be called **after** source → IR conversion.  When the resolved
+    shim has ``supports_custom_tools = False``, each IR tool with
+    ``type == "custom"`` is rewritten to ``type = "function"`` with a
+    synthesised JSON schema wrapping the input as ``{"input": string}``.
+    The original type is preserved in ``metadata["provider_type"]`` so
+    the response path can restore it.
+
+    No-op when *shim* is ``None`` or supports custom tools natively.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        shim: Provider shim (name or object).
+
+    Returns:
+        The IR request with custom tools downgraded, or the original
+        request unchanged.
+    """
+    resolved = resolve_shim(shim) if isinstance(shim, str) else shim
+    if resolved is None or resolved.supports_custom_tools:
+        return ir_request
+
+    tools = ir_request.get("tools")
+    if not tools:
+        return ir_request
+
+    # Check if any custom tools exist before copying
+    if not any(isinstance(t, dict) and t.get("type") == "custom" for t in tools):
+        return ir_request
+
+    # Deep-copy tools to avoid mutating cached entries
+    import copy
+
+    tools = copy.deepcopy(tools)
+    ir_request["tools"] = tools
+
+    changed = False
+    for tool in tools:
+        if not isinstance(tool, dict) or tool.get("type") != "custom":
+            continue
+        changed = True
+        tool["type"] = "function"
+
+        meta = tool.get("metadata") or {}
+        meta["provider_type"] = "custom"
+        fmt = meta.get("format")
+        tool["metadata"] = meta
+
+        if not tool.get("parameters"):
+            tool["parameters"] = dict(_CUSTOM_TOOL_SYNTH_PARAMS)
+
+        if fmt:
+            fmt_type = fmt.get("type", "unknown")
+            fmt_syntax = fmt.get("syntax") or fmt.get("grammar", {}).get("syntax", "")
+            hint = f"[Output format: {fmt_type}"
+            if fmt_syntax:
+                hint += f", syntax: {fmt_syntax}"
+            hint += "]"
+            desc = tool.get("description", "")
+            tool["description"] = f"{desc}\n\n{hint}" if desc else hint
+
+    if changed:
+        tc = ir_request.get("tool_choice")
+        if isinstance(tc, dict) and tc.get("tool_type") == "custom":
+            del tc["tool_type"]
+
+    return ir_request
+
+
+def get_custom_tool_names(ir_request: dict[str, Any]) -> frozenset[str]:
+    """Return names of tools that were downgraded from custom to function.
+
+    Looks for ``metadata.provider_type == "custom"`` on each tool
+    definition in the IR request — the marker set by
+    :func:`enforce_custom_tools`.
+    """
+    names: set[str] = set()
+    for tool in ir_request.get("tools") or []:
+        if (
+            isinstance(tool, dict)
+            and (tool.get("metadata") or {}).get("provider_type") == "custom"
+        ):
+            name = tool.get("name")
+            if name:
+                names.add(name)
+    return frozenset(names)
+
+
+def restore_custom_tool_calls(
+    ir_response: dict[str, Any],
+    *,
+    custom_tool_names: frozenset[str],
+) -> None:
+    """Re-tag downgraded tool calls as custom in the IR response.
+
+    Mutates *ir_response* in place.  For each tool call whose
+    ``tool_name`` is in *custom_tool_names*, sets
+    ``tool_type = "custom"``.  Called on the non-streaming response
+    path after Target → IR conversion.
+    """
+    if not custom_tool_names:
+        return
+
+    for choice in ir_response.get("choices") or []:
+        if not isinstance(choice, dict):
+            continue
+        msg = choice.get("message")
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("content") or []:
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "tool_call"
+                and part.get("tool_name") in custom_tool_names
+            ):
+                part["tool_type"] = "custom"
+
+    for msg in ir_response.get("messages") or []:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("content") or []:
+            if (
+                isinstance(part, dict)
+                and part.get("type") == "tool_call"
+                and part.get("tool_name") in custom_tool_names
+            ):
+                part["tool_type"] = "custom"
+
+
+def unwrap_custom_tool_input(raw: str) -> str:
+    """Recover a custom tool's raw text from the downgraded JSON wrapper.
+
+    The synthesised schema is ``{"input": string}``, so a well-formed
+    call arrives as ``{"input": "..."}``.  Anything else is returned
+    untouched.
+    """
+    import json
+
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return raw
+    if isinstance(parsed, dict) and list(parsed.keys()) == ["input"]:
+        value = parsed["input"]
+        return value if isinstance(value, str) else json.dumps(value)
+    return raw

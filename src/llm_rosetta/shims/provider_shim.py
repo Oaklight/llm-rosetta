@@ -126,6 +126,11 @@ class ProviderShim:
             (e.g. ``"resp_"`` for OpenAI Responses, ``"chatcmpl-"`` for
             OpenAI Chat).  Default ``""`` means passthrough (no
             prefix stripping or adding).
+        supports_custom_tools: Whether the provider's API natively
+            accepts custom tool definitions (``{type: "custom"}``).
+            Default ``False`` — only OpenAI's official API supports
+            this.  When ``False``, custom tools are downgraded to
+            function wrappers.
     """
 
     name: str
@@ -140,6 +145,7 @@ class ProviderShim:
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
+    supports_custom_tools: bool = False
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -185,6 +191,7 @@ class ProviderShim:
             "reasoning": None,
             "model_reasoning": None,
             "response_id_prefix": "",
+            "supports_custom_tools": False,
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

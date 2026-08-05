@@ -15,3 +15,5 @@ reasoning:
     high: high
     xhigh: high
     max: high
+
+supports_custom_tools: true
