@@ -209,7 +209,7 @@ def enforce_custom_tools(
         tool["metadata"] = meta
 
         if not tool.get("parameters"):
-            tool["parameters"] = dict(_CUSTOM_TOOL_SYNTH_PARAMS)
+            tool["parameters"] = copy.deepcopy(_CUSTOM_TOOL_SYNTH_PARAMS)
 
         if fmt:
             fmt_type = fmt.get("type", "unknown")
@@ -259,6 +259,10 @@ def restore_custom_tool_calls(
     ``tool_name`` is in *custom_tool_names*, sets
     ``tool_type = "custom"``.  Called on the non-streaming response
     path after Target → IR conversion.
+
+    Input unwrapping (extracting raw text from the ``{"input": ...}``
+    JSON wrapper) is handled downstream by the source converter's
+    IR → provider serialisation for custom tool calls.
     """
     if not custom_tool_names:
         return

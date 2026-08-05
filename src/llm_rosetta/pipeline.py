@@ -692,8 +692,7 @@ class StreamProcessor:
                 call_id = event.get("tool_call_id", "")
                 if call_id:
                     self._custom_arg_buffers[call_id] = ""
-                    if call_id in self._from_ctx._tool_call_types:
-                        self._from_ctx._tool_call_types[call_id] = "custom"
+                    self._from_ctx.set_tool_call_type(call_id, "custom")
                 staged.append(event)
                 continue
 
