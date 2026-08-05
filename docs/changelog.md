@@ -51,6 +51,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Provider 透传事件** — 新增非流式和流式 provider 透传 IR 类型，允许转换器转发 provider 特定数据而不丢失。
 - **空 reasoning 内容** — OpenAI Chat 转换器保留空 reasoning 内容而非丢弃。
+- **多模态 tool result 载荷重复** ([#480](https://github.com/Oaklight/llm-rosetta/issues/480)、PR [#482](https://github.com/Oaklight/llm-rosetta/pull/482))：目标格式为 OpenAI Chat 时，tool result 中的图片会被发送两次 —— 一次是合成 user 消息中的真实图片块，一次是 `role: "tool"` 消息体中经 `json.dumps()` 序列化的无效 base64 文本 —— 使载荷恰好翻倍，触发上游请求大小限制。现已打包的块会从 tool 消息中剥离；打包失败的块予以保留。
 
 ### 网关
 
