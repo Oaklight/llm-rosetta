@@ -74,7 +74,7 @@ class TestEnforceCustomTools:
         ir = {"tools": [dict(FUNCTION_TOOL_IR)]}
         result = enforce_custom_tools(ir, shim=shim)
         assert result["tools"][0]["type"] == "function"
-        assert "provider_type" not in (result["tools"][0].get("metadata") or {})
+        assert "_downgraded_from" not in (result["tools"][0].get("metadata") or {})
 
     def test_downgrades_custom_to_function(self):
         shim = _make_shim(supports=False)
@@ -85,7 +85,7 @@ class TestEnforceCustomTools:
 
         t = result["tools"][0]
         assert t["type"] == "function"
-        assert t["metadata"]["provider_type"] == "custom"
+        assert t["metadata"]["_downgraded_from"] == "custom"
         assert t["parameters"]["properties"]["input"]["type"] == "string"
         assert t["parameters"]["required"] == ["input"]
 
@@ -138,9 +138,9 @@ class TestEnforceCustomTools:
         result = enforce_custom_tools(ir, shim=shim)
 
         assert result["tools"][0]["type"] == "function"
-        assert result["tools"][0]["metadata"]["provider_type"] == "custom"
+        assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
         assert result["tools"][1]["type"] == "function"
-        assert "provider_type" not in (result["tools"][1].get("metadata") or {})
+        assert "_downgraded_from" not in (result["tools"][1].get("metadata") or {})
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +152,7 @@ class TestGetCustomToolNames:
     def test_returns_downgraded_names(self):
         ir = {
             "tools": [
-                {"name": "apply_patch", "metadata": {"provider_type": "custom"}},
+                {"name": "apply_patch", "metadata": {"_downgraded_from": "custom"}},
                 {"name": "get_weather", "metadata": {}},
             ]
         }

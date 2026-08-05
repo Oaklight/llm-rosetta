@@ -204,7 +204,7 @@ def enforce_custom_tools(
         tool["type"] = "function"
 
         meta = tool.get("metadata") or {}
-        meta["provider_type"] = "custom"
+        meta["_downgraded_from"] = "custom"
         fmt = meta.get("format")
         tool["metadata"] = meta
 
@@ -232,7 +232,7 @@ def enforce_custom_tools(
 def get_custom_tool_names(ir_request: dict[str, Any]) -> frozenset[str]:
     """Return names of tools that were downgraded from custom to function.
 
-    Looks for ``metadata.provider_type == "custom"`` on each tool
+    Looks for ``metadata._downgraded_from == "custom"`` on each tool
     definition in the IR request — the marker set by
     :func:`enforce_custom_tools`.
     """
@@ -240,7 +240,7 @@ def get_custom_tool_names(ir_request: dict[str, Any]) -> frozenset[str]:
     for tool in ir_request.get("tools") or []:
         if (
             isinstance(tool, dict)
-            and (tool.get("metadata") or {}).get("provider_type") == "custom"
+            and (tool.get("metadata") or {}).get("_downgraded_from") == "custom"
         ):
             name = tool.get("name")
             if name:
