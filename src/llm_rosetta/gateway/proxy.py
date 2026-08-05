@@ -14,6 +14,7 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -41,7 +42,11 @@ from .transport import (
     UpstreamConnectionError,
     UpstreamTransport,
 )
-from .transport.sse_format import SSE_FORMATTERS, format_sse_done
+from .transport.sse_format import (
+    SSE_FORMATTERS,
+    build_stream_error_events,
+    format_sse_done,
+)
 
 logger = get_logger()
 
@@ -429,6 +434,52 @@ async def handle_non_streaming(
     return JSONResponse(source_response), profile
 
 
+def _terminal_error_sse(
+    source_provider: ProviderType,
+    processor: Any,
+    format_sse: Any,
+    exc: BaseException,
+) -> list[str]:
+    """Build SSE text announcing that the upstream stream died mid-flight.
+
+    Without this the socket simply closes and clients that wait for a
+    terminal event (Codex waits for ``response.completed``) report a bare
+    "stream closed before response.completed" with no upstream reason.
+
+    Never raises: a failure to synthesize the notice must not replace the
+    original exception, which carries the real diagnosis.
+
+    Returns:
+        SSE strings to yield, or an empty list if no notice applies.
+    """
+    # Unreachable while the caller catches Exception, since CancelledError
+    # derives from BaseException. Kept so widening that clause later cannot
+    # silently start writing to a client that has already hung up.
+    if isinstance(exc, asyncio.CancelledError):
+        return []
+
+    try:
+        ctx = getattr(processor, "source_context", None)
+        if ctx is not None and ctx.is_ended:
+            # Stream already reached its terminal event — the failure
+            # happened during teardown, so a second one would corrupt it.
+            return []
+
+        events = build_stream_error_events(
+            source_provider,
+            str(exc) or exc.__class__.__name__,
+            response_id=getattr(ctx, "outbound_response_id", "") or "",
+            sequence_number=getattr(ctx, "next_sequence_number", None),
+        )
+        out = [format_sse(event) for event in events]
+        if source_provider in ("openai_chat", "openai_responses", "open_responses"):
+            out.append(format_sse_done())
+        return out
+    except Exception:
+        logger.debug("Failed to build terminal error event", exc_info=True)
+        return []
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -479,6 +530,10 @@ async def _stream_event_generator(
         )
     except Exception as exc:
         stream_error = str(exc)
+        for sse_text in _terminal_error_sse(
+            source_provider, processor, format_sse, exc
+        ):
+            yield sse_text
         raise
     finally:
         # Write back stream profile to request log entry

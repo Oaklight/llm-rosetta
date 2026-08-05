@@ -59,6 +59,16 @@ class OpenAIResponsesStreamContext(StreamContext):
         self._output_item_counter += 1
         return idx
 
+    @property
+    def next_sequence_number(self) -> int:
+        """The sequence number the next emitted event should carry.
+
+        Responses numbers its stream events monotonically, so a
+        synthesized terminal event has to continue the run the client
+        has already consumed rather than restart it.
+        """
+        return self._sequence_number + 1
+
     @classmethod
     def from_base(cls, base: StreamContext) -> OpenAIResponsesStreamContext:
         """Create from a base StreamContext, preserving existing state.

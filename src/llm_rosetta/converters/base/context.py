@@ -275,6 +275,33 @@ class StreamContext(ConversionContext):
         """Whether the stream has been ended."""
         return self._ended
 
+    @property
+    def next_sequence_number(self) -> int | None:
+        """The sequence number a synthesized event should carry, if any.
+
+        Only formats that number their stream events (OpenAI Responses)
+        override this; everywhere else there is no sequence to continue.
+        """
+        return None
+
+    @property
+    def outbound_response_id(self) -> str:
+        """The response ID as the client sees it, prefix included.
+
+        ``response_id`` holds the bare stem: the source prefix is stripped
+        on ingest and re-added by the converter on the way out. Anything
+        synthesizing an event outside the converter must use this instead,
+        or it will emit a second, differently-shaped ID for the same
+        response.
+        """
+        stem = self.response_id
+        if not stem:
+            return ""
+        prefix = self.options.get("response_id_prefix", "")
+        if prefix and not stem.startswith(prefix):
+            return f"{prefix}{stem}"
+        return stem
+
     # Buffer convenience methods
 
     def buffer_usage(self, usage: Mapping[str, Any]) -> None:

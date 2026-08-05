@@ -50,3 +50,59 @@ SSE_FORMATTERS: dict[str, Any] = {
     "anthropic": _format_sse_anthropic,
     "google": _format_sse_google,
 }
+
+
+# ---------------------------------------------------------------------------
+# Terminal error events
+# ---------------------------------------------------------------------------
+
+_TERMINAL_ERROR_MESSAGE = "Upstream stream ended before completion: {reason}"
+
+
+def build_stream_error_events(
+    source_provider: str,
+    reason: str,
+    *,
+    response_id: str = "",
+    sequence_number: int | None = None,
+) -> list[dict[str, Any]]:
+    """Build terminal events announcing that a stream failed mid-flight.
+
+    Clients that wait for a format-specific terminal event (Codex waits for
+    ``response.completed``) otherwise see only an abrupt socket close, which
+    is indistinguishable from a network fault and hides the upstream reason.
+
+    Args:
+        source_provider: Client-facing format.
+        reason: Short description of the upstream failure.
+        response_id: Response ID already advertised to the client, if any.
+        sequence_number: Next sequence number for Responses events.
+
+    Returns:
+        Event dicts to format and yield. Empty for formats with no terminal
+        event convention.
+    """
+    message = _TERMINAL_ERROR_MESSAGE.format(reason=reason)
+
+    if source_provider in ("openai_responses", "open_responses"):
+        response: dict[str, Any] = {
+            "id": response_id,
+            "object": "response",
+            "status": "failed",
+            "error": {"code": "server_error", "message": message},
+        }
+        event: dict[str, Any] = {"type": "response.failed", "response": response}
+        if sequence_number is not None:
+            event["sequence_number"] = sequence_number
+        return [event]
+
+    if source_provider == "openai_chat":
+        return [{"error": {"message": message, "type": "server_error", "code": None}}]
+
+    if source_provider == "anthropic":
+        return [{"type": "error", "error": {"type": "api_error", "message": message}}]
+
+    if source_provider == "google":
+        return [{"error": {"code": 500, "message": message, "status": "INTERNAL"}}]
+
+    return []
