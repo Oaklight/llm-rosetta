@@ -417,6 +417,11 @@ class OpenAIChatMessageOps(BaseMessageOps):
         multimodal extraction; text-only results go straight through
         ``tool_ops.ir_tool_result_to_p()``.
 
+        Blocks that were successfully packed into the synthetic user message
+        are dropped from the tool message body. Re-serializing them here would
+        emit the same bytes twice — and for base64 images that inert copy can
+        be megabytes the model cannot even read.
+
         Args:
             part: IR tool result part.
             multimodal_packs: Accumulator mapping call_id → provider content blocks.
@@ -428,10 +433,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
         result = part.get("result", "")
         if not has_multimodal_content(result):
             return self.tool_ops.ir_tool_result_to_p(part)
-        pack_multimodal_tool_result(
+        residual = pack_multimodal_tool_result(
             result, self.content_ops, multimodal_packs, part["tool_call_id"], warnings
         )
-        return self.tool_ops.ir_tool_result_to_p(part)
+        return self.tool_ops.ir_tool_result_to_p({**part, "result": residual})
 
     # ==================== Provider → IR ====================
 

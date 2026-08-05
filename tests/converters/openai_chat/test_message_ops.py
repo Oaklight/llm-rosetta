@@ -738,7 +738,7 @@ class TestMultimodalToolResultPacking:
         assert result[2]["content"] == "plain text result"
 
     def test_image_only_packing(self):
-        """Image-only tool result → json.dumps in tool msg + synthetic user msg."""
+        """Image-only tool result → image lives only in the synthetic user msg."""
         tr = ToolResultPart(
             type="tool_result",
             tool_call_id="call_img",
@@ -752,11 +752,10 @@ class TestMultimodalToolResultPacking:
         roles = [m["role"] for m in result]
         assert roles == ["user", "assistant", "tool", "user"]
 
-        # Tool message has json.dumps fallback
+        # Packed image is stripped from the tool message, not re-serialized there
         import json
 
-        tool_content = json.loads(result[2]["content"])
-        assert tool_content[0]["type"] == "image"
+        assert json.loads(result[2]["content"]) == []
 
         # Synthetic user message has tagged image_url
         synthetic = result[3]
@@ -1036,6 +1035,67 @@ class TestMultimodalToolResultPacking:
         assert "text" in types
         # No file-related part type in synthetic
         assert "file" not in types
+
+    def test_packed_image_bytes_not_duplicated(self):
+        """Base64 image payload appears exactly once in the converted messages.
+
+        Regression for #480: the tool message used to carry a json.dumps copy
+        of the same base64 alongside the synthetic user message, doubling
+        payload size and tripping upstream request-size limits.
+        """
+        import json
+
+        b64 = "A" * 4096
+        data_url = f"data:image/png;base64,{b64}"
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_big",
+            result=[
+                {"type": "text", "text": "rendered page"},
+                {
+                    "type": "image",
+                    "image_data": {"media_type": "image/png", "data": b64},
+                },
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        assert json.dumps(result).count(b64) == 1
+
+        # The surviving copy is the real image block in the synthetic message
+        synthetic = result[-1]
+        assert synthetic["role"] == "user"
+        images = [p for p in synthetic["content"] if p.get("type") == "image_url"]
+        assert len(images) == 1
+        assert images[0]["image_url"]["url"] == data_url
+
+        # Text is still readable in the tool slot
+        assert json.loads(result[2]["content"]) == [
+            {"type": "text", "text": "rendered page"}
+        ]
+
+    def test_unpackable_image_stays_in_tool_message(self):
+        """An image that fails to pack is not dropped from the tool message.
+
+        Stripping only applies to blocks that actually made it into the
+        synthetic message; otherwise the content would be lost entirely.
+        """
+        import json
+
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_bad",
+            result=[
+                {"type": "image", "detail": "auto"},  # no url and no data
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, warnings = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        assert any("Skipped image in tool result packing" in w for w in warnings)
+        tool_msg = [m for m in result if m["role"] == "tool"][0]
+        assert json.loads(tool_msg["content"]) == [{"type": "image", "detail": "auto"}]
 
     def test_has_multimodal_content_helper(self):
         """has_multimodal_content correctly detects multimodal vs text-only."""
