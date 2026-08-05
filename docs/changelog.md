@@ -51,6 +51,7 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **Provider passthrough events** — new IR types for non-stream and streaming provider passthrough items, allowing converters to forward provider-specific data without loss.
 - **Empty reasoning content** — OpenAI Chat converter preserves empty reasoning content instead of dropping it.
+- **Multimodal tool result payload duplication** ([#480](https://github.com/Oaklight/llm-rosetta/issues/480), PR [#482](https://github.com/Oaklight/llm-rosetta/pull/482)): When targeting OpenAI Chat, images in tool results were emitted twice — once as a real image block in the synthetic user message, and once as inert base64 text via `json.dumps()` in the `role: "tool"` body — exactly doubling the payload and tripping upstream request-size limits. Packed blocks are now stripped from the tool message; blocks that fail to pack are retained.
 
 ### Gateway
 
