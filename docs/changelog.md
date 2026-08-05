@@ -59,6 +59,7 @@ Systematic pass across all four converters to ensure output matches official API
 - **CORS headers on auth errors** — add CORS headers to auth error responses.
 - **Bearer token fallback** — accept `Bearer` token as fallback for all auth strategies.
 - **Embedding request IDs** — align embedding request IDs with upstream format.
+- **Terminal event on upstream stream abort** ([#481](https://github.com/Oaklight/llm-rosetta/issues/481), PR [#483](https://github.com/Oaklight/llm-rosetta/pull/483)): When an upstream connection dropped mid-stream, the gateway closed the SSE socket without any terminal event — clients waiting on one reported a bare `stream closed before response.completed` with no trace of the cause. The gateway now emits a format-appropriate terminal event carrying the upstream reason (`response.failed` + `[DONE]` for Responses, an error chunk + `[DONE]` for Chat, `event: error` for Anthropic, an error object for Google). Skipped when the stream already ended or the client disconnected. Adds `StreamProcessor.source_context`, plus `StreamContext.next_sequence_number` and `StreamContext.outbound_response_id`.
 - **Admin modal polish** — CSS fixes, flatten hint tooltip, i18n alignment.
 
 ### CI & Documentation
