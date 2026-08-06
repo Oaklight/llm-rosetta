@@ -140,6 +140,7 @@ class StreamContext(ConversionContext):
     # Tool call accumulation for streaming
     _tool_call_args: dict[str, str] = field(default_factory=dict, repr=False)
     _tool_call_order: list[str] = field(default_factory=list, repr=False)
+    _tool_call_index: dict[str, int] = field(default_factory=dict, repr=False)
     _tool_call_types: dict[str, str] = field(default_factory=dict, repr=False)
 
     def next_block_index(self) -> int:
@@ -164,7 +165,8 @@ class StreamContext(ConversionContext):
         self.tool_call_id_map[tool_call_id] = tool_name
         self._tool_call_args[tool_call_id] = ""
         self._tool_call_types[tool_call_id] = tool_type
-        if tool_call_id not in self._tool_call_order:
+        if tool_call_id not in self._tool_call_index:
+            self._tool_call_index[tool_call_id] = len(self._tool_call_order)
             self._tool_call_order.append(tool_call_id)
 
     def get_tool_type(self, tool_call_id: str) -> str:
@@ -217,7 +219,8 @@ class StreamContext(ConversionContext):
         """
         if tool_call_id not in self._tool_call_args:
             self._tool_call_args[tool_call_id] = ""
-            if tool_call_id not in self._tool_call_order:
+            if tool_call_id not in self._tool_call_index:
+                self._tool_call_index[tool_call_id] = len(self._tool_call_order)
                 self._tool_call_order.append(tool_call_id)
         self._tool_call_args[tool_call_id] += delta
 
@@ -298,10 +301,7 @@ class StreamContext(ConversionContext):
         Returns:
             Zero-based index, or None if not registered.
         """
-        try:
-            return self._tool_call_order.index(tool_call_id)
-        except ValueError:
-            return None
+        return self._tool_call_index.get(tool_call_id)
 
     def mark_started(self) -> None:
         """Mark the stream as started."""
