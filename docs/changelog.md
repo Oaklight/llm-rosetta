@@ -8,6 +8,18 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.8.1 — 2026-08-07
+
+### Bug 修复
+
+- **Custom tool grammar 格式** (PR [#489](https://github.com/Oaklight/llm-rosetta/pull/489))：修复 grammar 约束的 custom tools（如 Codex `apply_patch`）在 Chat Completions 上游失败的问题。Responses API 使用扁平 `format` 格式（`{type, syntax, definition}`），Chat Completions 要求嵌套在 `format.grammar` 下。在 Chat 边界添加了双向幂等的格式转换。
+- **流式 null union 成员** (PR [#489](https://github.com/Oaklight/llm-rosetta/pull/489))：修复流式 custom tool call delta 导致 `AttributeError` 崩溃的问题。Provider 在每个 delta 中序列化 union 的所有成员，非活跃成员设为 `null`；`dict.get("type", "function")` 在 key 存在但值为 null 时返回 `None`。现在从有数据的 payload 推断类型，回退到 context 中注册的类型。
+
+### 改进
+
+- **Tool call order 公开 API** (PR [#490](https://github.com/Oaklight/llm-rosetta/pull/490))：4 个 converter 中对 `_tool_call_order` 的私有访问全部替换为 `StreamContext` 上的公开方法：`tool_call_ids`、`tool_call_count`、`resolve_tool_call_id_by_index()`、`get_tool_call_index()`。
+- **O(1) tool call index 查找** — `get_tool_call_index()` 使用反向 dict 替代线性 `list.index()` 扫描。
+
 ## v0.8.0 — 2026-08-06
 
 ### Spec 合规性
