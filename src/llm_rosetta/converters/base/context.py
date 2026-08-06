@@ -266,6 +266,43 @@ class StreamContext(ConversionContext):
             result.append((call_id, name, args))
         return result
 
+    @property
+    def tool_call_ids(self) -> list[str]:
+        """Ordered list of registered tool call IDs."""
+        return list(self._tool_call_order)
+
+    @property
+    def tool_call_count(self) -> int:
+        """Number of registered tool calls."""
+        return len(self._tool_call_order)
+
+    def resolve_tool_call_id_by_index(self, index: int) -> str | None:
+        """Look up a tool call ID by its positional index.
+
+        Args:
+            index: Zero-based position in registration order.
+
+        Returns:
+            The tool call ID, or None if the index is out of range.
+        """
+        if 0 <= index < len(self._tool_call_order):
+            return self._tool_call_order[index]
+        return None
+
+    def get_tool_call_index(self, tool_call_id: str) -> int | None:
+        """Look up the positional index of a tool call ID.
+
+        Args:
+            tool_call_id: The tool call ID to look up.
+
+        Returns:
+            Zero-based index, or None if not registered.
+        """
+        try:
+            return self._tool_call_order.index(tool_call_id)
+        except ValueError:
+            return None
+
     def mark_started(self) -> None:
         """Mark the stream as started."""
         self._started = True
