@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.8.0 — 2026-08-06
+
 ### Spec 合规性
 
 对所有四个转换器进行系统性检查，确保输出符合官方 API 规范。由 [llm-comply](https://github.com/Oaklight/llm-comply) 合规性测试驱动。
@@ -60,7 +62,26 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Bearer token 降级** — 对所有认证策略接受 `Bearer` token 作为降级方式。
 - **Embedding 请求 ID** — 对齐 embedding 请求 ID 与上游格式。
 - **上游流式中断时发送终止事件** ([#481](https://github.com/Oaklight/llm-rosetta/issues/481)、PR [#483](https://github.com/Oaklight/llm-rosetta/pull/483))：上游连接在流式传输中途断开时，网关会直接关闭 SSE 连接而不发送任何终止事件 —— 等待终止事件的客户端只能得到一句 `stream closed before response.completed`，无从得知原因。现在网关会发送符合目标格式的终止事件并携带上游原因（Responses 为 `response.failed` + `[DONE]`，Chat 为 error chunk + `[DONE]`，Anthropic 为 `event: error`，Google 为 error 对象）。流已正常结束或客户端已断开时跳过。新增 `StreamProcessor.source_context`，以及 `StreamContext.next_sequence_number` 和 `StreamContext.outbound_response_id`。
+- **结构化 JSON 日志** (PR [#468](https://github.com/Oaklight/llm-rosetta/pull/468))：可配置 `debug.log_format`（`json`/`text`/`auto`）。JSON 模式每行输出一个 JSON 对象，UTC ISO 8601 时间戳，结构化 extras 通过 allowlist 提升为顶层键。`auto` 非 TTY 时为 `json`，交互式为 `text`。支持管理 API 热加载。
+- **流内上游错误 surface** (PR [#454](https://github.com/Oaklight/llm-rosetta/pull/454))：上游在 200 SSE 流内报告请求错误时（如 Argo 对超限 tools 发送 `event: error`），之前错误块会被静默吞掉，客户端收到成功但空的响应。现在检测裸 error envelope，发送格式匹配的错误事件，并正常终止流。
+- **管理面板 custom tools 开关** (PR [#467](https://github.com/Oaklight/llm-rosetta/pull/467))：在管理面板 provider 设置中暴露 `supports_custom_tools` 复选框，含 (i) 提示 tooltip。
+- **可配置超时** (PR [#463](https://github.com/Oaklight/llm-rosetta/pull/463))：`server.upstream_timeout` 和 `server.read_timeout` 配置项（均默认 300 秒）。
+- **根路径重定向** (PR [#461](https://github.com/Oaklight/llm-rosetta/pull/461))：`server.root_redirect` 配置项，将 `GET /` 重定向到管理面板。
+- **匿名访问选项** — `server.open_on_no_keys` 在未配置 API key 时允许匿名访问。
+- **原子化配置写入** — 跨平台文件锁，保证并发配置读-改-写安全。
 - **管理面板 modal 优化** — CSS 修复、展平提示 tooltip、i18n 对齐。
+
+
+### Shim 与转换
+
+- **自动注入 Anthropic 缓存断点** ([#464](https://github.com/Oaklight/llm-rosetta/issues/464)、[#465](https://github.com/Oaklight/llm-rosetta/issues/465)，PR [#469](https://github.com/Oaklight/llm-rosetta/pull/469))：跨格式请求（OpenAI/Gemini → Anthropic）缺少缓存语义时，自动通过 `auto_cache_breakpoints` IR 转换注入最多 4 个 `cache_hint` 断点。断点位置：最后一个 tool 定义、system 指令尾部、最后两条 user 消息。挂载在 `argo--anthropic` 和 `openrouter--anthropic` shim 上。两种模式：`none_only`（默认，已有 hint 时跳过）和 `fill_gaps`（按段独立填充）。
+- **非支持 Chat 上游的 custom tool 降级** ([#460](https://github.com/Oaklight/llm-rosetta/issues/460)，PR [#486](https://github.com/Oaklight/llm-rosetta/pull/486))：`ProviderShim` 新增 `supports_custom_tools` 标志（默认 `False`）。目标 Chat 上游不支持 `{type: "custom"}` tool 定义时，请求时降级为 `{type: "function"}`，响应时恢复原始类型。仅 OpenAI shim 设为 `true`。
+
+### 转换器
+
+- **OpenAI Chat 原生 custom tool 支持** — `openai_chat` 转换器原生处理 `custom` tool 类型，`ConversionContext` 新增 `set_tool_call_type()` 公开 API。
+- **`custom_tool_call_output` 项类型** — OpenAI Responses 转换器支持 `custom_tool_call_output` 输入项。
+- **BaseConverter 模板方法重构** — `BaseConverter` 转换为模板方法模式，通过 `__init_subclass__` 强制 `_PASSTHROUGH_RESTORE_KEY`。
 
 ### CI 与文档
 
