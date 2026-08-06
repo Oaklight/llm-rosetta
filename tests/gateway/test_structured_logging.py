@@ -152,11 +152,15 @@ class TestJsonFormatter:
         assert entry["request_id"] == "abc-123"
         assert entry["model"] == "gpt-4"
 
-    def test_standard_attrs_excluded(self):
-        entry = _capture_json_log("test")
-        # Standard Python logging attributes should NOT appear
-        for attr in ("args", "funcName", "pathname", "lineno", "processName"):
-            assert attr not in entry
+    def test_only_allowed_extras_promoted(self):
+        entry = _capture_json_log(
+            "test",
+            extra={"request_id": "r-1", "color_message": "leaked", "foo": "bar"},
+        )
+        assert entry["request_id"] == "r-1"
+        # Third-party or unknown attrs must NOT leak into JSON
+        assert "color_message" not in entry
+        assert "foo" not in entry
 
     def test_levels(self):
         for level, name in [
@@ -248,6 +252,17 @@ class TestSetupLogging:
 
 
 class TestStructuredExtra:
+    def setup_method(self):
+        import llm_rosetta.gateway.logging as _mod
+
+        self._orig = _mod._log_format
+        _mod._log_format = "json"
+
+    def teardown_method(self):
+        import llm_rosetta.gateway.logging as _mod
+
+        _mod._log_format = self._orig
+
     def test_none_values_excluded(self):
         extra = _structured_extra(request_id="abc", model=None, status=200)
         assert extra == {"request_id": "abc", "status": 200}
@@ -273,6 +288,13 @@ class TestStructuredExtra:
             "duration_ms": 1234,
             "status": "success",
         }
+
+    def test_text_mode_returns_empty(self):
+        import llm_rosetta.gateway.logging as _mod
+
+        _mod._log_format = "text"
+        extra = _structured_extra(request_id="abc", model="gpt-4", status=200)
+        assert extra == {}
 
 
 # ---------------------------------------------------------------------------

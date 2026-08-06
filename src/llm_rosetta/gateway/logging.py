@@ -97,31 +97,22 @@ def _supports_color() -> bool:
 # ---------------------------------------------------------------------------
 
 
-# Standard LogRecord attributes to exclude from JSON extra fields
-_STANDARD_LOG_ATTRS: frozenset[str] = frozenset(
+# Extra keys promoted to top-level JSON fields (allowlist).
+# Update this set when adding new structured keys to log helpers.
+_STRUCTURED_EXTRA_KEYS: frozenset[str] = frozenset(
     {
-        "args",
-        "created",
-        "exc_info",
-        "exc_text",
-        "filename",
-        "funcName",
-        "levelname",
-        "levelno",
-        "lineno",
-        "message",
-        "module",
-        "msecs",
-        "msg",
-        "name",
-        "pathname",
-        "process",
-        "processName",
-        "relativeCreated",
-        "stack_info",
-        "thread",
-        "threadName",
-        "taskName",
+        "chunk_count",
+        "duration_ms",
+        "endpoint",
+        "label",
+        "max_content_length",
+        "model",
+        "request_id",
+        "request_type",
+        "source_provider",
+        "status",
+        "target_provider",
+        "truncate_tools",
     }
 )
 
@@ -155,16 +146,9 @@ class JsonFormatter(logging.Formatter):
             "message": record.message,
         }
 
-        # Promote non-standard extra fields.
-        # We use a denylist of known stdlib LogRecord attributes rather than
-        # an allowlist so that callers can attach arbitrary structured fields
-        # via ``extra={...}``.  The denylist is exhaustive for Python 3.12+
-        # stdlib attrs; any new stdlib attr added in future versions should
-        # be added to ``_STANDARD_LOG_ATTRS``.
+        # Promote allowed extra fields only.
         for key, value in record.__dict__.items():
-            if key.startswith("_"):  # skip private/internal attrs
-                continue
-            if key not in _STANDARD_LOG_ATTRS and key not in entry:
+            if key in _STRUCTURED_EXTRA_KEYS and key not in entry:
                 entry[key] = value
 
         if record.exc_info and not record.exc_text:
@@ -193,8 +177,6 @@ class ColoredFormatter(logging.Formatter):
         self, record: logging.LogRecord, datefmt: str | None = None
     ) -> str:
         """Format timestamp with millisecond precision."""
-        import datetime
-
         ct = datetime.datetime.fromtimestamp(record.created)
         return ct.strftime("%Y-%m-%d %H:%M:%S.") + f"{int(record.msecs):03d}"
 
@@ -427,7 +409,10 @@ def _structured_extra(**kwargs: Any) -> dict[str, Any]:
     """Build an ``extra`` dict for :meth:`logging.Logger.info` & friends.
 
     Only non-``None`` values are included so JSON output stays clean.
+    Skipped entirely in text mode where the formatter ignores extras.
     """
+    if _log_format != "json":
+        return {}
     return {k: v for k, v in kwargs.items() if v is not None}
 
 
