@@ -45,6 +45,52 @@ from .tool_ops import OpenAIChatToolOps
 logger = logging.getLogger(__name__)
 
 
+def _resolve_tool_call_delta(
+    tc: dict[str, Any],
+    effective_tc_id: str | None,
+    context: StreamContext | None,
+) -> tuple[str, str, str]:
+    """Resolve the type, name and input payload of one tool-call delta.
+
+    Providers serialise every member of the streaming tool-call union on
+    each delta and set the inactive ones to null; continuation deltas null
+    out ``type`` as well::
+
+        {"index": 0, "id": null, "type": null, "function": null,
+         "custom": {"input": "***"}}
+
+    ``dict.get(key, default)`` does not help here — the keys exist, so the
+    default never applies — hence the ``or`` coercion. The type is then
+    recovered from whichever payload is populated, falling back to the type
+    registered when the call started, so continuation deltas of a custom
+    tool call are not misread as function calls and silently dropped.
+
+    Args:
+        tc: A single tool-call delta from a provider chunk.
+        effective_tc_id: Resolved tool call ID, if one is known yet.
+        context: Stream context holding previously registered call types.
+
+    Returns:
+        Tuple of ``(tool_type, tool_name, tool_input)``. ``tool_type`` is
+        either ``"custom"`` or ``"function"``.
+    """
+    tc_custom = tc.get("custom") or {}
+    tc_func = tc.get("function") or {}
+    tc_type = tc.get("type")
+
+    if not tc_type:
+        if tc_custom:
+            tc_type = "custom"
+        elif tc_func:
+            tc_type = "function"
+        elif context is not None and effective_tc_id:
+            tc_type = context.get_tool_type(effective_tc_id)
+
+    if tc_type == "custom":
+        return tc_type, tc_custom.get("name", ""), tc_custom.get("input", "")
+    return "function", tc_func.get("name", ""), tc_func.get("arguments", "")
+
+
 class OpenAIChatConverter(BaseConverter):
     """OpenAI Chat Completions API converter.
 
@@ -632,18 +678,18 @@ class OpenAIChatConverter(BaseConverter):
     ) -> None:
         """Process tool call deltas from a choice."""
         for tc in tool_calls:
-            tc_type = tc.get("type", "function")
             tc_id = tc.get("id")
             tc_index = tc.get("index")
 
-            if tc_type == "custom":
-                tc_custom = tc.get("custom", {})
-                tc_name = tc_custom.get("name", "")
-                tc_input = tc_custom.get("input", "")
-            else:
-                tc_func = tc.get("function", {})
-                tc_name = tc_func.get("name", "")
-                tc_input = tc_func.get("arguments", "")
+            # Resolve the effective call ID for delta-only chunks
+            # (they carry index but no id).
+            effective_tc_id = tc_id
+            if not effective_tc_id and tc_index is not None and context is not None:
+                effective_tc_id = context.resolve_tool_call_id_by_index(tc_index)
+
+            tc_type, tc_name, tc_input = _resolve_tool_call_delta(
+                tc, effective_tc_id, context
+            )
 
             if tc_id:
                 start_event_tc = ToolCallStartEvent(
@@ -665,11 +711,6 @@ class OpenAIChatConverter(BaseConverter):
                         "custom" if tc_type == "custom" else "function",
                     )
 
-            # Resolve the effective call ID for delta-only chunks
-            # (they carry index but no id).
-            effective_tc_id = tc_id
-            if not effective_tc_id and tc_index is not None and context is not None:
-                effective_tc_id = context.resolve_tool_call_id_by_index(tc_index)
 
             if tc_input:
                 delta_event = ToolCallDeltaEvent(
