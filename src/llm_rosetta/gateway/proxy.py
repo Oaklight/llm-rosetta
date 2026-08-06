@@ -15,6 +15,7 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
@@ -481,6 +482,26 @@ def _terminal_error_sse(
         return []
 
 
+def _is_upstream_error_chunk(chunk: Any) -> bool:
+    """True if *chunk* is an in-band upstream error rather than content.
+
+    Only treats a chunk as an error when it carries no payload of its own, so
+    a provider that legitimately ships an ``error`` field alongside content is
+    left alone.
+    """
+    if not isinstance(chunk, dict) or not chunk.get("error"):
+        return False
+    return not any(k in chunk for k in ("choices", "delta", "candidates", "type"))
+
+
+def _upstream_error_message(chunk: dict[str, Any]) -> str:
+    """Pull a human-readable message out of an upstream error envelope."""
+    err = chunk.get("error")
+    if isinstance(err, dict):
+        return str(err.get("message") or err)
+    return str(err)
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -518,6 +539,21 @@ async def _stream_event_generator(
                 chunk_count += 1
                 if upstream_chunks is not None:
                     upstream_chunks.append(chunk)
+
+                if _is_upstream_error_chunk(chunk):
+                    stream_error = _upstream_error_message(chunk)
+                    log_upstream_error(
+                        getattr(stream, "status_code", 200),
+                        json.dumps(chunk)[:2000],
+                        endpoint=model,
+                        is_streaming=True,
+                    )
+                    for event in build_stream_error_events(
+                        source_provider, stream_error
+                    ):
+                        yield format_sse(event)
+                    break
+
                 for source_event in processor.process_chunk(chunk):
                     yield format_sse(source_event)
 
