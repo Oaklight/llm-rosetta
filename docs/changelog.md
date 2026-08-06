@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.8.0 — 2026-08-06
+
 ### Spec Compliance
 
 Systematic pass across all four converters to ensure output matches official API specs. Driven by [llm-comply](https://github.com/Oaklight/llm-comply) compliance testing.
@@ -60,7 +62,26 @@ Systematic pass across all four converters to ensure output matches official API
 - **Bearer token fallback** — accept `Bearer` token as fallback for all auth strategies.
 - **Embedding request IDs** — align embedding request IDs with upstream format.
 - **Terminal event on upstream stream abort** ([#481](https://github.com/Oaklight/llm-rosetta/issues/481), PR [#483](https://github.com/Oaklight/llm-rosetta/pull/483)): When an upstream connection dropped mid-stream, the gateway closed the SSE socket without any terminal event — clients waiting on one reported a bare `stream closed before response.completed` with no trace of the cause. The gateway now emits a format-appropriate terminal event carrying the upstream reason (`response.failed` + `[DONE]` for Responses, an error chunk + `[DONE]` for Chat, `event: error` for Anthropic, an error object for Google). Skipped when the stream already ended or the client disconnected. Adds `StreamProcessor.source_context`, plus `StreamContext.next_sequence_number` and `StreamContext.outbound_response_id`.
+- **Structured JSON logging** (PR [#468](https://github.com/Oaklight/llm-rosetta/pull/468)): Configurable `debug.log_format` (`json`/`text`/`auto`). JSON mode emits one JSON object per line with UTC ISO 8601 timestamps, structured extras promoted to top-level keys via allowlist. `auto` resolves to `json` for non-TTY, `text` for interactive. Hot-reload via admin API.
+- **In-band upstream error surfacing** (PR [#454](https://github.com/Oaklight/llm-rosetta/pull/454)): When an upstream reports a request error inside a 200 SSE stream (e.g. Argo sends `event: error` for over-limit tools), the error chunk was previously swallowed and the client received a successful but empty response. Now detects bare error envelopes, emits a format-appropriate error event, and stops the stream cleanly.
+- **Admin custom tools toggle** (PR [#467](https://github.com/Oaklight/llm-rosetta/pull/467)): Expose `supports_custom_tools` checkbox in admin provider settings with (i) hint tooltip.
+- **Configurable timeouts** (PR [#463](https://github.com/Oaklight/llm-rosetta/pull/463)): `server.upstream_timeout` and `server.read_timeout` config options (both default 300s).
+- **Root redirect** (PR [#461](https://github.com/Oaklight/llm-rosetta/pull/461)): `server.root_redirect` config option for redirecting `GET /` to admin panel.
+- **Anonymous access opt-in** — `server.open_on_no_keys` allows anonymous access when no API keys are configured.
+- **Atomic config writes** — cross-platform file locking for concurrent config read-modify-write safety.
 - **Admin modal polish** — CSS fixes, flatten hint tooltip, i18n alignment.
+
+
+### Shims & Transforms
+
+- **Auto-inject Anthropic cache breakpoints** ([#464](https://github.com/Oaklight/llm-rosetta/issues/464), [#465](https://github.com/Oaklight/llm-rosetta/issues/465), PR [#469](https://github.com/Oaklight/llm-rosetta/pull/469)): Cross-format requests (OpenAI/Gemini → Anthropic) that lack cache semantics now get up to 4 `cache_hint` breakpoints injected automatically via the `auto_cache_breakpoints` IR transform. Breakpoints placed on: last tool definition, system instruction tail, and last two user messages. Mounted on `argo--anthropic` and `openrouter--anthropic` shims. Two modes: `none_only` (default, skips if any hint exists) and `fill_gaps` (fills per-segment independently).
+- **Custom tool downgrade for Chat upstreams** ([#460](https://github.com/Oaklight/llm-rosetta/issues/460), PR [#486](https://github.com/Oaklight/llm-rosetta/pull/486)): `supports_custom_tools` flag on `ProviderShim` (default `False`). When targeting a Chat upstream that doesn't support `{type: "custom"}` tool definitions, `enforce_custom_tools()` downgrades them to `{type: "function"}` with synthetic parameters on request, and `restore_custom_tool_calls()` restores the original type on response.
+
+### Converters
+
+- **Native custom tool support in OpenAI Chat** — `openai_chat` converter natively handles `custom` tool type, including `set_tool_call_type()` public API on `ConversionContext`.
+- **`custom_tool_call_output` item type** — OpenAI Responses converter supports `custom_tool_call_output` input items.
+- **BaseConverter template method refactor** — `BaseConverter` converted to template method pattern with `__init_subclass__` enforcement of `_PASSTHROUGH_RESTORE_KEY`.
 
 ### CI & Documentation
 
