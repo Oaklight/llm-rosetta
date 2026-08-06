@@ -693,7 +693,7 @@ class AnthropicConverter(BaseConverter):
                 tool_name=tool_name,
             )
             if context is not None:
-                start_evt["tool_call_index"] = len(context._tool_call_order) - 1
+                start_evt["tool_call_index"] = context.tool_call_count - 1
             events.append(start_evt)
 
     def _handle_p_content_block_delta_to_ir(
@@ -732,11 +732,9 @@ class AnthropicConverter(BaseConverter):
             if (
                 context is not None
                 and tool_call_id
-                and tool_call_id in context._tool_call_order
+                and (tc_idx := context.get_tool_call_index(tool_call_id)) is not None
             ):
-                delta_evt["tool_call_index"] = context._tool_call_order.index(
-                    tool_call_id
-                )
+                delta_evt["tool_call_index"] = tc_idx
             events.append(delta_evt)
 
             if context is not None and tool_call_id:

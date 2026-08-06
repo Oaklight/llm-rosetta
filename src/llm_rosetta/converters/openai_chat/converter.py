@@ -669,9 +669,7 @@ class OpenAIChatConverter(BaseConverter):
             # (they carry index but no id).
             effective_tc_id = tc_id
             if not effective_tc_id and tc_index is not None and context is not None:
-                order = context._tool_call_order
-                if 0 <= tc_index < len(order):
-                    effective_tc_id = order[tc_index]
+                effective_tc_id = context.resolve_tool_call_id_by_index(tc_index)
 
             if tc_input:
                 delta_event = ToolCallDeltaEvent(

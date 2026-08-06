@@ -911,7 +911,7 @@ class GoogleGenAIConverter(BaseConverter):
         if context is not None:
             context.register_tool_call(tool_call_id, tool_name)
 
-        tc_index = len(context._tool_call_order) - 1 if context is not None else 0
+        tc_index = context.tool_call_count - 1 if context is not None else 0
         start_event: dict[str, Any] = {
             "type": "tool_call_start",
             "tool_call_id": tool_call_id,

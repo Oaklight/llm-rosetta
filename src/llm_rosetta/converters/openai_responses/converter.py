@@ -1437,8 +1437,8 @@ class OpenAIResponsesConverter(BaseConverter):
         # Some upstream providers (e.g. certain Chat Completions
         # implementations) only send tool_call_id on the first chunk.
         if not call_id and context is not None and tc_index is not None:
-            if tc_index < len(context._tool_call_order):
-                call_id = context._tool_call_order[tc_index]
+            if tc_index < context.tool_call_count:
+                call_id = context.resolve_tool_call_id_by_index(tc_index)
 
         # Accumulate arguments in context for done events
         if context is not None and call_id:
@@ -1596,7 +1596,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     part.setdefault("logprobs", [])
             output.append(msg_item)
 
-        for call_id in context._tool_call_order:
+        for call_id in context.tool_call_ids:
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             tc_item_id = context.get_tool_call_item_id(call_id) or call_id
@@ -1776,7 +1776,7 @@ class OpenAIResponsesConverter(BaseConverter):
         results: list[dict[str, Any]],
     ) -> None:
         """Emit done events for each tool call."""
-        for tc_idx, call_id in enumerate(context._tool_call_order):
+        for tc_idx, call_id in enumerate(context.tool_call_ids):
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             item_id = context.get_tool_call_item_id(call_id) or call_id
