@@ -194,13 +194,13 @@ tr:hover td { background: var(--bg-hover); }
 .seg-control > * { display:flex;align-items:center;padding:6px 20px;font-size:13px;font-weight:500;cursor:pointer;border-right:1px solid var(--border);transition:all 0.15s;user-select:none;color:var(--text-dim);text-transform:none;letter-spacing:0;margin:0; }
 .seg-control > *:last-child { border-right:none; }
 .seg-control > *:hover { background:var(--bg); }
-.seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:none; }
+.seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:#fff; }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
 .chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;user-select:none;transition:all 0.15s;background:var(--bg-card);color:var(--text-dim); }
 .chip:hover { border-color:var(--accent);color:var(--accent); }
 .chip.active { background:var(--accent);border-color:var(--accent);color:#fff; }
-.chip input { position:absolute;opacity:0;width:0;height:0;pointer-events:none; }
+.chip input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .expand-link { font-size:12px;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-top:6px; }
 .expand-link:hover { text-decoration:underline; }
 .bulk-bar { display:none;align-items:center;gap:10px;padding:8px 14px;margin-bottom:8px;background:#ddf4ff;border:1px solid #a8d4f5;border-radius:8px;font-size:13px; }
@@ -400,7 +400,7 @@ canvas { width: 100%; height: 160px; }
 
 /* Tooltip */
 .hint-icon { display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:11px;font-weight:700;cursor:help;position:relative;vertical-align:middle;margin-left:4px;flex-shrink:0; }
-.hint-icon .hint-popup { display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:12px;font-weight:400;line-height:1.5;color:var(--text);white-space:normal;width:280px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:none; }
+.hint-icon .hint-popup { display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:12px;font-weight:400;line-height:1.5;color:var(--text);white-space:normal;width:280px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:auto; }
 .hint-icon:hover .hint-popup { display:block; }
 
 /* Network diagnostics */
