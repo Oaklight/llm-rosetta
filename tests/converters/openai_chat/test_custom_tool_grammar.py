@@ -75,7 +75,9 @@ class TestCustomToolGrammarShape:
         ir_tool = OpenAIChatToolOps.p_tool_definition_to_ir(CHAT_CUSTOM_TOOL)
         chat_tool = OpenAIChatToolOps.ir_tool_definition_to_p(ir_tool)
 
-        assert chat_tool["custom"]["format"] == CHAT_CUSTOM_TOOL["custom"]["format"]
+        expected_fmt = CHAT_CUSTOM_TOOL["custom"]
+        assert isinstance(expected_fmt, dict)
+        assert chat_tool["custom"]["format"] == expected_fmt["format"]
 
     def test_responses_round_trip_is_stable(self):
         """Responses → IR → Chat → IR → Responses preserves the flat shape."""
