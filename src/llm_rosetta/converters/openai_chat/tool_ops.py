@@ -29,6 +29,43 @@ from ..base.helpers import log_orphan_warnings, sanitize_schema
 logger = logging.getLogger(__name__)
 
 
+# ==================== Custom Tool Format Shape ====================
+#
+# The Responses API flattens grammar fields into ``format``:
+#     {"type": "grammar", "syntax": "lark", "definition": "..."}
+# Chat Completions nests them under ``format.grammar``:
+#     {"type": "grammar", "grammar": {"syntax": "lark", "definition": "..."}}
+# IR canonically stores the flat (Responses) shape in ``metadata["format"]``,
+# so the Chat boundary has to nest on the way out and flatten on the way in.
+# Both helpers are idempotent.
+
+
+def _custom_format_to_chat(fmt: Any) -> Any:
+    """Flat IR/Responses custom-tool ``format`` → nested Chat Completions shape."""
+    if not isinstance(fmt, dict) or fmt.get("type") != "grammar":
+        return fmt
+    if isinstance(fmt.get("grammar"), dict):
+        return fmt  # already Chat-shaped
+    grammar = {k: fmt[k] for k in ("syntax", "definition") if fmt.get(k) is not None}
+    if not grammar:
+        return fmt
+    return {"type": "grammar", "grammar": grammar}
+
+
+def _custom_format_to_ir(fmt: Any) -> Any:
+    """Nested Chat Completions custom-tool ``format`` → flat IR/Responses shape."""
+    if not isinstance(fmt, dict) or fmt.get("type") != "grammar":
+        return fmt
+    grammar = fmt.get("grammar")
+    if not isinstance(grammar, dict):
+        return fmt  # already flat
+    flat = {"type": "grammar"}
+    for k in ("syntax", "definition"):
+        if grammar.get(k) is not None:
+            flat[k] = grammar[k]
+    return flat
+
+
 # ==================== Orphaned Tool Call Fix ====================
 
 
@@ -157,7 +194,7 @@ class OpenAIChatToolOps(BaseToolOps):
                 custom["description"] = desc
             fmt = metadata.get("format")
             if fmt:
-                custom["format"] = fmt
+                custom["format"] = _custom_format_to_chat(fmt)
             return {"type": "custom", "custom": custom}
 
         if tool_type == "function":
@@ -203,7 +240,7 @@ class OpenAIChatToolOps(BaseToolOps):
             metadata: dict[str, Any] = {}
             fmt = custom.get("format")
             if fmt:
-                metadata["format"] = fmt
+                metadata["format"] = _custom_format_to_ir(fmt)
             return cast(
                 ToolDefinition,
                 {
