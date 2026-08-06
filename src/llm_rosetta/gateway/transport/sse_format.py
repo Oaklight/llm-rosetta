@@ -106,3 +106,32 @@ def build_stream_error_events(
         return [{"error": {"code": 500, "message": message, "status": "INTERNAL"}}]
 
     return []
+
+
+# ---------------------------------------------------------------------------
+# In-band upstream error detection
+# ---------------------------------------------------------------------------
+
+
+def is_upstream_error_chunk(chunk: Any) -> bool:
+    """True if *chunk* is an in-band upstream error rather than content.
+
+    Some upstreams report request errors inside a 200 SSE stream rather than
+    by HTTP status.  Such a chunk converts to zero source events, leaving the
+    client a successful but empty response.
+
+    Only treats a chunk as an error when it carries no payload of its own, so
+    a provider that legitimately ships an ``error`` field alongside content is
+    left alone.
+    """
+    if not isinstance(chunk, dict) or not chunk.get("error"):
+        return False
+    return not any(k in chunk for k in ("choices", "delta", "candidates", "type"))
+
+
+def extract_upstream_error_message(chunk: dict[str, Any]) -> str:
+    """Pull a human-readable message out of an upstream error envelope."""
+    err = chunk.get("error")
+    if isinstance(err, dict):
+        return str(err.get("message") or err)
+    return str(err)
