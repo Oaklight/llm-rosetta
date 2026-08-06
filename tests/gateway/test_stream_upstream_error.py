@@ -12,11 +12,11 @@ import asyncio
 
 import pytest
 
-from llm_rosetta.gateway.proxy import (
-    _is_upstream_error_chunk,
-    _stream_event_generator,
+from llm_rosetta.gateway.proxy import _stream_event_generator
+from llm_rosetta.gateway.transport.sse_format import (
+    build_stream_error_events,
+    is_upstream_error_chunk,
 )
-from llm_rosetta.gateway.transport.sse_format import build_stream_error_events
 
 ERROR_CHUNK = {
     "error": {
@@ -80,7 +80,7 @@ async def _collect(chunks, source_provider="openai_responses"):
 
 
 def test_detects_bare_error_envelope():
-    assert _is_upstream_error_chunk(ERROR_CHUNK)
+    assert is_upstream_error_chunk(ERROR_CHUNK)
 
 
 @pytest.mark.parametrize(
@@ -95,7 +95,7 @@ def test_detects_bare_error_envelope():
     ],
 )
 def test_content_chunks_are_not_errors(chunk):
-    assert not _is_upstream_error_chunk(chunk)
+    assert not is_upstream_error_chunk(chunk)
 
 
 def test_error_event_uses_source_envelope():
