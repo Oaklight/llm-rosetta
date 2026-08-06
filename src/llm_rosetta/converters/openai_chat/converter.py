@@ -681,8 +681,8 @@ class OpenAIChatConverter(BaseConverter):
             tc_id = tc.get("id")
             tc_index = tc.get("index")
 
-            # Resolve the effective call ID for delta-only chunks
-            # (they carry index but no id).
+            # Resolve effective call ID before dispatch — the helper
+            # uses it for context-based type recovery on null-type deltas.
             effective_tc_id = tc_id
             if not effective_tc_id and tc_index is not None and context is not None:
                 effective_tc_id = context.resolve_tool_call_id_by_index(tc_index)
@@ -710,7 +710,6 @@ class OpenAIChatConverter(BaseConverter):
                         tc_name,
                         "custom" if tc_type == "custom" else "function",
                     )
-
 
             if tc_input:
                 delta_event = ToolCallDeltaEvent(
