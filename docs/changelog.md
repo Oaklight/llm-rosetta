@@ -8,6 +8,18 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.8.1 — 2026-08-07
+
+### Bug Fixes
+
+- **Custom tool grammar shape** (PR [#489](https://github.com/Oaklight/llm-rosetta/pull/489)): Fix grammar-constrained custom tools (e.g. Codex `apply_patch`) failing on Chat Completions upstreams. Responses API uses a flat `format` shape (`{type, syntax, definition}`); Chat Completions nests under `format.grammar`. Added bidirectional, idempotent shape converters at the Chat boundary.
+- **Streaming null union members** (PR [#489](https://github.com/Oaklight/llm-rosetta/pull/489)): Fix `AttributeError` crash on streaming custom tool call deltas. Providers serialize all union members on each delta with inactive ones set to `null`; `dict.get("type", "function")` returns `None` for a present-but-null key. Type is now recovered from the populated payload, falling back to the context-registered type.
+
+### Improvements
+
+- **Public API for tool call order** (PR [#490](https://github.com/Oaklight/llm-rosetta/pull/490)): Replace direct `_tool_call_order` private access from all 4 converters with public methods on `StreamContext`: `tool_call_ids`, `tool_call_count`, `resolve_tool_call_id_by_index()`, `get_tool_call_index()`.
+- **O(1) tool call index lookup** — `get_tool_call_index()` uses a reverse dict instead of linear `list.index()` scan.
+
 ## v0.8.0 — 2026-08-06
 
 ### Spec Compliance
