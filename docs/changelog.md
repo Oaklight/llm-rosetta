@@ -8,10 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Prompt cache preservation** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): wire `hoist_late_system_messages` IR transform to all 15 provider shims. Mid-conversation system/developer messages are rewritten as user-role `[System: ...]` envelopes to keep the prompt cache prefix stable.
+- **Per-provider hoist toggle** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): `hoist_system_messages` boolean in gateway config, per-provider override via admin UI checkbox with (i) hint popup.
+- **SQLite API key storage** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496)): migrate API key storage from plaintext config to SQLite with hash-based validation.
+
 ### Changed
 
 - **Complexity reduction** — refactor base converter helpers, Google GenAI converter, OpenAI Responses converter, gateway config, and SOCKS5 test handler to reduce cyclomatic complexity.
 - **complexipy v6 pre-commit hook** — enable complexipy v6 pre-commit hook; bump to v6.2.0 with threshold raised to 30.
+- **Config override resolution** (PR [#501](https://github.com/Oaklight/llm-rosetta/pull/501)): unify per-provider toggle resolution to Pattern C — `config.resolve()` uses shim defaults as fallback, downstream types simplified from `bool | None` to `bool`.
+
+### Fixed
+
+- **Hint popup hover** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): admin UI hint popups are now hoverable for text selection (CSS `::before` bridge over the icon-popup gap).
+- **Abort-path test doubles** (PR [#497](https://github.com/Oaklight/llm-rosetta/pull/497)): replace `_FakeContext`/`_FakeProcessor` with real `StreamContext` to eliminate interface drift risk.
 
 ### Removed
 
