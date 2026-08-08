@@ -8,10 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增
+
+- **Prompt cache 保持** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：将 `hoist_late_system_messages` IR 变换接入全部 15 个 provider shim。对话中间的 system/developer 消息被改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。
+- **Per-provider hoist 开关** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：gateway 配置中的 `hoist_system_messages` 布尔值，可通过 admin UI 复选框按 provider 覆盖，带 (i) 提示弹窗。
+- **SQLite API 密钥存储** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496))：将 API 密钥存储从明文配置迁移至 SQLite，使用哈希验证。
+
 ### 变更
 
 - **降低圈复杂度** — 重构 base converter helpers、Google GenAI converter、OpenAI Responses converter、gateway config 和 SOCKS5 test handler，降低圈复杂度。
 - **complexipy v6 pre-commit hook** — 启用 complexipy v6 pre-commit hook；升级至 v6.2.0，阈值提升至 30。
+- **配置覆盖解析统一** (PR [#501](https://github.com/Oaklight/llm-rosetta/pull/501))：将 per-provider 开关解析统一为 Pattern C —— `config.resolve()` 使用 shim 默认值作为 fallback，下游类型从 `bool | None` 简化为 `bool`。
+
+### 修复
+
+- **提示弹窗悬停** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：admin UI 的提示弹窗现在可以悬停选中文字（CSS `::before` 桥接图标与弹窗的间隙）。
+- **Abort-path 测试替身** (PR [#497](https://github.com/Oaklight/llm-rosetta/pull/497))：用真实 `StreamContext` 替换 `_FakeContext`/`_FakeProcessor`，消除接口漂移风险。
 
 ### 移除
 
