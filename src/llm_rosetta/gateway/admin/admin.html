@@ -638,7 +638,7 @@ body { padding-bottom: 26px; }
       <div class="table-scroll"><table>
         <thead><tr>
           <th data-i18n="col.label">Label</th>
-          <th data-i18n="col.key">Key</th>
+          <th data-i18n="col.allowedShims">Allowed Shims</th>
           <th data-i18n="col.created">Created</th>
           <th></th>
         </tr></thead>
@@ -785,12 +785,6 @@ body { padding-bottom: 26px; }
       </select>
     </div>
     <div class="settings-popup-item">
-      <label data-i18n="label.credentialReveal">Credential Reveal</label>
-      <label class="toggle-label">
-        <input type="checkbox" id="settingsCredentialVisible" onchange="saveSettingsField('credentialVisible',this.checked)">
-        <span data-i18n="label.enabled">Enabled</span>
-      </label>
-    </div>
     <div class="settings-popup-item">
       <label data-i18n="label.errorDumps">Error Detail Log</label>
       <label class="toggle-label">
@@ -1142,6 +1136,10 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <label data-i18n="label.keyManual">Manual key (leave empty to auto-generate)</label>
       <input id="keyManual" placeholder="rsk-... (auto-generated if empty)" style="font-family:var(--mono)">
     </div>
+    <div class="form-group">
+      <label data-i18n="label.keyAllowedShims">Allowed shims (comma-separated, * = all)</label>
+      <input id="keyAllowedShims" placeholder="* (default: all shims)" value="*">
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('keyModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="generateKey()" data-i18n="btn.generate">Generate</button>
@@ -1286,12 +1284,13 @@ const I18N = {
     'empty.searchResults':'No matching results.',
     'section.apiKeys':'API Keys',
     'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
-    'col.label':'Label', 'col.key':'Key', 'col.created':'Created',
+    'col.label':'Label', 'col.allowedShims':'Allowed Shims', 'col.created':'Created',
     'col.apiKey':'API Key', 'col.clientIp':'Client IP',
     'modal.generateKey':'Generate API Key',
     'modal.keyCreated':'Key Created',
     'label.keyLabel':'Label (optional)',
     'label.keyManual':'Manual key (leave empty to auto-generate)',
+    'label.keyAllowedShims':'Allowed shims (comma-separated, * = all)',
     'keys.description':'Manage gateway API keys used to authenticate requests to /v1/* endpoints.',
     'keys.copyWarning':'Copy this key now. It will not be shown again in full.',
     'keys.noKeys':'No API keys configured. Endpoints are open without authentication.',
@@ -1604,9 +1603,6 @@ function openSettings() {
   // Sync auto-refresh
   const ar = document.getElementById('settingsAutoRefresh');
   if (ar) ar.value = localStorage.getItem('dashboardRefreshMs') || '3000';
-  // Sync credential visibility
-  const cv = document.getElementById('settingsCredentialVisible');
-  if (cv) cv.checked = _credentialVisible;
   const ed = document.getElementById('settingsErrorDumps');
   if (ed) ed.checked = configData?.debug?.error_dumps !== false;
   // Sync log retention
@@ -1637,8 +1633,6 @@ async function saveSettingsField(field, value) {
   if (field === 'logLevel') {
     body.verbose = (value === 'verbose' || value === 'debug');
     body.log_bodies = (value === 'debug');
-  } else if (field === 'credentialVisible') {
-    body.credential_visible = value;
   } else if (field === 'errorDumps') {
     body.error_dumps = value;
   }
@@ -2964,11 +2958,7 @@ function renderKeys() {
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
-      <td style="width:40%"><div class="key-cell"><code class="key-masked" data-masked="${esc(k.key)}">${esc(k.key)}</code>
-        ${_credentialVisible ? `<span class="key-actions">
-          <button class="key-btn" onclick="toggleKey('${k.id}',this)" title="Toggle visibility"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
-          <button class="key-btn" onclick="copyKeyById('${k.id}')" title="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-        </span>` : ''}</div></td>
+      <td><code>${esc((k.allowed_shims || ['*']).join(', '))}</code></td>
       <td>${created}</td>
       <td style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
@@ -2978,13 +2968,16 @@ function renderKeys() {
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
   document.getElementById('keyManual').value = '';
+  document.getElementById('keyAllowedShims').value = '*';
   document.getElementById('keyModal').classList.add('open');
 }
 
 async function generateKey() {
   const label = document.getElementById('keyLabel').value.trim();
   const manual = document.getElementById('keyManual').value.trim();
-  const body = {label};
+  const shimsRaw = document.getElementById('keyAllowedShims').value.trim();
+  const allowed_shims = shimsRaw ? shimsRaw.split(',').map(s => s.trim()).filter(Boolean) : ['*'];
+  const body = {label, allowed_shims};
   if (manual) body.key = manual;
   const res = await api.post('/admin/api/keys', body);
   if (res.ok) {
@@ -3013,37 +3006,6 @@ async function _doDeleteKey(id, label) {
   const res = await api.del(`/admin/api/keys/${encodeURIComponent(id)}`);
   if (res.ok) { showToast(t('toast.keyDeleted')); loadKeys(); }
   else { showToast(res.error || 'Failed', 'error'); }
-}
-
-const _eyeOpenSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
-const _eyeClosedSvg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
-
-async function toggleKey(id, btn) {
-  const code = btn.closest('td').querySelector('code');
-  if (code.dataset.revealed === 'true') {
-    code.textContent = code.dataset.masked;
-    code.dataset.revealed = 'false';
-    btn.innerHTML = _eyeOpenSvg;
-  } else {
-    const res = await api.get(`/admin/api/keys/${encodeURIComponent(id)}/reveal`);
-    if (res.key) {
-      code.textContent = res.key;
-      code.dataset.revealed = 'true';
-      btn.innerHTML = _eyeClosedSvg;
-    }
-  }
-}
-
-async function copyKeyById(id) {
-  const res = await api.get(`/admin/api/keys/${encodeURIComponent(id)}/reveal`);
-  if (res.key) {
-    try {
-      await navigator.clipboard.writeText(res.key);
-      showToast(t('toast.keyCopied'));
-    } catch(e) {
-      showToast('Copy failed', 'error');
-    }
-  }
 }
 
 async function editKeyLabel(id, currentLabel) {

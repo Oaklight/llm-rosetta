@@ -1,32 +1,33 @@
 """Gateway API key authentication — before-request hook.
 
-Validates incoming requests against the gateway's configured API keys,
-extracting credentials in the format native to each API standard:
+Validates incoming requests against the gateway's API keys stored in
+SQLite (hash-based) with a config-file fallback for read-only mounts.
+
+Key extraction uses the format native to each API standard:
 
 - OpenAI Chat/Responses: ``Authorization: Bearer <key>``
 - Anthropic: ``x-api-key: <key>``
 - Google GenAI: ``x-goog-api-key: <key>`` or ``?key=<key>`` query param
 
-Supports multiple API keys with labels for tracking.
-
 When no keys are configured, behavior depends on ``open_on_no_keys``:
-- ``True``:  all requests pass through (backward compatible default
-  for the standalone gateway).
-- ``False``: requests are rejected with 403 (secure default for
-  embedded/downstream usage).
+- ``True``:  all requests pass through.
+- ``False``: requests are rejected with 403 (secure default).
 """
 
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import hmac
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-# Per-request API key label — set by auth hook, read by proxy handler.
-api_key_label_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "api_key_label", default=None
+from .keystore import KeyContext, KeyStore
+
+# Per-request auth context — set by auth hook, read by telemetry.
+api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.ContextVar(
+    "api_key_context", default=None
 )
 
 # Paths that never require authentication
@@ -159,14 +160,14 @@ class AuthState:
 
     def __init__(
         self,
-        key_set: frozenset[str],
-        labels: dict[str, str],
+        keystore: KeyStore | None,
+        config_fallback: dict[str, KeyContext],
         internal_token: str | None,
         admin_password: str | None = None,
         open_on_no_keys: bool = False,
     ) -> None:
-        self.key_set = key_set
-        self.labels = labels
+        self.keystore = keystore
+        self.config_fallback = config_fallback
         self.internal_token = internal_token
         self.admin_password = admin_password
         self.open_on_no_keys = open_on_no_keys
@@ -174,13 +175,13 @@ class AuthState:
         self.admin_token: str | None = None
         self._recalculate_admin_token()
 
-    def _recalculate_admin_token(self) -> None:
-        """Derive ``admin_token`` from ``admin_password`` + ``internal_token``.
+    def _has_keys(self) -> bool:
+        ks_has = self.keystore.has_keys() if self.keystore else False
+        return ks_has or bool(self.config_fallback)
 
-        Called on init and after password or internal_token changes.
-        """
+    def _recalculate_admin_token(self) -> None:
+        """Derive ``admin_token`` from ``admin_password`` + ``internal_token``."""
         if self.admin_password and self.internal_token:
-            import hashlib
             import hmac as _hmac
 
             self.admin_token = _hmac.new(
@@ -206,15 +207,29 @@ class AuthState:
     def change_password(self, new_password: str) -> str:
         """Update the admin password and recalculate admin_token.
 
-        Args:
-            new_password: The new plaintext password.
-
         Returns:
             The new admin_token.
         """
         self.admin_password = new_password
         self._recalculate_admin_token()
         return self.admin_token or ""
+
+
+def _build_config_fallback(
+    api_keys: list[dict[str, str]],
+) -> dict[str, KeyContext]:
+    """Build a hash → KeyContext dict from config-sourced plaintext keys."""
+    fallback: dict[str, KeyContext] = {}
+    for entry in api_keys:
+        raw_key = entry.get("key", "")
+        if not raw_key:
+            continue
+        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
+        fallback[key_hash] = KeyContext(
+            label=entry.get("label", ""),
+            allowed_shims=frozenset({"*"}),
+        )
+    return fallback
 
 
 def create_auth_hook(auth_state: AuthState) -> Any:
@@ -225,14 +240,13 @@ def create_auth_hook(auth_state: AuthState) -> Any:
     """
 
     async def auth_hook(request: Any) -> Response | None:
-        # Reset per-request label before any early return so downstream
+        # Reset per-request context before any early return so downstream
         # hooks never see a stale value from a previous request.
-        api_key_label_var.set(None)
+        api_key_context_var.set(None)
 
         # CORS preflight must bypass auth — browsers send no credentials
         # on OPTIONS and need CORS headers back to proceed with the
-        # actual request.  Only skip auth for genuine preflights (Origin
-        # + Access-Control-Request-Method present per Fetch spec §3.2.2).
+        # actual request.
         if (
             request.method == "OPTIONS"
             and request.headers.get("origin")
@@ -250,7 +264,7 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if path.startswith("/admin"):
             return check_admin_auth(request, auth_state)
 
-        if not auth_state.key_set:
+        if not auth_state._has_keys():
             if auth_state.open_on_no_keys:
                 return None
             return _error_for_path(
@@ -262,14 +276,25 @@ def create_auth_hook(auth_state: AuthState) -> Any:
 
         # Check internal token first (admin panel test requests)
         if key and auth_state.internal_token and key == auth_state.internal_token:
-            api_key_label_var.set("internal")
+            api_key_context_var.set(
+                KeyContext(label="internal", allowed_shims=frozenset({"*"}))
+            )
             return None
 
-        if key not in auth_state.key_set:
+        if not key:
             return _error_for_path(path, 401, "Invalid or missing API key")
 
-        # Attach key label for request logging
-        api_key_label_var.set(auth_state.labels.get(key, ""))
+        # Try KeyStore (SQLite) first, then config fallback
+        ctx: KeyContext | None = None
+        if auth_state.keystore:
+            ctx = auth_state.keystore.validate(key)
+        if ctx is None:
+            key_hash = hashlib.sha256(key.encode()).hexdigest()
+            ctx = auth_state.config_fallback.get(key_hash)
+        if ctx is None:
+            return _error_for_path(path, 401, "Invalid or missing API key")
+
+        api_key_context_var.set(ctx)
         return None
 
     return auth_hook

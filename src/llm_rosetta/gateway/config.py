@@ -349,13 +349,16 @@ class GatewayConfig:
                     "created": "",
                 }
             ]
-        # O(1) lookup set and key→label map for auth middleware
+        # O(1) lookup set and key→label map for config fallback auth
         self.api_key_set: frozenset[str] = frozenset(
             entry["key"] for entry in self.api_keys
         )
         self.api_key_labels: dict[str, str] = {
             entry["key"]: entry.get("label", "") for entry in self.api_keys
         }
+
+        # Custom SQLite DB path for API key storage (default: alongside config)
+        self.api_keys_db: str | None = _server.get("api_keys_db")
 
     def _apply_debug_settings(self, _debug: dict[str, Any]) -> None:
         """Parse debug/logging settings with env-var overrides.

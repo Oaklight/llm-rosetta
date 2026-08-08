@@ -50,7 +50,6 @@ from .keys import (
     delete_api_key,
     get_api_keys,
     get_internal_token,
-    reveal_api_key,
     rotate_api_key,
     update_api_key,
 )
@@ -148,7 +147,6 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/keys", methods=["POST"])(create_api_key)
     app.route("/admin/api/keys/<key_id>", methods=["PUT"])(update_api_key)
     app.route("/admin/api/keys/<key_id>", methods=["DELETE"])(delete_api_key)
-    app.route("/admin/api/keys/<key_id>/reveal", methods=["GET"])(reveal_api_key)
     app.route("/admin/api/keys/<key_id>/rotate", methods=["POST"])(rotate_api_key)
     app.route("/admin/api/internal-token", methods=["GET"])(get_internal_token)
     # Async model test
