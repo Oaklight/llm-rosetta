@@ -430,3 +430,32 @@ def flatten_system_content(pattern: str | None = None) -> Transform:
         label += f"pattern={pattern!r}"
     label += ")"
     return _NamedTransform(_flatten, label)
+
+
+# ---------------------------------------------------------------------------
+# IR-level: late system message hoisting
+# ---------------------------------------------------------------------------
+
+
+def hoist_late_system_messages() -> IRTransform:
+    """Return an IR transform that hoists late system messages.
+
+    Leading system messages (before any non-system message) are moved to
+    ``system_instruction``.  Mid-conversation system messages are rewritten
+    as ``UserMessage`` with a ``[System: ...]`` envelope so they don't
+    break the prompt cache prefix or get silently dropped by target
+    converters.
+
+    Idempotent: once rewritten to ``role: "user"``, a second pass is a
+    no-op.  Should run **before** ``auto_cache_breakpoints()`` so cache
+    hints target the post-hoist message structure.
+    """
+
+    def _hoist(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        from llm_rosetta.converters.base.helpers.system_message_hoist import (
+            hoist_late_system_messages_ir,
+        )
+
+        return hoist_late_system_messages_ir(body, request_id=context.request_id)
+
+    return _NamedIRTransform(_hoist, "hoist_late_system_messages()")
