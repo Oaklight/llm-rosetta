@@ -225,7 +225,6 @@ def unpack_tool_content(
 __all__ = [
     "TOOL_CONTENT_CLOSE_TAG",
     "TOOL_CONTENT_OPEN_TAG_RE",
-    "_parse_synthetic_tags",
     "has_multimodal_content",
     "inject_packed_tool_content",
     "is_synthetic_tool_content_msg",
