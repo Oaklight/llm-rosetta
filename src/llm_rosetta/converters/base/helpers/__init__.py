@@ -47,3 +47,8 @@ __all__ = [
     "convert_content_blocks_to_ir",
     "convert_ir_content_blocks_to_p",
 ]
+
+# system_message_hoist
+from .system_message_hoist import hoist_late_system_messages_ir
+
+__all__ += ["hoist_late_system_messages_ir"]
