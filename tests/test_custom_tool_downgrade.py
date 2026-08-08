@@ -151,20 +151,19 @@ class TestEnforceCustomTools:
         assert result["tools"][0]["type"] == "custom"
 
     def test_config_override_false_forces_downgrade(self):
-        shim = _make_shim(supports=True)
         tool = dict(CUSTOM_TOOL_IR)
         tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
         ir = {"tools": [tool]}
-        result = enforce_custom_tools(ir, shim=shim, config_override=False)
+        result = enforce_custom_tools(ir, config_override=False)
         assert result["tools"][0]["type"] == "function"
         assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
 
-    def test_config_override_none_defers_to_shim(self):
+    def test_config_override_default_defers_to_shim(self):
         shim = _make_shim(supports=False)
         tool = dict(CUSTOM_TOOL_IR)
         tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
         ir = {"tools": [tool]}
-        result = enforce_custom_tools(ir, shim=shim, config_override=None)
+        result = enforce_custom_tools(ir, shim=shim)
         assert result["tools"][0]["type"] == "function"
 
 

@@ -528,10 +528,12 @@ class GatewayConfig:
         caps = self.model_capabilities.get(model, list(self.DEFAULT_CAPABILITIES))
         reasoning = self.model_reasoning_overrides.get(model)
         flatten_system = self.model_flatten_system.get(model, False)
-        custom_tools = self.provider_supports_custom_tools.get(provider_name)
         from llm_rosetta.shims import resolve_shim
 
         _shim = resolve_shim(shim_name) if shim_name else None
+        custom_tools = self.provider_supports_custom_tools.get(
+            provider_name, _shim.supports_custom_tools if _shim else False
+        )
         hoist_system = self.provider_hoist_system_messages.get(
             provider_name, _shim.hoist_system_messages if _shim else True
         )
