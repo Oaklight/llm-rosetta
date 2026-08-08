@@ -790,8 +790,8 @@ class TestOpenAIResponsesConverter:
 
     # ==================== request_to_provider / messages_to_provider ====================
 
-    def test_request_to_provider_backward_compat_ir_request(self):
-        """Test request_to_provider with IRRequest dict."""
+    def test_request_to_provider_with_generation(self):
+        """Test request_to_provider with generation params."""
         ir_request = cast(
             IRRequest,
             {

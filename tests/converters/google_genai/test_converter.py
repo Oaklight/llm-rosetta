@@ -956,8 +956,8 @@ class TestGoogleGenAIConverter:
         # messages_to_provider returns the converted message list
         assert len(result) >= 1
 
-    def test_request_to_provider_backward_compat(self):
-        """Test request_to_provider with IRRequest."""
+    def test_request_to_provider_basic_ir_request(self):
+        """Test request_to_provider with a simple IRRequest."""
         ir_request = cast(
             IRRequest,
             {
