@@ -662,40 +662,6 @@ class OpenAIResponsesConverter(BaseConverter):
                 if "logprobs" in pm:
                     content[j]["logprobs"] = pm["logprobs"]
 
-    # ==================== Backward Compatibility ====================
-    # These methods maintain backward compatibility with the old API
-
-    def to_provider(self, ir_input, tools=None, tool_choice=None, **kwargs):
-        """Backward-compatible conversion method.
-
-        Handles both IRRequest dicts and plain message lists.
-
-        Args:
-            ir_input: Either an IRRequest dict or a list of IR messages.
-            tools: Optional tool definitions.
-            tool_choice: Optional tool choice config.
-
-        Returns:
-            Tuple of (provider request dict, warnings list).
-        """
-        # Check if it's an IRRequest (has "messages" key)
-        if isinstance(ir_input, dict) and "messages" in ir_input:
-            return self.request_to_provider(ir_input, **kwargs)
-
-        # It's a plain message list - wrap in a minimal request
-        items, warnings = self.message_ops.ir_messages_to_p(
-            ir_input, target_provider=self._CONVERTER_TAG
-        )
-        result: dict[str, Any] = {"input": items}
-
-        if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        if tool_choice:
-            result["tool_choice"] = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-
-        return result, warnings
-
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
