@@ -224,138 +224,27 @@ class GatewayConfig:
             self._raw_providers
         )
 
-        # Per-provider supports_custom_tools override from config.
-        self.provider_supports_custom_tools: dict[str, bool] = {}
-        for pname, pcfg in self._raw_providers.items():
-            if isinstance(pcfg, dict) and "supports_custom_tools" in pcfg:
-                self.provider_supports_custom_tools[pname] = bool(
-                    pcfg["supports_custom_tools"]
-                )
+        self.provider_supports_custom_tools = self._parse_custom_tools_overrides(
+            self._raw_providers
+        )
 
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
 
-        # Per-model URL template overrides.
-        self.model_url_templates: dict[str, str] = {}
-        self.model_stream_url_templates: dict[str, str] = {}
-        for model_name, value in raw.get("models", {}).items():
-            if isinstance(value, dict):
-                if "url_template" in value:
-                    self.model_url_templates[model_name] = value["url_template"]
-                if "stream_url_template" in value:
-                    self.model_stream_url_templates[model_name] = value[
-                        "stream_url_template"
-                    ]
-
-        # Per-model reasoning overrides from config.jsonc (admin UI edits).
-        # Keyed by gateway model name (same as self.models keys).
-        self.model_reasoning_overrides: dict[str, dict[str, Any]] = {}
-        for model_name, value in raw.get("models", {}).items():
-            if isinstance(value, dict) and value.get("reasoning_override"):
-                self.model_reasoning_overrides[model_name] = value["reasoning_override"]
-
-        # Per-model flatten_system flag (explicit config or auto-detected).
-        # When True, system message content arrays are flattened to plain
-        # strings before sending upstream.
-        self.model_flatten_system: dict[str, bool] = {}
-        for model_name, value in raw.get("models", {}).items():
-            if isinstance(value, dict) and "flatten_system" in value:
-                self.model_flatten_system[model_name] = bool(value["flatten_system"])
-            elif re.search(r"gemini", model_name, re.IGNORECASE):
-                # Auto-detect: gemini models default to flatten_system=True
-                self.model_flatten_system[model_name] = True
+        raw_models = raw.get("models", {})
+        (
+            self.model_url_templates,
+            self.model_stream_url_templates,
+            self.model_reasoning_overrides,
+            self.model_flatten_system,
+        ) = self._parse_model_overrides(raw_models)
 
         _server = raw.get("server", {})
-        self.host: str = _server.get("host", "0.0.0.0")
-        self.port: int = _server.get("port", 8765)
-        self.proxy: str | None = _server.get("proxy")
-        self.socket: str | None = _server.get("socket")
-        self.credential_visible: bool = _server.get("credential_visible", True)
+        self._apply_server_settings(_server)
+        self._apply_auth_settings(_server)
 
-        # When no API keys are configured, ``open_on_no_keys`` decides whether
-        # the standalone gateway serves /v1/* anonymously (True) or rejects
-        # every request with 403 (False). Defaults to False (secure by
-        # default). Set to True to restore the pre-0.7 behaviour for a
-        # trusted, localhost-only deployment, e.g.:
-        #   "server": { "open_on_no_keys": true }
-        self.open_on_no_keys: bool = bool(_server.get("open_on_no_keys", False))
-
-        self.admin_password: str | None = _server.get("admin_password")
-        if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
-            raise ValueError(
-                "config: admin_password contains an unresolved ${...} placeholder. "
-                "Set the environment variable or use a literal password."
-            )
-
-        # CORS allow-list for /admin/* endpoints.
-        # Default [] means same-origin only (no Access-Control-Allow-Origin header).
-        # To permit a specific trusted origin set e.g. in your config (JSONC):
-        #   "server": {
-        #     "admin_cors_origins": ["https://my-admin.example.com"]
-        #   }
-        self.admin_cors_origins: list[str] = _server.get("admin_cors_origins", []) or []
-
-        # Optional root redirect: when set, GET / returns a 307 to the given
-        # path (e.g. "/admin").  Disabled by default (no redirect).
-        self.root_redirect: str | None = _server.get("root_redirect")
-
-        # Timeout settings (seconds).  upstream_timeout governs the entire
-        # upstream HTTP lifecycle: connect, header-read, and per-chunk
-        # streaming reads.  read_timeout governs how long the inbound
-        # httpserver waits for the client to send a complete request.
-        self.upstream_timeout: float = max(
-            1.0, float(_server.get("upstream_timeout", 300.0))
-        )
-        self.read_timeout: float = max(1.0, float(_server.get("read_timeout", 300.0)))
-
-        # Request-log retention knobs (consumed by setup_admin).  Kept as
-        # a raw dict here so admin layer owns the resolution policy.
-        self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
-
-        # Multi-key auth: server.api_keys takes precedence over server.api_key
-        self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
-        if not self.api_keys and _server.get("api_key"):
-            # Backward compat: single api_key → synthetic entry
-            self.api_keys = [
-                {
-                    "id": "default",
-                    "key": _server["api_key"],
-                    "label": "default",
-                    "created": "",
-                }
-            ]
-        # O(1) lookup set and key→label map for auth middleware
-        self.api_key_set: frozenset[str] = frozenset(
-            entry["key"] for entry in self.api_keys
-        )
-        self.api_key_labels: dict[str, str] = {
-            entry["key"]: entry.get("label", "") for entry in self.api_keys
-        }
-
-        # Debug / logging options (config + env-var overrides)
-        _debug = raw.get("debug", {})
-        self.verbose: bool = _debug.get("verbose", False) or os.environ.get(
-            "LLM_ROSETTA_VERBOSE", ""
-        ).lower() in ("1", "true", "yes")
-        self.log_bodies: bool = _debug.get("log_bodies", False) or os.environ.get(
-            "LLM_ROSETTA_LOG_BODIES", ""
-        ).lower() in ("1", "true", "yes")
-        self.error_dumps_enabled: bool = _debug.get("error_dumps", True)
-
-        # Log format: "text" (colourised, default for TTY), "json" (structured
-        # one-line JSON, default for non-TTY), or "auto" (detect from stderr
-        # TTY status).  Env var LLM_ROSETTA_LOG_FORMAT overrides config.
-        _env_log_format = os.environ.get("LLM_ROSETTA_LOG_FORMAT", "").strip().lower()
-        _cfg_log_format = _debug.get("log_format", "auto")
-        raw_log_format = _env_log_format or _cfg_log_format
-        if raw_log_format not in ("json", "text", "auto"):
-            logger.warning(
-                "config: invalid log_format %r, falling back to 'auto'",
-                raw_log_format,
-            )
-            raw_log_format = "auto"
-        self.log_format: str = raw_log_format  # resolved later by setup_logging
+        self._apply_debug_settings(raw.get("debug", {}))
 
         self._validate()
 
@@ -366,6 +255,104 @@ class GatewayConfig:
             )
             for name, cfg in self._raw_providers.items()
         }
+
+    @staticmethod
+    def _parse_custom_tools_overrides(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> dict[str, bool]:
+        """Extract per-provider supports_custom_tools overrides."""
+        result: dict[str, bool] = {}
+        for pname, pcfg in raw_providers.items():
+            if isinstance(pcfg, dict) and "supports_custom_tools" in pcfg:
+                result[pname] = bool(pcfg["supports_custom_tools"])
+        return result
+
+    @staticmethod
+    def _parse_model_overrides(
+        raw_models: dict[str, Any],
+    ) -> tuple[
+        dict[str, str], dict[str, str], dict[str, dict[str, Any]], dict[str, bool]
+    ]:
+        """Extract per-model URL templates, reasoning overrides, and flatten_system flags."""
+        url_templates: dict[str, str] = {}
+        stream_url_templates: dict[str, str] = {}
+        reasoning_overrides: dict[str, dict[str, Any]] = {}
+        flatten_system: dict[str, bool] = {}
+        for model_name, value in raw_models.items():
+            if isinstance(value, dict):
+                if "url_template" in value:
+                    url_templates[model_name] = value["url_template"]
+                if "stream_url_template" in value:
+                    stream_url_templates[model_name] = value["stream_url_template"]
+                if value.get("reasoning_override"):
+                    reasoning_overrides[model_name] = value["reasoning_override"]
+                if "flatten_system" in value:
+                    flatten_system[model_name] = bool(value["flatten_system"])
+                    continue
+            if re.search(r"gemini", model_name, re.IGNORECASE):
+                flatten_system[model_name] = True
+        return url_templates, stream_url_templates, reasoning_overrides, flatten_system
+
+    def _apply_server_settings(self, _server: dict[str, Any]) -> None:
+        """Parse server section: host, port, proxy, timeouts, CORS, etc."""
+        self.host: str = _server.get("host", "0.0.0.0")
+        self.port: int = _server.get("port", 8765)
+        self.proxy: str | None = _server.get("proxy")
+        self.socket: str | None = _server.get("socket")
+        self.credential_visible: bool = _server.get("credential_visible", True)
+        self.open_on_no_keys: bool = bool(_server.get("open_on_no_keys", False))
+        self.admin_password: str | None = _server.get("admin_password")
+        if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
+            raise ValueError(
+                "config: admin_password contains an unresolved ${...} placeholder. "
+                "Set the environment variable or use a literal password."
+            )
+        self.admin_cors_origins: list[str] = _server.get("admin_cors_origins", []) or []
+        self.root_redirect: str | None = _server.get("root_redirect")
+        self.upstream_timeout: float = max(
+            1.0, float(_server.get("upstream_timeout", 300.0))
+        )
+        self.read_timeout: float = max(1.0, float(_server.get("read_timeout", 300.0)))
+        self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
+
+    def _apply_auth_settings(self, _server: dict[str, Any]) -> None:
+        """Parse API key auth settings from the server section."""
+        self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
+        if not self.api_keys and _server.get("api_key"):
+            self.api_keys = [
+                {
+                    "id": "default",
+                    "key": _server["api_key"],
+                    "label": "default",
+                    "created": "",
+                }
+            ]
+        self.api_key_set: frozenset[str] = frozenset(
+            entry["key"] for entry in self.api_keys
+        )
+        self.api_key_labels: dict[str, str] = {
+            entry["key"]: entry.get("label", "") for entry in self.api_keys
+        }
+
+    def _apply_debug_settings(self, _debug: dict[str, Any]) -> None:
+        """Parse debug/logging settings with env-var overrides."""
+        self.verbose: bool = _debug.get("verbose", False) or os.environ.get(
+            "LLM_ROSETTA_VERBOSE", ""
+        ).lower() in ("1", "true", "yes")
+        self.log_bodies: bool = _debug.get("log_bodies", False) or os.environ.get(
+            "LLM_ROSETTA_LOG_BODIES", ""
+        ).lower() in ("1", "true", "yes")
+        self.error_dumps_enabled: bool = _debug.get("error_dumps", True)
+        _env_log_format = os.environ.get("LLM_ROSETTA_LOG_FORMAT", "").strip().lower()
+        _cfg_log_format = _debug.get("log_format", "auto")
+        raw_log_format = _env_log_format or _cfg_log_format
+        if raw_log_format not in ("json", "text", "auto"):
+            logger.warning(
+                "config: invalid log_format %r, falling back to 'auto'",
+                raw_log_format,
+            )
+            raw_log_format = "auto"
+        self.log_format: str = raw_log_format
 
     def _validate(self) -> None:
         if not self._raw_providers:
