@@ -262,6 +262,23 @@ def sanitize_schema(
 # ---- nullable → type-array conversion ----
 
 
+def _inject_null_type(result: dict[str, Any]) -> None:
+    """Inject ``"null"`` into an already-copied schema node's type declaration."""
+    if "type" in result:
+        current_type = result["type"]
+        if isinstance(current_type, str):
+            result["type"] = [current_type, "null"]
+        elif isinstance(current_type, list) and "null" not in current_type:
+            result["type"] = [*current_type, "null"]
+    else:
+        for kw in ("anyOf", "oneOf"):
+            if kw in result and isinstance(result[kw], list):
+                null_variant = {"type": "null"}
+                if null_variant not in result[kw]:
+                    result[kw] = [*result[kw], null_variant]
+                break
+
+
 def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
     """Recursively convert ``"nullable": true`` to standard JSON Schema type arrays.
 
@@ -285,20 +302,7 @@ def _nullable_to_type_array(schema: dict[str, Any]) -> dict[str, Any]:
             result[key] = value
 
     if schema.get("nullable") is True:
-        if "type" in result:
-            current_type = result["type"]
-            if isinstance(current_type, str):
-                result["type"] = [current_type, "null"]
-            elif isinstance(current_type, list) and "null" not in current_type:
-                result["type"] = [*current_type, "null"]
-        else:
-            # No type field — inject null variant into anyOf/oneOf if present
-            for kw in ("anyOf", "oneOf"):
-                if kw in result and isinstance(result[kw], list):
-                    null_variant = {"type": "null"}
-                    if null_variant not in result[kw]:
-                        result[kw] = [*result[kw], null_variant]
-                    break
+        _inject_null_type(result)
 
     return result
 

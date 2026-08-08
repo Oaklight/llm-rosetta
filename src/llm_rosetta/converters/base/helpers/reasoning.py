@@ -281,6 +281,34 @@ def _derive_budget_tokens(
     return min(budget, max_tokens - 1)
 
 
+def _apply_thinking_type_override(
+    result: dict[str, Any],
+    cap: ReasoningCapability | None,
+    max_tokens: int | None,
+) -> None:
+    """Apply shim ``thinking_type`` override to the ``thinking`` dict.
+
+    When the shim declares a preferred thinking type, reconcile it with
+    what is already set — deriving ``budget_tokens`` from the ratio when
+    switching to ``"enabled"``, or stripping it when falling back to
+    ``"adaptive"``.
+    """
+    if cap is None or cap.thinking_type is None or "thinking" not in result:
+        return
+    current_type = result["thinking"].get("type")
+    target_type = cap.thinking_type
+    if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
+        derived = _derive_budget_tokens(cap, max_tokens)
+        if derived is not None:
+            result["thinking"]["budget_tokens"] = derived
+        else:
+            target_type = "adaptive"
+    if current_type != target_type:
+        result["thinking"]["type"] = target_type
+        if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
+            del result["thinking"]["budget_tokens"]
+
+
 # ── Converter-specific pass-through extras ─────────────────────────────────
 
 
@@ -303,20 +331,7 @@ def _apply_openai_chat_extras(
     if thinking:
         result["thinking"] = thinking
 
-    # Apply shim thinking_type override if set.
-    if cap is not None and cap.thinking_type is not None and "thinking" in result:
-        current_type = result["thinking"].get("type")
-        target_type = cap.thinking_type
-        if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
-            derived = _derive_budget_tokens(cap, max_tokens)
-            if derived is not None:
-                result["thinking"]["budget_tokens"] = derived
-            else:
-                target_type = "adaptive"
-        if current_type != target_type:
-            result["thinking"]["type"] = target_type
-            if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
-                del result["thinking"]["budget_tokens"]
+    _apply_thinking_type_override(result, cap, max_tokens)
 
 
 def _apply_openai_responses_extras(
@@ -373,22 +388,7 @@ def _apply_anthropic_extras(
     elif budget_tokens is not None:
         result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
 
-    # Apply shim thinking_type override if set.
-    if cap is not None and cap.thinking_type is not None and "thinking" in result:
-        current_type = result["thinking"].get("type")
-        target_type = cap.thinking_type
-        # Anthropic requires budget_tokens when type=enabled; if missing,
-        # try to derive from ratio, otherwise fall back to adaptive.
-        if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
-            derived = _derive_budget_tokens(cap, max_tokens)
-            if derived is not None:
-                result["thinking"]["budget_tokens"] = derived
-            else:
-                target_type = "adaptive"
-        if current_type != target_type:
-            result["thinking"]["type"] = target_type
-            if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
-                del result["thinking"]["budget_tokens"]
+    _apply_thinking_type_override(result, cap, max_tokens)
 
 
 def _apply_google_extras(

@@ -159,6 +159,49 @@ def is_synthetic_tool_content_msg(msg: dict[str, Any]) -> bool:
     return False
 
 
+def _parse_synthetic_tags(
+    content: list[Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Parse ``<tool-content>`` XML tags from a synthetic message's parts.
+
+    Returns:
+        Mapping of call-id to the content blocks enclosed by each tag pair.
+    """
+    entries: dict[str, list[dict[str, Any]]] = {}
+    current_call_id: str | None = None
+    current_blocks: list[dict[str, Any]] = []
+
+    for part in content:
+        if not isinstance(part, dict):
+            continue
+
+        if part.get("type") == "text":
+            text = part.get("text", "")
+
+            open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
+            if open_match:
+                if current_call_id and current_blocks:
+                    entries[current_call_id] = current_blocks
+                current_call_id = open_match.group(1)
+                current_blocks = []
+                continue
+
+            if text == TOOL_CONTENT_CLOSE_TAG:
+                if current_call_id and current_blocks:
+                    entries[current_call_id] = current_blocks
+                current_call_id = None
+                current_blocks = []
+                continue
+
+        if current_call_id is not None:
+            current_blocks.append(part)
+
+    if current_call_id and current_blocks:
+        entries[current_call_id] = current_blocks
+
+    return entries
+
+
 def unpack_tool_content(
     messages: list[dict[str, Any]],
 ) -> tuple[dict[str, list[dict[str, Any]]], list[dict[str, Any]]]:
@@ -174,38 +217,7 @@ def unpack_tool_content(
         if not is_synthetic_tool_content_msg(msg):
             clean.append(msg)
             continue
-
-        content = msg.get("content", [])
-        current_call_id: str | None = None
-        current_blocks: list[dict[str, Any]] = []
-
-        for part in content:
-            if not isinstance(part, dict):
-                continue
-
-            if part.get("type") == "text":
-                text = part.get("text", "")
-
-                open_match = TOOL_CONTENT_OPEN_TAG_RE.match(text)
-                if open_match:
-                    if current_call_id and current_blocks:
-                        unpacked[current_call_id] = current_blocks
-                    current_call_id = open_match.group(1)
-                    current_blocks = []
-                    continue
-
-                if text == TOOL_CONTENT_CLOSE_TAG:
-                    if current_call_id and current_blocks:
-                        unpacked[current_call_id] = current_blocks
-                    current_call_id = None
-                    current_blocks = []
-                    continue
-
-            if current_call_id is not None:
-                current_blocks.append(part)
-
-        if current_call_id and current_blocks:
-            unpacked[current_call_id] = current_blocks
+        unpacked.update(_parse_synthetic_tags(msg.get("content", [])))
 
     return unpacked, clean
 
@@ -213,6 +225,7 @@ def unpack_tool_content(
 __all__ = [
     "TOOL_CONTENT_CLOSE_TAG",
     "TOOL_CONTENT_OPEN_TAG_RE",
+    "_parse_synthetic_tags",
     "has_multimodal_content",
     "inject_packed_tool_content",
     "is_synthetic_tool_content_msg",
