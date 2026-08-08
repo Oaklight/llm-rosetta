@@ -585,11 +585,11 @@ def _setup_auth(
             logger.info(
                 "Imported %d API key(s) from config into SQLite keystore", imported
             )
-        logger.warning(
-            "API keys found in config file. Consider removing server.api_keys "
-            "after verifying the SQLite keystore (%s) is working correctly.",
-            keys_db_path,
-        )
+            logger.warning(
+                "API keys found in config file. Consider removing server.api_keys "
+                "after verifying the SQLite keystore (%s) is working correctly.",
+                keys_db_path,
+            )
 
     config_fallback = _build_config_fallback(config.api_keys)
 

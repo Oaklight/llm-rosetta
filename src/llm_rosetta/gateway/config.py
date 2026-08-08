@@ -349,13 +349,6 @@ class GatewayConfig:
                     "created": "",
                 }
             ]
-        # O(1) lookup set and key→label map for config fallback auth
-        self.api_key_set: frozenset[str] = frozenset(
-            entry["key"] for entry in self.api_keys
-        )
-        self.api_key_labels: dict[str, str] = {
-            entry["key"]: entry.get("label", "") for entry in self.api_keys
-        }
 
         # Custom SQLite DB path for API key storage (default: alongside config)
         self.api_keys_db: str | None = _server.get("api_keys_db")
