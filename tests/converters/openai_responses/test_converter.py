@@ -846,15 +846,15 @@ class TestOpenAIResponsesConverter:
         )
         assert result["tool_choice"] == "auto"
 
-    # ==================== validate_ir_input ====================
+    # ==================== validate_messages ====================
 
-    def test_validate_ir_input(self):
-        """Test validate_ir_input delegation."""
+    def test_validate_messages(self):
+        """Test message validation via message_ops."""
         messages = cast(
             list[Message],
             [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}],
         )
-        errors = self.converter.validate_ir_input(messages)
+        errors = self.converter.message_ops.validate_messages(messages)
         assert errors == []
 
 

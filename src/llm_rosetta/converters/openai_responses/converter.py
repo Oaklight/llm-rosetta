@@ -696,24 +696,6 @@ class OpenAIResponsesConverter(BaseConverter):
 
         return result, warnings
 
-    # ==================== Compatibility Aliases ====================
-
-    def _convert_ir_image_to_p(self, image_part):
-        """Convert IR image to Responses API format (compatibility alias)."""
-        return self.content_ops.ir_image_to_p(image_part)
-
-    def _convert_ir_file_to_p(self, file_part):
-        """Convert IR file to Responses API format (compatibility alias)."""
-        return self.content_ops.ir_file_to_p(file_part)
-
-    def _convert_p_image_to_ir(self, image_part):
-        """Convert Responses API image to IR format (compatibility alias)."""
-        return self.content_ops.p_image_to_ir(image_part)
-
-    def _convert_p_file_to_ir(self, file_part):
-        """Convert Responses API file to IR format (compatibility alias)."""
-        return self.content_ops.p_file_to_ir(file_part)
-
     # ==================== Stream Support ====================
 
     def stream_response_from_provider(
@@ -1863,16 +1845,3 @@ class OpenAIResponsesConverter(BaseConverter):
             "type": ResponsesEventType.RESPONSE_COMPLETED,
             "response": resp,
         }
-
-    # ==================== Backward Compatibility ====================
-
-    def validate_ir_input(self, ir_input):
-        """Validate IR input for backward compatibility.
-
-        Args:
-            ir_input: IR input to validate.
-
-        Returns:
-            List of validation errors, empty if valid.
-        """
-        return self.message_ops.validate_messages(ir_input)

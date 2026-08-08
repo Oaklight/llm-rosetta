@@ -649,34 +649,6 @@ class GoogleGenAIConverter(BaseConverter):
             return text_parts or None
         return None
 
-    # ==================== Backward Compatibility ====================
-
-    def build_config(
-        self,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-    ) -> dict[str, Any] | None:
-        """Build Google GenAI config parameters (backward compatibility).
-
-        Args:
-            tools: Tool definition list.
-            tool_choice: Tool choice configuration.
-
-        Returns:
-            Google GenAI config dict, or None if no tool configuration.
-        """
-        config: dict[str, Any] = {}
-
-        if tools:
-            config["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        if tool_choice:
-            tool_config = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-            if tool_config:
-                config["tool_config"] = tool_config
-
-        return config if config else None
-
     def to_provider(
         self,
         ir_input: IRInput | IRRequest,

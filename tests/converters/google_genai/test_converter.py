@@ -941,34 +941,6 @@ class TestGoogleGenAIConverter:
 
     # ==================== Backward Compatibility ====================
 
-    def test_build_config_with_tools(self):
-        """Test build_config with tools."""
-        tools = cast(
-            list[ToolDefinition],
-            [
-                {
-                    "type": "function",
-                    "name": "search",
-                    "description": "Search",
-                    "parameters": {"type": "object", "properties": {}},
-                }
-            ],
-        )
-        config = self.converter.build_config(tools=tools)
-        assert config is not None
-        assert len(config["tools"]) == 1
-
-    def test_build_config_with_tool_choice(self):
-        """Test build_config with tool choice."""
-        config = self.converter.build_config(tool_choice={"mode": "auto"})
-        assert config is not None
-        assert config["tool_config"]["function_calling_config"]["mode"] == "AUTO"
-
-    def test_build_config_empty(self):
-        """Test build_config with no args returns None."""
-        config = self.converter.build_config()
-        assert config is None
-
     def test_to_provider_with_ir_input(self):
         """Test to_provider with IRInput (message list)."""
         ir_input = cast(
