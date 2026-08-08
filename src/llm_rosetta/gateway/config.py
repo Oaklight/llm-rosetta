@@ -529,7 +529,12 @@ class GatewayConfig:
         reasoning = self.model_reasoning_overrides.get(model)
         flatten_system = self.model_flatten_system.get(model, False)
         custom_tools = self.provider_supports_custom_tools.get(provider_name)
-        hoist_system = self.provider_hoist_system_messages.get(provider_name, True)
+        from llm_rosetta.shims import resolve_shim
+
+        _shim = resolve_shim(shim_name) if shim_name else None
+        hoist_system = self.provider_hoist_system_messages.get(
+            provider_name, _shim.hoist_system_messages if _shim else True
+        )
 
         route = ResolvedRoute(
             source_provider=source_provider,
