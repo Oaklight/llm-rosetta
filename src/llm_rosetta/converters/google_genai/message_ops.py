@@ -51,6 +51,18 @@ _GOOGLE_TO_IR_ROLE = {
 }
 
 
+def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
+    """Find the tool_name that best matches a result ID.
+
+    Checks for exact match first, then Gemini CLI prefix format
+    (``<name>_<timestamp>_<index>``).  Falls back to *result_id* itself.
+    """
+    for name in known_names:
+        if result_id == name or result_id.startswith(name + "_"):
+            return name
+    return result_id
+
+
 class GoogleGenAIMessageOps(BaseMessageOps):
     """Google GenAI message conversion operations.
 
@@ -283,16 +295,7 @@ class GoogleGenAIMessageOps(BaseMessageOps):
                 # function name (Google convention) or a client-generated
                 # ID.  We need to find the matching tool_call by name.
                 result_id = part.get("tool_call_id", "")
-                # Try to identify the function name: check if result_id
-                # matches any known tool_name directly.
-                tool_name = result_id  # default guess
-                for name in call_queue:
-                    # Match if the result_id starts with the tool name
-                    # (Gemini CLI format: "<name>_<timestamp>_<index>")
-                    # or equals the tool name exactly.
-                    if result_id == name or result_id.startswith(name + "_"):
-                        tool_name = name
-                        break
+                tool_name = _match_tool_name(result_id, call_queue)
 
                 ids = call_queue.get(tool_name)
                 if not ids:
