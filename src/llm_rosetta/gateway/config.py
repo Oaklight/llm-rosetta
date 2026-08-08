@@ -228,6 +228,10 @@ class GatewayConfig:
             self._raw_providers
         )
 
+        self.provider_hoist_system_messages = self._parse_hoist_system_overrides(
+            self._raw_providers
+        )
+
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
@@ -265,6 +269,17 @@ class GatewayConfig:
         for pname, pcfg in raw_providers.items():
             if isinstance(pcfg, dict) and "supports_custom_tools" in pcfg:
                 result[pname] = bool(pcfg["supports_custom_tools"])
+        return result
+
+    @staticmethod
+    def _parse_hoist_system_overrides(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> dict[str, bool]:
+        """Extract per-provider hoist_system_messages overrides."""
+        result: dict[str, bool] = {}
+        for pname, pcfg in raw_providers.items():
+            if isinstance(pcfg, dict) and "hoist_system_messages" in pcfg:
+                result[pname] = bool(pcfg["hoist_system_messages"])
         return result
 
     @staticmethod
@@ -514,6 +529,7 @@ class GatewayConfig:
         reasoning = self.model_reasoning_overrides.get(model)
         flatten_system = self.model_flatten_system.get(model, False)
         custom_tools = self.provider_supports_custom_tools.get(provider_name)
+        hoist_system = self.provider_hoist_system_messages.get(provider_name, True)
 
         route = ResolvedRoute(
             source_provider=source_provider,
@@ -525,6 +541,7 @@ class GatewayConfig:
             reasoning_override=reasoning,
             flatten_system=flatten_system,
             supports_custom_tools=custom_tools,
+            hoist_system_messages=hoist_system,
         )
 
         pinfo = self.providers[provider_name]

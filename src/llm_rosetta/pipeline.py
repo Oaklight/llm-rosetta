@@ -76,6 +76,7 @@ def apply_ir_transforms(
     upstream_model: str | None = None,
     model_capabilities: list[str] | None = None,
     request_id: str = "-",
+    hoist_system_messages: bool = True,
 ) -> dict[str, Any]:
     """Apply all shim-driven IR-level transforms.
 
@@ -105,6 +106,7 @@ def apply_ir_transforms(
         model=upstream_model or "",
         model_capabilities=model_capabilities,
         request_id=request_id,
+        hoist_system_messages=hoist_system_messages,
     )
     return _apply_ir_transforms_exec(resolved.ir_transforms, ir_request, ctx)
 
@@ -206,6 +208,7 @@ class ConversionPipeline:
         model_capabilities: list[str] | None = None,
         reasoning_config_override: dict[str, Any] | None = None,
         supports_custom_tools_override: bool | None = None,
+        hoist_system_messages: bool = True,
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
@@ -216,6 +219,7 @@ class ConversionPipeline:
         self._model_capabilities = model_capabilities
         self._reasoning_config_override = reasoning_config_override
         self._supports_custom_tools_override = supports_custom_tools_override
+        self._hoist_system_messages = hoist_system_messages
 
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
@@ -397,6 +401,7 @@ class ConversionPipeline:
             upstream_model=self._upstream_model or body.get("model"),
             model_capabilities=self._model_capabilities,
             request_id=request_id,
+            hoist_system_messages=self._hoist_system_messages,
         )
         self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
         self._ir_request = ir_request

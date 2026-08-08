@@ -146,6 +146,7 @@ class ProviderShim:
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
     supports_custom_tools: bool = False
+    hoist_system_messages: bool = True
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -192,6 +193,7 @@ class ProviderShim:
             "model_reasoning": None,
             "response_id_prefix": "",
             "supports_custom_tools": False,
+            "hoist_system_messages": True,
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():
