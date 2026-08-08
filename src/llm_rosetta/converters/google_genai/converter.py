@@ -679,47 +679,10 @@ class GoogleGenAIConverter(BaseConverter):
         deferred_finish: FinishEvent | None = None
 
         for candidate in chunk.get("candidates", []):
-            choice_index = candidate.get("index", 0)
-            content = candidate.get("content", {})
-
-            finish_reason = candidate.get("finish_reason") or candidate.get(
-                "finishReason"
-            )
-
-            # Track how many events existed before processing this
-            # candidate's parts, so we can identify which text_delta
-            # events belong to this compound chunk.
-            pre_parts_len = len(events)
-
-            for part in content.get("parts", []):
-                self._handle_p_part_to_ir(part, choice_index, context, events)
-
-            # When a compound chunk has both text and finishReason,
-            # defer the text into context so _handle_ir_finish_to_p can
-            # merge it into the finish candidate's parts, avoiding
-            # an extra output event.
-            if finish_reason and context is not None:
-                new_events = events[pre_parts_len:]
-                deferred_texts: list[str] = []
-                kept_new: list[IRStreamEvent] = []
-                for ev in new_events:
-                    if ev["type"] == "text_delta":
-                        deferred_texts.append(ev["text"])
-                    else:
-                        kept_new.append(ev)
-                if deferred_texts:
-                    context.pending_text = "".join(deferred_texts)
-                    events[pre_parts_len:] = kept_new
-
-            if finish_reason:
+            finish = self._process_stream_candidate(candidate, context, events)
+            if finish is not None:
                 has_finish_reason = True
-                deferred_finish = FinishEvent(
-                    type="finish",
-                    finish_reason={
-                        "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
-                    },
-                    choice_index=choice_index,
-                )
+                deferred_finish = finish
 
         # Handle prompt-level blocks in streaming (no candidates)
         if not has_finish_reason and not chunk.get("candidates"):
@@ -750,6 +713,49 @@ class GoogleGenAIConverter(BaseConverter):
             events.append(StreamEndEvent(type="stream_end"))
 
         return events
+
+    def _process_stream_candidate(
+        self,
+        candidate: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> FinishEvent | None:
+        """Process a single candidate from a stream chunk.
+
+        Handles part dispatch, text deferral for compound chunks, and
+        finish reason detection.  Returns a ``FinishEvent`` if the
+        candidate signals completion, otherwise ``None``.
+        """
+        choice_index = candidate.get("index", 0)
+        cand_content = candidate.get("content", {})
+        finish_reason = candidate.get("finish_reason") or candidate.get("finishReason")
+
+        pre_parts_len = len(events)
+        for part in cand_content.get("parts", []):
+            self._handle_p_part_to_ir(part, choice_index, context, events)
+
+        if finish_reason and context is not None:
+            new_events = events[pre_parts_len:]
+            deferred_texts: list[str] = []
+            kept_new: list[IRStreamEvent] = []
+            for ev in new_events:
+                if ev["type"] == "text_delta":
+                    deferred_texts.append(ev["text"])
+                else:
+                    kept_new.append(ev)
+            if deferred_texts:
+                context.pending_text = "".join(deferred_texts)
+                events[pre_parts_len:] = kept_new
+
+        if finish_reason:
+            return FinishEvent(
+                type="finish",
+                finish_reason={
+                    "reason": GOOGLE_REASON_FROM_PROVIDER.get(finish_reason, "stop")  # ty: ignore[invalid-argument-type]
+                },
+                choice_index=choice_index,
+            )
+        return None
 
     def _handle_p_stream_start_to_ir(
         self,
