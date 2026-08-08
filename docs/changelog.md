@@ -8,6 +8,18 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Changed
+
+- **Complexity reduction** — refactor base converter helpers, Google GenAI converter, OpenAI Responses converter, gateway config, and SOCKS5 test handler to reduce cyclomatic complexity.
+- **complexipy v6 pre-commit hook** — enable complexipy v6 pre-commit hook; bump to v6.2.0 with threshold raised to 30.
+
+### Removed
+
+- **Backward-compat aliases** (PR [#492](https://github.com/Oaklight/llm-rosetta/pull/492)): remove `to_provider()` compat aliases from openai_responses and google_genai converters.
+- **Dead compat shims** — remove dead backward-compat shims and compat aliases from base converter and converters.
+- **Stale docs** — remove stale base converter READMEs.
+- **Stray file** — remove stray `validate.py` from project root.
+
 ## v0.8.1 — 2026-08-07
 
 ### Bug Fixes
