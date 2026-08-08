@@ -7,7 +7,8 @@ References:
     https://api-docs.deepseek.com/api/create-chat-completion
 """
 
-from llm_rosetta.shims.transforms import strip_fields
+from llm_rosetta.shims.transforms import hoist_late_system_messages, strip_fields
 
 post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
 pre_ir_transforms = ()
+ir_transforms = (hoist_late_system_messages(),)
