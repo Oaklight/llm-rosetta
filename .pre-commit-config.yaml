@@ -17,10 +17,10 @@ repos:
         require_serial: true
         types: [python]
 
-  # - repo: https://github.com/rohaquinlop/complexipy-pre-commit
-  #   rev: v5.1.0
-  #   hooks:
-  #     - id: complexipy
-  #       files: ^src/llm_rosetta/
-  #       exclude: ^src/llm_rosetta/_vendor/
-  #       args: [-mx, "25"]
+  - repo: https://github.com/rohaquinlop/complexipy-pre-commit
+    rev: v6.2.0
+    hooks:
+      - id: complexipy
+        files: ^(src/llm_rosetta/|tests/)
+        exclude: ^src/llm_rosetta/_vendor/
+        args: [-mx, "30"]
