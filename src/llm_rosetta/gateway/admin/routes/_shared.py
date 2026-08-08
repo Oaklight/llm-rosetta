@@ -90,8 +90,9 @@ def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
     """Update the auth hook's state for hot-reload."""
     auth_state = getattr(app, "auth_state", None)
     if auth_state is not None:
-        auth_state.key_set = config.api_key_set
-        auth_state.labels = dict(config.api_key_labels)
+        from ...auth import _build_config_fallback
+
+        auth_state.config_fallback = _build_config_fallback(config.api_keys)
         # Sync admin password (e.g. changed via CLI or config edit)
         if config.admin_password != auth_state.admin_password:
             auth_state.change_password(config.admin_password or "")

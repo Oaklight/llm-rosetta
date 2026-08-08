@@ -15,8 +15,14 @@ from llm_rosetta._vendor.httpserver import (
 )
 from llm_rosetta.auto_detect import ProviderType
 
-from .auth import AuthState, api_key_label_var, create_auth_hook
+from .auth import (
+    AuthState,
+    _build_config_fallback,
+    api_key_context_var,
+    create_auth_hook,
+)
 from .config import GatewayConfig
+from .keystore import KeyStore
 from .embeddings import handle_embeddings as _handle_embeddings
 from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
@@ -90,7 +96,9 @@ def _record_telemetry(
             status_code=status_code,
             duration_ms=duration_ms,
             error_detail=error_detail,
-            api_key_label=api_key_label_var.get(),
+            api_key_label=(
+                _kctx.label if (_kctx := api_key_context_var.get()) else None
+            ),
             client_ip=_extract_client_ip(request),
             profile=profile,
         )
@@ -538,12 +546,73 @@ def _flush_now(app: App) -> None:
             logger.warning("Shutdown: failed to flush metrics: %s", exc)
 
     persistence.close()
+
+    keystore = getattr(app, "keystore", None)
+    if keystore is not None:
+        keystore.close()
+
     logger.info("Persistence flushed and closed on shutdown")
 
 
 # ---------------------------------------------------------------------------
 # App factory
 # ---------------------------------------------------------------------------
+
+
+def _setup_auth(
+    config: GatewayConfig, config_path: str | None
+) -> tuple[str, KeyStore, AuthState]:
+    """Create KeyStore, import config keys, build AuthState."""
+    import os
+    import secrets
+
+    internal_token = f"rsk-internal-{secrets.token_hex(16)}"
+
+    if config.api_keys_db:
+        keys_db_path = config.api_keys_db
+    elif config_path:
+        keys_db_path = os.path.join(
+            os.path.dirname(os.path.abspath(config_path)), "keys.db"
+        )
+    else:
+        keys_db_path = "keys.db"
+
+    keystore = KeyStore(keys_db_path)
+
+    if config.api_keys:
+        imported = keystore.import_from_config(config.api_keys)
+        if imported:
+            logger.info(
+                "Imported %d API key(s) from config into SQLite keystore", imported
+            )
+        logger.warning(
+            "API keys found in config file. Consider removing server.api_keys "
+            "after verifying the SQLite keystore (%s) is working correctly.",
+            keys_db_path,
+        )
+
+    config_fallback = _build_config_fallback(config.api_keys)
+
+    auth_state = AuthState(
+        keystore=keystore,
+        config_fallback=config_fallback,
+        internal_token=internal_token,
+        admin_password=config.admin_password,
+        open_on_no_keys=config.open_on_no_keys,
+    )
+    if not auth_state._has_keys():
+        _no_key_msg = (
+            "No API keys configured — all /v1/* endpoints are OPEN "
+            "(server.open_on_no_keys=true). Set server.api_keys in your "
+            "config or generate keys in the admin panel to restrict access."
+            if config.open_on_no_keys
+            else "No API keys configured — all /v1/* endpoints are BLOCKED. "
+            "Generate keys in the admin panel, set server.api_keys, or "
+            "set server.open_on_no_keys=true to allow anonymous access."
+        )
+        logger.warning(_no_key_msg)
+
+    return internal_token, keystore, auth_state
 
 
 def _install_root_redirect(app: App, target: str | None) -> None:
@@ -590,28 +659,8 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
 
     _install_root_redirect(app, config.root_redirect)
 
-    # --- Auth ---
-    import secrets
-
-    internal_token = f"rsk-internal-{secrets.token_hex(16)}"
-    auth_state = AuthState(
-        config.api_key_set,
-        config.api_key_labels,
-        internal_token,
-        admin_password=config.admin_password,
-        open_on_no_keys=config.open_on_no_keys,
-    )
-    if not config.api_key_set:
-        _no_key_msg = (
-            "No API keys configured — all /v1/* endpoints are OPEN "
-            "(server.open_on_no_keys=true). Set server.api_keys in your "
-            "config or generate keys in the admin panel to restrict access."
-            if config.open_on_no_keys
-            else "No API keys configured — all /v1/* endpoints are BLOCKED. "
-            "Generate keys in the admin panel, set server.api_keys, or "
-            "set server.open_on_no_keys=true to allow anonymous access."
-        )
-        logger.warning(_no_key_msg)
+    # --- Auth (SQLite keystore + config fallback) ---
+    internal_token, keystore, auth_state = _setup_auth(config, config_path)
     app.before_request(create_auth_hook(auth_state))
 
     # --- CORS ---
@@ -692,6 +741,7 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     app.metadata_store = metadata_store  # type: ignore
     app.internal_token = internal_token  # type: ignore
     app.auth_state = auth_state  # type: ignore
+    app.keystore = keystore  # type: ignore
 
     setup_admin(app, config, config_path)
 

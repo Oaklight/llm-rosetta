@@ -1,52 +1,30 @@
-"""API key management route handlers."""
+"""API key management route handlers (SQLite keystore)."""
 
 from __future__ import annotations
 
-import secrets
-import uuid
-from datetime import datetime, timezone
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ...config import GatewayConfig, config_lock
-from ._shared import (
-    _get_config_io,
-    _get_config_path,
-    _mask_api_key,
-    _reload_gateway_config,
-)
+from ...keystore import KeyStore
+
+
+def _get_keystore(request: Any) -> KeyStore:
+    ks = getattr(request.app, "keystore", None)
+    if ks is None:
+        raise RuntimeError("KeyStore not configured on this application")
+    return ks
 
 
 async def get_api_keys(request: Any) -> Response:
-    """List all gateway API keys (values masked)."""
-    config_path = _get_config_path(request)
-
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
-
-    server = data.get("server", {})
-    keys = list(server.get("api_keys", []))
-    # Backward compat: expose legacy single key as a synthetic entry
-    if not keys and server.get("api_key"):
-        keys = [
-            {
-                "id": "default",
-                "key": server["api_key"],
-                "label": "default",
-                "created": "",
-            }
-        ]
-
-    masked = [{**entry, "key": _mask_api_key(entry.get("key", ""))} for entry in keys]
-    return JSONResponse({"keys": masked})
+    """List all gateway API keys (no secrets returned)."""
+    keystore = _get_keystore(request)
+    return JSONResponse({"keys": keystore.list_keys()})
 
 
 async def create_api_key(request: Any) -> Response:
     """Create a new gateway API key."""
-    config_path = _get_config_path(request)
+    keystore = _get_keystore(request)
 
     try:
         body = request.json()
@@ -55,61 +33,26 @@ async def create_api_key(request: Any) -> Response:
 
     label = body.get("label", "")
     manual_key = body.get("key")
-    key_value = manual_key if manual_key else f"rsk-{secrets.token_hex(24)}"
-
-    entry = {
-        "id": uuid.uuid4().hex[:8],
-        "key": key_value,
-        "label": label,
-        "created": datetime.now(timezone.utc).isoformat(),
-    }
-
-    with config_lock(config_path):
-        try:
-            data = _get_config_io(request).load_raw(config_path)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to read config: {exc}"}, status_code=500
-            )
-
-        server = data.setdefault("server", {})
-
-        # Migrate legacy single key → api_keys array
-        if "api_key" in server and "api_keys" not in server:
-            old_key = server.pop("api_key")
-            server["api_keys"] = [
-                {"id": "default", "key": old_key, "label": "default", "created": ""}
-            ]
-
-        server.setdefault("api_keys", []).append(entry)
-
-        try:
-            _get_config_io(request).save(config_path, data)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to write config: {exc}"}, status_code=500
-            )
+    allowed_shims = body.get("allowed_shims")
 
     try:
-        _reload_gateway_config(request, config_path)
-    except Exception as exc:
-        return JSONResponse(
-            {
-                "error": f"Config saved but reload failed: {exc}",
-                "saved": True,
-                "reloaded": False,
-            },
-            status_code=500,
+        key_id, raw_key = keystore.create(
+            label=label,
+            allowed_shims=allowed_shims,
+            manual_key=manual_key,
         )
+    except Exception as exc:
+        return JSONResponse({"error": f"Failed to create key: {exc}"}, status_code=500)
 
-    # Return the full key exactly once so the user can copy it
-    return JSONResponse({"ok": True, "key": entry})
+    entry = keystore.list_keys()
+    created_entry = next((k for k in entry if k["id"] == key_id), {"id": key_id})
+    created_entry["key"] = raw_key
+    return JSONResponse({"ok": True, "key": created_entry})
 
 
 async def update_api_key(request: Any, **kwargs: Any) -> Response:
-    """Update an API key's label."""
-    config_path = _get_config_path(request)
-
+    """Update an API key's label and/or allowed_shims."""
+    keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
     try:
@@ -117,165 +60,41 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     except Exception:
         return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
 
-    with config_lock(config_path):
-        try:
-            data = _get_config_io(request).load_raw(config_path)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to read config: {exc}"}, status_code=500
-            )
+    label = body.get("label")
+    allowed_shims = body.get("allowed_shims")
 
-        keys = data.get("server", {}).get("api_keys", [])
-        target = None
-        for entry in keys:
-            if entry.get("id") == key_id:
-                target = entry
-                break
+    if not keystore.update(key_id, label=label, allowed_shims=allowed_shims):
+        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-        if target is None:
-            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
-
-        if "label" in body:
-            target["label"] = body["label"]
-
-        try:
-            _get_config_io(request).save(config_path, data)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to write config: {exc}"}, status_code=500
-            )
-
-    try:
-        _reload_gateway_config(request, config_path)
-    except Exception as exc:
-        return JSONResponse(
-            {
-                "error": f"Config saved but reload failed: {exc}",
-                "saved": True,
-                "reloaded": False,
-            },
-            status_code=500,
-        )
-
-    return JSONResponse({"ok": True, "id": key_id, "label": target["label"]})
+    result: dict[str, Any] = {"ok": True, "id": key_id}
+    if label is not None:
+        result["label"] = label
+    if allowed_shims is not None:
+        result["allowed_shims"] = allowed_shims
+    return JSONResponse(result)
 
 
 async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     """Delete a gateway API key."""
-    config_path = _get_config_path(request)
-
+    keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
-    with config_lock(config_path):
-        try:
-            data = _get_config_io(request).load_raw(config_path)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to read config: {exc}"}, status_code=500
-            )
-
-        keys = data.get("server", {}).get("api_keys", [])
-        original_len = len(keys)
-        keys[:] = [e for e in keys if e.get("id") != key_id]
-
-        if len(keys) == original_len:
-            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
-
-        try:
-            _get_config_io(request).save(config_path, data)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to write config: {exc}"}, status_code=500
-            )
-
-    try:
-        _reload_gateway_config(request, config_path)
-    except Exception as exc:
-        return JSONResponse(
-            {
-                "error": f"Config saved but reload failed: {exc}",
-                "saved": True,
-                "reloaded": False,
-            },
-            status_code=500,
-        )
+    if not keystore.delete(key_id):
+        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
     return JSONResponse({"ok": True, "deleted": key_id})
 
 
 async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     """Rotate an API key: generate a new value, keep the same id and label."""
-    config_path = _get_config_path(request)
-
+    keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
-    with config_lock(config_path):
-        try:
-            data = _get_config_io(request).load_raw(config_path)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to read config: {exc}"}, status_code=500
-            )
+    new_key = keystore.rotate(key_id)
+    if new_key is None:
+        return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-        keys = data.get("server", {}).get("api_keys", [])
-        target = None
-        for entry in keys:
-            if entry.get("id") == key_id:
-                target = entry
-                break
-
-        if target is None:
-            return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
-
-        new_key = f"rsk-{secrets.token_hex(24)}"
-        target["key"] = new_key
-        target["rotated"] = datetime.now(timezone.utc).isoformat()
-
-        try:
-            _get_config_io(request).save(config_path, data)
-        except Exception as exc:
-            return JSONResponse(
-                {"error": f"Failed to write config: {exc}"}, status_code=500
-            )
-
-    try:
-        _reload_gateway_config(request, config_path)
-    except Exception as exc:
-        return JSONResponse(
-            {
-                "error": f"Config saved but reload failed: {exc}",
-                "saved": True,
-                "reloaded": False,
-            },
-            status_code=500,
-        )
-
-    # Return the new key exactly once so the user can copy it
     return JSONResponse({"ok": True, "id": key_id, "key": new_key})
-
-
-async def reveal_api_key(request: Any, **kwargs: Any) -> Response:
-    """Return the raw (unmasked) API key value."""
-    config: GatewayConfig = request.app.gateway_config
-    if not config.credential_visible:
-        return JSONResponse(
-            {"error": "Credential visibility is disabled"}, status_code=403
-        )
-    config_path = _get_config_path(request)
-
-    key_id = request.path_params["key_id"]
-
-    try:
-        data = _get_config_io(request).load_raw(config_path)
-    except Exception as exc:
-        return JSONResponse({"error": f"Failed to read config: {exc}"}, status_code=500)
-
-    keys = data.get("server", {}).get("api_keys", [])
-    for entry in keys:
-        if entry.get("id") == key_id:
-            return JSONResponse({"key": entry.get("key", "")})
-
-    return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
 
 async def get_internal_token(request: Any) -> Response:
