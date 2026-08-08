@@ -11,21 +11,16 @@ Google-specific:
 - Config → GenerateContentConfig (generation params, tools, tool_config)
 - Response → candidates (list of Candidate objects)
 
-Also maintains backward compatibility with the old to_provider/from_provider API.
 """
 
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any, cast
 
 
 from ...types.ir import (
-    IRInput,
-    IRInputItem,
     TextPart,
-    ToolChoice,
-    ToolDefinition,
     is_message,
     is_text_part,
     is_tool_call_part,
@@ -648,62 +643,6 @@ class GoogleGenAIConverter(BaseConverter):
             ]
             return text_parts or None
         return None
-
-    def to_provider(
-        self,
-        ir_input: IRInput | IRRequest,
-        tools: Sequence[ToolDefinition] | None = None,
-        tool_choice: ToolChoice | None = None,
-        **kwargs: Any,
-    ) -> tuple[dict[str, Any], list[str]]:
-        """Convert IR format to Google GenAI format (backward compatibility).
-
-        Supports both IRInput (message list) and IRRequest (full request).
-
-        Args:
-            ir_input: IR input list or request object.
-            tools: Tool definition list.
-            tool_choice: Tool choice configuration.
-
-        Returns:
-            (Google GenAI format dict, warning list)
-        """
-        if isinstance(ir_input, dict) and "messages" in ir_input:
-            # Handle IRRequest
-            return self.request_to_provider(cast(IRRequest, ir_input))
-
-        # Handle IRInput (message list)
-        ir_input_list: list[IRInputItem] = list(cast(IRInput, ir_input))
-        warnings_list: list[str] = []
-
-        # Extract system messages
-        system_instruction, remaining = self.message_ops.extract_system_instruction(
-            ir_input_list
-        )
-
-        # Convert non-system messages
-        contents, msg_warnings = self.message_ops.ir_messages_to_p(
-            remaining, target_provider=self._CONVERTER_TAG
-        )
-        warnings_list.extend(msg_warnings)
-
-        # Build result
-        result: dict[str, Any] = {"contents": contents}
-
-        if system_instruction:
-            result["system_instruction"] = system_instruction
-
-        # Convert tools
-        if tools:
-            result["tools"] = [self.tool_ops.ir_tool_definition_to_p(t) for t in tools]
-
-        # Convert tool choice
-        if tool_choice:
-            tool_config = self.tool_ops.ir_tool_choice_to_p(tool_choice)
-            if tool_config:
-                result["tool_config"] = tool_config
-
-        return result, warnings_list
 
     # ==================== Stream Support ====================
 

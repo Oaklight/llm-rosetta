@@ -788,10 +788,10 @@ class TestOpenAIResponsesConverter:
         with pytest.raises(TypeError, match="Cannot normalize"):
             OpenAIResponsesConverter._normalize(42)
 
-    # ==================== to_provider (backward compat) ====================
+    # ==================== request_to_provider / messages_to_provider ====================
 
-    def test_to_provider_with_ir_request(self):
-        """Test to_provider with IRRequest dict."""
+    def test_request_to_provider_with_generation(self):
+        """Test request_to_provider with generation params."""
         ir_request = cast(
             IRRequest,
             {
@@ -802,48 +802,64 @@ class TestOpenAIResponsesConverter:
                 "generation": {"temperature": 0.7, "max_tokens": 100},
             },
         )
-        result, warnings = self.converter.to_provider(ir_request)
+        result, warnings = self.converter.request_to_provider(ir_request)
         assert result["model"] == "gpt-4o"
         assert result["temperature"] == 0.7
         assert result["max_output_tokens"] == 100
 
-    def test_to_provider_with_message_list(self):
-        """Test to_provider with plain message list."""
+    def test_messages_to_provider_plain_list(self):
+        """Test messages_to_provider with plain message list."""
         messages = cast(
             list[Message],
             [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
         )
-        result, warnings = self.converter.to_provider(messages)
-        assert "input" in result
-        assert len(result["input"]) == 1
+        result, warnings = self.converter.messages_to_provider(messages)
+        assert len(result) == 1
 
-    def test_to_provider_with_tools(self):
-        """Test to_provider with tools parameter."""
-        messages = cast(
-            list[Message],
-            [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
-        )
-        tools = [
+    def test_request_to_provider_with_tools(self):
+        """Test request_to_provider with tools."""
+        ir_request = cast(
+            IRRequest,
             {
-                "type": "function",
-                "name": "test",
-                "description": "Test",
-                "parameters": {},
-            }
-        ]
-        result, warnings = self.converter.to_provider(messages, tools=tools)
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "test",
+                        "description": "Test",
+                        "parameters": {},
+                    }
+                ],
+            },
+        )
+        result, warnings = self.converter.request_to_provider(ir_request)
         assert "tools" in result
         assert len(result["tools"]) == 1
 
-    def test_to_provider_with_tool_choice(self):
-        """Test to_provider with tool_choice parameter."""
-        messages = cast(
-            list[Message],
-            [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}],
+    def test_request_to_provider_with_tool_choice(self):
+        """Test request_to_provider with tool_choice."""
+        ir_request = cast(
+            IRRequest,
+            {
+                "model": "gpt-4o",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]}
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "test",
+                        "description": "Test",
+                        "parameters": {},
+                    }
+                ],
+                "tool_choice": {"mode": "auto"},
+            },
         )
-        result, warnings = self.converter.to_provider(
-            messages, tool_choice={"mode": "auto"}
-        )
+        result, warnings = self.converter.request_to_provider(ir_request)
         assert result["tool_choice"] == "auto"
 
     # ==================== validate_messages ====================

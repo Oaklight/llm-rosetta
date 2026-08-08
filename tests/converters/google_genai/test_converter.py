@@ -13,7 +13,6 @@ from llm_rosetta.types.ir import (
     IRRequest,
     IRResponse,
     Message,
-    ToolDefinition,
 )
 
 
@@ -939,11 +938,11 @@ class TestGoogleGenAIConverter:
         with pytest.raises(TypeError, match="Cannot normalize"):
             GoogleGenAIConverter._normalize(42)
 
-    # ==================== Backward Compatibility ====================
+    # ==================== request_to_provider / messages_to_provider ====================
 
-    def test_to_provider_with_ir_input(self):
-        """Test to_provider with IRInput (message list)."""
-        ir_input = cast(
+    def test_messages_to_provider_with_system(self):
+        """Test messages_to_provider with system + user messages."""
+        messages = cast(
             list[Message],
             [
                 {
@@ -953,13 +952,12 @@ class TestGoogleGenAIConverter:
                 {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
             ],
         )
-        result, warnings = self.converter.to_provider(ir_input)
-        assert "system_instruction" in result
-        assert result["system_instruction"]["parts"][0]["text"] == "Be helpful."
-        assert len(result["contents"]) == 1
+        result, warnings = self.converter.messages_to_provider(messages)
+        # messages_to_provider returns the converted message list
+        assert len(result) >= 1
 
-    def test_to_provider_with_ir_request(self):
-        """Test to_provider with IRRequest (dict with messages key)."""
+    def test_request_to_provider_basic_ir_request(self):
+        """Test request_to_provider with a simple IRRequest."""
         ir_request = cast(
             IRRequest,
             {
@@ -969,30 +967,30 @@ class TestGoogleGenAIConverter:
                 ],
             },
         )
-        result, warnings = self.converter.to_provider(ir_request)
+        result, warnings = self.converter.request_to_provider(ir_request)
         assert result["model"] == "gemini-2.0-flash"
 
-    def test_to_provider_with_tools(self):
-        """Test to_provider with tools parameter."""
-        ir_input = cast(
-            list[Message],
-            [
-                {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
-            ],
+    def test_request_to_provider_with_tools(self):
+        """Test request_to_provider with tools."""
+        ir_request = cast(
+            IRRequest,
+            {
+                "model": "gemini-2.0-flash",
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "Hello"}]},
+                ],
+                "tools": [
+                    {
+                        "type": "function",
+                        "name": "search",
+                        "description": "Search",
+                        "parameters": {"type": "object", "properties": {}},
+                    }
+                ],
+            },
         )
-        tools = cast(
-            list[ToolDefinition],
-            [
-                {
-                    "type": "function",
-                    "name": "search",
-                    "description": "Search",
-                    "parameters": {"type": "object", "properties": {}},
-                }
-            ],
-        )
-        result, warnings = self.converter.to_provider(ir_input, tools=tools)
-        assert len(result["tools"]) == 1
+        result, warnings = self.converter.request_to_provider(ir_request)
+        assert len(result["config"]["tools"]) == 1
 
     # ==================== GoogleConverter Alias ====================
 
