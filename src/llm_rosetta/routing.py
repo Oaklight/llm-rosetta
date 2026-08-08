@@ -54,6 +54,7 @@ class ResolvedRoute:
     reasoning_override: dict[str, Any] | None = None
     flatten_system: bool = False
     supports_custom_tools: bool | None = None
+    hoist_system_messages: bool = True
 
 
 class Router(Protocol):

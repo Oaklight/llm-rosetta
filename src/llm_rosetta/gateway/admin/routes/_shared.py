@@ -132,6 +132,8 @@ def _build_provider_entry(
 
     if "supports_custom_tools" in body:
         entry["supports_custom_tools"] = bool(body["supports_custom_tools"])
+    if "hoist_system_messages" in body:
+        entry["hoist_system_messages"] = bool(body["hoist_system_messages"])
 
     return entry
 

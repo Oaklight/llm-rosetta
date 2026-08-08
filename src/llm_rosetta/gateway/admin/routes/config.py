@@ -178,6 +178,7 @@ async def get_config(request: Any) -> Response:
                     "default_base_url": s.default_base_url,
                     "default_api_key_env": s.default_api_key_env,
                     "supports_custom_tools": s.supports_custom_tools,
+                    "hoist_system_messages": s.hoist_system_messages,
                 }
                 for s in list_shims()
             ],

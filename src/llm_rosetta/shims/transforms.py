@@ -220,11 +220,14 @@ class TransformContext:
         model_capabilities: Declared capabilities of the model
             (e.g. ``["text", "vision"]``).  ``None`` means unknown.
         request_id: Request identifier for logging.
+        hoist_system_messages: Whether to hoist late system messages
+            into user-role envelopes for cache prefix stability.
     """
 
     model: str = ""
     model_capabilities: list[str] | None = None
     request_id: str = "-"
+    hoist_system_messages: bool = True
 
 
 IRTransform = Callable[[dict[str, Any], TransformContext], dict[str, Any]]
@@ -452,6 +455,8 @@ def hoist_late_system_messages() -> IRTransform:
     """
 
     def _hoist(body: dict[str, Any], context: TransformContext) -> dict[str, Any]:
+        if not context.hoist_system_messages:
+            return body
         from llm_rosetta.converters.base.helpers.system_message_hoist import (
             hoist_late_system_messages_ir,
         )
