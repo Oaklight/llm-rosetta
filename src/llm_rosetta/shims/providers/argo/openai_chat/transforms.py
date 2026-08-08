@@ -18,6 +18,8 @@ Request-side (post_ir_transforms) — body-level
 
 Request-side (ir_transforms) — IR-level
 -----------------------------------------
+- ``hoist_late_system_messages()``: rewrite mid-conversation system messages
+  as user-role envelopes for prompt cache prefix stability.
 - ``truncate_images(50, pattern=r"^(gpt|o\\d)")``: enforce 50-image limit
   for GPT/o* models; Gemini and Claude pass through untouched.
 - ``unwind_parallel_tool_calls(pattern=r"^gemini")``: split parallel tool
@@ -27,6 +29,7 @@ Request-side (ir_transforms) — IR-level
 from llm_rosetta.shims.transforms import (
     default_message_field,
     flatten_system_content,
+    hoist_late_system_messages,
     rename_field,
     replace_message_field,
     strip_fields_for_model,
@@ -43,6 +46,7 @@ post_ir_transforms = (
 )
 pre_ir_transforms = ()
 ir_transforms = (
+    hoist_late_system_messages(),
     truncate_images(50, pattern=r"^(gpt|o\d)"),
     unwind_parallel_tool_calls(pattern=r"^gemini"),
 )
