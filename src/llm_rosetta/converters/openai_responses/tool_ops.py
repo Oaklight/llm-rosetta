@@ -116,6 +116,82 @@ def fix_orphaned_tool_calls(
     return patched
 
 
+def _synthesize_passthrough_tool(
+    provider_tool: dict[str, Any], tool_type: str
+) -> ToolDefinition:
+    """Build a passthrough IR tool for non-standard provider tool types.
+
+    Synthesizes a minimal JSON Schema so cross-provider degradation
+    produces "a function that accepts one text input" instead of an
+    empty schema.  Appends format-constraint hints to the description.
+    """
+    synth_params: dict[str, Any] = {}
+    if provider_tool.get("name"):
+        synth_params = {
+            "type": "object",
+            "properties": {
+                "input": {
+                    "type": "string",
+                    "description": "Free-form text input",
+                }
+            },
+            "required": ["input"],
+        }
+    desc = provider_tool.get("description", "")
+    fmt = provider_tool.get("format")
+    if fmt:
+        fmt_type = fmt.get("type", "unknown")
+        fmt_syntax = fmt.get("syntax", "")
+        hint = f"[Output format: {fmt_type}"
+        if fmt_syntax:
+            hint += f", syntax: {fmt_syntax}"
+        hint += "]"
+        desc = f"{desc}\n\n{hint}" if desc else hint
+    return cast(
+        ToolDefinition,
+        {
+            "type": "function",
+            "name": provider_tool.get("name", tool_type),
+            "description": desc,
+            "parameters": synth_params,
+            "_passthrough": dict(provider_tool),
+            "metadata": {"provider_type": tool_type},
+            "required_parameters": synth_params.get("required", []),
+        },
+    )
+
+
+def _build_function_call_item(
+    ir_tool_call: ToolCallPart,
+    tool_call_id: str,
+    tool_name: str,
+    arguments: str,
+) -> dict:
+    """Build a ``function_call`` item with correct ``fc_`` prefixed ID.
+
+    Recovers the Responses API item ID from provider_metadata when
+    available, otherwise converts ``call_`` prefix to ``fc_`` or adds
+    the prefix for other ID schemes (e.g. Anthropic ``toolu_``).
+    """
+    metadata = ir_tool_call.get("provider_metadata") or {}
+    item_id = metadata.get("responses_item_id")
+    if not item_id:
+        if tool_call_id and tool_call_id.startswith("fc_"):
+            item_id = tool_call_id
+        elif tool_call_id and tool_call_id.startswith("call_"):
+            item_id = "fc_" + tool_call_id[5:]
+        else:
+            item_id = "fc_" + tool_call_id
+    return {
+        "type": "function_call",
+        "id": item_id,
+        "call_id": tool_call_id,
+        "name": tool_name,
+        "arguments": arguments,
+        "status": "completed",
+    }
+
+
 class OpenAIResponsesToolOps(BaseToolOps):
     """OpenAI Responses API tool conversion operations.
 
@@ -213,46 +289,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             # satisfy validation; ``ir_tool_definition_to_p`` restores the
             # original payload on the outbound leg.
             if tool_type != "function" and tool_type not in _IR_ALLOWED_TYPES:
-                # Synthesize a minimal JSON Schema for cross-provider
-                # degradation so other providers see "a function that
-                # accepts one text input" instead of an empty schema.
-                synth_params: dict[str, Any] = {}
-                if provider_tool.get("name"):
-                    synth_params = {
-                        "type": "object",
-                        "properties": {
-                            "input": {
-                                "type": "string",
-                                "description": "Free-form text input",
-                            }
-                        },
-                        "required": ["input"],
-                    }
-                # Append format constraint info to description so
-                # cross-provider models get a hint about the expected
-                # output shape (best-effort, not enforced).
-                desc = provider_tool.get("description", "")
-                fmt = provider_tool.get("format")
-                if fmt:
-                    fmt_type = fmt.get("type", "unknown")
-                    fmt_syntax = fmt.get("syntax", "")
-                    hint = f"[Output format: {fmt_type}"
-                    if fmt_syntax:
-                        hint += f", syntax: {fmt_syntax}"
-                    hint += "]"
-                    desc = f"{desc}\n\n{hint}" if desc else hint
-                result = {
-                    "type": "function",
-                    "name": provider_tool.get("name", tool_type),
-                    "description": desc,
-                    "parameters": synth_params,
-                    "_passthrough": dict(provider_tool),
-                }
-                result["metadata"] = {"provider_type": tool_type}
-                result["required_parameters"] = (
-                    synth_params.get("required", []) if synth_params else []
-                )
-                return cast(ToolDefinition, result)
+                return _synthesize_passthrough_tool(provider_tool, tool_type)
 
             # Flat format (Responses API native).
             # Custom tools use "schema" instead of "parameters".
@@ -398,17 +435,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
         )
 
-        # Detect MCP call
-        if tool_name and tool_name.startswith("mcp://"):
-            return {
-                "type": "mcp_call",
-                "id": tool_call_id,
-                "name": tool_name,
-                "arguments": arguments,
-                "server_label": ir_tool_call.get("server_name", "default"),
-                "status": "calling",
-            }
-        elif tool_type == "mcp":
+        is_mcp = tool_type == "mcp" or (tool_name and tool_name.startswith("mcp://"))
+        if is_mcp:
             return {
                 "type": "mcp_call",
                 "id": tool_call_id,
@@ -418,27 +446,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "status": "calling",
             }
         elif tool_type == "function":
-            # Recover Responses API item ID from provider_metadata if available;
-            # the API requires 'id' to start with 'fc_' prefix.
-            metadata = ir_tool_call.get("provider_metadata") or {}
-            item_id = metadata.get("responses_item_id")
-            if not item_id:
-                # Cross-format: ensure fc_ prefix required by Responses API
-                if tool_call_id and tool_call_id.startswith("fc_"):
-                    item_id = tool_call_id
-                elif tool_call_id and tool_call_id.startswith("call_"):
-                    item_id = "fc_" + tool_call_id[5:]
-                else:
-                    # Other prefixes (e.g. toolu_ from Anthropic)
-                    item_id = "fc_" + tool_call_id
-            return {
-                "type": "function_call",
-                "id": item_id,
-                "call_id": tool_call_id,
-                "name": tool_name,
-                "arguments": arguments,
-                "status": "completed",
-            }
+            return _build_function_call_item(
+                ir_tool_call, tool_call_id, tool_name, arguments
+            )
         elif tool_type == "custom":
             # Custom tool calls use plain text 'input' instead of JSON
             # 'arguments'.  If tool_input has a single "input" key, unwrap

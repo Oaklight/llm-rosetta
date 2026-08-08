@@ -58,6 +58,30 @@ from .tool_ops import OpenAIResponsesToolOps
 from .utils import build_message_preamble_events, resolve_call_id
 
 
+def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
+    """Extract per-output-item metadata for lossless round-trip."""
+    meta: dict[str, Any] = {}
+    if "id" in item:
+        meta["id"] = item["id"]
+    if "status" in item:
+        meta["status"] = item["status"]
+    item_content = item.get("content", [])
+    if isinstance(item_content, list):
+        parts_meta: list[dict[str, Any]] = []
+        for cp in item_content:
+            if not isinstance(cp, dict):
+                continue
+            pm: dict[str, Any] = {}
+            if "annotations" in cp:
+                pm["annotations"] = cp["annotations"]
+            if "logprobs" in cp:
+                pm["logprobs"] = cp["logprobs"]
+            parts_meta.append(pm)
+        if parts_meta:
+            meta["content_meta"] = parts_meta
+    return meta
+
+
 class OpenAIResponsesConverter(BaseConverter):
     """OpenAI Responses API converter.
 
@@ -583,30 +607,11 @@ class OpenAIResponsesConverter(BaseConverter):
         if extras:
             ctx.store_response_extras(extras)
 
-        items_meta: list[dict[str, Any]] = []
-        for item in output_items:
-            if not OpenAIResponsesMessageOps.is_portable_response_output_item(item):
-                continue
-            meta: dict[str, Any] = {}
-            if "id" in item:
-                meta["id"] = item["id"]
-            if "status" in item:
-                meta["status"] = item["status"]
-            content = item.get("content", [])
-            if isinstance(content, list):
-                parts_meta: list[dict[str, Any]] = []
-                for cp in content:
-                    if not isinstance(cp, dict):
-                        continue
-                    pm: dict[str, Any] = {}
-                    if "annotations" in cp:
-                        pm["annotations"] = cp["annotations"]
-                    if "logprobs" in cp:
-                        pm["logprobs"] = cp["logprobs"]
-                    parts_meta.append(pm)
-                if parts_meta:
-                    meta["content_meta"] = parts_meta
-            items_meta.append(meta)
+        items_meta = [
+            _capture_item_metadata(item)
+            for item in output_items
+            if OpenAIResponsesMessageOps.is_portable_response_output_item(item)
+        ]
         if items_meta:
             ctx.store_output_items_meta(items_meta)
 
