@@ -79,10 +79,11 @@ class TestLateSystem:
             "messages": [_user("hi"), _asst("hey"), _sys("Be formal"), _user("ok")],
         }
         result = hoist_late_system_messages_ir(req)
-        assert len(result["messages"]) == 4
-        rewritten = result["messages"][2]
-        assert rewritten["role"] == "user"
-        assert rewritten["content"][0]["text"] == "[System: Be formal]"
+        assert len(result["messages"]) == 3
+        merged = result["messages"][2]
+        assert merged["role"] == "user"
+        assert merged["content"][0]["text"] == "[System: Be formal]"
+        assert merged["content"][1]["text"] == "ok"
 
     def test_multiple_late(self):
         req = {
@@ -123,10 +124,11 @@ class TestMixed:
         assert result["system_instruction"] == [
             {"type": "text", "text": "System prompt"}
         ]
-        assert len(result["messages"]) == 4
+        assert len(result["messages"]) == 3
         assert result["messages"][0]["role"] == "user"  # "hi"
-        assert result["messages"][2]["role"] == "user"  # rewritten
+        assert result["messages"][2]["role"] == "user"  # merged
         assert result["messages"][2]["content"][0]["text"] == "[System: Now be formal]"
+        assert result["messages"][2]["content"][1]["text"] == "ok"
 
     def test_multi_part_system(self):
         msg = {
@@ -235,3 +237,34 @@ class TestTransformIntegration:
         assert len(enveloped) == 1
         # system_instruction preserved
         assert result["system_instruction"][0]["text"] == "You are helpful."
+
+    def test_no_consecutive_user_after_anthropic_conversion(self):
+        """Hoisted late system → user must not create consecutive user roles.
+
+        The Anthropic converter merges consecutive same-role messages, so
+        the final output should always alternate roles.
+        """
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+        from llm_rosetta.pipeline import apply_ir_transforms
+
+        ir_request = {
+            "model": "claude-haiku-4-5",
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
+                {"role": "system", "content": [{"type": "text", "text": "Be formal"}]},
+                {"role": "user", "content": [{"type": "text", "text": "ok"}]},
+            ],
+        }
+        hoisted = apply_ir_transforms(ir_request, "argo--anthropic")
+        converter = AnthropicConverter()
+        from typing import cast
+        from llm_rosetta.types.ir.request import IRRequest
+
+        result, _ = converter.request_to_provider(cast(IRRequest, hoisted))
+
+        roles = [m["role"] for m in result["messages"]]
+        for i in range(1, len(roles)):
+            assert roles[i] != roles[i - 1], (
+                f"consecutive {roles[i]} at index {i}: {roles}"
+            )

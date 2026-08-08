@@ -49,6 +49,46 @@ def _rewrite_as_user(msg: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
+def _build_new_messages(
+    messages: list[dict[str, Any]],
+    leading_indices: set[int],
+    late_indices: set[int],
+) -> list[dict[str, Any]]:
+    """Build new message list with late system messages rewritten.
+
+    When a late system message is immediately followed by a user message,
+    the envelope is merged into that user message to avoid consecutive
+    user roles (which Anthropic rejects).
+    """
+    skip: set[int] = set(leading_indices)
+    new_messages: list[dict[str, Any]] = []
+    for i, msg in enumerate(messages):
+        if i in skip:
+            continue
+        if i in late_indices:
+            rewritten = _rewrite_as_user(msg)
+            next_idx = i + 1
+            while next_idx in skip:
+                next_idx += 1
+            if (
+                next_idx < len(messages)
+                and isinstance(messages[next_idx], dict)
+                and messages[next_idx].get("role") == "user"
+            ):
+                next_msg = messages[next_idx]
+                merged = {
+                    **next_msg,
+                    "content": rewritten["content"] + list(next_msg.get("content", [])),
+                }
+                new_messages.append(merged)
+                skip.add(next_idx)
+            else:
+                new_messages.append(rewritten)
+        else:
+            new_messages.append(msg)
+    return new_messages
+
+
 def hoist_late_system_messages_ir(
     ir_request: dict[str, Any],
     *,
@@ -68,13 +108,11 @@ def hoist_late_system_messages_ir(
     if not messages:
         return ir_request
 
-    first_non_system = 0
+    first_non_system = len(messages)
     for i, msg in enumerate(messages):
         if not isinstance(msg, dict) or msg.get("role") != "system":
             first_non_system = i
             break
-    else:
-        first_non_system = len(messages)
 
     leading_indices: set[int] = set()
     late_indices: set[int] = set()
@@ -95,14 +133,7 @@ def hoist_late_system_messages_ir(
         if text.strip():
             existing_si.append({"type": "text", "text": text})
 
-    new_messages = []
-    for i, msg in enumerate(messages):
-        if i in leading_indices:
-            continue
-        if i in late_indices:
-            new_messages.append(_rewrite_as_user(msg))
-        else:
-            new_messages.append(msg)
+    new_messages = _build_new_messages(messages, leading_indices, late_indices)
 
     changed = len(leading_indices) + len(late_indices)
     logger.debug(
