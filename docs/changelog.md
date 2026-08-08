@@ -8,6 +8,18 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 变更
+
+- **降低圈复杂度** — 重构 base converter helpers、Google GenAI converter、OpenAI Responses converter、gateway config 和 SOCKS5 test handler，降低圈复杂度。
+- **complexipy v6 pre-commit hook** — 启用 complexipy v6 pre-commit hook；升级至 v6.2.0，阈值提升至 30。
+
+### 移除
+
+- **向后兼容别名** (PR [#492](https://github.com/Oaklight/llm-rosetta/pull/492))：移除 openai_responses 和 google_genai converter 中的 `to_provider()` 兼容别名。
+- **废弃兼容 shims** — 移除 base converter 和各 converter 中的废弃向后兼容 shims 和别名。
+- **过期文档** — 移除过期的 base converter README 文件。
+- **多余文件** — 移除项目根目录中的多余 `validate.py` 文件。
+
 ## v0.8.1 — 2026-08-07
 
 ### Bug 修复
