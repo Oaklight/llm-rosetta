@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.8.2 — 2026-08-09
+
 ### 新增
 
 - **Per-provider/model 超时覆盖** (PR [#502](https://github.com/Oaklight/llm-rosetta/pull/502))：支持按服务方和模型粒度配置上游超时，取代全局统一值。优先级：`model.timeout > provider.timeout > server.upstream_timeout`。Admin UI 在服务方和模型弹窗中增加超时输入框。
