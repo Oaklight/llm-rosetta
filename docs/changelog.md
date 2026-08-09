@@ -8,6 +8,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.8.2 — 2026-08-09
+
 ### Added
 
 - **Per-provider/model timeout overrides** (PR [#502](https://github.com/Oaklight/llm-rosetta/pull/502)): configure upstream timeout at provider and model granularity instead of global-only. Resolution: `model.timeout > provider.timeout > server.upstream_timeout`. Admin UI timeout inputs in both provider and model modals.
