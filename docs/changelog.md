@@ -10,6 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
+- **Per-provider/model timeout overrides** (PR [#502](https://github.com/Oaklight/llm-rosetta/pull/502)): configure upstream timeout at provider and model granularity instead of global-only. Resolution: `model.timeout > provider.timeout > server.upstream_timeout`. Admin UI timeout inputs in both provider and model modals.
 - **Prompt cache preservation** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): wire `hoist_late_system_messages` IR transform to all 15 provider shims. Mid-conversation system/developer messages are rewritten as user-role `[System: ...]` envelopes to keep the prompt cache prefix stable.
 - **Per-provider hoist toggle** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): `hoist_system_messages` boolean in gateway config, per-provider override via admin UI checkbox with (i) hint popup.
 - **SQLite API key storage** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496)): migrate API key storage from plaintext config to SQLite with hash-based validation.
