@@ -898,6 +898,11 @@ body { padding-bottom: 26px; }
       <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
     </div>
     <div class="form-group">
+      <label data-i18n="label.timeout">Upstream Timeout (seconds)</label>
+      <input id="provTimeout" type="number" min="1" step="1" placeholder="">
+      <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.timeoutHint">Leave blank to use the global default. Per-model overrides take precedence.</div>
+    </div>
+    <div class="form-group">
       <div class="checkbox-group">
         <label><input type="checkbox" id="provCustomTools"> <span data-i18n="label.supportsCustomTools">Supports custom tool definitions</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.customTools">Whether this provider's API natively accepts <code>{type: &quot;custom&quot;}</code> tool definitions.<br><br><b>When enabled:</b> custom tools pass through as-is.<br><b>When disabled:</b> custom tools are downgraded to function wrappers with a synthesized JSON schema, then restored on the response path.<br><br>Only OpenAI's official API supports custom tools natively. Third-party Chat Completions providers (DeepSeek, Moonshot, etc.) typically do not.<br><br><a href="https://web.archive.org/web/20260806000546/https://developers.openai.com/api/docs/guides/function-calling#custom-tools" target="_blank" style="color:var(--accent)">OpenAI Function Calling docs &rarr;</a></span></span>
       </div>
