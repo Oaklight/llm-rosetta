@@ -309,10 +309,9 @@ class GatewayConfig:
                     reasoning_overrides[model_name] = value["reasoning_override"]
                 if "flatten_system" in value:
                     flatten_system[model_name] = bool(value["flatten_system"])
-                    continue
                 if "timeout" in value:
                     timeouts[model_name] = float(value["timeout"])
-            if re.search(r"gemini", model_name, re.IGNORECASE):
+            elif re.search(r"gemini", model_name, re.IGNORECASE):
                 flatten_system[model_name] = True
         return (
             url_templates,

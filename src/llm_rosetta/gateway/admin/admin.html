@@ -1949,8 +1949,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     _syncKeyField();
   }
   document.getElementById('provProxy').value = proxy || '';
-  document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
-  document.getElementById('provTimeout').placeholder = (configData.server && configData.server.upstream_timeout) || 300;
+
   // URL template overrides
   const provCfg = name && configData ? configData.providers[name] : null;
   document.getElementById('provUrlTemplate').value = (provCfg && provCfg.url_template) || '';
@@ -1971,6 +1970,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     const shimHoist = (shimMap[provType || '' ] || {}).hoist_system_messages;
     hoistCb.checked = shimHoist !== false;
   }
+  document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
+  document.getElementById('provTimeout').placeholder = (configData.server && configData.server.upstream_timeout) || 300;
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
@@ -2422,6 +2423,8 @@ async function saveProvider() {
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
   body.hoist_system_messages = document.getElementById('provHoistSystem').checked;
+  const provTimeoutVal = document.getElementById('provTimeout').value.trim();
+  if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references

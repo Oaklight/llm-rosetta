@@ -927,7 +927,7 @@ async def bulk_add_models(request: Any) -> Response:
                 continue
             entry: dict[str, Any] = {
                 "provider": provider,
-                "capabilities": body.get("capabilities", ["text"]),
+                "capabilities": body.get("capabilities", ["text", "vision", "tools"]),
             }
             # When a prefix is used, the gateway name differs from the
             # upstream model id — store the original as upstream_model so the
