@@ -171,4 +171,5 @@ def build_provider_info(
         url_template=url_tpl,
         stream_url_template=stream_tpl,
         proxy_url=proxy_url,
+        timeout=float(cfg["timeout"]) if "timeout" in cfg else None,
     )

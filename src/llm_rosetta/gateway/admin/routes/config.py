@@ -515,6 +515,27 @@ async def bulk_update_models(request: Any) -> Response:
     )
 
 
+def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
+    """Build a model config entry from request body."""
+    entry: dict[str, Any] = {
+        "provider": provider,
+        "capabilities": body.get("capabilities", ["text"]),
+    }
+    for opt_key in ("upstream_model", "url_template", "stream_url_template"):
+        if body.get(opt_key):
+            entry[opt_key] = body[opt_key]
+    if body.get("flatten_system") is not None:
+        entry["flatten_system"] = bool(body["flatten_system"])
+    if body.get("timeout") not in (None, ""):
+        entry["timeout"] = float(body["timeout"])
+    reasoning_override = body.get("reasoning_override")
+    if isinstance(reasoning_override, dict):
+        cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
+        if cleaned:
+            entry["reasoning_override"] = cleaned
+    return entry
+
+
 async def put_model(request: Any, **kwargs: Any) -> Response:
     """Add or update a model routing entry."""
     config_path = _get_config_path(request)
@@ -546,8 +567,6 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                 status_code=400,
             )
 
-        capabilities = body.get("capabilities", ["text"])
-
         # Handle rename: remove old entry
         rename_from = body.get("rename_from")
         if rename_from and rename_from != name:
@@ -564,26 +583,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                 )
             del models[rename_from]
 
-        model_entry: dict[str, Any] = {
-            "provider": provider,
-            "capabilities": capabilities,
-        }
-        for opt_key in ("upstream_model", "url_template", "stream_url_template"):
-            if body.get(opt_key):
-                model_entry[opt_key] = body[opt_key]
-
-        # Persist per-model flatten_system flag (if provided)
-        flatten_system = body.get("flatten_system")
-        if flatten_system is not None:
-            model_entry["flatten_system"] = bool(flatten_system)
-
-        # Persist per-model reasoning override (if provided)
-        reasoning_override = body.get("reasoning_override")
-        if isinstance(reasoning_override, dict):
-            cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
-            if cleaned:
-                model_entry["reasoning_override"] = cleaned
-        data.setdefault("models", {})[name] = model_entry
+        data.setdefault("models", {})[name] = _build_model_entry(body, provider)
 
         try:
             _get_config_io(request).save(config_path, data)
@@ -609,7 +609,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
             "ok": True,
             "model": name,
             "provider": provider,
-            "capabilities": capabilities,
+            "capabilities": body.get("capabilities", ["text"]),
             "models": dict(new_config.models),
         }
     )
@@ -895,7 +895,6 @@ async def bulk_add_models(request: Any) -> Response:
     provider = body.get("provider")
     models_to_add: list[str] = body.get("models", [])
     prefix = body.get("prefix", "")
-    capabilities = body.get("capabilities", ["text", "vision", "tools"])
 
     if not provider or not models_to_add:
         return JSONResponse(
@@ -928,7 +927,7 @@ async def bulk_add_models(request: Any) -> Response:
                 continue
             entry: dict[str, Any] = {
                 "provider": provider,
-                "capabilities": capabilities,
+                "capabilities": body.get("capabilities", ["text"]),
             }
             # When a prefix is used, the gateway name differs from the
             # upstream model id — store the original as upstream_model so the

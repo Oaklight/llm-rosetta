@@ -242,6 +242,7 @@ class GatewayConfig:
             self.model_stream_url_templates,
             self.model_reasoning_overrides,
             self.model_flatten_system,
+            self.model_timeouts,
         ) = self._parse_model_overrides(raw_models)
 
         _server = raw.get("server", {})
@@ -286,13 +287,18 @@ class GatewayConfig:
     def _parse_model_overrides(
         raw_models: dict[str, Any],
     ) -> tuple[
-        dict[str, str], dict[str, str], dict[str, dict[str, Any]], dict[str, bool]
+        dict[str, str],
+        dict[str, str],
+        dict[str, dict[str, Any]],
+        dict[str, bool],
+        dict[str, float],
     ]:
-        """Extract per-model URL templates, reasoning overrides, and flatten_system flags."""
+        """Extract per-model URL templates, reasoning overrides, flatten_system, and timeouts."""
         url_templates: dict[str, str] = {}
         stream_url_templates: dict[str, str] = {}
         reasoning_overrides: dict[str, dict[str, Any]] = {}
         flatten_system: dict[str, bool] = {}
+        timeouts: dict[str, float] = {}
         for model_name, value in raw_models.items():
             if isinstance(value, dict):
                 if "url_template" in value:
@@ -304,9 +310,17 @@ class GatewayConfig:
                 if "flatten_system" in value:
                     flatten_system[model_name] = bool(value["flatten_system"])
                     continue
+                if "timeout" in value:
+                    timeouts[model_name] = float(value["timeout"])
             if re.search(r"gemini", model_name, re.IGNORECASE):
                 flatten_system[model_name] = True
-        return url_templates, stream_url_templates, reasoning_overrides, flatten_system
+        return (
+            url_templates,
+            stream_url_templates,
+            reasoning_overrides,
+            flatten_system,
+            timeouts,
+        )
 
     def _apply_server_settings(self, _server: dict[str, Any]) -> None:
         """Parse server section: host, port, proxy, timeouts, CORS, etc."""
@@ -560,5 +574,9 @@ class GatewayConfig:
         model_stream_tpl = self.model_stream_url_templates.get(model)
         if model_url_tpl or model_stream_tpl:
             pinfo = pinfo.with_url_templates(model_url_tpl, model_stream_tpl)
+
+        model_timeout = self.model_timeouts.get(model)
+        if model_timeout is not None:
+            pinfo = pinfo.with_timeout(model_timeout)
 
         return route, pinfo

@@ -134,6 +134,8 @@ def _build_provider_entry(
         entry["supports_custom_tools"] = bool(body["supports_custom_tools"])
     if "hoist_system_messages" in body:
         entry["hoist_system_messages"] = bool(body["hoist_system_messages"])
+    if "timeout" in body and body["timeout"] not in (None, ""):
+        entry["timeout"] = float(body["timeout"])
 
     return entry
 
