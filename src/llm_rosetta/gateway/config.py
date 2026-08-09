@@ -311,7 +311,9 @@ class GatewayConfig:
                     flatten_system[model_name] = bool(value["flatten_system"])
                 if "timeout" in value:
                     timeouts[model_name] = float(value["timeout"])
-            elif re.search(r"gemini", model_name, re.IGNORECASE):
+            if model_name not in flatten_system and re.search(
+                r"gemini", model_name, re.IGNORECASE
+            ):
                 flatten_system[model_name] = True
         return (
             url_templates,
