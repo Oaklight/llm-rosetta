@@ -10,6 +10,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 新增
 
+- **Per-provider/model 超时覆盖** (PR [#502](https://github.com/Oaklight/llm-rosetta/pull/502))：支持按服务方和模型粒度配置上游超时，取代全局统一值。优先级：`model.timeout > provider.timeout > server.upstream_timeout`。Admin UI 在服务方和模型弹窗中增加超时输入框。
 - **Prompt cache 保持** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：将 `hoist_late_system_messages` IR 变换接入全部 15 个 provider shim。对话中间的 system/developer 消息被改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。
 - **Per-provider hoist 开关** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：gateway 配置中的 `hoist_system_messages` 布尔值，可通过 admin UI 复选框按 provider 覆盖，带 (i) 提示弹窗。
 - **SQLite API 密钥存储** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496))：将 API 密钥存储从明文配置迁移至 SQLite，使用哈希验证。
