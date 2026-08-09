@@ -138,7 +138,10 @@ class HttpTransport:
         )
         client = self._pool.get(provider_info.proxy_url)
         try:
-            resp = await client.post(url, json=req_body, headers=headers)
+            kwargs: dict[str, Any] = {}
+            if provider_info.timeout is not None:
+                kwargs["timeout"] = provider_info.timeout
+            resp = await client.post(url, json=req_body, headers=headers, **kwargs)
         except HttpClientError as exc:
             raise UpstreamConnectionError(str(exc)) from exc
 
@@ -169,7 +172,12 @@ class HttpTransport:
         )
         client = self._pool.get(provider_info.proxy_url)
         try:
-            resp = await client.post(url, json=req_body, headers=headers, stream=True)
+            kwargs: dict[str, Any] = {}
+            if provider_info.timeout is not None:
+                kwargs["timeout"] = provider_info.timeout
+            resp = await client.post(
+                url, json=req_body, headers=headers, stream=True, **kwargs
+            )
         except HttpClientError as exc:
             raise UpstreamConnectionError(str(exc)) from exc
 

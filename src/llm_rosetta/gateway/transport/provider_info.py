@@ -70,6 +70,7 @@ class ProviderInfo:
         url_template: str,
         stream_url_template: str | None = None,
         proxy_url: str | None = None,
+        timeout: float | None = None,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -83,6 +84,7 @@ class ProviderInfo:
         self._url_template = url_template
         self._stream_url_template = stream_url_template
         self.proxy_url = proxy_url
+        self.timeout = timeout
 
     # -- public helpers used by the proxy -----------------------------------
 
@@ -117,6 +119,20 @@ class ProviderInfo:
             clone._url_template = url_template
         if stream_url_template is not None:
             clone._stream_url_template = stream_url_template
+        return clone
+
+    def with_timeout(self, timeout: float | None) -> ProviderInfo:
+        """Return a shallow copy with an overridden timeout.
+
+        The new instance shares the same :class:`KeyRing`.
+        Returns ``self`` unchanged if *timeout* is ``None``.
+        """
+        if timeout is None:
+            return self
+        import copy
+
+        clone = copy.copy(self)
+        clone.timeout = timeout
         return clone
 
 
