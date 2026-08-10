@@ -118,7 +118,9 @@ class CohereRerankConverter(BaseRerankConverter):
         meta = provider_response.get("meta", {})
         tokens = meta.get("tokens")
         if tokens:
-            ir_response["usage"] = self._build_p_usage_to_ir(tokens)
+            usage = self._build_p_usage_to_ir(tokens)
+            if usage:
+                ir_response["usage"] = usage
 
         return ir_response
 
@@ -128,6 +130,13 @@ class CohereRerankConverter(BaseRerankConverter):
         *,
         context: ConversionContext,
     ) -> dict[str, Any]:
+        has_docs = any("document" in item for item in ir_response["results"])
+        if has_docs:
+            context.warnings.append(
+                "Cohere rerank format does not include document text in results; "
+                "document data from IR will be dropped"
+            )
+
         results = []
         for item in ir_response["results"]:
             p_item: dict[str, Any] = {
@@ -148,11 +157,13 @@ class CohereRerankConverter(BaseRerankConverter):
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> RerankUsageInfo:
         usage = RerankUsageInfo()
-        # meta.tokens uses input_tokens, map to our canonical names
-        input_tokens = p_usage.get("input_tokens")
-        if input_tokens is not None:
-            usage["total_tokens"] = input_tokens
-            usage["prompt_tokens"] = input_tokens
+        if "total_tokens" in p_usage:
+            usage["total_tokens"] = p_usage["total_tokens"]
+        if "input_tokens" in p_usage:
+            usage["prompt_tokens"] = p_usage["input_tokens"]
+            # Derive total_tokens from input_tokens only if not explicitly provided
+            if "total_tokens" not in usage:
+                usage["total_tokens"] = p_usage["input_tokens"]
         if "cached_tokens" in p_usage:
             usage["cached_tokens"] = p_usage["cached_tokens"]
         return usage

@@ -65,6 +65,9 @@ class JinaRerankConverter(BaseRerankConverter):
             elif isinstance(doc, dict) and "text" in doc:
                 ir_docs.append(RerankDocument(text=doc["text"]))
             else:
+                context.warnings.append(
+                    f"Unexpected document type {type(doc).__name__}, coercing to str"
+                )
                 ir_docs.append(RerankDocument(text=str(doc)))
 
         ir_request = IRRerankRequest(
@@ -104,8 +107,10 @@ class JinaRerankConverter(BaseRerankConverter):
             model=provider_response.get("model", ""),
             results=results,
         )
-        if "usage" in provider_response:
-            ir_response["usage"] = self._build_p_usage_to_ir(provider_response["usage"])
+        if "usage" in provider_response and provider_response["usage"]:
+            usage = self._build_p_usage_to_ir(provider_response["usage"])
+            if usage:
+                ir_response["usage"] = usage
         return ir_response
 
     def _do_response_to_provider(

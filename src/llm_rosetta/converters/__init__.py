@@ -10,6 +10,7 @@ from .base import BaseConverter, BaseRerankConverter
 from .google_genai import GoogleConverter, GoogleGenAIConverter
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
+from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
 
 __all__ = [
     "BaseConverter",
@@ -19,4 +20,7 @@ __all__ = [
     "GoogleGenAIConverter",
     "GoogleConverter",
     "OpenAIResponsesConverter",
+    "JinaRerankConverter",
+    "CohereRerankConverter",
+    "VoyageRerankConverter",
 ]
