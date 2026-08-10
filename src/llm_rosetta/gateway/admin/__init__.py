@@ -184,6 +184,7 @@ def setup_admin(
     merged_branding = dict(branding) if branding else {}
     if disabled:
         merged_branding["disabled_tabs"] = sorted(disabled)
+        merged_branding["all_tabs"] = sorted(_VALID_TABS)
     if merged_branding:
         import json as _json
 
