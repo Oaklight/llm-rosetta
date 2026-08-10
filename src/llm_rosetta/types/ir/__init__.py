@@ -107,6 +107,15 @@ from .parts import (
     UserContentPart,
 )
 
+# Rerank 类型 Rerank types
+from .rerank import (
+    IRRerankRequest,
+    IRRerankResponse,
+    RerankDocument,
+    RerankResultItem,
+    RerankUsageInfo,
+)
+
 # 请求类型 Request types
 from .request import IRInputItem, IRRequest
 
@@ -246,6 +255,12 @@ __all__ = [
     "ToolCallDeltaEvent",
     "FinishEvent",
     "UsageEvent",
+    # ========== Rerank 类型 Rerank types ==========
+    "RerankDocument",
+    "RerankUsageInfo",
+    "RerankResultItem",
+    "IRRerankRequest",
+    "IRRerankResponse",
     # ========== 向后兼容类型 Backward compatibility types ==========
     "IRInput",
     "IRInputSimple",
