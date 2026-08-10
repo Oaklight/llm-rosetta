@@ -118,6 +118,7 @@ nav:
           - IR Types: guide/ir-types.md
           - API Layers: guide/api-layers.md
           - API Standards: guide/api-standards.md
+          - Embedding API Formats: guide/embedding-formats.md
           - Rerank API Formats: guide/rerank-formats.md
       - Providers:
           - Provider Shims: guide/shims.md
