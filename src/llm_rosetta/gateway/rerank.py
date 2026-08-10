@@ -1,7 +1,7 @@
 """Rerank proxy handler with cross-format conversion.
 
-Proxies ``/v1/rerank`` requests to upstream rerank providers,
-converting between Jina, Cohere, and Voyage formats via IR.
+Proxies ``/v1/rerank`` and ``/v2/rerank`` requests to upstream rerank
+providers, converting between Jina, Cohere, and Voyage formats via IR.
 """
 
 from __future__ import annotations
@@ -21,16 +21,23 @@ from .rerank_pipeline import RerankConversionPipeline
 logger = get_logger()
 
 
+def _detect_source_format(request: Any, config: GatewayConfig) -> str:
+    """Infer the source rerank format from the request path.
+
+    ``/v2/rerank`` implies Cohere format (only Cohere uses v2).
+    ``/v1/rerank`` falls back to ``config.default_rerank_format``.
+    """
+    path: str = getattr(request, "path", "")
+    if path.startswith("/v2/"):
+        return "cohere"
+    return config.default_rerank_format
+
+
 async def handle_rerank(
     request: Any,
     config: GatewayConfig,
 ) -> Response:
-    """Proxy a rerank request with cross-format conversion.
-
-    Incoming requests can be in any supported rerank format (Jina,
-    Cohere, Voyage).  The pipeline converts to the upstream provider's
-    native format, forwards the request, and converts the response back.
-    """
+    """Proxy a rerank request with cross-format conversion."""
     request_id = get_request_id(request)
 
     def with_request_id(response: Response) -> Response:
@@ -69,9 +76,7 @@ async def handle_rerank(
 
     # --- Resolve rerank provider ---
     try:
-        provider_name, target_format, base_url, rerank_path, auth_headers, _ = (
-            config.resolve_rerank(model)
-        )
+        route = config.resolve_rerank(model)
     except KeyError:
         configured = ", ".join(sorted(config.rerank_models.keys()))
         return with_request_id(
@@ -89,10 +94,10 @@ async def handle_rerank(
             )
         )
 
-    source_format = config.default_rerank_format
+    source_format = _detect_source_format(request, config)
 
     # --- Convert request ---
-    pipeline = RerankConversionPipeline(source_format, target_format)
+    pipeline = RerankConversionPipeline(source_format, route.format)
     try:
         target_body = pipeline.convert_request(body)
     except Exception as exc:
@@ -110,11 +115,11 @@ async def handle_rerank(
         )
 
     # --- Forward to upstream ---
-    upstream_url = f"{base_url}{rerank_path}"
+    upstream_url = f"{route.base_url}{route.rerank_path}"
     extra_headers = build_upstream_extra_headers(request, request_id)
     headers = {
         "Content-Type": "application/json",
-        **auth_headers,
+        **route.auth_headers,
         **extra_headers,
     }
 
@@ -143,25 +148,29 @@ async def handle_rerank(
         try:
             upstream_body = resp.json()
         except Exception:
-            return with_request_id(
+            fallback = with_request_id(
                 Response(
                     body=resp.content,
                     status_code=200,
                     content_type="application/json",
                 )
             )
+            fallback.headers["x-rosetta-conversion"] = "passthrough"
+            return fallback
 
         try:
             source_body = pipeline.convert_response(upstream_body)
         except Exception as exc:
             logger.warning("rerank: response conversion failed: %s", exc)
-            return with_request_id(
+            fallback = with_request_id(
                 Response(
                     body=resp.content,
                     status_code=200,
                     content_type="application/json",
                 )
             )
+            fallback.headers["x-rosetta-conversion"] = "passthrough"
+            return fallback
 
         return with_request_id(JSONResponse(source_body, status_code=200))
 
@@ -204,9 +213,9 @@ async def handle_rerank(
         logger.info(
             "rerank: %s → %s (%s→%s) %dms status=%d",
             model,
-            provider_name,
+            route.provider_name,
             source_format,
-            target_format,
+            route.format,
             duration_ms,
             status_code,
         )

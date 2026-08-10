@@ -9,7 +9,7 @@ import re
 import sys
 from collections.abc import Generator
 from contextlib import contextmanager, suppress
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, NamedTuple, Protocol, runtime_checkable
 
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
@@ -18,6 +18,17 @@ from .providers import build_provider_info
 from .transport import ProviderInfo
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+
+class RerankRoute(NamedTuple):
+    """Resolved rerank provider routing info."""
+
+    provider_name: str
+    format: str
+    base_url: str
+    rerank_path: str
+    auth_headers: dict[str, str]
+
 
 # ---------------------------------------------------------------------------
 # Config file search paths (checked in order)
@@ -631,29 +642,24 @@ class GatewayConfig:
                 models[model_name] = provider_name
         return providers, models
 
-    def resolve_rerank(
-        self, model: str
-    ) -> tuple[str, str, str, str, dict[str, str], str | None]:
+    def resolve_rerank(self, model: str) -> RerankRoute:
         """Resolve a rerank model to its provider config.
 
         Args:
             model: Model name from the client request.
 
         Returns:
-            Tuple of (provider_name, format, base_url, rerank_path,
-            auth_headers, upstream_model).
+            A :class:`RerankRoute` with provider connection details.
 
         Raises:
             KeyError: If the model is not in rerank_models.
         """
         provider_name = self.rerank_models[model]
         pcfg = self.rerank_providers[provider_name]
-        auth_headers = {"Authorization": f"Bearer {pcfg['api_key']}"}
-        return (
-            provider_name,
-            pcfg["format"],
-            pcfg["base_url"],
-            pcfg["rerank_path"],
-            auth_headers,
-            None,
+        return RerankRoute(
+            provider_name=provider_name,
+            format=pcfg["format"],
+            base_url=pcfg["base_url"],
+            rerank_path=pcfg["rerank_path"],
+            auth_headers={"Authorization": f"Bearer {pcfg['api_key']}"},
         )
