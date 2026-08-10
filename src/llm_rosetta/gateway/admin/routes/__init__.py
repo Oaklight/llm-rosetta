@@ -94,8 +94,15 @@ from .testing import (
 )
 
 
-def _tab_guard(tab_id: str, handler: Any) -> Any:
-    """Wrap a route handler to return 404 when its tab is disabled."""
+def _guard(tab_id: str, handler: Any) -> Any:
+    """Wrap a route handler to return 404 when its tab is disabled.
+
+    Read-only endpoints (``get_config``, ``get_metrics``,
+    ``get_request_key_labels``) are intentionally left unguarded —
+    disabled tabs are a UI convenience, not security isolation, and
+    other components (e.g. argo-proxy's ``ArgoConfigIO``) may depend
+    on them regardless of tab visibility.
+    """
 
     @functools.wraps(handler)
     async def _guarded(request: Any, **kw: Any) -> Any:
@@ -106,11 +113,6 @@ def _tab_guard(tab_id: str, handler: Any) -> Any:
         return await handler(request, **kw)
 
     return _guarded
-
-
-def _guard(tab_id: str, handler: Any) -> Any:
-    """Shorthand: wrap *handler* with a disabled-tab guard for *tab_id*."""
-    return _tab_guard(tab_id, handler)
 
 
 def register_admin_routes(app: Any) -> None:

@@ -4038,7 +4038,7 @@ checkAuthAndInit();
     if (_dt.indexOf('logs') !== -1) { loadLogs = _noop; }
     // Fall back to first non-disabled tab if persisted tab is disabled
     if (_dt.indexOf(currentTab) !== -1) {
-      var _allTabs = ['providers','models','keys','dashboard','logs'];
+      var _allTabs = b.all_tabs || ['providers','models','keys','dashboard','logs'];
       for (var i = 0; i < _allTabs.length; i++) {
         if (_dt.indexOf(_allTabs[i]) === -1) { currentTab = _allTabs[i]; break; }
       }
