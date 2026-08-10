@@ -118,6 +118,7 @@ nav:
           - IR 类型: guide/ir-types.md
           - API 分层: guide/api-layers.md
           - API 标准: guide/api-standards.md
+          - Rerank API 格式: guide/rerank-formats.md
       - 提供商:
           - 提供商 Shim: guide/shims.md
           - 推理 / 思考参数: guide/reasoning.md
