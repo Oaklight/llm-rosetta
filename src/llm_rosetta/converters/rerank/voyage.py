@@ -109,8 +109,10 @@ class VoyageRerankConverter(BaseRerankConverter):
             model=provider_response.get("model", ""),
             results=results,
         )
-        if "usage" in provider_response:
-            ir_response["usage"] = self._build_p_usage_to_ir(provider_response["usage"])
+        if "usage" in provider_response and provider_response["usage"]:
+            usage = self._build_p_usage_to_ir(provider_response["usage"])
+            if usage:
+                ir_response["usage"] = usage
         return ir_response
 
     def _do_response_to_provider(

@@ -376,3 +376,54 @@ class TestCrossProviderRoundtrip:
         assert voyage_req["top_k"] == 2
         assert "top_n" not in voyage_req
         assert voyage_req["documents"] == SAMPLE_REQUEST["documents"]
+
+    def test_request_voyage_to_cohere(self) -> None:
+        voyage = VoyageRerankConverter()
+        cohere = CohereRerankConverter()
+        voyage_req = {
+            "model": "rerank-2-lite",
+            "query": "test",
+            "documents": ["doc1", "doc2"],
+            "top_k": 3,
+        }
+        ir = voyage.request_from_provider(voyage_req)
+        cohere_req, _ = cohere.request_to_provider(ir)
+        assert cohere_req["top_n"] == 3
+        assert "top_k" not in cohere_req
+
+    def test_request_cohere_to_jina(self) -> None:
+        cohere = CohereRerankConverter()
+        jina = JinaRerankConverter()
+        cohere_req = {
+            "model": "rerank-v3.5",
+            "query": "test",
+            "documents": ["doc1"],
+            "top_n": 1,
+            "max_tokens_per_doc": 2048,
+        }
+        ir = cohere.request_from_provider(cohere_req)
+        jina_req, _ = jina.request_to_provider(ir)
+        assert jina_req["top_n"] == 1
+        # max_tokens_per_doc is Cohere-specific, Jina doesn't emit it
+        assert "max_tokens_per_doc" not in jina_req
+
+    def test_jina_to_cohere_warns_on_document_drop(self) -> None:
+        jina = JinaRerankConverter()
+        cohere = CohereRerankConverter()
+        ir = jina.response_from_provider(JINA_RESPONSE)
+        assert "document" in ir["results"][0]
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        ctx = ConversionContext()
+        cohere.response_to_provider(ir, context=ctx)
+        assert any("document data" in w for w in ctx.warnings)
+
+    def test_empty_usage_not_set(self) -> None:
+        jina = JinaRerankConverter()
+        response_with_empty_usage = {
+            "model": "test",
+            "results": [{"index": 0, "relevance_score": 0.5}],
+            "usage": {},
+        }
+        ir = jina.response_from_provider(response_with_empty_usage)
+        assert "usage" not in ir
