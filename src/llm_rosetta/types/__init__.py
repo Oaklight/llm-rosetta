@@ -46,6 +46,12 @@ from .ir import (
     StreamConfig,
     ReasoningConfig,
     CacheConfig,
+    # Rerank types
+    RerankDocument,
+    RerankUsageInfo,
+    RerankResultItem,
+    IRRerankRequest,
+    IRRerankResponse,
     # Request types
     IRInputItem,
     IRRequest,
@@ -114,6 +120,12 @@ __all__ = [
     "StreamConfig",
     "ReasoningConfig",
     "CacheConfig",
+    # Rerank types
+    "RerankDocument",
+    "RerankUsageInfo",
+    "RerankResultItem",
+    "IRRerankRequest",
+    "IRRerankResponse",
     # Request types
     "IRInputItem",
     "IRRequest",
