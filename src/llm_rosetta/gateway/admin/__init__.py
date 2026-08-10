@@ -62,11 +62,15 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
     )
 
 
+_VALID_TABS = frozenset({"providers", "models", "keys", "dashboard", "logs"})
+
+
 def setup_admin(
     app: Any,
     config: GatewayConfig,
     config_path: str | None,
     config_io: ConfigIO | None = None,
+    disabled_tabs: list[str] | None = None,
     custom_head: str | None = None,
     branding: dict[str, Any] | None = None,
 ) -> None:
@@ -81,6 +85,11 @@ def setup_admin(
             file.  Defaults to :class:`JsoncConfigIO` when ``None``.
             Supply a custom implementation for non-JSONC formats
             (e.g. YAML in argo-proxy).
+        disabled_tabs: Optional list of tab identifiers to hide from the
+            admin panel.  Valid values: ``"providers"``, ``"models"``,
+            ``"keys"``, ``"dashboard"``, ``"logs"``.  Disabled tabs are
+            hidden via CSS, their data-fetching JS functions are
+            suppressed, and their API routes return 404.
         custom_head: Optional HTML fragment (``<style>``, ``<script>``,
             etc.) injected before ``</head>`` when serving the admin
             panel.  Allows downstream projects to override UI behavior
@@ -98,6 +107,16 @@ def setup_admin(
     Routes are registered separately via ``register_admin_routes`` before
     calling this function.
     """
+    disabled = frozenset(disabled_tabs or ())
+    unknown = disabled - _VALID_TABS
+    if unknown:
+        logger.warning(
+            "Ignoring unknown disabled_tabs: %s (valid: %s)",
+            ", ".join(sorted(unknown)),
+            ", ".join(sorted(_VALID_TABS)),
+        )
+        disabled = disabled & _VALID_TABS
+    app.disabled_tabs = disabled
     if config_io is None:
         from ..config import JsoncConfigIO
 
@@ -153,13 +172,21 @@ def setup_admin(
     app.config_io = config_io
     app.profiler_state = profiler_state
     app.capture_state = capture_state
-    # Build custom_head: user-supplied fragment + branding injection
+    # Build custom_head: disabled-tab CSS + user fragment + branding injection
     parts: list[str] = []
+    if disabled:
+        selectors = ", ".join(
+            f'.tab[data-tab="{t}"], #tab-{t}' for t in sorted(disabled)
+        )
+        parts.append(f"<style>{selectors} {{ display: none !important; }}</style>")
     if custom_head:
         parts.append(custom_head)
-    if branding:
+    merged_branding = dict(branding) if branding else {}
+    if disabled:
+        merged_branding["disabled_tabs"] = sorted(disabled)
+    if merged_branding:
         import json as _json
 
-        serialized = _json.dumps(branding).replace("</", r"<\/")
+        serialized = _json.dumps(merged_branding).replace("</", r"<\/")
         parts.append(f"<script>window.__branding={serialized};</script>")
     app.admin_custom_head = "\n".join(parts)

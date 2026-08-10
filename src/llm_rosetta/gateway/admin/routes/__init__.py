@@ -12,7 +12,10 @@ This package splits the admin route handlers into focused modules:
 
 from __future__ import annotations
 
+import functools
 from typing import Any
+
+from llm_rosetta._vendor.httpserver import JSONResponse
 
 from ._shared import (  # noqa: F401  (re-exported for backward compat)
     _ENV_VAR_RE,
@@ -91,6 +94,25 @@ from .testing import (
 )
 
 
+def _tab_guard(tab_id: str, handler: Any) -> Any:
+    """Wrap a route handler to return 404 when its tab is disabled."""
+
+    @functools.wraps(handler)
+    async def _guarded(request: Any, **kw: Any) -> Any:
+        if tab_id in getattr(request.app, "disabled_tabs", ()):
+            return JSONResponse(
+                {"error": "Tab disabled", "disabled": True}, status_code=404
+            )
+        return await handler(request, **kw)
+
+    return _guarded
+
+
+def _guard(tab_id: str, handler: Any) -> Any:
+    """Shorthand: wrap *handler* with a disabled-tab guard for *tab_id*."""
+    return _tab_guard(tab_id, handler)
+
+
 def register_admin_routes(app: Any) -> None:
     """Register all admin panel routes on the httpserver App."""
     # HTML
@@ -101,35 +123,49 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/auth-check", methods=["GET"])(admin_check)
     app.route("/admin/api/config/password", methods=["PUT"])(change_password)
     app.route("/admin/api/token/rotate", methods=["POST"])(rotate_token)
-    # Config CRUD
+    # Config CRUD (providers + models tabs)
     app.route("/admin/api/config", methods=["GET"])(get_config)
-    app.route("/admin/api/config/providers/<name>", methods=["PUT"])(put_provider)
-    app.route("/admin/api/config/providers/<name>", methods=["DELETE"])(delete_provider)
+    app.route("/admin/api/config/providers/<name>", methods=["PUT"])(
+        _guard("providers", put_provider)
+    )
+    app.route("/admin/api/config/providers/<name>", methods=["DELETE"])(
+        _guard("providers", delete_provider)
+    )
     app.route("/admin/api/config/providers/<name>/toggle", methods=["POST"])(
-        toggle_provider
+        _guard("providers", toggle_provider)
     )
     app.route("/admin/api/config/providers/<name>/key", methods=["GET"])(
         get_provider_key
     )
-    app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(put_model)
-    app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(delete_model)
-    app.route("/admin/api/config/models/<path:name>/toggle", methods=["POST"])(
-        toggle_model
+    app.route("/admin/api/config/models/<path:name>", methods=["PUT"])(
+        _guard("models", put_model)
     )
-    app.route("/admin/api/config/models/bulk", methods=["POST"])(bulk_update_models)
+    app.route("/admin/api/config/models/<path:name>", methods=["DELETE"])(
+        _guard("models", delete_model)
+    )
+    app.route("/admin/api/config/models/<path:name>/toggle", methods=["POST"])(
+        _guard("models", toggle_model)
+    )
+    app.route("/admin/api/config/models/bulk", methods=["POST"])(
+        _guard("models", bulk_update_models)
+    )
     app.route("/admin/api/config/providers/<name>/models", methods=["GET"])(
         fetch_upstream_models
     )
-    app.route("/admin/api/config/models", methods=["POST"])(bulk_add_models)
+    app.route("/admin/api/config/models", methods=["POST"])(
+        _guard("models", bulk_add_models)
+    )
     app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)
-    # Metrics
+    # Metrics (dashboard tab)
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
-    app.route("/admin/api/metrics/rebuild", methods=["POST"])(rebuild_metrics)
-    # Request log
-    app.route("/admin/api/requests", methods=["GET"])(get_requests)
+    app.route("/admin/api/metrics/rebuild", methods=["POST"])(
+        _guard("dashboard", rebuild_metrics)
+    )
+    # Request log (logs tab)
+    app.route("/admin/api/requests", methods=["GET"])(_guard("logs", get_requests))
     app.route("/admin/api/requests/key-labels", methods=["GET"])(get_request_key_labels)
-    app.route("/admin/api/requests", methods=["DELETE"])(clear_requests)
+    app.route("/admin/api/requests", methods=["DELETE"])(_guard("logs", clear_requests))
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
@@ -142,36 +178,62 @@ def register_admin_routes(app: Any) -> None:
         get_error_dump_body
     )
     app.route("/admin/api/error-dumps", methods=["DELETE"])(clear_error_dumps)
-    # API key management
-    app.route("/admin/api/keys", methods=["GET"])(get_api_keys)
-    app.route("/admin/api/keys", methods=["POST"])(create_api_key)
-    app.route("/admin/api/keys/<key_id>", methods=["PUT"])(update_api_key)
-    app.route("/admin/api/keys/<key_id>", methods=["DELETE"])(delete_api_key)
-    app.route("/admin/api/keys/<key_id>/rotate", methods=["POST"])(rotate_api_key)
+    # API key management (keys tab)
+    app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))
+    app.route("/admin/api/keys", methods=["POST"])(_guard("keys", create_api_key))
+    app.route("/admin/api/keys/<key_id>", methods=["PUT"])(
+        _guard("keys", update_api_key)
+    )
+    app.route("/admin/api/keys/<key_id>", methods=["DELETE"])(
+        _guard("keys", delete_api_key)
+    )
+    app.route("/admin/api/keys/<key_id>/rotate", methods=["POST"])(
+        _guard("keys", rotate_api_key)
+    )
     app.route("/admin/api/internal-token", methods=["GET"])(get_internal_token)
     # Async model test
     app.route("/admin/api/test", methods=["POST"])(start_test)
     app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
     app.route("/admin/api/test/<task_id>/poll", methods=["POST"])(get_test_result)
     app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)
-    # Content capture
-    app.route("/admin/api/capture/status", methods=["GET"])(get_capture_status)
-    app.route("/admin/api/capture/enable", methods=["POST"])(enable_capture)
-    app.route("/admin/api/capture/disable", methods=["POST"])(disable_capture)
-    app.route("/admin/api/capture/results", methods=["GET"])(get_capture_results)
-    app.route("/admin/api/capture/results/<index>", methods=["GET"])(get_capture_result)
-    app.route("/admin/api/capture/results", methods=["DELETE"])(clear_capture_results)
-    # Profiling
-    app.route("/admin/api/profiling/status", methods=["GET"])(get_profiling_status)
-    app.route("/admin/api/profiling/enable", methods=["POST"])(enable_profiling)
-    app.route("/admin/api/profiling/disable", methods=["POST"])(disable_profiling)
-    app.route("/admin/api/profiling/results", methods=["GET"])(get_profiling_results)
+    # Content capture (dashboard tab)
+    app.route("/admin/api/capture/status", methods=["GET"])(
+        _guard("dashboard", get_capture_status)
+    )
+    app.route("/admin/api/capture/enable", methods=["POST"])(
+        _guard("dashboard", enable_capture)
+    )
+    app.route("/admin/api/capture/disable", methods=["POST"])(
+        _guard("dashboard", disable_capture)
+    )
+    app.route("/admin/api/capture/results", methods=["GET"])(
+        _guard("dashboard", get_capture_results)
+    )
+    app.route("/admin/api/capture/results/<index>", methods=["GET"])(
+        _guard("dashboard", get_capture_result)
+    )
+    app.route("/admin/api/capture/results", methods=["DELETE"])(
+        _guard("dashboard", clear_capture_results)
+    )
+    # Profiling (dashboard tab)
+    app.route("/admin/api/profiling/status", methods=["GET"])(
+        _guard("dashboard", get_profiling_status)
+    )
+    app.route("/admin/api/profiling/enable", methods=["POST"])(
+        _guard("dashboard", enable_profiling)
+    )
+    app.route("/admin/api/profiling/disable", methods=["POST"])(
+        _guard("dashboard", disable_profiling)
+    )
+    app.route("/admin/api/profiling/results", methods=["GET"])(
+        _guard("dashboard", get_profiling_results)
+    )
     app.route("/admin/api/profiling/results/<index>", methods=["GET"])(
-        get_profiling_result
+        _guard("dashboard", get_profiling_result)
     )
     app.route("/admin/api/profiling/results/download", methods=["GET"])(
-        download_profiling_results
+        _guard("dashboard", download_profiling_results)
     )
     app.route("/admin/api/profiling/results", methods=["DELETE"])(
-        clear_profiling_results
+        _guard("dashboard", clear_profiling_results)
     )

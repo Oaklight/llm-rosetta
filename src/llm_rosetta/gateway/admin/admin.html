@@ -4029,6 +4029,22 @@ checkAuthAndInit();
       fn2.parentNode.insertBefore(attr, fn2.nextSibling);
     }
   }
+  // Suppress data fetching for disabled tabs
+  if (b.disabled_tabs) {
+    var _noop = function(){};
+    var _dt = b.disabled_tabs;
+    if (_dt.indexOf('keys') !== -1) { loadKeys = _noop; }
+    if (_dt.indexOf('dashboard') !== -1) { loadMetrics = _noop; loadProfilingStatus = _noop; loadProfilingResults = _noop; loadCaptureStatus = _noop; loadCaptureResults = _noop; }
+    if (_dt.indexOf('logs') !== -1) { loadLogs = _noop; }
+    // Fall back to first non-disabled tab if persisted tab is disabled
+    if (_dt.indexOf(currentTab) !== -1) {
+      var _allTabs = ['providers','models','keys','dashboard','logs'];
+      for (var i = 0; i < _allTabs.length; i++) {
+        if (_dt.indexOf(_allTabs[i]) === -1) { currentTab = _allTabs[i]; break; }
+      }
+      localStorage.setItem('llm-rosetta-tab', currentTab);
+    }
+  }
 })();
 
 document.addEventListener('click', function(e) {
