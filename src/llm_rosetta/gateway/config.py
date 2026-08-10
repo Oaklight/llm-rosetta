@@ -261,6 +261,13 @@ class GatewayConfig:
             for name, cfg in self._raw_providers.items()
         }
 
+        # --- Rerank routing ---
+        self.rerank_providers, self.rerank_models = self._parse_rerank_config(
+            raw.get("rerank_providers", {}),
+            raw.get("rerank_models", {}),
+        )
+        self.default_rerank_format: str = raw.get("default_rerank_format", "jina")
+
     @staticmethod
     def _parse_custom_tools_overrides(
         raw_providers: dict[str, dict[str, str]],
@@ -581,3 +588,72 @@ class GatewayConfig:
             pinfo = pinfo.with_timeout(model_timeout)
 
         return route, pinfo
+
+    # ---- Rerank routing -------------------------------------------------
+
+    @staticmethod
+    def _parse_rerank_config(
+        raw_providers: dict[str, Any],
+        raw_models: dict[str, Any],
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+        """Parse rerank_providers and rerank_models from config.
+
+        Each rerank provider entry has:
+          - api_key, base_url: connection credentials
+          - format: converter key (jina, cohere, voyage)
+          - rerank_path: endpoint path (e.g. /v1/rerank, /v2/rerank)
+
+        Returns:
+            Tuple of (rerank_providers, rerank_models).
+        """
+        providers: dict[str, dict[str, Any]] = {}
+        for name, cfg in raw_providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("enabled") is False:
+                continue
+            providers[name] = {
+                "api_key": cfg.get("api_key", ""),
+                "base_url": cfg.get("base_url", "").rstrip("/"),
+                "format": cfg.get("format", "jina"),
+                "rerank_path": cfg.get("rerank_path", "/v1/rerank"),
+            }
+
+        models: dict[str, str] = {}
+        for model_name, value in raw_models.items():
+            if isinstance(value, str):
+                provider_name = value
+            elif isinstance(value, dict):
+                provider_name = value.get("provider", "")
+            else:
+                continue
+            if provider_name in providers:
+                models[model_name] = provider_name
+        return providers, models
+
+    def resolve_rerank(
+        self, model: str
+    ) -> tuple[str, str, str, str, dict[str, str], str | None]:
+        """Resolve a rerank model to its provider config.
+
+        Args:
+            model: Model name from the client request.
+
+        Returns:
+            Tuple of (provider_name, format, base_url, rerank_path,
+            auth_headers, upstream_model).
+
+        Raises:
+            KeyError: If the model is not in rerank_models.
+        """
+        provider_name = self.rerank_models[model]
+        pcfg = self.rerank_providers[provider_name]
+        auth_headers = {"Authorization": f"Bearer {pcfg['api_key']}"}
+        return (
+            provider_name,
+            pcfg["format"],
+            pcfg["base_url"],
+            pcfg["rerank_path"],
+            auth_headers,
+            None,
+        )

@@ -24,6 +24,7 @@ from .auth import (
 from .config import GatewayConfig
 from .keystore import KeyStore
 from .embeddings import handle_embeddings as _handle_embeddings
+from .rerank import handle_rerank as _handle_rerank
 from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
 from llm_rosetta.observability.error_dump import dump_error
@@ -377,6 +378,11 @@ async def handle_embeddings(request: Any) -> Response:
     return await _handle_embeddings(request, _config)
 
 
+async def handle_rerank(request: Any) -> Response:
+    assert _config is not None
+    return await _handle_rerank(request, _config)
+
+
 async def handle_anthropic(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="anthropic")
 
@@ -648,6 +654,8 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     # --- Routes ---
     app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
     app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
+    app.route("/v1/rerank", methods=["POST"])(handle_rerank)
+    app.route("/v2/rerank", methods=["POST"])(handle_rerank)
     app.route("/v1/messages", methods=["POST"])(handle_anthropic)
     app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
     app.route("/v1/models", methods=["GET"])(handle_list_models)
