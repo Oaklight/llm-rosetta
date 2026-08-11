@@ -36,6 +36,39 @@
     "gemini-2.5-flash": "google"
   },
 
+  // Rerank providers — each entry specifies the upstream format and endpoint path.
+  // "format" maps to a converter: "jina", "cohere", or "voyage".
+  "rerank_providers": {
+    "jina": {
+      "api_key": "${JINA_API_KEY}",
+      "base_url": "https://api.jina.ai",
+      "format": "jina",
+      "rerank_path": "/v1/rerank"
+    },
+    "cohere": {
+      "api_key": "${COHERE_API_KEY}",
+      "base_url": "https://api.cohere.com",
+      "format": "cohere",
+      "rerank_path": "/v2/rerank"
+    },
+    "voyage": {
+      "api_key": "${VOYAGE_API_KEY}",
+      "base_url": "https://api.voyageai.com",
+      "format": "voyage",
+      "rerank_path": "/v1/rerank"
+    }
+  },
+
+  // Rerank model → provider routing table.
+  "rerank_models": {
+    "jina-reranker-v2-base-multilingual": "jina",
+    "rerank-v3.5": "cohere",
+    "rerank-2-lite": "voyage"
+  },
+
+  // Default format for incoming rerank requests (jina, cohere, or voyage).
+  "default_rerank_format": "jina",
+
   // Server settings
   "server": {
     "host": "0.0.0.0",
