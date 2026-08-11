@@ -25,9 +25,8 @@ class RerankRoute(NamedTuple):
 
     provider_name: str
     format: str
-    base_url: str
     rerank_path: str
-    auth_headers: dict[str, str]
+    provider_info: ProviderInfo
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +272,14 @@ class GatewayConfig:
         }
 
         # --- Rerank routing ---
-        self.rerank_providers, self.rerank_models = self._parse_rerank_config(
+        (
+            self.rerank_providers,
+            self.rerank_provider_infos,
+            self.rerank_models,
+        ) = self._parse_rerank_config(
             raw.get("rerank_providers", {}),
             raw.get("rerank_models", {}),
+            global_proxy=self.proxy,
         )
         self.default_rerank_format: str = raw.get("default_rerank_format", "jina")
 
@@ -606,20 +610,31 @@ class GatewayConfig:
     def _parse_rerank_config(
         raw_providers: dict[str, Any],
         raw_models: dict[str, Any],
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+        *,
+        global_proxy: str | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
         """Parse rerank_providers and rerank_models from config."""
+        from .transport.provider_info import openai_auth
+
         providers: dict[str, dict[str, Any]] = {}
+        provider_infos: dict[str, ProviderInfo] = {}
         for name, cfg in raw_providers.items():
             if not isinstance(cfg, dict):
                 continue
             if cfg.get("enabled") is False:
                 continue
             providers[name] = {
-                "api_key": cfg.get("api_key", ""),
-                "base_url": cfg.get("base_url", "").rstrip("/"),
                 "format": cfg.get("format", "jina"),
                 "rerank_path": cfg.get("rerank_path", "/v1/rerank"),
             }
+            provider_infos[name] = ProviderInfo(
+                name=f"rerank:{name}",
+                api_key=cfg.get("api_key", ""),
+                base_url=cfg.get("base_url", "").rstrip("/"),
+                auth_header_fn=openai_auth,
+                url_template="{base_url}" + cfg.get("rerank_path", "/v1/rerank"),
+                proxy_url=global_proxy,
+            )
 
         models: dict[str, str] = {}
         for model_name, value in raw_models.items():
@@ -631,7 +646,7 @@ class GatewayConfig:
                 continue
             if provider_name in providers:
                 models[model_name] = provider_name
-        return providers, models
+        return providers, provider_infos, models
 
     def resolve_rerank(self, model: str) -> RerankRoute:
         """Resolve a rerank model to its provider config.
@@ -641,10 +656,10 @@ class GatewayConfig:
         """
         provider_name = self.rerank_models[model]
         pcfg = self.rerank_providers[provider_name]
+        pinfo = self.rerank_provider_infos[provider_name]
         return RerankRoute(
             provider_name=provider_name,
             format=pcfg["format"],
-            base_url=pcfg["base_url"],
             rerank_path=pcfg["rerank_path"],
-            auth_headers={"Authorization": f"Bearer {pcfg['api_key']}"},
+            provider_info=pinfo,
         )

@@ -2,25 +2,22 @@
 
 Proxies ``/v1/rerank`` and ``/v2/rerank`` requests to upstream rerank
 providers, converting between Jina, Cohere, and Voyage formats via IR.
+Uses the shared :class:`~transport.UpstreamTransport` interface,
+consistent with the embeddings and chat handlers.
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any, cast
+from typing import Any
 
-from llm_rosetta._vendor.httpclient import (
-    AsyncClient,
-    HttpConnectionError,
-    HttpTimeoutError,
-    Response as HttpResponse,
-)
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .config import GatewayConfig
 from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
 from .rerank_pipeline import RerankConversionPipeline
+from .transport import UpstreamConnectionError, UpstreamTransport
 
 logger = get_logger()
 
@@ -118,29 +115,27 @@ async def handle_rerank(
             )
         )
 
-    # --- Forward to upstream ---
-    upstream_url = f"{route.base_url}{route.rerank_path}"
+    # --- Forward via transport ---
+    upstream_url = f"{route.provider_info.base_url}{route.rerank_path}"
+    transport: UpstreamTransport = request.app.transport
     extra_headers = build_upstream_extra_headers(request, request_id)
-    headers = {
-        "Content-Type": "application/json",
-        **route.auth_headers,
-        **extra_headers,
-    }
 
     t0 = time.monotonic()
     status_code = 500
 
     try:
-        async with AsyncClient(
-            headers=headers, timeout=config.upstream_timeout
-        ) as client:
-            resp = cast(HttpResponse, await client.post(upstream_url, json=target_body))
+        resp = await transport.send_passthrough(
+            route.provider_info,
+            upstream_url,
+            target_body,
+            extra_headers=extra_headers,
+        )
         status_code = resp.status_code
 
-        if resp.status_code >= 400:
+        if resp.is_error:
             return with_request_id(
                 Response(
-                    body=resp.content,
+                    body=resp.raw_content,
                     status_code=resp.status_code,
                     content_type="application/json",
                 )
@@ -148,11 +143,13 @@ async def handle_rerank(
 
         # --- Convert response ---
         try:
-            upstream_body = resp.json()
+            upstream_body = resp.body
+            if upstream_body is None:
+                raise ValueError("Empty response body")
         except Exception:
             fallback = with_request_id(
                 Response(
-                    body=resp.content,
+                    body=resp.raw_content,
                     status_code=200,
                     content_type="application/json",
                 )
@@ -166,7 +163,7 @@ async def handle_rerank(
             logger.warning("rerank: response conversion failed: %s", exc)
             fallback = with_request_id(
                 Response(
-                    body=resp.content,
+                    body=resp.raw_content,
                     status_code=200,
                     content_type="application/json",
                 )
@@ -176,20 +173,7 @@ async def handle_rerank(
 
         return with_request_id(JSONResponse(source_body, status_code=200))
 
-    except HttpTimeoutError as exc:
-        status_code = 504
-        return with_request_id(
-            JSONResponse(
-                {
-                    "error": {
-                        "message": f"Upstream timeout: {exc}",
-                        "type": "upstream_error",
-                    }
-                },
-                status_code=504,
-            )
-        )
-    except HttpConnectionError as exc:
+    except UpstreamConnectionError as exc:
         status_code = 502
         return with_request_id(
             JSONResponse(
