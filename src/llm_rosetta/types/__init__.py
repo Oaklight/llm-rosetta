@@ -46,6 +46,13 @@ from .ir import (
     StreamConfig,
     ReasoningConfig,
     CacheConfig,
+    # Embedding types
+    EmbeddingTaskType,
+    EmbeddingEncodingFormat,
+    EmbeddingUsageInfo,
+    EmbeddingItem,
+    IREmbeddingRequest,
+    IREmbeddingResponse,
     # Rerank types
     RerankDocument,
     RerankUsageInfo,
@@ -120,6 +127,13 @@ __all__ = [
     "StreamConfig",
     "ReasoningConfig",
     "CacheConfig",
+    # Embedding types
+    "EmbeddingTaskType",
+    "EmbeddingEncodingFormat",
+    "EmbeddingUsageInfo",
+    "EmbeddingItem",
+    "IREmbeddingRequest",
+    "IREmbeddingResponse",
     # Rerank types
     "RerankDocument",
     "RerankUsageInfo",
