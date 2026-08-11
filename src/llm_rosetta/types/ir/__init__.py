@@ -107,6 +107,16 @@ from .parts import (
     UserContentPart,
 )
 
+# Embedding 类型 Embedding types
+from .embedding import (
+    EmbeddingEncodingFormat,
+    EmbeddingItem,
+    EmbeddingTaskType,
+    EmbeddingUsageInfo,
+    IREmbeddingRequest,
+    IREmbeddingResponse,
+)
+
 # Rerank 类型 Rerank types
 from .rerank import (
     IRRerankRequest,
@@ -255,6 +265,13 @@ __all__ = [
     "ToolCallDeltaEvent",
     "FinishEvent",
     "UsageEvent",
+    # ========== Embedding 类型 Embedding types ==========
+    "EmbeddingTaskType",
+    "EmbeddingEncodingFormat",
+    "EmbeddingUsageInfo",
+    "EmbeddingItem",
+    "IREmbeddingRequest",
+    "IREmbeddingResponse",
     # ========== Rerank 类型 Rerank types ==========
     "RerankDocument",
     "RerankUsageInfo",

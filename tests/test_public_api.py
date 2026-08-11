@@ -58,11 +58,11 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
-        "max_count": 70,
+        "max_count": 80,
     },
     "llm_rosetta.types": {
         "items": None,
-        "max_count": 70,
+        "max_count": 80,
     },
     "llm_rosetta.converters.base": {
         "items": [
