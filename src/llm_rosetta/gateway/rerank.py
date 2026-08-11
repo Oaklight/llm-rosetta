@@ -9,8 +9,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
-import httpx
-
+from llm_rosetta._vendor.httpclient import (
+    AsyncClient,
+    HttpConnectionError,
+    HttpTimeoutError,
+)
+from llm_rosetta._vendor.httpclient import Response as _HCResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .config import GatewayConfig
@@ -127,12 +131,14 @@ async def handle_rerank(
     status_code = 500
 
     try:
-        async with httpx.AsyncClient(timeout=config.upstream_timeout) as client:
-            resp = await client.post(
+        async with AsyncClient(timeout=config.upstream_timeout) as client:
+            _resp = await client.post(
                 upstream_url,
                 json=target_body,
                 headers=headers,
             )
+        assert isinstance(_resp, _HCResponse)  # rerank never streams
+        resp = _resp
         status_code = resp.status_code
 
         if resp.status_code >= 400:
@@ -174,7 +180,7 @@ async def handle_rerank(
 
         return with_request_id(JSONResponse(source_body, status_code=200))
 
-    except httpx.TimeoutException as exc:
+    except HttpTimeoutError as exc:
         status_code = 504
         return with_request_id(
             JSONResponse(
@@ -187,7 +193,7 @@ async def handle_rerank(
                 status_code=504,
             )
         )
-    except httpx.ConnectError as exc:
+    except HttpConnectionError as exc:
         status_code = 502
         return with_request_id(
             JSONResponse(
