@@ -627,12 +627,13 @@ class GatewayConfig:
                 "format": cfg.get("format", "jina"),
                 "rerank_path": cfg.get("rerank_path", "/v1/rerank"),
             }
+            rerank_path = cfg.get("rerank_path", "/v1/rerank")
             provider_infos[name] = ProviderInfo(
                 name=f"rerank:{name}",
                 api_key=cfg.get("api_key", ""),
                 base_url=cfg.get("base_url", "").rstrip("/"),
                 auth_header_fn=openai_auth,
-                url_template="{base_url}" + cfg.get("rerank_path", "/v1/rerank"),
+                url_template="{base_url}" + rerank_path,
                 proxy_url=global_proxy,
             )
 

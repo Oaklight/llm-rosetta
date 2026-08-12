@@ -17,7 +17,7 @@ from .config import GatewayConfig
 from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
 from .rerank_pipeline import RerankConversionPipeline
-from .transport import UpstreamConnectionError, UpstreamTransport
+from .transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 
 logger = get_logger()
 
@@ -173,6 +173,19 @@ async def handle_rerank(
 
         return with_request_id(JSONResponse(source_body, status_code=200))
 
+    except UpstreamTimeoutError as exc:
+        status_code = 504
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Upstream timeout: {exc}",
+                        "type": "upstream_error",
+                    }
+                },
+                status_code=504,
+            )
+        )
     except UpstreamConnectionError as exc:
         status_code = 502
         return with_request_id(

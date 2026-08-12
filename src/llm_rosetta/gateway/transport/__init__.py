@@ -12,6 +12,7 @@ sub-packages:
 
 from ._base import (
     UpstreamConnectionError,
+    UpstreamTimeoutError,
     UpstreamResponse,
     UpstreamStream,
     UpstreamTransport,
@@ -30,6 +31,7 @@ from .sse_format import SSE_FORMATTERS, format_sse_done
 __all__ = [
     # Protocol + response types
     "UpstreamConnectionError",
+    "UpstreamTimeoutError",
     "UpstreamResponse",
     "UpstreamStream",
     "UpstreamTransport",
