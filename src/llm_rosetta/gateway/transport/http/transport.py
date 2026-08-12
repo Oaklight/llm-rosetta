@@ -14,13 +14,19 @@ from typing import Any
 
 from llm_rosetta._vendor.httpclient import (
     HttpClientError,
+    HttpTimeoutError,
     Response as HttpResponse,
     StreamingResponse as HttpStreamingResponse,
 )
 from llm_rosetta._vendor.sse import AsyncEventSource
 from llm_rosetta.auto_detect import ProviderType
 
-from .._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
+from .._base import (
+    UpstreamConnectionError,
+    UpstreamResponse,
+    UpstreamStream,
+    UpstreamTimeoutError,
+)
 from ..provider_info import ProviderInfo
 from .client_pool import HttpClientPool
 
@@ -142,6 +148,8 @@ class HttpTransport:
             if provider_info.timeout is not None:
                 kwargs["timeout"] = provider_info.timeout
             resp = await client.post(url, json=req_body, headers=headers, **kwargs)
+        except HttpTimeoutError as exc:
+            raise UpstreamTimeoutError(str(exc)) from exc
         except HttpClientError as exc:
             raise UpstreamConnectionError(str(exc)) from exc
 
@@ -178,6 +186,8 @@ class HttpTransport:
             resp = await client.post(
                 url, json=req_body, headers=headers, stream=True, **kwargs
             )
+        except HttpTimeoutError as exc:
+            raise UpstreamTimeoutError(str(exc)) from exc
         except HttpClientError as exc:
             raise UpstreamConnectionError(str(exc)) from exc
 
@@ -206,6 +216,8 @@ class HttpTransport:
         client = self._pool.get(provider_info.proxy_url)
         try:
             resp = await client.post(url, json=body, headers=headers)
+        except HttpTimeoutError as exc:
+            raise UpstreamTimeoutError(str(exc)) from exc
         except HttpClientError as exc:
             raise UpstreamConnectionError(str(exc)) from exc
 

@@ -112,6 +112,10 @@ class UpstreamConnectionError(Exception):
     """Raised when the transport cannot reach the upstream provider."""
 
 
+class UpstreamTimeoutError(UpstreamConnectionError):
+    """Raised when the upstream provider does not respond in time."""
+
+
 # ---------------------------------------------------------------------------
 # Transport protocol
 # ---------------------------------------------------------------------------
