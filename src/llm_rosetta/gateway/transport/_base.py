@@ -13,8 +13,6 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from llm_rosetta.auto_detect import ProviderType
-
 from .provider_info import ProviderInfo
 
 
@@ -128,31 +126,7 @@ class UpstreamTransport(Protocol):
     implementations live in sub-packages (``transport.http``, etc.).
     """
 
-    async def send_request(
-        self,
-        provider_info: ProviderInfo,
-        target_provider: ProviderType,
-        body: dict[str, Any],
-        model: str,
-        *,
-        extra_headers: dict[str, str] | None = None,
-    ) -> UpstreamResponse:
-        """Send a non-streaming request and return the full response."""
-        ...
-
-    async def send_streaming(
-        self,
-        provider_info: ProviderInfo,
-        target_provider: ProviderType,
-        body: dict[str, Any],
-        model: str,
-        *,
-        extra_headers: dict[str, str] | None = None,
-    ) -> UpstreamStream:
-        """Send a streaming request and return an async chunk iterator."""
-        ...
-
-    async def send_passthrough(
+    async def send(
         self,
         provider_info: ProviderInfo,
         url: str,
@@ -160,13 +134,23 @@ class UpstreamTransport(Protocol):
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> UpstreamResponse:
-        """Send a raw passthrough request (no format-specific URL or flags).
+        """Send a non-streaming request and return the full response.
 
-        Used for endpoints that don't go through IR conversion (e.g.
-        embeddings, reranking) — the URL is caller-provided, auth
-        headers come from *provider_info*, and the body is forwarded
-        as-is.
+        The caller is responsible for constructing the upstream URL and
+        injecting any provider-specific body modifications (e.g. stream
+        flags) before calling this method.
         """
+        ...
+
+    async def send_streaming(
+        self,
+        provider_info: ProviderInfo,
+        url: str,
+        body: dict[str, Any],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> UpstreamStream:
+        """Send a streaming request and return an async chunk iterator."""
         ...
 
     async def close(self) -> None:

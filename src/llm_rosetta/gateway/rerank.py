@@ -124,7 +124,7 @@ async def handle_rerank(
     status_code = 500
 
     try:
-        resp = await transport.send_passthrough(
+        resp = await transport.send(
             route.provider_info,
             upstream_url,
             target_body,
