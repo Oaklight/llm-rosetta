@@ -103,6 +103,26 @@ def error_response_for_source(
 # ---------------------------------------------------------------------------
 
 
+def _inject_stream_flags(
+    target_provider: ProviderType, body: dict[str, Any], *, stream: bool
+) -> dict[str, Any]:
+    """Inject provider-specific stream flags into an outbound request body.
+
+    Returns the body unchanged when *stream* is False. When True, returns
+    a shallow copy with stream flags set for the target provider.
+    """
+    if not stream:
+        return body
+    body = dict(body)
+    if target_provider == "openai_chat":
+        body["stream"] = True
+        body["stream_options"] = {"include_usage": True}
+    elif target_provider in ("openai_responses", "open_responses", "anthropic"):
+        body["stream"] = True
+    # Google streaming is signaled via URL, not body
+    return body
+
+
 def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -> bool:
     """Detect if the incoming request asks for streaming."""
     if source_provider in (
@@ -324,13 +344,13 @@ async def handle_non_streaming(
     _strip_internal_metadata(target_body)
 
     # Phase 3: Forward to upstream via transport
+    upstream_url = provider_info.upstream_url(model)
     t_upstream = time.perf_counter()
     try:
-        resp = await transport.send_request(
+        resp = await transport.send(
             provider_info,
-            route.target_provider,
+            upstream_url,
             target_body,
-            model,
             extra_headers=extra_headers,
         )
     except UpstreamConnectionError as exc:
@@ -646,13 +666,14 @@ async def handle_streaming(
 
     # Phase 3: Open upstream connection and check for immediate errors
     # *before* committing to a 200 StreamingResponse.
+    upstream_url = provider_info.upstream_url(model, stream=True)
+    target_body = _inject_stream_flags(route.target_provider, target_body, stream=True)
     t_connect = time.perf_counter()
     try:
         stream = await transport.send_streaming(
             provider_info,
-            route.target_provider,
+            upstream_url,
             target_body,
-            model,
             extra_headers=extra_headers,
         )
     except UpstreamConnectionError as exc:

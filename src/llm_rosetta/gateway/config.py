@@ -623,11 +623,11 @@ class GatewayConfig:
                 continue
             if cfg.get("enabled") is False:
                 continue
+            rerank_path = cfg.get("rerank_path", "/v1/rerank")
             providers[name] = {
                 "format": cfg.get("format", "jina"),
-                "rerank_path": cfg.get("rerank_path", "/v1/rerank"),
+                "rerank_path": rerank_path,
             }
-            rerank_path = cfg.get("rerank_path", "/v1/rerank")
             provider_infos[name] = ProviderInfo(
                 name=f"rerank:{name}",
                 api_key=cfg.get("api_key", ""),

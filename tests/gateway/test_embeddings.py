@@ -169,7 +169,7 @@ class TestEmbeddingUpstreamModel:
             headers=headers,
         )
         request.app.transport = MagicMock()
-        request.app.transport.send_passthrough = AsyncMock(
+        request.app.transport.send = AsyncMock(
             return_value=UpstreamResponse(
                 status_code=200,
                 body={"object": "list", "data": [], "model": "my-embed"},
@@ -180,7 +180,7 @@ class TestEmbeddingUpstreamModel:
         response = asyncio.run(handle_embeddings(request, config))
 
         assert response.status_code == 200
-        _, kwargs = request.app.transport.send_passthrough.call_args
+        _, kwargs = request.app.transport.send.call_args
         upstream_headers = kwargs["extra_headers"]
         assert upstream_headers["User-Agent"] == "codex-cli/1.2.3"
         assert upstream_headers["x-request-id"]

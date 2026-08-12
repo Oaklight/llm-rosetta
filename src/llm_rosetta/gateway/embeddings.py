@@ -107,7 +107,7 @@ async def handle_embeddings(
     error_detail: str | None = None
 
     try:
-        resp = await transport.send_passthrough(
+        resp = await transport.send(
             provider_info,
             upstream_url,
             body,

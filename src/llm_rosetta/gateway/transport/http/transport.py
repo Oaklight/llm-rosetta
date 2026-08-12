@@ -3,6 +3,10 @@
 Implements the :class:`~transport._base.UpstreamTransport` protocol for
 HTTP REST + SSE streaming, backed by the vendored ``httpclient`` and ``sse``
 modules.
+
+The transport layer is URL-agnostic — callers construct the upstream URL
+and inject any provider-specific body modifications (e.g. stream flags)
+before calling :meth:`send` or :meth:`send_streaming`.
 """
 
 from __future__ import annotations
@@ -19,7 +23,6 @@ from llm_rosetta._vendor.httpclient import (
     StreamingResponse as HttpStreamingResponse,
 )
 from llm_rosetta._vendor.sse import AsyncEventSource
-from llm_rosetta.auto_detect import ProviderType
 
 from .._base import (
     UpstreamConnectionError,
@@ -31,43 +34,6 @@ from ..provider_info import ProviderInfo
 from .client_pool import HttpClientPool
 
 logger = logging.getLogger("llm-rosetta-gateway")
-
-
-# ---------------------------------------------------------------------------
-# Upstream request assembly
-# ---------------------------------------------------------------------------
-
-
-def _prepare_upstream(
-    target_provider: ProviderType,
-    provider_info: ProviderInfo,
-    provider_request: dict[str, Any],
-    model: str,
-    *,
-    stream: bool,
-    extra_headers: dict[str, str] | None = None,
-) -> tuple[str, dict[str, str], dict[str, Any]]:
-    """Return ``(url, headers, body)`` ready for the upstream HTTP call."""
-    url = provider_info.upstream_url(model, stream=stream)
-    headers = {
-        "Content-Type": "application/json",
-        **provider_info.auth_headers(),
-    }
-    if extra_headers:
-        headers.update(extra_headers)
-
-    body = dict(provider_request)
-
-    # Inject stream flag into the body for providers that use it
-    if stream:
-        if target_provider in ("openai_chat",):
-            body["stream"] = True
-            body["stream_options"] = {"include_usage": True}
-        elif target_provider in ("openai_responses", "open_responses", "anthropic"):
-            body["stream"] = True
-        # Google streaming is signaled via URL, not body
-
-    return url, headers, body
 
 
 # ---------------------------------------------------------------------------
@@ -124,30 +90,35 @@ class HttpTransport:
     def __init__(self, *, timeout: float = 300.0) -> None:
         self._pool = HttpClientPool(timeout=timeout)
 
-    async def send_request(
+    def _build_headers(
         self,
         provider_info: ProviderInfo,
-        target_provider: ProviderType,
+        extra_headers: dict[str, str] | None = None,
+    ) -> dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            **provider_info.auth_headers(),
+        }
+        if extra_headers:
+            headers.update(extra_headers)
+        return headers
+
+    async def send(
+        self,
+        provider_info: ProviderInfo,
+        url: str,
         body: dict[str, Any],
-        model: str,
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> UpstreamResponse:
         """Send a non-streaming request and return the full response."""
-        url, headers, req_body = _prepare_upstream(
-            target_provider,
-            provider_info,
-            body,
-            model,
-            stream=False,
-            extra_headers=extra_headers,
-        )
+        headers = self._build_headers(provider_info, extra_headers)
         client = self._pool.get(provider_info.proxy_url)
         try:
             kwargs: dict[str, Any] = {}
             if provider_info.timeout is not None:
                 kwargs["timeout"] = provider_info.timeout
-            resp = await client.post(url, json=req_body, headers=headers, **kwargs)
+            resp = await client.post(url, json=body, headers=headers, **kwargs)
         except HttpTimeoutError as exc:
             raise UpstreamTimeoutError(str(exc)) from exc
         except HttpClientError as exc:
@@ -163,28 +134,20 @@ class HttpTransport:
     async def send_streaming(
         self,
         provider_info: ProviderInfo,
-        target_provider: ProviderType,
+        url: str,
         body: dict[str, Any],
-        model: str,
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> HttpUpstreamStream:
         """Send a streaming request and return an async chunk iterator."""
-        url, headers, req_body = _prepare_upstream(
-            target_provider,
-            provider_info,
-            body,
-            model,
-            stream=True,
-            extra_headers=extra_headers,
-        )
+        headers = self._build_headers(provider_info, extra_headers)
         client = self._pool.get(provider_info.proxy_url)
         try:
             kwargs: dict[str, Any] = {}
             if provider_info.timeout is not None:
                 kwargs["timeout"] = provider_info.timeout
             resp = await client.post(
-                url, json=req_body, headers=headers, stream=True, **kwargs
+                url, json=body, headers=headers, stream=True, **kwargs
             )
         except HttpTimeoutError as exc:
             raise UpstreamTimeoutError(str(exc)) from exc
@@ -193,40 +156,6 @@ class HttpTransport:
 
         assert isinstance(resp, HttpStreamingResponse)
         return HttpUpstreamStream(resp)
-
-    async def send_passthrough(
-        self,
-        provider_info: ProviderInfo,
-        url: str,
-        body: dict[str, Any],
-        *,
-        extra_headers: dict[str, str] | None = None,
-    ) -> UpstreamResponse:
-        """Send a raw passthrough request — no URL template or stream flags.
-
-        Used for non-conversion endpoints (embeddings, reranking, etc.).
-        """
-        headers = {
-            "Content-Type": "application/json",
-            **provider_info.auth_headers(),
-        }
-        if extra_headers:
-            headers.update(extra_headers)
-
-        client = self._pool.get(provider_info.proxy_url)
-        try:
-            resp = await client.post(url, json=body, headers=headers)
-        except HttpTimeoutError as exc:
-            raise UpstreamTimeoutError(str(exc)) from exc
-        except HttpClientError as exc:
-            raise UpstreamConnectionError(str(exc)) from exc
-
-        assert isinstance(resp, HttpResponse)
-        return UpstreamResponse(
-            status_code=resp.status_code,
-            body=resp.json() if resp.status_code < 400 else None,
-            raw_content=resp.content,
-        )
 
     async def close(self) -> None:
         """Close all pooled HTTP clients."""

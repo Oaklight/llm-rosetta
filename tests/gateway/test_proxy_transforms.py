@@ -102,9 +102,7 @@ def _make_mock_transport(
 ) -> MagicMock:
     """Create a mock transport that returns an UpstreamResponse."""
 
-    async def mock_send_request(
-        provider_info, target_provider, body, model, *, extra_headers=None
-    ):
+    async def mock_send(provider_info, url, body, *, extra_headers=None):
         if captured_body is not None:
             captured_body.update(body)
         return UpstreamResponse(
@@ -114,7 +112,7 @@ def _make_mock_transport(
         )
 
     transport = MagicMock()
-    transport.send_request = AsyncMock(side_effect=mock_send_request)
+    transport.send = AsyncMock(side_effect=mock_send)
     return transport
 
 
