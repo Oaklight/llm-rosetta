@@ -11,9 +11,11 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
+
+from llm_rosetta.auto_detect import ProviderType
 
 from .config import GatewayConfig
 from .embedding_pipeline import EmbeddingConversionPipeline
@@ -34,6 +36,7 @@ class _ResolvedEmbedding:
     provider_info: ProviderInfo
     upstream_url: str
     provider_name: str
+    target_format: str = "openai_chat"
     pipeline: EmbeddingConversionPipeline | None = field(default=None)
 
 
@@ -54,6 +57,7 @@ def _resolve_embedding_provider(
             provider_info=route.provider_info,
             upstream_url=f"{route.provider_info.base_url}{route.embedding_path}",
             provider_name=route.provider_name,
+            target_format=route.format,
             pipeline=pipeline,
         )
     except KeyError:
@@ -186,6 +190,8 @@ async def handle_embeddings(
         if resolved.pipeline and resp.body is not None:
             try:
                 source_body = resolved.pipeline.convert_response(resp.body)
+                if not source_body.get("model"):
+                    source_body["model"] = model
                 return with_request_id(JSONResponse(source_body, status_code=200))
             except Exception as exc:
                 logger.warning("embedding: response conversion failed: %s", exc)
@@ -243,8 +249,8 @@ async def handle_embeddings(
         _record_telemetry(
             request,
             model=model,
-            source_provider="openai_chat",
-            target_provider="openai_chat",
+            source_provider=cast(ProviderType, config.default_embedding_format),
+            target_provider=cast(ProviderType, resolved.target_format),
             provider_name=resolved.provider_name,
             is_stream=False,
             status_code=status_code,
