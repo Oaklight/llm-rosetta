@@ -69,6 +69,46 @@
   // Default format for incoming rerank requests (jina, cohere, or voyage).
   "default_rerank_format": "jina",
 
+  // Embedding providers — each entry specifies the upstream format and endpoint path.
+  // "format" maps to a converter: "openai", "cohere", "jina", or "voyage".
+  "embedding_providers": {
+    "openai": {
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": "https://api.openai.com",
+      "format": "openai",
+      "embedding_path": "/v1/embeddings"
+    },
+    "jina": {
+      "api_key": "${JINA_API_KEY}",
+      "base_url": "https://api.jina.ai",
+      "format": "jina",
+      "embedding_path": "/v1/embeddings"
+    },
+    "cohere": {
+      "api_key": "${COHERE_API_KEY}",
+      "base_url": "https://api.cohere.com",
+      "format": "cohere",
+      "embedding_path": "/v2/embed"
+    },
+    "voyage": {
+      "api_key": "${VOYAGE_API_KEY}",
+      "base_url": "https://api.voyageai.com",
+      "format": "voyage",
+      "embedding_path": "/v1/embeddings"
+    }
+  },
+
+  // Embedding model → provider routing table.
+  "embedding_models": {
+    "text-embedding-3-small": "openai",
+    "jina-embeddings-v3": "jina",
+    "embed-v4.0": "cohere",
+    "voyage-3-lite": "voyage"
+  },
+
+  // Default format for incoming embedding requests.
+  "default_embedding_format": "openai",
+
   // Server settings
   "server": {
     "host": "0.0.0.0",
