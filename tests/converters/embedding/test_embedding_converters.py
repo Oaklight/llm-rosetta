@@ -241,7 +241,7 @@ class TestCohereEmbeddingConverter:
     def test_truncation_mapping(self) -> None:
         ir = IREmbeddingRequest(model="test", input=["hello"], truncation=True)
         result, _ = self.converter.request_to_provider(ir)
-        assert result["truncate"] == "START"
+        assert result["truncate"] == "END"
 
         ir2 = IREmbeddingRequest(model="test", input=["hello"], truncation=False)
         result2, _ = self.converter.request_to_provider(ir2)

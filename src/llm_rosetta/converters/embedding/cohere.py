@@ -65,7 +65,7 @@ class CohereEmbeddingConverter(BaseEmbeddingConverter):
         enc = ir_request.get("encoding_format", "float")
         result["embedding_types"] = [enc]
         if "truncation" in ir_request:
-            result["truncate"] = "START" if ir_request["truncation"] else "NONE"
+            result["truncate"] = "END" if ir_request["truncation"] else "NONE"
         return result
 
     def _do_request_from_provider(

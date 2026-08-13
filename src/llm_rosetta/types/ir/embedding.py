@@ -201,6 +201,9 @@ class IREmbeddingResponse(TypedDict):
     usage: NotRequired[EmbeddingUsageInfo]
     encoding_format: NotRequired[EmbeddingEncodingFormat]
 
+    # ========== Provider 特定扩展 Provider-specific Extensions ==========
+    provider_extensions: NotRequired[dict[str, Any]]
+
 
 # ============================================================================
 # 导出的主要类型 Main Exported Types
