@@ -20,6 +20,15 @@ from .transport import ProviderInfo
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
+class EmbeddingRoute(NamedTuple):
+    """Resolved embedding provider routing info."""
+
+    provider_name: str
+    format: str
+    embedding_path: str
+    provider_info: ProviderInfo
+
+
 class RerankRoute(NamedTuple):
     """Resolved rerank provider routing info."""
 
@@ -282,6 +291,20 @@ class GatewayConfig:
             global_proxy=self.proxy,
         )
         self.default_rerank_format: str = raw.get("default_rerank_format", "jina")
+
+        # --- Embedding routing ---
+        (
+            self.embedding_providers,
+            self.embedding_provider_infos,
+            self.embedding_models,
+        ) = self._parse_embedding_config(
+            raw.get("embedding_providers", {}),
+            raw.get("embedding_models", {}),
+            global_proxy=self.proxy,
+        )
+        self.default_embedding_format: str = raw.get(
+            "default_embedding_format", "openai"
+        )
 
     @staticmethod
     def _parse_custom_tools_overrides(
@@ -662,5 +685,66 @@ class GatewayConfig:
             provider_name=provider_name,
             format=pcfg["format"],
             rerank_path=pcfg["rerank_path"],
+            provider_info=pinfo,
+        )
+
+    # ---- Embedding routing ----------------------------------------------
+
+    @staticmethod
+    def _parse_embedding_config(
+        raw_providers: dict[str, Any],
+        raw_models: dict[str, Any],
+        *,
+        global_proxy: str | None = None,
+    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
+        """Parse embedding_providers and embedding_models from config."""
+        from .transport.provider_info import openai_auth
+
+        providers: dict[str, dict[str, Any]] = {}
+        provider_infos: dict[str, ProviderInfo] = {}
+        for name, cfg in raw_providers.items():
+            if not isinstance(cfg, dict):
+                continue
+            if cfg.get("enabled") is False:
+                continue
+            embedding_path = cfg.get("embedding_path", "/v1/embeddings")
+            providers[name] = {
+                "format": cfg.get("format", "openai"),
+                "embedding_path": embedding_path,
+            }
+            provider_infos[name] = ProviderInfo(
+                name=f"embedding:{name}",
+                api_key=cfg.get("api_key", ""),
+                base_url=cfg.get("base_url", "").rstrip("/"),
+                auth_header_fn=openai_auth,
+                url_template="{base_url}" + embedding_path,
+                proxy_url=global_proxy,
+            )
+
+        models: dict[str, str] = {}
+        for model_name, value in raw_models.items():
+            if isinstance(value, str):
+                provider_name = value
+            elif isinstance(value, dict):
+                provider_name = value.get("provider", "")
+            else:
+                continue
+            if provider_name in providers:
+                models[model_name] = provider_name
+        return providers, provider_infos, models
+
+    def resolve_embedding(self, model: str) -> EmbeddingRoute:
+        """Resolve an embedding model to its provider config.
+
+        Raises:
+            KeyError: If the model is not in embedding_models.
+        """
+        provider_name = self.embedding_models[model]
+        pcfg = self.embedding_providers[provider_name]
+        pinfo = self.embedding_provider_infos[provider_name]
+        return EmbeddingRoute(
+            provider_name=provider_name,
+            format=pcfg["format"],
+            embedding_path=pcfg["embedding_path"],
             provider_info=pinfo,
         )

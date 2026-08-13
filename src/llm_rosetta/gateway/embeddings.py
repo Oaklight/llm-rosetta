@@ -1,44 +1,85 @@
-"""Embeddings passthrough handler.
+"""Embeddings proxy handler with optional cross-format conversion.
 
-Proxies ``/v1/embeddings`` requests to the upstream provider without
-format conversion — the OpenAI embeddings API format is universal
-across providers that support it.
-
-Uses the :class:`~transport.UpstreamTransport` interface so the handler
-is transport-agnostic (works with HTTP, and future gRPC/WebSocket).
+Proxies ``/v1/embeddings`` requests to upstream embedding providers.
+When ``embedding_providers`` / ``embedding_models`` are configured, uses
+IR-based conversion between OpenAI, Cohere, Jina, and Voyage formats.
+Otherwise falls back to passthrough via the chat provider routing
+(backward compatible with existing configs).
 """
 
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .config import GatewayConfig
+from .embedding_pipeline import EmbeddingConversionPipeline
 from .headers import build_upstream_extra_headers, get_request_id
 from .logging import get_logger
-from .transport import UpstreamConnectionError, UpstreamTransport
+from .transport import (
+    ProviderInfo,
+    UpstreamConnectionError,
+    UpstreamTimeoutError,
+    UpstreamTransport,
+)
 
 logger = get_logger()
+
+
+@dataclass
+class _ResolvedEmbedding:
+    provider_info: ProviderInfo
+    upstream_url: str
+    provider_name: str
+    pipeline: EmbeddingConversionPipeline | None = field(default=None)
+
+
+def _resolve_embedding_provider(
+    config: GatewayConfig, model: str, body: dict[str, Any]
+) -> _ResolvedEmbedding | None:
+    """Resolve embedding provider; returns None if model not found anywhere."""
+    # Try embedding-specific routing first
+    try:
+        route = config.resolve_embedding(model)
+        source_format = config.default_embedding_format
+        pipeline = (
+            EmbeddingConversionPipeline(source_format, route.format)
+            if source_format != route.format
+            else None
+        )
+        return _ResolvedEmbedding(
+            provider_info=route.provider_info,
+            upstream_url=f"{route.provider_info.base_url}{route.embedding_path}",
+            provider_name=route.provider_name,
+            pipeline=pipeline,
+        )
+    except KeyError:
+        pass
+
+    # Fall back to chat provider routing (backward compat)
+    try:
+        chat_route, provider_info = config.resolve("openai_chat", model)
+    except KeyError:
+        return None
+
+    if chat_route.upstream_model:
+        body["model"] = chat_route.upstream_model
+
+    return _ResolvedEmbedding(
+        provider_info=provider_info,
+        upstream_url=f"{provider_info.base_url}/embeddings",
+        provider_name=chat_route.provider_name,
+    )
 
 
 async def handle_embeddings(
     request: Any,
     config: GatewayConfig,
 ) -> Response:
-    """Proxy an embeddings request to the upstream provider.
-
-    This is a thin passthrough — no IR conversion is performed.
-    The request body is forwarded as-is after model resolution.
-
-    Args:
-        request: The incoming HTTP request.
-        config: The live gateway configuration.
-
-    Returns:
-        The upstream response, forwarded to the client.
-    """
+    """Proxy an embedding request with optional cross-format conversion."""
     request_id = get_request_id(request)
 
     def with_request_id(response: Response) -> Response:
@@ -75,16 +116,20 @@ async def handle_embeddings(
             )
         )
 
-    # --- Resolve provider via unified routing ---
-    try:
-        route, provider_info = config.resolve("openai_chat", model)
-    except KeyError:
-        configured = ", ".join(sorted(config.models.keys()))
+    # --- Resolve provider ---
+    resolved = _resolve_embedding_provider(config, model, body)
+    if resolved is None:
+        all_models = sorted(
+            set(config.models.keys()) | set(config.embedding_models.keys())
+        )
         return with_request_id(
             JSONResponse(
                 {
                     "error": {
-                        "message": f"Unknown model: '{model}'. Configured models: {configured}",
+                        "message": (
+                            f"Unknown model: '{model}'. "
+                            f"Configured: {', '.join(all_models)}"
+                        ),
                         "type": "model_not_found",
                     }
                 },
@@ -92,13 +137,25 @@ async def handle_embeddings(
             )
         )
 
-    # Model alias: replace the model name in the request body with the
-    # actual upstream identifier so the upstream provider sees the correct name.
-    if route.upstream_model:
-        body["model"] = route.upstream_model
+    # --- Convert request (if cross-format) ---
+    if resolved.pipeline:
+        try:
+            body = resolved.pipeline.convert_request(body)
+        except Exception as exc:
+            logger.warning("embedding: request conversion failed: %s", exc)
+            return with_request_id(
+                JSONResponse(
+                    {
+                        "error": {
+                            "message": f"Request conversion failed: {exc}",
+                            "type": "conversion_error",
+                        }
+                    },
+                    status_code=400,
+                )
+            )
 
     # --- Forward via transport ---
-    upstream_url = f"{provider_info.base_url}/embeddings"
     transport: UpstreamTransport = request.app.transport
     extra_headers = build_upstream_extra_headers(request, request_id)
 
@@ -108,8 +165,8 @@ async def handle_embeddings(
 
     try:
         resp = await transport.send(
-            provider_info,
-            upstream_url,
+            resolved.provider_info,
+            resolved.upstream_url,
             body,
             extra_headers=extra_headers,
         )
@@ -125,11 +182,42 @@ async def handle_embeddings(
                 )
             )
 
+        # --- Convert response (if cross-format) ---
+        if resolved.pipeline and resp.body is not None:
+            try:
+                source_body = resolved.pipeline.convert_response(resp.body)
+                return with_request_id(JSONResponse(source_body, status_code=200))
+            except Exception as exc:
+                logger.warning("embedding: response conversion failed: %s", exc)
+                fallback = with_request_id(
+                    Response(
+                        body=resp.raw_content,
+                        status_code=200,
+                        content_type="application/json",
+                    )
+                )
+                fallback.headers["x-rosetta-conversion"] = "passthrough"
+                return fallback
+
         return with_request_id(
             Response(
                 body=resp.raw_content,
                 status_code=200,
                 content_type="application/json",
+            )
+        )
+    except UpstreamTimeoutError as exc:
+        error_detail = str(exc)
+        status_code = 504
+        return with_request_id(
+            JSONResponse(
+                {
+                    "error": {
+                        "message": f"Upstream timeout: {exc}",
+                        "type": "upstream_error",
+                    }
+                },
+                status_code=504,
             )
         )
     except UpstreamConnectionError as exc:
@@ -156,8 +244,8 @@ async def handle_embeddings(
             request,
             model=model,
             source_provider="openai_chat",
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
+            target_provider="openai_chat",
+            provider_name=resolved.provider_name,
             is_stream=False,
             status_code=status_code,
             duration_ms=(time.monotonic() - t0) * 1000,
