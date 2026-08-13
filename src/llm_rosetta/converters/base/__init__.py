@@ -22,6 +22,7 @@ from .configs import BaseConfigOps  # noqa: F401
 from .content import BaseContentOps  # noqa: F401
 from .context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
+from .embedding_converter import BaseEmbeddingConverter
 from .rerank_converter import BaseRerankConverter
 from .messages import BaseMessageOps  # noqa: F401
 from .helpers.tool_content import convert_content_blocks_to_ir  # noqa: F401
@@ -33,6 +34,7 @@ __all__ = [
     # 主转换器 Main converter
     "BaseConverter",
     "BaseRerankConverter",
+    "BaseEmbeddingConverter",
     # 转换上下文 Conversion context
     "ConversionContext",
     "MetadataMode",
