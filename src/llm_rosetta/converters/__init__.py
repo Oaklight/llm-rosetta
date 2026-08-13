@@ -6,7 +6,13 @@ Provides converter implementations between various providers
 """
 
 from .anthropic import AnthropicConverter
-from .base import BaseConverter, BaseRerankConverter
+from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
+from .embedding import (
+    CohereEmbeddingConverter,
+    JinaEmbeddingConverter,
+    OpenAIEmbeddingConverter,
+    VoyageEmbeddingConverter,
+)
 from .google_genai import GoogleConverter, GoogleGenAIConverter
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
@@ -15,6 +21,11 @@ from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConv
 __all__ = [
     "BaseConverter",
     "BaseRerankConverter",
+    "BaseEmbeddingConverter",
+    "OpenAIEmbeddingConverter",
+    "JinaEmbeddingConverter",
+    "VoyageEmbeddingConverter",
+    "CohereEmbeddingConverter",
     "OpenAIChatConverter",
     "AnthropicConverter",
     "GoogleGenAIConverter",

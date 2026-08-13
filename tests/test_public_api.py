@@ -68,11 +68,12 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         "items": [
             "BaseConverter",
             "BaseRerankConverter",
+            "BaseEmbeddingConverter",
             "ConversionContext",
             "MetadataMode",
             "StreamContext",
         ],
-        "max_count": 6,
+        "max_count": 7,
     },
 }
 
