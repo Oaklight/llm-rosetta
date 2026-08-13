@@ -110,7 +110,7 @@ nav:
   - IR Type System:
       - IR Types: guide/ir-types.md
       - API Layers: guide/api-layers.md
-      - Chat API Standards: guide/api-standards.md
+      - Text Generation API Formats: guide/api-standards.md
       - Rerank API Formats: guide/rerank-formats.md
       - Embedding API Formats: guide/embedding-formats.md
       - API Reference: api/types.md
