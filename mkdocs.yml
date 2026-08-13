@@ -110,7 +110,7 @@ nav:
   - IR 类型系统:
       - IR 类型: guide/ir-types.md
       - API 分层: guide/api-layers.md
-      - Chat API 标准: guide/api-standards.md
+      - 文本生成 API 格式: guide/api-standards.md
       - Rerank API 格式: guide/rerank-formats.md
       - Embedding API 格式: guide/embedding-formats.md
       - API 参考: api/types.md
