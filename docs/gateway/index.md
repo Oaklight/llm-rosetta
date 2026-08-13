@@ -21,7 +21,9 @@ New here? Start with the [Gateway Quick Start](../getting-started/gateway-quicks
 | `POST /v1/chat/completions` | OpenAI Chat | Drop-in for OpenAI SDK |
 | `POST /v1/messages` | Anthropic | Drop-in for Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | Drop-in for OpenAI Responses SDK |
-| `POST /v1/embeddings` | OpenAI Embeddings | Passthrough to upstream (no IR conversion) |
+| `POST /v1/embeddings` | OpenAI Embeddings | Cross-format conversion via IR (OpenAI, Cohere, Jina, Voyage) |
+| `POST /v1/rerank` | Rerank (Jina default) | Cross-format conversion via IR (Jina, Cohere, Voyage) |
+| `POST /v2/rerank` | Rerank (Cohere) | Auto-detected Cohere format; same handler as `/v1/rerank` |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | Drop-in for Google REST API |
 | `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI (streaming) | Drop-in for Google streaming |
 | `GET /v1/models` | OpenAI / Anthropic | List configured models with `api_standard` and `capabilities` |

@@ -107,23 +107,31 @@ nav:
       - Core Concepts: guide/concepts.md
       - Library Quick Start: getting-started/library-quickstart.md
       - Gateway Quick Start: getting-started/gateway-quickstart.md
+  - IR Type System:
+      - IR Types: guide/ir-types.md
+      - API Layers: guide/api-layers.md
+      - Chat API Standards: guide/api-standards.md
+      - Rerank API Formats: guide/rerank-formats.md
+      - Embedding API Formats: guide/embedding-formats.md
+      - API Reference: api/types.md
   - Library:
       - Provider Compatibility: guide/compatibility.md
-      - Converters:
+      - Chat Converters:
           - Using Converters: guide/converters.md
           - Streaming: guide/streaming.md
           - Multi-Turn State Bridge: guide/turn-bridge.md
           - Auto Detection: guide/auto-detection.md
-      - IR & Type System:
-          - IR Types: guide/ir-types.md
-          - API Layers: guide/api-layers.md
-          - API Standards: guide/api-standards.md
-          - Embedding API Formats: guide/embedding-formats.md
-          - Rerank API Formats: guide/rerank-formats.md
+      - Rerank Converters: guide/rerank-formats.md
+      - Embedding Converters: guide/embedding-formats.md
       - Providers:
           - Provider Shims: guide/shims.md
           - Reasoning / Thinking: guide/reasoning.md
           - Provider Reasoning Behavior: guide/provider-reasoning.md
+      - API Reference:
+          - Converters: api/converters.md
+          - Tool Ops: api/tool-ops.md
+          - Shims: api/shims.md
+          - Utilities: api/utils.md
       - Examples:
           - examples/index.md
           - Cross-Provider Conversation: examples/cross-provider.md
@@ -138,22 +146,12 @@ nav:
           - Admin Panel: gateway/admin-panel.md
           - Admin API: api/admin.md
       - Integration Guide: gateway/integration.md
+      - Observability: api/observability.md
       - Validation:
           - gateway/validation.md
           - CLI Cross-Format Testing: gateway/validation-cli.md
           - SDK & Integration Tests: gateway/validation-sdk.md
           - Compliance Testing: gateway/validation-comply.md
-  - API Reference:
-      - api/index.md
-      - Library API:
-          - Converters: api/converters.md
-          - IR Types: api/types.md
-          - Tool Ops: api/tool-ops.md
-          - Shims: api/shims.md
-          - Utilities: api/utils.md
-      - Gateway API:
-          - Admin API: api/admin.md
-          - Observability: api/observability.md
   - Contributing:
       - Contributing Guide: contributing/guide.md
       - Style Guide: contributing/style-guide.md

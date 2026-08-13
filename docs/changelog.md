@@ -8,6 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Rerank IR types and converter family** (PR [#506](https://github.com/Oaklight/llm-rosetta/pull/506)): 5 TypedDict IR types (`IRRerankRequest`, `IRRerankResponse`, `RerankDocument`, `RerankResultItem`, `RerankUsageInfo`) and 3 converters (`JinaRerankConverter`, `CohereRerankConverter`, `VoyageRerankConverter`) covering all major rerank API format families.
+- **Embedding IR types and converter family** (PR [#510](https://github.com/Oaklight/llm-rosetta/pull/510)): 6 IR types (`IREmbeddingRequest`, `IREmbeddingResponse`, `EmbeddingItem`, `EmbeddingUsageInfo`, `EmbeddingTaskType`, `EmbeddingEncodingFormat`) and 4 converters (`OpenAIEmbeddingConverter`, `JinaEmbeddingConverter`, `VoyageEmbeddingConverter`, `CohereEmbeddingConverter`).
+- **Gateway rerank proxy** (PRs [#511](https://github.com/Oaklight/llm-rosetta/pull/511), [#512](https://github.com/Oaklight/llm-rosetta/pull/512)): `/v1/rerank` and `/v2/rerank` endpoints with IR-based cross-format conversion. Config-driven routing via `rerank_providers`, `rerank_models`, `default_rerank_format`. `/v2/rerank` auto-detects Cohere source format.
+- **Gateway embedding proxy with IR conversion** (PR [#517](https://github.com/Oaklight/llm-rosetta/pull/517)): convert `/v1/embeddings` from passthrough to IR-based conversion mode (OpenAI↔Cohere↔Jina↔Voyage). Backward compatible — configs without `embedding_providers` still use passthrough.
+- **`UpstreamTimeoutError`** (PR [#513](https://github.com/Oaklight/llm-rosetta/pull/513)): distinguish upstream timeout (504) from connection error (502) across all transport methods. Rerank and embedding handlers return proper 504 on timeouts.
+- **`x-rosetta-conversion: passthrough` header** — returned when response conversion fails, allowing clients to detect fallback to raw upstream format.
+- **Rerank API format documentation** — bilingual (en/zh) documentation of Jina, Cohere, Siliconflow, and Voyage rerank API formats with provider lineage and IR mapping tables.
+- **Embedding API format documentation** — bilingual (en/zh) documentation of OpenAI, Cohere, Jina, and Voyage embedding API formats.
+
+### Changed
+
+- **Unified outbound transport** (PR [#516](https://github.com/Oaklight/llm-rosetta/pull/516)): merge `send_request` and `send_passthrough` into a single `send(provider_info, url, body)` method. Move URL construction and stream-flag injection from transport to proxy layer. Net -68 lines.
+- **Documentation restructured** — split into three top-level tabs: IR Type System, Library, Gateway. API Reference merged into each tab. Removed standalone API Reference tab.
+
 ## v0.8.2 — 2026-08-09
 
 ### Added
