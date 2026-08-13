@@ -107,23 +107,31 @@ nav:
       - 核心概念: guide/concepts.md
       - 库快速开始: getting-started/library-quickstart.md
       - 网关快速开始: getting-started/gateway-quickstart.md
+  - IR 类型系统:
+      - IR 类型: guide/ir-types.md
+      - API 分层: guide/api-layers.md
+      - Chat API 标准: guide/api-standards.md
+      - Rerank API 格式: guide/rerank-formats.md
+      - Embedding API 格式: guide/embedding-formats.md
+      - API 参考: api/types.md
   - 库:
       - 提供商兼容性: guide/compatibility.md
-      - 转换器:
+      - Chat 转换器:
           - 使用转换器: guide/converters.md
           - 流式处理: guide/streaming.md
           - 多轮状态桥接: guide/turn-bridge.md
           - 自动检测: guide/auto-detection.md
-      - IR 与类型系统:
-          - IR 类型: guide/ir-types.md
-          - API 分层: guide/api-layers.md
-          - API 标准: guide/api-standards.md
-          - Embedding API 格式: guide/embedding-formats.md
-          - Rerank API 格式: guide/rerank-formats.md
+      - Rerank 转换器: guide/rerank-formats.md
+      - Embedding 转换器: guide/embedding-formats.md
       - 提供商:
           - 提供商 Shim: guide/shims.md
           - 推理 / 思考参数: guide/reasoning.md
           - 提供商推理行为: guide/provider-reasoning.md
+      - API 参考:
+          - 转换器: api/converters.md
+          - Tool Ops: api/tool-ops.md
+          - Shims: api/shims.md
+          - 工具函数: api/utils.md
       - 示例:
           - examples/index.md
           - 跨提供商对话: examples/cross-provider.md
@@ -138,22 +146,12 @@ nav:
           - 管理面板: gateway/admin-panel.md
           - Admin API: api/admin.md
       - 集成指南: gateway/integration.md
+      - 可观测性: api/observability.md
       - 验证:
           - gateway/validation.md
           - CLI 跨格式测试: gateway/validation-cli.md
           - SDK 与集成测试: gateway/validation-sdk.md
           - 合规性测试: gateway/validation-comply.md
-  - API 参考:
-      - api/index.md
-      - 库 API:
-          - 转换器: api/converters.md
-          - IR 类型: api/types.md
-          - Tool Ops: api/tool-ops.md
-          - Shims: api/shims.md
-          - 工具函数: api/utils.md
-      - 网关 API:
-          - Admin API: api/admin.md
-          - 可观测性: api/observability.md
   - 贡献:
       - 贡献指南: contributing/guide.md
       - 风格指南: contributing/style-guide.md

@@ -21,7 +21,9 @@ LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供商 AP
 | `POST /v1/chat/completions` | OpenAI Chat | 兼容 OpenAI SDK |
 | `POST /v1/messages` | Anthropic | 兼容 Anthropic SDK |
 | `POST /v1/responses` | OpenAI Responses | 兼容 OpenAI Responses SDK |
-| `POST /v1/embeddings` | OpenAI Embeddings | 直接透传到上游（无 IR 转换） |
+| `POST /v1/embeddings` | OpenAI Embeddings | 通过 IR 跨格式转换（OpenAI、Cohere、Jina、Voyage） |
+| `POST /v1/rerank` | Rerank（默认 Jina） | 通过 IR 跨格式转换（Jina、Cohere、Voyage） |
+| `POST /v2/rerank` | Rerank（Cohere） | 自动检测 Cohere 格式；与 `/v1/rerank` 共用处理器 |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | 兼容 Google REST API |
 | `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI（流式） | 兼容 Google 流式 API |
 | `GET /v1/models` | OpenAI / Anthropic | 列出已配置模型，含 `api_standard` 和 `capabilities` |

@@ -8,6 +8,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增
+
+- **Rerank IR 类型与转换器族** (PR [#506](https://github.com/Oaklight/llm-rosetta/pull/506))：5 个 TypedDict IR 类型和 3 个转换器（Jina、Cohere、Voyage），覆盖所有主流 rerank API 格式族。
+- **Embedding IR 类型与转换器族** (PR [#510](https://github.com/Oaklight/llm-rosetta/pull/510))：6 个 IR 类型和 4 个转换器（OpenAI、Jina、Voyage、Cohere），支持跨 provider 的 embedding 格式转换。
+- **网关 Rerank 代理** (PRs [#511](https://github.com/Oaklight/llm-rosetta/pull/511), [#512](https://github.com/Oaklight/llm-rosetta/pull/512))：`/v1/rerank` 和 `/v2/rerank` 端点，通过 IR 进行跨格式转换。配置驱动路由：`rerank_providers`、`rerank_models`、`default_rerank_format`。`/v2/rerank` 自动检测 Cohere 格式。
+- **网关 Embedding IR 转换模式** (PR [#517](https://github.com/Oaklight/llm-rosetta/pull/517))：将 `/v1/embeddings` 从直接透传升级为 IR 转换模式（OpenAI↔Cohere↔Jina↔Voyage）。向后兼容——没有配置 `embedding_providers` 的配置仍使用透传模式。
+- **`UpstreamTimeoutError`** (PR [#513](https://github.com/Oaklight/llm-rosetta/pull/513))：区分上游超时（504）和连接错误（502）。Rerank 和 embedding 处理器在超时时返回正确的 504。
+- **`x-rosetta-conversion: passthrough` 头部** — 当响应转换失败时返回，让客户端可以检测到回退了原始上游格式。
+- **Rerank API 格式文档** — 双语（中/英）文档，覆盖 Jina、Cohere、Siliconflow、Voyage rerank API 格式，含 provider 族谱和 IR 映射表。
+- **Embedding API 格式文档** — 双语（中/英）文档，覆盖 OpenAI、Cohere、Jina、Voyage embedding API 格式。
+
+### 变更
+
+- **统一出站传输层** (PR [#516](https://github.com/Oaklight/llm-rosetta/pull/516))：将 `send_request` 和 `send_passthrough` 合并为单一 `send(provider_info, url, body)` 方法。URL 构建和流式标志注入从传输层移至代理层。净减 68 行。
+- **文档结构重组** — 拆分为三个顶级标签页：IR 类型系统、库、网关。API 参考合并到各标签页内。移除独立的 API 参考标签页。
+
 ## v0.8.2 — 2026-08-09
 
 ### 新增
