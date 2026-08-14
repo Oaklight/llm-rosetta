@@ -31,6 +31,24 @@ from .transport import (
 logger = get_logger()
 
 
+def _detect_embedding_source(body: dict[str, Any], config: GatewayConfig) -> str:
+    """Infer the source embedding format from the request body.
+
+    Detection order:
+    1. ``texts`` field (without ``input``) → Cohere
+    2. ``task`` field → Jina
+    3. ``output_dtype`` field → Voyage
+    4. Fall back to ``config.default_embedding_format``
+    """
+    if "texts" in body and "input" not in body:
+        return "cohere"
+    if "task" in body:
+        return "jina"
+    if "output_dtype" in body:
+        return "voyage"
+    return config.default_embedding_format
+
+
 @dataclass
 class _ResolvedEmbedding:
     provider_info: ProviderInfo
@@ -47,7 +65,7 @@ def _resolve_embedding_provider(
     # Try embedding-specific routing first
     try:
         route = config.resolve_embedding(model)
-        source_format = config.default_embedding_format
+        source_format = _detect_embedding_source(body, config)
         pipeline = (
             EmbeddingConversionPipeline(source_format, route.format)
             if source_format != route.format
