@@ -293,3 +293,8 @@ def resolve_base(name: str) -> str:
 def _reset_registry() -> None:
     """Clear the registry.  Intended for testing only."""
     _SHIM_REGISTRY.clear()
+    # Also clear the converter cache since shim resolution may have
+    # cached converters for names that are now unregistered.
+    from llm_rosetta.auto_detect import _converter_cache
+
+    _converter_cache.clear()

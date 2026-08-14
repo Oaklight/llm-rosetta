@@ -24,7 +24,7 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     enforce_custom_tools,
@@ -166,6 +166,16 @@ class ConversionError(Exception):
 _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
 
+@runtime_checkable
+class StreamProcessorProtocol(Protocol):
+    """Shared interface for StreamProcessor and PassthroughStreamProcessor."""
+
+    @property
+    def source_context(self) -> Any: ...
+
+    def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]: ...
+
+
 class ConversionPipeline:
     """Orchestrates format conversion between LLM API standards.
 
@@ -209,6 +219,8 @@ class ConversionPipeline:
         reasoning_config_override: dict[str, Any] | None = None,
         supports_custom_tools: bool = False,
         hoist_system_messages: bool = True,
+        force_conversion: bool = True,
+        fidelity_mode: Literal["critical", "full"] | None = None,
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
@@ -220,6 +232,15 @@ class ConversionPipeline:
         self._reasoning_config_override = reasoning_config_override
         self._supports_custom_tools = supports_custom_tools
         self._hoist_system_messages = hoist_system_messages
+
+        self._passthrough = source_provider == target_provider and not force_conversion
+        self._fidelity: Any = None
+        if self._passthrough and fidelity_mode is not None:
+            from llm_rosetta.fidelity import FidelityChecker
+
+            self._fidelity = FidelityChecker(
+                mode=fidelity_mode, format_name=source_provider
+            )
 
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
@@ -314,6 +335,29 @@ class ConversionPipeline:
         """
         return self._profile
 
+    def _run_fidelity_check(self, body: dict[str, Any], *, direction: str) -> None:
+        """Shadow round-trip and compare for fidelity monitoring."""
+        try:
+            ctx = ConversionContext()
+            ctx.options["metadata_mode"] = "preserve"
+            if direction == "request":
+                ir = self._source_converter.request_from_provider(body, context=ctx)
+                rt, _ = self._target_converter.request_to_provider(ir, context=ctx)
+            else:
+                ir = self._target_converter.response_from_provider(body, context=ctx)
+                rt = self._source_converter.response_to_provider(ir, context=ctx)
+            diffs = self._fidelity.compare(body, rt, direction=direction)
+            if diffs:
+                logger.warning(
+                    "Fidelity loss in %s round-trip (%s→%s): %s",
+                    direction,
+                    self._source_provider,
+                    self._target_provider,
+                    "; ".join(str(d) for d in diffs[:10]),
+                )
+        except Exception:
+            logger.debug("Fidelity check failed", exc_info=True)
+
     def convert_request(
         self,
         body: dict[str, Any],
@@ -347,6 +391,25 @@ class ConversionPipeline:
 
         # Setup context
         ctx = ConversionContext()
+        self._ctx = ctx
+
+        # Same-format short-circuit: skip IR round-trip, apply only shim
+        # body-level transforms.  This avoids lossy round-trips when
+        # source == target (e.g. Anthropic → gateway → Anthropic upstream).
+        if self._passthrough:
+            t0 = time.perf_counter()
+            result = body
+            if self._post_ir_transforms:
+                result = apply_transforms(self._post_ir_transforms, dict(result))
+            # No IR produced in passthrough mode
+            self._ir_request = {}
+            # Shadow round-trip for fidelity monitoring
+            if self._fidelity is not None:
+                self._run_fidelity_check(body, direction="request")
+            self._profile["request_conversion_ms"] = round(
+                (time.perf_counter() - t0) * 1000, 2
+            )
+            return result
         ctx.options["metadata_mode"] = "preserve"
         if self._target_provider == "google":
             ctx.options["output_format"] = "rest"
@@ -358,7 +421,6 @@ class ConversionPipeline:
             model=self._upstream_model or body.get("model"),
             config_override=self._reasoning_config_override,
         )
-        self._ctx = ctx
 
         t_total = time.perf_counter()
 
@@ -458,6 +520,20 @@ class ConversionPipeline:
             RuntimeError: If called before :meth:`convert_request`.
         """
         ctx = self.context  # raises RuntimeError if not ready
+
+        # Same-format short-circuit: skip IR round-trip for response too
+        if self._passthrough:
+            t0 = time.perf_counter()
+            result = upstream_response
+            if self._pre_ir_transforms:
+                result = apply_transforms(self._pre_ir_transforms, dict(result))
+            if self._fidelity is not None:
+                self._run_fidelity_check(upstream_response, direction="response")
+            self._profile["response_conversion_ms"] = round(
+                (time.perf_counter() - t0) * 1000, 2
+            )
+            return result
+
         t_total = time.perf_counter()
 
         # Phase 4a: Body-level shim pre_ir_transforms
@@ -515,7 +591,7 @@ class ConversionPipeline:
         self,
         *,
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
-    ) -> StreamProcessor:
+    ) -> StreamProcessorProtocol:
         """Create a stateful processor for streaming response chunks.
 
         Must be called after :meth:`convert_request`.  The returned
@@ -536,6 +612,12 @@ class ConversionPipeline:
             RuntimeError: If called before :meth:`convert_request`.
         """
         ctx = self.context  # raises RuntimeError if not ready
+
+        # Same-format short-circuit: return a passthrough processor
+        if self._passthrough:
+            return PassthroughStreamProcessor(
+                pre_ir_transforms=self._pre_ir_transforms,
+            )
 
         from_ctx = self._target_converter.create_stream_context()
         to_ctx = self._source_converter.create_stream_context()
@@ -569,6 +651,61 @@ class ConversionPipeline:
 # ---------------------------------------------------------------------------
 # StreamProcessor
 # ---------------------------------------------------------------------------
+
+
+class PassthroughStreamProcessor:
+    """No-op stream processor for same-format pipelines.
+
+    Forwards upstream chunks directly, applying only shim body-level
+    transforms.  Has a dummy ``source_context`` so the gateway's
+    terminal-event logic doesn't crash.
+    """
+
+    def __init__(
+        self,
+        *,
+        pre_ir_transforms: tuple[Transform, ...] = (),
+    ) -> None:
+        self._pre_ir_transforms = pre_ir_transforms
+        self._ctx = self._PassthroughCtx()
+
+    @property
+    def source_context(self) -> Any:
+        """Minimal context for passthrough — enough for gateway error handling."""
+        return self._ctx
+
+    class _PassthroughCtx:
+        def __init__(self) -> None:
+            self.is_ended = False
+            self.response_id = ""
+            self.options: dict[str, Any] = {}
+
+        def mark_ended(self) -> None:
+            self.is_ended = True
+
+        @property
+        def next_sequence_number(self) -> None:
+            return None
+
+        @property
+        def outbound_response_id(self) -> str:
+            return self.response_id
+
+    _TERMINAL_TYPES = frozenset(
+        {"response.completed", "response.failed", "message_stop"}
+    )
+
+    def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
+        if self._pre_ir_transforms:
+            chunk = apply_transforms(self._pre_ir_transforms, chunk)
+        # Detect terminal events so source_context.is_ended reflects reality
+        ctype = chunk.get("type", "")
+        choices = chunk.get("choices", [])
+        if ctype in self._TERMINAL_TYPES or (
+            choices and choices[0].get("finish_reason") is not None
+        ):
+            self._ctx.mark_ended()
+        return [chunk]
 
 
 class StreamProcessor:

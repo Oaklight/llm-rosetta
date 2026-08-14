@@ -129,22 +129,28 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     return "openai_chat"
 
 
+_converter_cache: dict[str, Any] = {}
+
+
 def get_converter_for_provider(provider: str):
     """Get the corresponding converter for a provider type or shim name.
 
-    Accepts both base converter types (e.g. ``"openai_chat"``) and
-    registered shim names (e.g. ``"deepseek"``).  Shim names are
-    resolved to their base converter type via the shim registry.
+    Converter instances are cached — the same object is returned for the
+    same resolved base provider.  This is safe because converters are
+    stateless (all per-request state lives in ``ConversionContext``).
 
     Args:
         provider: Provider type string or registered shim name.
 
     Returns:
-        Corresponding converter instance.
+        Corresponding converter instance (cached).
 
     Raises:
         ValueError: If the provider is not a known type or shim name.
     """
+    if provider in _converter_cache:
+        return _converter_cache[provider]
+
     from .converters.anthropic import AnthropicConverter
     from .converters.google_genai import GoogleConverter
     from .converters.openai_chat import OpenAIChatConverter
@@ -161,12 +167,17 @@ def get_converter_for_provider(provider: str):
 
     # Direct match against base converter types
     if provider in converter_map:
-        return converter_map[provider]()
+        instance = converter_map[provider]()
+        _converter_cache[provider] = instance
+        return instance
 
     # Resolve through shim registry
     base = resolve_base(provider)
     if base in converter_map:
-        return converter_map[base]()
+        instance = converter_map[base]()
+        _converter_cache[provider] = instance
+        _converter_cache[base] = instance
+        return instance
 
     raise ValueError(f"Unsupported provider: {provider}")
 
