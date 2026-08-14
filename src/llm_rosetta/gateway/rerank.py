@@ -22,15 +22,21 @@ from .transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTr
 logger = get_logger()
 
 
-def _detect_source_format(request: Any, config: GatewayConfig) -> str:
-    """Infer the source rerank format from the request path.
+def _detect_source_format(
+    request: Any, body: dict[str, Any], config: GatewayConfig
+) -> str:
+    """Infer the source rerank format from the request path and body.
 
-    ``/v2/rerank`` implies Cohere format (only Cohere uses v2).
-    ``/v1/rerank`` falls back to ``config.default_rerank_format``.
+    Detection order:
+    1. ``/v2/rerank`` path → Cohere (only Cohere uses v2)
+    2. ``top_k`` in body (without ``top_n``) → Voyage
+    3. Fall back to ``config.default_rerank_format``
     """
     path: str = getattr(request, "path", "")
     if path.startswith("/v2/"):
         return "cohere"
+    if "top_k" in body and "top_n" not in body:
+        return "voyage"
     return config.default_rerank_format
 
 
@@ -95,7 +101,7 @@ async def handle_rerank(
             )
         )
 
-    source_format = _detect_source_format(request, config)
+    source_format = _detect_source_format(request, body, config)
 
     # --- Convert request ---
     pipeline = RerankConversionPipeline(source_format, route.format)
