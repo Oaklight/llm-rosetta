@@ -187,3 +187,82 @@ class TestEmbeddingUpstreamModel:
         assert response.headers["x-request-id"] == upstream_headers["x-request-id"]
         if client_request_id:
             assert upstream_headers["x-request-id"] == client_request_id
+
+
+# ============================================================================
+# Auto-detection tests
+# ============================================================================
+
+
+class TestDetectEmbeddingSource:
+    """Tests for _detect_embedding_source auto-detection logic."""
+
+    @pytest.fixture()
+    def config(self) -> GatewayConfig:
+        return GatewayConfig(
+            {
+                "providers": {
+                    "openai_chat": {
+                        "api_key": "sk-test",
+                        "base_url": "https://api.openai.com/v1",
+                    }
+                },
+                "models": {"gpt-4o": "openai_chat"},
+            }
+        )
+
+    @pytest.mark.parametrize(
+        "body, expected",
+        [
+            ({"texts": ["hello"]}, "cohere"),
+            ({"input": "hello", "task": "retrieval.query"}, "jina"),
+            ({"input": "hello", "output_dtype": "float"}, "voyage"),
+            ({"input": "hello"}, "openai"),  # fallback
+            ({"input": "hello", "model": "x"}, "openai"),  # fallback
+            # edge: texts + input → not Cohere, falls to default
+            ({"texts": ["hello"], "input": "hello"}, "openai"),
+        ],
+    )
+    def test_parametrized(
+        self, body: dict, expected: str, config: GatewayConfig
+    ) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert _detect_embedding_source(body, config) == expected
+
+    def test_cohere_texts_field(self, config: GatewayConfig) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert _detect_embedding_source({"texts": ["hi"]}, config) == "cohere"
+
+    def test_cohere_skipped_when_input_present(self, config: GatewayConfig) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert (
+            _detect_embedding_source({"texts": ["hi"], "input": "hi"}, config)
+            != "cohere"
+        )
+
+    def test_jina_task_field(self, config: GatewayConfig) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert (
+            _detect_embedding_source({"input": "hi", "task": "retrieval.query"}, config)
+            == "jina"
+        )
+
+    def test_voyage_output_dtype(self, config: GatewayConfig) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert (
+            _detect_embedding_source({"input": "hi", "output_dtype": "float"}, config)
+            == "voyage"
+        )
+
+    def test_fallback_to_default(self, config: GatewayConfig) -> None:
+        from llm_rosetta.gateway.embeddings import _detect_embedding_source
+
+        assert (
+            _detect_embedding_source({"input": "hi"}, config)
+            == config.default_embedding_format
+        )
