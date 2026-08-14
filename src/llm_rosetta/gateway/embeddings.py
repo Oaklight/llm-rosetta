@@ -55,6 +55,7 @@ class _ResolvedEmbedding:
     upstream_url: str
     provider_name: str
     target_format: str = "openai_chat"
+    source_format: str = "openai_chat"
     pipeline: EmbeddingConversionPipeline | None = field(default=None)
 
 
@@ -66,6 +67,7 @@ def _resolve_embedding_provider(
     try:
         route = config.resolve_embedding(model)
         source_format = _detect_embedding_source(body, config)
+        logger.debug("embedding: detected source format: %s", source_format)
         pipeline = (
             EmbeddingConversionPipeline(source_format, route.format)
             if source_format != route.format
@@ -76,6 +78,7 @@ def _resolve_embedding_provider(
             upstream_url=f"{route.provider_info.base_url}{route.embedding_path}",
             provider_name=route.provider_name,
             target_format=route.format,
+            source_format=source_format,
             pipeline=pipeline,
         )
     except KeyError:
@@ -267,7 +270,7 @@ async def handle_embeddings(
         _record_telemetry(
             request,
             model=model,
-            source_provider=cast(ProviderType, config.default_embedding_format),
+            source_provider=cast(ProviderType, resolved.source_format),
             target_provider=cast(ProviderType, resolved.target_format),
             provider_name=resolved.provider_name,
             is_stream=False,
