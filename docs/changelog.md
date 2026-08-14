@@ -18,6 +18,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **`x-rosetta-conversion: passthrough` header** — returned when response conversion fails, allowing clients to detect fallback to raw upstream format.
 - **Rerank API format documentation** — bilingual (en/zh) documentation of Jina, Cohere, Siliconflow, and Voyage rerank API formats with provider lineage and IR mapping tables.
 - **Embedding API format documentation** — bilingual (en/zh) documentation of OpenAI, Cohere, Jina, and Voyage embedding API formats.
+- **ConversionPipeline passthrough mode** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): `force_conversion` parameter (default `True`). When `False` and source == target, the pipeline skips IR round-trip — fixes information loss when proxying same-format traffic (e.g. Claude Code → gateway → Anthropic upstream).
+- **Converter instance caching** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): `get_converter_for_provider()` caches instances in a module-level dict. Eliminates per-request converter allocation.
+- **Fidelity checker** (`fidelity.py`, PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): compare original and round-tripped bodies to detect IR conversion loss. Two modes: `"critical"` (per-format field check, ~0.01ms) and `"full"` (recursive leaf-level diff). Wired into pipeline passthrough path via `fidelity_mode` parameter for background monitoring.
+- **`StreamProcessorProtocol`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): shared `Protocol` for `StreamProcessor` and `PassthroughStreamProcessor` with terminal chunk detection.
+- **Rerank source format auto-detection** — detect Voyage format from `top_k` in request body; `/v2/rerank` implies Cohere.
 
 ### Changed
 
