@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import pytest
+from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta.gateway.rerank import _detect_source_format
 
 from llm_rosetta.gateway.rerank_pipeline import (
     RerankConversionPipeline,
@@ -272,3 +274,78 @@ class TestRerankConfig:
         config = GatewayConfig(raw)
         assert "jina" not in config.rerank_providers
         assert len(config.rerank_models) == 0
+
+
+# ============================================================================
+# Auto-detection tests
+# ============================================================================
+
+
+class _FakeRequest:
+    """Minimal request stub with a .path attribute."""
+
+    def __init__(self, path: str = "/v1/rerank") -> None:
+        self.path = path
+
+
+class TestDetectSourceFormat:
+    """Tests for _detect_source_format auto-detection logic."""
+
+    @pytest.fixture()
+    def config(self) -> GatewayConfig:
+        return GatewayConfig(
+            {
+                "providers": {
+                    "openai_chat": {
+                        "api_key": "sk-test",
+                        "base_url": "https://api.openai.com/v1",
+                    }
+                },
+                "models": {"gpt-4o": "openai_chat"},
+            }
+        )
+
+    def test_v2_path_detects_cohere(self, config: GatewayConfig) -> None:
+
+        assert _detect_source_format(_FakeRequest("/v2/rerank"), {}, config) == "cohere"
+
+    def test_top_k_without_top_n_detects_voyage(self, config: GatewayConfig) -> None:
+
+        assert (
+            _detect_source_format(
+                _FakeRequest(), {"top_k": 5, "query": "q", "documents": ["d"]}, config
+            )
+            == "voyage"
+        )
+
+    def test_top_k_with_top_n_falls_to_default(self, config: GatewayConfig) -> None:
+
+        assert (
+            _detect_source_format(_FakeRequest(), {"top_k": 5, "top_n": 3}, config)
+            == config.default_rerank_format
+        )
+
+    def test_plain_body_falls_to_default(self, config: GatewayConfig) -> None:
+
+        assert (
+            _detect_source_format(
+                _FakeRequest(), {"query": "q", "documents": ["d"]}, config
+            )
+            == config.default_rerank_format
+        )
+
+    @pytest.mark.parametrize(
+        "path, body, expected",
+        [
+            ("/v2/rerank", {}, "cohere"),
+            ("/v2/rerank", {"top_k": 5}, "cohere"),  # path takes precedence
+            ("/v1/rerank", {"top_k": 5}, "voyage"),
+            ("/v1/rerank", {"top_k": 5, "top_n": 3}, "jina"),  # fallback
+            ("/v1/rerank", {}, "jina"),  # fallback
+        ],
+    )
+    def test_parametrized(
+        self, path: str, body: dict, expected: str, config: GatewayConfig
+    ) -> None:
+
+        assert _detect_source_format(_FakeRequest(path), body, config) == expected

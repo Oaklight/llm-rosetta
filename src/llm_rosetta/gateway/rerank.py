@@ -103,6 +103,7 @@ async def handle_rerank(
 
     source_format = _detect_source_format(request, body, config)
 
+    logger.debug("rerank: detected source format: %s", source_format)
     # --- Convert request ---
     pipeline = RerankConversionPipeline(source_format, route.format)
     try:
