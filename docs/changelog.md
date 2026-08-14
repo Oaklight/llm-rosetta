@@ -18,6 +18,11 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **`x-rosetta-conversion: passthrough` 头部** — 当响应转换失败时返回，让客户端可以检测到回退了原始上游格式。
 - **Rerank API 格式文档** — 双语（中/英）文档，覆盖 Jina、Cohere、Siliconflow、Voyage rerank API 格式，含 provider 族谱和 IR 映射表。
 - **Embedding API 格式文档** — 双语（中/英）文档，覆盖 OpenAI、Cohere、Jina、Voyage embedding API 格式。
+- **ConversionPipeline 透传模式** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：`force_conversion` 参数（默认 `True`）。当 `False` 且 source == target 时，跳过 IR round-trip——修复同格式代理时的信息丢失（如 Claude Code → 网关 → Anthropic 上游）。
+- **转换器实例缓存** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：`get_converter_for_provider()` 在模块级 dict 中缓存实例，消除每请求的转换器分配。
+- **保真度检查器** (`fidelity.py`, PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：对比原始 body 和 round-trip 后的 body，检测 IR 转换信息损失。两种模式：`"critical"`（按格式检查关键字段，~0.01ms）和 `"full"`（递归叶级 diff）。通过 `fidelity_mode` 参数接入 pipeline 透传路径，实现后台监控。
+- **`StreamProcessorProtocol`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：`StreamProcessor` 和 `PassthroughStreamProcessor` 的共享 `Protocol`，含终端事件检测。
+- **Rerank 源格式自动检测** — 从请求体中的 `top_k` 检测 Voyage 格式；`/v2/rerank` 路径推断 Cohere 格式。
 
 ### 变更
 
