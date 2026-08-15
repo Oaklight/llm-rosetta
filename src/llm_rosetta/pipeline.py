@@ -414,6 +414,11 @@ class ConversionPipeline:
         if self._target_provider == "google":
             ctx.options["output_format"] = "rest"
 
+        # Shim-driven multimodal tool result override
+        target_shim = resolve_shim(self._shim) or resolve_shim(self._target_provider)
+        if target_shim is not None and target_shim.multimodal_tool_result is not None:
+            ctx.options["multimodal_tool_result"] = target_shim.multimodal_tool_result
+
         # Capability enforcement: reasoning (pre-IR)
         enforce_reasoning(
             ctx,

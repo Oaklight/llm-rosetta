@@ -131,6 +131,11 @@ class ProviderShim:
             Default ``False`` — only OpenAI's official API supports
             this.  When ``False``, custom tools are downgraded to
             function wrappers.
+        multimodal_tool_result: Whether the provider supports multimodal
+            content (images, files) in tool results natively.  ``None``
+            (default) defers to the converter's class-level flag.
+            ``True`` forces native multimodal pass-through; ``False``
+            forces dual-encoding (text fallback + synthetic user message).
     """
 
     name: str
@@ -147,6 +152,7 @@ class ProviderShim:
     response_id_prefix: str = ""
     supports_custom_tools: bool = False
     hoist_system_messages: bool = True
+    multimodal_tool_result: bool | None = None
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -194,6 +200,7 @@ class ProviderShim:
             "response_id_prefix": "",
             "supports_custom_tools": False,
             "hoist_system_messages": True,
+            "multimodal_tool_result": None,
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():
