@@ -81,6 +81,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
         """
         messages: list[dict[str, Any]] = []
         warnings: list[str] = []
+        supports_mm = kwargs.get("supports_multimodal_tool_result", False)
         multimodal_packs: dict[str, list[dict[str, Any]]] = {}
 
         for item in ir_messages:
@@ -94,7 +95,9 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 continue
             if is_message(item):
                 converted, msg_warnings = self._ir_message_to_p(
-                    cast(Message, item), multimodal_packs
+                    cast(Message, item),
+                    multimodal_packs,
+                    supports_multimodal=supports_mm,
                 )
                 warnings.extend(msg_warnings)
                 if isinstance(converted, list):
@@ -108,9 +111,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 warnings.extend(ext_warnings)
 
         messages = self._reorder_tool_messages(messages, warnings)
-        if multimodal_packs and not kwargs.get(
-            "supports_multimodal_tool_result", False
-        ):
+        if multimodal_packs and not supports_mm:
             messages = inject_packed_tool_content(messages, multimodal_packs)
         return messages, warnings
 
@@ -189,12 +190,16 @@ class OpenAIChatMessageOps(BaseMessageOps):
         self,
         message: Message,
         multimodal_packs: dict[str, list[dict[str, Any]]],
+        *,
+        supports_multimodal: bool = False,
     ) -> tuple[Any, list[str]]:
         """Convert a single IR message to OpenAI format.
 
         Args:
             message: IR message dict.
             multimodal_packs: Accumulator for multimodal tool result content.
+            supports_multimodal: When True, skip packing and pass multimodal
+                content through natively in tool results.
 
         Returns:
             Tuple of (converted message or list of messages, warnings).
@@ -206,11 +211,21 @@ class OpenAIChatMessageOps(BaseMessageOps):
         if role == "system":
             return self._ir_system_to_p(content), warnings
         elif role == "user":
-            return self._ir_user_to_p(content, warnings, multimodal_packs)
+            return self._ir_user_to_p(
+                content,
+                warnings,
+                multimodal_packs,
+                supports_multimodal=supports_multimodal,
+            )
         elif role == "assistant":
             return self._ir_assistant_to_p(content, warnings)
         elif role == "tool":
-            return self._ir_tool_messages_to_p(content, warnings, multimodal_packs)
+            return self._ir_tool_messages_to_p(
+                content,
+                warnings,
+                multimodal_packs,
+                supports_multimodal=supports_multimodal,
+            )
 
         return None, warnings
 
@@ -230,6 +245,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
         content: list,
         warnings: list[str],
         multimodal_packs: dict[str, list[dict[str, Any]]],
+        *,
+        supports_multimodal: bool = False,
     ) -> tuple[Any, list[str]]:
         """Convert IR user message content to OpenAI user message(s).
 
@@ -248,7 +265,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 # ToolResultPart in user message → separate tool role message
                 tool_messages.append(
                     self._convert_tool_result_with_packing(
-                        part, multimodal_packs, warnings
+                        part,
+                        multimodal_packs,
+                        warnings,
+                        supports_multimodal=supports_multimodal,
                     )
                 )
             elif is_file_part(part):
@@ -354,6 +374,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
         content: list,
         warnings: list[str],
         multimodal_packs: dict[str, list[dict[str, Any]]],
+        *,
+        supports_multimodal: bool = False,
     ) -> tuple[Any, list[str]]:
         """Convert IR tool message content to OpenAI tool role message(s).
 
@@ -366,7 +388,10 @@ class OpenAIChatMessageOps(BaseMessageOps):
             if is_tool_result_part(part):
                 tool_messages.append(
                     self._convert_tool_result_with_packing(
-                        part, multimodal_packs, warnings
+                        part,
+                        multimodal_packs,
+                        warnings,
+                        supports_multimodal=supports_multimodal,
                     )
                 )
 
@@ -410,28 +435,29 @@ class OpenAIChatMessageOps(BaseMessageOps):
         part: ToolResultPart,
         multimodal_packs: dict[str, list[dict[str, Any]]],
         warnings: list[str],
+        *,
+        supports_multimodal: bool = False,
     ) -> dict[str, Any]:
-        """Convert an IR ToolResultPart, packing multimodal content for dual encoding.
+        """Convert an IR ToolResultPart, optionally packing multimodal content.
 
-        Delegates to the shared ``pack_multimodal_tool_result`` helper for
-        multimodal extraction; text-only results go straight through
-        ``tool_ops.ir_tool_result_to_p()``.
+        When ``supports_multimodal`` is True, multimodal content passes through
+        directly without packing — the provider handles it natively.
 
-        Blocks that were successfully packed into the synthetic user message
-        are dropped from the tool message body. Re-serializing them here would
-        emit the same bytes twice — and for base64 images that inert copy can
-        be megabytes the model cannot even read.
+        When False (default for Chat Completions), delegates to the shared
+        ``pack_multimodal_tool_result`` helper.  Packed blocks are dropped from
+        the tool message body to avoid emitting large base64 payloads twice.
 
         Args:
             part: IR tool result part.
             multimodal_packs: Accumulator mapping call_id → provider content blocks.
             warnings: Warning list.
+            supports_multimodal: Skip packing when True.
 
         Returns:
             OpenAI tool role message dict.
         """
         result = part.get("result", "")
-        if not has_multimodal_content(result):
+        if supports_multimodal or not has_multimodal_content(result):
             return self.tool_ops.ir_tool_result_to_p(part)
         residual = pack_multimodal_tool_result(
             result, self.content_ops, multimodal_packs, part["tool_call_id"], warnings
