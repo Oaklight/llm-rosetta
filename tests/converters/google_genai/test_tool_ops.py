@@ -485,22 +485,20 @@ class TestGoogleGenAIToolOps:
         result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
         assert result["tool_call_id"] == "search"
 
-    def test_ir_tool_result_to_p_list_json_serialized(self):
-        """Test list result is serialized via json.dumps for Google Struct."""
+    def test_ir_tool_result_to_p_list_preserved(self):
+        """Test list result is preserved as-is for Google Struct."""
         ir_tr = ToolResultPart(
             type="tool_result",
             tool_call_id="call_list",
             result=[{"type": "text", "text": "hello"}],
         )
         result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
-        import json
-
         output = result["functionResponse"]["response"]["output"]
-        assert isinstance(output, str)
-        assert json.loads(output) == [{"type": "text", "text": "hello"}]
+        assert isinstance(output, list)
+        assert output == [{"type": "text", "text": "hello"}]
 
-    def test_ir_tool_result_to_p_with_context_list_json_serialized(self):
-        """Test list result via context method is serialized via json.dumps."""
+    def test_ir_tool_result_to_p_with_context_list_preserved(self):
+        """Test list result via context method is preserved as-is."""
         ir_input = [
             {
                 "role": "assistant",
@@ -520,12 +518,63 @@ class TestGoogleGenAIToolOps:
             result=[{"type": "image", "image_url": "https://example.com/img.png"}],
         )
         result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        output = result["functionResponse"]["response"]["output"]
+        assert isinstance(output, list)
+        assert output[0]["type"] == "image"
+
+    def test_ir_tool_result_to_p_dict_json_serialized(self):
+        """Test dict result is still serialized via json.dumps."""
         import json
 
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_dict",
+            result={"key": "value"},
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
         output = result["functionResponse"]["response"]["output"]
         assert isinstance(output, str)
-        parsed = json.loads(output)
-        assert parsed[0]["type"] == "image"
+        assert json.loads(output) == {"key": "value"}
+
+    def test_p_tool_result_to_ir_preserves_list(self):
+        """Test list content in function_response is preserved as-is in IR."""
+        provider = {
+            "functionResponse": {
+                "name": "screenshot",
+                "id": "call_mm",
+                "response": {
+                    "output": [
+                        {"type": "text", "text": "captured"},
+                        {"type": "image", "image_url": "https://example.com/img.png"},
+                    ]
+                },
+            }
+        }
+        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        assert isinstance(result["result"], list)
+        assert len(result["result"]) == 2
+        assert result["result"][0]["type"] == "text"
+        assert result["result"][1]["type"] == "image"
+
+    def test_multimodal_tool_result_round_trip(self):
+        """Test multimodal tool result round-trip: IR → Google → IR."""
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_rt",
+            result=[
+                {"type": "text", "text": "chart output:"},
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        google = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        restored = GoogleGenAIToolOps.p_tool_result_to_ir(google)
+        assert isinstance(restored["result"], list)
+        assert len(restored["result"]) == 2
+        assert restored["result"][0] == {"type": "text", "text": "chart output:"}
+        assert restored["result"][1] == {
+            "type": "image",
+            "image_url": "https://example.com/chart.png",
+        }
 
     # ==================== Tool Config ====================
 
