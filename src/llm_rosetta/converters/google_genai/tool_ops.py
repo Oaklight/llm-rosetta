@@ -58,6 +58,26 @@ def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
     return result
 
 
+def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
+    """Extract and normalize result content from an IR ToolResultPart.
+
+    Structured content (list of content blocks, dicts) is preserved as-is
+    for Google's Struct-based ``functionResponse.response``.  Scalar values
+    are returned unchanged.
+    """
+    result_content = (
+        ir_tool_result.get("result")
+        or ir_tool_result.get("content")
+        or ir_tool_result.get("output")
+        or ""
+    )
+    if isinstance(result_content, dict):
+        import json
+
+        return json.dumps(result_content)
+    return result_content
+
+
 class GoogleGenAIToolOps(BaseToolOps):
     """Google GenAI tool conversion operations.
 
@@ -342,20 +362,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         """
         tool_name = ir_tool_result.get("tool_call_id", "")
 
-        # Get result content from various field names
-        result_content = (
-            ir_tool_result.get("result")
-            or ir_tool_result.get("content")
-            or ir_tool_result.get("output")
-            or ""
-        )
-
-        # Google function_response uses Struct (dict), not content blocks.
-        # Serialize list/dict content to a string for the output field.
-        if isinstance(result_content, (list, dict)):
-            import json
-
-            result_content = json.dumps(result_content)
+        result_content = _get_result_content(ir_tool_result)
 
         response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):
@@ -411,20 +418,7 @@ class GoogleGenAIToolOps(BaseToolOps):
             )
             tool_name = tool_call_id
 
-        # Get result content from various field names
-        result_content = (
-            ir_tool_result.get("result")
-            or ir_tool_result.get("content")
-            or ir_tool_result.get("output")
-            or ""
-        )
-
-        # Google function_response uses Struct (dict), not content blocks.
-        # Serialize list/dict content to a string for the output field.
-        if isinstance(result_content, (list, dict)):
-            import json
-
-            result_content = json.dumps(result_content)
+        result_content = _get_result_content(ir_tool_result)
 
         response_data: dict[str, Any] = {"output": result_content}
         if ir_tool_result.get("is_error"):
@@ -445,7 +439,8 @@ class GoogleGenAIToolOps(BaseToolOps):
         """Google GenAI function_response Part → IR ToolResultPart.
 
         Supports both SDK naming (``function_response``) and REST API naming
-        (``functionResponse``).
+        (``functionResponse``).  Structured content (lists) is preserved
+        as-is for multimodal tool result round-tripping.
 
         Args:
             provider_tool_result: Google Part dict with function_response.
@@ -458,14 +453,18 @@ class GoogleGenAIToolOps(BaseToolOps):
         ) or provider_tool_result.get("functionResponse")
         response_data = func_response.get("response", {})
 
-        # Check if it's an error response
         is_error = "error" in response_data
         content = response_data.get("error" if is_error else "output", "")
+
+        if isinstance(content, list):
+            result: Any = content
+        else:
+            result = str(content)
 
         return ToolResultPart(
             type="tool_result",
             tool_call_id=func_response.get("id", func_response.get("name", "")),
-            result=str(content),
+            result=result,
             is_error=is_error,
         )
 
