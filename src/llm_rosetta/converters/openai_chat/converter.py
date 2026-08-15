@@ -151,7 +151,11 @@ class OpenAIChatConverter(BaseConverter):
         ir_messages = fix_orphaned_tool_calls_ir(ir_request.get("messages", []))
         ctx.warnings.extend(strip_orphaned_tool_config(ir_request))
         converted_msgs, msg_warnings = self.message_ops.ir_messages_to_p(
-            ir_messages, target_provider=self._CONVERTER_TAG
+            ir_messages,
+            target_provider=self._CONVERTER_TAG,
+            supports_multimodal_tool_result=self._supports_multimodal_tool_result(
+                context
+            ),
         )
         messages.extend(converted_msgs)
         ctx.warnings.extend(msg_warnings)

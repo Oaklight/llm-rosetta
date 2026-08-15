@@ -1111,6 +1111,65 @@ class TestMultimodalToolResultPacking:
         assert has_multimodal_content([]) is False
         assert has_multimodal_content(None) is False
 
+    # ==================== supports_multimodal_tool_result flag ====================
+
+    def test_supports_multimodal_skips_packing(self):
+        """When supports_multimodal_tool_result=True, no synthetic user msg."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_img",
+            result=[
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(
+            ir_msgs, supports_multimodal_tool_result=True
+        )
+
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool"]
+        assert "user" not in roles[3:]  # no synthetic user msg
+
+    def test_supports_multimodal_preserves_content(self):
+        """When supports_multimodal_tool_result=True, image stays in tool result."""
+        import json
+
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_img",
+            result=[
+                {"type": "text", "text": "chart:"},
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(
+            ir_msgs, supports_multimodal_tool_result=True
+        )
+
+        tool_msg = [m for m in result if m["role"] == "tool"][0]
+        content = json.loads(tool_msg["content"])
+        assert len(content) == 2
+        types = [c["type"] for c in content]
+        assert "text" in types
+        assert "image" in types
+
+    def test_default_false_still_packs(self):
+        """Default (False) behavior unchanged — still packs multimodal."""
+        tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_img",
+            result=[
+                {"type": "image", "image_url": "https://example.com/chart.png"},
+            ],
+        )
+        ir_msgs = self._make_ir_conversation([tr])
+        result, _ = self.message_ops.ir_messages_to_p(ir_msgs)
+
+        roles = [m["role"] for m in result]
+        assert roles == ["user", "assistant", "tool", "user"]
+
 
 class TestRefusalFieldAlwaysPresent:
     """Tests for refusal field always present on assistant messages (#427 follow-up)."""
