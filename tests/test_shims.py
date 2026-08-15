@@ -22,10 +22,19 @@ from llm_rosetta.shims.provider_shim import (
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the shim registry before and after each test."""
+    """Isolate each test from the global shim registry.
+
+    Saves the current registry state, clears it for the test, and
+    restores the original entries afterward so other test modules
+    that depend on built-in shims are not affected by test ordering.
+    """
+    from llm_rosetta.shims.provider_shim import _SHIM_REGISTRY
+
+    saved = dict(_SHIM_REGISTRY)
     _reset_registry()
     yield
     _reset_registry()
+    _SHIM_REGISTRY.update(saved)
 
 
 # ---------------------------------------------------------------------------
