@@ -328,6 +328,37 @@ class TestLoadProviders:
         assert len(shims) == 1
         assert shims[0].name == "good"
 
+    def test_multimodal_tool_result_from_yaml(self, tmp_path: Path):
+        """multimodal_tool_result is parsed from provider YAML."""
+        d = tmp_path / "multimodal_provider"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: multimodal_provider\nbase: openai_chat\nmultimodal_tool_result: true\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        assert shims[0].multimodal_tool_result is True
+
+    def test_multimodal_tool_result_false_from_yaml(self, tmp_path: Path):
+        """multimodal_tool_result: false is parsed correctly."""
+        d = tmp_path / "nomm"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: nomm\nbase: anthropic\nmultimodal_tool_result: false\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        assert shims[0].multimodal_tool_result is False
+
+    def test_multimodal_tool_result_absent_from_yaml(self, tmp_path: Path):
+        """Missing multimodal_tool_result defaults to None."""
+        d = tmp_path / "plain"
+        d.mkdir()
+        (d / "provider.yaml").write_text("name: plain\nbase: openai_chat\n")
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        assert shims[0].multimodal_tool_result is None
+
 
 class TestLoadProvidersFromDir:
     """Tests for the public load_providers_from_dir API."""

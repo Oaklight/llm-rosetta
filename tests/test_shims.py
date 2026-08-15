@@ -303,3 +303,121 @@ class TestGroupedProviders:
         grouped_names = ("argo--anthropic", "argo--openai_chat")
         for name in (*flat_names, *grouped_names):
             assert get_shim(name) is not None, f"Shim '{name}' not found"
+
+
+# ---------------------------------------------------------------------------
+# multimodal_tool_result capability plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestMultimodalToolResultCapability:
+    def test_shim_default_is_none(self):
+        s = ProviderShim(name="test", base="openai_chat")
+        assert s.multimodal_tool_result is None
+
+    def test_shim_explicit_true(self):
+        s = ProviderShim(name="test", base="openai_chat", multimodal_tool_result=True)
+        assert s.multimodal_tool_result is True
+
+    def test_shim_explicit_false(self):
+        s = ProviderShim(name="test", base="anthropic", multimodal_tool_result=False)
+        assert s.multimodal_tool_result is False
+
+    def test_convert_wires_shim_override_into_context(self):
+        """convert() sets ctx.options['multimodal_tool_result'] from target shim."""
+        from unittest.mock import patch
+        from typing import Any
+
+        from llm_rosetta.auto_detect import convert
+        from llm_rosetta.converters.base.context import ConversionContext
+
+        register_shim(
+            ProviderShim(
+                name="mm-target", base="openai_chat", multimodal_tool_result=True
+            )
+        )
+        register_shim(ProviderShim(name="mm-source", base="anthropic"))
+
+        captured_ctx: list[Any] = []
+
+        from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+
+        orig_req_to = OpenAIChatConverter.request_to_provider
+
+        def capture_ctx(
+            self: Any, ir_request: Any, *, context: Any = None, **kwargs: Any
+        ) -> Any:
+            captured_ctx.append(context)
+            return orig_req_to(self, ir_request, context=context, **kwargs)
+
+        with patch.object(OpenAIChatConverter, "request_to_provider", capture_ctx):
+            body = {
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+                "model": "test",
+                "max_tokens": 100,
+            }
+            convert(body, "mm-target", source_provider="mm-source")
+
+        assert len(captured_ctx) == 1
+        ctx: ConversionContext = captured_ctx[0]
+        assert ctx.options.get("multimodal_tool_result") is True
+
+    def test_convert_no_override_when_shim_is_none(self):
+        """convert() does not set multimodal_tool_result when shim field is None."""
+        from unittest.mock import patch
+        from typing import Any
+
+        from llm_rosetta.auto_detect import convert
+
+        register_shim(ProviderShim(name="plain-target", base="openai_chat"))
+        register_shim(ProviderShim(name="plain-source", base="anthropic"))
+
+        captured_ctx: list[Any] = []
+
+        from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
+
+        orig_req_to = OpenAIChatConverter.request_to_provider
+
+        def capture_ctx(
+            self: Any, ir_request: Any, *, context: Any = None, **kwargs: Any
+        ) -> Any:
+            captured_ctx.append(context)
+            return orig_req_to(self, ir_request, context=context, **kwargs)
+
+        with patch.object(OpenAIChatConverter, "request_to_provider", capture_ctx):
+            body = {
+                "messages": [
+                    {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+                ],
+                "model": "test",
+                "max_tokens": 100,
+            }
+            convert(body, "plain-target", source_provider="plain-source")
+
+        assert len(captured_ctx) == 1
+        assert "multimodal_tool_result" not in captured_ctx[0].options
+
+    def test_pipeline_wires_shim_override_into_context(self):
+        """ConversionPipeline sets ctx.options from target shim."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        register_shim(
+            ProviderShim(
+                name="pipe-target", base="openai_chat", multimodal_tool_result=True
+            )
+        )
+
+        pipeline = ConversionPipeline(
+            source_provider="anthropic",
+            target_provider="openai_chat",
+            shim="pipe-target",
+        )
+        body = {
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "model": "test",
+            "max_tokens": 100,
+        }
+        pipeline.convert_request(body)
+        assert pipeline.context.options.get("multimodal_tool_result") is True

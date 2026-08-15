@@ -270,6 +270,8 @@ def convert(
             cap = target_shim.model_reasoning[req_model]
         if cap is not None:
             ctx.options["reasoning_cap"] = cap
+        if target_shim.multimodal_tool_result is not None:
+            ctx.options["multimodal_tool_result"] = target_shim.multimodal_tool_result
 
     ir_request = source_converter.request_from_provider(body, context=ctx)
     target_body, _warnings = target_converter.request_to_provider(
