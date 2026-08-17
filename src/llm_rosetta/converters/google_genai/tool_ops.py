@@ -58,12 +58,23 @@ def _normalize_schema_types(schema: Any, to_upper: bool = False) -> Any:
     return result
 
 
+def _is_content_block_list(value: list) -> bool:
+    """Check whether *value* looks like ``list[ContentPart]``.
+
+    IR tool results are typed ``str | list[ContentPart]``.  Content block
+    lists contain typed dicts (``{"type": "text", ...}``,
+    ``{"type": "image", ...}``).  Plain data lists (``[1, 2, 3]``) are
+    not content blocks and should be JSON-serialized instead.
+    """
+    return bool(value) and isinstance(value[0], dict) and "type" in value[0]
+
+
 def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     """Extract and normalize result content from an IR ToolResultPart.
 
-    Structured content (list of content blocks, dicts) is preserved as-is
-    for Google's Struct-based ``functionResponse.response``.  Scalar values
-    are returned unchanged.
+    Content block lists (``list[ContentPart]``) are preserved as-is for
+    Google's Struct-based ``functionResponse.response``.  Plain data
+    lists and dicts are JSON-serialized.  Scalar values pass through.
     """
     result_content = (
         ir_tool_result.get("result")
@@ -71,6 +82,12 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
         or ir_tool_result.get("output")
         or ""
     )
+    if isinstance(result_content, list):
+        if _is_content_block_list(result_content):
+            return result_content
+        import json
+
+        return json.dumps(result_content)
     if isinstance(result_content, dict):
         import json
 
@@ -456,9 +473,11 @@ class GoogleGenAIToolOps(BaseToolOps):
         is_error = "error" in response_data
         content = response_data.get("error" if is_error else "output", "")
 
-        if isinstance(content, list):
+        # Preserve content block lists (list[ContentPart]) for multimodal
+        # round-tripping; serialize plain data lists/dicts to JSON string.
+        if isinstance(content, list) and _is_content_block_list(content):
             result: Any = content
-        elif isinstance(content, dict):
+        elif isinstance(content, (list, dict)):
             import json
 
             result = json.dumps(content)
