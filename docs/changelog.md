@@ -22,7 +22,16 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **转换器实例缓存** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：`get_converter_for_provider()` 在模块级 dict 中缓存实例，消除每请求的转换器分配。
 - **保真度检查器** (`fidelity.py`, PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：对比原始 body 和 round-trip 后的 body，检测 IR 转换信息损失。两种模式：`"critical"`（按格式检查关键字段，~0.01ms）和 `"full"`（递归叶级 diff）。通过 `fidelity_mode` 参数接入 pipeline 透传路径，实现后台监控。
 - **`StreamProcessorProtocol`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：`StreamProcessor` 和 `PassthroughStreamProcessor` 的共享 `Protocol`，含终端事件检测。
-- **Rerank 源格式自动检测** — 从请求体中的 `top_k` 检测 Voyage 格式；`/v2/rerank` 路径推断 Cohere 格式。
+- **Rerank 源格式自动检测** (PR [#522](https://github.com/Oaklight/llm-rosetta/pull/522)) — 从请求体中的 `top_k` 检测 Voyage 格式；`/v2/rerank` 路径推断 Cohere 格式。
+- **Embedding 源格式自动检测** (PR [#521](https://github.com/Oaklight/llm-rosetta/pull/521)) — 从请求体字段自动检测 embedding 源格式（`input_type` → Cohere/Jina/Voyage；`encoding_format` 候选值消歧）。
+- **Admin `disabled_tabs` 参数** (PR [#505](https://github.com/Oaklight/llm-rosetta/pull/505))：`setup_admin(disabled_tabs=["metrics"])` 在初始化时隐藏 admin UI 标签页。
+- **Shim `multimodal_tool_result` 能力声明** (PRs [#523](https://github.com/Oaklight/llm-rosetta/pull/523), [#524](https://github.com/Oaklight/llm-rosetta/pull/524))：`ProviderShim` 现在可以在 YAML 中声明 `multimodal_tool_result: true/false` 以覆盖转换器的类级别默认值。该标志通过 `ConversionContext.options` 在 `convert()` 和 `ConversionPipeline` 中传递。Chat 转换器将其透传至 `_convert_tool_result_with_packing`，使多模态内容在 provider 原生支持时得以保留。
+
+### 修复
+
+- **Google GenAI 多模态工具结果处理** (PR [#525](https://github.com/Oaklight/llm-rosetta/pull/525))：工具结果中的结构化内容块（`list[ContentPart]`）现在原样保留，不再通过 `json.dumps`/`str()` 扁平化。dict 内容使用 `json.dumps`（而非 `str()` 产生无效的 Python repr）。`_is_content_block_list` 守卫区分类型化内容块和普通数据列表。
+- **Chat 转换器多模态内容丢失** (PR [#524](https://github.com/Oaklight/llm-rosetta/pull/524))：`_do_request_to_provider` 未将 `supports_multimodal_tool_result` 传递给 `ir_messages_to_p`，导致 shim 覆盖在实际请求路径中无效。此外，`_convert_tool_result_with_packing` 在标志为 True 时仍然从工具消息中剥离图片——图片被打包但未重新注入，导致内容静默丢失。
+- **测试顺序不稳定** (PR [#523](https://github.com/Oaklight/llm-rosetta/pull/523))：`test_shims.py` fixture 现在保存/恢复全局 shim 注册表而非清空，防止跨模块测试失败。
 
 ### 变更
 
