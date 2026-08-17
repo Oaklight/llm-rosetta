@@ -458,6 +458,10 @@ class GoogleGenAIToolOps(BaseToolOps):
 
         if isinstance(content, list):
             result: Any = content
+        elif isinstance(content, dict):
+            import json
+
+            result = json.dumps(content)
         else:
             result = str(content)
 

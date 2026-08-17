@@ -536,6 +536,21 @@ class TestGoogleGenAIToolOps:
         assert isinstance(output, str)
         assert json.loads(output) == {"key": "value"}
 
+    def test_p_tool_result_to_ir_dict_json_serialized(self):
+        """Test dict content in function_response is json.dumps'd, not str()."""
+        import json
+
+        provider = {
+            "functionResponse": {
+                "name": "get_weather",
+                "id": "call_dict",
+                "response": {"output": {"temp": 72, "unit": "F"}},
+            }
+        }
+        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        assert isinstance(result["result"], str)
+        assert json.loads(result["result"]) == {"temp": 72, "unit": "F"}
+
     def test_p_tool_result_to_ir_preserves_list(self):
         """Test list content in function_response is preserved as-is in IR."""
         provider = {
