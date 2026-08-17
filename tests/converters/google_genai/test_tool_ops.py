@@ -571,6 +571,35 @@ class TestGoogleGenAIToolOps:
         assert result["result"][0]["type"] == "text"
         assert result["result"][1]["type"] == "image"
 
+    def test_ir_tool_result_to_p_plain_data_list_serialized(self):
+        """Plain data list (not content blocks) is json.dumps'd, not preserved."""
+        import json
+
+        ir_tr = ToolResultPart(
+            type="tool_result",
+            tool_call_id="call_plain",
+            result=[1, 2, 3],
+        )
+        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        output = result["functionResponse"]["response"]["output"]
+        assert isinstance(output, str)
+        assert json.loads(output) == [1, 2, 3]
+
+    def test_p_tool_result_to_ir_plain_data_list_serialized(self):
+        """Plain data list from provider is json.dumps'd, not preserved as list."""
+        import json
+
+        provider = {
+            "functionResponse": {
+                "name": "counter",
+                "id": "call_plain",
+                "response": {"output": [1, 2, 3]},
+            }
+        }
+        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        assert isinstance(result["result"], str)
+        assert json.loads(result["result"]) == [1, 2, 3]
+
     def test_multimodal_tool_result_round_trip(self):
         """Test multimodal tool result round-trip: IR → Google → IR."""
         ir_tr = ToolResultPart(
