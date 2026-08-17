@@ -65,6 +65,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
     def ir_messages_to_p(
         self,
         ir_messages: Sequence[IRInputItem],
+        *,
+        supports_multimodal_tool_result: bool = False,
         **kwargs: Any,
     ) -> tuple[list[Any], list[str]]:
         """IR Messages → OpenAI Chat messages.
@@ -75,13 +77,15 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         Args:
             ir_messages: IR message list (may contain ExtensionItems).
+            supports_multimodal_tool_result: When True, multimodal content
+                in tool results passes through natively without dual-encoding.
 
         Returns:
             Tuple of (converted messages list, warnings list).
         """
         messages: list[dict[str, Any]] = []
         warnings: list[str] = []
-        supports_mm = kwargs.get("supports_multimodal_tool_result", False)
+        supports_mm = supports_multimodal_tool_result
         multimodal_packs: dict[str, list[dict[str, Any]]] = {}
 
         for item in ir_messages:

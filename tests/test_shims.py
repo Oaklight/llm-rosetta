@@ -430,3 +430,76 @@ class TestMultimodalToolResultCapability:
         }
         pipeline.convert_request(body)
         assert pipeline.context.options.get("multimodal_tool_result") is True
+
+    def test_pipeline_e2e_multimodal_tool_result_preserved(self):
+        """End-to-end: shim + pipeline + multimodal tool result content preserved."""
+        import json
+
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        register_shim(
+            ProviderShim(
+                name="mm-chat", base="openai_chat", multimodal_tool_result=True
+            )
+        )
+
+        pipeline = ConversionPipeline(
+            source_provider="anthropic",
+            target_provider="openai_chat",
+            shim="mm-chat",
+        )
+        body = {
+            "model": "test",
+            "max_tokens": 100,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "take screenshot"}],
+                },
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "call_ss",
+                            "name": "screenshot",
+                            "input": {},
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "call_ss",
+                            "content": [
+                                {"type": "text", "text": "captured"},
+                                {
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/png",
+                                        "data": "iVBOR",
+                                    },
+                                },
+                            ],
+                        }
+                    ],
+                },
+            ],
+        }
+        result = pipeline.convert_request(body)
+
+        tool_msgs = [m for m in result["messages"] if m.get("role") == "tool"]
+        assert len(tool_msgs) == 1
+        content = json.loads(tool_msgs[0]["content"])
+        assert isinstance(content, list)
+        assert len(content) == 2
+        types = [c["type"] for c in content]
+        assert "text" in types
+        assert "image" in types
+
+        # No synthetic user message injected
+        user_msgs = [m for m in result["messages"] if m.get("role") == "user"]
+        assert len(user_msgs) == 1
