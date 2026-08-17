@@ -22,7 +22,16 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Converter instance caching** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): `get_converter_for_provider()` caches instances in a module-level dict. Eliminates per-request converter allocation.
 - **Fidelity checker** (`fidelity.py`, PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): compare original and round-tripped bodies to detect IR conversion loss. Two modes: `"critical"` (per-format field check, ~0.01ms) and `"full"` (recursive leaf-level diff). Wired into pipeline passthrough path via `fidelity_mode` parameter for background monitoring.
 - **`StreamProcessorProtocol`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): shared `Protocol` for `StreamProcessor` and `PassthroughStreamProcessor` with terminal chunk detection.
-- **Rerank source format auto-detection** — detect Voyage format from `top_k` in request body; `/v2/rerank` implies Cohere.
+- **Rerank source format auto-detection** (PR [#522](https://github.com/Oaklight/llm-rosetta/pull/522)) — detect Voyage format from `top_k` in request body; `/v2/rerank` implies Cohere.
+- **Embedding source format auto-detection** (PR [#521](https://github.com/Oaklight/llm-rosetta/pull/521)) — detect embedding source format from request body fields (`input_type` → Cohere/Jina/Voyage; `encoding_format` candidates disambiguate).
+- **Admin `disabled_tabs` parameter** (PR [#505](https://github.com/Oaklight/llm-rosetta/pull/505)): `setup_admin(disabled_tabs=["metrics"])` hides admin UI tabs at initialization time.
+- **Shim `multimodal_tool_result` capability** (PRs [#523](https://github.com/Oaklight/llm-rosetta/pull/523), [#524](https://github.com/Oaklight/llm-rosetta/pull/524)): `ProviderShim` can now declare `multimodal_tool_result: true/false` in YAML to override the converter's class-level default. The flag is wired through `ConversionContext.options` in both `convert()` and `ConversionPipeline`. Chat converter threads it to `_convert_tool_result_with_packing` so multimodal content is preserved natively when the provider supports it.
+
+### Fixed
+
+- **Google GenAI multimodal tool result handling** (PR [#525](https://github.com/Oaklight/llm-rosetta/pull/525)): structured content blocks (`list[ContentPart]`) in tool results are now preserved natively instead of being flattened via `json.dumps`/`str()`. Dict content uses `json.dumps` (not `str()` which produced invalid Python repr). A `_is_content_block_list` guard distinguishes typed content blocks from plain data lists.
+- **Chat converter multimodal content loss** (PR [#524](https://github.com/Oaklight/llm-rosetta/pull/524)): `_do_request_to_provider` was not passing `supports_multimodal_tool_result` to `ir_messages_to_p`, so shim overrides had no effect on the real request path. Additionally, `_convert_tool_result_with_packing` always stripped images from tool messages even when the flag was True — images were packed but never injected back, causing silent content loss.
+- **Test ordering flakiness** (PR [#523](https://github.com/Oaklight/llm-rosetta/pull/523)): `test_shims.py` fixture now saves/restores the global shim registry instead of clearing it, preventing cross-module test failures.
 
 ### Changed
 
