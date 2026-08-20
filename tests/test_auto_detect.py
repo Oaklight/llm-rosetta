@@ -770,24 +770,34 @@ class TestDualShimPipeline:
             unregister_shim("__test_pass_src__")
             unregister_shim("__test_pass_tgt__")
 
-    def test_shim_backward_compat_keyword(self):
-        """Legacy shim= keyword still works with deprecation warning."""
+    def test_shim_none_no_deprecation(self):
+        """shim=None should not trigger a deprecation warning."""
         import warnings
 
         from llm_rosetta.pipeline import ConversionPipeline
 
-        with warnings.catch_warnings(record=True):
+        with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
             pipeline = ConversionPipeline("openai_chat", "anthropic", shim=None)
-            # shim=None should not trigger deprecation (it's the default)
-            # Actually shim=None IS not None check fails... let me test with a value
-        # Verify the pipeline works
+            assert not any(issubclass(x.category, DeprecationWarning) for x in w)
+
         body = {
             "model": "gpt-4",
             "messages": [{"role": "user", "content": "hi"}],
         }
         result = pipeline.convert_request(body)
         assert "messages" in result
+
+    def test_shim_keyword_emits_deprecation(self):
+        """Legacy shim= with a non-None value emits DeprecationWarning."""
+        import warnings
+
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            ConversionPipeline("openai_chat", "anthropic", shim="nonexistent")
+            assert any(issubclass(x.category, DeprecationWarning) for x in w)
 
     def test_shim_and_target_shim_raises(self):
         """Passing both shim= and target_shim= raises ValueError."""

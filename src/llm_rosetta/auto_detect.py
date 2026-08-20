@@ -255,6 +255,7 @@ def convert(
         target_shim=get_shim(str(target_provider)),
         upstream_model=model,
         force_conversion=force_conversion,
+        # Library callers expect Google SDK format; gateway uses "rest"
         google_output_format="sdk",
     )
     return pipeline.convert_request(source_body)
@@ -304,7 +305,9 @@ def convert_response(
         target_shim=get_shim(tgt),
         upstream_model=model,
         force_conversion=force_conversion,
+        # Library callers expect Google SDK format; gateway uses "rest"
         google_output_format="sdk",
     )
+    # Replay request to populate pipeline context (tool state, metadata)
     pipeline.convert_request(request_body)
     return pipeline.convert_response(response_body)
