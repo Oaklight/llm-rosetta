@@ -11,6 +11,7 @@ IR stream event type definitions for supporting SSE chunk-level real-time conver
 - ContentBlockEndEvent: 内容块结束事件
 - TextDeltaEvent: 文本增量事件
 - ReasoningDeltaEvent: 推理/思考内容增量事件
+- RefusalDeltaEvent: 拒绝内容增量事件
 - ToolCallStartEvent: 工具调用开始事件
 - ToolCallDeltaEvent: 工具调用增量事件
 - FinishEvent: 完成事件
@@ -23,6 +24,7 @@ Contains the following event types:
 - ContentBlockEndEvent: Content block end event
 - TextDeltaEvent: Text delta event
 - ReasoningDeltaEvent: Reasoning/thinking content delta event
+- RefusalDeltaEvent: Refusal content delta event
 - ToolCallStartEvent: Tool call start event
 - ToolCallDeltaEvent: Tool call delta event
 - FinishEvent: Finish event
@@ -122,6 +124,18 @@ class ReasoningDeltaEvent(TypedDict):
     choice_index: NotRequired[int]
 
 
+class RefusalDeltaEvent(TypedDict):
+    """Refusal content delta event.
+
+    Emitted when a new refusal text fragment is received from the model.
+    """
+
+    type: Required[Literal["refusal_delta"]]
+    refusal: Required[str]
+    block_index: NotRequired[int]
+    choice_index: NotRequired[int]
+
+
 class ToolCallStartEvent(TypedDict):
     """Tool call start event.
 
@@ -183,6 +197,7 @@ IRStreamEvent = Union[
     ContentBlockEndEvent,
     TextDeltaEvent,
     ReasoningDeltaEvent,
+    RefusalDeltaEvent,
     ToolCallStartEvent,
     ToolCallDeltaEvent,
     FinishEvent,
@@ -201,6 +216,7 @@ __all__ = [
     "ContentBlockEndEvent",
     "TextDeltaEvent",
     "ReasoningDeltaEvent",
+    "RefusalDeltaEvent",
     "ToolCallStartEvent",
     "ToolCallDeltaEvent",
     "FinishEvent",

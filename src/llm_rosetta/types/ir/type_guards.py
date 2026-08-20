@@ -29,6 +29,7 @@ from .stream import (
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    RefusalDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
     TextDeltaEvent,
@@ -138,6 +139,13 @@ def is_reasoning_delta_event(
     return isinstance(event, dict) and event.get("type") == "reasoning_delta"
 
 
+def is_refusal_delta_event(
+    event: IRStreamEvent,
+) -> TypeGuard[RefusalDeltaEvent]:
+    """Check if a stream event is a RefusalDeltaEvent."""
+    return isinstance(event, dict) and event.get("type") == "refusal_delta"
+
+
 def is_tool_call_start_event(
     event: IRStreamEvent,
 ) -> TypeGuard[ToolCallStartEvent]:
@@ -228,6 +236,7 @@ _TYPE_STRING_MAP: dict[type, str] = {
     ContentBlockEndEvent: "content_block_end",
     TextDeltaEvent: "text_delta",
     ReasoningDeltaEvent: "reasoning_delta",
+    RefusalDeltaEvent: "refusal_delta",
     ToolCallStartEvent: "tool_call_start",
     ToolCallDeltaEvent: "tool_call_delta",
     FinishEvent: "finish",
@@ -301,6 +310,7 @@ __all__ = [
     "is_content_block_end_event",
     "is_text_delta_event",
     "is_reasoning_delta_event",
+    "is_refusal_delta_event",
     "is_tool_call_start_event",
     "is_tool_call_delta_event",
     "is_finish_event",
