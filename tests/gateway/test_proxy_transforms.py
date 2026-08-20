@@ -70,23 +70,23 @@ def shim_with_transforms():
 class TestPipelineTransformResolution:
     def test_none_shim(self):
         p = ConversionPipeline("openai_chat", "openai_chat", None)
-        assert p._pre_ir_transforms == ()
-        assert p._post_ir_transforms == ()
+        assert p._target_pre_ir_transforms == ()
+        assert p._target_post_ir_transforms == ()
 
     def test_unknown_shim(self):
         p = ConversionPipeline("openai_chat", "openai_chat", "nonexistent-provider")
-        assert p._pre_ir_transforms == ()
-        assert p._post_ir_transforms == ()
+        assert p._target_pre_ir_transforms == ()
+        assert p._target_post_ir_transforms == ()
 
     def test_volcengine_shim(self, volcengine_shim):
         p = ConversionPipeline("openai_chat", "openai_chat", "volcengine--openai_chat")
-        assert p._post_ir_transforms == volcengine_shim.post_ir_transforms
-        assert p._pre_ir_transforms == ()
+        assert p._target_post_ir_transforms == volcengine_shim.post_ir_transforms
+        assert p._target_pre_ir_transforms == ()
 
     def test_shim_with_both_transforms(self, shim_with_transforms):
         p = ConversionPipeline("openai_chat", "openai_chat", "custom_provider")
-        assert p._pre_ir_transforms == shim_with_transforms.pre_ir_transforms
-        assert p._post_ir_transforms == shim_with_transforms.post_ir_transforms
+        assert p._target_pre_ir_transforms == shim_with_transforms.pre_ir_transforms
+        assert p._target_post_ir_transforms == shim_with_transforms.post_ir_transforms
 
 
 # ---------------------------------------------------------------------------

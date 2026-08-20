@@ -312,7 +312,7 @@ async def handle_non_streaming(
     pipeline = ConversionPipeline(
         route.source_provider,
         route.target_provider,
-        route.shim_name,
+        target_shim=route.shim_name,
         upstream_model=model,
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
@@ -633,7 +633,7 @@ async def handle_streaming(
     pipeline = ConversionPipeline(
         route.source_provider,
         route.target_provider,
-        route.shim_name,
+        target_shim=route.shim_name,
         upstream_model=model,
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
