@@ -6,7 +6,7 @@ This module provides two layers of API:
 full conversion lifecycle (Phase 1→2→4).  Use this when you need
 request conversion, response conversion, and/or streaming:
 
-    pipeline = ConversionPipeline("openai_chat", "anthropic", shim="argo--anthropic")
+    pipeline = ConversionPipeline("openai_chat", "anthropic", target_shim="argo--anthropic")
     target_body = pipeline.convert_request(body)
     # ... transport sends target_body, receives upstream_response ...
     source_response = pipeline.convert_response(upstream_response)
@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import time
+import warnings
 from collections.abc import Callable
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -212,8 +213,10 @@ class ConversionPipeline:
         self,
         source_provider: str,
         target_provider: str,
-        shim: ProviderShim | str | None = None,
+        target_shim: ProviderShim | str | None = None,
         *,
+        source_shim: ProviderShim | str | None = None,
+        shim: ProviderShim | str | None = None,
         upstream_model: str | None = None,
         model_capabilities: list[str] | None = None,
         reasoning_config_override: dict[str, Any] | None = None,
@@ -221,17 +224,35 @@ class ConversionPipeline:
         hoist_system_messages: bool = True,
         force_conversion: bool = True,
         fidelity_mode: Literal["critical", "full"] | None = None,
+        metadata_mode: str = "preserve",
+        google_output_format: str = "rest",
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
+        # Backward compat: accept legacy ``shim=`` as alias for target_shim
+        if shim is not None:
+            if target_shim is not None:
+                raise ValueError(
+                    "Cannot pass both 'shim' and 'target_shim'. "
+                    "Use 'target_shim' (shim is deprecated)."
+                )
+            warnings.warn(
+                "ConversionPipeline(shim=...) is deprecated, use target_shim instead",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            target_shim = shim
+
         self._source_provider = source_provider
         self._target_provider = target_provider
-        self._shim = shim
+        self._target_shim = target_shim
         self._upstream_model = upstream_model
         self._model_capabilities = model_capabilities
         self._reasoning_config_override = reasoning_config_override
         self._supports_custom_tools = supports_custom_tools
         self._hoist_system_messages = hoist_system_messages
+        self._metadata_mode = metadata_mode
+        self._google_output_format = google_output_format
 
         self._passthrough = source_provider == target_provider and not force_conversion
         self._fidelity: Any = None
@@ -245,26 +266,42 @@ class ConversionPipeline:
         self._source_converter = get_converter_for_provider(source_provider)
         self._target_converter = get_converter_for_provider(target_provider)
 
-        # Resolve body-level transforms from shim
-        resolved = resolve_shim(shim)
-        if resolved is not None:
-            self._pre_ir_transforms = resolved.pre_ir_transforms
-            self._post_ir_transforms = resolved.post_ir_transforms
+        # Resolve body-level transforms from source shim
+        resolved_source = resolve_shim(source_shim)
+        if resolved_source is not None:
+            self._source_pre_ir_transforms = resolved_source.pre_ir_transforms
+            self._source_post_ir_transforms = resolved_source.post_ir_transforms
         else:
-            self._pre_ir_transforms = _EMPTY_TRANSFORMS
-            self._post_ir_transforms = _EMPTY_TRANSFORMS
+            self._source_pre_ir_transforms = _EMPTY_TRANSFORMS
+            self._source_post_ir_transforms = _EMPTY_TRANSFORMS
+
+        # Resolve body-level transforms from target shim
+        resolved_target = resolve_shim(target_shim)
+        if resolved_target is not None:
+            self._target_pre_ir_transforms = resolved_target.pre_ir_transforms
+            self._target_post_ir_transforms = resolved_target.post_ir_transforms
+        else:
+            self._target_pre_ir_transforms = _EMPTY_TRANSFORMS
+            self._target_post_ir_transforms = _EMPTY_TRANSFORMS
 
         # Resolve response_id_prefix for each converter from its shim.
-        # The target prefix comes from the upstream shim (falling back
-        # to the target provider name); the source prefix is resolved
-        # from the source provider name.
-        target_shim = resolved or resolve_shim(target_provider)
-        self._target_id_prefix = target_shim.response_id_prefix if target_shim else ""
-        self._multimodal_tool_result = (
-            target_shim.multimodal_tool_result if target_shim else None
+        resolved_target_for_prefix = resolved_target or resolve_shim(target_provider)
+        self._target_id_prefix = (
+            resolved_target_for_prefix.response_id_prefix
+            if resolved_target_for_prefix
+            else ""
         )
-        source_shim = resolve_shim(source_provider)
-        self._source_id_prefix = source_shim.response_id_prefix if source_shim else ""
+        self._multimodal_tool_result = (
+            resolved_target_for_prefix.multimodal_tool_result
+            if resolved_target_for_prefix
+            else None
+        )
+        resolved_source_for_prefix = resolved_source or resolve_shim(source_provider)
+        self._source_id_prefix = (
+            resolved_source_for_prefix.response_id_prefix
+            if resolved_source_for_prefix
+            else ""
+        )
 
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
@@ -402,8 +439,13 @@ class ConversionPipeline:
         if self._passthrough:
             t0 = time.perf_counter()
             result = body
-            if self._post_ir_transforms:
-                result = apply_transforms(self._post_ir_transforms, dict(result))
+            if self._source_pre_ir_transforms:
+                result = apply_transforms(self._source_pre_ir_transforms, dict(result))
+            if self._target_post_ir_transforms:
+                result = apply_transforms(
+                    self._target_post_ir_transforms,
+                    dict(result) if result is body else result,
+                )
             # No IR produced in passthrough mode
             self._ir_request = {}
             # Shadow round-trip for fidelity monitoring
@@ -413,9 +455,9 @@ class ConversionPipeline:
                 (time.perf_counter() - t0) * 1000, 2
             )
             return result
-        ctx.options["metadata_mode"] = "preserve"
+        ctx.options["metadata_mode"] = self._metadata_mode
         if self._target_provider == "google":
-            ctx.options["output_format"] = "rest"
+            ctx.options["output_format"] = self._google_output_format
 
         if self._multimodal_tool_result is not None:
             ctx.options["multimodal_tool_result"] = self._multimodal_tool_result
@@ -423,12 +465,16 @@ class ConversionPipeline:
         # Capability enforcement: reasoning (pre-IR)
         enforce_reasoning(
             ctx,
-            self._shim,
+            self._target_shim,
             model=self._upstream_model or body.get("model"),
             config_override=self._reasoning_config_override,
         )
 
         t_total = time.perf_counter()
+
+        # Phase 0: Source shim pre_ir_transforms (normalise source dialect)
+        if self._source_pre_ir_transforms:
+            body = apply_transforms(self._source_pre_ir_transforms, body)
 
         # Phase 1: Source → IR
         t0 = time.perf_counter()
@@ -458,14 +504,14 @@ class ConversionPipeline:
         # Capability enforcement: custom tools (post-IR)
         ir_request = enforce_custom_tools(
             ir_request,
-            shim=self._shim,
+            shim=self._target_shim,
             config_override=self._supports_custom_tools,
         )
 
         # Phase 2a: Shim-driven IR transforms
         ir_request = apply_ir_transforms(
             ir_request,
-            self._shim,
+            self._target_shim,
             upstream_model=self._upstream_model or body.get("model"),
             model_capabilities=self._model_capabilities,
             request_id=request_id,
@@ -486,10 +532,10 @@ class ConversionPipeline:
             ) from exc
         self._profile["ir_to_target_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
-        # Phase 2c: Body-level shim post_ir_transforms
+        # Phase 2c: Body-level target shim post_ir_transforms
         t0 = time.perf_counter()
-        if self._post_ir_transforms:
-            target_body = apply_transforms(self._post_ir_transforms, target_body)
+        if self._target_post_ir_transforms:
+            target_body = apply_transforms(self._target_post_ir_transforms, target_body)
         self._profile["body_transforms_ms"] = round(
             (time.perf_counter() - t0) * 1000, 2
         )
@@ -531,8 +577,13 @@ class ConversionPipeline:
         if self._passthrough:
             t0 = time.perf_counter()
             result = upstream_response
-            if self._pre_ir_transforms:
-                result = apply_transforms(self._pre_ir_transforms, dict(result))
+            if self._target_pre_ir_transforms:
+                result = apply_transforms(self._target_pre_ir_transforms, dict(result))
+            if self._source_post_ir_transforms:
+                result = apply_transforms(
+                    self._source_post_ir_transforms,
+                    dict(result) if result is upstream_response else result,
+                )
             if self._fidelity is not None:
                 self._run_fidelity_check(upstream_response, direction="response")
             self._profile["response_conversion_ms"] = round(
@@ -542,10 +593,10 @@ class ConversionPipeline:
 
         t_total = time.perf_counter()
 
-        # Phase 4a: Body-level shim pre_ir_transforms
+        # Phase 4a: Body-level target shim pre_ir_transforms
         response = upstream_response
-        if self._pre_ir_transforms:
-            response = apply_transforms(self._pre_ir_transforms, response)
+        if self._target_pre_ir_transforms:
+            response = apply_transforms(self._target_pre_ir_transforms, response)
 
         # Phase 4b: Target response → IR
         t0 = time.perf_counter()
@@ -588,6 +639,12 @@ class ConversionPipeline:
             (time.perf_counter() - t0) * 1000, 2
         )
 
+        # Phase 4d: Source shim post_ir_transforms (denormalise back)
+        if self._source_post_ir_transforms:
+            source_response = apply_transforms(
+                self._source_post_ir_transforms, source_response
+            )
+
         self._profile["response_conversion_ms"] = round(
             (time.perf_counter() - t_total) * 1000, 2
         )
@@ -622,15 +679,16 @@ class ConversionPipeline:
         # Same-format short-circuit: return a passthrough processor
         if self._passthrough:
             return PassthroughStreamProcessor(
-                pre_ir_transforms=self._pre_ir_transforms,
+                pre_ir_transforms=self._target_pre_ir_transforms,
+                post_ir_transforms=self._source_post_ir_transforms,
             )
 
         from_ctx = self._target_converter.create_stream_context()
         to_ctx = self._source_converter.create_stream_context()
 
         # Bridge preserve-mode metadata and shim-driven prefix
-        to_ctx.options["metadata_mode"] = "preserve"
-        from_ctx.options["metadata_mode"] = "preserve"
+        to_ctx.options["metadata_mode"] = self._metadata_mode
+        from_ctx.options["metadata_mode"] = self._metadata_mode
         from_ctx.options["response_id_prefix"] = self._target_id_prefix
         to_ctx.options["response_id_prefix"] = self._source_id_prefix
         if "_request_echo" in ctx.metadata:
@@ -648,7 +706,8 @@ class ConversionPipeline:
             source_converter=self._source_converter,
             from_ctx=from_ctx,
             to_ctx=to_ctx,
-            pre_ir_transforms=self._pre_ir_transforms,
+            pre_ir_transforms=self._target_pre_ir_transforms,
+            post_ir_transforms=self._source_post_ir_transforms,
             custom_tool_names=custom_names,
             on_ir_event=on_ir_event,
         )
@@ -671,8 +730,10 @@ class PassthroughStreamProcessor:
         self,
         *,
         pre_ir_transforms: tuple[Transform, ...] = (),
+        post_ir_transforms: tuple[Transform, ...] = (),
     ) -> None:
         self._pre_ir_transforms = pre_ir_transforms
+        self._post_ir_transforms = post_ir_transforms
         self._ctx = self._PassthroughCtx()
 
     @property
@@ -704,6 +765,8 @@ class PassthroughStreamProcessor:
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         if self._pre_ir_transforms:
             chunk = apply_transforms(self._pre_ir_transforms, chunk)
+        if self._post_ir_transforms:
+            chunk = apply_transforms(self._post_ir_transforms, chunk)
         # Detect terminal events so source_context.is_ended reflects reality
         ctype = chunk.get("type", "")
         choices = chunk.get("choices", [])
@@ -745,6 +808,7 @@ class StreamProcessor:
         from_ctx: Any,
         to_ctx: Any,
         pre_ir_transforms: tuple[Transform, ...] = (),
+        post_ir_transforms: tuple[Transform, ...] = (),
         custom_tool_names: frozenset[str] = frozenset(),
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
@@ -753,6 +817,7 @@ class StreamProcessor:
         self._from_ctx = from_ctx
         self._to_ctx = to_ctx
         self._pre_ir_transforms = pre_ir_transforms
+        self._post_ir_transforms = post_ir_transforms
         self._custom_tool_names = custom_tool_names
         self._custom_arg_buffers: dict[str, str] = {}
         self._on_ir_event = on_ir_event
@@ -815,6 +880,10 @@ class StreamProcessor:
                 result.extend(sc for sc in source_chunks if sc)
             elif source_chunks:
                 result.append(source_chunks)
+
+        # Apply source shim post_ir_transforms to outbound chunks
+        if self._post_ir_transforms and result:
+            result = [apply_transforms(self._post_ir_transforms, c) for c in result]
 
         return result
 

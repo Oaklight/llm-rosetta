@@ -182,6 +182,22 @@ def get_converter_for_provider(provider: str):
     raise ValueError(f"Unsupported provider: {provider}")
 
 
+def _detect_source(
+    source_body: dict[str, Any],
+    source_provider: ProviderType | str | None,
+) -> str:
+    """Detect or validate the source provider, raising on failure."""
+    if source_provider is not None:
+        return str(source_provider)
+    detected = detect_provider(source_body)
+    if detected is None:
+        raise ValueError(
+            "Unable to detect source provider. "
+            "Please specify source_provider explicitly."
+        )
+    return detected
+
+
 def convert(
     source_body: dict[str, Any],
     target_provider: ProviderType | str,
@@ -192,30 +208,26 @@ def convert(
 ) -> dict[str, Any]:
     """Auto-detect source provider and convert to target provider format.
 
-    This is a convenience function that auto-detects the source format and
-    performs conversion through the IR (Intermediate Representation).
-
-    When *source_provider* or *target_provider* is a registered shim name
-    (e.g. ``"deepseek"``), the shim's transforms are applied around the
-    base converter.
+    Delegates to :class:`~llm_rosetta.pipeline.ConversionPipeline`
+    internally, resolving source and target shims from the provider
+    names.  For response or streaming conversion, use
+    :func:`convert_response` or :class:`ConversionPipeline` directly.
 
     Args:
         source_body: Source provider request body.
         target_provider: Target provider type or registered shim name.
         source_provider: Optional source provider type or shim name.
             Auto-detected from *source_body* when not provided.
-        model: Optional model name (currently unused, reserved for future use).
+        model: Optional model name passed as ``upstream_model`` to the
+            pipeline (used for per-model shim overrides).
         force_conversion: When ``True``, always run the full conversion
-            pipeline (source -> IR -> target) even when source and target
-            providers are the same.  This normalises parameter names (e.g.
-            ``max_tokens`` -> ``max_completion_tokens`` for OpenAI Chat) and
-            ensures metadata is round-tripped consistently.
+            pipeline even when source and target providers are the same.
 
     Returns:
         Target provider format request body.
 
     Raises:
-        ValueError: If source provider cannot be detected or conversion fails.
+        ValueError: If source provider cannot be detected.
 
     Examples:
         >>> openai_body = {"messages": [{"role": "user", "content": "Hello"}]}
@@ -231,54 +243,68 @@ def convert(
         >>> body = {"messages": [...], "max_tokens": 256}
         >>> normalised = convert(body, "openai_chat", force_conversion=True)
     """
-    from .converters.base.context import ConversionContext
+    from .pipeline import ConversionPipeline
     from .shims import get_shim
-    from .shims.transforms import apply_transforms
 
-    # Detect source provider
-    if source_provider is None:
-        source_provider = detect_provider(source_body)
-        if source_provider is None:
-            raise ValueError(
-                "Unable to detect source provider. Please specify source_provider explicitly."
-            )
+    src = _detect_source(source_body, source_provider)
 
-    # Skip conversion when source == target (unless forced)
-    if source_provider == target_provider and not force_conversion:
-        return source_body
-
-    # --- Resolve shims and transforms ---
-    source_shim = get_shim(source_provider)
-    target_shim = get_shim(target_provider)
-
-    source_pre_t = source_shim.pre_ir_transforms if source_shim else ()
-    target_post_t = target_shim.post_ir_transforms if target_shim else ()
-
-    # --- Apply source pre_ir_transforms ---
-    body = apply_transforms(source_pre_t, source_body)
-
-    # --- Core conversion: source → IR → target ---
-    source_converter = get_converter_for_provider(source_provider)
-    target_converter = get_converter_for_provider(target_provider)
-
-    ctx = ConversionContext()
-    if target_shim is not None:
-        cap = target_shim.reasoning
-        # Model-level override (keyed by upstream/body model ID)
-        req_model = body.get("model", "")
-        if target_shim.model_reasoning and req_model in target_shim.model_reasoning:
-            cap = target_shim.model_reasoning[req_model]
-        if cap is not None:
-            ctx.options["reasoning_cap"] = cap
-        if target_shim.multimodal_tool_result is not None:
-            ctx.options["multimodal_tool_result"] = target_shim.multimodal_tool_result
-
-    ir_request = source_converter.request_from_provider(body, context=ctx)
-    target_body, _warnings = target_converter.request_to_provider(
-        ir_request, context=ctx
+    pipeline = ConversionPipeline(
+        src,
+        str(target_provider),
+        source_shim=get_shim(src),
+        target_shim=get_shim(str(target_provider)),
+        upstream_model=model,
+        force_conversion=force_conversion,
+        google_output_format="sdk",
     )
+    return pipeline.convert_request(source_body)
 
-    # --- Apply target post_ir_transforms ---
-    target_body = apply_transforms(target_post_t, target_body)
 
-    return target_body
+def convert_response(
+    response_body: dict[str, Any],
+    request_body: dict[str, Any],
+    source_provider: ProviderType | str,
+    target_provider: ProviderType | str,
+    *,
+    model: str | None = None,
+    force_conversion: bool = False,
+) -> dict[str, Any]:
+    """Convert a response body from target provider format back to source.
+
+    Creates a :class:`~llm_rosetta.pipeline.ConversionPipeline`,
+    replays the request conversion to establish context, then converts
+    the response.
+
+    Args:
+        response_body: Target-format response body from upstream.
+        request_body: The original source-format request body (needed
+            to establish conversion context, e.g. custom-tool state).
+        source_provider: The client/source provider type or shim name.
+        target_provider: The upstream/target provider type or shim name.
+        model: Optional model name for per-model shim overrides.
+        force_conversion: When ``True``, run full conversion even for
+            same-provider passthrough.
+
+    Returns:
+        Source-format response body.
+
+    Raises:
+        ValueError: If conversion fails.
+    """
+    from .pipeline import ConversionPipeline
+    from .shims import get_shim
+
+    src = str(source_provider)
+    tgt = str(target_provider)
+
+    pipeline = ConversionPipeline(
+        src,
+        tgt,
+        source_shim=get_shim(src),
+        target_shim=get_shim(tgt),
+        upstream_model=model,
+        force_conversion=force_conversion,
+        google_output_format="sdk",
+    )
+    pipeline.convert_request(request_body)
+    return pipeline.convert_response(response_body)

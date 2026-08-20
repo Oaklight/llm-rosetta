@@ -8,9 +8,11 @@ A library for converting message formats between different LLM providers
 from .auto_detect import (
     ProviderType,
     convert,
+    convert_response,
     detect_provider,
     get_converter_for_provider,
 )
+from .pipeline import ConversionError, ConversionPipeline
 from .converters import (
     AnthropicConverter,
     BaseConverter,
@@ -54,7 +56,11 @@ __all__ = [
     "detect_provider",
     "get_converter_for_provider",
     "convert",
+    "convert_response",
     "ProviderType",
+    # Conversion pipeline
+    "ConversionPipeline",
+    "ConversionError",
     # Provider shim layer
     "ProviderShim",
     "register_shim",
