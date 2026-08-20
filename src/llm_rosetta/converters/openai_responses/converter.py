@@ -29,6 +29,7 @@ from ...types.ir.stream import (
     FinishEvent,
     IRStreamEvent,
     ReasoningDeltaEvent,
+    RefusalDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
     TextDeltaEvent,
@@ -775,6 +776,19 @@ class OpenAIResponsesConverter(BaseConverter):
             )
         )
 
+    def _handle_p_refusal_delta_to_ir(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        events.append(
+            RefusalDeltaEvent(
+                type="refusal_delta",
+                refusal=chunk.get("delta", ""),
+            )
+        )
+
     def _handle_p_output_item_added_to_ir(
         self,
         chunk: dict[str, Any],
@@ -837,6 +851,8 @@ class OpenAIResponsesConverter(BaseConverter):
                 block_type = "text"
             elif part_type == "summary_text":
                 block_type = "thinking"
+            elif part_type == "refusal":
+                block_type = "refusal"
             block_index = context.next_block_index()
             events.append(
                 ContentBlockStartEvent(
@@ -1040,6 +1056,12 @@ class OpenAIResponsesConverter(BaseConverter):
         ResponsesEventType.CUSTOM_TOOL_CALL_INPUT_DONE: "_handle_p_custom_tool_call_input_done_to_ir",
         ResponsesEventType.RESPONSE_COMPLETED: "_handle_p_response_completed_to_ir",
         ResponsesEventType.RESPONSE_FAILED: "_handle_p_response_failed_to_ir",
+        ResponsesEventType.REFUSAL_DELTA: "_handle_p_refusal_delta_to_ir",
+    }
+
+    _IR_TO_P_DISPATCH: dict[str, str] = {
+        **BaseConverter._IR_TO_P_DISPATCH,
+        "refusal_delta": "_handle_ir_refusal_delta_to_p",
     }
 
     def stream_response_to_provider(
@@ -1177,14 +1199,14 @@ class OpenAIResponsesConverter(BaseConverter):
         context: OpenAIResponsesStreamContext | None,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         block_type = event["block_type"]
-        if block_type == "text":
-            # With context: emit output_item.added + content_part.added
-            # and mark the item as emitted so the first TextDelta doesn't
-            # re-emit them.
+        if context is not None:
+            context.current_block_type = block_type
+        if block_type in ("text", "refusal"):
+            content_part_type = "refusal" if block_type == "refusal" else "output_text"
             if context is not None and not context.output_item_emitted:
-                return build_message_preamble_events(context)
-            # Fallback: just emit content_part.added (e.g. no context, or
-            # output item already emitted by a prior ContentBlockStartEvent)
+                return build_message_preamble_events(context, content_part_type)
+            from .utils import _build_content_part
+
             item_id = context.item_id if context is not None else ""
             msg_idx = context._message_output_index if context is not None else 0
             return {
@@ -1192,12 +1214,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 "item_id": item_id,
                 "output_index": msg_idx,
                 "content_index": 0,
-                "part": {
-                    "type": "output_text",
-                    "text": "",
-                    "annotations": [],
-                    "logprobs": [],
-                },
+                "part": _build_content_part(content_part_type),
             }
         # Other block types are no-ops for now
         return {}
@@ -1209,11 +1226,31 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> dict[str, Any] | list[dict[str, Any]]:
         if context is not None:
             context.content_part_done_emitted = True
-            accumulated = context.accumulated_text
-            # Emit output_text.done before content_part.done (matches
-            # OpenAI's event ordering)
             item_id = context.item_id
             msg_idx = context._message_output_index
+            is_refusal = context.current_block_type == "refusal"
+            if is_refusal:
+                accumulated = context.accumulated_refusal
+                return [
+                    {
+                        "type": ResponsesEventType.REFUSAL_DONE,
+                        "item_id": item_id,
+                        "output_index": msg_idx,
+                        "content_index": 0,
+                        "refusal": accumulated,
+                    },
+                    {
+                        "type": ResponsesEventType.CONTENT_PART_DONE,
+                        "item_id": item_id,
+                        "output_index": msg_idx,
+                        "content_index": 0,
+                        "part": {
+                            "type": "refusal",
+                            "refusal": accumulated,
+                        },
+                    },
+                ]
+            accumulated = context.accumulated_text
             return [
                 {
                     "type": ResponsesEventType.OUTPUT_TEXT_DONE,
@@ -1269,6 +1306,34 @@ class OpenAIResponsesConverter(BaseConverter):
             "content_index": 0,
             "delta": text,
             "logprobs": [],
+        }
+
+        if preamble:
+            return preamble + [delta_event]
+        return delta_event
+
+    def _handle_ir_refusal_delta_to_p(
+        self,
+        event: RefusalDeltaEvent,
+        context: OpenAIResponsesStreamContext | None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        refusal = event["refusal"]
+
+        preamble: list[dict[str, Any]] = []
+        if context is not None and not context.output_item_emitted:
+            preamble = build_message_preamble_events(context, "refusal")
+
+        if context is not None:
+            context.accumulated_refusal += refusal
+
+        msg_idx = context._message_output_index if context is not None else 0
+        item_id = context.item_id if context is not None else ""
+        delta_event: dict[str, Any] = {
+            "type": ResponsesEventType.REFUSAL_DELTA,
+            "item_id": item_id,
+            "output_index": msg_idx,
+            "content_index": 0,
+            "delta": refusal,
         }
 
         if preamble:

@@ -32,6 +32,7 @@ class OpenAIResponsesStreamContext(StreamContext):
     output_item_emitted: bool = False
     item_id: str = ""
     accumulated_text: str = ""
+    accumulated_refusal: str = ""
     content_part_done_emitted: bool = False
     _sequence_number: int = 0
 

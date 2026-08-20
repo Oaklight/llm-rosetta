@@ -31,6 +31,8 @@ class ResponsesEventType:
     FUNCTION_CALL_ARGS_DONE = "response.function_call_arguments.done"
     CUSTOM_TOOL_CALL_INPUT_DELTA = "response.custom_tool_call_input.delta"
     CUSTOM_TOOL_CALL_INPUT_DONE = "response.custom_tool_call_input.done"
+    REFUSAL_DELTA = "response.refusal.delta"
+    REFUSAL_DONE = "response.refusal.done"
 
 
 # --- Status <-> Reason mappings ---

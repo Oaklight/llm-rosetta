@@ -51,8 +51,21 @@ def _build_message_item_skeleton(
     return item
 
 
+def _build_content_part(content_part_type: str) -> dict[str, Any]:
+    """Build the ``part`` dict for a ``content_part.added`` event."""
+    if content_part_type == "refusal":
+        return {"type": "refusal", "refusal": ""}
+    return {
+        "type": "output_text",
+        "text": "",
+        "annotations": [],
+        "logprobs": [],
+    }
+
+
 def build_message_preamble_events(
     context: OpenAIResponsesStreamContext,
+    content_part_type: str = "output_text",
 ) -> list[dict[str, Any]]:
     """Build output_item.added + content_part.added for a new message item.
 
@@ -62,6 +75,8 @@ def build_message_preamble_events(
 
     Args:
         context: Responses stream context.
+        content_part_type: The content part type for the added event
+            (``"output_text"`` or ``"refusal"``).
 
     Returns:
         Two-element list of SSE event dicts.
@@ -82,11 +97,6 @@ def build_message_preamble_events(
             "item_id": item_id,
             "output_index": output_index,
             "content_index": 0,
-            "part": {
-                "type": "output_text",
-                "text": "",
-                "annotations": [],
-                "logprobs": [],
-            },
+            "part": _build_content_part(content_part_type),
         },
     ]

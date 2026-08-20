@@ -14,6 +14,7 @@ from llm_rosetta.types.ir.stream import (
     ContentBlockStartEvent,
     FinishEvent,
     ReasoningDeltaEvent,
+    RefusalDeltaEvent,
     StreamEndEvent,
     StreamStartEvent,
     TextDeltaEvent,
@@ -2403,3 +2404,170 @@ class TestStreamingMessagePhase:
 
         assert len(added) == 1
         assert added[0]["item"].get("phase") == "commentary"
+
+
+class TestStreamingRefusal:
+    """Tests for streaming refusal events (response.refusal.delta / .done)."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    # --- p→ir ---
+
+    def test_refusal_delta_from_provider(self):
+        """response.refusal.delta produces RefusalDeltaEvent."""
+        event = {
+            "type": "response.refusal.delta",
+            "delta": "I cannot help",
+            "output_index": 0,
+            "content_index": 0,
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "refusal_delta"
+        assert events[0]["refusal"] == "I cannot help"
+
+    def test_refusal_delta_empty_string(self):
+        """Empty refusal delta still produces an event."""
+        event = {"type": "response.refusal.delta", "delta": ""}
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "refusal_delta"
+        assert events[0]["refusal"] == ""
+
+    def test_content_part_added_refusal(self):
+        """response.content_part.added with refusal type maps to refusal block type."""
+        ctx = OpenAIResponsesStreamContext()
+        event = {
+            "type": "response.content_part.added",
+            "part": {"type": "refusal", "refusal": ""},
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "content_block_start"
+        assert events[0]["block_type"] == "refusal"
+
+    # --- ir→p (without context) ---
+
+    def test_refusal_delta_to_provider(self):
+        """RefusalDeltaEvent → response.refusal.delta."""
+        event = cast(
+            RefusalDeltaEvent, {"type": "refusal_delta", "refusal": "I cannot"}
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "response.refusal.delta"
+        assert result["delta"] == "I cannot"
+
+    def test_content_block_start_refusal_to_provider(self):
+        """ContentBlockStartEvent (refusal) → response.content_part.added with refusal part."""
+        event = cast(
+            ContentBlockStartEvent,
+            {"type": "content_block_start", "block_index": 0, "block_type": "refusal"},
+        )
+        result = cast(dict[str, Any], self.converter.stream_response_to_provider(event))
+        assert result["type"] == "response.content_part.added"
+        assert result["part"]["type"] == "refusal"
+        assert result["part"]["refusal"] == ""
+
+    # --- ir→p (with context) ---
+
+    def test_refusal_delta_with_context_emits_preamble(self):
+        """First RefusalDeltaEvent with context emits preamble + delta."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_test"
+        event = cast(RefusalDeltaEvent, {"type": "refusal_delta", "refusal": "Sorry"})
+        result = self.converter.stream_response_to_provider(event, context=ctx)
+        assert isinstance(result, list)
+        assert len(result) == 3  # output_item.added + content_part.added + delta
+        assert result[0]["type"] == "response.output_item.added"
+        assert result[1]["type"] == "response.content_part.added"
+        assert result[1]["part"]["type"] == "refusal"
+        assert result[2]["type"] == "response.refusal.delta"
+        assert result[2]["delta"] == "Sorry"
+
+    def test_refusal_delta_accumulates_in_context(self):
+        """Refusal deltas accumulate in context.accumulated_refusal."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_test"
+        for text in ["I ", "cannot ", "help"]:
+            event = cast(RefusalDeltaEvent, {"type": "refusal_delta", "refusal": text})
+            self.converter.stream_response_to_provider(event, context=ctx)
+        assert ctx.accumulated_refusal == "I cannot help"
+
+    def test_content_block_end_refusal_with_context(self):
+        """ContentBlockEndEvent after refusal emits refusal.done + content_part.done."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_test"
+        ctx.current_block_type = "refusal"
+        ctx.accumulated_refusal = "I cannot help with that."
+        ctx.output_item_emitted = True
+        ctx._message_output_index = 0
+        ctx.item_id = "msg_resp_test"
+        end_event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 0},
+        )
+        result = self.converter.stream_response_to_provider(end_event, context=ctx)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0]["type"] == "response.refusal.done"
+        assert result[0]["refusal"] == "I cannot help with that."
+        assert result[1]["type"] == "response.content_part.done"
+        assert result[1]["part"]["type"] == "refusal"
+        assert result[1]["part"]["refusal"] == "I cannot help with that."
+
+    def test_content_block_end_text_unchanged(self):
+        """ContentBlockEndEvent for text blocks still emits output_text.done."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.response_id = "resp_test"
+        ctx.current_block_type = "text"
+        ctx.accumulated_text = "Hello world"
+        ctx.output_item_emitted = True
+        ctx._message_output_index = 0
+        ctx.item_id = "msg_resp_test"
+        end_event = cast(
+            ContentBlockEndEvent,
+            {"type": "content_block_end", "block_index": 0},
+        )
+        result = self.converter.stream_response_to_provider(end_event, context=ctx)
+        assert isinstance(result, list)
+        assert result[0]["type"] == "response.output_text.done"
+        assert result[0]["text"] == "Hello world"
+
+    # --- Round-trip ---
+
+    def test_refusal_delta_round_trip(self):
+        """Refusal delta p→ir→p preserves content."""
+        original = {
+            "type": "response.refusal.delta",
+            "delta": "I'm sorry, I can't do that.",
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(original))
+        assert len(events) == 1
+        assert events[0]["type"] == "refusal_delta"
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["type"] == "response.refusal.delta"
+        assert restored["delta"] == "I'm sorry, I can't do that."
+
+    def test_content_block_start_refusal_round_trip(self):
+        """Refusal content_block_start p→ir→p preserves block type."""
+        ctx = OpenAIResponsesStreamContext()
+        original = {
+            "type": "response.content_part.added",
+            "part": {"type": "refusal", "refusal": ""},
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(original, context=ctx),
+        )
+        assert events[0]["block_type"] == "refusal"
+        restored = cast(
+            dict[str, Any], self.converter.stream_response_to_provider(events[0])
+        )
+        assert restored["type"] == "response.content_part.added"
+        assert restored["part"]["type"] == "refusal"
