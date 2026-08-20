@@ -200,10 +200,26 @@ class ConversionPipeline:
     For streaming, call :meth:`create_stream_processor` after
     :meth:`convert_request` to get a stateful chunk converter.
 
+    Transform ordering (diamond flow)::
+
+        Request path:
+          source_shim.pre_ir → Source→IR → [enforce/ir_transforms] →
+          IR→Target → target_shim.post_ir
+
+        Response path (mirror):
+          target_shim.pre_ir → Target→IR → IR→Source →
+          source_shim.post_ir
+
+    In passthrough mode (source == target, force_conversion=False),
+    the IR round-trip is skipped but shim body-level transforms still
+    apply: source pre_ir → target post_ir (request) and target pre_ir
+    → source post_ir (response).
+
     Args:
         source_provider: Client API format (e.g. ``"openai_chat"``).
         target_provider: Upstream API format (e.g. ``"anthropic"``).
-        shim: Provider shim instance, registered name, or ``None``.
+        target_shim: Provider shim for the upstream/target side.
+        source_shim: Provider shim for the client/source side.
         upstream_model: The upstream model ID (for shim pattern matching).
         model_capabilities: Model capability list (e.g. ``["text", "vision"]``).
         reasoning_config_override: External reasoning override (e.g. admin UI).
