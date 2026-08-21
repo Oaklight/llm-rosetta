@@ -16,6 +16,7 @@ Streaming produces a sequence of `IRStreamEvent` types:
 | `ContentBlockStartEvent` | A new content block begins |
 | `TextDeltaEvent` | Incremental text content |
 | `ReasoningDeltaEvent` | Incremental reasoning/thinking content |
+| `RefusalDeltaEvent` | Incremental refusal content |
 | `ToolCallStartEvent` | Tool call begins (name + ID) |
 | `ToolCallDeltaEvent` | Incremental tool call arguments |
 | `ContentBlockEndEvent` | Current content block ends |

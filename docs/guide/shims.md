@@ -290,6 +290,28 @@ If a shim does not declare a `reasoning` section, default behavior is used (effo
 
 For full details on the IR effort ladder and per-provider mapping tables, see [Reasoning / Thinking Parameters](reasoning.md).
 
+## Capability Flags
+
+Beyond reasoning, shims can declare provider-level capability flags that control converter behavior:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `supports_custom_tools` | `bool` | `False` | Whether the provider's API natively accepts `{type: "custom"}` tool definitions. When `False`, custom tools are downgraded to function wrappers with a synthesized JSON schema. |
+| `hoist_system_messages` | `bool` | `True` | Rewrite mid-conversation system/developer messages as user-role `[System: ...]` envelopes to preserve prompt cache prefix stability. |
+| `multimodal_tool_result` | `bool \| None` | `None` | Whether the provider supports multimodal content (images, files) in tool results natively. `None` defers to the converter's class-level default. `True` forces native pass-through; `False` forces dual-encoding (text fallback + synthetic user message). |
+
+Example in `provider.yaml`:
+
+```yaml
+name: my-provider
+base: openai_chat
+supports_custom_tools: true
+hoist_system_messages: true
+multimodal_tool_result: false
+```
+
+These flags are injected into `ConversionContext.options` at conversion time, so converters can query them without knowing which shim is active.
+
 ## Transforms
 
 Transforms are pure `dict → dict` functions that bridge the gap between a provider's actual API dialect and the "ideal" standard that the corresponding base converter expects. They handle field-level quirks (strip unsupported fields, rename parameters, inject defaults) — **not** semantic API-standard translation, which is the converter's job.

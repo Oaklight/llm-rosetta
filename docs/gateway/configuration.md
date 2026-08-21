@@ -324,6 +324,58 @@ Example `/health` response:
 
 The `status` field is `"ok"` when all providers are healthy, or `"degraded"` when one or more providers are experiencing errors.
 
+## Embedding Providers
+
+The gateway can proxy `/v1/embeddings` requests with cross-format IR conversion (OpenAI ↔ Cohere ↔ Jina ↔ Voyage). Configure embedding providers and models separately from chat providers:
+
+```jsonc
+{
+  "embedding_providers": {
+    "jina-embed": { "type": "jina", "api_key": "${JINA_API_KEY}", "base_url": "https://api.jina.ai" },
+    "voyage-embed": { "type": "voyage", "api_key": "${VOYAGE_API_KEY}", "base_url": "https://api.voyageai.com" }
+  },
+  "embedding_models": {
+    "jina-embeddings-v3": "jina-embed",
+    "voyage-3-large": "voyage-embed"
+  },
+  "default_embedding_format": "openai"  // Source format when auto-detect fails
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `embedding_providers` | `dict` | `{}` | Provider configs for embedding upstreams (same format as `providers`) |
+| `embedding_models` | `dict` | `{}` | Model → provider mapping for embedding requests |
+| `default_embedding_format` | `str` | `"openai"` | Source format fallback. Options: `openai`, `cohere`, `jina`, `voyage` |
+
+When `embedding_providers` is not configured, `/v1/embeddings` falls back to passthrough mode (forwarded to the chat provider without IR conversion).
+
+## Rerank Providers
+
+The gateway can proxy `/v1/rerank` and `/v2/rerank` requests with cross-format IR conversion (Jina ↔ Cohere ↔ Voyage):
+
+```jsonc
+{
+  "rerank_providers": {
+    "jina-rerank": { "type": "jina", "api_key": "${JINA_API_KEY}", "base_url": "https://api.jina.ai" },
+    "cohere-rerank": { "type": "cohere", "api_key": "${COHERE_API_KEY}", "base_url": "https://api.cohere.com" }
+  },
+  "rerank_models": {
+    "jina-reranker-v2-base-multilingual": "jina-rerank",
+    "rerank-v3.5": "cohere-rerank"
+  },
+  "default_rerank_format": "jina"  // Source format when auto-detect fails
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `rerank_providers` | `dict` | `{}` | Provider configs for rerank upstreams |
+| `rerank_models` | `dict` | `{}` | Model → provider mapping for rerank requests |
+| `default_rerank_format` | `str` | `"jina"` | Source format fallback. Options: `jina`, `cohere`, `voyage` |
+
+The `/v2/rerank` endpoint auto-detects Cohere source format from the URL path.
+
 ## Full Example
 
 ```jsonc

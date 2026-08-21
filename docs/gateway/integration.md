@@ -91,6 +91,7 @@ def setup_admin(
     config_io: ConfigIO | None = None,
     custom_head: str | None = None,
     branding: dict[str, Any] | None = None,
+    disabled_tabs: list[str] | None = None,
 ) -> None:
 ```
 
@@ -102,6 +103,7 @@ def setup_admin(
 | `config_io` | `ConfigIO | None` | Custom config adapter. Defaults to `JsoncConfigIO` when `None`. |
 | `custom_head` | `str | None` | HTML fragment injected before `</head>` in the admin page |
 | `branding` | `dict | None` | Dict to customize the admin panel identity |
+| `disabled_tabs` | `list[str] | None` | Tab IDs to hide from the admin UI (e.g. `["metrics"]`). `None` shows all tabs. |
 
 ### Full Example
 

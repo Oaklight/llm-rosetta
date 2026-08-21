@@ -8,19 +8,25 @@ This page outlines the current feature status and areas where community contribu
 
 ## Current Status
 
-LLM-Rosetta v0.6.8 supports bidirectional conversion between 5 API standards:
+LLM-Rosetta v0.9.0 supports bidirectional conversion across 3 API families:
 
-| Provider | Format | Streaming | Tool Calls | Embeddings |
-|----------|--------|:---------:|:----------:|:----------:|
-| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ | ✓ |
-| OpenAI Responses | `openai_responses` | ✓ | ✓ | — |
-| Open Responses | `open_responses` | ✓ | ✓ | — |
-| Anthropic Messages | `anthropic` | ✓ | ✓ | — |
-| Google GenAI | `google` | ✓ | ✓ | — |
+**Chat / Completions** (5 standards):
+
+| Provider | Format | Streaming | Tool Calls |
+|----------|--------|:---------:|:----------:|
+| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
+| OpenAI Responses | `openai_responses` | ✓ | ✓ |
+| Open Responses | `open_responses` | ✓ | ✓ |
+| Anthropic Messages | `anthropic` | ✓ | ✓ |
+| Google GenAI | `google` | ✓ | ✓ |
+
+**Embedding** (4 formats): OpenAI, Jina, Voyage, Cohere — with IR-based cross-format conversion.
+
+**Rerank** (3 formats): Jina, Cohere, Voyage — with IR-based cross-format conversion.
 
 The [Gateway](gateway/index.md) provides real-time HTTP proxying with a **zero-dependency runtime**, verified with [5 CLI tools and SDK test suites](gateway/validation.md). The gateway includes a built-in [Admin Panel](gateway/admin-panel.md) with a full [REST API](api/admin.md).
 
-The **provider shim layer** enables adding new providers via declarative YAML files — no converter code needed for OpenAI-compatible providers. 14 providers are supported out of the box.
+The **provider shim layer** enables adding new providers via declarative YAML files — no converter code needed for OpenAI-compatible providers. 16 providers are supported out of the box.
 
 See [API Standards](guide/api-standards.md) for details on each format.
 
@@ -89,9 +95,9 @@ Cross-provider mapping for server-side tool types (`web_search`, `code_execution
 
 #### Reasoning Field Normalization
 
-!!! tip "Status: Planned — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
+!!! success "Status: Done (v0.8.1) — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
 
-Normalize `reasoning_content` / thinking fields across OpenAI Chat-compatible providers (e.g. DeepSeek, Qwen) via shim transforms instead of per-provider converter code.
+Normalize `reasoning_content` / thinking fields across OpenAI Chat-compatible providers (e.g. DeepSeek, Qwen) via shim transforms instead of per-provider converter code. MiniMax `<think>` tag parsing, OpenRouter `reasoning` → `reasoning_content` rename, and Volcengine `encrypted_content` preservation are all handled via shim transforms.
 
 ### Shim System
 
@@ -103,11 +109,11 @@ Restore `ModelShim` to enable per-model transform rules — different models fro
 
 ### Gateway
 
-#### Upstream Timeout & Circuit Breaker
+#### Upstream Timeout
 
-!!! tip "Status: Planned — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
+!!! success "Status: Done (v0.8.2) — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
 
-Configurable per-provider timeouts and circuit breaker pattern to handle slow or failing upstreams gracefully.
+Per-provider and per-model timeout overrides with `UpstreamTimeoutError` (504) distinct from connection errors (502). Circuit breaker pattern remains open for future work.
 
 #### Rate Limiting Middleware
 
