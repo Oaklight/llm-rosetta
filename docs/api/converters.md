@@ -4,6 +4,8 @@ title: 转换器
 
 # 转换器 API
 
+## Chat / Completions 转换器
+
 ::: llm_rosetta.converters.base.converter.BaseConverter
 
 ::: llm_rosetta.converters.openai_chat.converter.OpenAIChatConverter
@@ -13,3 +15,25 @@ title: 转换器
 ::: llm_rosetta.converters.anthropic.converter.AnthropicConverter
 
 ::: llm_rosetta.converters.google_genai.converter.GoogleGenAIConverter
+
+## Embedding 转换器
+
+::: llm_rosetta.converters.base.embedding_converter.BaseEmbeddingConverter
+
+::: llm_rosetta.converters.embedding.openai.OpenAIEmbeddingConverter
+
+::: llm_rosetta.converters.embedding.jina.JinaEmbeddingConverter
+
+::: llm_rosetta.converters.embedding.voyage.VoyageEmbeddingConverter
+
+::: llm_rosetta.converters.embedding.cohere.CohereEmbeddingConverter
+
+## Rerank 转换器
+
+::: llm_rosetta.converters.base.rerank_converter.BaseRerankConverter
+
+::: llm_rosetta.converters.rerank.jina.JinaRerankConverter
+
+::: llm_rosetta.converters.rerank.cohere.CohereRerankConverter
+
+::: llm_rosetta.converters.rerank.voyage.VoyageRerankConverter

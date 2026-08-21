@@ -16,6 +16,7 @@ LLM-Rosetta 支持在提供商之间转换流式数据块。有状态的 `Stream
 | `ContentBlockStartEvent` | 新内容块开始 |
 | `TextDeltaEvent` | 增量文本内容 |
 | `ReasoningDeltaEvent` | 增量推理/思考内容 |
+| `RefusalDeltaEvent` | 增量拒绝内容 |
 | `ToolCallStartEvent` | 工具调用开始（名称 + ID） |
 | `ToolCallDeltaEvent` | 增量工具调用参数 |
 | `ContentBlockEndEvent` | 当前内容块结束 |

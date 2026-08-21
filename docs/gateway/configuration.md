@@ -324,6 +324,58 @@ API Key 也支持 `${ENV_VAR}` 替换：
 
 `status` 字段取值：所有服务方正常时为 `"ok"`，一个或多个服务方异常时为 `"degraded"`。
 
+## Embedding 提供商
+
+网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。Embedding 提供商和模型独立于 chat 提供商配置：
+
+```jsonc
+{
+  "embedding_providers": {
+    "jina-embed": { "type": "jina", "api_key": "${JINA_API_KEY}", "base_url": "https://api.jina.ai" },
+    "voyage-embed": { "type": "voyage", "api_key": "${VOYAGE_API_KEY}", "base_url": "https://api.voyageai.com" }
+  },
+  "embedding_models": {
+    "jina-embeddings-v3": "jina-embed",
+    "voyage-3-large": "voyage-embed"
+  },
+  "default_embedding_format": "openai"  // 自动检测失败时的源格式
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `embedding_providers` | `dict` | `{}` | Embedding 上游的提供商配置（格式同 `providers`） |
+| `embedding_models` | `dict` | `{}` | 模型 → 提供商映射 |
+| `default_embedding_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage` |
+
+未配置 `embedding_providers` 时，`/v1/embeddings` 回退到透传模式（直接转发给 chat 提供商，不做 IR 转换）。
+
+## Rerank 提供商
+
+网关可以代理 `/v1/rerank` 和 `/v2/rerank` 请求，支持跨格式 IR 转换（Jina ↔ Cohere ↔ Voyage）：
+
+```jsonc
+{
+  "rerank_providers": {
+    "jina-rerank": { "type": "jina", "api_key": "${JINA_API_KEY}", "base_url": "https://api.jina.ai" },
+    "cohere-rerank": { "type": "cohere", "api_key": "${COHERE_API_KEY}", "base_url": "https://api.cohere.com" }
+  },
+  "rerank_models": {
+    "jina-reranker-v2-base-multilingual": "jina-rerank",
+    "rerank-v3.5": "cohere-rerank"
+  },
+  "default_rerank_format": "jina"  // 自动检测失败时的源格式
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `rerank_providers` | `dict` | `{}` | Rerank 上游的提供商配置 |
+| `rerank_models` | `dict` | `{}` | 模型 → 提供商映射 |
+| `default_rerank_format` | `str` | `"jina"` | 源格式兜底。选项：`jina`、`cohere`、`voyage` |
+
+`/v2/rerank` 端点会根据 URL 路径自动检测 Cohere 源格式。
+
 ## 完整示例
 
 ```jsonc

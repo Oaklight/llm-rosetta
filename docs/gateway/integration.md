@@ -90,6 +90,7 @@ def setup_admin(
     config_io: ConfigIO | None = None,
     custom_head: str | None = None,
     branding: dict[str, Any] | None = None,
+    disabled_tabs: list[str] | None = None,
 ) -> None:
 ```
 
@@ -101,6 +102,7 @@ def setup_admin(
 | `config_io` | `ConfigIO | None` | 自定义配置适配器。为 `None` 时默认使用 `JsoncConfigIO`。 |
 | `custom_head` | `str | None` | 注入管理页面 `</head>` 前的 HTML 片段 |
 | `branding` | `dict | None` | 用于自定义管理面板外观的字典 |
+| `disabled_tabs` | `list[str] | None` | 要隐藏的管理面板标签页 ID（如 `["metrics"]`）。`None` 显示所有标签页。 |
 
 ### 完整示例
 

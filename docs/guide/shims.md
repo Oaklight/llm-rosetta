@@ -289,6 +289,28 @@ OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_t
 !!! note
     默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。Argo shim 将在未来版本中作为插件移至 [argo-proxy](https://github.com/Oaklight/argo-proxy) 包。
 
+## 能力标志
+
+除推理配置外，shim 还可以声明影响转换器行为的提供商级能力标志：
+
+| 字段 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `supports_custom_tools` | `bool` | `False` | 提供商 API 是否原生支持 `{type: "custom"}` 工具定义。`False` 时，自定义工具降级为函数包装并合成 JSON schema。 |
+| `hoist_system_messages` | `bool` | `True` | 将对话中间的 system/developer 消息改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。 |
+| `multimodal_tool_result` | `bool \| None` | `None` | 提供商是否原生支持工具结果中的多模态内容（图片、文件）。`None` 使用转换器的类级默认值。`True` 强制原生透传；`False` 强制双重编码（文本回退 + 合成 user 消息）。 |
+
+`provider.yaml` 示例：
+
+```yaml
+name: my-provider
+base: openai_chat
+supports_custom_tools: true
+hoist_system_messages: true
+multimodal_tool_result: false
+```
+
+这些标志在转换时注入 `ConversionContext.options`，转换器无需知道当前使用的是哪个 shim 即可查询。
+
 ## 转换规则（Transforms）
 
 转换规则是纯 `dict → dict` 函数，用于弥合提供商实际 API 方言与对应基础转换器所期望的"标准"格式之间的差异。它们处理字段级差异（剥离不支持的字段、重命名参数、注入默认值）—— **不**处理语义级 API 标准转换，那是转换器的职责。

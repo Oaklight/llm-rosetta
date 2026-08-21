@@ -8,19 +8,25 @@ title: 路线图
 
 ## 当前状态
 
-LLM-Rosetta v0.6.8 支持 5 种 API 标准之间的双向转换：
+LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
-| 提供商 | 格式 | 流式 | 工具调用 | Embeddings |
-|-------|------|:----:|:------:|:----------:|
-| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ | ✓ |
-| OpenAI Responses | `openai_responses` | ✓ | ✓ | — |
-| Open Responses | `open_responses` | ✓ | ✓ | — |
-| Anthropic Messages | `anthropic` | ✓ | ✓ | — |
-| Google GenAI | `google` | ✓ | ✓ | — |
+**Chat / Completions**（5 种标准）：
+
+| 提供商 | 格式 | 流式 | 工具调用 |
+|-------|------|:----:|:------:|
+| OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
+| OpenAI Responses | `openai_responses` | ✓ | ✓ |
+| Open Responses | `open_responses` | ✓ | ✓ |
+| Anthropic Messages | `anthropic` | ✓ | ✓ |
+| Google GenAI | `google` | ✓ | ✓ |
+
+**Embedding**（4 种格式）：OpenAI、Jina、Voyage、Cohere——支持基于 IR 的跨格式转换。
+
+**Rerank**（3 种格式）：Jina、Cohere、Voyage——支持基于 IR 的跨格式转换。
 
 [网关](gateway/index.md)提供**零运行时依赖**的实时 HTTP 代理，已通过 [5 种 CLI 工具和 SDK 测试套件验证](gateway/validation.md)。网关内置[管理面板](gateway/admin-panel.md)及完整的 [REST API](api/admin.md)。
 
-**提供商 shim 层**支持通过声明式 YAML 文件添加新提供商——OpenAI 兼容提供商无需编写转换器代码。内置支持 14 个提供商。
+**提供商 shim 层**支持通过声明式 YAML 文件添加新提供商——OpenAI 兼容提供商无需编写转换器代码。内置支持 16 个提供商。
 
 详见 [API 标准](guide/api-standards.md)了解各格式详情。
 
@@ -89,9 +95,9 @@ OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使
 
 #### 推理字段标准化
 
-!!! tip "状态：计划中 — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
+!!! success "状态：已完成（v0.8.1） — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
 
-通过 shim 转换（而非逐提供商的转换器代码）标准化 OpenAI Chat 兼容提供商（如 DeepSeek、Qwen）的 `reasoning_content` / 思考字段。
+通过 shim 转换（而非逐提供商的转换器代码）标准化 OpenAI Chat 兼容提供商的 `reasoning_content` / 思考字段。MiniMax `<think>` 标签解析、OpenRouter `reasoning` → `reasoning_content` 重命名、Volcengine `encrypted_content` 保留均通过 shim transforms 实现。
 
 ### Shim 系统
 
@@ -103,11 +109,11 @@ OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使
 
 ### 网关
 
-#### 上游超时与熔断器
+#### 上游超时
 
-!!! tip "状态：计划中 — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
+!!! success "状态：已完成（v0.8.2） — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
 
-可配置的每提供商超时和熔断器模式，优雅处理慢速或故障的上游。
+支持每提供商和每模型的超时覆盖，`UpstreamTimeoutError`（504）与连接错误（502）区分。熔断器模式保留为未来工作。
 
 #### 速率限制中间件
 
