@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [Unreleased]
+## v0.9.0 — 2026-08-21
 
 ### Added
 
@@ -26,6 +26,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Embedding source format auto-detection** (PR [#521](https://github.com/Oaklight/llm-rosetta/pull/521)) — detect embedding source format from request body fields (`input_type` → Cohere/Jina/Voyage; `encoding_format` candidates disambiguate).
 - **Admin `disabled_tabs` parameter** (PR [#505](https://github.com/Oaklight/llm-rosetta/pull/505)): `setup_admin(disabled_tabs=["metrics"])` hides admin UI tabs at initialization time.
 - **Shim `multimodal_tool_result` capability** (PRs [#523](https://github.com/Oaklight/llm-rosetta/pull/523), [#524](https://github.com/Oaklight/llm-rosetta/pull/524)): `ProviderShim` can now declare `multimodal_tool_result: true/false` in YAML to override the converter's class-level default. The flag is wired through `ConversionContext.options` in both `convert()` and `ConversionPipeline`. Chat converter threads it to `_convert_tool_result_with_packing` so multimodal content is preserved natively when the provider supports it.
+- **Streaming refusal events** (PR [#528](https://github.com/Oaklight/llm-rosetta/pull/528)): `response.refusal.delta` / `response.refusal.done` SSE events in the OpenAI Responses converter. New `RefusalDeltaEvent` IR stream type with full p→ir→p round-trip support. Completes issue [#431](https://github.com/Oaklight/llm-rosetta/issues/431).
 
 ### Fixed
 
@@ -35,6 +36,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
+- **Unified `convert()` and `ConversionPipeline`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): both now support dual-shim (source + target) transforms and response conversion. `ConversionPipeline` delegates to `convert()` internally, eliminating code divergence.
 - **Unified outbound transport** (PR [#516](https://github.com/Oaklight/llm-rosetta/pull/516)): merge `send_request` and `send_passthrough` into a single `send(provider_info, url, body)` method. Move URL construction and stream-flag injection from transport to proxy layer. Net -68 lines.
 - **Documentation restructured** — split into three top-level tabs: IR Type System, Library, Gateway. API Reference merged into each tab. Removed standalone API Reference tab.
 
