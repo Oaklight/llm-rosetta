@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [未发布]
+## v0.9.0 — 2026-08-21
 
 ### 新增
 
@@ -26,6 +26,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Embedding 源格式自动检测** (PR [#521](https://github.com/Oaklight/llm-rosetta/pull/521)) — 从请求体字段自动检测 embedding 源格式（`input_type` → Cohere/Jina/Voyage；`encoding_format` 候选值消歧）。
 - **Admin `disabled_tabs` 参数** (PR [#505](https://github.com/Oaklight/llm-rosetta/pull/505))：`setup_admin(disabled_tabs=["metrics"])` 在初始化时隐藏 admin UI 标签页。
 - **Shim `multimodal_tool_result` 能力声明** (PRs [#523](https://github.com/Oaklight/llm-rosetta/pull/523), [#524](https://github.com/Oaklight/llm-rosetta/pull/524))：`ProviderShim` 现在可以在 YAML 中声明 `multimodal_tool_result: true/false` 以覆盖转换器的类级别默认值。该标志通过 `ConversionContext.options` 在 `convert()` 和 `ConversionPipeline` 中传递。Chat 转换器将其透传至 `_convert_tool_result_with_packing`，使多模态内容在 provider 原生支持时得以保留。
+- **流式拒绝事件** (PR [#528](https://github.com/Oaklight/llm-rosetta/pull/528))：OpenAI Responses 转换器支持 `response.refusal.delta` / `response.refusal.done` SSE 事件。新增 `RefusalDeltaEvent` IR 流事件类型，支持完整的 p→ir→p 往返转换。完成 issue [#431](https://github.com/Oaklight/llm-rosetta/issues/431)。
 
 ### 修复
 
@@ -35,6 +36,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 变更
 
+- **统一 `convert()` 和 `ConversionPipeline`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520))：两者现在都支持双 shim（source + target）变换和响应转换。`ConversionPipeline` 内部委托给 `convert()`，消除代码分歧。
 - **统一出站传输层** (PR [#516](https://github.com/Oaklight/llm-rosetta/pull/516))：将 `send_request` 和 `send_passthrough` 合并为单一 `send(provider_info, url, body)` 方法。URL 构建和流式标志注入从传输层移至代理层。净减 68 行。
 - **文档结构重组** — 拆分为三个顶级标签页：IR 类型系统、库、网关。API 参考合并到各标签页内。移除独立的 API 参考标签页。
 
