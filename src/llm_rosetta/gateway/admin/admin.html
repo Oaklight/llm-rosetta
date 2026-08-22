@@ -2374,12 +2374,10 @@ function goToModelsForProvider(provName) {
   _modelDomain = 'all';
   const allSeg = document.querySelector('#modelTypeSeg > div:first-child');
   if (allSeg) _activateSegChild(allSeg);
+  renderModels();
   const filterSelect = document.getElementById('modelProviderFilter');
-  // Need to wait for renderModels to populate dropdown, then set value
-  setTimeout(() => {
-    filterSelect.value = provName;
-    renderModels();
-  }, 50);
+  filterSelect.value = provName;
+  renderModels();
 }
 
 function goToProviderFromModel(provName) {
@@ -2389,14 +2387,14 @@ function goToProviderFromModel(provName) {
   const allSeg = document.querySelector('#providerSeg > div:first-child');
   if (allSeg) _activateSegChild(allSeg);
   renderProviders();
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     const card = document.querySelector(`[data-provider="${provName}"]`);
     if (card) {
       card.scrollIntoView({ behavior: 'smooth', block: 'center' });
       card.classList.add('highlight');
       setTimeout(() => card.classList.remove('highlight'), 2000);
     }
-  }, 50);
+  });
 }
 
 function toggleProvCapSection() {
@@ -2412,7 +2410,7 @@ function toggleProvCapSection() {
 
 function _populateFormatDropdown(selectId, formats) {
   const sel = document.getElementById(selectId);
-  if (!sel || sel.options.length > 0) return;
+  if (!sel) return;
   sel.innerHTML = formats.map(f => `<option value="${f}">${f}</option>`).join('');
 }
 
@@ -2652,7 +2650,7 @@ function renderModels() {
     const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''}>
       <td><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
-      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${capBadges}</td>
+      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${_modelDomain === 'all' ? typeBadge + ' ' : ''}${capBadges}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>

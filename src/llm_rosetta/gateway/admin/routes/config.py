@@ -184,8 +184,8 @@ async def get_config(request: Any) -> Response:
                 }
                 for s in list_shims()
             ],
-            "embedding_formats": ["openai", "cohere", "jina", "voyage"],
-            "rerank_formats": ["jina", "cohere", "voyage"],
+            "embedding_formats": GatewayConfig.EMBEDDING_FORMATS,
+            "rerank_formats": GatewayConfig.RERANK_FORMATS,
         }
     )
 
