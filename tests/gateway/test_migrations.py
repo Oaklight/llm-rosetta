@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 
 from llm_rosetta.gateway.migrations import CURRENT_VERSION, migrate
@@ -306,3 +307,63 @@ class TestConfigIOIntegration:
         assert raw["providers"]["openai"]["api_key"] == "${OPENAI_API_KEY}"
         assert raw["providers"]["openai"]["embedding_format"] == "openai"
         assert "embedding_providers" not in raw
+
+    def test_load_does_not_write_substituted_env_vars(self, tmp_path, monkeypatch):
+        """Critical: load() must not write substituted secrets back to disk."""
+        monkeypatch.setenv("TEST_API_KEY", "sk-real-secret-value")
+        config_path = str(tmp_path / "config.jsonc")
+        old_config = {
+            "providers": {},
+            "models": {},
+            "rerank_providers": {
+                "jina": {
+                    "api_key": "${TEST_API_KEY}",
+                    "base_url": "https://api.jina.ai",
+                    "format": "jina",
+                }
+            },
+            "rerank_models": {"jina-reranker": "jina"},
+        }
+        with open(config_path, "w") as f:
+            json.dump(old_config, f)
+
+        from llm_rosetta.gateway.config import JsoncConfigIO
+
+        io = JsoncConfigIO()
+        raw = io.load(config_path)
+
+        # Runtime should have the substituted value
+        assert raw["providers"]["jina"]["api_key"] == "sk-real-secret-value"
+
+        # Disk should still have the placeholder
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert on_disk["providers"]["jina"]["api_key"] == "${TEST_API_KEY}"
+        assert on_disk["config_version"] == CURRENT_VERSION
+
+    def test_backup_created_on_migration(self, tmp_path):
+        config_path = str(tmp_path / "config.jsonc")
+        old_config = {
+            "providers": {},
+            "models": {},
+            "rerank_providers": {
+                "jina": {
+                    "api_key": "j-test",
+                    "base_url": "https://api.jina.ai",
+                    "format": "jina",
+                }
+            },
+        }
+        with open(config_path, "w") as f:
+            json.dump(old_config, f)
+
+        from llm_rosetta.gateway.config import JsoncConfigIO
+
+        io = JsoncConfigIO()
+        io.load(config_path)
+
+        bak_path = config_path + ".pre-migration.bak"
+        assert os.path.exists(bak_path)
+        with open(bak_path) as f:
+            bak_data = json.load(f)
+        assert "rerank_providers" in bak_data
