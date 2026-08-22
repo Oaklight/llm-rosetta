@@ -328,6 +328,40 @@ class GatewayConfig:
             "default_embedding_format", "openai"
         )
 
+        # --- Extract type-tagged models from unified models pool ---
+        self._distribute_typed_models(raw.get("models", {}))
+
+    def _distribute_typed_models(self, raw_models: dict[str, Any]) -> None:
+        """Move models with ``type: embedding`` or ``type: rerank`` from the
+        main models pool into the corresponding embedding/rerank models dicts.
+
+        Models whose provider lacks the corresponding endpoint config are
+        silently skipped (left in main pool or dropped).
+        """
+        to_remove: list[str] = []
+        for name, value in raw_models.items():
+            if not isinstance(value, dict):
+                continue
+            model_type = value.get("type", "llm")
+            if model_type == "llm":
+                continue
+            if value.get("enabled") is False:
+                continue
+
+            provider_name = value.get("provider", "")
+
+            if model_type == "embedding" and provider_name in self.embedding_providers:
+                self.embedding_models.setdefault(name, provider_name)
+                to_remove.append(name)
+            elif model_type == "rerank" and provider_name in self.rerank_providers:
+                self.rerank_models.setdefault(name, provider_name)
+                to_remove.append(name)
+
+        # Remove from main LLM pool (they belong in the specialized pool)
+        for name in to_remove:
+            self.models.pop(name, None)
+            self.model_capabilities.pop(name, None)
+
     @staticmethod
     def _parse_custom_tools_overrides(
         raw_providers: dict[str, dict[str, str]],
