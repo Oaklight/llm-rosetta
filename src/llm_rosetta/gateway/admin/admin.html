@@ -196,6 +196,40 @@ tr:hover td { background: var(--bg-hover); }
 .seg-control > *:hover { background:var(--bg); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:#fff; }
+/* Capability badges for provider cards */
+.cap-badge { display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;margin-left:4px;vertical-align:middle; }
+.cap-badge svg { width:10px;height:10px;flex-shrink:0; }
+.cap-badge-llm { background:rgba(99,102,241,0.15);color:var(--accent); }
+.cap-badge-embedding { background:rgba(16,185,129,0.12);color:var(--green); }
+.cap-badge-rerank { background:rgba(245,158,11,0.12);color:var(--orange); }
+/* Provider-model cross-navigation */
+.provider-card .model-link { margin-left:auto;font-size:12px;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:4px;opacity:0.8;transition:opacity 0.15s; }
+.provider-card .model-link:hover { opacity:1;text-decoration:underline; }
+.provider-link { color:inherit;cursor:pointer;text-decoration:none; }
+.provider-link:hover { text-decoration:underline;color:var(--accent); }
+.provider-card.highlight { border-color:var(--accent);box-shadow:0 0 0 2px rgba(99,102,241,0.3);transition:box-shadow 0.3s,border-color 0.3s; }
+/* Reset filter button */
+.btn-reset { padding:4px 8px;font-size:11px;color:var(--text-dim);border:1px solid var(--border);border-radius:6px;background:none;cursor:pointer;display:none;align-items:center;gap:3px;transition:all 0.15s; }
+.btn-reset:hover { color:var(--red);border-color:var(--red); }
+.btn-reset.visible { display:inline-flex; }
+/* Endpoint config sections in provider modal */
+.endpoint-section { margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);display:none; }
+.endpoint-section.visible { display:block; }
+.endpoint-section .section-label { font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
+.endpoint-section .section-label .dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
+.dot-llm { background:var(--accent); }
+.dot-embedding { background:var(--green); }
+.dot-rerank { background:var(--orange); }
+.endpoint-section .form-group { margin-bottom:10px; }
+.endpoint-section .form-group label { font-size:11px; }
+.endpoint-section .form-row { display:flex;gap:10px; }
+.endpoint-section .form-row .form-group { flex:1; }
+/* Capability checkboxes in provider modal */
+.cap-section { margin-top:18px;border-top:1px solid var(--border);padding-top:14px; }
+.cap-section-title { font-size:13px;font-weight:600;margin-bottom:10px;color:var(--text); }
+.cap-checks { display:flex;gap:16px;margin-bottom:14px; }
+.cap-checks label { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--text);user-select:none; }
+.cap-checks input[type="checkbox"] { accent-color:var(--accent);width:16px;height:16px; }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
 .chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;user-select:none;transition:all 0.15s;background:var(--bg-card);color:var(--text-dim); }
 .chip:hover { border-color:var(--accent);color:var(--accent); }
@@ -577,6 +611,12 @@ body { padding-bottom: 26px; }
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
+        <div class="seg-control" id="providerSeg">
+          <div class="active" onclick="switchProviderFilter(this,'all')"><span data-i18n="filter.all">All</span></div>
+          <div onclick="switchProviderFilter(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
+          <div onclick="switchProviderFilter(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
+          <div onclick="switchProviderFilter(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
+        </div>
       </div>
       <div class="provider-toolbar" id="providerToolbar">
         <input id="providerSearch" placeholder="Search providers..." oninput="renderProviders()" data-i18n-placeholder="label.searchProviders" style="display:none">
@@ -605,7 +645,14 @@ body { padding-bottom: 26px; }
         <select id="modelProviderFilter" onchange="renderModels()">
           <option value="" data-i18n="filter.allProviders">All Providers</option>
         </select>
+        <div class="seg-control" id="modelTypeSeg">
+          <div class="active" onclick="switchModelDomain(this,'all')"><span data-i18n="filter.all">All</span></div>
+          <div onclick="switchModelDomain(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
+          <div onclick="switchModelDomain(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
+          <div onclick="switchModelDomain(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
+        </div>
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
+        <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
         <span class="model-count" id="modelCount"></span>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
@@ -912,6 +959,43 @@ body { padding-bottom: 26px; }
         <label><input type="checkbox" id="provHoistSystem" checked> <span data-i18n="label.hoistSystemMessages">Hoist late system messages</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.hoistSystem">Rewrite mid-conversation system/developer messages as user-role envelopes (<code>[System: ...]</code>) to preserve the prompt cache prefix.<br><br><b>When enabled:</b> late system messages are hoisted — leading ones move to the system instruction, mid-conversation ones become user messages. This keeps the cacheable prefix stable and avoids silent message loss on some providers.<br><br><b>When disabled:</b> system messages are left in their original positions. This may break prompt caching or cause message loss on providers that reject non-leading system messages.</span></span>
       </div>
     </div>
+    <!-- Capability checkboxes -->
+    <div class="cap-section">
+      <div class="cap-section-title" data-i18n="label.capabilities">Capabilities</div>
+      <div class="cap-checks">
+        <label><input type="checkbox" id="provCapLlm" checked onchange="toggleProvCapSection()"> <span data-i18n="label.llm">LLM</span></label>
+        <label><input type="checkbox" id="provCapEmbedding" onchange="toggleProvCapSection()"> <span data-i18n="label.embedding">Embedding</span></label>
+        <label><input type="checkbox" id="provCapRerank" onchange="toggleProvCapSection()"> <span data-i18n="label.rerank">Rerank</span></label>
+      </div>
+      <!-- Embedding endpoint config -->
+      <div class="endpoint-section" id="provEmbeddingSection">
+        <div class="section-label"><span class="dot dot-embedding"></span> <span data-i18n="label.embeddingEndpoint">Embedding Endpoint</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="label.format">Format</label>
+            <select id="provEmbeddingFormat"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="label.embeddingPath">Embedding Path</label>
+            <input type="text" id="provEmbeddingPath" placeholder="/v1/embeddings">
+          </div>
+        </div>
+      </div>
+      <!-- Rerank endpoint config -->
+      <div class="endpoint-section" id="provRerankSection">
+        <div class="section-label"><span class="dot dot-rerank"></span> <span data-i18n="label.rerankEndpoint">Rerank Endpoint</span></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label data-i18n="label.format">Format</label>
+            <select id="provRerankFormat"></select>
+          </div>
+          <div class="form-group">
+            <label data-i18n="label.rerankPath">Rerank Path</label>
+            <input type="text" id="provRerankPath" placeholder="/v1/rerank">
+          </div>
+        </div>
+      </div>
+    </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
@@ -949,9 +1033,10 @@ body { padding-bottom: 26px; }
       </div>
       <div class="form-group">
         <label data-i18n="label.modelType">Type</label>
-        <div class="seg-control">
+        <div class="seg-control" id="modelModalTypeSeg">
           <div class="active" onclick="segModelType(this,'llm')"><input type="radio" name="modelType" value="llm" checked><span data-i18n="label.llm">LLM</span></div>
           <div onclick="segModelType(this,'embedding')"><input type="radio" name="modelType" value="embedding"><span data-i18n="label.embedding">Embedding</span></div>
+          <div onclick="segModelType(this,'rerank')"><input type="radio" name="modelType" value="rerank"><span data-i18n="label.rerank">Rerank</span></div>
         </div>
       </div>
       <div class="form-group" id="modelCapsGroup">
@@ -1326,6 +1411,15 @@ const I18N = {
     'label.modelType':'Model Type',
     'label.llm':'LLM',
     'label.embedding':'Embedding',
+    'label.rerank':'Rerank',
+    'label.capabilities':'Capabilities',
+    'label.format':'Format',
+    'label.embeddingEndpoint':'Embedding Endpoint',
+    'label.rerankEndpoint':'Rerank Endpoint',
+    'label.embeddingPath':'Embedding Path',
+    'label.rerankPath':'Rerank Path',
+    'filter.all':'All',
+    'btn.resetFilters':'✕ Reset',
     'fetch.loading':'Fetching models...',
     'fetch.count':'{checked} / {total} selected',
     'fetch.noModels':'No models found from this provider.',
@@ -1456,6 +1550,15 @@ const I18N = {
     'label.modelType':'\u6a21\u578b\u7c7b\u578b',
     'label.llm':'LLM',
     'label.embedding':'Embedding',
+    'label.rerank':'Rerank',
+    'label.capabilities':'能力',
+    'label.format':'格式',
+    'label.embeddingEndpoint':'Embedding 端点',
+    'label.rerankEndpoint':'Rerank 端点',
+    'label.embeddingPath':'Embedding 路径',
+    'label.rerankPath':'Rerank 路径',
+    'filter.all':'全部',
+    'btn.resetFilters':'✕ 重置',
     'fetch.loading':'\u6b63\u5728\u83b7\u53d6\u6a21\u578b...',
     'fetch.count':'{checked} / {total} \u5df2\u9009',
     'fetch.noModels':'\u672a\u4ece\u8be5\u670d\u52a1\u65b9\u627e\u5230\u6a21\u578b\u3002',
@@ -1521,6 +1624,14 @@ function applyI18n() {
 let currentTab = localStorage.getItem('llm-rosetta-tab') || 'providers';
 let configData = null;
 let _credentialVisible = true;
+let _providerFilter = 'all';
+let _modelDomain = 'all';
+
+const _CAP_ICONS = {
+  llm: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4c0-1.1.9-2 2-2h8a2 2 0 012 2v5a2 2 0 01-2 2H5l-3 3V4z"/></svg>',
+  embedding: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="5" r="1.3"/><circle cx="10" cy="3" r="1.3"/><circle cx="12" cy="9" r="1.3"/><circle cx="6" cy="11" r="1.3"/><circle cx="3" cy="9" r="1"/><circle cx="9" cy="7" r="1"/><circle cx="13" cy="13" r="1"/></svg>',
+  rerank: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3h8M4 7h6M4 11h10"/><path d="M13 1.5l1.5 1.5-1.5 1.5" stroke-linejoin="round"/><path d="M3 9.5L1.5 11 3 12.5" stroke-linejoin="round"/></svg>',
+};
 let keysData = null;
 let logKeyLabels = [];
 let internalToken = null;
@@ -1978,6 +2089,28 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
   document.getElementById('provTimeout').placeholder = (configData.server && configData.server.upstream_timeout) || 300;
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
+  // Populate embedding/rerank capability checkboxes
+  const provCaps = provCfg ? _getProviderCaps(provCfg) : ['llm'];
+  document.getElementById('provCapLlm').checked = provCaps.includes('llm');
+  document.getElementById('provCapEmbedding').checked = provCaps.includes('embedding');
+  document.getElementById('provCapRerank').checked = provCaps.includes('rerank');
+  // Populate format dropdowns
+  const embFmts = configData?.embedding_formats || ['openai','cohere','jina','voyage'];
+  const rrFmts = configData?.rerank_formats || ['jina','cohere','voyage'];
+  const embFmtSel = document.getElementById('provEmbeddingFormat');
+  embFmtSel.innerHTML = embFmts.map(f => `<option value="${f}">${f}</option>`).join('');
+  const rrFmtSel = document.getElementById('provRerankFormat');
+  rrFmtSel.innerHTML = rrFmts.map(f => `<option value="${f}">${f}</option>`).join('');
+  if (provCfg) {
+    if (provCfg.embedding_format) embFmtSel.value = provCfg.embedding_format;
+    document.getElementById('provEmbeddingPath').value = provCfg.embedding_path || '/v1/embeddings';
+    if (provCfg.rerank_format) rrFmtSel.value = provCfg.rerank_format;
+    document.getElementById('provRerankPath').value = provCfg.rerank_path || '/v1/rerank';
+  } else {
+    document.getElementById('provEmbeddingPath').value = '';
+    document.getElementById('provRerankPath').value = '';
+  }
+  toggleProvCapSection();
   document.getElementById('providerModal').classList.add('open');
   // When editing, fetch the real (unmasked) key
   if (name && _credentialVisible) {
@@ -2057,10 +2190,13 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   // Set model type via seg-control
   const caps = capabilities || ['text', 'tools'];
   const isEmbedding = caps.includes('embedding') && !caps.includes('text');
-  const segLabels = modal.querySelectorAll('.seg-control > div');
+  const isRerank = caps.includes('rerank') && !caps.includes('text');
+  const detectedType = isRerank ? 'rerank' : isEmbedding ? 'embedding' : 'llm';
+  const segLabels = document.getElementById('modelModalTypeSeg').querySelectorAll(':scope > div');
   segLabels.forEach(l => l.classList.remove('active'));
-  segLabels[isEmbedding ? 1 : 0].classList.add('active');
-  document.querySelector('input[name="modelType"][value="' + (isEmbedding ? 'embedding' : 'llm') + '"]').checked = true;
+  const typeIdx = detectedType === 'rerank' ? 2 : detectedType === 'embedding' ? 1 : 0;
+  segLabels[typeIdx].classList.add('active');
+  document.querySelector('input[name="modelType"][value="' + detectedType + '"]').checked = true;
   // Set capability chips
   const chipMap = {capText: 'text', capVision: 'vision', capTools: 'tools', capReasoning: 'reasoning'};
   for (const [id, cap] of Object.entries(chipMap)) {
@@ -2178,6 +2314,116 @@ async function runNetDiag() {
   }
 }
 
+// ── Provider/Model domain switching and cross-navigation ──
+
+function _activateSegChild(el) {
+  el.parentElement.querySelectorAll(':scope > div').forEach(s => s.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function switchProviderFilter(el, filter) {
+  _activateSegChild(el);
+  _providerFilter = filter;
+  renderProviders();
+}
+
+function switchModelDomain(el, domain) {
+  _activateSegChild(el);
+  _modelDomain = domain;
+  renderModels();
+}
+
+function resetModelFilters() {
+  _modelDomain = 'all';
+  const allSeg = document.querySelector('#modelTypeSeg > div:first-child');
+  if (allSeg) _activateSegChild(allSeg);
+  document.getElementById('modelProviderFilter').value = '';
+  document.getElementById('modelSearch').value = '';
+  renderModels();
+}
+
+function _getProviderCaps(cfg) {
+  const caps = [];
+  if (cfg.type || cfg.url_template || cfg.stream_url_template) caps.push('llm');
+  if (cfg.embedding_format) caps.push('embedding');
+  if (cfg.rerank_format) caps.push('rerank');
+  if (caps.length === 0) caps.push('llm');
+  return caps;
+}
+
+function _capBadgesHtml(caps) {
+  return caps.map(c => {
+    const cls = c === 'llm' ? 'cap-badge-llm' : c === 'embedding' ? 'cap-badge-embedding' : 'cap-badge-rerank';
+    return `<span class="cap-badge ${cls}">${_CAP_ICONS[c] || ''}${esc(c.toUpperCase())}</span>`;
+  }).join('');
+}
+
+function _countModelsForProvider(provName) {
+  if (!configData) return 0;
+  let count = 0;
+  for (const [, info] of Object.entries(configData.models || {})) {
+    const prov = typeof info === 'string' ? info : info.provider;
+    if (prov === provName) count++;
+  }
+  return count;
+}
+
+function goToModelsForProvider(provName) {
+  const modelsTab = document.querySelector('[data-tab="models"]');
+  if (modelsTab) { modelsTab.click(); }
+  _modelDomain = 'all';
+  const allSeg = document.querySelector('#modelTypeSeg > div:first-child');
+  if (allSeg) _activateSegChild(allSeg);
+  const filterSelect = document.getElementById('modelProviderFilter');
+  // Need to wait for renderModels to populate dropdown, then set value
+  setTimeout(() => {
+    filterSelect.value = provName;
+    renderModels();
+  }, 50);
+}
+
+function goToProviderFromModel(provName) {
+  const provTab = document.querySelector('[data-tab="providers"]');
+  if (provTab) { provTab.click(); }
+  _providerFilter = 'all';
+  const allSeg = document.querySelector('#providerSeg > div:first-child');
+  if (allSeg) _activateSegChild(allSeg);
+  renderProviders();
+  setTimeout(() => {
+    const card = document.querySelector(`[data-provider="${provName}"]`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      card.classList.add('highlight');
+      setTimeout(() => card.classList.remove('highlight'), 2000);
+    }
+  }, 50);
+}
+
+function toggleProvCapSection() {
+  const llm = document.getElementById('provCapLlm').checked;
+  const embed = document.getElementById('provCapEmbedding').checked;
+  const rerank = document.getElementById('provCapRerank').checked;
+  document.getElementById('provEmbeddingSection').classList.toggle('visible', embed);
+  document.getElementById('provRerankSection').classList.toggle('visible', rerank);
+  // Populate format dropdowns if shown
+  if (embed) _populateFormatDropdown('provEmbeddingFormat', configData?.embedding_formats || ['openai','cohere','jina','voyage']);
+  if (rerank) _populateFormatDropdown('provRerankFormat', configData?.rerank_formats || ['jina','cohere','voyage']);
+}
+
+function _populateFormatDropdown(selectId, formats) {
+  const sel = document.getElementById(selectId);
+  if (!sel || sel.options.length > 0) return;
+  sel.innerHTML = formats.map(f => `<option value="${f}">${f}</option>`).join('');
+}
+
+function _getModelType(info) {
+  if (typeof info === 'string') return 'llm';
+  if (info.type) return info.type;
+  const caps = info.capabilities || ['text'];
+  if (caps.includes('embedding') && !caps.includes('text')) return 'embedding';
+  return 'llm';
+}
+
 function renderProviders() {
   const grid = document.getElementById('providerGrid');
   const providers = configData.providers || {};
@@ -2207,6 +2453,11 @@ function renderProviders() {
         typeName.toLowerCase().includes(query) ||
         (cfg.base_url || '').toLowerCase().includes(query);
     });
+  }
+
+  // Filter by capability
+  if (_providerFilter !== 'all') {
+    entries = entries.filter(([, cfg]) => _getProviderCaps(cfg).includes(_providerFilter));
   }
 
   // Update count
@@ -2244,20 +2495,33 @@ function renderProviders() {
          ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
      ${cfg.url_template ? `<div class="field">URL Template: <code>${esc(cfg.url_template)}</code></div>` : ''}
      ${cfg.stream_url_template ? `<div class="field">Stream URL Template: <code>${esc(cfg.stream_url_template)}</code></div>` : ''}`;
+    const provCaps = _getProviderCaps(cfg);
+    const capBadges = _capBadgesHtml(provCaps);
+    const modelCount = _countModelsForProvider(name);
+    const modelLink = modelCount > 0
+      ? `<span class="model-link" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
+      : '';
+    // Embedding/rerank endpoint info
+    let epFieldsHtml = '';
+    if (!isList) {
+      if (cfg.embedding_format) epFieldsHtml += `<div class="field">Embed: <code>${esc(cfg.embedding_format)}</code> → <code>${esc(cfg.embedding_path || '/v1/embeddings')}</code></div>`;
+      if (cfg.rerank_format) epFieldsHtml += `<div class="field">Rerank: <code>${esc(cfg.rerank_format)}</code> → <code>${esc(cfg.rerank_path || '/v1/rerank')}</code></div>`;
+    }
     return `
-    <div class="provider-card${enabled ? '' : ' disabled'}">
+    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}" style="display:flex;flex-direction:column">
       <div class="card-header">
-        <div class="name">${logoHtml}${esc(name)}</div>
+        <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)} ${capBadges}</div>
         <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleProvider('${esc(name)}')">
           <span class="slider"></span>
         </label>
       </div>
-      ${fieldsHtml}
-      <div class="actions">
+      ${fieldsHtml}${epFieldsHtml}
+      <div class="actions" style="margin-top:auto;padding-top:12px">
         <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
+        ${modelLink}
       </div>
     </div>`;
   }).join('');
@@ -2333,6 +2597,16 @@ function renderModels() {
     entries = entries.filter(e => e.name.toLowerCase().includes(query) || e.prov.toLowerCase().includes(query));
   }
 
+  // Filter by model type (domain)
+  if (_modelDomain !== 'all') {
+    entries = entries.filter(e => _getModelType(e.info) === _modelDomain);
+  }
+
+  // Show/hide reset button
+  const hasFilters = _modelDomain !== 'all' || selectedProv || query;
+  const resetBtn = document.getElementById('modelResetBtn');
+  if (resetBtn) resetBtn.classList.toggle('visible', !!hasFilters);
+
   // Sort
   const dir = _modelSortDir === 'asc' ? 1 : -1;
   entries.sort((a, b) => {
@@ -2369,6 +2643,9 @@ function renderModels() {
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
     const isEmbedding = caps.includes('embedding');
+    const modelType = _getModelType(info);
+    const typeBadgeCls = modelType === 'llm' ? 'cap-badge-llm' : modelType === 'embedding' ? 'cap-badge-embedding' : 'cap-badge-rerank';
+    const typeBadge = `<span class="cap-badge ${typeBadgeCls}">${_CAP_ICONS[modelType] || ''}${esc(modelType.toUpperCase())}</span>`;
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
@@ -2376,7 +2653,7 @@ function renderModels() {
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''}>
       <td><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
       <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${capBadges}</td>
-      <td>${esc(prov)}${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
+      <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right; white-space:nowrap">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group">
@@ -2428,6 +2705,21 @@ async function saveProvider() {
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
   body.hoist_system_messages = document.getElementById('provHoistSystem').checked;
+  // Embedding/rerank endpoint config
+  if (document.getElementById('provCapEmbedding').checked) {
+    body.embedding_format = document.getElementById('provEmbeddingFormat').value;
+    body.embedding_path = document.getElementById('provEmbeddingPath').value.trim() || '/v1/embeddings';
+  } else {
+    body.embedding_format = '';
+    body.embedding_path = '';
+  }
+  if (document.getElementById('provCapRerank').checked) {
+    body.rerank_format = document.getElementById('provRerankFormat').value;
+    body.rerank_path = document.getElementById('provRerankPath').value.trim() || '/v1/rerank';
+  } else {
+    body.rerank_format = '';
+    body.rerank_path = '';
+  }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
   // When api_key is empty and we're editing, omit it so backend keeps the original
@@ -2666,6 +2958,8 @@ async function saveModel() {
   let capabilities;
   if (modelType === 'embedding') {
     capabilities = ['embedding'];
+  } else if (modelType === 'rerank') {
+    capabilities = ['rerank'];
   } else {
     capabilities = [];
     if (document.getElementById('capText').checked) capabilities.push('text');
@@ -2675,6 +2969,7 @@ async function saveModel() {
     if (capabilities.length === 0) capabilities.push('text');
   }
   const body = {provider, capabilities};
+  if (modelType !== 'llm') body.type = modelType;
   const upstreamModel = document.getElementById('modelUpstream').value.trim();
   if (upstreamModel) body.upstream_model = upstreamModel;
   // Collect reasoning override if reasoning capability is enabled
