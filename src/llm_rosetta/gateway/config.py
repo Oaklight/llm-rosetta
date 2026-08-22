@@ -228,6 +228,8 @@ class GatewayConfig:
 
     # Default capabilities when not specified in config.
     DEFAULT_CAPABILITIES: list[str] = ["text"]
+    EMBEDDING_FORMATS: list[str] = ["openai", "cohere", "jina", "voyage"]
+    RERANK_FORMATS: list[str] = ["jina", "cohere", "voyage"]
 
     def __init__(self, raw: dict[str, Any]) -> None:
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
@@ -286,8 +288,13 @@ class GatewayConfig:
             self.rerank_providers,
             self.rerank_provider_infos,
             self.rerank_models,
-        ) = self._extract_rerank_from_providers(
-            self._raw_providers, global_proxy=self.proxy
+        ) = self._extract_endpoint_from_providers(
+            self._raw_providers,
+            format_key="rerank_format",
+            path_key="rerank_path",
+            default_path="/v1/rerank",
+            info_prefix="rerank",
+            global_proxy=self.proxy,
         )
         # 2. Merge legacy rerank_providers / rerank_models (old format)
         legacy_rp, legacy_ri, legacy_rm = self._parse_rerank_config(
@@ -309,8 +316,13 @@ class GatewayConfig:
             self.embedding_providers,
             self.embedding_provider_infos,
             self.embedding_models,
-        ) = self._extract_embedding_from_providers(
-            self._raw_providers, global_proxy=self.proxy
+        ) = self._extract_endpoint_from_providers(
+            self._raw_providers,
+            format_key="embedding_format",
+            path_key="embedding_path",
+            default_path="/v1/embeddings",
+            info_prefix="embedding",
+            global_proxy=self.proxy,
         )
         # 2. Merge legacy embedding_providers / embedding_models (old format)
         legacy_ep, legacy_ei, legacy_em = self._parse_embedding_config(
@@ -356,6 +368,14 @@ class GatewayConfig:
             elif model_type == "rerank" and provider_name in self.rerank_providers:
                 self.rerank_models.setdefault(name, provider_name)
                 to_remove.append(name)
+            elif model_type in ("embedding", "rerank"):
+                logger.warning(
+                    "Model %r has type=%s but provider %r lacks %s_format — skipped",
+                    name,
+                    model_type,
+                    provider_name,
+                    model_type,
+                )
 
         # Remove from main LLM pool (they belong in the specialized pool)
         for name in to_remove:
@@ -686,66 +706,38 @@ class GatewayConfig:
     # ---- Unified endpoint extraction ------------------------------------
 
     @staticmethod
-    def _extract_rerank_from_providers(
+    def _extract_endpoint_from_providers(
         raw_providers: dict[str, dict[str, Any]],
         *,
+        format_key: str,
+        path_key: str,
+        default_path: str,
+        info_prefix: str,
         global_proxy: str | None = None,
     ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Extract rerank endpoint config from unified providers.
+        """Extract endpoint config from unified providers.
 
-        Providers that have a ``rerank_format`` field are treated as rerank-capable.
+        Providers that have the given *format_key* field are treated as
+        capable of the corresponding endpoint type.
         """
         from .transport.provider_info import openai_auth
 
         providers: dict[str, dict[str, Any]] = {}
         provider_infos: dict[str, ProviderInfo] = {}
         for name, cfg in raw_providers.items():
-            if "rerank_format" not in cfg:
+            if format_key not in cfg:
                 continue
-            rerank_path = cfg.get("rerank_path", "/v1/rerank")
+            path = cfg.get(path_key, default_path)
             providers[name] = {
-                "format": cfg["rerank_format"],
-                "rerank_path": rerank_path,
+                "format": cfg[format_key],
+                path_key: path,
             }
             provider_infos[name] = ProviderInfo(
-                name=f"rerank:{name}",
+                name=f"{info_prefix}:{name}",
                 api_key=cfg.get("api_key", ""),
                 base_url=cfg.get("base_url", "").rstrip("/"),
                 auth_header_fn=openai_auth,
-                url_template="{base_url}" + rerank_path,
-                proxy_url=cfg.get("proxy") or global_proxy,
-            )
-        return providers, provider_infos, {}
-
-    @staticmethod
-    def _extract_embedding_from_providers(
-        raw_providers: dict[str, dict[str, Any]],
-        *,
-        global_proxy: str | None = None,
-    ) -> tuple[dict[str, dict[str, Any]], dict[str, ProviderInfo], dict[str, str]]:
-        """Extract embedding endpoint config from unified providers.
-
-        Providers that have an ``embedding_format`` field are treated as
-        embedding-capable.
-        """
-        from .transport.provider_info import openai_auth
-
-        providers: dict[str, dict[str, Any]] = {}
-        provider_infos: dict[str, ProviderInfo] = {}
-        for name, cfg in raw_providers.items():
-            if "embedding_format" not in cfg:
-                continue
-            embedding_path = cfg.get("embedding_path", "/v1/embeddings")
-            providers[name] = {
-                "format": cfg["embedding_format"],
-                "embedding_path": embedding_path,
-            }
-            provider_infos[name] = ProviderInfo(
-                name=f"embedding:{name}",
-                api_key=cfg.get("api_key", ""),
-                base_url=cfg.get("base_url", "").rstrip("/"),
-                auth_header_fn=openai_auth,
-                url_template="{base_url}" + embedding_path,
+                url_template="{base_url}" + path,
                 proxy_url=cfg.get("proxy") or global_proxy,
             )
         return providers, provider_infos, {}
