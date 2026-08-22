@@ -137,6 +137,19 @@ def _build_provider_entry(
     if "timeout" in body and body["timeout"] not in (None, ""):
         entry["timeout"] = float(body["timeout"])
 
+    # Embedding/rerank endpoint config (unified provider format)
+    for ep_key in (
+        "embedding_format",
+        "embedding_path",
+        "rerank_format",
+        "rerank_path",
+    ):
+        val = body.get(ep_key)
+        if val:
+            entry[ep_key] = val
+        elif ep_key in body and not val:
+            entry.pop(ep_key, None)
+
     return entry
 
 
