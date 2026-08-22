@@ -101,6 +101,8 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
         "provider": value.get("provider", ""),
         "capabilities": value.get("capabilities", ["text"]),
     }
+    if value.get("type"):
+        entry["type"] = value["type"]
     for key in (
         "upstream_model",
         "reasoning_override",
@@ -182,6 +184,8 @@ async def get_config(request: Any) -> Response:
                 }
                 for s in list_shims()
             ],
+            "embedding_formats": ["openai", "cohere", "jina", "voyage"],
+            "rerank_formats": ["jina", "cohere", "voyage"],
         }
     )
 
@@ -517,10 +521,13 @@ async def bulk_update_models(request: Any) -> Response:
 
 def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
     """Build a model config entry from request body."""
+    model_type = body.get("type", "llm")
     entry: dict[str, Any] = {
         "provider": provider,
         "capabilities": body.get("capabilities", ["text"]),
     }
+    if model_type != "llm":
+        entry["type"] = model_type
     for opt_key in ("upstream_model", "url_template", "stream_url_template"):
         if body.get(opt_key):
             entry[opt_key] = body[opt_key]
