@@ -40,19 +40,22 @@ def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
     providers = raw.setdefault("providers", {})
     models = raw.setdefault("models", {})
 
+    default_rerank_fmt = raw.get("default_rerank_format", "jina")
+    default_embed_fmt = raw.get("default_embedding_format", "openai")
+
     # --- Merge rerank_providers ---
     for name, cfg in raw.get("rerank_providers", {}).items():
         if not isinstance(cfg, dict):
             continue
         if name in providers:
             prov = providers[name]
-            prov.setdefault("rerank_format", cfg.get("format", "jina"))
+            prov.setdefault("rerank_format", cfg.get("format", default_rerank_fmt))
             prov.setdefault("rerank_path", cfg.get("rerank_path", "/v1/rerank"))
         else:
             providers[name] = {
                 "api_key": cfg.get("api_key", ""),
                 "base_url": cfg.get("base_url", ""),
-                "rerank_format": cfg.get("format", "jina"),
+                "rerank_format": cfg.get("format", default_rerank_fmt),
                 "rerank_path": cfg.get("rerank_path", "/v1/rerank"),
             }
             if cfg.get("enabled") is False:
@@ -64,7 +67,7 @@ def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
             continue
         if name in providers:
             prov = providers[name]
-            prov.setdefault("embedding_format", cfg.get("format", "openai"))
+            prov.setdefault("embedding_format", cfg.get("format", default_embed_fmt))
             prov.setdefault(
                 "embedding_path", cfg.get("embedding_path", "/v1/embeddings")
             )
@@ -72,7 +75,7 @@ def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
             providers[name] = {
                 "api_key": cfg.get("api_key", ""),
                 "base_url": cfg.get("base_url", ""),
-                "embedding_format": cfg.get("format", "openai"),
+                "embedding_format": cfg.get("format", default_embed_fmt),
                 "embedding_path": cfg.get("embedding_path", "/v1/embeddings"),
             }
             if cfg.get("enabled") is False:
@@ -116,13 +119,13 @@ def migrate(raw: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         Tuple of (migrated_dict, changed) where *changed* is True if any
         migration was applied.
     """
-    version = raw.get("config_version", 0)
-    if version >= CURRENT_VERSION:
+    initial_version = raw.get("config_version", 0)
+    if initial_version >= CURRENT_VERSION:
         return raw, False
 
     changed = False
     for from_version, migration_fn in _MIGRATIONS:
-        if version <= from_version:
+        if initial_version <= from_version:
             logger.info(
                 "config: applying migration v%d → v%d", from_version, from_version + 1
             )

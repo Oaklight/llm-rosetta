@@ -199,25 +199,40 @@ class JsoncConfigIO:
 
     def load(self, path: str) -> dict[str, Any]:
         raw = load_config(path)
-        return self._apply_migrations(raw, path)
+        return self._apply_migrations(raw, path, is_raw=False)
 
     def load_raw(self, path: str) -> dict[str, Any]:
         raw = load_config_raw(path)
-        return self._apply_migrations(raw, path)
+        return self._apply_migrations(raw, path, is_raw=True)
 
     def save(self, path: str, data: dict[str, Any]) -> None:
         write_config(path, data)
 
     @staticmethod
-    def _apply_migrations(raw: dict[str, Any], path: str) -> dict[str, Any]:
+    def _apply_migrations(
+        raw: dict[str, Any], path: str, *, is_raw: bool = False
+    ) -> dict[str, Any]:
         from .migrations import migrate
 
         raw, changed = migrate(raw)
         if changed:
+            if is_raw:
+                disk_data = raw
+            else:
+                disk_data = load_config_raw(path)
+                migrate(disk_data)
+            import shutil
+
+            bak = path + ".pre-migration.bak"
+            if not os.path.exists(bak):
+                shutil.copy2(path, bak)
+                logger.info("config: backed up original to %s", bak)
             with config_lock(path):
-                write_config(path, raw)
+                write_config(path, disk_data)
             logger.info(
-                "config: migrated %s to version %s", path, raw.get("config_version")
+                "config: migrated %s to version %s",
+                path,
+                disk_data.get("config_version"),
             )
         return raw
 
