@@ -191,16 +191,35 @@ class ConfigIO(Protocol):
 
 
 class JsoncConfigIO:
-    """Default :class:`ConfigIO` — reads/writes JSONC with env-var substitution."""
+    """Default :class:`ConfigIO` — reads/writes JSONC with env-var substitution.
+
+    On load, applies any pending config migrations and writes back the
+    migrated config if changes were made.
+    """
 
     def load(self, path: str) -> dict[str, Any]:
-        return load_config(path)
+        raw = load_config(path)
+        return self._apply_migrations(raw, path)
 
     def load_raw(self, path: str) -> dict[str, Any]:
-        return load_config_raw(path)
+        raw = load_config_raw(path)
+        return self._apply_migrations(raw, path)
 
     def save(self, path: str, data: dict[str, Any]) -> None:
         write_config(path, data)
+
+    @staticmethod
+    def _apply_migrations(raw: dict[str, Any], path: str) -> dict[str, Any]:
+        from .migrations import migrate
+
+        raw, changed = migrate(raw)
+        if changed:
+            with config_lock(path):
+                write_config(path, raw)
+            logger.info(
+                "config: migrated %s to version %s", path, raw.get("config_version")
+            )
+        return raw
 
 
 def discover_config(explicit_path: str | None = None) -> str | None:

@@ -1,10 +1,17 @@
 {
+  "config_version": 1,
+
   // Provider credentials and base URLs.
   // API keys support ${ENV_VAR} syntax for environment variable substitution.
+  // Providers can declare LLM, embedding, and rerank capabilities via
+  // their respective fields (type, embedding_format, rerank_format).
   "providers": {
     "openai_chat": {
       "api_key": "${OPENAI_API_KEY}",
-      "base_url": "https://api.openai.com/v1"
+      "base_url": "https://api.openai.com/v1",
+      // Embedding endpoint on the same provider
+      "embedding_format": "openai",
+      "embedding_path": "/v1/embeddings"
     },
     "openai_responses": {
       "api_key": "${OPENAI_API_KEY}",
@@ -17,12 +24,35 @@
     "google": {
       "api_key": "${GOOGLE_API_KEY}",
       "base_url": "https://generativelanguage.googleapis.com"
+    },
+    "jina": {
+      "api_key": "${JINA_API_KEY}",
+      "base_url": "https://api.jina.ai",
+      "embedding_format": "jina",
+      "embedding_path": "/v1/embeddings",
+      "rerank_format": "jina",
+      "rerank_path": "/v1/rerank"
+    },
+    "cohere": {
+      "api_key": "${COHERE_API_KEY}",
+      "base_url": "https://api.cohere.com",
+      "embedding_format": "cohere",
+      "embedding_path": "/v2/embed",
+      "rerank_format": "cohere",
+      "rerank_path": "/v2/rerank"
+    },
+    "voyage": {
+      "api_key": "${VOYAGE_API_KEY}",
+      "base_url": "https://api.voyageai.com",
+      "embedding_format": "voyage",
+      "embedding_path": "/v1/embeddings",
+      "rerank_format": "voyage",
+      "rerank_path": "/v1/rerank"
     }
   },
 
   // Model → provider routing table.
-  // When a request arrives with a given model name, the gateway
-  // looks up the target provider here.
+  // Models use "type" to declare their function: "llm" (default), "embedding", or "rerank".
   "models": {
     "gpt-4o": "openai_chat",
     "gpt-4o-mini": "openai_chat",
@@ -33,81 +63,17 @@
     "claude-3-5-haiku-20241022": "anthropic",
     "gemini-2.0-flash": "google",
     "gemini-2.5-pro": "google",
-    "gemini-2.5-flash": "google"
+    "gemini-2.5-flash": "google",
+    // Embedding models
+    "text-embedding-3-small": { "provider": "openai_chat", "type": "embedding" },
+    "jina-embeddings-v3": { "provider": "jina", "type": "embedding" },
+    "embed-v4.0": { "provider": "cohere", "type": "embedding" },
+    "voyage-3-lite": { "provider": "voyage", "type": "embedding" },
+    // Rerank models
+    "jina-reranker-v2-base-multilingual": { "provider": "jina", "type": "rerank" },
+    "rerank-v3.5": { "provider": "cohere", "type": "rerank" },
+    "rerank-2-lite": { "provider": "voyage", "type": "rerank" }
   },
-
-  // Rerank providers — each entry specifies the upstream format and endpoint path.
-  // "format" maps to a converter: "jina", "cohere", or "voyage".
-  "rerank_providers": {
-    "jina": {
-      "api_key": "${JINA_API_KEY}",
-      "base_url": "https://api.jina.ai",
-      "format": "jina",
-      "rerank_path": "/v1/rerank"
-    },
-    "cohere": {
-      "api_key": "${COHERE_API_KEY}",
-      "base_url": "https://api.cohere.com",
-      "format": "cohere",
-      "rerank_path": "/v2/rerank"
-    },
-    "voyage": {
-      "api_key": "${VOYAGE_API_KEY}",
-      "base_url": "https://api.voyageai.com",
-      "format": "voyage",
-      "rerank_path": "/v1/rerank"
-    }
-  },
-
-  // Rerank model → provider routing table.
-  "rerank_models": {
-    "jina-reranker-v2-base-multilingual": "jina",
-    "rerank-v3.5": "cohere",
-    "rerank-2-lite": "voyage"
-  },
-
-  // Default format for incoming rerank requests (jina, cohere, or voyage).
-  "default_rerank_format": "jina",
-
-  // Embedding providers — each entry specifies the upstream format and endpoint path.
-  // "format" maps to a converter: "openai", "cohere", "jina", or "voyage".
-  "embedding_providers": {
-    "openai": {
-      "api_key": "${OPENAI_API_KEY}",
-      "base_url": "https://api.openai.com",
-      "format": "openai",
-      "embedding_path": "/v1/embeddings"
-    },
-    "jina": {
-      "api_key": "${JINA_API_KEY}",
-      "base_url": "https://api.jina.ai",
-      "format": "jina",
-      "embedding_path": "/v1/embeddings"
-    },
-    "cohere": {
-      "api_key": "${COHERE_API_KEY}",
-      "base_url": "https://api.cohere.com",
-      "format": "cohere",
-      "embedding_path": "/v2/embed"
-    },
-    "voyage": {
-      "api_key": "${VOYAGE_API_KEY}",
-      "base_url": "https://api.voyageai.com",
-      "format": "voyage",
-      "embedding_path": "/v1/embeddings"
-    }
-  },
-
-  // Embedding model → provider routing table.
-  "embedding_models": {
-    "text-embedding-3-small": "openai",
-    "jina-embeddings-v3": "jina",
-    "embed-v4.0": "cohere",
-    "voyage-3-lite": "voyage"
-  },
-
-  // Default format for incoming embedding requests.
-  "default_embedding_format": "openai",
 
   // Server settings
   "server": {
