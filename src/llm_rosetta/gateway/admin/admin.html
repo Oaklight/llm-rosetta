@@ -750,6 +750,7 @@ body { padding-bottom: 26px; }
         <input type="number" id="captureCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
         <button class="btn btn-sm" onclick="toggleCapture()" id="captureToggleBtn" data-i18n="capture.enable">Enable</button>
         <button class="btn btn-sm" onclick="clearCaptureResults()" data-i18n="capture.clear">Clear</button>
+        <button class="btn btn-sm" onclick="downloadAllCaptures()" id="captureDownloadAll" style="display:none" data-i18n="capture.downloadAll">Download All</button>
       </div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="capture.hint">Captures full request/response bodies in memory. Results are ephemeral and lost on restart.</p>
       <div class="table-scroll"><table>
@@ -1349,6 +1350,7 @@ const I18N = {
     'capture.empty':'No captures. Enable capture and send requests.',
     'capture.remaining':'{n} remaining',
     'capture.hint':'Captures full request/response bodies in memory. Results are ephemeral and lost on restart.',
+    'capture.downloadAll':'Download All',
     'filter.allModels':'All Models', 'filter.allProviders':'All Providers',
     'filter.allStatus':'All Status', 'filter.ok':'OK (2xx/3xx)', 'filter.error':'Error (4xx/5xx)',
     'test.text':'Simple Text', 'test.stream':'Stream',
@@ -3504,12 +3506,15 @@ async function loadCaptureResults() {
     const empty = document.getElementById('captureEmpty');
     if (!tbody) return;
     const results = data.results || [];
+    const dlBtn = document.getElementById('captureDownloadAll');
     if (results.length === 0) {
       tbody.innerHTML = '';
       if (empty) empty.style.display = '';
+      if (dlBtn) dlBtn.style.display = 'none';
       return;
     }
     if (empty) empty.style.display = 'none';
+    if (dlBtn) dlBtn.style.display = '';
     tbody.innerHTML = results.map((r, i) => {
       const ts = r.timestamp ? new Date(r.timestamp).toLocaleTimeString() : '-';
       const mode = r.is_stream ? 'stream' : 'sync';
@@ -3520,7 +3525,7 @@ async function loadCaptureResults() {
         <td>${esc(r.source_provider || '-')} \u2192 ${esc(r.target_provider || '-')}</td>
         <td>${mode}</td>
         <td>${st}</td>
-        <td><button class="btn btn-sm" onclick="viewCapture(${i})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button></td>
+        <td><button class="btn btn-sm" onclick="viewCapture(${i})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button> <button class="btn btn-sm" onclick="downloadCapture(${i}, '${esc(r.model||"capture")}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
       </tr>`;
     }).join('');
   } catch (e) { /* ignore */ }
@@ -3565,6 +3570,35 @@ ${sections.map(s => `<div><h2 onclick="this.parentElement.classList.toggle('coll
     w.document.write(html);
     w.document.close();
   } catch (e) { showToast('Failed to load capture detail', 'error'); }
+}
+
+async function downloadCapture(index, model) {
+  try {
+    const data = await api.get('/admin/api/capture/results/' + index);
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const ts = data.timestamp ? new Date(data.timestamp).toISOString().replace(/[:.]/g, '-').slice(0, 19) : index;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `capture-${model}-${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { showToast('Failed to download capture', 'error'); }
+}
+
+async function downloadAllCaptures() {
+  try {
+    const data = await api.get('/admin/api/capture/results');
+    const results = data.results || [];
+    if (results.length === 0) { showToast('No captures to download', 'error'); return; }
+    const json = JSON.stringify(results, null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `captures-${new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { showToast('Failed to download captures', 'error'); }
 }
 
 // Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
