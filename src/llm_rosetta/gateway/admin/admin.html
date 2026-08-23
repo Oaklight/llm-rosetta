@@ -325,13 +325,13 @@ code.copyable:hover { background: var(--bg-hover); }
 
 /* Toast */
 .toast {
-  position: fixed; bottom: 24px; right: 24px;
+  position: fixed; bottom: 30px; right: 10px;
   padding: 12px 20px; border-radius: var(--radius); font-size: 13px;
   z-index: 200; opacity: 0; transition: opacity 0.3s;
 }
-.toast.show { opacity: 1; }
-.toast.success { background: var(--green); color: #fff; }
-.toast.error { background: var(--red); color: #fff; }
+.toast.show { opacity: 0.9; }
+.toast.success { background: #316d42; color: #fff; backdrop-filter: blur(8px); }
+.toast.error { background: var(--red); color: #fff; backdrop-filter: blur(8px); }
 
 /* Charts */
 .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
@@ -461,6 +461,9 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .model-toolbar, .provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
 .model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
 .model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
+#tab-models table { table-layout:fixed; }
+#tab-models .model-name-cell { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+#tab-models .model-name-cell code { overflow:hidden;text-overflow:ellipsis; }
 .model-count, .provider-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
 
 /* Fetch models modal */
@@ -637,13 +640,16 @@ body { padding-bottom: 26px; }
   <!-- Models Tab -->
   <div class="tab-panel" id="tab-models">
     <div class="section">
+      <!-- Row 1: Title + count + buttons -->
       <div class="section-header">
         <h2 data-i18n="section.models">Model Routing</h2>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span class="model-count" id="modelCount" style="margin:0"></span>
           <button class="btn btn-sm" onclick="openFetchModelsModal()" data-i18n="btn.fetchModels">&#x2B07; Fetch from Provider</button>
           <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
         </div>
       </div>
+      <!-- Row 2: Filters only -->
       <div class="model-toolbar">
         <select id="modelProviderFilter" onchange="renderModels()">
           <option value="" data-i18n="filter.allProviders">All Providers</option>
@@ -654,9 +660,8 @@ body { padding-bottom: 26px; }
           <div onclick="switchModelDomain(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
           <div onclick="switchModelDomain(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
         </div>
-        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels">
+        <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels" style="max-width:200px">
         <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
-        <span class="model-count" id="modelCount"></span>
       </div>
       <div class="bulk-bar" id="modelBulkBar">
         <span class="bulk-count" id="modelBulkCount">0</span> <span data-i18n="label.selected">selected</span>
@@ -668,10 +673,12 @@ body { padding-bottom: 26px; }
       </div>
       <div class="table-scroll"><table>
         <thead><tr>
-          <th style="width:30px"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
-          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model">Model</th>
-          <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider">Provider</th>
-          <th></th>
+          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
+          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:25%">Model</th>
+          <th style="width:9%;text-align:center" data-i18n="col.type">Type</th>
+          <th style="width:20%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
+          <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:13%">Provider</th>
+          <th style="width:20%;text-align:right" data-i18n="col.actions"></th>
         </tr></thead>
         <tbody id="modelTable"></tbody>
       </table></div>
@@ -1422,7 +1429,7 @@ function setTheme(name) {
 // ===================== i18n =====================
 const I18N = {
   en: {
-    'tab.providers':'Providers', 'tab.models':'Models', 'tab.keys':'API Keys',
+    'tab.providers':'Providers', 'col.type':'Type', 'col.capabilities':'Capabilities', 'col.status':'Status', 'col.actions':'Actions', 'tab.models':'Models', 'tab.keys':'API Keys',
     'tab.dashboard':'Dashboard', 'tab.logs':'Request Log',
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL',
@@ -1563,7 +1570,7 @@ const I18N = {
   },
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
-    'tab.providers':'\u670d\u52a1\u65b9', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
+    'tab.providers':'\u670d\u52a1\u65b9', 'col.type':'\u7c7b\u578b', 'col.capabilities':'\u80fd\u529b', 'col.status':'\u72b6\u6001', 'col.actions':'\u64cd\u4f5c', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
     'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
     'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u65b9', 'section.models':'\u6a21\u578b\u8def\u7531',
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
@@ -2770,11 +2777,16 @@ function renderModels() {
     const urlTplTag = urlTpl ? ` <span style="font-size:10px;color:var(--text-dim);background:var(--bg-card);padding:1px 4px;border-radius:3px;border:1px solid var(--border)" title="URL Template: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''}>
       <td><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>
-      <td><code class="copyable" title="Click to copy" onclick="copyText('${esc(name)}')">${esc(name)}</code>${upstreamTag}${urlTplTag} ${_modelDomain === 'all' ? typeBadge + ' ' : ''}${capBadges}</td>
+      <td class="model-name-cell">
+        <code class="copyable" title="${esc(name)}" onclick="copyText('${esc(name)}')" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">${esc(name)}</code>
+        ${upstreamTag || urlTplTag ? `<div style="margin-top:2px">${upstreamTag}${urlTplTag}</div>` : ''}
+      </td>
+      <td style="text-align:center">${typeBadge}</td>
+      <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
-      <td style="text-align:right; white-space:nowrap">
-        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
-        <div class="test-group">
+      <td style="text-align:right;white-space:nowrap">
+        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${isEmbedding ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${isEmbedding ? 'embedding' : 'text'}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
@@ -2793,13 +2805,11 @@ function renderModels() {
           </div>
         </div>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
-        <div class="model-more-menu" style="display:inline-block;position:relative">
-          <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
-          <div class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
-            <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
-            <div style="border-top:1px solid var(--border);margin:2px 0"></div>
-            <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
-          </div>
+        <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
+        <div class="more-menu" style="display:none;position:absolute;right:24px;min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
+          <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
+          <div style="border-top:1px solid var(--border);margin:2px 0"></div>
+          <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
         </div>
       </td>
     </tr>`;
