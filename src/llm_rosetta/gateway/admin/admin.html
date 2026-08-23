@@ -330,7 +330,7 @@ code.copyable:hover { background: var(--bg-hover); }
   z-index: 200; opacity: 0; transition: opacity 0.3s;
 }
 .toast.show { opacity: 0.9; }
-.toast.success { background: #316d42; color: #fff; backdrop-filter: blur(8px); }
+.toast.success { background: color-mix(in srgb, var(--green) 60%, #000); color: #fff; backdrop-filter: blur(8px); }
 .toast.error { background: var(--red); color: #fff; backdrop-filter: blur(8px); }
 
 /* Charts */
@@ -674,11 +674,11 @@ body { padding-bottom: 26px; }
       <div class="table-scroll"><table>
         <thead><tr>
           <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
-          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:25%">Model</th>
+          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:28%">Model</th>
           <th style="width:9%;text-align:center" data-i18n="col.type">Type</th>
           <th style="width:20%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:13%">Provider</th>
-          <th style="width:20%;text-align:right" data-i18n="col.actions"></th>
+          <th style="width:22%;text-align:right" data-i18n="col.actions"></th>
         </tr></thead>
         <tbody id="modelTable"></tbody>
       </table></div>
@@ -2784,7 +2784,7 @@ function renderModels() {
       <td style="text-align:center">${typeBadge}</td>
       <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
-      <td style="text-align:right;white-space:nowrap">
+      <td style="text-align:right;white-space:nowrap;position:relative">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${isEmbedding ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${isEmbedding ? 'embedding' : 'text'}')">${t('btn.test')}</button>
@@ -2806,7 +2806,7 @@ function renderModels() {
         </div>
         <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
-        <div class="more-menu" style="display:none;position:absolute;right:24px;min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
+        <div class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
           <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
           <div style="border-top:1px solid var(--border);margin:2px 0"></div>
           <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
