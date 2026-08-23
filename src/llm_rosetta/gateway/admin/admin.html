@@ -3624,7 +3624,7 @@ async function loadCaptureResults() {
         <td>${esc(r.source_provider || '-')} \u2192 ${esc(r.target_provider || '-')}</td>
         <td>${mode}</td>
         <td>${st}</td>
-        <td><button class="btn btn-sm" onclick="viewCapture(${i})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button> <button class="btn btn-sm" onclick="downloadCapture(${i}, '${esc(r.model||"capture")}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
+        <td><button class="btn btn-sm" onclick="viewCapture(${i})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button> <button class="btn btn-sm" onclick="downloadCapture(${i})" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
       </tr>`;
     }).join('');
   } catch (e) { /* ignore */ }
@@ -3671,9 +3671,10 @@ ${sections.map(s => `<div><h2 onclick="this.parentElement.classList.toggle('coll
   } catch (e) { showToast('Failed to load capture detail', 'error'); }
 }
 
-async function downloadCapture(index, model) {
+async function downloadCapture(index) {
   try {
     const data = await api.get('/admin/api/capture/results/' + index);
+    const model = data.model || 'capture';
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], {type: 'application/json'});
     const ts = data.timestamp ? new Date(data.timestamp).toISOString().replace(/[:.]/g, '-').slice(0, 19) : index;
@@ -3705,8 +3706,11 @@ let _dumpPage = 0;
 const DUMP_PAGE_SIZE = 20;
 
 async function loadDumps() {
+  _dumpAllEntries = [];
   renderDumps();
 }
+
+let _dumpAllEntries = [];
 
 async function renderDumps() {
   const phase = document.getElementById('dumpPhaseFilter').value;
@@ -3718,18 +3722,33 @@ async function renderDumps() {
   const dateFrom = document.getElementById('dumpDateFrom').value;
   const dateTo = document.getElementById('dumpDateTo').value;
 
-  let params = `limit=${DUMP_PAGE_SIZE}&offset=${_dumpPage * DUMP_PAGE_SIZE}`;
-  if (phase) params += `&error_phase=${encodeURIComponent(phase)}`;
-  if (provider) params += `&provider=${encodeURIComponent(provider)}`;
-  const filterModel = (modelDrop && modelDrop !== 'custom') ? modelDrop : '';
-  if (filterModel) params += `&model=${encodeURIComponent(filterModel)}`;
-
   try {
-    const data = await api.get(`/admin/api/error-dumps?${params}`);
-    let entries = data.entries || [];
-    const total = data.total || 0;
+    // Fetch all entries on first load or refresh
+    if (_dumpAllEntries.length === 0) {
+      const data = await api.get('/admin/api/error-dumps?limit=10000&offset=0');
+      _dumpAllEntries = data.entries || [];
+    }
 
-    // Client-side filters not supported by backend
+    // Populate dropdowns from full dataset (before filtering)
+    const provSelect = document.getElementById('dumpProviderFilter');
+    const prevProv = provSelect.value;
+    const allProvSet = new Set(_dumpAllEntries.map(e => e.provider_name).filter(Boolean));
+    provSelect.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
+      [...allProvSet].sort().map(p => `<option value="${p}"${p===prevProv?' selected':''}>${esc(p)}</option>`).join('');
+
+    const modelSelect = document.getElementById('dumpModelFilter');
+    const prevModel = modelSelect.value;
+    const allModelSet = new Set(_dumpAllEntries.map(e => e.model).filter(Boolean));
+    modelSelect.innerHTML = `<option value="">${t('filter.allModels')}</option>` +
+      [...allModelSet].sort().map(m => `<option value="${m}"${m===prevModel?' selected':''}>${esc(m)}</option>`).join('') +
+      '<option value="custom">Custom...</option>';
+
+    // Apply all filters client-side
+    let entries = _dumpAllEntries;
+    if (phase) entries = entries.filter(e => e.error_phase === phase);
+    if (provider) entries = entries.filter(e => e.provider_name === provider);
+    const filterModel = (modelDrop && modelDrop !== 'custom') ? modelDrop : '';
+    if (filterModel) entries = entries.filter(e => e.model === filterModel);
     if (search) entries = entries.filter(e => (e.model||'').toLowerCase().includes(search));
     if (status) {
       if (status === '4xx') entries = entries.filter(e => e.status_code >= 400 && e.status_code < 500);
@@ -3745,20 +3764,7 @@ async function renderDumps() {
       if (dateTo) entries = entries.filter(e => new Date(e.timestamp) <= new Date(dateTo + 'T23:59:59'));
     }
 
-    // Populate provider filter
-    const provSelect = document.getElementById('dumpProviderFilter');
-    const prevProv = provSelect.value;
-    const provSet = new Set(entries.map(e => e.provider_name).filter(Boolean));
-    provSelect.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
-      [...provSet].sort().map(p => `<option value="${p}"${p===prevProv?' selected':''}>${esc(p)}</option>`).join('');
-
-    // Populate model filter
-    const modelSelect = document.getElementById('dumpModelFilter');
-    const prevModel = modelSelect.value;
-    const modelSet = new Set(entries.map(e => e.model).filter(Boolean));
-    modelSelect.innerHTML = `<option value="">${t('filter.allModels')}</option>` +
-      [...modelSet].sort().map(m => `<option value="${m}"${m===prevModel?' selected':''}>${esc(m)}</option>`).join('') +
-      '<option value="custom">Custom...</option>';
+    const total = entries.length;
 
     const tbody = document.getElementById('dumpTable');
     const countEl = document.getElementById('dumpCount');
@@ -3766,23 +3772,26 @@ async function renderDumps() {
     const dlBtn = document.getElementById('dumpDownloadAllBtn');
 
     countEl.textContent = total > 0 ? `${total} error${total !== 1 ? 's' : ''}` : '';
-    emptyEl.style.display = entries.length === 0 ? '' : 'none';
-    if (dlBtn) dlBtn.style.display = total > 0 ? '' : 'none';
+    emptyEl.style.display = total === 0 ? '' : 'none';
+    if (dlBtn) dlBtn.style.display = _dumpAllEntries.length > 0 ? '' : 'none';
 
     // Show/hide reset
-    const hasFilters = phase || status || provider || search || (modelDrop && modelDrop !== 'custom' && modelDrop) || (timeRange && timeRange !== '');
+    const hasFilters = phase || status || provider || search || filterModel || (timeRange && timeRange !== '');
     const resetBtn = document.getElementById('dumpResetBtn');
     if (resetBtn) resetBtn.style.display = hasFilters ? 'inline-flex' : 'none';
 
-    // Pagination
+    // Client-side pagination on filtered results
     const totalPages = Math.ceil(total / DUMP_PAGE_SIZE) || 1;
+    if (_dumpPage >= totalPages) _dumpPage = Math.max(0, totalPages - 1);
+    const pageStart = _dumpPage * DUMP_PAGE_SIZE;
+    const pageEntries = entries.slice(pageStart, pageStart + DUMP_PAGE_SIZE);
     document.getElementById('dumpPageInfo').textContent = `Page ${_dumpPage + 1} / ${totalPages}`;
     document.getElementById('dumpPrevPage').disabled = _dumpPage === 0;
     document.getElementById('dumpNextPage').disabled = (_dumpPage + 1) * DUMP_PAGE_SIZE >= total;
 
-    if (entries.length === 0) { tbody.innerHTML = ''; return; }
+    if (total === 0) { tbody.innerHTML = ''; return; }
 
-    tbody.innerHTML = entries.map(e => {
+    tbody.innerHTML = pageEntries.map(e => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
       let errPreview = '—';
       if (e.response_text) {
@@ -3797,8 +3806,8 @@ async function renderDumps() {
         <td><span class="badge badge-error">${e.status_code||'-'}</span></td>
         <td><span style="font-size:11px;color:var(--red);font-family:var(--mono);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}','${esc(e.model||'error')}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
+          <button class="btn btn-sm" onclick="viewDump(${JSON.stringify(e.dump_id||e.id)})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button class="btn btn-sm" onclick="downloadDump(${JSON.stringify(e.dump_id||e.id)})" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
         </td>
       </tr>`;
     }).join('');
@@ -3846,15 +3855,16 @@ pre.error{color:#ef4444}</style></head><body>
 <div><div class="label">Upstream URL</div><div class="value">${esc(e.upstream_url||'-')}</div></div>
 <div><div class="label">Dump ID</div><div class="value">${esc(e.dump_id||e.id||'-')}</div></div>
 </div>${sections.map(s => `<div class="section"><div class="section-header" onclick="this.parentElement.classList.toggle('collapsed')">${s.title}</div><pre${s.cls?` class="${s.cls}"`:''}>` + (function(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;})(s.body) + `</pre></div>`).join('')}
-</div><`+`script>function downloadThis(){const b=new Blob([${JSON.stringify(JSON.stringify(e,null,2))}],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='error-dump-${esc(e.model||'error')}-${esc(e.dump_id||e.id||'')}.json';a.click();URL.revokeObjectURL(a.href);}<`+`/script></body></html>`;
+</div><`+`script>function downloadThis(){const b=new Blob([${JSON.stringify(JSON.stringify(e,null,2)).replace(/</g,'\\u003c')}],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='error-dump-${esc(e.model||'error')}-${esc(e.dump_id||e.id||'')}.json';a.click();URL.revokeObjectURL(a.href);}<`+`/script></body></html>`;
     w.document.write(html);
     w.document.close();
   } catch (err) { showToast(t('error.loadFailed'), 'error'); }
 }
 
-async function downloadDump(dumpId, model) {
+async function downloadDump(dumpId) {
   try {
     const data = await api.get(`/admin/api/error-dumps/${encodeURIComponent(dumpId)}`);
+    const model = data.model || 'error';
     const json = JSON.stringify(data, null, 2);
     const blob = new Blob([json], {type:'application/json'});
     const ts = data.timestamp ? new Date(data.timestamp).toISOString().replace(/[:.]/g,'-').slice(0,19) : dumpId;
@@ -3923,6 +3933,7 @@ async function confirmClearDumps() {
   await api.del('/admin/api/error-dumps');
   showToast('Cleared all error dumps');
   _dumpPage = 0;
+  _dumpAllEntries = [];
   renderDumps();
 }
 
