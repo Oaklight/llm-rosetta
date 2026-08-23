@@ -213,11 +213,14 @@ tr:hover td { background: var(--bg-hover); }
 .btn-reset:hover { color:var(--red);border-color:var(--red); }
 .btn-reset.visible { display:inline-flex; }
 /* Endpoint config sections in provider modal */
-.endpoint-section { margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);display:none; }
+.endpoint-section { margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:var(--radius);display:none; }
 .endpoint-section.visible { display:block; }
+#provLlmSection.visible { border-left-color:var(--accent);background:rgba(99,102,241,0.02); }
+#provEmbeddingSection.visible { border-left-color:var(--green);background:rgba(34,197,94,0.02); }
+#provRerankSection.visible { border-left-color:var(--orange);background:rgba(245,158,11,0.02); }
 .endpoint-section .section-label { font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
 .endpoint-section .section-label .dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
-.dot-llm { background:var(--accent); }
+.dot-llm { background:var(--purple, var(--accent)); }
 .dot-embedding { background:var(--green); }
 .dot-rerank { background:var(--orange); }
 .endpoint-section .form-group { margin-bottom:10px; }
@@ -1000,18 +1003,29 @@ body { padding-bottom: 26px; }
 
 <!-- Provider Modal -->
 <div class="modal-overlay" id="providerModal">
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
+
+    <!-- Capability Selector — top of form -->
+    <div class="cap-section" style="margin-top:0;border-top:none;padding-top:0;margin-bottom:14px">
+      <div class="cap-section-title" data-i18n="label.capabilities">Capabilities</div>
+      <div class="cap-checks" style="gap:8px">
+        <label style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s" id="provCapLlmWrap">
+          <input type="checkbox" id="provCapLlm" checked onchange="toggleProvCapSection()"> <span data-i18n="label.llm">LLM</span>
+        </label>
+        <label style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s" id="provCapEmbedWrap">
+          <input type="checkbox" id="provCapEmbedding" onchange="toggleProvCapSection()"> <span data-i18n="label.embedding">Embedding</span>
+        </label>
+        <label style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s" id="provCapRerankWrap">
+          <input type="checkbox" id="provCapRerank" onchange="toggleProvCapSection()"> <span data-i18n="label.rerank">Rerank</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Connection — always visible -->
     <div class="form-group">
       <label data-i18n="label.providerName">Provider Name</label>
       <input id="provName" placeholder="e.g. my-openai, openrouter-claude">
-    </div>
-    <div class="form-group">
-      <label data-i18n="label.providerType">Provider Type</label>
-      <div class="type-logo-wrapper">
-        <img id="provTypeLogo" class="type-logo-preview" src="" alt="" style="display:none">
-        <select id="provType"></select>
-      </div>
     </div>
     <div class="form-group">
       <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
@@ -1034,66 +1048,72 @@ body { padding-bottom: 26px; }
       <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890">
     </div>
     <div class="form-group">
-      <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
-      <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">
-      <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.urlTemplateHint">Override the endpoint path. Placeholders: {base_url}, {model}</div>
-    </div>
-    <div class="form-group">
-      <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
-      <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
-    </div>
-    <div class="form-group">
       <label data-i18n="label.timeout">Upstream Timeout (seconds)</label>
       <input id="provTimeout" type="number" min="1" step="1" placeholder="">
       <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.timeoutHint">Leave blank to use the global default. Per-model overrides take precedence.</div>
     </div>
-    <div class="form-group">
-      <div class="checkbox-group">
-        <label><input type="checkbox" id="provCustomTools"> <span data-i18n="label.supportsCustomTools">Supports custom tool definitions</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.customTools">Whether this provider's API natively accepts <code>{type: &quot;custom&quot;}</code> tool definitions.<br><br><b>When enabled:</b> custom tools pass through as-is.<br><b>When disabled:</b> custom tools are downgraded to function wrappers with a synthesized JSON schema, then restored on the response path.<br><br>Only OpenAI's official API supports custom tools natively. Third-party Chat Completions providers (DeepSeek, Moonshot, etc.) typically do not.<br><br><a href="https://web.archive.org/web/20260806000546/https://developers.openai.com/api/docs/guides/function-calling#custom-tools" target="_blank" style="color:var(--accent)">OpenAI Function Calling docs &rarr;</a></span></span>
-      </div>
-    </div>
-    <div class="form-group">
-      <div class="checkbox-group">
-        <label><input type="checkbox" id="provHoistSystem" checked> <span data-i18n="label.hoistSystemMessages">Hoist late system messages</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.hoistSystem">Rewrite mid-conversation system/developer messages as user-role envelopes (<code>[System: ...]</code>) to preserve the prompt cache prefix.<br><br><b>When enabled:</b> late system messages are hoisted — leading ones move to the system instruction, mid-conversation ones become user messages. This keeps the cacheable prefix stable and avoids silent message loss on some providers.<br><br><b>When disabled:</b> system messages are left in their original positions. This may break prompt caching or cause message loss on providers that reject non-leading system messages.</span></span>
-      </div>
-    </div>
-    <!-- Capability checkboxes -->
-    <div class="cap-section">
-      <div class="cap-section-title" data-i18n="label.capabilities">Capabilities</div>
-      <div class="cap-checks">
-        <label><input type="checkbox" id="provCapLlm" checked onchange="toggleProvCapSection()"> <span data-i18n="label.llm">LLM</span></label>
-        <label><input type="checkbox" id="provCapEmbedding" onchange="toggleProvCapSection()"> <span data-i18n="label.embedding">Embedding</span></label>
-        <label><input type="checkbox" id="provCapRerank" onchange="toggleProvCapSection()"> <span data-i18n="label.rerank">Rerank</span></label>
-      </div>
-      <!-- Embedding endpoint config -->
-      <div class="endpoint-section" id="provEmbeddingSection">
-        <div class="section-label"><span class="dot dot-embedding"></span> <span data-i18n="label.embeddingEndpoint">Embedding Endpoint</span></div>
-        <div class="form-row">
-          <div class="form-group">
-            <label data-i18n="label.format">Format</label>
-            <select id="provEmbeddingFormat"></select>
-          </div>
-          <div class="form-group">
-            <label data-i18n="label.embeddingPath">Embedding Path</label>
-            <input type="text" id="provEmbeddingPath" placeholder="/v1/embeddings">
-          </div>
+
+    <!-- LLM Endpoint panel -->
+    <div class="endpoint-section visible" id="provLlmSection">
+      <div class="section-label"><span class="dot dot-llm"></span> <span data-i18n="label.llmEndpoint">LLM Endpoint</span></div>
+      <div class="form-group">
+        <label data-i18n="label.providerType">Provider Type</label>
+        <div class="type-logo-wrapper">
+          <img id="provTypeLogo" class="type-logo-preview" src="" alt="" style="display:none">
+          <select id="provType"></select>
         </div>
       </div>
-      <!-- Rerank endpoint config -->
-      <div class="endpoint-section" id="provRerankSection">
-        <div class="section-label"><span class="dot dot-rerank"></span> <span data-i18n="label.rerankEndpoint">Rerank Endpoint</span></div>
-        <div class="form-row">
-          <div class="form-group">
-            <label data-i18n="label.format">Format</label>
-            <select id="provRerankFormat"></select>
-          </div>
-          <div class="form-group">
-            <label data-i18n="label.rerankPath">Rerank Path</label>
-            <input type="text" id="provRerankPath" placeholder="/v1/rerank">
-          </div>
+      <div class="form-group">
+        <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+        <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">
+        <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.urlTemplateHint">Override the endpoint path. Placeholders: {base_url}, {model}</div>
+      </div>
+      <div class="form-group">
+        <label data-i18n="label.streamUrlTemplate">Stream URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+        <input id="provStreamUrlTemplate" placeholder="Leave blank to use URL Template above">
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="provCustomTools"> <span data-i18n="label.supportsCustomTools">Supports custom tool definitions</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.customTools">Whether this provider's API natively accepts <code>{type: &quot;custom&quot;}</code> tool definitions.<br><br><b>When enabled:</b> custom tools pass through as-is.<br><b>When disabled:</b> custom tools are downgraded to function wrappers with a synthesized JSON schema, then restored on the response path.<br><br>Only OpenAI's official API supports custom tools natively. Third-party Chat Completions providers (DeepSeek, Moonshot, etc.) typically do not.<br><br><a href="https://web.archive.org/web/20260806000546/https://developers.openai.com/api/docs/guides/function-calling#custom-tools" target="_blank" style="color:var(--accent)">OpenAI Function Calling docs &rarr;</a></span></span>
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="provHoistSystem" checked> <span data-i18n="label.hoistSystemMessages">Hoist late system messages</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.hoistSystem">Rewrite mid-conversation system/developer messages as user-role envelopes (<code>[System: ...]</code>) to preserve the prompt cache prefix.<br><br><b>When enabled:</b> late system messages are hoisted — leading ones move to the system instruction, mid-conversation ones become user messages. This keeps the cacheable prefix stable and avoids silent message loss on some providers.<br><br><b>When disabled:</b> system messages are left in their original positions. This may break prompt caching or cause message loss on providers that reject non-leading system messages.</span></span>
         </div>
       </div>
     </div>
+
+    <!-- Embedding Endpoint panel -->
+    <div class="endpoint-section" id="provEmbeddingSection">
+      <div class="section-label"><span class="dot dot-embedding"></span> <span data-i18n="label.embeddingEndpoint">Embedding Endpoint</span></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label data-i18n="label.format">Format</label>
+          <select id="provEmbeddingFormat"></select>
+        </div>
+        <div class="form-group">
+          <label data-i18n="label.embeddingPath">Embedding Path</label>
+          <input type="text" id="provEmbeddingPath" placeholder="/v1/embeddings">
+        </div>
+      </div>
+    </div>
+
+    <!-- Rerank Endpoint panel -->
+    <div class="endpoint-section" id="provRerankSection">
+      <div class="section-label"><span class="dot dot-rerank"></span> <span data-i18n="label.rerankEndpoint">Rerank Endpoint</span></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label data-i18n="label.format">Format</label>
+          <select id="provRerankFormat"></select>
+        </div>
+        <div class="form-group">
+          <label data-i18n="label.rerankPath">Rerank Path</label>
+          <input type="text" id="provRerankPath" placeholder="/v1/rerank">
+        </div>
+      </div>
+    </div>
+
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
@@ -1514,7 +1534,7 @@ const I18N = {
     'label.rerank':'Rerank',
     'label.capabilities':'Capabilities',
     'label.format':'Format',
-    'label.embeddingEndpoint':'Embedding Endpoint',
+    'label.llmEndpoint':'LLM Endpoint', 'label.embeddingEndpoint':'Embedding Endpoint',
     'label.rerankEndpoint':'Rerank Endpoint',
     'label.embeddingPath':'Embedding Path',
     'label.rerankPath':'Rerank Path',
@@ -2191,7 +2211,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provTimeout').placeholder = (configData.server && configData.server.upstream_timeout) || 300;
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   // Populate embedding/rerank capability checkboxes
-  const provCaps = provCfg ? _getProviderCaps(provCfg) : ['llm'];
+  const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
   document.getElementById('provCapLlm').checked = provCaps.includes('llm');
   document.getElementById('provCapEmbedding').checked = provCaps.includes('embedding');
   document.getElementById('provCapRerank').checked = provCaps.includes('rerank');
@@ -2443,9 +2463,16 @@ function resetModelFilters() {
   renderModels();
 }
 
-function _getProviderCaps(cfg) {
+function _getProviderCaps(cfg, provName) {
   const caps = [];
-  if (cfg.type || cfg.url_template || cfg.stream_url_template) caps.push('llm');
+  // LLM if the provider has LLM models, or has url_template, or has no embedding/rerank fields at all
+  const hasEmbedOrRerank = cfg.embedding_format || cfg.rerank_format;
+  const hasLlmModels = provName && configData && configData.models && Object.values(configData.models).some(m => {
+    const p = typeof m === 'string' ? m : m.provider;
+    const t = typeof m === 'object' ? (m.type || 'llm') : 'llm';
+    return p === provName && t === 'llm';
+  });
+  if (hasLlmModels || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
   if (cfg.embedding_format) caps.push('embedding');
   if (cfg.rerank_format) caps.push('rerank');
   if (caps.length === 0) caps.push('llm');
@@ -2502,6 +2529,7 @@ function toggleProvCapSection() {
   const llm = document.getElementById('provCapLlm').checked;
   const embed = document.getElementById('provCapEmbedding').checked;
   const rerank = document.getElementById('provCapRerank').checked;
+  document.getElementById('provLlmSection').classList.toggle('visible', llm);
   document.getElementById('provEmbeddingSection').classList.toggle('visible', embed);
   document.getElementById('provRerankSection').classList.toggle('visible', rerank);
   // Populate format dropdowns if shown
@@ -2556,7 +2584,7 @@ function renderProviders() {
 
   // Filter by capability
   if (_providerFilter !== 'all') {
-    entries = entries.filter(([, cfg]) => _getProviderCaps(cfg).includes(_providerFilter));
+    entries = entries.filter(([name, cfg]) => _getProviderCaps(cfg, name).includes(_providerFilter));
   }
 
   // Update count
@@ -2583,29 +2611,20 @@ function renderProviders() {
     const typeName = cfg.type || name;
     const logo = shimLogo[typeName];
     const logoHtml = logo ? `<img class="provider-logo" src="${esc(logo)}" alt="">` : '';
-    // In list view, always output fixed columns (Type, Base URL, API Key) for alignment
     const fieldsHtml = isList
       ? `<div class="field" title="Type: ${esc(typeName)}"><code>${esc(typeName)}</code></div>
          <div class="field" title="${esc(cfg.base_url || '')}"><code>${esc(cfg.base_url || '')}</code></div>
          ${_credentialVisible ? `<div class="field" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>` : '<div class="field"></div>'}`
       : `<div class="field">Type: <code>${esc(typeName)}</code></div>
          <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-         ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}
-         ${cfg.proxy ? `<div class="field">Proxy: <code>${esc(cfg.proxy)}</code></div>` : ''}
-     ${cfg.url_template ? `<div class="field">URL Template: <code>${esc(cfg.url_template)}</code></div>` : ''}
-     ${cfg.stream_url_template ? `<div class="field">Stream URL Template: <code>${esc(cfg.stream_url_template)}</code></div>` : ''}`;
-    const provCaps = _getProviderCaps(cfg);
+         ${_credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}`;
+    const provCaps = _getProviderCaps(cfg, name);
     const capBadges = _capBadgesHtml(provCaps);
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
       ? `<span class="model-link" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
       : '';
-    // Embedding/rerank endpoint info
-    let epFieldsHtml = '';
-    if (!isList) {
-      if (cfg.embedding_format) epFieldsHtml += `<div class="field">Embed: <code>${esc(cfg.embedding_format)}</code> → <code>${esc(cfg.embedding_path || '/v1/embeddings')}</code></div>`;
-      if (cfg.rerank_format) epFieldsHtml += `<div class="field">Rerank: <code>${esc(cfg.rerank_format)}</code> → <code>${esc(cfg.rerank_path || '/v1/rerank')}</code></div>`;
-    }
+    // Endpoint details are in Edit modal — badges on card are sufficient
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}" style="display:flex;flex-direction:column">
       <div class="card-header">
@@ -2615,7 +2634,7 @@ function renderProviders() {
           <span class="slider"></span>
         </label>
       </div>
-      ${fieldsHtml}${epFieldsHtml}
+      ${fieldsHtml}
       <div class="actions" style="margin-top:auto;padding-top:12px">
         <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
@@ -2796,7 +2815,8 @@ async function saveProvider() {
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
   const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();
-  if (!name || !provType) { showToast(t('error.fieldsRequired'), 'error'); return; }
+  const isLlm = document.getElementById('provCapLlm').checked;
+  if (!name || (isLlm && !provType)) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {type: provType, base_url: baseUrl, proxy};
