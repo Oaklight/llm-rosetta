@@ -2819,7 +2819,8 @@ async function saveProvider() {
   if (!name || (isLlm && !provType)) { showToast(t('error.fieldsRequired'), 'error'); return; }
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
-  const body = {type: provType, base_url: baseUrl, proxy};
+  const body = {base_url: baseUrl, proxy};
+  if (isLlm) body.type = provType;
   if (urlTemplate) body.url_template = urlTemplate;
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
