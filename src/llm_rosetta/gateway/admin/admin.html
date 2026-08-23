@@ -766,6 +766,103 @@ body { padding-bottom: 26px; }
       </table></div>
       <div id="captureEmpty" class="empty" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
     </div>
+
+    <!-- Error Dumps Section -->
+    <div class="section" id="errorDumpSection">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <h2 style="margin:0;line-height:1" data-i18n="section.errorDumps">Error Dumps</h2>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--text-dim)" id="dumpCount"></span>
+          <button class="btn btn-sm" onclick="downloadAllDumps()" id="dumpDownloadAllBtn" style="display:none" data-i18n="btn.downloadAll">Download All</button>
+          <div style="display:inline-block;position:relative">
+            <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
+            <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
+              <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="model-toolbar" id="dumpToolbar">
+        <select id="dumpPhaseFilter" onchange="renderDumps()">
+          <option value="" data-i18n="filter.allPhases">All Phases</option>
+          <option value="conversion">conversion</option>
+          <option value="upstream">upstream</option>
+          <option value="response">response</option>
+          <option value="stream">stream</option>
+        </select>
+        <select id="dumpStatusFilter" onchange="renderDumps()">
+          <option value="" data-i18n="filter.allStatus">All Status</option>
+          <option value="4xx">4xx</option>
+          <option value="5xx">5xx</option>
+          <option value="400">400</option>
+          <option value="422">422</option>
+          <option value="429">429</option>
+          <option value="500">500</option>
+          <option value="503">503</option>
+        </select>
+        <select id="dumpProviderFilter" onchange="renderDumps()">
+          <option value="" data-i18n="filter.allProviders">All Providers</option>
+        </select>
+        <span id="dumpModelFilterWrap" style="display:inline-flex;width:180px">
+          <select id="dumpModelFilter" onchange="onDumpModelFilterChange()" style="width:100%">
+            <option value="" data-i18n="filter.allModels">All Models</option>
+            <option value="custom">Custom...</option>
+          </select>
+          <span id="dumpModelSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
+            <input type="text" id="dumpModelSearch" placeholder="Search model..." oninput="renderDumps()" style="flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="closeDumpModelSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
+          </span>
+        </span>
+        <span id="dumpTimeFilterWrap" style="display:inline-flex;width:280px">
+          <select id="dumpTimeRange" onchange="onDumpTimeRangeChange()" style="width:100%">
+            <option value="" data-i18n="filter.allTime">All Time</option>
+            <option value="1h">Last 1h</option>
+            <option value="24h">Last 24h</option>
+            <option value="7d">Last 7d</option>
+            <option value="30d">Last 30d</option>
+            <option value="custom">Custom...</option>
+          </select>
+          <span id="dumpCustomDateRange" style="display:none;align-items:center;gap:4px;width:100%">
+            <input type="date" id="dumpDateFrom" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
+            <span style="color:var(--text-dim)">—</span>
+            <input type="date" id="dumpDateTo" onchange="renderDumps()" style="padding:5px 6px;font-size:12px;flex:1;min-width:0">
+            <button class="btn btn-sm" onclick="closeDumpTimeCustom()" style="padding:5px 8px;font-size:12px;line-height:1;flex-shrink:0">✕</button>
+          </span>
+        </span>
+        <button class="btn-reset" id="dumpResetBtn" onclick="resetDumpFilters()" style="display:none" data-i18n="btn.resetFilters">✕ Reset</button>
+      </div>
+      <div class="table-scroll"><table>
+        <thead><tr>
+          <th data-i18n="col.time">Time</th>
+          <th data-i18n="col.model">Model</th>
+          <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
+          <th>Phase</th>
+          <th data-i18n="col.status">Status</th>
+          <th>Error</th>
+          <th style="width:90px" data-i18n="col.actions">Actions</th>
+        </tr></thead>
+        <tbody id="dumpTable"></tbody>
+      </table></div>
+      <div id="dumpEmpty" class="empty" data-i18n="dump.empty">No error dumps recorded.</div>
+      <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px;font-size:13px;color:var(--text-dim)">
+        <button class="btn btn-sm" onclick="changeDumpPage(-1)" id="dumpPrevPage" disabled>← Prev</button>
+        <span id="dumpPageInfo">Page 1 / 1</span>
+        <button class="btn btn-sm" onclick="changeDumpPage(1)" id="dumpNextPage" disabled>Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Clear Dumps Confirm Modal -->
+  <div class="modal-overlay" id="clearDumpsModal">
+    <div class="modal" style="width:400px">
+      <h3 data-i18n="confirm.clearDumps">Clear All Error Dumps</h3>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
+      <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" style="width:100%;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;font-family:var(--mono)">
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
+        <button class="btn btn-danger" id="clearDumpsBtn" onclick="confirmClearDumps()" disabled style="opacity:0.4;cursor:not-allowed" data-i18n="btn.clearAll">Clear All</button>
+      </div>
+    </div>
   </div>
 
   <!-- Request Log Tab -->
@@ -1345,6 +1442,7 @@ const I18N = {
     'profiling.remaining':'{n} remaining',
     'profiling.downloadAll':'Download All', 'profiling.hint':'Results are in-memory only and will be lost on restart. Download important results.',
     'section.capture':'Content Capture',
+    'section.errorDumps':'Error Dumps', 'dump.empty':'No error dumps recorded.', 'confirm.clearDumps':'Clear All Error Dumps', 'confirm.clearDumpsHint':'This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.', 'filter.allPhases':'All Phases', 'filter.allStatus':'All Status', 'filter.allTime':'All Time', 'btn.downloadAll':'Download All', 'btn.clearAll':'Clear All', 'btn.resetFilters':'✕ Reset',
     'capture.enable':'Enable', 'capture.disable':'Disable', 'capture.clear':'Clear',
     'capture.requests':'Requests:', 'capture.detail':'Detail', 'capture.mode':'Mode',
     'capture.empty':'No captures. Enable capture and send requests.',
@@ -1486,6 +1584,7 @@ const I18N = {
     'profiling.remaining':'\u5269\u4f59 {n} \u4e2a',
     'profiling.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'profiling.hint':'\u7ed3\u679c\u4ec5\u5b58\u4e8e\u5185\u5b58\uff0c\u91cd\u542f\u540e\u4e22\u5931\u3002\u8bf7\u53ca\u65f6\u4e0b\u8f7d\u91cd\u8981\u7ed3\u679c\u3002',
     'section.capture':'\u5185\u5bb9\u6355\u83b7',
+    'section.errorDumps':'\u9519\u8bef\u8bb0\u5f55', 'dump.empty':'\u6682\u65e0\u9519\u8bef\u8bb0\u5f55\u3002', 'confirm.clearDumps':'\u6e05\u7a7a\u6240\u6709\u9519\u8bef\u8bb0\u5f55', 'confirm.clearDumpsHint':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u6240\u6709\u9519\u8bef\u8bb0\u5f55\u3002\u8f93\u5165 <strong style="color:var(--red)">CLEAR</strong> \u786e\u8ba4\u3002', 'filter.allPhases':'\u6240\u6709\u9636\u6bb5', 'filter.allStatus':'\u6240\u6709\u72b6\u6001', 'filter.allTime':'\u6240\u6709\u65f6\u95f4', 'btn.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'btn.clearAll':'\u6e05\u7a7a\u6240\u6709', 'btn.resetFilters':'✕ \u91cd\u7f6e',
     'capture.enable':'\u542f\u7528', 'capture.disable':'\u505c\u6b62', 'capture.clear':'\u6e05\u7a7a',
     'capture.requests':'\u8bf7\u6c42\u6570\uff1a', 'capture.detail':'\u8be6\u60c5', 'capture.mode':'\u6a21\u5f0f',
     'capture.empty':'\u6682\u65e0\u6355\u83b7\u7ed3\u679c\u3002\u542f\u7528\u540e\u53d1\u9001\u8bf7\u6c42\u5373\u53ef\u91c7\u96c6\u3002',
@@ -3601,6 +3700,276 @@ async function downloadAllCaptures() {
   } catch (e) { showToast('Failed to download captures', 'error'); }
 }
 
+// ===================== Error Dumps =====================
+let _dumpPage = 0;
+const DUMP_PAGE_SIZE = 20;
+
+async function loadDumps() {
+  renderDumps();
+}
+
+async function renderDumps() {
+  const phase = document.getElementById('dumpPhaseFilter').value;
+  const status = document.getElementById('dumpStatusFilter').value;
+  const provider = document.getElementById('dumpProviderFilter').value;
+  const modelDrop = document.getElementById('dumpModelFilter').value;
+  const search = document.getElementById('dumpModelSearch').value.toLowerCase();
+  const timeRange = document.getElementById('dumpTimeRange').value;
+  const dateFrom = document.getElementById('dumpDateFrom').value;
+  const dateTo = document.getElementById('dumpDateTo').value;
+
+  let params = `limit=${DUMP_PAGE_SIZE}&offset=${_dumpPage * DUMP_PAGE_SIZE}`;
+  if (phase) params += `&error_phase=${encodeURIComponent(phase)}`;
+  if (provider) params += `&provider=${encodeURIComponent(provider)}`;
+  const filterModel = (modelDrop && modelDrop !== 'custom') ? modelDrop : '';
+  if (filterModel) params += `&model=${encodeURIComponent(filterModel)}`;
+
+  try {
+    const data = await api.get(`/admin/api/error-dumps?${params}`);
+    let entries = data.entries || [];
+    const total = data.total || 0;
+
+    // Client-side filters not supported by backend
+    if (search) entries = entries.filter(e => (e.model||'').toLowerCase().includes(search));
+    if (status) {
+      if (status === '4xx') entries = entries.filter(e => e.status_code >= 400 && e.status_code < 500);
+      else if (status === '5xx') entries = entries.filter(e => e.status_code >= 500 && e.status_code < 600);
+      else entries = entries.filter(e => e.status_code === parseInt(status));
+    }
+    if (timeRange && timeRange !== 'custom') {
+      const now = Date.now();
+      const ms = {'1h':3600e3,'24h':86400e3,'7d':604800e3,'30d':2592000e3}[timeRange];
+      if (ms) entries = entries.filter(e => now - new Date(e.timestamp).getTime() < ms);
+    } else if (timeRange === 'custom') {
+      if (dateFrom) entries = entries.filter(e => new Date(e.timestamp) >= new Date(dateFrom));
+      if (dateTo) entries = entries.filter(e => new Date(e.timestamp) <= new Date(dateTo + 'T23:59:59'));
+    }
+
+    // Populate provider filter
+    const provSelect = document.getElementById('dumpProviderFilter');
+    const prevProv = provSelect.value;
+    const provSet = new Set(entries.map(e => e.provider_name).filter(Boolean));
+    provSelect.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
+      [...provSet].sort().map(p => `<option value="${p}"${p===prevProv?' selected':''}>${esc(p)}</option>`).join('');
+
+    // Populate model filter
+    const modelSelect = document.getElementById('dumpModelFilter');
+    const prevModel = modelSelect.value;
+    const modelSet = new Set(entries.map(e => e.model).filter(Boolean));
+    modelSelect.innerHTML = `<option value="">${t('filter.allModels')}</option>` +
+      [...modelSet].sort().map(m => `<option value="${m}"${m===prevModel?' selected':''}>${esc(m)}</option>`).join('') +
+      '<option value="custom">Custom...</option>';
+
+    const tbody = document.getElementById('dumpTable');
+    const countEl = document.getElementById('dumpCount');
+    const emptyEl = document.getElementById('dumpEmpty');
+    const dlBtn = document.getElementById('dumpDownloadAllBtn');
+
+    countEl.textContent = total > 0 ? `${total} error${total !== 1 ? 's' : ''}` : '';
+    emptyEl.style.display = entries.length === 0 ? '' : 'none';
+    if (dlBtn) dlBtn.style.display = total > 0 ? '' : 'none';
+
+    // Show/hide reset
+    const hasFilters = phase || status || provider || search || (modelDrop && modelDrop !== 'custom' && modelDrop) || (timeRange && timeRange !== '');
+    const resetBtn = document.getElementById('dumpResetBtn');
+    if (resetBtn) resetBtn.style.display = hasFilters ? 'inline-flex' : 'none';
+
+    // Pagination
+    const totalPages = Math.ceil(total / DUMP_PAGE_SIZE) || 1;
+    document.getElementById('dumpPageInfo').textContent = `Page ${_dumpPage + 1} / ${totalPages}`;
+    document.getElementById('dumpPrevPage').disabled = _dumpPage === 0;
+    document.getElementById('dumpNextPage').disabled = (_dumpPage + 1) * DUMP_PAGE_SIZE >= total;
+
+    if (entries.length === 0) { tbody.innerHTML = ''; return; }
+
+    tbody.innerHTML = entries.map(e => {
+      const time = new Date(e.timestamp).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      let errPreview = '—';
+      if (e.response_text) {
+        try { errPreview = JSON.parse(e.response_text).error?.message || JSON.parse(e.response_text).detail || e.response_text; } catch { errPreview = e.response_text; }
+        if (errPreview.length > 60) errPreview = errPreview.slice(0, 60) + '…';
+      }
+      return `<tr>
+        <td>${time}</td>
+        <td><code>${esc(e.model||'-')}</code></td>
+        <td>${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</td>
+        <td><span class="badge badge-stream">${esc(e.error_phase||'-')}</span></td>
+        <td><span class="badge badge-error">${e.status_code||'-'}</span></td>
+        <td><span style="font-size:11px;color:var(--red);font-family:var(--mono);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}','${esc(e.model||'error')}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
+        </td>
+      </tr>`;
+    }).join('');
+  } catch (err) { /* ignore load errors */ }
+}
+
+async function viewDump(dumpId) {
+  try {
+    const e = await api.get(`/admin/api/error-dumps/${encodeURIComponent(dumpId)}`);
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const sections = [];
+    if (e.response_text) {
+      let formatted;
+      try { formatted = JSON.stringify(JSON.parse(e.response_text), null, 2); } catch { formatted = e.response_text; }
+      sections.push({title:'Response / Error', body:formatted, cls:'error'});
+    }
+    if (e.request_body) {
+      const size = JSON.stringify(e.request_body).length;
+      sections.push({title:`Request Body (${_fmtBytes(size)})`, body:JSON.stringify(e.request_body, null, 2)});
+    }
+    if (e.converted_body) {
+      const size = JSON.stringify(e.converted_body).length;
+      sections.push({title:`Converted Body (${_fmtBytes(size)})`, body:JSON.stringify(e.converted_body, null, 2)});
+    }
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error Dump — ${esc(e.model||'')}</title>
+<style>body{font-family:system-ui,sans-serif;margin:0;background:#0f1117;color:#e4e7ef}
+.header{padding:16px 24px;border-bottom:1px solid #2d3148;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:16px;font-weight:600} .header button{padding:6px 14px;border-radius:6px;border:1px solid #2d3148;background:#1a1d27;color:#e4e7ef;cursor:pointer;font-size:13px}
+.header button:hover{background:#242838} .content{padding:24px;max-width:1000px;margin:0 auto}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 24px;margin-bottom:20px;padding:12px;background:#1a1d27;border:1px solid #2d3148;border-radius:8px;font-size:13px}
+.meta .label{color:#8b90a5;font-size:11px;text-transform:uppercase;letter-spacing:.5px} .meta .value{color:#e4e7ef;font-family:'SF Mono',Consolas,monospace;font-size:12px;word-break:break-all} .meta .value.error{color:#ef4444}
+.section{margin-bottom:16px} .section-header{font-size:14px;font-weight:600;color:#8b90a5;margin-bottom:8px;cursor:pointer;user-select:none}
+.section-header:hover{color:#e4e7ef} .section-header::before{content:'▾ ';font-size:10px} .section.collapsed .section-header::before{content:'▸ '} .section.collapsed pre{display:none}
+pre{background:#0d1117;padding:12px;border-radius:8px;overflow-x:auto;font-size:12px;line-height:1.6;border:1px solid #333;white-space:pre-wrap;word-break:break-word;font-family:'SF Mono',Consolas,monospace;max-height:400px;overflow-y:auto}
+pre.error{color:#ef4444}</style></head><body>
+<div class="header"><h1>Error Dump Detail</h1><div><button onclick="downloadThis()">↓ Download JSON</button></div></div>
+<div class="content"><div class="meta">
+<div><div class="label">Model</div><div class="value">${esc(e.model||'-')}</div></div>
+<div><div class="label">Routing</div><div class="value">${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</div></div>
+<div><div class="label">Provider</div><div class="value">${esc(e.provider_name||'-')}</div></div>
+<div><div class="label">Phase</div><div class="value">${esc(e.error_phase||'-')}</div></div>
+<div><div class="label">Status</div><div class="value error">${e.status_code||'-'}</div></div>
+<div><div class="label">Time</div><div class="value">${esc(e.timestamp||'-')}</div></div>
+<div><div class="label">Upstream URL</div><div class="value">${esc(e.upstream_url||'-')}</div></div>
+<div><div class="label">Dump ID</div><div class="value">${esc(e.dump_id||e.id||'-')}</div></div>
+</div>${sections.map(s => `<div class="section"><div class="section-header" onclick="this.parentElement.classList.toggle('collapsed')">${s.title}</div><pre${s.cls?` class="${s.cls}"`:''}>` + (function(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;})(s.body) + `</pre></div>`).join('')}
+</div><`+`script>function downloadThis(){const b=new Blob([${JSON.stringify(JSON.stringify(e,null,2))}],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='error-dump-${esc(e.model||'error')}-${esc(e.dump_id||e.id||'')}.json';a.click();URL.revokeObjectURL(a.href);}<`+`/script></body></html>`;
+    w.document.write(html);
+    w.document.close();
+  } catch (err) { showToast(t('error.loadFailed'), 'error'); }
+}
+
+async function downloadDump(dumpId, model) {
+  try {
+    const data = await api.get(`/admin/api/error-dumps/${encodeURIComponent(dumpId)}`);
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], {type:'application/json'});
+    const ts = data.timestamp ? new Date(data.timestamp).toISOString().replace(/[:.]/g,'-').slice(0,19) : dumpId;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `error-dump-${model}-${ts}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { showToast('Failed to download', 'error'); }
+}
+
+async function downloadAllDumps() {
+  try {
+    const data = await api.get('/admin/api/error-dumps?limit=10000&offset=0');
+    const entries = data.entries || [];
+    if (entries.length === 0) { showToast('No dumps to download', 'error'); return; }
+    const json = JSON.stringify(entries, null, 2);
+    const blob = new Blob([json], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `error-dumps-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) { showToast('Failed to download', 'error'); }
+}
+
+function _fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function changeDumpPage(dir) {
+  _dumpPage = Math.max(0, _dumpPage + dir);
+  renderDumps();
+}
+
+function toggleDumpMoreMenu(btn) {
+  const menu = document.getElementById('dumpMoreMenu');
+  const show = menu.style.display === 'none';
+  menu.style.display = show ? '' : 'none';
+  if (show) {
+    const close = (e) => { if (!btn.parentElement.contains(e.target)) { menu.style.display = 'none'; document.removeEventListener('click', close); } };
+    setTimeout(() => document.addEventListener('click', close), 0);
+  }
+}
+
+function openClearDumpsConfirm() {
+  document.getElementById('clearDumpsInput').value = '';
+  const btn = document.getElementById('clearDumpsBtn');
+  btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
+  document.getElementById('clearDumpsModal').classList.add('open');
+  document.getElementById('clearDumpsInput').focus();
+}
+
+function onClearDumpsInput() {
+  const matched = document.getElementById('clearDumpsInput').value === 'CLEAR';
+  const btn = document.getElementById('clearDumpsBtn');
+  btn.disabled = !matched;
+  btn.style.opacity = matched ? '1' : '0.4';
+  btn.style.cursor = matched ? 'pointer' : 'not-allowed';
+}
+
+async function confirmClearDumps() {
+  closeModal('clearDumpsModal');
+  await api.del('/admin/api/error-dumps');
+  showToast('Cleared all error dumps');
+  _dumpPage = 0;
+  renderDumps();
+}
+
+function onDumpModelFilterChange() {
+  const val = document.getElementById('dumpModelFilter').value;
+  if (val === 'custom') {
+    document.getElementById('dumpModelFilter').style.display = 'none';
+    document.getElementById('dumpModelSearchWrap').style.display = 'inline-flex';
+    document.getElementById('dumpModelSearch').focus();
+  }
+  renderDumps();
+}
+
+function closeDumpModelSearch() {
+  document.getElementById('dumpModelSearch').value = '';
+  document.getElementById('dumpModelFilter').value = '';
+  document.getElementById('dumpModelFilter').style.display = '';
+  document.getElementById('dumpModelSearchWrap').style.display = 'none';
+  renderDumps();
+}
+
+function onDumpTimeRangeChange() {
+  const val = document.getElementById('dumpTimeRange').value;
+  if (val === 'custom') {
+    document.getElementById('dumpTimeRange').style.display = 'none';
+    document.getElementById('dumpCustomDateRange').style.display = 'inline-flex';
+  }
+  renderDumps();
+}
+
+function closeDumpTimeCustom() {
+  document.getElementById('dumpDateFrom').value = '';
+  document.getElementById('dumpDateTo').value = '';
+  document.getElementById('dumpTimeRange').value = '';
+  document.getElementById('dumpTimeRange').style.display = '';
+  document.getElementById('dumpCustomDateRange').style.display = 'none';
+  renderDumps();
+}
+
+function resetDumpFilters() {
+  document.getElementById('dumpPhaseFilter').value = '';
+  document.getElementById('dumpStatusFilter').value = '';
+  document.getElementById('dumpProviderFilter').value = '';
+  closeDumpModelSearch();
+  closeDumpTimeCustom();
+}
+
 // Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
 function fmtBytes(n) {
   if (!Number.isFinite(n) || n < 0) return '–';
@@ -3901,7 +4270,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     currentTab = id;
     localStorage.setItem('llm-rosetta-tab', id);
     stopTimers();
-    if (id === 'dashboard') { loadMetrics(); dashboardTimer = (_dashboardRefreshMs > 0 ? setInterval(loadMetrics, _dashboardRefreshMs) : null); }
+    if (id === 'dashboard') { loadMetrics(); loadDumps(); dashboardTimer = (_dashboardRefreshMs > 0 ? setInterval(loadMetrics, _dashboardRefreshMs) : null); }
     if (id === 'logs') { logOffset = 0; loadLogs(); logTimer = setInterval(loadLogs, 5000); }
     if (id === 'providers' || id === 'models') { loadConfig(); }
     if (id === 'keys') { loadKeys(); }
