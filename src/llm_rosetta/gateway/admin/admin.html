@@ -4597,7 +4597,7 @@ async function runTest(model, type, extraParam) {
 
             meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
 
-            if (type === 'embedding') {
+            if (isEmbedType) {
               if (body?.usage) {
                 meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in</div>`;
               }
