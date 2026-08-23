@@ -4603,6 +4603,15 @@ async function runTest(model, type, extraParam) {
               }
               const dim = body?.data?.[0]?.embedding?.length;
               output.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
+            } else if (isRerankType) {
+              // Rerank result
+              const results = body?.results || body?.data || [];
+              if (results.length > 0) {
+                output.textContent = `Rerank OK — ${results.length} result${results.length !== 1 ? 's' : ''}\n\n` +
+                  results.map((r, i) => `#${i+1} index=${r.index ?? i} score=${(r.relevance_score ?? r.score ?? 0).toFixed(4)}`).join('\n');
+              } else {
+                output.textContent = t('test.emptyResponse');
+              }
             } else {
               // Chat completion result
               if (body?.usage) {
