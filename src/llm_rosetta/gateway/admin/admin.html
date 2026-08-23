@@ -2760,10 +2760,10 @@ function renderModels() {
     const modelEnabled = typeof info === 'object' ? info.enabled !== false : true;
     const rowDimmed = provDisabled || !modelEnabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
-    const capBadges = caps.map(c => {
+    const capBadges = modelType === 'llm' ? caps.map(c => {
       const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : c === 'reasoning' ? 'badge-cap-reasoning' : 'badge-cap';
       return `<span class="badge ${cls}">${esc(c)}</span>`;
-    }).join('');
+    }).join('') : '';
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
