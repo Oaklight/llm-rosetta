@@ -183,7 +183,7 @@ tr:hover td { background: var(--bg-hover); }
 }
 .provider-card .field code { overflow: hidden; text-overflow: ellipsis; max-width: 220px; display: inline-block; vertical-align: bottom; }
 .provider-card.disabled { opacity: 0.5; }
-.model-disabled td:not(:first-child):not(:last-child) { opacity: 0.4; }
+.model-disabled td { opacity: 0.4; }
 .model-tab-bar { display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:16px; }
 .model-tab { padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;color:var(--text-dim);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all 0.15s;user-select:none; }
 .model-tab:hover { color:var(--text); }
@@ -2787,14 +2787,17 @@ function renderModels() {
       <td style="text-align:right;white-space:nowrap;position:relative">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
-          <button class="btn btn-sm btn-test${isEmbedding ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${isEmbedding ? 'embedding' : 'text'}')">${t('btn.test')}</button>
+          <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${modelType === 'embedding' ? 'embedding' : modelType === 'rerank' ? 'rerank' : 'text'}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
-            ${isEmbedding ? `
+            ${modelType === 'embedding' ? `
             <div class="test-menu-item" onclick="runTest('${esc(name)}','embedding')">${t('test.embedding')}</div>
             <div class="test-menu-item" onclick="runTest('${esc(name)}','embed_batch')">${t('test.embedBatch')}</div>
             <div class="test-menu-item" onclick="promptMatryoshka('${esc(name)}')">${t('test.matryoshka')}</div>
             <div class="test-menu-item" onclick="runTest('${esc(name)}','embed_multimodal')">${t('test.embedMultimodal')}</div>
+            ` : modelType === 'rerank' ? `
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','rerank')">${t('test.rerank')}</div>
+            <div class="test-menu-item" onclick="runTest('${esc(name)}','rerank_batch')">${t('test.rerankBatch')}</div>
             ` : `
             <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">${t('test.text')}</div>
             <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">${t('test.stream')}</div>
@@ -4408,6 +4411,10 @@ function buildTestPayload(model, type, extraParam) {
       return {model, input: [{type: 'text', text: 'Describe this image.'}, {type: 'image_url', image_url: {url: TEST_IMAGE_URL}}]};
     case 'matryoshka':
       return {model, input: 'Hello, world!', dimensions: extraParam};
+    case 'rerank':
+      return {model, query: 'What is machine learning?', documents: ['Machine learning is a subset of artificial intelligence.', 'The weather today is sunny.', 'Deep learning uses neural networks with many layers.']};
+    case 'rerank_batch':
+      return {model, query: 'What is machine learning?', documents: ['Machine learning is a subset of artificial intelligence.', 'The weather today is sunny.', 'Deep learning uses neural networks with many layers.', 'Python is a popular programming language.', 'Gradient descent is an optimization algorithm.'], top_n: 3};
   }
 }
 
@@ -4519,7 +4526,8 @@ async function runTest(model, type, extraParam) {
     // Browser never holds a long connection; the gateway's httpx pool
     // handles the upstream call.
     const isEmbedType = ['embedding','embed_batch','embed_multimodal','matryoshka'].includes(type);
-    const endpoint = isEmbedType ? '/v1/embeddings' : '/v1/chat/completions';
+    const isRerankType = ['rerank','rerank_batch'].includes(type);
+    const endpoint = isRerankType ? '/v1/rerank' : isEmbedType ? '/v1/embeddings' : '/v1/chat/completions';
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     // Show Cancel button and live elapsed timer
     const cancelBtn = document.getElementById('testCancelBtn');
