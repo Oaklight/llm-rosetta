@@ -21,6 +21,7 @@ from llm_rosetta._vendor.httpclient import (
     HttpTimeoutError,
     Response as HttpResponse,
     StreamingResponse as HttpStreamingResponse,
+    TooManyRedirects,
 )
 from llm_rosetta._vendor.sse import AsyncEventSource
 
@@ -119,6 +120,10 @@ class HttpTransport:
             if provider_info.timeout is not None:
                 kwargs["timeout"] = provider_info.timeout
             resp = await client.post(url, json=body, headers=headers, **kwargs)
+        except TooManyRedirects:
+            raise UpstreamConnectionError(
+                f"Upstream {url} returned a redirect (blocked for security)"
+            )
         except HttpTimeoutError as exc:
             raise UpstreamTimeoutError(str(exc)) from exc
         except HttpClientError as exc:
@@ -148,6 +153,10 @@ class HttpTransport:
                 kwargs["timeout"] = provider_info.timeout
             resp = await client.post(
                 url, json=body, headers=headers, stream=True, **kwargs
+            )
+        except TooManyRedirects:
+            raise UpstreamConnectionError(
+                f"Upstream {url} returned a redirect (blocked for security)"
             )
         except HttpTimeoutError as exc:
             raise UpstreamTimeoutError(str(exc)) from exc
