@@ -1,0 +1,54 @@
+name: Spec Compliance
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Model to test against"
+        default: "gemini-3.1-flash-lite"
+        type: string
+
+jobs:
+  comply:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        format: [openai-chat, open-responses, anthropic, google-genai]
+    name: comply (${{ matrix.format }})
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install gateway + llm-comply
+        run: |
+          pip install -e ".[gateway]"
+          pip install llm-comply>=0.3.0
+
+      - name: Start gateway
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        run: |
+          llm-rosetta-gateway --config ci/comply-gateway-config.jsonc --no-banner &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:18765/health/ready > /dev/null 2>&1; then
+              echo "Gateway ready"
+              break
+            fi
+            sleep 1
+          done
+
+      - name: Run compliance tests (${{ matrix.format }})
+        run: |
+          llm-comply \
+            --base-url http://127.0.0.1:18765/v1 \
+            --api-key dummy \
+            --format ${{ matrix.format }} \
+            --model ${{ inputs.model || 'gemini-3.1-flash-lite' }} \
+            --timeout 120 \
+            --delay 5
