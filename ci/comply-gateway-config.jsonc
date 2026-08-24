@@ -1,0 +1,26 @@
+// Minimal gateway config for llm-comply spec compliance testing.
+// Used by .github/workflows/comply.yml — not for production.
+//
+// Upstream: Google Gemini free tier via ${GOOGLE_API_KEY}.
+// All 4 client formats (openai-chat, open-responses, anthropic, google-genai)
+// route to the same Google upstream through format conversion.
+{
+  "config_version": 1,
+
+  "providers": {
+    "google": {
+      "api_key": "${GOOGLE_API_KEY}",
+      "base_url": "https://generativelanguage.googleapis.com"
+    }
+  },
+
+  "models": {
+    "gemini-3.1-flash-lite": "google"
+  },
+
+  "server": {
+    "host": "127.0.0.1",
+    "port": 18765,
+    "open_on_no_keys": true
+  }
+}
