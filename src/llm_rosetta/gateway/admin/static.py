@@ -31,7 +31,9 @@ def load_static_file(subpath: str) -> tuple[bytes, str]:
     Raises:
         FileNotFoundError: If the path is invalid or the file doesn't exist.
     """
-    if ".." in subpath or not subpath.startswith(_ALLOWED_PREFIXES):
+    if any(seg == ".." for seg in subpath.split("/")) or not subpath.startswith(
+        _ALLOWED_PREFIXES
+    ):
         raise FileNotFoundError(subpath)
 
     ext = os.path.splitext(subpath)[1]

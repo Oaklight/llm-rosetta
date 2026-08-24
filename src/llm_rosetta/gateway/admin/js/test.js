@@ -1,3 +1,4 @@
+// Side-effect-only module: exposes functions via window.* for inline HTML handlers.
 import { S, _TEST_TIMEOUT_MS } from './state.js';
 import { t } from './i18n.js';
 import { api, showToast, esc } from './core.js';

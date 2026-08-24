@@ -5,21 +5,23 @@
 
 import { S, DUMP_PAGE_SIZE } from './state.js';
 import { t } from './i18n.js';
-import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytes, _fmtBytes } from './core.js';
+import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytesShort, fmtBytesLong } from './core.js';
 
 // ===================== Metrics =====================
 
 async function loadMetrics() {
-  const data = await api.get('/admin/api/metrics?seconds=60');
-  renderStats(data);
-  drawChart('chartThroughput', data.series, 'count', 'req/s');
-  drawChart('chartLatency', data.series, 'avg_ms', 'ms');
-  renderProviderBreakdown(data);
-  renderPersistence(data.persistence, data.total_requests);
-  loadProfilingStatus();
-  loadProfilingResults();
-  loadCaptureStatus();
-  loadCaptureResults();
+  try {
+    const data = await api.get('/admin/api/metrics?seconds=60');
+    renderStats(data);
+    drawChart('chartThroughput', data.series, 'count', 'req/s');
+    drawChart('chartLatency', data.series, 'avg_ms', 'ms');
+    renderProviderBreakdown(data);
+    renderPersistence(data.persistence, data.total_requests);
+    loadProfilingStatus();
+    loadProfilingResults();
+    loadCaptureStatus();
+    loadCaptureResults();
+  } catch { /* metrics endpoint unavailable — keep stale data */ }
 }
 
 // ===================== Profiling =====================
@@ -382,11 +384,11 @@ async function viewDump(dumpId) {
     }
     if (e.request_body) {
       const size = JSON.stringify(e.request_body).length;
-      sections.push({title:`Request Body (${_fmtBytes(size)})`, body:JSON.stringify(e.request_body, null, 2)});
+      sections.push({title:`Request Body (${fmtBytesLong(size)})`, body:JSON.stringify(e.request_body, null, 2)});
     }
     if (e.converted_body) {
       const size = JSON.stringify(e.converted_body).length;
-      sections.push({title:`Converted Body (${_fmtBytes(size)})`, body:JSON.stringify(e.converted_body, null, 2)});
+      sections.push({title:`Converted Body (${fmtBytesLong(size)})`, body:JSON.stringify(e.converted_body, null, 2)});
     }
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Error Dump — ${esc(e.model||'')}</title>
 <style>body{font-family:system-ui,sans-serif;margin:0;background:#0f1117;color:#e4e7ef}
@@ -553,8 +555,8 @@ function renderPersistence(p, totalReq) {
     <span class="seg" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
     <span class="seg" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
     <span class="seg" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
-    <span class="seg" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytes(p.db_bytes)}</span></span>
-    <span class="seg" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytes(p.wal_bytes)}</span></span>
+    <span class="seg" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytesShort(p.db_bytes)}</span></span>
+    <span class="seg" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytesShort(p.wal_bytes)}</span></span>
   `;
 }
 
@@ -681,4 +683,4 @@ Object.assign(window, {
   rebuildMetrics, drawChart,
 });
 
-export { loadMetrics, renderPersistence, renderStats, renderProviderBreakdown, rebuildMetrics };
+export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown, rebuildMetrics };

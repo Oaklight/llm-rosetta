@@ -1,7 +1,7 @@
 import { S } from './state.js';
 import { t, setLang, applyI18n } from './i18n.js';
 import {
-  setTheme, api, showToast, closeModal, esc, fmtBytes,
+  setTheme, api, showToast, closeModal, esc,
   _startInactivityTracking, _stopInactivityTracking,
 } from './core.js';
 import { checkAuthAndInit, showLoginOverlay } from './auth.js';
@@ -9,7 +9,7 @@ import { loadConfig, renderProviders } from './providers.js';
 import { renderModels } from './models.js';
 import './fetch-models.js';
 import { loadKeys, loadLogKeyLabels, renderKeys } from './keys.js';
-import { loadMetrics, renderPersistence } from './dashboard.js';
+import { loadMetrics, loadDumps, renderPersistence } from './dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from './logs.js';
 import './test.js';
 
@@ -38,7 +38,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     S.currentTab = id;
     localStorage.setItem('llm-rosetta-tab', id);
     stopTimers();
-    if (id === 'dashboard') { loadMetrics(); window.loadDumps?.(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
+    if (id === 'dashboard') { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
     if (id === 'logs') { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
     if (id === 'providers' || id === 'models') { loadConfig(); }
     if (id === 'keys') { loadKeys(); }

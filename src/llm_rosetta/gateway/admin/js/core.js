@@ -170,15 +170,15 @@ function formatDuration(seconds) {
   return h + 'h ' + m + 'm';
 }
 
-// Short-form byte formatter for request/response body sizes in error dumps
-function _fmtBytes(n) {
+// Verbose byte formatter for request/response body sizes (e.g. "1.5 KB")
+function fmtBytesLong(n) {
   if (n < 1024) return n + ' B';
   if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
   return (n / 1048576).toFixed(1) + ' MB';
 }
 
-// Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
-function fmtBytes(n) {
+// Compact byte formatter for dashboard footer (e.g. "832 K", "1.4 M")
+function fmtBytesShort(n) {
   if (!Number.isFinite(n) || n < 0) return '–';
   if (n < 1024) return n + ' B';
   if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' K';
@@ -189,13 +189,15 @@ function fmtBytes(n) {
 // ===================== Window globals =====================
 Object.assign(window, {
   setTheme, api, doLogout, copyText, copyProviderEntry,
-  showToast, closeModal, inlineConfirm, esc, formatDuration, fmtBytes,
+  showToast, closeModal, inlineConfirm, esc, formatDuration,
+  fmtBytesShort, fmtBytesLong,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
   THEMES, setTheme, _adminHeaders, api, showToast, closeModal,
-  copyText, copyProviderEntry, esc, formatDuration, fmtBytes, _fmtBytes,
+  copyText, copyProviderEntry, esc, formatDuration,
+  fmtBytesShort, fmtBytesLong,
   inlineConfirm, doLogout,
   _startInactivityTracking, _stopInactivityTracking,
 };
