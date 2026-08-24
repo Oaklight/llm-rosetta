@@ -33,6 +33,7 @@ from .auth import (
     change_password,
     rotate_token,
     serve_admin_html,
+    serve_admin_static,
 )
 from .config import (
     bulk_add_models,
@@ -117,9 +118,10 @@ def _guard(tab_id: str, handler: Any) -> Any:
 
 def register_admin_routes(app: Any) -> None:
     """Register all admin panel routes on the httpserver App."""
-    # HTML
+    # HTML + static assets
     app.route("/admin", methods=["GET"])(serve_admin_html)
     app.route("/admin/", methods=["GET"])(serve_admin_html)
+    app.route("/admin/static/<path:path>", methods=["GET"])(serve_admin_static)
     # Admin auth
     app.route("/admin/api/login", methods=["POST"])(admin_login)
     app.route("/admin/api/auth-check", methods=["GET"])(admin_check)

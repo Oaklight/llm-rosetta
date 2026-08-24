@@ -1,0 +1,201 @@
+/**
+ * core.js — shared utilities for the admin panel.
+ *
+ * Every tab-specific module depends on this module.  It provides theming,
+ * the authenticated API wrapper, inactivity auto-logout, toast / modal /
+ * clipboard helpers, inline confirmation, and small formatting utilities.
+ */
+
+import { S, INACTIVITY_TIMEOUT_MS } from './state.js';
+import { t } from './i18n.js';
+
+// ===================== Themes =====================
+const THEMES = {
+  light: {
+    '--bg':'#ffffff','--bg-card':'#f6f8fa','--bg-hover':'#eef1f5','--border':'#d1d9e0',
+    '--text':'#1f2328','--text-dim':'#656d76','--accent':'#0969da','--accent-hover':'#0550ae',
+    '--green':'#1a7f37','--red':'#cf222e','--orange':'#bf8700','--blue':'#0969da',
+  },
+  dark: {
+    '--bg':'#0f1117','--bg-card':'#1a1d27','--bg-hover':'#242838','--border':'#2d3148',
+    '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
+    '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6',
+  },
+};
+
+function setTheme(name) {
+  // Backward compat: map old theme names to light/dark
+  if (!THEMES[name]) name = (name === 'light') ? 'light' : 'dark';
+  const vars = THEMES[name];
+  if (!vars) return;
+  const root = document.documentElement;
+  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
+  S.currentTheme = name;
+  localStorage.setItem('llm-rosetta-theme', name);
+  // Sync settings popup dropdown if open
+  const ts = document.getElementById('settingsThemeSelect');
+  if (ts) ts.value = name;
+  // Redraw charts if on dashboard tab
+  if (S.currentTab === 'dashboard') window.loadMetrics?.();
+}
+
+// ===================== API =====================
+function _adminHeaders(extra) {
+  const h = extra ? {...extra} : {};
+  const token = localStorage.getItem('admin_token');
+  if (token) h['X-Admin-Token'] = token;
+  return h;
+}
+
+const api = {
+  async get(url) {
+    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
+    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
+    const data = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(data?.error || (r.status === 504 ? 'Request timed out — the upstream service may be unreachable' : `HTTP ${r.status}`));
+    if (data === null) throw new Error('Invalid JSON response');
+    return data;
+  },
+  async put(url, body) {
+    const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body)});
+    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
+    return r.json();
+  },
+  async del(url) {
+    const r = await fetch(url, {method:'DELETE', headers: _adminHeaders()});
+    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
+    return r.json();
+  },
+  async post(url, body) {
+    const h = body !== undefined ? _adminHeaders({'Content-Type':'application/json'}) : _adminHeaders();
+    const opts = {method:'POST', headers: h};
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const r = await fetch(url, opts);
+    if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
+    return r.json();
+  }
+};
+
+// ===================== Inactivity auto-logout =====================
+let _inactivityTimer = null;
+
+function _resetInactivityTimer() {
+  if (_inactivityTimer) clearTimeout(_inactivityTimer);
+  _inactivityTimer = setTimeout(() => doLogout(), INACTIVITY_TIMEOUT_MS);
+}
+
+function _startInactivityTracking() {
+  ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll', 'click'].forEach(evt => {
+    document.addEventListener(evt, _resetInactivityTimer, { passive: true });
+  });
+  _resetInactivityTimer();
+}
+
+function _stopInactivityTracking() {
+  if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
+}
+
+function doLogout() {
+  localStorage.removeItem('admin_token');
+  _stopInactivityTracking();
+  const btn = document.getElementById('logoutBtn');
+  if (btn) btn.style.display = 'none';
+  window.showLoginOverlay?.();
+}
+
+// ===================== Copy Helper =====================
+async function copyText(text, toastMsg) {
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast(toastMsg || t('toast.copied'));
+  } catch(e) {
+    showToast('Copy failed', 'error');
+  }
+}
+
+function copyProviderEntry(name) {
+  const cfg = S.configData.providers[name] || {};
+  // Open Add Provider modal pre-filled with non-sensitive fields; API key is intentionally omitted
+  window.openProviderModal?.('', cfg.base_url, '', cfg.proxy, cfg.type || name);
+}
+
+// ===================== Toast =====================
+function showToast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'toast show ' + type;
+  setTimeout(() => el.className = 'toast', 3000);
+}
+
+// ===================== Modal =====================
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  if (id === 'testModal') window._abortPendingTest?.();
+}
+
+// ===================== Inline Confirm =====================
+// Inline two-step delete confirmation — replaces native confirm()
+function inlineConfirm(btn, action) {
+  if (btn.dataset.confirming) return;
+  btn.dataset.confirming = '1';
+  const orig = btn.innerHTML;
+  const origClass = btn.className;
+  const origOnclick = btn.onclick;
+  btn.innerHTML = `${t('confirm.sure')} <span style="text-decoration:underline;cursor:pointer">${t('confirm.yes')}</span>`;
+  btn.className = btn.className.replace('btn-danger', 'btn-warning');
+  btn.style.minWidth = btn.offsetWidth + 'px';
+  const revert = () => { btn.innerHTML = orig; btn.className = origClass; btn.style.minWidth = ''; btn.onclick = origOnclick; delete btn.dataset.confirming; };
+  const timer = setTimeout(revert, 3000);
+  btn.querySelector('span').onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); action(); };
+  btn.onclick = (e) => { e.stopPropagation(); clearTimeout(timer); revert(); };
+}
+
+// ===================== Helpers =====================
+// esc() escapes HTML special chars AND single quotes so the result is
+// safe in both HTML text nodes and single-quoted JS-string attributes
+// such as onclick="fn('${esc(name)}')".
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  // innerHTML escapes &, <, > and " but NOT '.  Replace ' last to avoid
+  // double-encoding the & in the &#39; entity.
+  return d.innerHTML.replace(/'/g, '&#39;');
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return Math.floor(seconds) + 's';
+  if (seconds < 3600) return Math.floor(seconds/60) + 'm ' + Math.floor(seconds%60) + 's';
+  const h = Math.floor(seconds/3600);
+  const m = Math.floor((seconds%3600)/60);
+  return h + 'h ' + m + 'm';
+}
+
+// Short-form byte formatter for request/response body sizes in error dumps
+function _fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+// Format bytes as "1.4 M", "832 K", "5.4 G". Fixed-width-ish for footer.
+function fmtBytes(n) {
+  if (!Number.isFinite(n) || n < 0) return '–';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' K';
+  if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' M';
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + ' G';
+}
+
+// ===================== Window globals =====================
+Object.assign(window, {
+  setTheme, api, doLogout, copyText, copyProviderEntry,
+  showToast, closeModal, inlineConfirm, esc, formatDuration, fmtBytes,
+  _startInactivityTracking, _stopInactivityTracking,
+});
+
+export {
+  THEMES, setTheme, _adminHeaders, api, showToast, closeModal,
+  copyText, copyProviderEntry, esc, formatDuration, fmtBytes, _fmtBytes,
+  inlineConfirm, doLogout,
+  _startInactivityTracking, _stopInactivityTracking,
+};
