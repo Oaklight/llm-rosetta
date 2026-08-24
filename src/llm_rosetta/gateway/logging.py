@@ -583,6 +583,9 @@ def log_upstream_error(
     model: str | None = None,
 ) -> None:
     """Log an upstream API error in a structured format."""
+    from .sanitize import scrub_credential_patterns
+
+    error_text = scrub_credential_patterns(error_text)
     request_type = "streaming" if is_streaming else "non-streaming"
     extra = _structured_extra(
         request_id=request_id,

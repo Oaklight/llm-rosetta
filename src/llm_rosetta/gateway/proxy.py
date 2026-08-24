@@ -38,6 +38,7 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
+from .sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -416,7 +417,7 @@ async def handle_non_streaming(
             )
         return (
             Response(
-                body=resp.raw_content,
+                body=sanitize_upstream_error(resp.raw_content),
                 status_code=resp.status_code,
                 content_type="application/json",
             ),
@@ -734,9 +735,7 @@ async def handle_streaming(
         )
         return (
             Response(
-                body=error_text.encode("utf-8")
-                if isinstance(error_text, str)
-                else error_text,
+                body=sanitize_upstream_error(error_text),
                 status_code=stream.status_code,
                 content_type="application/json",
             ),

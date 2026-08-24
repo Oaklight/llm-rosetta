@@ -230,9 +230,13 @@ def _dump_error_impl(
                 converted_body_hash, compressed_conv, orig_conv
             )
 
-    # --- Truncate response_text if excessively large ---
-    if response_text and len(response_text) > 64 * 1024:
-        response_text = response_text[: 64 * 1024] + "\n…[truncated]"
+    # --- Scrub credential patterns and truncate if excessively large ---
+    if response_text:
+        from llm_rosetta.gateway.sanitize import scrub_credential_patterns
+
+        response_text = scrub_credential_patterns(response_text)
+        if len(response_text) > 64 * 1024:
+            response_text = response_text[: 64 * 1024] + "\n…[truncated]"
 
     # --- Insert the error dump record ---
     persistence.insert_error_dump(
