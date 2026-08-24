@@ -3,9 +3,6 @@ import { S } from './state.js';
 import { t, applyI18n } from './i18n.js';
 import { api, showToast, _startInactivityTracking, _stopInactivityTracking } from './core.js';
 
-// --- Settings save helpers ---
-let _dashboardRefreshMs = parseInt(localStorage.getItem('dashboardRefreshMs') || '3000', 10);
-
 // --- Admin Token ---
 let _tokenRotateTimer = null;
 let _tokenRotateEnd = 0;
@@ -69,13 +66,13 @@ async function saveSettingsField(field, value) {
 }
 
 function saveAutoRefresh(val) {
-  _dashboardRefreshMs = parseInt(val, 10);
+  S._dashboardRefreshMs = parseInt(val, 10);
   localStorage.setItem('dashboardRefreshMs', val);
   // Restart dashboard timer if active
   if (S.dashboardTimer) {
     clearInterval(S.dashboardTimer);
-    S.dashboardTimer = _dashboardRefreshMs > 0
-      ? setInterval(window.loadMetrics, _dashboardRefreshMs)
+    S.dashboardTimer = S._dashboardRefreshMs > 0
+      ? setInterval(window.loadMetrics, S._dashboardRefreshMs)
       : null;
   }
 }
