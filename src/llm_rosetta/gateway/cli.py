@@ -250,6 +250,70 @@ def _cmd_set_password(args: argparse.Namespace) -> None:
 _KNOWN_PROVIDERS = known_provider_types()
 
 
+def _cmd_db_cleanup(args: argparse.Namespace) -> None:
+    """Run age-based database cleanup."""
+    from llm_rosetta.observability import PersistenceManager
+
+    config_path = discover_config(args.config)
+    if config_path is None:
+        print("No config file found. Use --config to specify one.", file=sys.stderr)
+        sys.exit(1)
+
+    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    db_path = os.path.join(data_dir, "gateway.db")
+    if not os.path.exists(db_path):
+        print(f"Database not found: {db_path}", file=sys.stderr)
+        sys.exit(1)
+
+    pm = PersistenceManager(data_dir)
+    result = pm.cleanup_by_age(args.max_age_days)
+    pm.close()
+
+    total = (
+        result["request_log_deleted"]
+        + result["error_dumps_deleted"]
+        + result["dump_bodies_deleted"]
+    )
+    if total == 0:
+        print(f"Nothing to clean up — no records older than {args.max_age_days} days.")
+        return
+
+    freed_mb = result["freed_bytes"] / (1024 * 1024)
+    print(f"Cleaned up records older than {args.max_age_days} days:")
+    print(f"  Request logs deleted:  {result['request_log_deleted']}")
+    print(f"  Error dumps deleted:   {result['error_dumps_deleted']}")
+    print(f"  Dump bodies deleted:   {result['dump_bodies_deleted']}")
+    print(f"  Space freed:           {freed_mb:.1f} MB")
+    print(
+        f"  DB size:               {result['size_before'] / (1024 * 1024):.1f} MB → {result['size_after'] / (1024 * 1024):.1f} MB"
+    )
+
+
+def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
+    """Handle subcommands; return True if one matched."""
+    if args.command == "init":
+        _cmd_init(args)
+        return True
+    if args.command == "add":
+        if args.add_type == "provider":
+            _cmd_add_provider(args)
+        elif args.add_type == "model":
+            _cmd_add_model(args)
+        else:
+            sub.choices["add"].print_help()
+        return True
+    if args.command == "set-password":
+        _cmd_set_password(args)
+        return True
+    if args.command == "db":
+        if args.db_type == "cleanup":
+            _cmd_db_cleanup(args)
+        else:
+            sub.choices["db"].print_help()
+        return True
+    return False
+
+
 def main() -> None:
     """Parse CLI arguments and either run a subcommand or start the server."""
     from .app import create_app
@@ -340,6 +404,19 @@ def main() -> None:
         "config", nargs="?", default=None, help="Path to config file"
     )
 
+    # ``db`` subcommands
+    db_parser = sub.add_parser("db", help="Database maintenance commands")
+    db_sub = db_parser.add_subparsers(dest="db_type")
+    cleanup_parser = db_sub.add_parser(
+        "cleanup", help="Delete records older than max-age-days and vacuum"
+    )
+    cleanup_parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=90,
+        help="Delete records older than this many days (default: 90)",
+    )
+
     args = parser.parse_args()
 
     # --- edit mode ---
@@ -347,24 +424,8 @@ def main() -> None:
         _open_in_editor(args.config)
         return
 
-    # --- init subcommand ---
-    if args.command == "init":
-        _cmd_init(args)
-        return
-
-    # --- add subcommand ---
-    if args.command == "add":
-        if args.add_type == "provider":
-            _cmd_add_provider(args)
-        elif args.add_type == "model":
-            _cmd_add_model(args)
-        else:
-            sub.choices["add"].print_help()
-        return
-
-    # --- set-password subcommand ---
-    if args.command == "set-password":
-        _cmd_set_password(args)
+    # --- subcommands ---
+    if _dispatch_subcommand(args, sub):
         return
 
     # --- normal server startup ---

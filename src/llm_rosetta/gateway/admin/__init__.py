@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from llm_rosetta.observability import (
     DEFAULT_ERROR_MAX,
+    DEFAULT_MAX_AGE_DAYS,
     DEFAULT_SUCCESS_MAX,
     MetricsCollector,
     PersistenceManager,
@@ -22,8 +23,8 @@ __all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
-    """Resolve (success_max, error_max) from env vars and config.
+def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int, int]:
+    """Resolve (success_max, error_max, max_age_days) from env vars and config.
 
     Precedence: env vars > config.request_log.{success,error}_max >
     legacy config.request_log.max_entries > built-in defaults.
@@ -42,11 +43,14 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
 
     success_max = _parse_int_env("REQUEST_LOG_SUCCESS_MAX")
     error_max = _parse_int_env("REQUEST_LOG_ERROR_MAX")
+    max_age_days = _parse_int_env("REQUEST_LOG_MAX_AGE_DAYS")
 
     if success_max is None:
         success_max = rl_cfg.get("success_max")
     if error_max is None:
         error_max = rl_cfg.get("error_max")
+    if max_age_days is None:
+        max_age_days = rl_cfg.get("max_age_days")
 
     legacy = rl_cfg.get("max_entries")
     if legacy is not None and success_max is None:
@@ -59,6 +63,7 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
     return (
         int(success_max) if success_max is not None else DEFAULT_SUCCESS_MAX,
         int(error_max) if error_max is not None else DEFAULT_ERROR_MAX,
+        int(max_age_days) if max_age_days is not None else DEFAULT_MAX_AGE_DAYS,
     )
 
 
@@ -127,7 +132,7 @@ def setup_admin(
     persistence: PersistenceManager | None = None
     if config_path:
         data_dir = os.path.join(os.path.dirname(config_path), "data")
-        success_max, error_max = _resolve_log_caps(config)
+        success_max, error_max, max_age_days = _resolve_log_caps(config)
         persistence = PersistenceManager(
             data_dir, success_max=success_max, error_max=error_max
         )

@@ -353,3 +353,24 @@ async def clear_error_dumps(request: Any) -> Response:
 
     persistence.clear_error_dumps()
     return JSONResponse({"ok": True})
+
+
+async def db_cleanup(request: Any) -> Response:
+    """Delete records older than max_age_days and vacuum the database."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    max_age_days = body.get("max_age_days", 90)
+    if not isinstance(max_age_days, int) or max_age_days < 1:
+        return JSONResponse(
+            {"error": "max_age_days must be a positive integer"}, status_code=400
+        )
+
+    result = persistence.cleanup_by_age(max_age_days)
+    return JSONResponse({"ok": True, **result})

@@ -724,6 +724,8 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
                 rl_cfg["success_max"] = max(50000, int(rl["success_max"]))
             if "error_max" in rl:
                 rl_cfg["error_max"] = max(5000, int(rl["error_max"]))
+            if "max_age_days" in rl:
+                rl_cfg["max_age_days"] = max(1, int(rl["max_age_days"]))
 
         # Debug / log level
         debug = data.setdefault("debug", {})
