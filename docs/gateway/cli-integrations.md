@@ -167,7 +167,7 @@ agy -p "your prompt here"
 ```
 
 !!! warning "需要配置 planner 模型"
-    agy 内部使用一个硬编码的 planner 模型（`gemini-3.1-pro-preview`），会与用户选择的主模型一起发送请求。网关上**必须**配置此模型，否则 planner 会在主模型执行前失败。
+    agy 内部使用一个硬编码的 planner 模型（`gemini-3.1-pro-preview`），会与用户选择的主模型一起发送请求。该模型**无法通过** `settings.json` 或 CLI 参数覆盖——没有用户可配置的选项。网关上**必须**配置此模型，否则 planner 会在主模型执行前失败。
 
     在网关配置中添加一个别名，指向任意可用的 provider：
 
