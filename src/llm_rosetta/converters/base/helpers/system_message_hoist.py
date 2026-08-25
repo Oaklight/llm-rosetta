@@ -10,18 +10,30 @@ This helper rewrites the IR request so that:
 1. **Leading** system messages (before any non-system message) are moved
    into ``system_instruction``.
 2. **Late** system messages (after the first non-system message) are
-   rewritten as ``UserMessage`` with a ``[System: ...]`` envelope.
+   rewritten as ``UserMessage`` with ``<system>...</system>`` envelope
+   tags wrapping the text content while preserving any non-text parts
+   (images, files).
 
 The result is a stable prefix that caching can rely on, and no data loss
 regardless of target format.
+
+Attribution: envelope approach adapted from codex-rosetta commits
+c749003b and e7e7768e (late developer/system message rewriting).
+Deviation: operates at IR level (not raw request body), uses no
+product-specific metadata checks, and applies to all source→target
+conversions (not just Responses→Chat).
 """
 
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_SYSTEM_OPEN = "<system>"
+_SYSTEM_CLOSE = "</system>"
 
 
 def _extract_system_text(msg: dict[str, Any]) -> str:
@@ -36,13 +48,62 @@ def _extract_system_text(msg: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _wrap_content(content: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Wrap system content with ``<system>...</system>`` envelope tags.
+
+    Text parts have tags prepended/appended to the first and last text
+    part respectively.  Non-text parts (images, files) are preserved
+    as-is.  If there are no text parts, sentinel text parts are inserted
+    at the boundaries so the envelope is always present.
+    """
+    wrapped = copy.deepcopy(content)
+
+    text_indices = [
+        i
+        for i, part in enumerate(wrapped)
+        if isinstance(part, dict) and isinstance(part.get("text"), str)
+    ]
+
+    if not text_indices:
+        # No text parts — insert boundary sentinels
+        return [
+            {"type": "text", "text": _SYSTEM_OPEN},
+            *wrapped,
+            {"type": "text", "text": _SYSTEM_CLOSE},
+        ]
+
+    first = text_indices[0]
+    last = text_indices[-1]
+    wrapped[first]["text"] = f"{_SYSTEM_OPEN}\n{wrapped[first]['text']}"
+    wrapped[last]["text"] = f"{wrapped[last]['text']}\n{_SYSTEM_CLOSE}"
+    return wrapped
+
+
 def _rewrite_as_user(msg: dict[str, Any]) -> dict[str, Any]:
-    """Convert a SystemMessage to a UserMessage with envelope."""
-    text = _extract_system_text(msg)
-    envelope = f"[System: {text}]" if text.strip() else "[System instruction]"
+    """Convert a SystemMessage to a UserMessage with ``<system>`` envelope.
+
+    Preserves all content parts (text, image, file) and wraps text with
+    ``<system>...</system>`` tags.
+    """
+    content = msg.get("content", [])
+
+    if isinstance(content, str):
+        envelope = (
+            f"{_SYSTEM_OPEN}\n{content}\n{_SYSTEM_CLOSE}"
+            if content.strip()
+            else f"{_SYSTEM_OPEN}\n{_SYSTEM_CLOSE}"
+        )
+        wrapped_content: list[dict[str, Any]] = [{"type": "text", "text": envelope}]
+    elif isinstance(content, list):
+        wrapped_content = _wrap_content(content)
+    else:
+        wrapped_content = [
+            {"type": "text", "text": f"{_SYSTEM_OPEN}\n{_SYSTEM_CLOSE}"}
+        ]
+
     result: dict[str, Any] = {
         "role": "user",
-        "content": [{"type": "text", "text": envelope}],
+        "content": wrapped_content,
     }
     if "metadata" in msg:
         result["metadata"] = msg["metadata"]
@@ -54,36 +115,14 @@ def _build_new_messages(
     leading_indices: set[int],
     late_indices: set[int],
 ) -> list[dict[str, Any]]:
-    """Build new message list with late system messages rewritten.
-
-    When a late system message is immediately followed by a user message,
-    the envelope is merged into that user message to avoid consecutive
-    user roles (which Anthropic rejects).
-    """
+    """Build new message list with late system messages rewritten."""
     skip: set[int] = set(leading_indices)
     new_messages: list[dict[str, Any]] = []
     for i, msg in enumerate(messages):
         if i in skip:
             continue
         if i in late_indices:
-            rewritten = _rewrite_as_user(msg)
-            next_idx = i + 1
-            while next_idx in skip:
-                next_idx += 1
-            if (
-                next_idx < len(messages)
-                and isinstance(messages[next_idx], dict)
-                and messages[next_idx].get("role") == "user"
-            ):
-                next_msg = messages[next_idx]
-                merged = {
-                    **next_msg,
-                    "content": rewritten["content"] + list(next_msg.get("content", [])),
-                }
-                new_messages.append(merged)
-                skip.add(next_idx)
-            else:
-                new_messages.append(rewritten)
+            new_messages.append(_rewrite_as_user(msg))
         else:
             new_messages.append(msg)
     return new_messages

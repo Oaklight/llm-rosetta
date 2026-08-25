@@ -2,7 +2,11 @@
 
 Verifies that system messages appearing mid-conversation are either moved
 to system_instruction (leading) or rewritten as user messages with a
-[System: ...] envelope (late), preserving prompt cache prefix stability.
+``<system>...</system>`` envelope (late), preserving prompt cache prefix
+stability.
+
+Attribution: envelope format adapted from codex-rosetta commits c749003b
+and e7e7768e.
 """
 
 from __future__ import annotations
@@ -22,6 +26,10 @@ def _user(text: str) -> dict:
 
 def _asst(text: str) -> dict:
     return {"role": "assistant", "content": [{"type": "text", "text": text}]}
+
+
+def _wrapped(text: str) -> str:
+    return f"<system>\n{text}\n</system>"
 
 
 class TestNoOp:
@@ -79,11 +87,13 @@ class TestLateSystem:
             "messages": [_user("hi"), _asst("hey"), _sys("Be formal"), _user("ok")],
         }
         result = hoist_late_system_messages_ir(req)
-        assert len(result["messages"]) == 3
-        merged = result["messages"][2]
-        assert merged["role"] == "user"
-        assert merged["content"][0]["text"] == "[System: Be formal]"
-        assert merged["content"][1]["text"] == "ok"
+        # Late system rewritten as user; no merging with adjacent user
+        assert len(result["messages"]) == 4
+        rewritten = result["messages"][2]
+        assert rewritten["role"] == "user"
+        assert rewritten["content"][0]["text"] == _wrapped("Be formal")
+        # Following user message unchanged
+        assert result["messages"][3] == _user("ok")
 
     def test_multiple_late(self):
         req = {
@@ -91,13 +101,13 @@ class TestLateSystem:
             "messages": [_user("hi"), _sys("A"), _asst("ok"), _sys("B"), _user("bye")],
         }
         result = hoist_late_system_messages_ir(req)
-        assert result["messages"][1]["content"][0]["text"] == "[System: A]"
-        assert result["messages"][3]["content"][0]["text"] == "[System: B]"
+        assert result["messages"][1]["content"][0]["text"] == _wrapped("A")
+        assert result["messages"][3]["content"][0]["text"] == _wrapped("B")
 
-    def test_empty_system_uses_placeholder(self):
+    def test_empty_system_uses_envelope(self):
         req = {"model": "m", "messages": [_user("hi"), _sys("")]}
         result = hoist_late_system_messages_ir(req)
-        assert result["messages"][1]["content"][0]["text"] == "[System instruction]"
+        assert result["messages"][1]["content"][0]["text"] == _wrapped("")
 
     def test_metadata_preserved(self):
         req = {
@@ -124,11 +134,12 @@ class TestMixed:
         assert result["system_instruction"] == [
             {"type": "text", "text": "System prompt"}
         ]
-        assert len(result["messages"]) == 3
+        # Late system rewritten as user, following user unchanged
+        assert len(result["messages"]) == 4
         assert result["messages"][0]["role"] == "user"  # "hi"
-        assert result["messages"][2]["role"] == "user"  # merged
-        assert result["messages"][2]["content"][0]["text"] == "[System: Now be formal]"
-        assert result["messages"][2]["content"][1]["text"] == "ok"
+        assert result["messages"][2]["role"] == "user"  # rewritten
+        assert result["messages"][2]["content"][0]["text"] == _wrapped("Now be formal")
+        assert result["messages"][3] == _user("ok")
 
     def test_multi_part_system(self):
         msg = {
@@ -140,9 +151,51 @@ class TestMixed:
         }
         req = {"model": "m", "messages": [_user("hi"), msg]}
         result = hoist_late_system_messages_ir(req)
-        assert (
-            result["messages"][1]["content"][0]["text"]
-            == "[System: Part one\nPart two]"
+        # First and last text parts get envelope tags
+        content = result["messages"][1]["content"]
+        assert content[0]["text"] == "<system>\nPart one"
+        assert content[1]["text"] == "Part two\n</system>"
+
+
+class TestMultimodalPreservation:
+    """Late system messages with non-text content preserve all parts."""
+
+    def test_image_part_preserved(self):
+        image = {"type": "image", "source": {"type": "base64", "data": "AA=="}}
+        msg = {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": "Look at this"},
+                image,
+                {"type": "text", "text": "and respond"},
+            ],
+        }
+        req = {"model": "m", "messages": [_user("hi"), msg]}
+        result = hoist_late_system_messages_ir(req)
+        rewritten = result["messages"][1]
+        assert rewritten["role"] == "user"
+        assert len(rewritten["content"]) == 3
+        assert rewritten["content"][0]["text"] == "<system>\nLook at this"
+        assert rewritten["content"][1] == image
+        assert rewritten["content"][2]["text"] == "and respond\n</system>"
+
+    def test_nontext_only_gets_boundary_sentinels(self):
+        image = {"type": "image", "source": {"type": "base64", "data": "AA=="}}
+        msg = {"role": "system", "content": [image]}
+        req = {"model": "m", "messages": [_user("hi"), msg]}
+        result = hoist_late_system_messages_ir(req)
+        content = result["messages"][1]["content"]
+        assert len(content) == 3
+        assert content[0] == {"type": "text", "text": "<system>"}
+        assert content[1] == image
+        assert content[2] == {"type": "text", "text": "</system>"}
+
+    def test_string_content_wrapped(self):
+        msg = {"role": "system", "content": "plain text system"}
+        req = {"model": "m", "messages": [_user("hi"), msg]}
+        result = hoist_late_system_messages_ir(req)
+        assert result["messages"][1]["content"][0]["text"] == _wrapped(
+            "plain text system"
         )
 
 
@@ -223,13 +276,13 @@ class TestTransformIntegration:
         # No system messages in the messages array
         for msg in result["messages"]:
             assert msg["role"] != "system", f"system message leaked: {msg}"
-        # Late system rewritten as user envelope
+        # Late system rewritten as user with <system> envelope
         user_msgs = [m for m in result["messages"] if m["role"] == "user"]
         enveloped = [
             m
             for m in user_msgs
             if any(
-                "[System:" in c.get("text", "")
+                "<system>" in c.get("text", "")
                 for c in m.get("content", [])
                 if isinstance(c, dict)
             )
@@ -238,13 +291,14 @@ class TestTransformIntegration:
         # system_instruction preserved
         assert result["system_instruction"][0]["text"] == "You are helpful."
 
-    def test_no_consecutive_user_after_anthropic_conversion(self):
-        """Hoisted late system → user must not create consecutive user roles.
+    def test_hoist_produces_correct_ir_for_anthropic(self):
+        """Hoisted late system → user with envelope; no merging at IR level.
 
-        The Anthropic converter merges consecutive same-role messages, so
-        the final output should always alternate roles.
+        The hoist deliberately does NOT merge consecutive user messages.
+        That is the target converter's responsibility (e.g. Anthropic API
+        requires alternating roles). This test verifies the IR output is
+        correct and the envelope is present.
         """
-        from llm_rosetta.converters.anthropic import AnthropicConverter
         from llm_rosetta.pipeline import apply_ir_transforms
 
         ir_request = {
@@ -257,14 +311,120 @@ class TestTransformIntegration:
             ],
         }
         hoisted = apply_ir_transforms(ir_request, "argo--anthropic")
-        converter = AnthropicConverter()
-        from typing import cast
-        from llm_rosetta.types.ir.request import IRRequest
 
-        result, _ = converter.request_to_provider(cast(IRRequest, hoisted))
+        # No system messages remain
+        for msg in hoisted["messages"]:
+            assert msg["role"] != "system", f"system message leaked: {msg}"
 
+        # The rewritten message has the envelope
+        rewritten = hoisted["messages"][2]
+        assert rewritten["role"] == "user"
+        assert "<system>" in rewritten["content"][0]["text"]
+        assert "Be formal" in rewritten["content"][0]["text"]
+        assert "</system>" in rewritten["content"][0]["text"]
+
+        # Following user message is separate (not merged)
+        assert hoisted["messages"][3]["role"] == "user"
+        assert hoisted["messages"][3]["content"][0]["text"] == "ok"
+
+
+class TestDeveloperRole:
+    """Chat API developer role should be converted to IR system and hoisted."""
+
+    def test_chat_developer_to_ir_system(self):
+        """Chat developer messages are recognized and converted to IR system."""
+        from llm_rosetta.converters.openai_chat import OpenAIChatConverter
+
+        body = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "developer", "content": "You are helpful."},
+                {"role": "user", "content": "Hello"},
+            ],
+        }
+        converter = OpenAIChatConverter()
+        ir_request = converter.request_from_provider(body)
+        # Developer becomes system in IR
+        assert ir_request["messages"][0]["role"] == "system"
+
+    def test_late_chat_developer_hoisted(self):
+        """Late Chat developer message is hoisted as user with envelope."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "developer", "content": "You are helpful."},
+                {"role": "user", "content": "Hello"},
+                {"role": "assistant", "content": "Hi there!"},
+                {"role": "developer", "content": "Be concise."},
+                {"role": "user", "content": "What is 2+2?"},
+            ],
+        }
+        pipeline = ConversionPipeline(
+            "openai_chat", "openai_chat", target_shim="openai"
+        )
+        result = pipeline.convert_request(body)
         roles = [m["role"] for m in result["messages"]]
-        for i in range(1, len(roles)):
-            assert roles[i] != roles[i - 1], (
-                f"consecutive {roles[i]} at index {i}: {roles}"
-            )
+        # No system messages mid-conversation
+        system_indices = [i for i, r in enumerate(roles) if r == "system"]
+        assert all(i == 0 for i in system_indices), (
+            f"system message at non-leading position: {system_indices}"
+        )
+        # Late developer appears as user with envelope
+        user_msgs = [m for m in result["messages"] if m["role"] == "user"]
+        enveloped = [
+            m
+            for m in user_msgs
+            if isinstance(m.get("content"), str) and "<system>" in m["content"]
+        ]
+        assert len(enveloped) == 1
+        assert "Be concise." in enveloped[0]["content"]
+
+    def test_responses_late_developer_to_chat(self):
+        """Responses developer messages hoisted when converting to Chat."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        body = {
+            "model": "gpt-4o",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [
+                        {"type": "input_text", "text": "You are a helpful assistant."}
+                    ],
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Hello"}],
+                },
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Hi there!"}],
+                },
+                {
+                    "type": "message",
+                    "role": "developer",
+                    "content": [
+                        {"type": "input_text", "text": "New instructions: be concise."}
+                    ],
+                },
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "What is 2+2?"}],
+                },
+            ],
+            "stream": True,
+        }
+        pipeline = ConversionPipeline(
+            "openai_responses", "openai_chat", target_shim="openai"
+        )
+        result = pipeline.convert_request(body)
+        roles = [m["role"] for m in result["messages"]]
+        # Late system hoisted to user
+        non_leading_system = [i for i, r in enumerate(roles) if r == "system" and i > 0]
+        assert not non_leading_system, f"late system messages: {non_leading_system}"
