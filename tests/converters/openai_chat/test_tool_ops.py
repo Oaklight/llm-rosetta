@@ -285,8 +285,8 @@ class TestOpenAIChatToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
-    def test_ir_tool_result_to_p_list_json_serialized(self):
-        """Test list result is serialized via json.dumps, not str()."""
+    def test_ir_tool_result_to_p_list_converted_to_provider(self):
+        """Test list result is converted to provider format via content_ops."""
         ir_tr = cast(
             ToolResultPart,
             {
@@ -296,10 +296,9 @@ class TestOpenAIChatToolOps:
             },
         )
         result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tr)
-        assert result["content"] == json.dumps([{"type": "text", "text": "hello"}])
-        # Verify it's valid JSON (not Python repr)
-        parsed = json.loads(result["content"])
-        assert parsed == [{"type": "text", "text": "hello"}]
+        # List content is converted to Chat format (not json.dumps'd)
+        assert isinstance(result["content"], list)
+        assert result["content"] == [{"type": "text", "text": "hello"}]
 
     def test_ir_tool_result_to_p_dict_json_serialized(self):
         """Test dict result is serialized via json.dumps, not str()."""

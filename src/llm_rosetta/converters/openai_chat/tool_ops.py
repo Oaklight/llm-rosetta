@@ -469,7 +469,15 @@ class OpenAIChatToolOps(BaseToolOps):
         """
         result = ir_tool_result.get("result", "")
 
-        if isinstance(result, (list, dict)):
+        if isinstance(result, list):
+            from ..base.helpers.tool_content import convert_ir_content_blocks_to_p
+
+            from .content_ops import OpenAIChatContentOps
+
+            content = convert_ir_content_blocks_to_p(result, OpenAIChatContentOps)
+            # Return list content directly — Chat API supports list-valued
+            # tool message content for multimodal results
+        elif isinstance(result, dict):
             content = json.dumps(result)
         elif result is not None:
             content = str(result)
