@@ -517,9 +517,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         role = provider_message.get("role")
 
-        if role == "system":
-            return self._p_system_to_ir(provider_message)
-        elif role == "developer":
+        if role in ("system", "developer"):
             return self._p_system_to_ir(provider_message)
         elif role == "user":
             return self._p_user_to_ir(provider_message)

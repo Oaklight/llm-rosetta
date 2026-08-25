@@ -108,6 +108,9 @@ def hoist_late_system_messages_ir(
     if not messages:
         return ir_request
 
+    # Check both "system" and "developer" roles.  Chat→IR already maps
+    # developer→system, but directly-constructed IR payloads may carry
+    # developer role; handle it defensively.
     first_non_system = len(messages)
     for i, msg in enumerate(messages):
         if not isinstance(msg, dict) or msg.get("role") not in ("system", "developer"):
