@@ -102,9 +102,11 @@ def _p_block_to_ir(
     if block_type in _PROVIDER_FILE_TYPES:
         return {**content_ops_class.p_file_to_ir(block)}
 
-    # Google-style inline data (no "type" field, uses "inlineData" key)
+    # Google-style blocks (no "type" field)
     if "inlineData" in block or "inline_data" in block:
         return {**content_ops_class.p_image_to_ir(block)}
+    if "text" in block and "type" not in block:
+        return {**content_ops_class.p_text_to_ir(block)}
 
     # Unknown — pass through as-is
     logger.debug("Unknown content block type in tool result: %s", block_type)
