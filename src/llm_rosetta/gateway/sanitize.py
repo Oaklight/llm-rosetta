@@ -16,7 +16,7 @@ _AUTH_HEADER_NAMES = frozenset(
 _CREDENTIAL_PATTERNS = re.compile(
     r"|".join(
         [
-            r"Bearer\s+\S+",
+            r"Bearer\s+[A-Za-z0-9_\-./+]+",
             r"sk-ant-[A-Za-z0-9_-]{20,}",
             r"sk-[A-Za-z0-9_-]{20,}",
             r"AIza[A-Za-z0-9_-]{30,}",
