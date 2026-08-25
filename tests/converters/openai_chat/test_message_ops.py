@@ -1071,8 +1071,8 @@ class TestMultimodalToolResultPacking:
         # Text is still readable in the tool slot
         assert result[2]["content"] == [{"type": "text", "text": "rendered page"}]
 
-    def test_unpackable_image_stays_in_tool_message(self):
-        """An image that fails to pack is not dropped from the tool message.
+    def test_unpackable_image_dropped_from_tool_message(self):
+        """An image that fails both packing and IR→Chat conversion is dropped.
 
         Stripping only applies to blocks that actually made it into the
         synthetic message; otherwise the content would be lost entirely.
