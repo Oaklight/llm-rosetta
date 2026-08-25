@@ -124,11 +124,84 @@ Ollama v0.13+ supports three API formats that the gateway can serve:
 
 This means tools built on Ollama's OpenAI-compatible layer can use the gateway to reach cloud providers (Anthropic, Google, etc.) without code changes — just point the base URL at the gateway.
 
-## Gemini CLI
+## Antigravity CLI (agy)
 
-Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
+[Antigravity CLI](https://antigravity.google/docs/cli/install/) is Google's agentic coding CLI (successor to Gemini CLI). It uses the Google GenAI API (`/v1beta/models/...`).
 
-=== "Config Files (Recommended)"
+**Install:**
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+**Configure** `~/.gemini/antigravity-cli/settings.json`:
+
+```json
+{
+    "modelProvider": "gemini",
+    "model": {
+        "name": "gemini-3.5-flash"
+    }
+}
+```
+
+The model name can be **any model** configured on your gateway — including non-Google models like `claude-sonnet-4-6`, `deepseek-v4-flash`, or `gpt-5-nano`. The gateway handles cross-format conversion transparently.
+
+**Set environment variables:**
+
+```bash
+export GEMINI_API_KEY=your-gateway-api-key
+export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+```
+
+**Run:**
+
+```bash
+agy
+```
+
+Or in headless mode:
+
+```bash
+agy -p "your prompt here"
+```
+
+!!! warning "Planner model required"
+    agy internally uses a planner model (`gemini-3.1-pro-preview`) that is hardcoded and sent alongside your chosen model. Your gateway **must** have this model configured, or the planner will fail before your main model runs.
+
+    Add it as an alias in your gateway config pointing to any capable provider:
+
+    ```json
+    "gemini-3.1-pro-preview": {
+        "provider": "YourProvider",
+        "capabilities": ["text", "vision", "tools", "reasoning"],
+        "upstream_model": "any-capable-model"
+    }
+    ```
+
+!!! tip "Using non-Google models"
+    This is the key use case for llm-rosetta with agy: you can run agy against Claude, DeepSeek, GPT, or any other provider. The gateway converts between Google GenAI format and the target provider's format automatically.
+
+    Tested combinations:
+
+    | Model | Provider | Text | Vision | Tools |
+    |-------|----------|:----:|:------:|:-----:|
+    | `claude-sonnet-4-6` | Anthropic | ✅ | ✅ | ✅ |
+    | `deepseek-v4-flash` | DeepSeek | ✅ | ✅ | ✅ |
+    | `gemini-3.5-flash` | Google | ✅ | ✅ | ✅ |
+
+**Supported**: chat, streaming, vision, tool use ✅
+
+---
+
+## Gemini CLI (Discontinued)
+
+!!! warning "Discontinued"
+    Gemini CLI was discontinued on June 18, 2026 and replaced by [Antigravity CLI (agy)](#antigravity-cli-agy). The configuration below is preserved for reference only.
+
+??? note "Legacy Gemini CLI configuration"
+
+    Gemini CLI used the Google GenAI API (`/v1beta/models/...`).
 
     **`~/.gemini/.env`** — Gemini CLI auto-reads this file on startup:
 
@@ -151,34 +224,3 @@ Gemini CLI uses the Google GenAI API (`/v1beta/models/...`).
         }
     }
     ```
-
-    With both files configured, just run `gemini` — no extra flags needed.
-
-=== "Environment Variables"
-
-    ```bash
-    export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-    export GEMINI_API_KEY=your-key
-    gemini -m gemini-2.5-pro -p "your prompt here"
-    ```
-
-!!! tip "Bearer token authentication"
-    If your upstream proxy expects Bearer token auth (e.g., OneAPI), add to `~/.gemini/.env`:
-
-    ```bash
-    GEMINI_API_KEY_AUTH_MECHANISM=bearer
-    ```
-
-    This sends the API key as a `Bearer` token in the `Authorization` header instead of as a query parameter.
-
-!!! note "TTY requirement"
-    Gemini CLI requires a TTY even in headless mode (`-p`). When running from scripts or non-interactive shells, wrap with `script`:
-
-    ```bash
-    script -qec 'gemini -m gemini-2.5-pro -p "your prompt"' /dev/null
-    ```
-
-!!! note "Network dependencies"
-    Gemini CLI makes outbound connections to `github.com` and `play.googleapis.com` during startup. These must be reachable (directly or via proxy) for the CLI to function.
-
-**Supported**: chat, streaming ✅

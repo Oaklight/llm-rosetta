@@ -72,7 +72,7 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
     llm-rosetta-gateway
     ```
 
-    Drop-in backend for **Claude Code**, **Gemini CLI**, **OpenAI Codex CLI**, **Kilo Code**, and **Ollama**. See [CLI Integrations](gateway/cli-integrations.md).
+    Drop-in backend for **Claude Code**, **Antigravity CLI (agy)**, **OpenAI Codex CLI**, **Kilo Code**, and **Ollama**. See [CLI Integrations](gateway/cli-integrations.md).
 
     [Gateway Quick Start →](getting-started/gateway-quickstart.md){ .md-button }
 
@@ -111,7 +111,7 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons, and
 
 **Multi-provider applications** — Build apps that switch between LLM providers without changing integration code. Use OpenAI in production and Claude for testing, or let users choose their provider.
 
-**AI coding tool proxy** — Run a single gateway serving Claude Code, Gemini CLI, Codex CLI, and more, routing each to the right upstream.
+**AI coding tool proxy** — Run a single gateway serving Claude Code, Antigravity CLI, Codex CLI, and more, routing each to the right upstream.
 
 **Local model access** — Point the gateway at Ollama or LM Studio to let cloud-SDK-based tools talk to local models with automatic format conversion.
 
