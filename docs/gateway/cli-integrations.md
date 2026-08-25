@@ -167,7 +167,7 @@ agy -p "your prompt here"
 ```
 
 !!! warning "Planner model required"
-    agy internally uses a planner model (`gemini-3.1-pro-preview`) that is hardcoded and sent alongside your chosen model. Your gateway **must** have this model configured, or the planner will fail before your main model runs.
+    agy internally uses a hardcoded planner model (`gemini-3.1-pro-preview`) alongside your chosen model. This **cannot be overridden** via `settings.json` or CLI flags — there is no user-facing configuration for it. Your gateway **must** have this model configured, or the planner will fail before your main model runs.
 
     Add it as an alias in your gateway config pointing to any capable provider:
 
