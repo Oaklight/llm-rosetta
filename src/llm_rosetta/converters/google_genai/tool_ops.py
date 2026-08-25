@@ -63,19 +63,40 @@ def _is_content_block_list(value: list) -> bool:
 
     IR tool results are typed ``str | list[ContentPart]``.  Content block
     lists contain typed dicts (``{"type": "text", ...}``,
-    ``{"type": "image", ...}``).  Plain data lists (``[1, 2, 3]``) are
-    not content blocks and should be JSON-serialized instead.
+    ``{"type": "image", ...}``).  Google-format blocks may lack a
+    ``"type"`` key, using ``"text"``, ``"inlineData"``, or
+    ``"functionCall"`` as top-level keys instead.  Plain data lists
+    (``[1, 2, 3]``) are not content blocks and should be
+    JSON-serialized instead.
     """
-    return bool(value) and isinstance(value[0], dict) and "type" in value[0]
+    if not value or not isinstance(value[0], dict):
+        return False
+    first = value[0]
+    # IR / OpenAI / Anthropic style: has "type" key
+    if "type" in first:
+        return True
+    # Google style: has known part keys without "type"
+    _GOOGLE_PART_KEYS = {
+        "text",
+        "inlineData",
+        "inline_data",
+        "functionCall",
+        "functionResponse",
+    }
+    return bool(first.keys() & _GOOGLE_PART_KEYS)
 
 
 def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     """Extract and normalize result content from an IR ToolResultPart.
 
-    Content block lists (``list[ContentPart]``) are preserved as-is for
-    Google's Struct-based ``functionResponse.response``.  Plain data
+    Content block lists are converted from IR format to Google GenAI
+    provider format via ``convert_ir_content_blocks_to_p``.  Plain data
     lists and dicts are JSON-serialized.  Scalar values pass through.
     """
+    from ..base.helpers.tool_content import convert_ir_content_blocks_to_p
+
+    from .content_ops import GoogleGenAIContentOps
+
     result_content = (
         ir_tool_result.get("result")
         or ir_tool_result.get("content")
@@ -84,7 +105,7 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     )
     if isinstance(result_content, list):
         if _is_content_block_list(result_content):
-            return result_content
+            return convert_ir_content_blocks_to_p(result_content, GoogleGenAIContentOps)
         import json
 
         return json.dumps(result_content)
@@ -473,10 +494,13 @@ class GoogleGenAIToolOps(BaseToolOps):
         is_error = "error" in response_data
         content = response_data.get("error" if is_error else "output", "")
 
-        # Preserve content block lists (list[ContentPart]) for multimodal
-        # round-tripping; serialize plain data lists/dicts to JSON string.
+        # Normalize provider content block lists to IR format
         if isinstance(content, list) and _is_content_block_list(content):
-            result: Any = content
+            from ..base.helpers.tool_content import convert_content_blocks_to_ir
+
+            from .content_ops import GoogleGenAIContentOps
+
+            result: Any = convert_content_blocks_to_ir(content, GoogleGenAIContentOps)
         elif isinstance(content, (list, dict)):
             import json
 
