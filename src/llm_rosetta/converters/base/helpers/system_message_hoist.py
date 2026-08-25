@@ -97,9 +97,7 @@ def _rewrite_as_user(msg: dict[str, Any]) -> dict[str, Any]:
     elif isinstance(content, list):
         wrapped_content = _wrap_content(content)
     else:
-        wrapped_content = [
-            {"type": "text", "text": f"{_SYSTEM_OPEN}\n{_SYSTEM_CLOSE}"}
-        ]
+        wrapped_content = [{"type": "text", "text": f"{_SYSTEM_OPEN}\n{_SYSTEM_CLOSE}"}]
 
     result: dict[str, Any] = {
         "role": "user",
