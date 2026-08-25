@@ -675,8 +675,13 @@ class PersistenceManager:
 
         self._conn.commit()
 
-        # VACUUM reclaims space but requires no active transactions
-        self._conn.execute("VACUUM")
+        # VACUUM reclaims space; may fail under concurrent load
+        vacuum_ok = True
+        try:
+            self._conn.execute("VACUUM")
+        except sqlite3.OperationalError:
+            vacuum_ok = False
+            logger.warning("VACUUM skipped — database is locked by another connection")
 
         size_after = self.db_path.stat().st_size
 
@@ -688,6 +693,7 @@ class PersistenceManager:
             "size_before": size_before,
             "size_after": size_after,
             "max_age_days": max_age_days,
+            "vacuum": vacuum_ok,
         }
 
     def _prune_error_dumps(self) -> None:
