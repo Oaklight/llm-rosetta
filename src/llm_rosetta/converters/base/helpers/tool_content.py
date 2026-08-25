@@ -134,7 +134,7 @@ def _ir_block_to_p(
         try:
             result = content_ops_class.ir_image_to_p(block)
             return {**result} if result is not None else None
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, NotImplementedError):
             logger.warning("Failed to convert IR image block: %s", block)
             return None
 
@@ -143,7 +143,7 @@ def _ir_block_to_p(
         try:
             result = content_ops_class.ir_file_to_p(block)
             return {**result} if result is not None else None
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, NotImplementedError):
             logger.warning("Failed to convert IR file block: %s", block)
             return None
 

@@ -433,7 +433,6 @@ class TestMultimodalToolResultCapability:
 
     def test_pipeline_e2e_multimodal_tool_result_preserved(self):
         """End-to-end: shim + pipeline + multimodal tool result content preserved."""
-        import json
 
         from llm_rosetta.pipeline import ConversionPipeline
 
@@ -493,12 +492,12 @@ class TestMultimodalToolResultCapability:
 
         tool_msgs = [m for m in result["messages"] if m.get("role") == "tool"]
         assert len(tool_msgs) == 1
-        content = json.loads(tool_msgs[0]["content"])
+        content = tool_msgs[0]["content"]
         assert isinstance(content, list)
         assert len(content) == 2
         types = [c["type"] for c in content]
         assert "text" in types
-        assert "image" in types
+        assert "image_url" in types
 
         # No synthetic user message injected
         user_msgs = [m for m in result["messages"] if m.get("role") == "user"]
