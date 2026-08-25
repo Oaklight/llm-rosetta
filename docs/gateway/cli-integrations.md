@@ -124,11 +124,84 @@ Ollama v0.13+ 支持网关可以提供的三种 API 格式：
 
 这意味着基于 Ollama OpenAI 兼容层构建的工具可以通过网关访问云提供商（Anthropic、Google 等），无需更改代码——只需将 base URL 指向网关即可。
 
-## Gemini CLI
+## Antigravity CLI (agy)
 
-Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
+[Antigravity CLI](https://antigravity.google/docs/cli/install/) 是 Google 的 AI 编程 CLI 工具（Gemini CLI 的继任者），使用 Google GenAI API (`/v1beta/models/...`)。
 
-=== "配置文件（推荐）"
+**安装：**
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+```
+
+**配置** `~/.gemini/antigravity-cli/settings.json`：
+
+```json
+{
+    "modelProvider": "gemini",
+    "model": {
+        "name": "gemini-3.5-flash"
+    }
+}
+```
+
+模型名称可以是网关上配置的**任意模型**，包括非 Google 模型如 `claude-sonnet-4-6`、`deepseek-v4-flash`、`gpt-5-nano`。网关会自动处理跨格式转换。
+
+**设置环境变量：**
+
+```bash
+export GEMINI_API_KEY=your-gateway-api-key
+export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
+```
+
+**运行：**
+
+```bash
+agy
+```
+
+或无头模式：
+
+```bash
+agy -p "your prompt here"
+```
+
+!!! warning "需要配置 planner 模型"
+    agy 内部使用一个硬编码的 planner 模型（`gemini-3.1-pro-preview`），会与用户选择的主模型一起发送请求。网关上**必须**配置此模型，否则 planner 会在主模型执行前失败。
+
+    在网关配置中添加一个别名，指向任意可用的 provider：
+
+    ```json
+    "gemini-3.1-pro-preview": {
+        "provider": "YourProvider",
+        "capabilities": ["text", "vision", "tools", "reasoning"],
+        "upstream_model": "any-capable-model"
+    }
+    ```
+
+!!! tip "使用非 Google 模型"
+    这是 llm-rosetta 配合 agy 的核心用例：你可以通过 agy 使用 Claude、DeepSeek、GPT 等任意 provider。网关会自动在 Google GenAI 格式和目标 provider 格式之间进行转换。
+
+    已验证的组合：
+
+    | 模型 | Provider | 文本 | 图像 | 工具 |
+    |------|----------|:----:|:----:|:----:|
+    | `claude-sonnet-4-6` | Anthropic | ✅ | ✅ | ✅ |
+    | `deepseek-v4-flash` | DeepSeek | ✅ | ✅ | ✅ |
+    | `gemini-3.5-flash` | Google | ✅ | ✅ | ✅ |
+
+**支持功能**：对话、流式传输、图像识别、工具调用 ✅
+
+---
+
+## Gemini CLI（已停止服务）
+
+!!! warning "已停止服务"
+    Gemini CLI 已于 2026 年 6 月 18 日停止服务，由 [Antigravity CLI (agy)](#antigravity-cli-agy) 取代。以下配置仅供参考。
+
+??? note "旧版 Gemini CLI 配置"
+
+    Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
 
     **`~/.gemini/.env`** — Gemini CLI 启动时自动读取此文件：
 
@@ -151,34 +224,3 @@ Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
         }
     }
     ```
-
-    两个文件配置好后，直接运行 `gemini` 即可，无需额外参数。
-
-=== "环境变量"
-
-    ```bash
-    export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-    export GEMINI_API_KEY=your-key
-    gemini -m gemini-2.5-pro -p "your prompt here"
-    ```
-
-!!! tip "Bearer token 认证"
-    如果上游代理要求 Bearer token 认证（如 OneAPI），在 `~/.gemini/.env` 中添加：
-
-    ```bash
-    GEMINI_API_KEY_AUTH_MECHANISM=bearer
-    ```
-
-    这会将 API key 作为 `Bearer` token 放在 `Authorization` 请求头中发送，而非作为查询参数。
-
-!!! note "TTY 要求"
-    Gemini CLI 即使在无头模式（`-p`）下也需要 TTY。在脚本或非交互式 shell 中运行时，请使用 `script` 包装：
-
-    ```bash
-    script -qec 'gemini -m gemini-2.5-pro -p "your prompt"' /dev/null
-    ```
-
-!!! note "网络依赖"
-    Gemini CLI 在启动时会连接 `github.com` 和 `play.googleapis.com`。这些地址必须可达（直连或通过代理）。
-
-**支持功能**：对话、流式传输 ✅

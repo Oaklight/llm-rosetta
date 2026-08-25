@@ -72,7 +72,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
     llm-rosetta-gateway
     ```
 
-    可直接作为 **Claude Code**、**Gemini CLI**、**OpenAI Codex CLI**、**Kilo Code** 和 **Ollama** 的后端。详见 [CLI 工具集成](gateway/cli-integrations.md)。
+    可直接作为 **Claude Code**、**Antigravity CLI (agy)**、**OpenAI Codex CLI**、**Kilo Code** 和 **Ollama** 的后端。详见 [CLI 工具集成](gateway/cli-integrations.md)。
 
     [网关快速开始 →](getting-started/gateway-quickstart.md){ .md-button }
 
@@ -111,7 +111,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 **多提供商应用** — 构建可在 LLM 提供商之间无缝切换的应用，无需更改集成代码。生产环境用 OpenAI，测试用 Claude，或让用户自选提供商。
 
-**AI 编程工具代理** — 运行单个网关，同时服务 Claude Code、Gemini CLI、Codex CLI 等工具，将每个请求路由到正确的上游。
+**AI 编程工具代理** — 运行单个网关，同时服务 Claude Code、Antigravity CLI、Codex CLI 等工具，将每个请求路由到正确的上游。
 
 **本地模型访问** — 将网关指向 Ollama 或 LM Studio，让基于云 SDK 的工具通过自动格式转换访问本地模型。
 
