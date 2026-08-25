@@ -637,6 +637,19 @@ class PersistenceManager:
         )
         self._conn.commit()
 
+    def _delete_orphan_bodies(self) -> int:
+        """Delete dump_bodies not referenced by any error_dumps."""
+        cur = self._conn.execute(
+            "DELETE FROM dump_bodies WHERE hash NOT IN ("
+            "    SELECT body_hash FROM error_dumps "
+            "    WHERE body_hash IS NOT NULL"
+            "    UNION "
+            "    SELECT converted_body_hash FROM error_dumps "
+            "    WHERE converted_body_hash IS NOT NULL"
+            ")"
+        )
+        return cur.rowcount
+
     def _vacuum(self) -> bool:
         """Run VACUUM; return True on success, False if locked."""
         try:
@@ -682,17 +695,7 @@ class PersistenceManager:
         )
         error_dumps_deleted = cur.rowcount
 
-        # Remove orphaned dump_bodies (global, not age-scoped — intentional)
-        cur = self._conn.execute(
-            "DELETE FROM dump_bodies WHERE hash NOT IN ("
-            "    SELECT body_hash FROM error_dumps "
-            "    WHERE body_hash IS NOT NULL"
-            "    UNION "
-            "    SELECT converted_body_hash FROM error_dumps "
-            "    WHERE converted_body_hash IS NOT NULL"
-            ")"
-        )
-        dump_bodies_deleted = cur.rowcount
+        dump_bodies_deleted = self._delete_orphan_bodies()
         self._conn.commit()
         vacuum_ok = self._vacuum()
         size_after = self.db_path.stat().st_size
@@ -727,16 +730,7 @@ class PersistenceManager:
         )
         error_dumps_deleted = cur.rowcount
 
-        cur = self._conn.execute(
-            "DELETE FROM dump_bodies WHERE hash NOT IN ("
-            "    SELECT body_hash FROM error_dumps "
-            "    WHERE body_hash IS NOT NULL"
-            "    UNION "
-            "    SELECT converted_body_hash FROM error_dumps "
-            "    WHERE converted_body_hash IS NOT NULL"
-            ")"
-        )
-        dump_bodies_deleted = cur.rowcount
+        dump_bodies_deleted = self._delete_orphan_bodies()
         self._conn.commit()
         vacuum_ok = self._vacuum()
         size_after = self.db_path.stat().st_size
