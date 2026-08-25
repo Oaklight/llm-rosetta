@@ -39,6 +39,7 @@ from ..base.helpers.multimodal_tool_patch import (
     pack_multimodal_tool_result,
     unpack_tool_content,
 )
+from ..base.helpers.tool_content import convert_content_blocks_to_ir
 from .content_ops import OpenAIChatContentOps
 from .tool_ops import OpenAIChatToolOps
 
@@ -618,8 +619,8 @@ class OpenAIChatMessageOps(BaseMessageOps):
 
         If unpacked multimodal content exists for this tool_call_id (from a
         synthetic user message), the visual content blocks are converted to IR
-        and used as the result. Otherwise, the tool message content string is
-        used as-is.
+        and used as the result. Otherwise, direct list content is normalized to
+        IR and scalar content is used as-is.
 
         Args:
             msg: OpenAI tool role message dict.
@@ -644,13 +645,17 @@ class OpenAIChatMessageOps(BaseMessageOps):
                 ],
             }
 
+        content = msg.get("content", "")
+        if isinstance(content, list):
+            content = convert_content_blocks_to_ir(content, OpenAIChatContentOps)
+
         return {
             "role": "tool",
             "content": [
                 ToolResultPart(
                     type="tool_result",
                     tool_call_id=call_id,
-                    result=msg.get("content", ""),
+                    result=content,
                 )
             ],
         }

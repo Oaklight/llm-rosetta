@@ -617,6 +617,40 @@ class TestOpenAIChatMessageOps:
         assert result[0]["content"][0]["tool_call_id"] == "call_1"
         assert result[0]["content"][0]["result"] == "42"
 
+    def test_p_tool_list_content_to_ir(self):
+        """Direct tool list content normalizes provider blocks to IR."""
+        data_url = "data:image/png;base64,aW1hZ2U="
+        result = cast(
+            list[Any],
+            self.message_ops.p_messages_to_ir(
+                [
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_multimodal",
+                        "content": [
+                            {"type": "text", "text": "Screenshot result"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url, "detail": "high"},
+                            },
+                        ],
+                    }
+                ]
+            ),
+        )
+
+        tool_result = result[0]["content"][0]
+        assert result[0]["role"] == "tool"
+        assert tool_result["type"] == "tool_result"
+        assert tool_result["tool_call_id"] == "call_multimodal"
+        assert [part["type"] for part in tool_result["result"]] == ["text", "image"]
+        assert tool_result["result"][0]["text"] == "Screenshot result"
+        assert tool_result["result"][1]["image_data"] == {
+            "data": "aW1hZ2U=",
+            "media_type": "image/png",
+        }
+        assert tool_result["result"][1]["detail"] == "high"
+
     def test_p_function_to_ir(self):
         """Test OpenAI deprecated function role → IR ToolMessage."""
         result = cast(

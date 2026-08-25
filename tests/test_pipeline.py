@@ -510,6 +510,53 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
+    def test_chat_tool_list_content_to_responses(self):
+        """Chat tool list content converts to Responses input blocks."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        data_url = "data:image/png;base64,aW1hZ2U="
+        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-5",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_multimodal",
+                                "type": "function",
+                                "function": {"name": "inspect", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_multimodal",
+                        "content": [
+                            {"type": "text", "text": "Screenshot result"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url, "detail": "high"},
+                            },
+                        ],
+                    },
+                ],
+            }
+        )
+
+        tool_output = next(
+            item for item in target["input"] if item["type"] == "function_call_output"
+        )
+        assert tool_output["type"] == "function_call_output"
+        assert tool_output["call_id"] == "call_multimodal"
+        assert tool_output["output"] == [
+            {"type": "input_text", "text": "Screenshot result"},
+            {"type": "input_image", "image_url": data_url, "detail": "high"},
+        ]
+        assert all(block["type"] != "image_url" for block in tool_output["output"])
+
     def test_convert_response_openai_to_openai(self):
         """Response round-trip produces valid source response."""
         from llm_rosetta.pipeline import ConversionPipeline
