@@ -637,18 +637,84 @@ class PersistenceManager:
         )
         self._conn.commit()
 
+    def _vacuum(self) -> bool:
+        """Run VACUUM; return True on success, False if locked."""
+        try:
+            self._conn.execute("VACUUM")
+        except sqlite3.OperationalError:
+            logger.warning("VACUUM skipped — database is locked by another connection")
+            return False
+        return True
+
+    def cleanup_logs_by_age(self, max_age_days: int) -> dict[str, Any]:
+        """Delete request_log rows older than *max_age_days* and vacuum."""
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        size_before = self.db_path.stat().st_size
+
+        cur = self._conn.execute(
+            "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
+        )
+        deleted = cur.rowcount
+        self._conn.commit()
+        vacuum_ok = self._vacuum()
+        size_after = self.db_path.stat().st_size
+
+        return {
+            "deleted": deleted,
+            "freed_bytes": max(0, size_before - size_after),
+            "size_before": size_before,
+            "size_after": size_after,
+            "max_age_days": max_age_days,
+            "vacuum": vacuum_ok,
+        }
+
+    def cleanup_error_dumps_by_age(self, max_age_days: int) -> dict[str, Any]:
+        """Delete error_dumps and orphaned dump_bodies older than *max_age_days*."""
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        size_before = self.db_path.stat().st_size
+
+        cur = self._conn.execute(
+            "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
+        )
+        error_dumps_deleted = cur.rowcount
+
+        # Remove orphaned dump_bodies (global, not age-scoped — intentional)
+        cur = self._conn.execute(
+            "DELETE FROM dump_bodies WHERE hash NOT IN ("
+            "    SELECT body_hash FROM error_dumps "
+            "    WHERE body_hash IS NOT NULL"
+            "    UNION "
+            "    SELECT converted_body_hash FROM error_dumps "
+            "    WHERE converted_body_hash IS NOT NULL"
+            ")"
+        )
+        dump_bodies_deleted = cur.rowcount
+        self._conn.commit()
+        vacuum_ok = self._vacuum()
+        size_after = self.db_path.stat().st_size
+
+        return {
+            "error_dumps_deleted": error_dumps_deleted,
+            "dump_bodies_deleted": dump_bodies_deleted,
+            "freed_bytes": max(0, size_before - size_after),
+            "size_before": size_before,
+            "size_after": size_after,
+            "max_age_days": max_age_days,
+            "vacuum": vacuum_ok,
+        }
+
     def cleanup_by_age(self, max_age_days: int = 90) -> dict[str, Any]:
-        """Delete records older than *max_age_days* and vacuum the database.
+        """Delete all records older than *max_age_days* and vacuum.
 
-        This is a manual operation — it is never called automatically.
-
-        Returns:
-            Dict with deletion counts and bytes freed.
+        Convenience method that cleans both request logs and error dumps.
         """
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
-
         size_before = self.db_path.stat().st_size
 
         cur = self._conn.execute(
@@ -661,7 +727,6 @@ class PersistenceManager:
         )
         error_dumps_deleted = cur.rowcount
 
-        # Remove orphaned dump_bodies
         cur = self._conn.execute(
             "DELETE FROM dump_bodies WHERE hash NOT IN ("
             "    SELECT body_hash FROM error_dumps "
@@ -672,17 +737,8 @@ class PersistenceManager:
             ")"
         )
         dump_bodies_deleted = cur.rowcount
-
         self._conn.commit()
-
-        # VACUUM reclaims space; may fail under concurrent load
-        vacuum_ok = True
-        try:
-            self._conn.execute("VACUUM")
-        except sqlite3.OperationalError:
-            vacuum_ok = False
-            logger.warning("VACUUM skipped — database is locked by another connection")
-
+        vacuum_ok = self._vacuum()
         size_after = self.db_path.stat().st_size
 
         return {
@@ -695,6 +751,92 @@ class PersistenceManager:
             "max_age_days": max_age_days,
             "vacuum": vacuum_ok,
         }
+
+    def export_error_dumps(
+        self, *, start: str | None = None, end: str | None = None
+    ) -> bytes:
+        """Export error dumps in a date range as tar.gz bytes.
+
+        Args:
+            start: ISO timestamp lower bound (inclusive). None = no lower bound.
+            end: ISO timestamp upper bound (inclusive). None = no upper bound.
+
+        Returns:
+            In-memory tar.gz archive with metadata.json and bodies/<hash>.bin.
+        """
+        import io
+        import tarfile
+
+        where_clauses: list[str] = []
+        params: list[str] = []
+        if start:
+            where_clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            where_clauses.append("timestamp <= ?")
+            params.append(end)
+
+        where_sql = ""
+        if where_clauses:
+            where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        cols = (
+            "id, request_log_id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, error_phase, "
+            "body_hash, response_text, upstream_url, converted_body_hash"
+        )
+        col_names = [
+            "id",
+            "request_log_id",
+            "timestamp",
+            "model",
+            "source_provider",
+            "target_provider",
+            "provider_name",
+            "status_code",
+            "error_phase",
+            "body_hash",
+            "response_text",
+            "upstream_url",
+            "converted_body_hash",
+        ]
+        rows = self._conn.execute(
+            f"SELECT {cols} FROM error_dumps {where_sql} ORDER BY timestamp DESC",
+            params,
+        ).fetchall()
+
+        entries = [
+            {k: v for k, v in zip(col_names, row) if v is not None} for row in rows
+        ]
+
+        # Collect unique body hashes
+        hashes: set[str] = set()
+        for e in entries:
+            if e.get("body_hash"):
+                hashes.add(e["body_hash"])
+            if e.get("converted_body_hash"):
+                hashes.add(e["converted_body_hash"])
+
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            # metadata.json
+            meta_bytes = json.dumps(entries, indent=2, ensure_ascii=False).encode()
+            info = tarfile.TarInfo(name="metadata.json")
+            info.size = len(meta_bytes)
+            tar.addfile(info, io.BytesIO(meta_bytes))
+
+            # bodies/<hash>.bin
+            for h in sorted(hashes):
+                row = self._conn.execute(
+                    "SELECT data FROM dump_bodies WHERE hash = ?", (h,)
+                ).fetchone()
+                if row and row[0]:
+                    data = row[0]
+                    info = tarfile.TarInfo(name=f"bodies/{h}.bin")
+                    info.size = len(data)
+                    tar.addfile(info, io.BytesIO(data))
+
+        return buf.getvalue()
 
     def _prune_error_dumps(self) -> None:
         """Remove oldest error dumps beyond the retention cap.

@@ -289,6 +289,104 @@ def _cmd_db_cleanup(args: argparse.Namespace) -> None:
     )
 
 
+def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
+    """Run age-based request log cleanup."""
+    from llm_rosetta.observability import PersistenceManager
+
+    config_path = discover_config(args.config)
+    if config_path is None:
+        print("No config file found. Use --config to specify one.", file=sys.stderr)
+        sys.exit(1)
+
+    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    db_path = os.path.join(data_dir, "gateway.db")
+    if not os.path.exists(db_path):
+        print(f"Database not found: {db_path}", file=sys.stderr)
+        sys.exit(1)
+
+    pm = PersistenceManager(data_dir)
+    result = pm.cleanup_logs_by_age(args.max_age_days)
+    pm.close()
+
+    if result["deleted"] == 0:
+        print(f"Nothing to clean up — no logs older than {args.max_age_days} days.")
+        return
+
+    freed_mb = result["freed_bytes"] / (1024 * 1024)
+    print(f"Cleaned up logs older than {args.max_age_days} days:")
+    print(f"  Log entries deleted:  {result['deleted']}")
+    print(f"  Space freed:          {freed_mb:.1f} MB")
+    print(
+        f"  DB size:              {result['size_before'] / (1024 * 1024):.1f} MB"
+        f" → {result['size_after'] / (1024 * 1024):.1f} MB"
+    )
+
+
+def _cmd_db_cleanup_errors(args: argparse.Namespace) -> None:
+    """Run age-based error dump cleanup."""
+    from llm_rosetta.observability import PersistenceManager
+
+    config_path = discover_config(args.config)
+    if config_path is None:
+        print("No config file found. Use --config to specify one.", file=sys.stderr)
+        sys.exit(1)
+
+    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    db_path = os.path.join(data_dir, "gateway.db")
+    if not os.path.exists(db_path):
+        print(f"Database not found: {db_path}", file=sys.stderr)
+        sys.exit(1)
+
+    pm = PersistenceManager(data_dir)
+    result = pm.cleanup_error_dumps_by_age(args.max_age_days)
+    pm.close()
+
+    total = result["error_dumps_deleted"] + result["dump_bodies_deleted"]
+    if total == 0:
+        print(
+            f"Nothing to clean up — no error dumps older than {args.max_age_days} days."
+        )
+        return
+
+    freed_mb = result["freed_bytes"] / (1024 * 1024)
+    print(f"Cleaned up error dumps older than {args.max_age_days} days:")
+    print(f"  Error dumps deleted:  {result['error_dumps_deleted']}")
+    print(f"  Dump bodies deleted:  {result['dump_bodies_deleted']}")
+    print(f"  Space freed:          {freed_mb:.1f} MB")
+    print(
+        f"  DB size:              {result['size_before'] / (1024 * 1024):.1f} MB"
+        f" → {result['size_after'] / (1024 * 1024):.1f} MB"
+    )
+
+
+def _cmd_db_export_errors(args: argparse.Namespace) -> None:
+    """Export error dumps to a tar.gz file."""
+    from llm_rosetta.observability import PersistenceManager
+
+    config_path = discover_config(args.config)
+    if config_path is None:
+        print("No config file found. Use --config to specify one.", file=sys.stderr)
+        sys.exit(1)
+
+    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    db_path = os.path.join(data_dir, "gateway.db")
+    if not os.path.exists(db_path):
+        print(f"Database not found: {db_path}", file=sys.stderr)
+        sys.exit(1)
+
+    start = f"{args.start}T00:00:00Z" if args.start else None
+    end = f"{args.end}T23:59:59Z" if args.end else None
+
+    pm = PersistenceManager(data_dir)
+    data = pm.export_error_dumps(start=start, end=end)
+    pm.close()
+
+    output = args.output or "error-dumps.tar.gz"
+    with open(output, "wb") as f:
+        f.write(data)
+    print(f"Exported {len(data)} bytes to {output}")
+
+
 def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     """Handle subcommands; return True if one matched."""
     if args.command == "init":
@@ -308,6 +406,12 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     if args.command == "db":
         if args.db_type == "cleanup":
             _cmd_db_cleanup(args)
+        elif args.db_type == "cleanup-logs":
+            _cmd_db_cleanup_logs(args)
+        elif args.db_type == "cleanup-errors":
+            _cmd_db_cleanup_errors(args)
+        elif args.db_type == "export-errors":
+            _cmd_db_export_errors(args)
         else:
             sub.choices["db"].print_help()
         return True
@@ -408,13 +512,33 @@ def main() -> None:
     db_parser = sub.add_parser("db", help="Database maintenance commands")
     db_sub = db_parser.add_subparsers(dest="db_type")
     cleanup_parser = db_sub.add_parser(
-        "cleanup", help="Delete records older than max-age-days and vacuum"
+        "cleanup", help="Delete all records older than max-age-days and vacuum"
     )
     cleanup_parser.add_argument(
         "--max-age-days",
         type=int,
         default=90,
         help="Delete records older than this many days (default: 90)",
+    )
+    cl_parser = db_sub.add_parser(
+        "cleanup-logs", help="Delete request logs older than max-age-days"
+    )
+    cl_parser.add_argument(
+        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
+    )
+    ce_parser = db_sub.add_parser(
+        "cleanup-errors", help="Delete error dumps older than max-age-days"
+    )
+    ce_parser.add_argument(
+        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
+    )
+    export_parser = db_sub.add_parser(
+        "export-errors", help="Export error dumps to a tar.gz file"
+    )
+    export_parser.add_argument("--start", default=None, help="Start date (YYYY-MM-DD)")
+    export_parser.add_argument("--end", default=None, help="End date (YYYY-MM-DD)")
+    export_parser.add_argument(
+        "-o", "--output", default=None, help="Output file (default: error-dumps.tar.gz)"
     )
 
     args = parser.parse_args()

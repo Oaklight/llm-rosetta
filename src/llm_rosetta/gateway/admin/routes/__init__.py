@@ -57,9 +57,12 @@ from .keys import (
     update_api_key,
 )
 from .observability import (
+    cleanup_error_dumps_by_age,
+    cleanup_requests_by_age,
     clear_error_dumps,
     clear_requests,
     db_cleanup,
+    export_error_dumps,
     get_error_dump_body,
     get_error_dump_detail,
     get_error_dumps,
@@ -182,6 +185,13 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/error-dumps", methods=["DELETE"])(clear_error_dumps)
     app.route("/admin/api/db/cleanup", methods=["POST"])(db_cleanup)
+    app.route("/admin/api/requests/cleanup", methods=["POST"])(
+        _guard("logs", cleanup_requests_by_age)
+    )
+    app.route("/admin/api/error-dumps/cleanup", methods=["POST"])(
+        cleanup_error_dumps_by_age
+    )
+    app.route("/admin/api/error-dumps/export", methods=["GET"])(export_error_dumps)
     # API key management (keys tab)
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))
     app.route("/admin/api/keys", methods=["POST"])(_guard("keys", create_api_key))
