@@ -25,6 +25,7 @@ def _test_provider() -> ProviderInfo:
 
 
 class TestClientPoolRedirects:
+    # Intentionally access private attr — security-critical setting with no public accessor
     def test_pool_creates_client_with_zero_redirects(self):
         pool = HttpClientPool()
         client = pool.get()

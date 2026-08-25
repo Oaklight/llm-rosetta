@@ -1,0 +1,3 @@
+paths-ignore:
+  - "tests/gateway/test_credential_sanitize.py"
+  - "tests/gateway/test_redirect_security.py"

@@ -99,6 +99,11 @@ class TestScrubCredentialPatterns:
         assert result.startswith("before ")
         assert result.endswith(" after")
 
+    def test_bearer_does_not_eat_json_quotes(self):
+        text = '{"error":"Bearer sk-proj-abc123def456ghijklmno","code":"err"}'
+        result = scrub_credential_patterns(text)
+        assert result == '{"error":"[REDACTED]","code":"err"}'
+
 
 class TestSanitizeUpstreamError:
     def test_str_input_returns_str(self):
