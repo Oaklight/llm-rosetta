@@ -39,7 +39,7 @@ def _extract_system_text(msg: dict[str, Any]) -> str:
 def _rewrite_as_user(msg: dict[str, Any]) -> dict[str, Any]:
     """Convert a SystemMessage to a UserMessage with envelope."""
     text = _extract_system_text(msg)
-    envelope = f"[System: {text}]" if text.strip() else "[System instruction]"
+    envelope = f"<system>\n{text}\n</system>" if text.strip() else "<system>\n[system instruction]\n</system>"
     result: dict[str, Any] = {
         "role": "user",
         "content": [{"type": "text", "text": envelope}],
@@ -110,14 +110,14 @@ def hoist_late_system_messages_ir(
 
     first_non_system = len(messages)
     for i, msg in enumerate(messages):
-        if not isinstance(msg, dict) or msg.get("role") != "system":
+        if not isinstance(msg, dict) or msg.get("role") not in ("system", "developer"):
             first_non_system = i
             break
 
     leading_indices: set[int] = set()
     late_indices: set[int] = set()
     for i, msg in enumerate(messages):
-        if not isinstance(msg, dict) or msg.get("role") != "system":
+        if not isinstance(msg, dict) or msg.get("role") not in ("system", "developer"):
             continue
         if i < first_non_system:
             leading_indices.add(i)

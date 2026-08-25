@@ -2,7 +2,7 @@
 
 Verifies that system messages appearing mid-conversation are either moved
 to system_instruction (leading) or rewritten as user messages with a
-[System: ...] envelope (late), preserving prompt cache prefix stability.
+<system>...</system> envelope (late), preserving prompt cache prefix stability.
 """
 
 from __future__ import annotations
@@ -18,6 +18,10 @@ def _sys(text: str, **kw) -> dict:
 
 def _user(text: str) -> dict:
     return {"role": "user", "content": [{"type": "text", "text": text}]}
+
+
+def _dev(text: str, **kw) -> dict:
+    return {"role": "developer", "content": [{"type": "text", "text": text}], **kw}
 
 
 def _asst(text: str) -> dict:
@@ -82,7 +86,7 @@ class TestLateSystem:
         assert len(result["messages"]) == 3
         merged = result["messages"][2]
         assert merged["role"] == "user"
-        assert merged["content"][0]["text"] == "[System: Be formal]"
+        assert merged["content"][0]["text"] == "<system>\nBe formal\n</system>"
         assert merged["content"][1]["text"] == "ok"
 
     def test_multiple_late(self):
@@ -91,13 +95,13 @@ class TestLateSystem:
             "messages": [_user("hi"), _sys("A"), _asst("ok"), _sys("B"), _user("bye")],
         }
         result = hoist_late_system_messages_ir(req)
-        assert result["messages"][1]["content"][0]["text"] == "[System: A]"
-        assert result["messages"][3]["content"][0]["text"] == "[System: B]"
+        assert result["messages"][1]["content"][0]["text"] == "<system>\nA\n</system>"
+        assert result["messages"][3]["content"][0]["text"] == "<system>\nB\n</system>"
 
     def test_empty_system_uses_placeholder(self):
         req = {"model": "m", "messages": [_user("hi"), _sys("")]}
         result = hoist_late_system_messages_ir(req)
-        assert result["messages"][1]["content"][0]["text"] == "[System instruction]"
+        assert result["messages"][1]["content"][0]["text"] == "<system>\n[system instruction]\n</system>"
 
     def test_metadata_preserved(self):
         req = {
@@ -127,7 +131,7 @@ class TestMixed:
         assert len(result["messages"]) == 3
         assert result["messages"][0]["role"] == "user"  # "hi"
         assert result["messages"][2]["role"] == "user"  # merged
-        assert result["messages"][2]["content"][0]["text"] == "[System: Now be formal]"
+        assert result["messages"][2]["content"][0]["text"] == "<system>\nNow be formal\n</system>"
         assert result["messages"][2]["content"][1]["text"] == "ok"
 
     def test_multi_part_system(self):
@@ -142,7 +146,7 @@ class TestMixed:
         result = hoist_late_system_messages_ir(req)
         assert (
             result["messages"][1]["content"][0]["text"]
-            == "[System: Part one\nPart two]"
+            == "<system>\nPart one\nPart two\n</system>"
         )
 
 
@@ -229,7 +233,7 @@ class TestTransformIntegration:
             m
             for m in user_msgs
             if any(
-                "[System:" in c.get("text", "")
+                "<system>" in c.get("text", "")
                 for c in m.get("content", [])
                 if isinstance(c, dict)
             )
@@ -268,3 +272,49 @@ class TestTransformIntegration:
             assert roles[i] != roles[i - 1], (
                 f"consecutive {roles[i]} at index {i}: {roles}"
             )
+
+
+class TestDeveloperRole:
+    """Developer role messages should be treated identically to system."""
+
+    def test_developer_role_treated_as_instruction(self):
+        """Developer role messages are recognized as instruction roles."""
+        req = {"model": "m", "messages": [_dev("Be helpful"), _user("hi")]}
+        result = hoist_late_system_messages_ir(req)
+        assert result["system_instruction"] == [{"type": "text", "text": "Be helpful"}]
+        assert len(result["messages"]) == 1
+        assert result["messages"][0]["role"] == "user"
+
+    def test_leading_developer_hoisted(self):
+        """Leading developer messages go to system_instruction."""
+        req = {"model": "m", "messages": [_dev("Instruct A"), _dev("Instruct B"), _user("hi")]}
+        result = hoist_late_system_messages_ir(req)
+        assert len(result["system_instruction"]) == 2
+        assert result["system_instruction"][0]["text"] == "Instruct A"
+        assert result["system_instruction"][1]["text"] == "Instruct B"
+        assert len(result["messages"]) == 1
+
+    def test_late_developer_rewritten(self):
+        """Late developer messages get <system> envelope."""
+        req = {
+            "model": "m",
+            "messages": [_user("hi"), _asst("hey"), _dev("Be formal"), _user("ok")],
+        }
+        result = hoist_late_system_messages_ir(req)
+        assert len(result["messages"]) == 3
+        merged = result["messages"][2]
+        assert merged["role"] == "user"
+        assert merged["content"][0]["text"] == "<system>\nBe formal\n</system>"
+        assert merged["content"][1]["text"] == "ok"
+
+    def test_mixed_system_and_developer_leading(self):
+        """Mixed leading system+developer all go to system_instruction."""
+        req = {
+            "model": "m",
+            "messages": [_sys("System A"), _dev("Dev B"), _user("hi")],
+        }
+        result = hoist_late_system_messages_ir(req)
+        assert len(result["system_instruction"]) == 2
+        assert result["system_instruction"][0]["text"] == "System A"
+        assert result["system_instruction"][1]["text"] == "Dev B"
+        assert len(result["messages"]) == 1

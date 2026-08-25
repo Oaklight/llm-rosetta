@@ -223,4 +223,4 @@ docs_zh/
 # Temporary notes
 REVIEW_*
 TEMP_*
-tmp/
+tmp/keys.db
