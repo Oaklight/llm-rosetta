@@ -611,3 +611,183 @@ class TestCleanupByAge:
         rows = pm._conn.execute("SELECT id FROM request_log").fetchall()
         assert len(rows) == 1
         pm.close()
+
+
+class TestCleanupLogsIndependent:
+    def test_only_logs_deleted(self, tmp_path):
+        """cleanup_logs_by_age deletes logs but leaves error dumps untouched."""
+        from datetime import datetime, timedelta, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+
+        pm._conn.execute(
+            "INSERT INTO request_log (id, timestamp, model, source_provider, "
+            "target_provider, is_stream, status_code, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("old-log", old_ts, "gpt-4o", "openai_chat", "openai_chat", 0, 200, 100),
+        )
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("old-dump", old_ts, "gpt-4o", "openai_chat", "openai_chat", "openai", 500),
+        )
+        pm._conn.commit()
+
+        result = pm.cleanup_logs_by_age(90)
+        assert result["deleted"] == 1
+
+        # Error dump should still be there
+        dumps = pm._conn.execute("SELECT id FROM error_dumps").fetchall()
+        assert len(dumps) == 1
+        assert dumps[0][0] == "old-dump"
+        pm.close()
+
+
+class TestCleanupErrorsIndependent:
+    def test_only_errors_deleted(self, tmp_path):
+        """cleanup_error_dumps_by_age deletes dumps but leaves logs untouched."""
+        from datetime import datetime, timedelta, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+
+        pm._conn.execute(
+            "INSERT INTO request_log (id, timestamp, model, source_provider, "
+            "target_provider, is_stream, status_code, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("old-log", old_ts, "gpt-4o", "openai_chat", "openai_chat", 0, 200, 100),
+        )
+        pm._conn.execute(
+            "INSERT INTO dump_bodies (hash, data, orig_bytes, created) "
+            "VALUES (?, ?, ?, ?)",
+            ("hash-old", b"body data", 9, old_ts),
+        )
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, body_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "old-dump",
+                old_ts,
+                "gpt-4o",
+                "openai_chat",
+                "openai_chat",
+                "openai",
+                500,
+                "hash-old",
+            ),
+        )
+        pm._conn.commit()
+
+        result = pm.cleanup_error_dumps_by_age(90)
+        assert result["error_dumps_deleted"] == 1
+        assert result["dump_bodies_deleted"] == 1
+
+        # Request log should still be there
+        logs = pm._conn.execute("SELECT id FROM request_log").fetchall()
+        assert len(logs) == 1
+        assert logs[0][0] == "old-log"
+        pm.close()
+
+
+class TestExportErrorDumps:
+    def test_export_creates_valid_archive(self, tmp_path):
+        """export_error_dumps returns a valid tar.gz with metadata and bodies."""
+        import io
+        import tarfile
+        from datetime import datetime, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+        ts = datetime.now(timezone.utc).isoformat()
+
+        pm._conn.execute(
+            "INSERT INTO dump_bodies (hash, data, orig_bytes, created) "
+            "VALUES (?, ?, ?, ?)",
+            ("abc123", b"test body content", 17, ts),
+        )
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, body_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "dump-1",
+                ts,
+                "gpt-4o",
+                "openai_chat",
+                "openai_chat",
+                "openai",
+                500,
+                "abc123",
+            ),
+        )
+        pm._conn.commit()
+
+        data = pm.export_error_dumps()
+        assert len(data) > 0
+
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            names = tar.getnames()
+            assert "metadata.json" in names
+            assert "bodies/abc123.bin" in names
+
+            f = tar.extractfile("metadata.json")
+            assert f is not None
+            meta = json.loads(f.read())
+            assert len(meta) == 1
+            assert meta[0]["id"] == "dump-1"
+            assert meta[0]["body_hash"] == "abc123"
+
+            f = tar.extractfile("bodies/abc123.bin")
+            assert f is not None
+            body = f.read()
+            assert body == b"test body content"
+        pm.close()
+
+    def test_export_with_date_range(self, tmp_path):
+        """export_error_dumps respects start/end filters."""
+
+        pm = PersistenceManager(str(tmp_path))
+
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("old", "2026-01-01T00:00:00Z", "gpt-4o", "oc", "oc", "openai", 500),
+        )
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("new", "2026-08-01T00:00:00Z", "gpt-4o", "oc", "oc", "openai", 500),
+        )
+        pm._conn.commit()
+
+        data = pm.export_error_dumps(start="2026-07-01T00:00:00Z")
+        import io
+        import tarfile
+
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            f = tar.extractfile("metadata.json")
+            assert f is not None
+            meta = json.loads(f.read())
+            assert len(meta) == 1
+            assert meta[0]["id"] == "new"
+        pm.close()
+
+    def test_export_empty(self, tmp_path):
+        """export_error_dumps returns valid empty archive when no matches."""
+        import io
+        import tarfile
+
+        pm = PersistenceManager(str(tmp_path))
+        data = pm.export_error_dumps()
+        assert len(data) > 0
+
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            f = tar.extractfile("metadata.json")
+            assert f is not None
+            meta = json.loads(f.read())
+            assert meta == []
+        pm.close()

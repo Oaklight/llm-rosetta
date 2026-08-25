@@ -787,6 +787,7 @@ body { padding-bottom: 26px; }
           <div style="display:inline-block;position:relative">
             <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
             <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
+              <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
               <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
             </div>
           </div>
@@ -871,6 +872,23 @@ body { padding-bottom: 26px; }
       <div class="modal-actions">
         <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
         <button class="btn btn-danger" id="clearDumpsBtn" onclick="confirmClearDumps()" disabled style="opacity:0.4;cursor:not-allowed" data-i18n="btn.clearAll">Clear All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Error Dumps Modal -->
+  <div class="modal-overlay" id="exportDumpsModal">
+    <div class="modal" style="width:400px">
+      <h3 data-i18n="export.title">Export Error Dumps</h3>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="export.hint">Select a date range (optional). Leave empty to export all.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px">
+        <input type="date" id="exportStartDate" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <span style="color:var(--text-dim)">—</span>
+        <input type="date" id="exportEndDate" style="flex:1;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('exportDumpsModal')" data-i18n="btn.cancel">Cancel</button>
+        <button class="btn" onclick="doExportDumps()" style="background:var(--accent);color:#fff" data-i18n="btn.export">Export</button>
       </div>
     </div>
   </div>
@@ -962,7 +980,9 @@ body { padding-bottom: 26px; }
     <div class="settings-popup-item">
       <label data-i18n="label.maxAgeDays">Max Age (days)</label>
       <input type="number" id="settingsMaxAgeDays" min="1" step="1" value="90">
-      <button class="btn btn-sm" onclick="openCleanupConfirm()" style="background:var(--red);color:#fff" data-i18n="btn.cleanup">Cleanup</button>
+      <button class="btn btn-sm" onclick="openCleanupConfirm('logs')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
+      <button class="btn btn-sm" onclick="openCleanupConfirm('errors')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
+      <button class="btn btn-sm" onclick="openCleanupConfirm('all')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupAll">Cleanup All</button>
     </div>
     <div class="settings-divider"></div>
     <!-- Admin Token -->
@@ -1460,7 +1480,7 @@ const I18N = {
     'btn.save':'Save', 'btn.copy':'Copy', 'btn.change':'Change', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
     'label.logLevel':'Log Level', 'logLevel.normal':'Normal', 'logLevel.verbose':'Verbose', 'logLevel.debug':'Debug (bodies)',
     'label.autoRefresh':'Auto-Refresh', 'label.off':'Off', 'label.credentialReveal':'Credential Reveal', 'label.errorDumps':'Error Detail Log', 'label.enabled':'Enabled',
-    'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error',
+    'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error', 'label.maxAgeDays':'Max Age (days)', 'btn.cleanup':'Cleanup', 'btn.cleanupLogs':'Cleanup Logs', 'btn.cleanupErrors':'Cleanup Errors', 'btn.cleanupAll':'Cleanup All', 'btn.export':'Export...', 'confirm.cleanupTitle':'Database Cleanup', 'confirm.cleanupMsg':'This will permanently delete all records older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupLogsMsg':'This will permanently delete all request logs older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupErrorsMsg':'This will permanently delete all error dumps older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'toast.cleanupDone':'Cleaned up: {rl} logs, {ed} error dumps, {db} bodies removed. Freed {freed}.', 'toast.cleanupLogsDone':'Cleaned up {count} log entries. Freed {freed}.', 'toast.cleanupErrorsDone':'Cleaned up {ed} error dumps, {db} bodies. Freed {freed}.', 'toast.cleanupNone':'Nothing to clean up — no records older than {days} days.', 'toast.exported':'Export downloaded.', 'export.title':'Export Error Dumps', 'export.hint':'Select a date range (optional). Leave empty to export all.',
     'label.adminToken':'Admin Token', 'label.rotatingIn':'Rotating in <span class="cd-time">{time}</span>',
     'label.changePassword':'Change Password', 'label.currentPw':'Current', 'label.newPw':'New', 'label.confirmPw':'Confirm',
     'pw.required':'Both current and new password required', 'pw.mismatch':'Passwords do not match', 'pw.tooShort':'Password too short (min 4)', 'pw.changed':'Password changed',
@@ -1602,7 +1622,7 @@ const I18N = {
     'btn.save':'\u4fdd\u5b58', 'btn.copy':'\u590d\u5236', 'btn.change':'\u4fee\u6539', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
     'label.logLevel':'\u65e5\u5fd7\u7ea7\u522b', 'logLevel.normal':'\u6b63\u5e38', 'logLevel.verbose':'\u8be6\u7ec6', 'logLevel.debug':'\u8c03\u8bd5 (\u542b\u8bf7\u6c42\u4f53)',
     'label.autoRefresh':'\u81ea\u52a8\u5237\u65b0', 'label.off':'\u5173\u95ed', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.errorDumps':'\u9519\u8bef\u8be6\u60c5\u8bb0\u5f55', 'label.enabled':'\u5df2\u542f\u7528',
-    'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25', 'label.maxAgeDays':'\u6700\u5927\u4fdd\u7559\u5929\u6570', 'btn.cleanup':'\u6e05\u7406', 'confirm.cleanupTitle':'\u6570\u636e\u5e93\u6e05\u7406', 'confirm.cleanupMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u548c\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupDone':'\u5df2\u6e05\u7406\uff1a{rl} \u6761\u65e5\u5fd7\u3001{ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupNone':'\u65e0\u9700\u6e05\u7406\u2014\u2014\u6ca1\u6709\u8d85\u8fc7 {days} \u5929\u7684\u8bb0\u5f55\u3002',
+    'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25', 'label.maxAgeDays':'\u6700\u5927\u4fdd\u7559\u5929\u6570', 'btn.cleanup':'\u6e05\u7406', 'confirm.cleanupTitle':'\u6570\u636e\u5e93\u6e05\u7406', 'confirm.cleanupMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u548c\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupDone':'\u5df2\u6e05\u7406\uff1a{rl} \u6761\u65e5\u5fd7\u3001{ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupNone':'\u65e0\u9700\u6e05\u7406\u2014\u2014\u6ca1\u6709\u8d85\u8fc7 {days} \u5929\u7684\u8bb0\u5f55\u3002', 'btn.cleanupLogs':'\u6e05\u7406\u65e5\u5fd7', 'btn.cleanupErrors':'\u6e05\u7406\u9519\u8bef', 'btn.cleanupAll':'\u6e05\u7406\u5168\u90e8', 'btn.export':'\u5bfc\u51fa...', 'confirm.cleanupLogsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'confirm.cleanupErrorsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupLogsDone':'\u5df2\u6e05\u7406 {count} \u6761\u65e5\u5fd7\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupErrorsDone':'\u5df2\u6e05\u7406 {ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.exported':'\u5bfc\u51fa\u5df2\u4e0b\u8f7d\u3002', 'export.title':'\u5bfc\u51fa\u9519\u8bef\u8bb0\u5f55', 'export.hint':'\u9009\u62e9\u65e5\u671f\u8303\u56f4\uff08\u53ef\u9009\uff09\u3002\u7559\u7a7a\u5bfc\u51fa\u5168\u90e8\u3002',
     'label.adminToken':'\u7ba1\u7406 Token', 'label.rotatingIn':'<span class="cd-time">{time}</span> \u540e\u8f6e\u6362',
     'label.changePassword':'\u4fee\u6539\u5bc6\u7801', 'label.currentPw':'\u5f53\u524d\u5bc6\u7801', 'label.newPw':'\u65b0\u5bc6\u7801', 'label.confirmPw':'\u786e\u8ba4\u5bc6\u7801',
     'pw.required':'\u8bf7\u586b\u5199\u5f53\u524d\u5bc6\u7801\u548c\u65b0\u5bc6\u7801', 'pw.mismatch':'\u4e24\u6b21\u8f93\u5165\u4e0d\u4e00\u81f4', 'pw.tooShort':'\u5bc6\u7801\u592a\u77ed\uff08\u81f3\u5c114\u4f4d\uff09', 'pw.changed':'\u5bc6\u7801\u5df2\u4fee\u6539',
@@ -1947,10 +1967,16 @@ async function saveLogRetention() {
 }
 
 // --- Database Cleanup ---
-function openCleanupConfirm() {
+let _cleanupTarget = 'all';
+
+function openCleanupConfirm(target) {
+  _cleanupTarget = target || 'all';
   const days = parseInt(document.getElementById('settingsMaxAgeDays')?.value || '90', 10);
   if (days < 1) { showToast(t('toast.error'), 'error'); return; }
-  document.getElementById('cleanupConfirmMsg').innerHTML = t('confirm.cleanupMsg', {days});
+  const msgKey = target === 'logs' ? 'confirm.cleanupLogsMsg'
+    : target === 'errors' ? 'confirm.cleanupErrorsMsg'
+    : 'confirm.cleanupMsg';
+  document.getElementById('cleanupConfirmMsg').innerHTML = t(msgKey, {days});
   document.getElementById('cleanupConfirmInput').value = '';
   document.getElementById('cleanupConfirmBtn').disabled = true;
   const btn = document.getElementById('cleanupConfirmBtn');
@@ -1971,18 +1997,53 @@ function onCleanupConfirmInput() {
 async function onCleanupConfirmClick() {
   const days = parseInt(document.getElementById('settingsMaxAgeDays')?.value || '90', 10);
   closeModal('cleanupConfirmModal');
+  const target = _cleanupTarget;
   try {
-    const res = await api.post('/admin/api/db/cleanup', { max_age_days: days });
-    const d = res;
-    const total = d.request_log_deleted + d.error_dumps_deleted + d.dump_bodies_deleted;
-    if (total === 0) {
-      showToast(t('toast.cleanupNone', {days}));
+    const url = target === 'logs' ? '/admin/api/requests/cleanup'
+      : target === 'errors' ? '/admin/api/error-dumps/cleanup'
+      : '/admin/api/db/cleanup';
+    const d = await api.post(url, { max_age_days: days });
+    if (target === 'logs') {
+      if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
+      else showToast(t('toast.cleanupLogsDone', {count: d.deleted, freed: _fmtBytes(d.freed_bytes)}));
+    } else if (target === 'errors') {
+      const total = d.error_dumps_deleted + d.dump_bodies_deleted;
+      if (total === 0) showToast(t('toast.cleanupNone', {days}));
+      else showToast(t('toast.cleanupErrorsDone', {ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: _fmtBytes(d.freed_bytes)}));
     } else {
-      showToast(t('toast.cleanupDone', {
-        rl: d.request_log_deleted, ed: d.error_dumps_deleted,
-        db: d.dump_bodies_deleted, freed: _fmtBytes(d.freed_bytes)
-      }));
+      const total = d.request_log_deleted + d.error_dumps_deleted + d.dump_bodies_deleted;
+      if (total === 0) showToast(t('toast.cleanupNone', {days}));
+      else showToast(t('toast.cleanupDone', {rl: d.request_log_deleted, ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: _fmtBytes(d.freed_bytes)}));
     }
+  } catch { showToast(t('toast.error'), 'error'); }
+}
+
+// --- Error Dump Export ---
+function openExportDumpsModal() {
+  document.getElementById('exportStartDate').value = '';
+  document.getElementById('exportEndDate').value = '';
+  document.getElementById('exportDumpsModal').classList.add('open');
+}
+
+async function doExportDumps() {
+  closeModal('exportDumpsModal');
+  const start = document.getElementById('exportStartDate').value;
+  const end = document.getElementById('exportEndDate').value;
+  let url = '/admin/api/error-dumps/export';
+  const params = [];
+  if (start) params.push('start=' + encodeURIComponent(start + 'T00:00:00Z'));
+  if (end) params.push('end=' + encodeURIComponent(end + 'T23:59:59Z'));
+  if (params.length) url += '?' + params.join('&');
+  try {
+    const r = await fetch(url, {headers: _adminHeaders()});
+    if (!r.ok) { showToast(t('toast.error'), 'error'); return; }
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'error-dumps.tar.gz';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showToast(t('toast.exported'));
   } catch { showToast(t('toast.error'), 'error'); }
 }
 

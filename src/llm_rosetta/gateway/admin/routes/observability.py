@@ -374,3 +374,64 @@ async def db_cleanup(request: Any) -> Response:
 
     result = persistence.cleanup_by_age(max_age_days)
     return JSONResponse({"ok": True, **result})
+
+
+async def cleanup_requests_by_age(request: Any) -> Response:
+    """Delete request log entries older than max_age_days."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    max_age_days = body.get("max_age_days", 90)
+    if not isinstance(max_age_days, int) or max_age_days < 1:
+        return JSONResponse(
+            {"error": "max_age_days must be a positive integer"}, status_code=400
+        )
+
+    result = persistence.cleanup_logs_by_age(max_age_days)
+    return JSONResponse({"ok": True, **result})
+
+
+async def cleanup_error_dumps_by_age(request: Any) -> Response:
+    """Delete error dumps older than max_age_days."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    max_age_days = body.get("max_age_days", 90)
+    if not isinstance(max_age_days, int) or max_age_days < 1:
+        return JSONResponse(
+            {"error": "max_age_days must be a positive integer"}, status_code=400
+        )
+
+    result = persistence.cleanup_error_dumps_by_age(max_age_days)
+    return JSONResponse({"ok": True, **result})
+
+
+async def export_error_dumps(request: Any) -> Response:
+    """Export error dumps in a date range as tar.gz."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    start = _qp(request, "start")
+    end = _qp(request, "end")
+
+    data = persistence.export_error_dumps(start=start, end=end)
+
+    return Response(
+        body=data,
+        status_code=200,
+        content_type="application/gzip",
+        headers={"Content-Disposition": "attachment; filename=error-dumps.tar.gz"},
+    )
