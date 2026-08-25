@@ -185,9 +185,7 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/error-dumps", methods=["DELETE"])(clear_error_dumps)
     app.route("/admin/api/db/cleanup", methods=["POST"])(db_cleanup)
-    app.route("/admin/api/requests/cleanup", methods=["POST"])(
-        _guard("logs", cleanup_requests_by_age)
-    )
+    app.route("/admin/api/requests/cleanup", methods=["POST"])(cleanup_requests_by_age)
     app.route("/admin/api/error-dumps/cleanup", methods=["POST"])(
         cleanup_error_dumps_by_age
     )

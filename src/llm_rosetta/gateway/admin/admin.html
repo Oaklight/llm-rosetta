@@ -2040,7 +2040,10 @@ async function doExportDumps() {
     const blob = await r.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'error-dumps.tar.gz';
+    const parts = ['error-dumps'];
+    if (start) parts.push(start);
+    if (end) parts.push('to', end);
+    a.download = parts.join('-') + '.tar.gz';
     a.click();
     URL.revokeObjectURL(a.href);
     showToast(t('toast.exported'));
