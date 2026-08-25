@@ -347,20 +347,34 @@ class OpenAIChatConverter(BaseConverter):
         """
         ir_messages: list[dict[str, Any]] = []
         system_parts: list[TextPart] | None = None
+        seen_non_instruction = False
         for msg in messages:
-            if isinstance(msg, dict) and msg.get("role") == "system":
+            if not isinstance(msg, dict):
+                continue
+            role = msg.get("role")
+            is_instruction = role in ("system", "developer")
+            if is_instruction and not seen_non_instruction:
+                # Leading system/developer → extract to system_instruction
                 content = msg.get("content", "")
+                parts: list[TextPart] = []
                 if isinstance(content, str):
-                    system_parts = [TextPart(type="text", text=content)]
+                    parts = [TextPart(type="text", text=content)]
                 elif isinstance(content, list):
                     parts = [
                         TextPart(type="text", text=part["text"])
                         for part in content
                         if isinstance(part, dict) and part.get("type") == "text"
                     ]
-                    if parts:
+                if parts:
+                    if system_parts is None:
                         system_parts = parts
+                    else:
+                        system_parts.extend(parts)
+            elif is_instruction and seen_non_instruction:
+                # Late system/developer → keep as IR system message for hoist
+                ir_messages.append(self.message_ops._p_system_to_ir(msg))
             else:
+                seen_non_instruction = True
                 converted = self.message_ops._p_message_to_ir(msg)
                 if converted:
                     ir_messages.append(converted)

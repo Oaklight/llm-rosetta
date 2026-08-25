@@ -10,6 +10,7 @@ and e7e7768e.
 """
 
 from __future__ import annotations
+from typing import Any, cast
 
 from llm_rosetta.converters.base.helpers.system_message_hoist import (
     hoist_late_system_messages_ir,
@@ -332,7 +333,7 @@ class TestDeveloperRole:
     """Chat API developer role should be converted to IR system and hoisted."""
 
     def test_chat_developer_to_ir_system(self):
-        """Chat developer messages are recognized and converted to IR system."""
+        """Leading Chat developer messages are extracted to system_instruction."""
         from llm_rosetta.converters.openai_chat import OpenAIChatConverter
 
         body = {
@@ -343,9 +344,10 @@ class TestDeveloperRole:
             ],
         }
         converter = OpenAIChatConverter()
-        ir_request = converter.request_from_provider(body)
-        # Developer becomes system in IR
-        assert ir_request["messages"][0]["role"] == "system"
+        ir_request = cast(dict[str, Any], converter.request_from_provider(body))
+        assert ir_request["system_instruction"][0]["text"] == "You are helpful."
+        assert len(ir_request["messages"]) == 1
+        assert ir_request["messages"][0]["role"] == "user"
 
     def test_late_chat_developer_hoisted(self):
         """Late Chat developer message is hoisted as user with envelope."""
