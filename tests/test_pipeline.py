@@ -764,3 +764,52 @@ class TestConversionPipeline:
         result = pipeline.convert_response(upstream_response)
         # Source converter adds resp_ prefix back
         assert result["id"] == "resp_pipeline_test_123"
+
+    def test_chat_tool_list_content_round_trip(self):
+        """Chat tool list content survives A→IR→A round-trip via packing."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        data_url = "data:image/png;base64,aW1hZ2U="
+        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-4o",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_rt",
+                                "type": "function",
+                                "function": {"name": "screenshot", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_rt",
+                        "content": [
+                            {"type": "text", "text": "Screenshot captured"},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": data_url, "detail": "high"},
+                            },
+                        ],
+                    },
+                ],
+            }
+        )
+
+        # Chat packing moves image to synthetic user message
+        tool_msg = [m for m in target["messages"] if m.get("role") == "tool"][0]
+        content = tool_msg["content"]
+        # Tool message retains text only (image packed out)
+        assert isinstance(content, list)
+        assert content == [{"type": "text", "text": "Screenshot captured"}]
+
+        # Image appears in the synthetic user message
+        user_msgs = [m for m in target["messages"] if m.get("role") == "user"]
+        synthetic = user_msgs[-1]
+        assert isinstance(synthetic["content"], list)
+        assert any(p.get("type") == "image_url" for p in synthetic["content"])
