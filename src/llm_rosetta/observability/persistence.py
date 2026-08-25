@@ -32,6 +32,8 @@ _LEGACY_METRICS = "metrics.json"
 DEFAULT_SUCCESS_MAX = 50000
 DEFAULT_ERROR_MAX = 10000
 
+DEFAULT_MAX_AGE_DAYS = 90
+
 
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
@@ -634,6 +636,59 @@ class PersistenceManager:
             " WHERE converted_body_hash IS NOT NULL)"
         )
         self._conn.commit()
+
+    def cleanup_by_age(self, max_age_days: int = 90) -> dict[str, Any]:
+        """Delete records older than *max_age_days* and vacuum the database.
+
+        This is a manual operation — it is never called automatically.
+
+        Returns:
+            Dict with deletion counts and bytes freed.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+
+        size_before = self.db_path.stat().st_size
+
+        cur = self._conn.execute(
+            "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
+        )
+        request_log_deleted = cur.rowcount
+
+        cur = self._conn.execute(
+            "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
+        )
+        error_dumps_deleted = cur.rowcount
+
+        # Remove orphaned dump_bodies
+        cur = self._conn.execute(
+            "DELETE FROM dump_bodies WHERE hash NOT IN ("
+            "    SELECT body_hash FROM error_dumps "
+            "    WHERE body_hash IS NOT NULL"
+            "    UNION "
+            "    SELECT converted_body_hash FROM error_dumps "
+            "    WHERE converted_body_hash IS NOT NULL"
+            ")"
+        )
+        dump_bodies_deleted = cur.rowcount
+
+        self._conn.commit()
+
+        # VACUUM reclaims space but requires no active transactions
+        self._conn.execute("VACUUM")
+
+        size_after = self.db_path.stat().st_size
+
+        return {
+            "request_log_deleted": request_log_deleted,
+            "error_dumps_deleted": error_dumps_deleted,
+            "dump_bodies_deleted": dump_bodies_deleted,
+            "freed_bytes": max(0, size_before - size_after),
+            "size_before": size_before,
+            "size_after": size_after,
+            "max_age_days": max_age_days,
+        }
 
     def _prune_error_dumps(self) -> None:
         """Remove oldest error dumps beyond the retention cap.

@@ -33,7 +33,12 @@ from .error_dump import (
 )
 from .capture import CapturedRequest, CaptureState
 from .metrics import MetricsCollector
-from .persistence import DEFAULT_ERROR_MAX, DEFAULT_SUCCESS_MAX, PersistenceManager
+from .persistence import (
+    DEFAULT_ERROR_MAX,
+    DEFAULT_MAX_AGE_DAYS,
+    DEFAULT_SUCCESS_MAX,
+    PersistenceManager,
+)
 from .profiling import ProfilerState
 from .request_log import RequestLog, RequestLogEntry
 
@@ -41,6 +46,7 @@ __all__ = [
     "CapturedRequest",
     "CaptureState",
     "DEFAULT_ERROR_MAX",
+    "DEFAULT_MAX_AGE_DAYS",
     "DEFAULT_SUCCESS_MAX",
     "MetricsCollector",
     "PersistenceManager",

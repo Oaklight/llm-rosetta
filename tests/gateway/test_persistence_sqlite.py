@@ -513,3 +513,101 @@ class TestRequestLogWithPersistence:
         assert entries[0]["model"] == "second"
         assert entries[1]["model"] == "first"
         pm.close()
+
+
+class TestCleanupByAge:
+    def test_deletes_old_records(self, tmp_path):
+        """Records older than max_age_days are deleted."""
+        from datetime import datetime, timedelta, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+
+        # Insert entries with explicit old timestamps
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+        new_ts = datetime.now(timezone.utc).isoformat()
+
+        pm._conn.execute(
+            "INSERT INTO request_log (id, timestamp, model, source_provider, "
+            "target_provider, is_stream, status_code, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("old-1", old_ts, "gpt-4o", "openai_chat", "openai_chat", 0, 200, 100),
+        )
+        pm._conn.execute(
+            "INSERT INTO request_log (id, timestamp, model, source_provider, "
+            "target_provider, is_stream, status_code, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("new-1", new_ts, "gpt-4o", "openai_chat", "openai_chat", 0, 200, 50),
+        )
+        pm._conn.commit()
+
+        result = pm.cleanup_by_age(90)
+        assert result["request_log_deleted"] == 1
+        assert result["max_age_days"] == 90
+
+        # Only the new entry remains
+        rows = pm._conn.execute("SELECT id FROM request_log").fetchall()
+        assert len(rows) == 1
+        assert rows[0][0] == "new-1"
+        pm.close()
+
+    def test_cleans_orphaned_dump_bodies(self, tmp_path):
+        """Orphaned dump_bodies are removed after error_dumps are deleted."""
+        from datetime import datetime, timedelta, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+
+        pm._conn.execute(
+            "INSERT INTO dump_bodies (hash, data, orig_bytes, created) "
+            "VALUES (?, ?, ?, ?)",
+            ("hash-old", b"old body data", 13, old_ts),
+        )
+        pm._conn.execute(
+            "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+            "target_provider, provider_name, status_code, body_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "ed-1",
+                old_ts,
+                "gpt-4o",
+                "openai_chat",
+                "openai_chat",
+                "openai",
+                500,
+                "hash-old",
+            ),
+        )
+        pm._conn.commit()
+
+        result = pm.cleanup_by_age(90)
+        assert result["error_dumps_deleted"] == 1
+        assert result["dump_bodies_deleted"] == 1
+
+        bodies = pm._conn.execute("SELECT hash FROM dump_bodies").fetchall()
+        assert len(bodies) == 0
+        pm.close()
+
+    def test_nothing_deleted_when_all_recent(self, tmp_path):
+        """No records are deleted when everything is within the age window."""
+        from datetime import datetime, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+
+        new_ts = datetime.now(timezone.utc).isoformat()
+        pm._conn.execute(
+            "INSERT INTO request_log (id, timestamp, model, source_provider, "
+            "target_provider, is_stream, status_code, duration_ms) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            ("new-1", new_ts, "gpt-4o", "openai_chat", "openai_chat", 0, 200, 50),
+        )
+        pm._conn.commit()
+
+        result = pm.cleanup_by_age(90)
+        assert result["request_log_deleted"] == 0
+        assert result["error_dumps_deleted"] == 0
+        assert result["dump_bodies_deleted"] == 0
+
+        rows = pm._conn.execute("SELECT id FROM request_log").fetchall()
+        assert len(rows) == 1
+        pm.close()
