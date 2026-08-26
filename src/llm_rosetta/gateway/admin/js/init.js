@@ -13,18 +13,21 @@ import { loadMetrics, loadDumps, renderPersistence } from './dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from './logs.js';
 import './test.js';
 
+// Disabled tabs from branding — skip data fetching for these
+const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
+function _tabEnabled(id) { return _dt.indexOf(id) === -1; }
+
 // ===================== Init =====================
 function initApp() {
   loadConfig();
-  loadKeys();
-  loadLogKeyLabels();
+  if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
   api.get('/admin/api/internal-token').then(r => { S.internalToken = r.token; }).catch(() => {});
   api.get('/admin/api/metrics?seconds=1').then(data => {
     renderPersistence(data.persistence, data.total_requests);
   }).catch(() => {});
   stopTimers();
-  if (S.currentTab === 'dashboard') { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (S.currentTab === 'logs') { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
+  if (S.currentTab === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
 }
 
 // ===================== Tabs =====================
@@ -38,10 +41,10 @@ document.querySelectorAll('.tab').forEach(tab => {
     S.currentTab = id;
     localStorage.setItem('llm-rosetta-tab', id);
     stopTimers();
-    if (id === 'dashboard') { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-    if (id === 'logs') { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+    if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
+    if (id === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
     if (id === 'providers' || id === 'models') { loadConfig(); }
-    if (id === 'keys') { loadKeys(); }
+    if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
   });
 });
 
@@ -131,20 +134,13 @@ document.addEventListener('keydown', e => {
       fn2.parentNode.insertBefore(attr, fn2.nextSibling);
     }
   }
-  // Suppress data fetching for disabled tabs
-  if (b.disabled_tabs) {
-    const _noop = function() {};
-    const _dt = b.disabled_tabs;
-    if (_dt.indexOf('keys') !== -1) { window.loadKeys = _noop; }
-    if (_dt.indexOf('dashboard') !== -1) { window.loadMetrics = _noop; window.loadProfilingStatus = _noop; window.loadProfilingResults = _noop; window.loadCaptureStatus = _noop; window.loadCaptureResults = _noop; }
-    if (_dt.indexOf('logs') !== -1) { window.loadLogs = _noop; }
-    if (_dt.indexOf(S.currentTab) !== -1) {
-      const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'logs'];
-      for (let i = 0; i < _allTabs.length; i++) {
-        if (_dt.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
-      }
-      localStorage.setItem('llm-rosetta-tab', S.currentTab);
+  // Redirect away from disabled tabs
+  if (b.disabled_tabs && b.disabled_tabs.indexOf(S.currentTab) !== -1) {
+    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'logs'];
+    for (let i = 0; i < _allTabs.length; i++) {
+      if (b.disabled_tabs.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
     }
+    localStorage.setItem('llm-rosetta-tab', S.currentTab);
   }
 })();
 
