@@ -129,6 +129,7 @@ class StreamContext(ConversionContext):
 
     # Deferred event payloads
     pending_usage: dict | None = None
+    preflight_usage: dict | None = None
     pending_finish: dict | None = None
     pending_response: dict | None = None
     pending_text: str | None = None

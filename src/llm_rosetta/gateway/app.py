@@ -25,7 +25,11 @@ from .config import GatewayConfig
 from .keystore import KeyStore
 from .embeddings import handle_embeddings as _handle_embeddings
 from .rerank import handle_rerank as _handle_rerank
-from .headers import build_upstream_extra_headers, get_request_id
+from .headers import (
+    build_upstream_extra_headers,
+    get_preflight_tokens_override,
+    get_request_id,
+)
 from .logging import get_logger
 from llm_rosetta.observability.error_dump import dump_error
 
@@ -286,6 +290,13 @@ async def _proxy_handler(
             # generator can write back stream-phase profile after completion.
             pre_entry_id = uuid.uuid4().hex
 
+            preflight_override = get_preflight_tokens_override(request)
+            preflight = (
+                preflight_override
+                if preflight_override is not None
+                else route.preflight_token_count
+            )
+
             response, profile = await handle_streaming(
                 route,
                 provider_info,
@@ -296,6 +307,7 @@ async def _proxy_handler(
                 entry_id=pre_entry_id,
                 request_log=request_log,
                 persistence=persistence,
+                preflight_token_count=preflight,
             )
         else:
             pre_entry_id = None

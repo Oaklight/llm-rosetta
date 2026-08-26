@@ -846,6 +846,8 @@ class AnthropicConverter(BaseConverter):
             context.mark_started()
             if context.pending_usage is not None:
                 ir_usage = context.pending_usage
+            elif context.preflight_usage is not None:
+                ir_usage = context.preflight_usage
 
         p_usage = self._build_ir_usage_to_p(ir_usage)
 

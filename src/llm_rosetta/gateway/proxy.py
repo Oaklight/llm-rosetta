@@ -15,6 +15,7 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import time
 from collections.abc import AsyncIterator
@@ -600,6 +601,96 @@ async def _stream_event_generator(
             capture_state.record(capture_record)
 
 
+# ---------------------------------------------------------------------------
+# Preflight token count helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_preflight_body(
+    target_body: dict[str, Any], target_provider: ProviderType
+) -> dict[str, Any]:
+    """Build a minimal non-streaming request body for token counting.
+
+    Returns a deep copy of *target_body* with ``max_tokens=1``,
+    streaming disabled, and thinking/reasoning stripped so the upstream
+    returns a cheap response whose ``usage`` contains exact
+    ``input_tokens`` / ``prompt_tokens``.
+    """
+    body = copy.deepcopy(target_body)
+
+    # Disable streaming
+    body.pop("stream", None)
+    body.pop("stream_options", None)
+
+    # Set minimal output
+    if target_provider == "google":
+        gc = body.setdefault("generationConfig", {})
+        gc["maxOutputTokens"] = 1
+        gc.pop("responseModalities", None)
+    else:
+        body["max_tokens"] = 1
+
+    # Strip thinking / reasoning to minimise cost
+    body.pop("thinking", None)
+    body.pop("reasoning", None)
+    if isinstance(body.get("metadata"), dict):
+        body["metadata"].pop("thinking", None)
+
+    return body
+
+
+def _extract_preflight_input_tokens(
+    response_body: dict[str, Any], target_provider: ProviderType
+) -> int | None:
+    """Extract input/prompt token count from a non-streaming response."""
+    try:
+        if target_provider == "google":
+            return int(response_body["usageMetadata"]["promptTokenCount"])
+        usage = response_body.get("usage", {})
+        if target_provider in ("openai_chat",):
+            return int(usage["prompt_tokens"])
+        # Anthropic, OpenAI Responses, Open Responses
+        return int(usage["input_tokens"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+async def _run_preflight(
+    transport: UpstreamTransport,
+    provider_info: ProviderInfo,
+    target_body: dict[str, Any],
+    target_provider: ProviderType,
+    model: str,
+    *,
+    extra_headers: dict[str, str] | None = None,
+) -> int | None:
+    """Send a preflight request and return input token count.
+
+    Never raises — returns ``None`` on any failure so the real streaming
+    request can proceed with ``input_tokens=0`` as before.
+    """
+    try:
+        preflight_body = _build_preflight_body(target_body, target_provider)
+        upstream_url = provider_info.upstream_url(model)
+        resp = await transport.send(
+            provider_info,
+            upstream_url,
+            preflight_body,
+            extra_headers=extra_headers,
+        )
+        if resp.is_error:
+            logger.debug("Preflight request failed with status %d", resp.status_code)
+            return None
+        if resp.body is None:
+            return None
+        count = _extract_preflight_input_tokens(resp.body, target_provider)
+        logger.debug("Preflight input_tokens: %s", count)
+        return count
+    except Exception:
+        logger.debug("Preflight request error", exc_info=True)
+        return None
+
+
 async def handle_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -612,6 +703,7 @@ async def handle_streaming(
     request_log: Any | None = None,
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
+    preflight_token_count: bool = False,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -664,6 +756,18 @@ async def handle_streaming(
 
     log_converted_request(target_body)
     _strip_internal_metadata(target_body)
+
+    # Preflight: get exact input_tokens before streaming (opt-in)
+    _preflight_input_tokens: int | None = None
+    if preflight_token_count and route.source_provider != route.target_provider:
+        _preflight_input_tokens = await _run_preflight(
+            transport,
+            provider_info,
+            target_body,
+            route.target_provider,
+            model,
+            extra_headers=extra_headers,
+        )
 
     # Phase 3: Open upstream connection and check for immediate errors
     # *before* committing to a 200 StreamingResponse.
@@ -746,6 +850,12 @@ async def handle_streaming(
     processor = pipeline.create_stream_processor(
         on_ir_event=store.cache_from_stream_event,
     )
+
+    if _preflight_input_tokens is not None:
+        ctx = getattr(processor, "source_context", None)
+        if ctx is not None:
+            ctx.preflight_usage = {"prompt_tokens": _preflight_input_tokens}
+
     format_sse = SSE_FORMATTERS[route.source_provider]
 
     # Build a partial capture record if content capture is active.
