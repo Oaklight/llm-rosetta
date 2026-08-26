@@ -1,7 +1,6 @@
 name: Docker
 
 on:
-  # Called by the Release workflow after the package is published to PyPI.
   workflow_call:
     inputs:
       tag:
@@ -13,7 +12,6 @@ on:
         required: true
       DOCKERHUB_TOKEN:
         required: true
-  # Manual trigger for ad-hoc rebuilds of an already-published version.
   workflow_dispatch:
     inputs:
       tag:
@@ -25,35 +23,22 @@ permissions:
   contents: read
 
 jobs:
-  build-and-push:
+  # ── Python-based image (pip install) ──────────────────
+  build-python:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Extract version tag
+      - name: Extract version
         id: meta
         run: |
           VERSION="${{ inputs.tag }}"
-          # Normalize: strip an optional leading "v" so callers may pass either form.
           VERSION="${VERSION#v}"
-          if [ -z "$VERSION" ]; then
-            echo "::error::No version provided via inputs.tag"
-            exit 1
-          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Building version: $VERSION"
 
-      - name: Ensure build context has dist/
-        # The Dockerfile's `COPY dist/ /tmp/dist/` requires the source dir to
-        # exist in the build context. In CI we install from PyPI (no local
-        # wheel), so create an empty dist/ to make the COPY a harmless no-op.
+      - name: Ensure dist/ exists
         run: mkdir -p dist
 
       - name: Wait for PyPI availability
@@ -61,37 +46,139 @@ jobs:
           VERSION="${{ steps.meta.outputs.version }}"
           echo "Waiting for llm-rosetta==$VERSION on PyPI..."
           for i in $(seq 1 30); do
-            # Query the version-specific JSON endpoint for an exact match
-            # (200 = exists, 404 = not yet). Avoids substring false-positives.
             CODE=$(curl -fsS -o /dev/null -w "%{http_code}" \
               "https://pypi.org/pypi/llm-rosetta/$VERSION/json" || true)
             if [ "$CODE" = "200" ]; then
-              echo "✅ llm-rosetta==$VERSION found on PyPI (attempt $i)"
+              echo "Found on PyPI (attempt $i)"
               exit 0
             fi
-            echo "  Attempt $i/30: not yet available (HTTP $CODE), waiting 20s..."
+            echo "  Attempt $i/30: waiting 20s..."
             sleep 20
           done
-          echo "❌ llm-rosetta==$VERSION not found on PyPI after 10 minutes"
+          echo "::error::Not found on PyPI after 10 minutes"
           exit 1
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
+      - uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME || '' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN || '' }}
 
-      - name: Build and push multi-arch image
+      - name: Build and push python image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
           build-args: |
             PACKAGE_VERSION=${{ steps.meta.outputs.version }}
           tags: |
-            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}
-            oaklight/llm-rosetta-gateway:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-python
+          cache-from: type=gha,scope=python
+          cache-to: type=gha,mode=max,scope=python
+
+  # ── Binary-based images (Alpine + glibc) ──────────────
+  build-binary-images:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: alpine
+            base_image: alpine
+            binary_suffix: musl
+            tags_extra: true
+          - variant: glibc
+            base_image: busybox:glibc
+            binary_suffix: ""
+            tags_extra: false
+    name: docker-${{ matrix.variant }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Extract version
+        id: meta
+        run: |
+          VERSION="${{ inputs.tag }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: llm-rosetta-gateway-*-linux-*${{ matrix.binary_suffix && format('-{0}', matrix.binary_suffix) || '' }}
+          path: build/
+          merge-multiple: true
+
+      - name: List downloaded binaries
+        run: ls -lhR build/
+
+      - name: Prepare multi-arch build context
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          SUFFIX="${{ matrix.binary_suffix }}"
+          SUFFIX_DASH="${SUFFIX:+-$SUFFIX}"
+
+          mkdir -p build/linux-amd64 build/linux-arm64
+          cp build/llm-rosetta-gateway-${VERSION}-linux-x86_64${SUFFIX_DASH} build/linux-amd64/llm-rosetta-gateway
+          cp build/llm-rosetta-gateway-${VERSION}-linux-arm64${SUFFIX_DASH} build/linux-arm64/llm-rosetta-gateway
+          chmod +x build/linux-amd64/llm-rosetta-gateway build/linux-arm64/llm-rosetta-gateway
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME || '' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN || '' }}
+
+      - name: Build and push ${{ matrix.variant }} image (amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.binary
+          platforms: linux/amd64
+          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            BINARY=build/linux-amd64/llm-rosetta-gateway
+          tags: |
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-${{ matrix.variant }}-amd64
+          cache-from: type=gha,scope=${{ matrix.variant }}-amd64
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}-amd64
+
+      - name: Build and push ${{ matrix.variant }} image (arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.binary
+          platforms: linux/arm64
+          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            BINARY=build/linux-arm64/llm-rosetta-gateway
+          tags: |
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-${{ matrix.variant }}-arm64
+          cache-from: type=gha,scope=${{ matrix.variant }}-arm64
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}-arm64
+
+      - name: Create multi-arch manifest
+        if: secrets.DOCKERHUB_USERNAME != ''
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          VARIANT="${{ matrix.variant }}"
+          IMAGE="oaklight/llm-rosetta-gateway"
+
+          # Create variant manifest
+          docker buildx imagetools create \
+            -t "$IMAGE:${VERSION}-${VARIANT}" \
+            "$IMAGE:${VERSION}-${VARIANT}-amd64" \
+            "$IMAGE:${VERSION}-${VARIANT}-arm64"
+
+          # Alpine variant also gets the default tags
+          if [ "${{ matrix.tags_extra }}" = "true" ]; then
+            docker buildx imagetools create \
+              -t "$IMAGE:${VERSION}" \
+              -t "$IMAGE:latest" \
+              "$IMAGE:${VERSION}-${VARIANT}-amd64" \
+              "$IMAGE:${VERSION}-${VARIANT}-arm64"
+          fi
