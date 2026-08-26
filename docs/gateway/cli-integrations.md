@@ -6,34 +6,205 @@ title: CLI Integrations
 
 The gateway is a drop-in backend for popular AI coding CLI tools. Each tool speaks a different API format — the gateway handles the translation automatically.
 
+!!! note "Prerequisites"
+    All examples assume the gateway is running at `http://localhost:8765`. Replace with your actual host and port.
+
 ## Claude Code
 
-Claude Code uses the Anthropic Messages API (`/v1/messages`).
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) connects via the **Anthropic Messages API** (`/v1/messages`).
 
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:8765
-export ANTHROPIC_API_KEY=your-key  # or any placeholder
-export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
-claude --model claude-sonnet-4-20250514
-```
+=== "Config File (Recommended)"
 
-Or in `~/.claude/settings.json`:
+    ```bash
+    claude config set -g apiKeyHelper "echo 'your-api-key'"
+    claude config set -g env.ANTHROPIC_BASE_URL "http://localhost:8765"
+    claude config set -g env.CLAUDE_CODE_SKIP_ANTHROPIC_AUTH "1"
+    ```
 
-```json
-{
-  "env": {
-    "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
-    "ANTHROPIC_BASE_URL": "http://localhost:8765",
-    "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
-  }
-}
-```
+    This writes to `~/.claude/settings.json`:
+
+    ```json
+    {
+        "apiKeyHelper": "echo 'your-api-key'",
+        "env": {
+            "ANTHROPIC_BASE_URL": "http://localhost:8765",
+            "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
+        }
+    }
+    ```
+
+=== "Environment Variables"
+
+    ```bash
+    export ANTHROPIC_BASE_URL="http://localhost:8765"
+    export ANTHROPIC_API_KEY="your-api-key"
+    export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
+    claude
+    ```
+
+!!! important
+    - `CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1` is **required** — it skips Anthropic's default authentication flow
+    - Set `ANTHROPIC_BASE_URL` to the proxy root (e.g., `http://localhost:8765`), **not** `http://localhost:8765/v1/messages` — Claude Code appends the path automatically
 
 **Supported**: chat, multi-turn, images, tool calls, streaming ✅
 
+---
+
+## Codex CLI (OpenAI)
+
+[Codex CLI](https://github.com/openai/codex) connects via the **OpenAI Responses API** (`/v1/responses`).
+
+=== "Config File (Recommended)"
+
+    Create `~/.codex/config.toml`:
+
+    ```toml
+    model = "gpt-5-nano"
+    model_provider = "rosetta"
+
+    [model_providers.rosetta]
+    name = "Rosetta Gateway"
+    base_url = "http://localhost:8765/v1"
+    env_key = "ROSETTA_API_KEY"
+    wire_api = "responses"
+    ```
+
+    Then set the API key in your shell profile:
+
+    ```bash
+    export ROSETTA_API_KEY="your-api-key"
+    ```
+
+=== "Environment Variables"
+
+    ```bash
+    export OPENAI_BASE_URL="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    codex "your prompt here"
+    ```
+
+!!! note
+    Codex CLI uses the **Responses API** wire format by default. When using the config file approach, `wire_api = "responses"` makes this explicit.
+
+**Supported**: chat, multi-turn, tool calls, streaming ✅
+
+---
+
+## Aider
+
+[Aider](https://aider.chat/) supports both OpenAI and Anthropic backends.
+
+=== "OpenAI Mode"
+
+    ```bash
+    export OPENAI_API_BASE="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    aider --model gpt-5-nano
+    ```
+
+=== "Anthropic Mode"
+
+    ```bash
+    export ANTHROPIC_BASE_URL="http://localhost:8765"
+    export ANTHROPIC_API_KEY="your-api-key"
+    aider --model claude-sonnet-4-6
+    ```
+
+!!! tip
+    You can add these to your `.aider.conf.yml` or shell profile for persistence.
+
+**Supported**: chat, multi-turn, tool calls, streaming ✅
+
+---
+
+## Antigravity CLI (agy)
+
+[Antigravity CLI](https://antigravity.google/docs/cli/install/) is Google's agentic coding CLI (successor to Gemini CLI). It uses the **Google GenAI API** (`/v1beta/models/...`).
+
+=== "Config Files (Recommended)"
+
+    **1. `~/.gemini/antigravity-cli/settings.json`**:
+
+    ```json
+    {
+        "modelProvider": "gemini",
+        "model": {
+            "name": "gemini-3.5-flash"
+        }
+    }
+    ```
+
+    **2. Environment variables** (add to shell profile):
+
+    ```bash
+    export GEMINI_API_KEY="your-api-key"
+    export GOOGLE_GEMINI_BASE_URL="http://localhost:8765"
+    ```
+
+    Then just run `agy`.
+
+=== "Environment Variables"
+
+    ```bash
+    GOOGLE_GEMINI_BASE_URL=http://localhost:8765 \
+    GEMINI_API_KEY=your-api-key \
+    agy
+    ```
+
+The model name can be **any model** configured on your gateway — including non-Google models like `claude-sonnet-4-6`, `deepseek-v4-flash`, or `gpt-5-nano`. The gateway handles cross-format conversion transparently.
+
+!!! warning "Planner model required"
+    agy internally uses a hardcoded planner model (`gemini-3.1-pro-preview`) alongside your chosen model. This **cannot be overridden** — your gateway must have this model configured.
+
+!!! tip "Using non-Google models"
+    This is the key use case: run agy against Claude, DeepSeek, GPT, or any other provider. The gateway converts between Google GenAI format and the target provider's format automatically.
+
+**Supported**: chat, streaming, vision, tool calls ✅
+
+---
+
+## OpenCode
+
+[OpenCode](https://github.com/opencode-ai/opencode) supports OpenAI-compatible endpoints.
+
+=== "Config File (Recommended)"
+
+    Add a custom provider in `~/.config/opencode/opencode.json`:
+
+    ```json
+    {
+        "provider": {
+            "rosetta": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Rosetta Gateway",
+                "options": {
+                    "baseURL": "http://localhost:8765/v1",
+                    "apiKey": "your-api-key"
+                },
+                "models": {
+                    "gpt-5-nano": { "name": "GPT-5 Nano" },
+                    "claude-sonnet-4-6": { "name": "Claude Sonnet 4.6" }
+                }
+            }
+        }
+    }
+    ```
+
+=== "Environment Variables"
+
+    ```bash
+    export OPENAI_BASE_URL="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    opencode
+    ```
+
+**Supported**: chat, multi-turn, tool calls, streaming ✅
+
+---
+
 ## Kilo Code
 
-Kilo Code uses the OpenAI Chat Completions API (`/v1/chat/completions`).
+[Kilo Code](https://kilocode.ai/) (VS Code extension) uses the OpenAI Chat Completions API (`/v1/chat/completions`).
 
 In `~/.config/kilo/kilo.jsonc`, add a custom provider:
 
@@ -51,10 +222,9 @@ In `~/.config/kilo/kilo.jsonc`, add a custom provider:
           "cost": { "input": 0, "output": 0 },
           "limit": { "context": 200000, "output": 8192 }
         }
-        // Add more models as needed
       },
       "options": {
-        "apiKey": "your-key",
+        "apiKey": "your-api-key",
         "baseURL": "http://localhost:8765/v1"
       }
     }
@@ -66,37 +236,13 @@ Then use: `kilo --model rosetta/claude-sonnet-4-20250514`
 
 **Supported**: chat, multi-turn, tool calls, streaming ✅
 
-## OpenAI Codex CLI
-
-Codex CLI uses the OpenAI Responses API (`/v1/responses`).
-
-Create `~/.codex/config.toml`:
-
-```toml
-model = "gpt-4o"
-model_provider = "rosetta"
-
-[model_providers.rosetta]
-name = "Rosetta Gateway"
-base_url = "http://localhost:8765/v1"
-env_key = "ROSETTA_API_KEY"
-wire_api = "responses"
-```
-
-Then:
-
-```bash
-export ROSETTA_API_KEY=your-key
-codex "your prompt here"
-```
-
-**Supported**: chat, multi-turn, tool calls, streaming ✓
+---
 
 ## Ollama
 
-[Ollama](https://ollama.com/) (v0.13+) exposes OpenAI-compatible endpoints locally, making it a natural fit as both an upstream provider and a client target for the gateway.
+[Ollama](https://ollama.com/) (v0.13+) exposes OpenAI-compatible endpoints locally, making it a natural fit as both an upstream provider and a client target.
 
-### Using Ollama as an upstream provider
+### As an upstream provider
 
 Point a gateway provider at your local Ollama instance:
 
@@ -110,11 +256,9 @@ Point a gateway provider at your local Ollama instance:
 }
 ```
 
-Then any client (Anthropic SDK, Google SDK, etc.) can query local Ollama models through the gateway with automatic format conversion.
+### As a client
 
-### Using Ollama as a client
-
-Ollama v0.13+ supports three API formats that the gateway can serve:
+Ollama v0.13+ supports three API formats that the gateway serves:
 
 | Ollama Endpoint | Gateway Route | Converter |
 |---|---|---|
@@ -122,75 +266,44 @@ Ollama v0.13+ supports three API formats that the gateway can serve:
 | `/v1/responses` | Same | `openai_responses` (v0.13.3+) |
 | `/v1/messages` | Same | `anthropic` (v0.14.0+) |
 
-This means tools built on Ollama's OpenAI-compatible layer can use the gateway to reach cloud providers (Anthropic, Google, etc.) without code changes — just point the base URL at the gateway.
+---
 
-## Antigravity CLI (agy)
+## Generic SDKs
 
-[Antigravity CLI](https://antigravity.google/docs/cli/install/) is Google's agentic coding CLI (successor to Gemini CLI). It uses the Google GenAI API (`/v1beta/models/...`).
+### OpenAI Python SDK
 
-**Install:**
+```python
+from openai import OpenAI
 
-```bash
-curl -fsSL https://antigravity.google/cli/install.sh | bash
+client = OpenAI(
+    base_url="http://localhost:8765/v1",
+    api_key="your-api-key",
+)
+
+response = client.chat.completions.create(
+    model="claude-sonnet-4-6",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
 ```
 
-**Configure** `~/.gemini/antigravity-cli/settings.json`:
+### Anthropic Python SDK
 
-```json
-{
-    "modelProvider": "gemini",
-    "model": {
-        "name": "gemini-3.5-flash"
-    }
-}
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    base_url="http://localhost:8765",
+    api_key="your-api-key",
+)
+
+message = client.messages.create(
+    model="gpt-5-nano",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content[0].text)
 ```
-
-The model name can be **any model** configured on your gateway — including non-Google models like `claude-sonnet-4-6`, `deepseek-v4-flash`, or `gpt-5-nano`. The gateway handles cross-format conversion transparently.
-
-**Set environment variables:**
-
-```bash
-export GEMINI_API_KEY=your-gateway-api-key
-export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-```
-
-**Run:**
-
-```bash
-agy
-```
-
-Or in headless mode:
-
-```bash
-agy -p "your prompt here"
-```
-
-!!! warning "Planner model required"
-    agy internally uses a hardcoded planner model (`gemini-3.1-pro-preview`) alongside your chosen model. This **cannot be overridden** via `settings.json` or CLI flags — there is no user-facing configuration for it. Your gateway **must** have this model configured, or the planner will fail before your main model runs.
-
-    Add it as an alias in your gateway config pointing to any capable provider:
-
-    ```json
-    "gemini-3.1-pro-preview": {
-        "provider": "YourProvider",
-        "capabilities": ["text", "vision", "tools", "reasoning"],
-        "upstream_model": "any-capable-model"
-    }
-    ```
-
-!!! tip "Using non-Google models"
-    This is the key use case for llm-rosetta with agy: you can run agy against Claude, DeepSeek, GPT, or any other provider. The gateway converts between Google GenAI format and the target provider's format automatically.
-
-    Tested combinations:
-
-    | Model | Provider | Text | Vision | Tools |
-    |-------|----------|:----:|:------:|:-----:|
-    | `claude-sonnet-4-6` | Anthropic | ✅ | ✅ | ✅ |
-    | `deepseek-v4-flash` | DeepSeek | ✅ | ✅ | ✅ |
-    | `gemini-3.5-flash` | Google | ✅ | ✅ | ✅ |
-
-**Supported**: chat, streaming, vision, tool use ✅
 
 ---
 
@@ -201,26 +314,34 @@ agy -p "your prompt here"
 
 ??? note "Legacy Gemini CLI configuration"
 
-    Gemini CLI used the Google GenAI API (`/v1beta/models/...`).
-
-    **`~/.gemini/.env`** — Gemini CLI auto-reads this file on startup:
+    **`~/.gemini/.env`**:
 
     ```bash
-    GEMINI_API_KEY=your-key
+    GEMINI_API_KEY=your-api-key
     GOOGLE_GEMINI_BASE_URL=http://localhost:8765
     ```
 
-    **`~/.gemini/settings.json`** — set auth mode and default model:
+    **`~/.gemini/settings.json`**:
 
     ```json
     {
-        "model": {
-            "name": "gemini-2.5-pro"
-        },
-        "security": {
-            "auth": {
-                "selectedType": "gemini-api-key"
-            }
-        }
+        "model": { "name": "gemini-2.5-pro" },
+        "security": { "auth": { "selectedType": "gemini-api-key" } }
     }
     ```
+
+---
+
+## Summary
+
+| Tool | API Format | Base URL Env Var | Value |
+|------|-----------|-----------------|-------|
+| Claude Code | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
+| Codex CLI | OpenAI Responses | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Aider (OpenAI) | OpenAI | `OPENAI_API_BASE` | `http://localhost:8765/v1` |
+| Aider (Anthropic) | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
+| agy | Google GenAI | `GOOGLE_GEMINI_BASE_URL` | `http://localhost:8765` |
+| OpenCode | OpenAI | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Kilo Code | OpenAI | — (config file) | `http://localhost:8765/v1` |
+| OpenAI SDK | OpenAI | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Anthropic SDK | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
