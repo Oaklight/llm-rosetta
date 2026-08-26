@@ -8,27 +8,17 @@ ARG PYPI_MIRROR
 ARG LOCAL_WHEEL
 ARG PACKAGE_VERSION
 
-# Prevents Python from writing pyc files and enables unbuffered output.
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Create a non-privileged user and group (alpine syntax).
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
-# Install su-exec for runtime user switching in entrypoint.
-RUN apk add --no-cache su-exec
-
-# Copy only the dist/ directory for local wheels (never copy the full tree —
-# even with .dockerignore, a broad COPY risks leaking secrets into layers).
-# The trailing slash on dist/ + a wildcard ensures COPY is a no-op when empty.
 RUN mkdir -p /tmp/dist/
 COPY dist/ /tmp/dist/
 
-# Install llm-rosetta[gateway,profiling]: local wheel > specific version > latest from PyPI
-# Then remove pip/setuptools to save ~10MB
 RUN if [ -n "$LOCAL_WHEEL" ] && [ -f "/tmp/dist/$LOCAL_WHEEL" ]; then \
         echo "Installing from local wheel: $LOCAL_WHEEL"; \
         if [ -n "$PYPI_MIRROR" ]; then \
@@ -54,16 +44,12 @@ RUN if [ -n "$LOCAL_WHEEL" ] && [ -f "/tmp/dist/$LOCAL_WHEEL" ]; then \
     pip uninstall -y pip setuptools 2>/dev/null || true && \
     rm -rf /tmp/dist/
 
-# Config directory — mount a volume here with your config.jsonc.
-# The gateway also stores metrics and request logs under /config/data/.
 RUN mkdir -p /config && chown appuser:appgroup /config
 VOLUME /config
 
-# Entrypoint fixes /config ownership and drops to appuser via su-exec.
-# Set PUID/PGID environment variables to match your host user (default: 1000).
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY --chmod=755 docker/entrypoint.sh /entrypoint.sh
 
+USER appuser
 EXPOSE 8765
 
 ENTRYPOINT ["/entrypoint.sh"]
