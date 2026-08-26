@@ -8,10 +8,13 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ..static import load_admin_html
+from ..static import load_admin_html, load_static_file
 
 # Cached HTML — loaded once on first request, per custom_head value.
 _admin_html_cache: dict[str, str] = {}
+
+# Cached static assets (CSS/JS) — populated on first request per path.
+_static_cache: dict[str, tuple[bytes, str]] = {}
 
 
 async def serve_admin_html(request: Any) -> Response:
@@ -27,6 +30,23 @@ async def serve_admin_html(request: Any) -> Response:
         body=_admin_html_cache[cache_key],
         status_code=200,
         content_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+    )
+
+
+async def serve_admin_static(request: Any, **kwargs: Any) -> Response:
+    """Serve a static CSS/JS file from the admin package."""
+    subpath: str = request.path_params["path"]
+    if subpath not in _static_cache:
+        try:
+            _static_cache[subpath] = load_static_file(subpath)
+        except FileNotFoundError:
+            return Response(body=b"Not Found", status_code=404)
+    data, content_type = _static_cache[subpath]
+    return Response(
+        body=data,
+        status_code=200,
+        content_type=content_type,
         headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
     )
 
