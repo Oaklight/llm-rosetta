@@ -72,7 +72,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "llm_rosetta" = ["py.typed", "shims/providers/*/provider.yaml", "shims/providers/*/*/provider.yaml"]
-"llm_rosetta.gateway.admin" = ["admin.html"]
+"llm_rosetta.gateway.admin" = ["admin.html", "css/*.css", "js/*.js"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }
