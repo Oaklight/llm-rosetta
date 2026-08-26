@@ -37,6 +37,7 @@ __pycache__/
 *.egg
 .eggs/
 build/
+!build/llm-rosetta-gateway-*
 # NOTE: dist/ is intentionally NOT ignored — local wheels
 # are copied from dist/ during the Docker build.
 sdist/

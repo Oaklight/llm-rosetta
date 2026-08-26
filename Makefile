@@ -91,11 +91,143 @@ push: push-package
 clean: clean-package
 
 # ──────────────────────────────────────────────
+# Nuitka binary builds
+# ──────────────────────────────────────────────
+
+# Detect platform
+UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
+UNAME_M := $(shell uname -m 2>/dev/null || echo x86_64)
+ifeq ($(UNAME_S),Linux)
+  BINARY_OS := linux
+else ifeq ($(UNAME_S),Darwin)
+  BINARY_OS := macos
+else
+  BINARY_OS := windows
+endif
+ifeq ($(UNAME_M),aarch64)
+  BINARY_ARCH := arm64
+else ifeq ($(UNAME_M),arm64)
+  BINARY_ARCH := arm64
+else
+  BINARY_ARCH := x86_64
+endif
+
+BINARY_NAME = llm-rosetta-gateway-$(VERSION)-$(BINARY_OS)-$(BINARY_ARCH)
+BINARY_NAME_MUSL = llm-rosetta-gateway-$(VERSION)-linux-$(BINARY_ARCH)-musl
+BINARY_DIR := build
+NUITKA_ENTRY := _nuitka_entry.py
+NUITKA_JOBS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+
+NUITKA_FLAGS = \
+	--standalone \
+	--onefile \
+	--jobs=$(NUITKA_JOBS) \
+	--output-dir=$(BINARY_DIR) \
+	--include-package=llm_rosetta \
+	--include-package=pyinstrument \
+	--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
+	--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+	--nofollow-import-to=pytest \
+	--nofollow-import-to=setuptools \
+	--nofollow-import-to=pip \
+	--nofollow-import-to=_pytest \
+	--assume-yes-for-downloads
+
+# Build native binary (glibc on Linux, system libc on macOS, MSVC on Windows)
+build-binary:
+	@echo "Building native binary: $(BINARY_NAME)..."
+	@printf 'from llm_rosetta.gateway import main\nmain()\n' > $(NUITKA_ENTRY)
+	python -m nuitka $(NUITKA_FLAGS) \
+		--output-filename=$(BINARY_NAME)$(if $(filter windows,$(BINARY_OS)),.exe,) \
+		$(NUITKA_ENTRY)
+	@rm -f $(NUITKA_ENTRY)
+	@ls -lh $(BINARY_DIR)/$(BINARY_NAME)*
+	@echo "Binary build complete."
+
+# Build musl-linked binary via Alpine Docker container (Linux only)
+build-binary-musl:
+	@echo "Building musl binary: $(BINARY_NAME_MUSL)..."
+	@mkdir -p $(BINARY_DIR)
+	docker run --rm \
+		-v $(CURDIR):/workspace:ro \
+		-v $(CURDIR)/$(BINARY_DIR):/output \
+		$(REGISTRY_MIRROR:%=%/)python:3.12-alpine \
+		/bin/sh -c '\
+			cp -r /workspace /tmp/build && cd /tmp/build && \
+			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
+			pip install --break-system-packages patchelf -q && \
+			pip install --break-system-packages -e ".[profiling]" -q && \
+			pip install --break-system-packages "nuitka[onefile]" ordered-set -q && \
+			printf "from llm_rosetta.gateway import main\nmain()\n" > /tmp/_entry.py && \
+			python -m nuitka \
+				--standalone --onefile \
+				--jobs=$$(nproc) \
+				--output-dir=/output \
+				--output-filename=$(BINARY_NAME_MUSL) \
+				--include-package=llm_rosetta \
+				--include-package=pyinstrument \
+				--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
+				--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+				--nofollow-import-to=pytest \
+				--nofollow-import-to=setuptools \
+				--nofollow-import-to=pip \
+				--nofollow-import-to=_pytest \
+				--assume-yes-for-downloads \
+				/tmp/_entry.py && \
+			rm -rf /output/_entry.* '
+	@ls -lh $(BINARY_DIR)/$(BINARY_NAME_MUSL)
+	@echo "Musl binary build complete."
+
+clean-binary:
+	@echo "Cleaning binary build artifacts..."
+	rm -rf $(BINARY_DIR)/_nuitka_entry.* $(BINARY_DIR)/_entry.* $(NUITKA_ENTRY)
+	@echo "Clean complete. Binaries in $(BINARY_DIR)/ preserved."
+
+clean-binary-all:
+	@echo "Cleaning all binary artifacts..."
+	rm -rf $(BINARY_DIR)
+	rm -f $(NUITKA_ENTRY)
+	@echo "Clean complete."
+
+# ──────────────────────────────────────────────
 # Docker
 # ──────────────────────────────────────────────
 
-build-docker:
-	@echo "Building Docker image $(DOCKER_IMAGE):$(V)..."
+# Build Alpine Docker image with musl binary
+build-docker-alpine:
+	@BINARY=$(BINARY_DIR)/$(BINARY_NAME_MUSL); \
+	if [ ! -f "$$BINARY" ]; then \
+		echo "::error::Musl binary not found: $$BINARY"; \
+		echo "Run 'make build-binary-musl' first."; \
+		exit 1; \
+	fi; \
+	echo "Building Alpine Docker image $(DOCKER_IMAGE):$(V)-alpine..."; \
+	docker build -f docker/Dockerfile.binary \
+		--build-arg BASE_IMAGE=$(REGISTRY_MIRROR:%=%/)alpine \
+		--build-arg BINARY=$$BINARY \
+		-t $(DOCKER_IMAGE):$(V)-alpine \
+		-t $(DOCKER_IMAGE):$(V) \
+		-t $(DOCKER_IMAGE):latest .
+	@echo "Alpine Docker image built successfully."
+
+# Build glibc Docker image with native binary
+build-docker-glibc:
+	@BINARY=$(BINARY_DIR)/$(BINARY_NAME); \
+	if [ ! -f "$$BINARY" ]; then \
+		echo "::error::Native binary not found: $$BINARY"; \
+		echo "Run 'make build-binary' first."; \
+		exit 1; \
+	fi; \
+	echo "Building glibc Docker image $(DOCKER_IMAGE):$(V)-glibc..."; \
+	docker build -f docker/Dockerfile.binary \
+		--build-arg BASE_IMAGE=$(REGISTRY_MIRROR:%=%/)busybox:glibc \
+		--build-arg BINARY=$$BINARY \
+		-t $(DOCKER_IMAGE):$(V)-glibc .
+	@echo "Glibc Docker image built successfully."
+
+# Build Python-based Docker image (existing, with pip install)
+build-docker-python:
+	@echo "Building Python Docker image $(DOCKER_IMAGE):$(V)-python..."
 	@BUILD_ARGS=""; \
 	if [ -n "$(REGISTRY_MIRROR)" ]; then \
 		echo "Using registry mirror: $(REGISTRY_MIRROR)"; \
@@ -120,19 +252,27 @@ build-docker:
 		echo "Using PyPI mirror: $(PYPI_MIRROR)"; \
 		BUILD_ARGS="$$BUILD_ARGS --build-arg PYPI_MIRROR=$(PYPI_MIRROR)"; \
 	fi; \
-	cd docker && docker build -f Dockerfile $$BUILD_ARGS -t $(DOCKER_IMAGE):$(V) -t $(DOCKER_IMAGE):latest ..
-	@echo "Docker image built successfully."
+	cd docker && docker build -f Dockerfile $$BUILD_ARGS -t $(DOCKER_IMAGE):$(V)-python ..
+	@echo "Python Docker image built successfully."
+
+# Legacy alias
+build-docker: build-docker-python
 
 push-docker:
-	@echo "Pushing Docker images $(DOCKER_IMAGE):$(V) and $(DOCKER_IMAGE):latest..."
-	docker push $(DOCKER_IMAGE):$(V)
-	docker push $(DOCKER_IMAGE):latest
+	@echo "Pushing Docker images..."
+	@for tag in $(V)-alpine $(V) latest $(V)-glibc $(V)-python; do \
+		if docker image inspect $(DOCKER_IMAGE):$$tag >/dev/null 2>&1; then \
+			echo "  Pushing $(DOCKER_IMAGE):$$tag"; \
+			docker push $(DOCKER_IMAGE):$$tag; \
+		fi; \
+	done
 	@echo "Docker images pushed successfully."
 
 clean-docker:
 	@echo "Cleaning Docker images..."
-	docker rmi $(DOCKER_IMAGE):latest 2>/dev/null || true
-	docker rmi $(DOCKER_IMAGE):$(V) 2>/dev/null || true
+	@for tag in $(V)-alpine $(V) latest $(V)-glibc $(V)-python; do \
+		docker rmi $(DOCKER_IMAGE):$$tag 2>/dev/null || true; \
+	done
 
 # ──────────────────────────────────────────────
 # Dev-test deployment
@@ -186,10 +326,19 @@ help:
 	@echo "  push-package   - Push the package to PyPI"
 	@echo "  clean-package  - Clean up build and distribution files"
 	@echo ""
+	@echo "Binary:"
+	@echo "  build-binary       - Build native Nuitka binary for current platform"
+	@echo "  build-binary-musl  - Build musl-linked binary via Alpine Docker"
+	@echo "  clean-binary       - Clean build artifacts (keep binaries)"
+	@echo "  clean-binary-all   - Clean all binary artifacts"
+	@echo ""
 	@echo "Docker:"
-	@echo "  build-docker   - Build Docker image (local x64)"
-	@echo "  push-docker    - Push Docker image to registry"
-	@echo "  clean-docker   - Clean Docker images"
+	@echo "  build-docker-alpine  - Build Alpine Docker image (musl binary)"
+	@echo "  build-docker-glibc   - Build glibc Docker image (native binary)"
+	@echo "  build-docker-python  - Build Python Docker image (pip install)"
+	@echo "  build-docker         - Alias for build-docker-python"
+	@echo "  push-docker          - Push all Docker images"
+	@echo "  clean-docker         - Clean Docker images"
 	@echo ""
 	@echo "Aliases:"
 	@echo "  build          - Alias for build-package"
@@ -224,4 +373,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
