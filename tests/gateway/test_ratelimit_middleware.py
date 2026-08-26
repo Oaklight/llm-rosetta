@@ -216,40 +216,40 @@ class TestRateLimitState:
     def test_default_disabled(self):
         state = RateLimitState()
         assert state.enabled is False
-        assert state._global is None
+        assert state._snap.gl is None
 
     def test_rebuild_enabled(self):
         state = RateLimitState()
         config = FakeConfig(enabled=True, global_quota="100/m", per_ip="60/m")
         state.rebuild(cast(GatewayConfig, config))
         assert state.enabled is True
-        assert state._global is not None
-        assert state._per_ip is not None
-        assert state._per_key is None
-        assert state._per_model is None
+        assert state._snap.gl is not None
+        assert state._snap.ip is not None
+        assert state._snap.key is None
+        assert state._snap.model is None
 
     def test_rebuild_disabled(self):
         state = RateLimitState()
         state.rebuild(
             cast(GatewayConfig, FakeConfig(enabled=True, global_quota="100/m"))
         )
-        assert state._global is not None
+        assert state._snap.gl is not None
         state.rebuild(cast(GatewayConfig, FakeConfig(enabled=False)))
         assert state.enabled is False
-        assert state._global is None
+        assert state._snap.gl is None
 
     def test_rebuild_resets_counters(self):
         state = RateLimitState()
         config = FakeConfig(enabled=True, global_quota="2/m")
         state.rebuild(cast(GatewayConfig, config))
-        assert state._global is not None
-        state._global.acquire("k")
-        state._global.acquire("k")
-        r = state._global.acquire("k")
+        assert state._snap.gl is not None
+        state._snap.gl.acquire("k")
+        state._snap.gl.acquire("k")
+        r = state._snap.gl.acquire("k")
         assert not r.allowed
         state.rebuild(cast(GatewayConfig, config))
-        assert state._global is not None
-        r = state._global.acquire("k")
+        assert state._snap.gl is not None
+        r = state._snap.gl.acquire("k")
         assert r.allowed
 
 
