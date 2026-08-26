@@ -605,6 +605,8 @@ async def _stream_event_generator(
 # Preflight token count helpers
 # ---------------------------------------------------------------------------
 
+_PREFLIGHT_TIMEOUT = 5.0  # seconds — bound worst-case TTFT impact
+
 
 def _build_preflight_body(
     target_body: dict[str, Any], target_provider: ProviderType
@@ -622,13 +624,18 @@ def _build_preflight_body(
     body.pop("stream", None)
     body.pop("stream_options", None)
 
-    # Set minimal output
+    # Set minimal output and deterministic sampling
     if target_provider == "google":
         gc = body.setdefault("generationConfig", {})
         gc["maxOutputTokens"] = 1
+        gc["temperature"] = 0
         gc.pop("responseModalities", None)
+    elif target_provider in ("openai_responses", "open_responses"):
+        body["max_output_tokens"] = 1
+        body["temperature"] = 0
     else:
         body["max_tokens"] = 1
+        body["temperature"] = 0
 
     # Strip thinking / reasoning to minimise cost
     body.pop("thinking", None)
@@ -672,8 +679,9 @@ async def _run_preflight(
     try:
         preflight_body = _build_preflight_body(target_body, target_provider)
         upstream_url = provider_info.upstream_url(model)
+        pinfo = provider_info.with_timeout(_PREFLIGHT_TIMEOUT)
         resp = await transport.send(
-            provider_info,
+            pinfo,
             upstream_url,
             preflight_body,
             extra_headers=extra_headers,

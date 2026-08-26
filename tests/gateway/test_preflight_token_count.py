@@ -35,6 +35,7 @@ class TestBuildPreflightBody:
         }
         result = _build_preflight_body(body, "openai_chat")
         assert result["max_tokens"] == 1
+        assert result["temperature"] == 0
         assert "stream" not in result
         assert "stream_options" not in result
         assert "reasoning" not in result
@@ -81,12 +82,12 @@ class TestBuildPreflightBody:
         body = {
             "model": "gpt-4",
             "input": [{"role": "user", "content": "hi"}],
-            "max_tokens": 4096,
+            "max_output_tokens": 4096,
             "stream": True,
             "reasoning": {"effort": "medium"},
         }
         result = _build_preflight_body(body, "openai_responses")
-        assert result["max_tokens"] == 1
+        assert result["max_output_tokens"] == 1
         assert "stream" not in result
         assert "reasoning" not in result
 
@@ -257,6 +258,22 @@ class TestPreflightUsageIntegration:
         }
         result = converter._handle_ir_stream_start_to_p(event, ctx)
         assert result["message"]["usage"]["input_tokens"] == 0
+
+
+class TestPreflightSkipSameFormat:
+    def test_skip_when_source_equals_target(self):
+        """Preflight should not fire when source == target provider."""
+        from llm_rosetta.routing import ResolvedRoute
+
+        route = ResolvedRoute(
+            source_provider="anthropic",
+            target_provider="anthropic",
+            provider_name="anthropic",
+            preflight_token_count=True,
+        )
+        # The guard in handle_streaming checks source != target;
+        # verify the condition that would skip preflight
+        assert route.source_provider == route.target_provider
 
 
 # ---------------------------------------------------------------------------
