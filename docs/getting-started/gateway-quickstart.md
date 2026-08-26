@@ -12,11 +12,13 @@ title: 网关快速开始
 pip install "llm-rosetta[gateway]"
 ```
 
-或使用 Docker：
+或使用 Docker（Alpine 二进制版，~21 MB）：
 
 ```bash
 docker pull oaklight/llm-rosetta-gateway:latest
 ```
+
+也可以从 [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) 下载独立二进制文件 — 无需 Python。
 
 ## 2. 创建配置文件
 

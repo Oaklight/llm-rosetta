@@ -6,6 +6,19 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [未发布]
+
+### 新增
+
+- **Nuitka 独立二进制文件** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): 6 个平台的预编译单文件可执行程序 — linux-x86_64 (glibc + musl)、linux-arm64 (glibc + musl)、macOS arm64、Windows x86_64。无需 Python 运行时。包含 pyinstrument 性能分析支持。
+- **基于二进制的 Docker 镜像** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): 三种镜像变体 — `alpine`（musl 二进制，~21 MB，默认）、`glibc`（busybox:glibc，~25 MB）、`python`（pip 安装，~80 MB）。Alpine 变体同时标记为 `:latest` 和 `:<version>`。
+- **Makefile 构建目标** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): `build-binary`、`build-binary-musl`、`build-docker-alpine`、`build-docker-glibc`、`build-docker-python`，用于本地和 CI 构建。
+
+### 变更
+
+- **Docker 权限模型** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): 移除 su-exec/PUID/PGID，改用 Docker 原生的 `USER appuser` + `--user` 参数。使用 `docker run --user $(id -u):$(id -g)` 进行自定义 UID 映射。
+- **Docker 默认镜像** — `:latest` 现在指向 Alpine 二进制镜像（~21 MB），而非 Python 镜像（~80 MB）。Python 镜像仍可通过 `:<version>-python` 获取。
+
 ## v0.9.0 — 2026-08-21
 
 ### 新增
