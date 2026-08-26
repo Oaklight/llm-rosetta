@@ -92,47 +92,63 @@ def _build_limiter(algorithm: str, quota: str | None) -> RateLimiter | None:
     return ThreadSafeLimiter(create_limiter(algorithm, quota))
 
 
-class RateLimitState:
-    """Holds the active rate limiters, swappable on config reload."""
+class _LimiterSnapshot:
+    """Immutable snapshot of limiter state — assigned atomically."""
 
-    __slots__ = (
-        "enabled",
-        "exclude_prefixes",
-        "trust_proxy",
-        "_global",
-        "_per_ip",
-        "_per_key",
-        "_per_model",
-    )
+    __slots__ = ("gl", "ip", "key", "model")
+
+    def __init__(
+        self,
+        gl: RateLimiter | None,
+        ip: RateLimiter | None,
+        key: RateLimiter | None,
+        model: RateLimiter | None,
+    ) -> None:
+        self.gl = gl
+        self.ip = ip
+        self.key = key
+        self.model = model
+
+
+class RateLimitState:
+    """Holds the active rate limiters, swappable on config reload.
+
+    The hook reads ``_snap`` — a single reference that is replaced
+    atomically by ``rebuild()``, so concurrent requests never see a
+    mix of old and new limiters.
+    """
+
+    __slots__ = ("enabled", "exclude_prefixes", "trust_proxy", "_snap")
 
     def __init__(self) -> None:
         self.enabled: bool = False
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
         self.trust_proxy: bool = False
-        self._global: RateLimiter | None = None
-        self._per_ip: RateLimiter | None = None
-        self._per_key: RateLimiter | None = None
-        self._per_model: RateLimiter | None = None
+        self._snap: _LimiterSnapshot = _LimiterSnapshot(None, None, None, None)
 
     def rebuild(self, config: GatewayConfig) -> None:
         """Recreate limiters from the current config (counters reset)."""
-        self.enabled = config.rate_limit_enabled
+        algo = config.rate_limit_algorithm
+        snap = _LimiterSnapshot(
+            gl=_build_limiter(algo, config.rate_limit_global),
+            ip=_build_limiter(algo, config.rate_limit_per_ip),
+            key=_build_limiter(algo, config.rate_limit_per_key),
+            model=_build_limiter(algo, config.rate_limit_per_model),
+        )
+        # Single reference assignment — atomic under the GIL.
+        self._snap = snap
         self.exclude_prefixes = list(config.rate_limit_exclude)
         self.trust_proxy = config.rate_limit_trust_proxy
-        algo = config.rate_limit_algorithm
-        self._global = _build_limiter(algo, config.rate_limit_global)
-        self._per_ip = _build_limiter(algo, config.rate_limit_per_ip)
-        self._per_key = _build_limiter(algo, config.rate_limit_per_key)
-        self._per_model = _build_limiter(algo, config.rate_limit_per_model)
+        self.enabled = config.rate_limit_enabled
         if self.enabled:
             dims = []
-            if self._global:
+            if snap.gl:
                 dims.append("global")
-            if self._per_ip:
+            if snap.ip:
                 dims.append("per-ip")
-            if self._per_key:
+            if snap.key:
                 dims.append("per-key")
-            if self._per_model:
+            if snap.model:
                 dims.append("per-model")
             logger.info(
                 "Rate limiting enabled (%s, dimensions: %s)",
@@ -280,16 +296,18 @@ def create_rate_limit_hook(
             if path.startswith(prefix):
                 return None
 
+        # Read snapshot once — atomic under the GIL.
+        snap = state._snap
         tightest: RateLimitResult | None = None
 
         denied, tightest = _check_limiter(
-            state._global, "__global__", "global", path, tightest
+            snap.gl, "__global__", "global", path, tightest
         )
         if denied:
             return denied
 
         denied, tightest = _check_limiter(
-            state._per_ip,
+            snap.ip,
             _extract_client_ip(request, trust_proxy=state.trust_proxy),
             "per_ip",
             path,
@@ -301,7 +319,7 @@ def create_rate_limit_hook(
         ctx = api_key_context_var.get()
         if ctx is not None:
             denied, tightest = _check_limiter(
-                state._per_key, ctx.label, "per_key", path, tightest
+                snap.key, ctx.label, "per_key", path, tightest
             )
             if denied:
                 return denied
@@ -309,7 +327,7 @@ def create_rate_limit_hook(
         model = _extract_model(request)
         if model:
             denied, tightest = _check_limiter(
-                state._per_model, model, "per_model", path, tightest
+                snap.model, model, "per_model", path, tightest
             )
             if denied:
                 return denied

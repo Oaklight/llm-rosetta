@@ -74,10 +74,26 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
         log_format=new_config.log_format,
     )
 
-    # Hot-reload rate limiting
+    # Hot-reload rate limiting (only rebuild if config actually changed)
     rate_limit_state = getattr(request.app, "rate_limit_state", None)
     if rate_limit_state is not None:
-        rate_limit_state.rebuild(new_config)
+        old_config = getattr(request.app, "_prev_gateway_config", None)
+        rl_changed = old_config is None or any(
+            getattr(new_config, a, None) != getattr(old_config, a, None)
+            for a in (
+                "rate_limit_enabled",
+                "rate_limit_algorithm",
+                "rate_limit_global",
+                "rate_limit_per_ip",
+                "rate_limit_per_key",
+                "rate_limit_per_model",
+                "rate_limit_exclude",
+                "rate_limit_trust_proxy",
+            )
+        )
+        if rl_changed:
+            rate_limit_state.rebuild(new_config)
+    request.app._prev_gateway_config = new_config
 
     # Hot-reload log retention caps
     persistence = getattr(request.app, "persistence", None)
