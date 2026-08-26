@@ -6,36 +6,207 @@ title: CLI 工具集成
 
 网关可以作为主流 AI 编程 CLI 工具的后端。每个工具使用不同的 API 格式——网关会自动处理格式转换。
 
+!!! note "前提条件"
+    以下所有示例假设网关运行在 `http://localhost:8765`，请替换为你的实际地址和端口。
+
 ## Claude Code
 
-Claude Code 使用 Anthropic Messages API (`/v1/messages`)。
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) 通过 **Anthropic Messages API** (`/v1/messages`) 连接。
 
-```bash
-export ANTHROPIC_BASE_URL=http://localhost:8765
-export ANTHROPIC_API_KEY=your-key  # 或任意占位符
-export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
-claude --model claude-sonnet-4-20250514
-```
+=== "配置文件（推荐）"
 
-或在 `~/.claude/settings.json` 中配置：
+    ```bash
+    claude config set -g apiKeyHelper "echo 'your-api-key'"
+    claude config set -g env.ANTHROPIC_BASE_URL "http://localhost:8765"
+    claude config set -g env.CLAUDE_CODE_SKIP_ANTHROPIC_AUTH "1"
+    ```
 
-```json
-{
-  "env": {
-    "ANTHROPIC_MODEL": "claude-sonnet-4-20250514",
-    "ANTHROPIC_BASE_URL": "http://localhost:8765",
-    "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
-  }
-}
-```
+    这会写入 `~/.claude/settings.json`：
+
+    ```json
+    {
+        "apiKeyHelper": "echo 'your-api-key'",
+        "env": {
+            "ANTHROPIC_BASE_URL": "http://localhost:8765",
+            "CLAUDE_CODE_SKIP_ANTHROPIC_AUTH": "1"
+        }
+    }
+    ```
+
+=== "环境变量"
+
+    ```bash
+    export ANTHROPIC_BASE_URL="http://localhost:8765"
+    export ANTHROPIC_API_KEY="your-api-key"
+    export CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1
+    claude
+    ```
+
+!!! important
+    - `CLAUDE_CODE_SKIP_ANTHROPIC_AUTH=1` **必须设置** — 跳过 Anthropic 默认的认证流程
+    - `ANTHROPIC_BASE_URL` 设置为代理根路径（如 `http://localhost:8765`），**不要**加 `/v1/messages` — Claude Code 会自动拼接
 
 **支持功能**：对话、多轮对话、图片、工具调用、流式传输 ✅
 
+---
+
+## Codex CLI (OpenAI)
+
+[Codex CLI](https://github.com/openai/codex) 通过 **OpenAI Responses API** (`/v1/responses`) 连接。
+
+=== "配置文件（推荐）"
+
+    创建 `~/.codex/config.toml`：
+
+    ```toml
+    model = "gpt-5-nano"
+    model_provider = "rosetta"
+
+    [model_providers.rosetta]
+    name = "Rosetta Gateway"
+    base_url = "http://localhost:8765/v1"
+    env_key = "ROSETTA_API_KEY"
+    wire_api = "responses"
+    ```
+
+    然后在 shell 配置中设置 API key：
+
+    ```bash
+    export ROSETTA_API_KEY="your-api-key"
+    ```
+
+=== "环境变量"
+
+    ```bash
+    export OPENAI_BASE_URL="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    codex "your prompt here"
+    ```
+
+!!! note
+    Codex CLI 默认使用 **Responses API** 格式。配置文件中 `wire_api = "responses"` 使其显式声明。
+
+**支持功能**：对话、多轮对话、工具调用、流式传输 ✅
+
+---
+
+## Aider
+
+[Aider](https://aider.chat/) 支持 OpenAI 和 Anthropic 两种后端。
+
+=== "OpenAI 模式"
+
+    ```bash
+    export OPENAI_API_BASE="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    aider --model gpt-5-nano
+    ```
+
+=== "Anthropic 模式"
+
+    ```bash
+    export ANTHROPIC_BASE_URL="http://localhost:8765"
+    export ANTHROPIC_API_KEY="your-api-key"
+    aider --model claude-sonnet-4-6
+    ```
+
+!!! tip
+    可以将这些设置写入 `.aider.conf.yml` 或 shell 配置文件中持久化。
+
+**支持功能**：对话、多轮对话、工具调用、流式传输 ✅
+
+---
+
+## Antigravity CLI (agy)
+
+[Antigravity CLI](https://antigravity.google/docs/cli/install/) 是 Google 的智能编程 CLI（Gemini CLI 的后继者），使用 **Google GenAI API** (`/v1beta/models/...`)。
+
+=== "配置文件（推荐）"
+
+    **1. `~/.gemini/antigravity-cli/settings.json`**：
+
+    ```json
+    {
+        "modelProvider": "gemini",
+        "model": {
+            "name": "gemini-3.5-flash"
+        }
+    }
+    ```
+
+    **2. 环境变量**（添加到 shell 配置文件）：
+
+    ```bash
+    export GEMINI_API_KEY="your-api-key"
+    export GOOGLE_GEMINI_BASE_URL="http://localhost:8765"
+    ```
+
+    然后直接运行 `agy`。
+
+=== "环境变量"
+
+    ```bash
+    GOOGLE_GEMINI_BASE_URL=http://localhost:8765 \
+    GEMINI_API_KEY=your-api-key \
+    agy
+    ```
+
+模型名称可以是网关上配置的**任何模型** — 包括非 Google 模型如 `claude-sonnet-4-6`、`deepseek-v4-flash` 或 `gpt-5-nano`。网关会自动处理跨格式转换。
+
+!!! warning "需要 Planner 模型"
+    agy 内部使用硬编码的 planner 模型（`gemini-3.1-pro-preview`），**无法覆盖** — 你的网关必须配置此模型。
+
+!!! tip "使用非 Google 模型"
+    这是核心用途：通过网关让 agy 使用 Claude、DeepSeek、GPT 或任何其他 provider。网关自动处理 Google GenAI 格式与目标 provider 格式之间的转换。
+
+**支持功能**：对话、流式传输、视觉、工具调用 ✅
+
+---
+
+## OpenCode
+
+[OpenCode](https://github.com/opencode-ai/opencode) 支持 OpenAI 兼容端点。
+
+=== "配置文件（推荐）"
+
+    在 `~/.config/opencode/opencode.json` 中添加自定义 provider：
+
+    ```json
+    {
+        "provider": {
+            "rosetta": {
+                "npm": "@ai-sdk/openai-compatible",
+                "name": "Rosetta Gateway",
+                "options": {
+                    "baseURL": "http://localhost:8765/v1",
+                    "apiKey": "your-api-key"
+                },
+                "models": {
+                    "gpt-5-nano": { "name": "GPT-5 Nano" },
+                    "claude-sonnet-4-6": { "name": "Claude Sonnet 4.6" }
+                }
+            }
+        }
+    }
+    ```
+
+=== "环境变量"
+
+    ```bash
+    export OPENAI_BASE_URL="http://localhost:8765/v1"
+    export OPENAI_API_KEY="your-api-key"
+    opencode
+    ```
+
+**支持功能**：对话、多轮对话、工具调用、流式传输 ✅
+
+---
+
 ## Kilo Code
 
-Kilo Code 使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
+[Kilo Code](https://kilocode.ai/)（VS Code 扩展）使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
 
-在 `~/.config/kilo/kilo.jsonc` 中添加自定义提供商：
+在 `~/.config/kilo/kilo.jsonc` 中添加自定义 provider：
 
 ```jsonc
 {
@@ -51,10 +222,9 @@ Kilo Code 使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
           "cost": { "input": 0, "output": 0 },
           "limit": { "context": 200000, "output": 8192 }
         }
-        // 根据需要添加更多模型
       },
       "options": {
-        "apiKey": "your-key",
+        "apiKey": "your-api-key",
         "baseURL": "http://localhost:8765/v1"
       }
     }
@@ -66,39 +236,15 @@ Kilo Code 使用 OpenAI Chat Completions API (`/v1/chat/completions`)。
 
 **支持功能**：对话、多轮对话、工具调用、流式传输 ✅
 
-## OpenAI Codex CLI
-
-Codex CLI 使用 OpenAI Responses API (`/v1/responses`)。
-
-创建 `~/.codex/config.toml`：
-
-```toml
-model = "gpt-4o"
-model_provider = "rosetta"
-
-[model_providers.rosetta]
-name = "Rosetta Gateway"
-base_url = "http://localhost:8765/v1"
-env_key = "ROSETTA_API_KEY"
-wire_api = "responses"
-```
-
-然后：
-
-```bash
-export ROSETTA_API_KEY=your-key
-codex "your prompt here"
-```
-
-**支持功能**：对话、多轮对话、工具调用、流式传输 ✓
+---
 
 ## Ollama
 
-[Ollama](https://ollama.com/)（v0.13+）在本地提供 OpenAI 兼容接口，非常适合作为网关的上游提供商或客户端。
+[Ollama](https://ollama.com/) (v0.13+) 提供 OpenAI 兼容端点，既可以作为上游 provider，也可以作为客户端。
 
-### 将 Ollama 作为上游提供商
+### 作为上游 Provider
 
-将网关提供商指向本地 Ollama 实例：
+将网关 provider 指向本地 Ollama 实例：
 
 ```jsonc
 "providers": {
@@ -110,117 +256,92 @@ codex "your prompt here"
 }
 ```
 
-这样任何客户端（Anthropic SDK、Google SDK 等）都可以通过网关查询本地 Ollama 模型，格式自动转换。
+### 作为客户端
 
-### 将 Ollama 作为客户端
-
-Ollama v0.13+ 支持网关可以提供的三种 API 格式：
+Ollama v0.13+ 支持网关提供的三种 API 格式：
 
 | Ollama 端点 | 网关路由 | 转换器 |
 |---|---|---|
 | `/v1/chat/completions` | 相同 | `openai_chat` |
-| `/v1/responses` | 相同 | `openai_responses`（v0.13.3+） |
-| `/v1/messages` | 相同 | `anthropic`（v0.14.0+） |
-
-这意味着基于 Ollama OpenAI 兼容层构建的工具可以通过网关访问云提供商（Anthropic、Google 等），无需更改代码——只需将 base URL 指向网关即可。
-
-## Antigravity CLI (agy)
-
-[Antigravity CLI](https://antigravity.google/docs/cli/install/) 是 Google 的 AI 编程 CLI 工具（Gemini CLI 的继任者），使用 Google GenAI API (`/v1beta/models/...`)。
-
-**安装：**
-
-```bash
-curl -fsSL https://antigravity.google/cli/install.sh | bash
-```
-
-**配置** `~/.gemini/antigravity-cli/settings.json`：
-
-```json
-{
-    "modelProvider": "gemini",
-    "model": {
-        "name": "gemini-3.5-flash"
-    }
-}
-```
-
-模型名称可以是网关上配置的**任意模型**，包括非 Google 模型如 `claude-sonnet-4-6`、`deepseek-v4-flash`、`gpt-5-nano`。网关会自动处理跨格式转换。
-
-**设置环境变量：**
-
-```bash
-export GEMINI_API_KEY=your-gateway-api-key
-export GOOGLE_GEMINI_BASE_URL=http://localhost:8765
-```
-
-**运行：**
-
-```bash
-agy
-```
-
-或无头模式：
-
-```bash
-agy -p "your prompt here"
-```
-
-!!! warning "需要配置 planner 模型"
-    agy 内部使用一个硬编码的 planner 模型（`gemini-3.1-pro-preview`），会与用户选择的主模型一起发送请求。该模型**无法通过** `settings.json` 或 CLI 参数覆盖——没有用户可配置的选项。网关上**必须**配置此模型，否则 planner 会在主模型执行前失败。
-
-    在网关配置中添加一个别名，指向任意可用的 provider：
-
-    ```json
-    "gemini-3.1-pro-preview": {
-        "provider": "YourProvider",
-        "capabilities": ["text", "vision", "tools", "reasoning"],
-        "upstream_model": "any-capable-model"
-    }
-    ```
-
-!!! tip "使用非 Google 模型"
-    这是 llm-rosetta 配合 agy 的核心用例：你可以通过 agy 使用 Claude、DeepSeek、GPT 等任意 provider。网关会自动在 Google GenAI 格式和目标 provider 格式之间进行转换。
-
-    已验证的组合：
-
-    | 模型 | Provider | 文本 | 图像 | 工具 |
-    |------|----------|:----:|:----:|:----:|
-    | `claude-sonnet-4-6` | Anthropic | ✅ | ✅ | ✅ |
-    | `deepseek-v4-flash` | DeepSeek | ✅ | ✅ | ✅ |
-    | `gemini-3.5-flash` | Google | ✅ | ✅ | ✅ |
-
-**支持功能**：对话、流式传输、图像识别、工具调用 ✅
+| `/v1/responses` | 相同 | `openai_responses` (v0.13.3+) |
+| `/v1/messages` | 相同 | `anthropic` (v0.14.0+) |
 
 ---
 
-## Gemini CLI（已停止服务）
+## 通用 SDK
 
-!!! warning "已停止服务"
-    Gemini CLI 已于 2026 年 6 月 18 日停止服务，由 [Antigravity CLI (agy)](#antigravity-cli-agy) 取代。以下配置仅供参考。
+### OpenAI Python SDK
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="http://localhost:8765/v1",
+    api_key="your-api-key",
+)
+
+response = client.chat.completions.create(
+    model="claude-sonnet-4-6",
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(response.choices[0].message.content)
+```
+
+### Anthropic Python SDK
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    base_url="http://localhost:8765",
+    api_key="your-api-key",
+)
+
+message = client.messages.create(
+    model="gpt-5-nano",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "Hello!"}],
+)
+print(message.content[0].text)
+```
+
+---
+
+## Gemini CLI（已停止维护）
+
+!!! warning "已停止维护"
+    Gemini CLI 于 2026 年 6 月 18 日停止服务，已被 [Antigravity CLI (agy)](#antigravity-cli-agy) 取代。以下配置仅供参考。
 
 ??? note "旧版 Gemini CLI 配置"
 
-    Gemini CLI 使用 Google GenAI API (`/v1beta/models/...`)。
-
-    **`~/.gemini/.env`** — Gemini CLI 启动时自动读取此文件：
+    **`~/.gemini/.env`**：
 
     ```bash
-    GEMINI_API_KEY=your-key
+    GEMINI_API_KEY=your-api-key
     GOOGLE_GEMINI_BASE_URL=http://localhost:8765
     ```
 
-    **`~/.gemini/settings.json`** — 设置认证模式和默认模型：
+    **`~/.gemini/settings.json`**：
 
     ```json
     {
-        "model": {
-            "name": "gemini-2.5-pro"
-        },
-        "security": {
-            "auth": {
-                "selectedType": "gemini-api-key"
-            }
-        }
+        "model": { "name": "gemini-2.5-pro" },
+        "security": { "auth": { "selectedType": "gemini-api-key" } }
     }
     ```
+
+---
+
+## 总结
+
+| 工具 | API 格式 | Base URL 环境变量 | 值 |
+|------|---------|-----------------|------|
+| Claude Code | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
+| Codex CLI | OpenAI Responses | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Aider (OpenAI) | OpenAI | `OPENAI_API_BASE` | `http://localhost:8765/v1` |
+| Aider (Anthropic) | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
+| agy | Google GenAI | `GOOGLE_GEMINI_BASE_URL` | `http://localhost:8765` |
+| OpenCode | OpenAI | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Kilo Code | OpenAI | —（配置文件）| `http://localhost:8765/v1` |
+| OpenAI SDK | OpenAI | `OPENAI_BASE_URL` | `http://localhost:8765/v1` |
+| Anthropic SDK | Anthropic | `ANTHROPIC_BASE_URL` | `http://localhost:8765` |
