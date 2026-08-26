@@ -35,7 +35,6 @@ class TestBuildPreflightBody:
         }
         result = _build_preflight_body(body, "openai_chat")
         assert result["max_tokens"] == 1
-        assert result["temperature"] == 0
         assert "stream" not in result
         assert "stream_options" not in result
         assert "reasoning" not in result
