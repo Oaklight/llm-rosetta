@@ -13,6 +13,15 @@ on:
         required: true
         type: string
         default: "all"
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      platforms:
+        required: false
+        type: string
+        default: "all"
 
 jobs:
   prepare:

@@ -90,17 +90,31 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
+  binaries:
+    needs: prepare
+    uses: ./.github/workflows/nuitka.yml
+    with:
+      ref: v${{ inputs.version }}
+      platforms: all
+
   github-release:
-    needs: build-publish
+    needs: [build-publish, binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download artifacts
+      - name: Download wheel/sdist
         uses: actions/download-artifact@v4
         with:
           name: dist
           path: dist/
+
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: llm-rosetta-gateway-*
+          path: binaries/
+          merge-multiple: true
 
       - name: Create or update GitHub Release
         env:
@@ -108,12 +122,12 @@ jobs:
         run: |
           TAG="v${{ inputs.version }}"
           REPO="${{ github.repository }}"
+          ls -lh dist/ binaries/
           if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-            # Back-release: release already exists, just (re)upload artifacts.
             echo "Release $TAG already exists — uploading artifacts."
-            gh release upload "$TAG" dist/* --repo "$REPO" --clobber
+            gh release upload "$TAG" dist/* binaries/* --repo "$REPO" --clobber
           else
-            gh release create "$TAG" dist/* \
+            gh release create "$TAG" dist/* binaries/* \
               --repo "$REPO" \
               --title "$TAG" \
               --generate-notes
