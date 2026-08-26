@@ -622,19 +622,16 @@ def _build_preflight_body(
     body.pop("stream", None)
     body.pop("stream_options", None)
 
-    # Set minimal output and deterministic sampling
+    # Set minimal output
     if target_provider == "google":
         gc = dict(body.get("generationConfig", {}))
         gc["maxOutputTokens"] = 1
-        gc["temperature"] = 0
         gc.pop("responseModalities", None)
         body["generationConfig"] = gc
     elif target_provider in ("openai_responses", "open_responses"):
         body["max_output_tokens"] = 1
-        body["temperature"] = 0
     else:
         body["max_tokens"] = 1
-        body["temperature"] = 0
 
     # Strip thinking / reasoning to minimise cost
     body.pop("thinking", None)
