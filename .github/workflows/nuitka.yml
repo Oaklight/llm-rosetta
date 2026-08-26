@@ -9,7 +9,7 @@ on:
         type: string
         default: "master"
       platforms:
-        description: "Platforms to build (comma-separated, or 'all'): linux-x86_64, linux-arm64, macos-arm64, windows-x86_64"
+        description: "Platforms to build (comma-separated, or 'all'): linux-x86_64, linux-arm64, linux-x86_64-musl, linux-arm64-musl, macos-arm64, windows-x86_64"
         required: true
         type: string
         default: "all"
@@ -27,38 +27,60 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.matrix.outputs.result }}
+      matrix: ${{ steps.matrix.outputs.native }}
+      matrix_musl: ${{ steps.matrix.outputs.musl }}
+      version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Build matrix
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Resolve version
+        id: version
+        run: |
+          PKG_VER=$(python3 -c "
+          import re, pathlib
+          text = pathlib.Path('src/llm_rosetta/__init__.py').read_text(encoding='utf-8')
+          m = re.search(r'__version__\s*=\"(.+?)\"', text)
+          print(m.group(1))
+          ")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
+            VERSION="$PKG_VER"
+          else
+            VERSION="${PKG_VER}+g${SHORT_SHA}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION"
+
+      - name: Build matrices
         id: matrix
         shell: bash
         run: |
-          ALL='[{"runner":"ubuntu-latest","os":"linux","arch":"x86_64","platform":"linux-x86_64"},{"runner":"ubuntu-24.04-arm","os":"linux","arch":"arm64","platform":"linux-arm64"},{"runner":"macos-latest","os":"macos","arch":"arm64","platform":"macos-arm64"},{"runner":"windows-latest","os":"windows","arch":"x86_64","platform":"windows-x86_64"}]'
+          NATIVE='[{"runner":"ubuntu-latest","os":"linux","arch":"x86_64","platform":"linux-x86_64"},{"runner":"ubuntu-24.04-arm","os":"linux","arch":"arm64","platform":"linux-arm64"},{"runner":"macos-latest","os":"macos","arch":"arm64","platform":"macos-arm64"},{"runner":"windows-latest","os":"windows","arch":"x86_64","platform":"windows-x86_64"}]'
+          MUSL='[{"runner":"ubuntu-latest","arch":"x86_64","platform":"linux-x86_64-musl"},{"runner":"ubuntu-24.04-arm","arch":"arm64","platform":"linux-arm64-musl"}]'
 
           PLATFORMS="${{ inputs.platforms }}"
           if [ "$PLATFORMS" = "all" ]; then
-            echo "result=$ALL" >> "$GITHUB_OUTPUT"
+            echo "native=$NATIVE" >> "$GITHUB_OUTPUT"
+            echo "musl=$MUSL" >> "$GITHUB_OUTPUT"
           else
-            FILTERED=$(echo "$ALL" | jq -c "[.[] | select(.platform as \$p | \"$PLATFORMS\" | test(\$p))]")
-            if [ "$FILTERED" = "[]" ]; then
-              echo "::error::No platforms matched: $PLATFORMS"
-              exit 1
-            fi
-            echo "result=$FILTERED" >> "$GITHUB_OUTPUT"
+            FILTERED_NATIVE=$(echo "$NATIVE" | jq -c "[.[] | select(.platform as \$p | \"$PLATFORMS\" | test(\$p))]")
+            FILTERED_MUSL=$(echo "$MUSL" | jq -c "[.[] | select(.platform as \$p | \"$PLATFORMS\" | test(\$p))]")
+            echo "native=$FILTERED_NATIVE" >> "$GITHUB_OUTPUT"
+            echo "musl=$FILTERED_MUSL" >> "$GITHUB_OUTPUT"
           fi
-
-          echo "Selected platforms:"
-          echo "$PLATFORMS"
 
   build:
     needs: prepare
+    if: needs.prepare.outputs.matrix != '[]'
     strategy:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
 
     runs-on: ${{ matrix.runner }}
-    name: ${{ matrix.os }}-${{ matrix.arch }}
+    name: ${{ matrix.platform }}
 
     steps:
       - uses: actions/checkout@v4
@@ -69,99 +91,45 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Resolve version label
-        id: meta
-        shell: bash
-        run: |
-          PKG_VER=$(python -c "
-          import re, pathlib
-          text = pathlib.Path('src/llm_rosetta/__init__.py').read_text(encoding='utf-8')
-          m = re.search(r'__version__\s*=\s*\"(.+?)\"', text)
-          print(m.group(1))
-          ")
-          SHORT_SHA=$(git rev-parse --short HEAD)
-
-          REF="${{ inputs.ref }}"
-          if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
-            VERSION="$PKG_VER"
-          else
-            VERSION="${PKG_VER}+g${SHORT_SHA}"
-          fi
-
-          ARTIFACT="llm-rosetta-gateway-${VERSION}-${{ matrix.os }}-${{ matrix.arch }}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "artifact=$ARTIFACT" >> "$GITHUB_OUTPUT"
-          echo "pkg_ver=$PKG_VER" >> "$GITHUB_OUTPUT"
-          echo "Building: $ARTIFACT (ref=$REF, pkg=$PKG_VER, sha=$SHORT_SHA)"
-
       - name: Install patchelf (Linux)
         if: matrix.os == 'linux'
         run: sudo apt-get update && sudo apt-get install -y patchelf
 
-      - name: Install package and Nuitka
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -e ".[profiling]"
           pip install "nuitka[onefile]" ordered-set
 
-      - name: Create entry script
-        shell: bash
-        run: |
-          cat > _nuitka_entry.py << 'ENTRY'
-          from llm_rosetta.gateway import main
-          main()
-          ENTRY
-
       - name: Snapshot resources before build
         shell: bash
         run: |
           echo "NUITKA_START=$(date +%s)" >> "$GITHUB_ENV"
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            df -h / 2>/dev/null || true
-          else
-            df -h .
-          fi
 
-      - name: Build with Nuitka
+      - name: Build binary
         shell: bash
-        run: |
-          python -m nuitka \
-            --standalone \
-            --onefile \
-            --jobs=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2) \
-            --output-dir=build \
-            --output-filename=${{ steps.meta.outputs.artifact }}${{ matrix.os == 'windows' && '.exe' || '' }} \
-            --include-package=llm_rosetta \
-            --include-package=pyinstrument \
-            --include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
-            --include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
-            --nofollow-import-to=pytest \
-            --nofollow-import-to=setuptools \
-            --nofollow-import-to=pip \
-            --nofollow-import-to=_pytest \
-            --assume-yes-for-downloads \
-            _nuitka_entry.py
+        run: make build-binary
 
       - name: Build statistics
         shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           END=$(date +%s)
           ELAPSED=$((END - NUITKA_START))
           MINS=$((ELAPSED / 60))
           SECS=$((ELAPSED % 60))
 
-          BINARY="build/${{ steps.meta.outputs.artifact }}${{ matrix.os == 'windows' && '.exe' || '' }}"
+          BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
           BINARY_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || stat -f%z "$BINARY" 2>/dev/null || python -c "import os; print(os.path.getsize('$BINARY'))")
           BINARY_SIZE_MB=$(python -c "print(f'{int($BINARY_SIZE)/1048576:.1f}')")
 
           echo "============================================"
           echo "  Nuitka Build Statistics"
           echo "============================================"
-          echo "  Platform:     ${{ matrix.os }}-${{ matrix.arch }}"
+          echo "  Platform:     ${{ matrix.platform }}"
           echo "  Ref:          ${{ inputs.ref }}"
-          echo "  Version:      ${{ steps.meta.outputs.version }}"
-          echo "  Commit:       ${{ steps.meta.outputs.short_sha }}"
+          echo "  Version:      $VERSION"
           echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
           echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
           echo "--------------------------------------------"
@@ -177,25 +145,92 @@ jobs:
           fi
           echo "  Peak memory (build dir):"
           du -sh build/ 2>/dev/null || true
-          echo "  Disk after build:"
-          df -h . 2>/dev/null || true
           echo "============================================"
 
       - name: Smoke test (non-Windows)
         if: matrix.os != 'windows'
+        shell: bash
         run: |
-          chmod +x build/${{ steps.meta.outputs.artifact }}
-          build/${{ steps.meta.outputs.artifact }} --help || true
+          BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
+          chmod +x "$BINARY"
+          "$BINARY" --help || true
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows'
         shell: cmd
         run: |
-          build\${{ steps.meta.outputs.artifact }}.exe --help || exit 0
+          for %%f in (build\llm-rosetta-gateway-*) do %%f --help || exit 0
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
         with:
-          name: ${{ steps.meta.outputs.artifact }}
-          path: build/${{ steps.meta.outputs.artifact }}${{ matrix.os == 'windows' && '.exe' || '' }}
+          name: llm-rosetta-gateway-${{ env.VERSION }}-${{ matrix.platform }}
+          path: build/llm-rosetta-gateway-*
+          retention-days: 30
+
+  build-musl:
+    needs: prepare
+    if: needs.prepare.outputs.matrix_musl != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.prepare.outputs.matrix_musl) }}
+
+    runs-on: ${{ matrix.runner }}
+    name: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Snapshot resources before build
+        run: echo "NUITKA_START=$(date +%s)" >> "$GITHUB_ENV"
+
+      - name: Build musl binary
+        run: make build-binary-musl
+
+      - name: Build statistics
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          END=$(date +%s)
+          ELAPSED=$((END - NUITKA_START))
+          MINS=$((ELAPSED / 60))
+          SECS=$((ELAPSED % 60))
+
+          BINARY=$(ls build/llm-rosetta-gateway-*-musl 2>/dev/null | head -1)
+          BINARY_SIZE=$(stat --format=%s "$BINARY")
+          BINARY_SIZE_MB=$(python3 -c "print(f'{int($BINARY_SIZE)/1048576:.1f}')")
+
+          echo "============================================"
+          echo "  Nuitka Build Statistics"
+          echo "============================================"
+          echo "  Platform:     ${{ matrix.platform }}"
+          echo "  Ref:          ${{ inputs.ref }}"
+          echo "  Version:      $VERSION"
+          echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
+          echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
+          echo "--------------------------------------------"
+          echo "  CPU info:"
+          echo "    Cores: $(nproc)"
+          echo "    Model: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs)"
+          echo "  Peak memory (build dir):"
+          du -sh build/ 2>/dev/null || true
+          echo "============================================"
+
+      - name: Smoke test
+        run: |
+          BINARY=$(ls build/llm-rosetta-gateway-*-musl 2>/dev/null | head -1)
+          docker run --rm -v "$(pwd)/build:/b:ro" alpine "/b/$(basename $BINARY)" --help || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        with:
+          name: llm-rosetta-gateway-${{ env.VERSION }}-${{ matrix.platform }}
+          path: build/llm-rosetta-gateway-*-musl
           retention-days: 30

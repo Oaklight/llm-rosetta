@@ -82,7 +82,7 @@ jobs:
           retention-days: 7
 
   docker:
-    needs: build-publish
+    needs: [build-publish, binaries]
     uses: ./.github/workflows/docker.yml
     with:
       tag: ${{ inputs.version }}
