@@ -139,8 +139,8 @@ build-binary:
 	@printf 'from llm_rosetta.gateway import main\nmain()\n' > $(NUITKA_ENTRY)
 	python -m nuitka $(NUITKA_FLAGS) \
 		--output-filename=$(BINARY_NAME)$(if $(filter windows,$(BINARY_OS)),.exe,) \
-		$(NUITKA_ENTRY)
-	@rm -f $(NUITKA_ENTRY)
+		$(NUITKA_ENTRY); \
+	ret=$$?; rm -f $(NUITKA_ENTRY); exit $$ret
 	@ls -lh $(BINARY_DIR)/$(BINARY_NAME)*
 	@echo "Binary build complete."
 
@@ -153,7 +153,7 @@ build-binary-musl:
 		-v $(CURDIR)/$(BINARY_DIR):/output \
 		$(REGISTRY_MIRROR:%=%/)python:3.12-alpine \
 		/bin/sh -c '\
-			cp -r /workspace /tmp/build && cd /tmp/build && \
+			mkdir -p /tmp/build && tar -cf - -C /workspace --exclude=.git --exclude=__pycache__ . | tar -xf - -C /tmp/build && cd /tmp/build && \
 			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
 			pip install --break-system-packages patchelf -q && \
 			pip install --break-system-packages -e ".[profiling]" -q && \
