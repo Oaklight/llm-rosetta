@@ -303,6 +303,7 @@ class GatewayConfig:
         _server = raw.get("server", {})
         self._apply_server_settings(_server)
         self._apply_auth_settings(_server)
+        self._apply_rate_limit_settings(_server)
 
         self._apply_debug_settings(raw.get("debug", {}))
 
@@ -537,6 +538,30 @@ class GatewayConfig:
 
         # Custom SQLite DB path for API key storage (default: alongside config)
         self.api_keys_db: str | None = _server.get("api_keys_db")
+
+    _VALID_RL_ALGORITHMS = frozenset(
+        {"token_bucket", "fixed_window", "sliding_window", "gcra"}
+    )
+
+    def _apply_rate_limit_settings(self, _server: dict[str, Any]) -> None:
+        """Parse rate limiting settings from the server section."""
+        rl = _server.get("rate_limit", {}) or {}
+        self.rate_limit_enabled: bool = bool(rl.get("enabled", False))
+        algorithm = rl.get("algorithm", "sliding_window")
+        if algorithm not in self._VALID_RL_ALGORITHMS:
+            logger.warning(
+                "config: invalid rate_limit algorithm %r, falling back to 'sliding_window'",
+                algorithm,
+            )
+            algorithm = "sliding_window"
+        self.rate_limit_algorithm: str = algorithm
+        self.rate_limit_global: str | None = rl.get("global")
+        self.rate_limit_per_ip: str | None = rl.get("per_ip")
+        self.rate_limit_per_key: str | None = rl.get("per_key")
+        self.rate_limit_per_model: str | None = rl.get("per_model")
+        self.rate_limit_exclude: list[str] = rl.get(
+            "exclude_paths", ["/health", "/admin"]
+        )
 
     def _apply_debug_settings(self, _debug: dict[str, Any]) -> None:
         """Parse debug/logging settings with env-var overrides.

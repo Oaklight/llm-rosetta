@@ -671,6 +671,19 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     internal_token, keystore, auth_state = _setup_auth(config, config_path)
     app.before_request(create_auth_hook(auth_state))
 
+    # --- Rate Limiting (after auth so api_key_context_var is set) ---
+    from .ratelimit import (
+        RateLimitState,
+        create_rate_limit_hook,
+        create_rate_limit_after_hook,
+    )
+
+    rate_limit_state = RateLimitState()
+    rate_limit_state.rebuild(config)
+    app.before_request(create_rate_limit_hook(rate_limit_state))
+    app.rate_limit_state = rate_limit_state  # type: ignore
+    app.after_request(create_rate_limit_after_hook())
+
     # --- CORS ---
     # Admin API endpoints are restricted to same-origin by default.
     # /v1/* proxy endpoints remain open (Access-Control-Allow-Origin: *).

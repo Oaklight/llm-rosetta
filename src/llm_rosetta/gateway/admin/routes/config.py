@@ -670,6 +670,43 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
     )
 
 
+def _apply_rate_limit_settings(
+    server: dict[str, Any], rl_body: dict[str, Any]
+) -> Response | None:
+    """Validate and apply rate_limit settings; return error Response or None."""
+    from llm_rosetta.gateway.ratelimit import parse_quota
+
+    rl_cfg = server.setdefault("rate_limit", {})
+    if "enabled" in rl_body:
+        rl_cfg["enabled"] = bool(rl_body["enabled"])
+    if "algorithm" in rl_body:
+        algo = rl_body["algorithm"]
+        valid = {"token_bucket", "fixed_window", "sliding_window", "gcra"}
+        if algo not in valid:
+            return JSONResponse(
+                {
+                    "error": f"Invalid algorithm: {algo!r} (expected one of {sorted(valid)})"
+                },
+                status_code=400,
+            )
+        rl_cfg["algorithm"] = algo
+    for quota_key in ("global", "per_ip", "per_key", "per_model"):
+        if quota_key in rl_body:
+            val = rl_body[quota_key]
+            if val:
+                try:
+                    parse_quota(val)
+                except ValueError as exc:
+                    return JSONResponse(
+                        {"error": f"Invalid {quota_key} quota: {exc}"},
+                        status_code=400,
+                    )
+                rl_cfg[quota_key] = val
+            else:
+                rl_cfg.pop(quota_key, None)
+    return None
+
+
 def _apply_log_format(debug: dict, raw_value: Any) -> Response | None:
     """Validate and apply a log_format value; return error Response or None."""
     fmt = str(raw_value).strip().lower()
@@ -737,6 +774,12 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
             debug["error_dumps"] = bool(body["error_dumps"])
         if "log_format" in body:
             err = _apply_log_format(debug, body["log_format"])
+            if err is not None:
+                return err
+
+        # Rate limiting
+        if "rate_limit" in body:
+            err = _apply_rate_limit_settings(server, body["rate_limit"])
             if err is not None:
                 return err
 

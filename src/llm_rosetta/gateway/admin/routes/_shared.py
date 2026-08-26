@@ -74,6 +74,11 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
         log_format=new_config.log_format,
     )
 
+    # Hot-reload rate limiting
+    rate_limit_state = getattr(request.app, "rate_limit_state", None)
+    if rate_limit_state is not None:
+        rate_limit_state.rebuild(new_config)
+
     # Hot-reload log retention caps
     persistence = getattr(request.app, "persistence", None)
     if persistence is not None:

@@ -45,52 +45,138 @@ a { color: var(--accent); text-decoration: none; }
 /* Settings popup (tinyleaf-style centered modal) */
 .settings-popup {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,0.5); z-index: 200;
+  background: rgba(0,0,0,0.45); z-index: 200;
   align-items: center; justify-content: center;
 }
 .settings-popup.open { display: flex; }
 .settings-popup-panel {
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-  min-width: 340px; max-width: 440px; padding: 24px;
+  border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  width: 700px; max-width: 95vw; padding: 28px;
+  max-height: 85vh; overflow-y: auto;
+  transform: translateY(8px); opacity: 0;
+  animation: settingsPanelIn 0.25s ease forwards;
 }
-.settings-popup-panel h3 { margin-bottom: 16px; font-size: 16px; font-weight: 600; }
+@keyframes settingsPanelIn { to { transform: translateY(0); opacity: 1; } }
+.settings-popup-panel::-webkit-scrollbar { width: 6px; }
+.settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
+.settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.settings-popup-panel h3 {
+  margin-bottom: 20px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 8px;
+}
+.settings-popup-panel h3::before {
+  content: ''; display: block; width: 3px; height: 18px;
+  background: var(--accent); border-radius: 2px;
+}
+.settings-section {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px 18px; margin-bottom: 10px;
+  box-shadow: 0 1px 2px rgba(31,35,40,0.04);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.settings-section:hover { box-shadow: 0 4px 16px rgba(31,35,40,0.08); }
+.settings-section-title {
+  font-size: 11px; font-weight: 700; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
+  display: flex; align-items: center; gap: 6px;
+}
+.settings-section-title .section-icon { width: 14px; height: 14px; opacity: 0.5; }
+.settings-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 28px;
+}
 .settings-popup-item {
-  padding: 8px 0; font-size: 13px;
-  display: flex; align-items: center; gap: 12px;
+  padding: 7px 0; font-size: 13px;
+  display: flex; align-items: center; gap: 10px;
 }
 .settings-popup-item label {
   font-size: 12px; color: var(--text-dim);
-  white-space: nowrap; min-width: 80px;
+  white-space: nowrap; min-width: 84px; font-weight: 500;
 }
 .settings-popup-item select {
-  flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px;
+  flex: 1; min-width: 0; padding: 5px 10px; font-size: 12px;
   background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px;
+  border: 1px solid var(--border); border-radius: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease; cursor: pointer;
 }
+.settings-popup-item select:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9,105,218,0.08);
+}
+.settings-popup-item input[type="text"],
 .settings-popup-item input[type="number"],
 .settings-popup-item input[type="password"] {
-  flex: 1; min-width: 0; padding: 4px 8px; font-size: 12px;
+  flex: 1; min-width: 0; padding: 5px 10px; font-size: 12px;
   background: var(--bg); color: var(--text);
-  border: 1px solid var(--border); border-radius: 4px;
+  border: 1px solid var(--border); border-radius: 6px;
   font-family: var(--mono);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.settings-popup-item input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9,105,218,0.08);
 }
 .settings-popup-item input[type="number"] { max-width: 90px; }
 .settings-popup-item .toggle-label {
-  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px;
+  display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;
+  user-select: none;
 }
-.settings-popup-item .toggle-label input[type="checkbox"] { accent-color: var(--accent); }
+.settings-popup-item .toggle-label input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none;
+  width: 34px; height: 20px; border-radius: 10px;
+  background: var(--border); position: relative;
+  cursor: pointer; transition: background 0.2s ease; flex-shrink: 0;
+}
+.settings-popup-item .toggle-label input[type="checkbox"]::after {
+  content: ''; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.2s ease;
+}
+.settings-popup-item .toggle-label input[type="checkbox"]:checked { background: var(--accent); }
+.settings-popup-item .toggle-label input[type="checkbox"]:checked::after { transform: translateX(14px); }
+.settings-popup-item .toggle-label input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px rgba(9,105,218,0.08); }
 .settings-token-row {
   display: flex; align-items: center; gap: 6px; font-size: 11px;
   font-family: var(--mono); color: var(--text-dim); word-break: break-all;
+  background: var(--bg-card); padding: 6px 10px; border-radius: 6px;
+  border: 1px solid var(--border);
 }
-.countdown { color: var(--accent); font-size: 12px; white-space: nowrap; }
+.countdown { color: var(--accent); font-size: 12px; white-space: nowrap; font-weight: 500; }
 .countdown .cd-time { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.settings-section-title {
-  font-size: 11px; font-weight: 600; color: var(--text-dim);
-  text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;
-}
 .settings-divider { border-top: 1px solid var(--border); margin: 6px 0; }
+.section-footer {
+  display: flex; justify-content: flex-end; margin-top: 8px; padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.quota-input-wrap {
+  flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;
+}
+.quota-input-wrap input {
+  width: 100%; padding: 5px 10px; font-size: 12px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--border); border-radius: 6px;
+  font-family: var(--mono);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.quota-input-wrap input:focus {
+  outline: none; border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(9,105,218,0.08);
+}
+.quota-hint { font-size: 10px; color: var(--text-dim); font-style: italic; opacity: 0.8; }
+.rl-warning {
+  display: none; padding: 8px 12px; margin: 6px 0 2px;
+  font-size: 11px; color: var(--orange); line-height: 1.5;
+  background: rgba(210,153,34,0.06); border: 1px solid rgba(210,153,34,0.15);
+  border-radius: 6px;
+}
+.rl-warning.visible { display: block; }
+.rl-fields.disabled { opacity: 0.35; pointer-events: none; transition: opacity 0.3s ease; }
+.rl-fields { transition: opacity 0.3s ease; }
+.btn-danger { color: var(--red); border-color: rgba(207,34,46,0.3); }
+.btn-danger:hover { background: rgba(207,34,46,0.06); border-color: var(--red); }
+.btn-danger-fill { background: var(--red); color: #fff; border-color: var(--red); }
+.btn-danger-fill:hover { background: #b91c28; border-color: #b91c28; color: #fff; }
+@media (max-width: 600px) { .settings-grid { grid-template-columns: 1fr; } }
 .about-link {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 14px; font-size: 13px; color: var(--text);
@@ -918,107 +1004,205 @@ body { padding-bottom: 26px; }
   </div>
 </div>
 
-<!-- Settings Popup (tinyleaf-style) -->
+<!-- Settings Popup (wide section-card layout) -->
 <div class="settings-popup" id="settingsPopup" onclick="this.classList.remove('open')">
-  <div class="settings-popup-panel" onclick="event.stopPropagation()" style="max-height:85vh;overflow-y:auto">
+  <div class="settings-popup-panel" onclick="event.stopPropagation()">
     <h3 data-i18n="modal.settings">Settings</h3>
-    <!-- Theme & Language -->
-    <div class="settings-popup-item">
-      <label data-i18n="label.theme">Theme</label>
-      <select id="settingsThemeSelect" onchange="setTheme(this.value)">
-        <option value="light" data-i18n="theme.light">Light</option>
-        <option value="dark" data-i18n="theme.dark">Dark</option>
-      </select>
+
+    <!-- ── Appearance & Display ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 1Zm0 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5.657-5.157a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.06 0ZM15 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 15 8Zm-2.343 5.657a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 1 1 1.06-1.061l1.061 1.06a.75.75 0 0 1 0 1.06ZM8 15a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 1.5 0v1.5A.75.75 0 0 1 8 15ZM2.343 12.657a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 1.06l-1.06 1.061a.75.75 0 0 1-1.06 0ZM1 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1 8Zm2.343-5.657a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061L3.343 3.404a.75.75 0 0 1 0-1.06Z"/></svg>
+        <span data-i18n="section.appearance">Appearance & Display</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-popup-item">
+          <label data-i18n="label.theme">Theme</label>
+          <select id="settingsThemeSelect" onchange="setTheme(this.value)">
+            <option value="light" data-i18n="theme.light">Light</option>
+            <option value="dark" data-i18n="theme.dark">Dark</option>
+          </select>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.language">Language</label>
+          <select id="settingsLangSelect" onchange="setLang(this.value)">
+            <option value="en">English</option>
+            <option value="zh">中文</option>
+          </select>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.logLevel">Log Level</label>
+          <select id="settingsLogLevel" onchange="saveSettingsField('logLevel',this.value)">
+            <option value="normal" data-i18n="logLevel.normal">Normal</option>
+            <option value="verbose" data-i18n="logLevel.verbose">Verbose</option>
+            <option value="debug" data-i18n="logLevel.debug">Debug (bodies)</option>
+          </select>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.autoRefresh">Auto-Refresh</label>
+          <select id="settingsAutoRefresh" onchange="saveAutoRefresh(this.value)">
+            <option value="1000">1s</option>
+            <option value="3000" selected>3s</option>
+            <option value="5000">5s</option>
+            <option value="10000">10s</option>
+            <option value="30000">30s</option>
+            <option value="0" data-i18n="label.off">Off</option>
+          </select>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.errorDumps">Error Detail Log</label>
+          <label class="toggle-label">
+            <input type="checkbox" id="settingsErrorDumps" onchange="saveSettingsField('errorDumps',this.checked)">
+            <span data-i18n="label.enabled">Enabled</span>
+          </label>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.credentialReveal">Credential Reveal</label>
+          <label class="toggle-label">
+            <input type="checkbox" id="settingsCredentialVisible" onchange="saveSettingsField('credentialVisible',this.checked)">
+            <span data-i18n="label.disabled">Disabled</span>
+          </label>
+        </div>
+      </div>
     </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.language">Language</label>
-      <select id="settingsLangSelect" onchange="setLang(this.value)">
-        <option value="en">English</option>
-        <option value="zh">中文</option>
-      </select>
+
+    <!-- ── Rate Limiting ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0Zm0 1.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM8 3a.75.75 0 0 1 .75.75v3.69l2.28 2.28a.75.75 0 1 1-1.06 1.06l-2.5-2.5A.75.75 0 0 1 7.25 8V3.75A.75.75 0 0 1 8 3Z"/></svg>
+        <span data-i18n="section.rateLimit">Rate Limiting</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-popup-item">
+          <label data-i18n="label.rlEnabled">Enabled</label>
+          <label class="toggle-label">
+            <input type="checkbox" id="rlEnabled" onchange="onRlToggle()">
+            <span id="rlEnabledLabel" data-i18n="label.disabled">Disabled</span>
+          </label>
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.rlAlgorithm">Algorithm</label>
+          <select id="rlAlgorithm" disabled>
+            <option value="sliding_window" selected>Sliding Window</option>
+            <option value="token_bucket">Token Bucket</option>
+            <option value="fixed_window">Fixed Window</option>
+            <option value="gcra">GCRA</option>
+          </select>
+        </div>
+      </div>
+      <div id="rlFields" class="rl-fields disabled">
+        <div class="settings-grid" style="margin-top:4px">
+          <div class="settings-popup-item">
+            <label data-i18n="label.rlGlobal">Global</label>
+            <div class="quota-input-wrap">
+              <input type="text" id="rlGlobal" placeholder="e.g. 600/m">
+              <span class="quota-hint" data-i18n="hint.rlGlobal">All requests combined</span>
+            </div>
+          </div>
+          <div class="settings-popup-item">
+            <label data-i18n="label.rlPerIp">Per IP</label>
+            <div class="quota-input-wrap">
+              <input type="text" id="rlPerIp" placeholder="e.g. 120/m">
+              <span class="quota-hint" data-i18n="hint.rlPerIp">Per client IP address</span>
+            </div>
+          </div>
+          <div class="settings-popup-item">
+            <label data-i18n="label.rlPerKey">Per API Key</label>
+            <div class="quota-input-wrap">
+              <input type="text" id="rlPerKey" placeholder="e.g. 60/m">
+              <span class="quota-hint" data-i18n="hint.rlPerKey">Per gateway API key</span>
+            </div>
+          </div>
+          <div class="settings-popup-item">
+            <label data-i18n="label.rlPerModel">Per Model</label>
+            <div class="quota-input-wrap">
+              <input type="text" id="rlPerModel" placeholder="e.g. 30/m">
+              <span class="quota-hint" data-i18n="hint.rlPerModel">Per upstream model name</span>
+            </div>
+          </div>
+        </div>
+        <div id="rlWarning" class="rl-warning"></div>
+        <div class="section-footer">
+          <button class="btn btn-sm" onclick="saveRateLimitSettings()" data-i18n="btn.save">Save</button>
+        </div>
+      </div>
     </div>
-    <div class="settings-divider"></div>
-    <!-- Log Level & Auto-Refresh -->
-    <div class="settings-popup-item">
-      <label data-i18n="label.logLevel">Log Level</label>
-      <select id="settingsLogLevel" onchange="saveSettingsField('logLevel',this.value)">
-        <option value="normal" data-i18n="logLevel.normal">Normal</option>
-        <option value="verbose" data-i18n="logLevel.verbose">Verbose</option>
-        <option value="debug" data-i18n="logLevel.debug">Debug (bodies)</option>
-      </select>
+
+    <!-- ── Log Retention ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 3.25Zm-2 2a.75.75 0 0 1 .75-.75h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 5.25ZM1 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8Zm1.5.5v4h11v-4h-11Z"/></svg>
+        <span data-i18n="label.logRetention">Log Retention</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-popup-item">
+          <label data-i18n="label.successMax">Success Cap</label>
+          <input type="number" id="settingsSuccessMax" min="50000" step="10000" value="50000">
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.errorMax">Error Cap</label>
+          <input type="number" id="settingsErrorMax" min="5000" step="5000" value="10000">
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.maxAgeDays">Max Age (days)</label>
+          <input type="number" id="settingsMaxAgeDays" min="1" step="1" value="90">
+        </div>
+        <div class="settings-popup-item" style="justify-content:flex-end;gap:6px">
+          <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
+          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('logs')" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
+          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('errors')" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
+          <button class="btn btn-sm btn-danger-fill" onclick="openCleanupConfirm('all')" data-i18n="btn.cleanupAll">Cleanup All</button>
+        </div>
+      </div>
     </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.autoRefresh">Auto-Refresh</label>
-      <select id="settingsAutoRefresh" onchange="saveAutoRefresh(this.value)">
-        <option value="1000">1s</option>
-        <option value="3000" selected>3s</option>
-        <option value="5000">5s</option>
-        <option value="10000">10s</option>
-        <option value="30000">30s</option>
-        <option value="0" data-i18n="label.off">Off</option>
-      </select>
+
+    <!-- ── Admin Token ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M6.5 0a6.5 6.5 0 0 0-4.773 10.912L0 14.5l.5.5 3.588-1.727A6.5 6.5 0 1 0 6.5 0Zm0 1.5a5 5 0 1 1-3.312 8.745l-.35-.306-.932.449.449-.932-.306-.35A5 5 0 0 1 6.5 1.5Z"/><path d="M6.5 4a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-1.5 0v-2.5A.75.75 0 0 1 6.5 4Zm0 5.5a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z"/></svg>
+        <span data-i18n="label.adminToken">Admin Token</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="settings-token-row" style="flex:1;min-width:180px"><span id="settingsTokenDisplay">—</span></span>
+        <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
+        <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotate">Rotate</button>
+        <span class="countdown" id="tokenCountdown"></span>
+        <select id="settingsRotateInterval" style="font-size:11px;padding:3px 6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
+          <option value="5">5 min</option>
+          <option value="15" selected>15 min</option>
+          <option value="30">30 min</option>
+          <option value="60">60 min</option>
+        </select>
+      </div>
     </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.errorDumps">Error Detail Log</label>
-      <label class="toggle-label">
-        <input type="checkbox" id="settingsErrorDumps" onchange="saveSettingsField('errorDumps',this.checked)">
-        <span data-i18n="label.enabled">Enabled</span>
-      </label>
+
+    <!-- ── Change Password ── -->
+    <div class="settings-section">
+      <div class="settings-section-title">
+        <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M4 4a4 4 0 0 1 8 0v2h.25A1.75 1.75 0 0 1 14 7.75v5.5A1.75 1.75 0 0 1 12.25 15h-8.5A1.75 1.75 0 0 1 2 13.25v-5.5A1.75 1.75 0 0 1 3.75 6H4Zm8.5 3.75a.25.25 0 0 0-.25-.25h-8.5a.25.25 0 0 0-.25.25v5.5c0 .138.112.25.25.25h8.5a.25.25 0 0 0 .25-.25ZM10.5 6V4a2.5 2.5 0 1 0-5 0v2Z"/></svg>
+        <span data-i18n="label.changePassword">Change Password</span>
+      </div>
+      <div class="settings-grid">
+        <div class="settings-popup-item">
+          <label data-i18n="label.currentPw">Current</label>
+          <input type="password" id="settingsCurrentPw" autocomplete="current-password">
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.newPw">New</label>
+          <input type="password" id="settingsNewPw" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="settings-grid" style="margin-top:0">
+        <div class="settings-popup-item">
+          <label data-i18n="label.confirmPw">Confirm</label>
+          <input type="password" id="settingsConfirmPw" autocomplete="new-password">
+        </div>
+        <div class="settings-popup-item" style="justify-content:flex-end">
+          <button class="btn btn-sm" onclick="changeAdminPassword()" data-i18n="btn.change">Change</button>
+        </div>
+      </div>
+      <div id="settingsPwError" style="font-size:11px;color:var(--red);margin-top:2px"></div>
     </div>
-    <div class="settings-divider"></div>
-    <!-- Log Retention -->
-    <div class="settings-section-title" data-i18n="label.logRetention">Log Retention</div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.successMax">Success</label>
-      <input type="number" id="settingsSuccessMax" min="50000" step="10000" value="50000">
-    </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.errorMax">Error</label>
-      <input type="number" id="settingsErrorMax" min="5000" step="5000" value="10000">
-      <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
-    </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.maxAgeDays">Max Age (days)</label>
-      <input type="number" id="settingsMaxAgeDays" min="1" step="1" value="90">
-      <button class="btn btn-sm" onclick="openCleanupConfirm('logs')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
-      <button class="btn btn-sm" onclick="openCleanupConfirm('errors')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
-      <button class="btn btn-sm" onclick="openCleanupConfirm('all')" style="background:var(--red);color:#fff" data-i18n="btn.cleanupAll">Cleanup All</button>
-    </div>
-    <div class="settings-divider"></div>
-    <!-- Admin Token -->
-    <div class="settings-section-title" data-i18n="label.adminToken">Admin Token</div>
-    <div class="settings-token-row">
-      <span id="settingsTokenDisplay" style="flex:1">—</span>
-      <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
-      <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotate">Rotate</button>
-    </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-      <span class="countdown" id="tokenCountdown"></span>
-      <select id="settingsRotateInterval" style="font-size:11px;padding:2px 4px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:3px" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
-        <option value="5">5 min</option>
-        <option value="15" selected>15 min</option>
-        <option value="30">30 min</option>
-        <option value="60">60 min</option>
-      </select>
-    </div>
-    <div class="settings-divider"></div>
-    <!-- Change Password -->
-    <div class="settings-section-title" data-i18n="label.changePassword">Change Password</div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.currentPw">Current</label>
-      <input type="password" id="settingsCurrentPw" autocomplete="current-password">
-    </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.newPw">New</label>
-      <input type="password" id="settingsNewPw" autocomplete="new-password">
-    </div>
-    <div class="settings-popup-item">
-      <label data-i18n="label.confirmPw">Confirm</label>
-      <input type="password" id="settingsConfirmPw" autocomplete="new-password">
-      <button class="btn btn-sm" onclick="changeAdminPassword()" data-i18n="btn.change">Change</button>
-    </div>
-    <div id="settingsPwError" style="font-size:11px;color:var(--error);margin-top:2px"></div>
-    <div class="settings-divider"></div>
     <!-- Version & Links -->
     <div style="text-align:center;padding:4px 0 2px">
       <div id="brandFooterName" style="font-size:15px;font-weight:600;margin-bottom:2px">llm-rosetta</div>
@@ -1480,7 +1664,7 @@ const I18N = {
     'btn.save':'Save', 'btn.copy':'Copy', 'btn.change':'Change', 'modal.settings':'Settings', 'label.theme':'Theme', 'label.language':'Language', 'theme.light':'Light', 'theme.dark':'Dark', 'btn.cancel':'Cancel', 'btn.close':'Close',
     'label.logLevel':'Log Level', 'logLevel.normal':'Normal', 'logLevel.verbose':'Verbose', 'logLevel.debug':'Debug (bodies)',
     'label.autoRefresh':'Auto-Refresh', 'label.off':'Off', 'label.credentialReveal':'Credential Reveal', 'label.errorDumps':'Error Detail Log', 'label.enabled':'Enabled',
-    'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error', 'label.maxAgeDays':'Max Age (days)', 'btn.cleanup':'Cleanup', 'btn.cleanupLogs':'Cleanup Logs', 'btn.cleanupErrors':'Cleanup Errors', 'btn.cleanupAll':'Cleanup All', 'btn.export':'Export...', 'confirm.cleanupTitle':'Database Cleanup', 'confirm.cleanupMsg':'This will permanently delete all records older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupLogsMsg':'This will permanently delete all request logs older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupErrorsMsg':'This will permanently delete all error dumps older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'toast.cleanupDone':'Cleaned up: {rl} logs, {ed} error dumps, {db} bodies removed. Freed {freed}.', 'toast.cleanupLogsDone':'Cleaned up {count} log entries. Freed {freed}.', 'toast.cleanupErrorsDone':'Cleaned up {ed} error dumps, {db} bodies. Freed {freed}.', 'toast.cleanupNone':'Nothing to clean up — no records older than {days} days.', 'toast.exported':'Export downloaded.', 'export.title':'Export Error Dumps', 'export.hint':'Select a date range (optional). Leave empty to export all.',
+    'section.appearance':'Appearance & Display', 'section.rateLimit':'Rate Limiting', 'label.rlEnabled':'Enabled', 'label.rlAlgorithm':'Algorithm', 'label.rlGlobal':'Global', 'label.rlPerIp':'Per IP', 'label.rlPerKey':'Per API Key', 'label.rlPerModel':'Per Model', 'hint.rlGlobal':'All requests combined', 'hint.rlPerIp':'Per client IP address', 'hint.rlPerKey':'Per gateway API key', 'hint.rlPerModel':'Per upstream model name', 'label.credentialReveal':'Credential Reveal', 'label.disabled':'Disabled', 'label.logRetention':'Log Retention', 'label.successMax':'Success', 'label.errorMax':'Error', 'label.maxAgeDays':'Max Age (days)', 'btn.cleanup':'Cleanup', 'btn.cleanupLogs':'Cleanup Logs', 'btn.cleanupErrors':'Cleanup Errors', 'btn.cleanupAll':'Cleanup All', 'btn.export':'Export...', 'confirm.cleanupTitle':'Database Cleanup', 'confirm.cleanupMsg':'This will permanently delete all records older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupLogsMsg':'This will permanently delete all request logs older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'confirm.cleanupErrorsMsg':'This will permanently delete all error dumps older than <strong>{days} days</strong>. Type <strong>CLEANUP</strong> to confirm.', 'toast.cleanupDone':'Cleaned up: {rl} logs, {ed} error dumps, {db} bodies removed. Freed {freed}.', 'toast.cleanupLogsDone':'Cleaned up {count} log entries. Freed {freed}.', 'toast.cleanupErrorsDone':'Cleaned up {ed} error dumps, {db} bodies. Freed {freed}.', 'toast.cleanupNone':'Nothing to clean up — no records older than {days} days.', 'toast.exported':'Export downloaded.', 'export.title':'Export Error Dumps', 'export.hint':'Select a date range (optional). Leave empty to export all.',
     'label.adminToken':'Admin Token', 'label.rotatingIn':'Rotating in <span class="cd-time">{time}</span>',
     'label.changePassword':'Change Password', 'label.currentPw':'Current', 'label.newPw':'New', 'label.confirmPw':'Confirm',
     'pw.required':'Both current and new password required', 'pw.mismatch':'Passwords do not match', 'pw.tooShort':'Password too short (min 4)', 'pw.changed':'Password changed',
@@ -1622,7 +1806,7 @@ const I18N = {
     'btn.save':'\u4fdd\u5b58', 'btn.copy':'\u590d\u5236', 'btn.change':'\u4fee\u6539', 'btn.cancel':'\u53d6\u6d88', 'btn.close':'\u5173\u95ed',
     'label.logLevel':'\u65e5\u5fd7\u7ea7\u522b', 'logLevel.normal':'\u6b63\u5e38', 'logLevel.verbose':'\u8be6\u7ec6', 'logLevel.debug':'\u8c03\u8bd5 (\u542b\u8bf7\u6c42\u4f53)',
     'label.autoRefresh':'\u81ea\u52a8\u5237\u65b0', 'label.off':'\u5173\u95ed', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.errorDumps':'\u9519\u8bef\u8be6\u60c5\u8bb0\u5f55', 'label.enabled':'\u5df2\u542f\u7528',
-    'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25', 'label.maxAgeDays':'\u6700\u5927\u4fdd\u7559\u5929\u6570', 'btn.cleanup':'\u6e05\u7406', 'confirm.cleanupTitle':'\u6570\u636e\u5e93\u6e05\u7406', 'confirm.cleanupMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u548c\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupDone':'\u5df2\u6e05\u7406\uff1a{rl} \u6761\u65e5\u5fd7\u3001{ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupNone':'\u65e0\u9700\u6e05\u7406\u2014\u2014\u6ca1\u6709\u8d85\u8fc7 {days} \u5929\u7684\u8bb0\u5f55\u3002', 'btn.cleanupLogs':'\u6e05\u7406\u65e5\u5fd7', 'btn.cleanupErrors':'\u6e05\u7406\u9519\u8bef', 'btn.cleanupAll':'\u6e05\u7406\u5168\u90e8', 'btn.export':'\u5bfc\u51fa...', 'confirm.cleanupLogsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'confirm.cleanupErrorsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupLogsDone':'\u5df2\u6e05\u7406 {count} \u6761\u65e5\u5fd7\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupErrorsDone':'\u5df2\u6e05\u7406 {ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.exported':'\u5bfc\u51fa\u5df2\u4e0b\u8f7d\u3002', 'export.title':'\u5bfc\u51fa\u9519\u8bef\u8bb0\u5f55', 'export.hint':'\u9009\u62e9\u65e5\u671f\u8303\u56f4\uff08\u53ef\u9009\uff09\u3002\u7559\u7a7a\u5bfc\u51fa\u5168\u90e8\u3002',
+    'section.appearance':'\u5916\u89c2\u4e0e\u663e\u793a', 'section.rateLimit':'\u901f\u7387\u9650\u5236', 'label.rlEnabled':'\u542f\u7528', 'label.rlAlgorithm':'\u7b97\u6cd5', 'label.rlGlobal':'\u5168\u5c40', 'label.rlPerIp':'\u6bcf IP', 'label.rlPerKey':'\u6bcf API Key', 'label.rlPerModel':'\u6bcf\u6a21\u578b', 'hint.rlGlobal':'\u6240\u6709\u8bf7\u6c42\u5408\u8ba1', 'hint.rlPerIp':'\u6bcf\u4e2a\u5ba2\u6237\u7aef IP', 'hint.rlPerKey':'\u6bcf\u4e2a\u7f51\u5173 API Key', 'hint.rlPerModel':'\u6bcf\u4e2a\u4e0a\u6e38\u6a21\u578b', 'label.credentialReveal':'\u51ed\u8bc1\u53ef\u89c1', 'label.disabled':'\u5df2\u7981\u7528', 'label.logRetention':'\u65e5\u5fd7\u4fdd\u7559', 'label.successMax':'\u6210\u529f', 'label.errorMax':'\u5931\u8d25', 'label.maxAgeDays':'\u6700\u5927\u4fdd\u7559\u5929\u6570', 'btn.cleanup':'\u6e05\u7406', 'confirm.cleanupTitle':'\u6570\u636e\u5e93\u6e05\u7406', 'confirm.cleanupMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u548c\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupDone':'\u5df2\u6e05\u7406\uff1a{rl} \u6761\u65e5\u5fd7\u3001{ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupNone':'\u65e0\u9700\u6e05\u7406\u2014\u2014\u6ca1\u6709\u8d85\u8fc7 {days} \u5929\u7684\u8bb0\u5f55\u3002', 'btn.cleanupLogs':'\u6e05\u7406\u65e5\u5fd7', 'btn.cleanupErrors':'\u6e05\u7406\u9519\u8bef', 'btn.cleanupAll':'\u6e05\u7406\u5168\u90e8', 'btn.export':'\u5bfc\u51fa...', 'confirm.cleanupLogsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u8bf7\u6c42\u65e5\u5fd7\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'confirm.cleanupErrorsMsg':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u8d85\u8fc7 <strong>{days} \u5929</strong>\u7684\u6240\u6709\u9519\u8bef\u8f6c\u50a8\u3002\u8bf7\u8f93\u5165 <strong>CLEANUP</strong> \u786e\u8ba4\u3002', 'toast.cleanupLogsDone':'\u5df2\u6e05\u7406 {count} \u6761\u65e5\u5fd7\u3002\u91ca\u653e {freed}\u3002', 'toast.cleanupErrorsDone':'\u5df2\u6e05\u7406 {ed} \u6761\u9519\u8bef\u8f6c\u50a8\u3001{db} \u4e2a Body\u3002\u91ca\u653e {freed}\u3002', 'toast.exported':'\u5bfc\u51fa\u5df2\u4e0b\u8f7d\u3002', 'export.title':'\u5bfc\u51fa\u9519\u8bef\u8bb0\u5f55', 'export.hint':'\u9009\u62e9\u65e5\u671f\u8303\u56f4\uff08\u53ef\u9009\uff09\u3002\u7559\u7a7a\u5bfc\u51fa\u5168\u90e8\u3002',
     'label.adminToken':'\u7ba1\u7406 Token', 'label.rotatingIn':'<span class="cd-time">{time}</span> \u540e\u8f6e\u6362',
     'label.changePassword':'\u4fee\u6539\u5bc6\u7801', 'label.currentPw':'\u5f53\u524d\u5bc6\u7801', 'label.newPw':'\u65b0\u5bc6\u7801', 'label.confirmPw':'\u786e\u8ba4\u5bc6\u7801',
     'pw.required':'\u8bf7\u586b\u5199\u5f53\u524d\u5bc6\u7801\u548c\u65b0\u5bc6\u7801', 'pw.mismatch':'\u4e24\u6b21\u8f93\u5165\u4e0d\u4e00\u81f4', 'pw.tooShort':'\u5bc6\u7801\u592a\u77ed\uff08\u81f3\u5c114\u4f4d\uff09', 'pw.changed':'\u5bc6\u7801\u5df2\u4fee\u6539',
@@ -1912,6 +2096,24 @@ function openSettings() {
     if (em) em.value = configData.server.request_log.error_max || 10000;
     if (mad) mad.value = configData.server.request_log.max_age_days || 90;
   }
+  // Sync rate limiting
+  const rl = configData?.server?.rate_limit || {};
+  const rlEn = document.getElementById('rlEnabled');
+  if (rlEn) { rlEn.checked = !!rl.enabled; onRlToggle(); }
+  const rlAlgo = document.getElementById('rlAlgorithm');
+  if (rlAlgo && rl.algorithm) rlAlgo.value = rl.algorithm;
+  const rlG = document.getElementById('rlGlobal');
+  if (rlG) rlG.value = rl.global || '';
+  const rlI = document.getElementById('rlPerIp');
+  if (rlI) rlI.value = rl.per_ip || '';
+  const rlK = document.getElementById('rlPerKey');
+  if (rlK) rlK.value = rl.per_key || '';
+  const rlM = document.getElementById('rlPerModel');
+  if (rlM) rlM.value = rl.per_model || '';
+  _validateRlQuotas();
+  // Sync credential visibility
+  const cv = document.getElementById('settingsCredentialVisible');
+  if (cv) cv.checked = configData?.server?.credential_visible !== false;
   // Sync token
   _refreshTokenDisplay();
   // Sync rotate interval
@@ -1964,6 +2166,63 @@ async function saveLogRetention() {
     await api.put('/admin/api/config/server', { request_log: { success_max: sm, error_max: em, max_age_days: mad } });
     await loadConfig(); showToast(t('toast.saved'));
   } catch { showToast(t('toast.error'), 'error'); }
+}
+
+// --- Rate Limiting ---
+const _RL_UNIT_MAP = {s:1,sec:1,second:1,m:60,min:60,minute:60,h:3600,hr:3600,hour:3600,d:86400,day:86400};
+function _parseQuota(q) {
+  if (!q || !q.trim()) return null;
+  const m = q.trim().match(/^(\d+)\s*(?:\/|per)\s*([a-z]+)(?:\s+burst\s+(\d+))?$/i);
+  if (!m) return {error: 'Invalid format. Use: N/unit (e.g. 100/m, 60/s, 10000/d)'};
+  let unit = m[2].toLowerCase();
+  if (unit.length > 1 && unit.endsWith('s')) unit = unit.slice(0, -1);
+  if (!(unit in _RL_UNIT_MAP)) return {error: 'Unknown unit: ' + m[2]};
+  return {limit: parseInt(m[1]), period: _RL_UNIT_MAP[unit]};
+}
+function _toRpm(p) { return p ? (p.limit / p.period) * 60 : null; }
+function _fmtRpm(v) { return v >= 1 ? Math.round(v) + ' req/min' : (v * 60).toFixed(1) + ' req/hr'; }
+
+function onRlToggle() {
+  const on = document.getElementById('rlEnabled').checked;
+  document.getElementById('rlEnabledLabel').textContent = on ? t('label.enabled') : t('label.disabled');
+  document.getElementById('rlFields').classList.toggle('disabled', !on);
+  document.getElementById('rlAlgorithm').disabled = !on;
+}
+
+function _validateRlQuotas() {
+  const fields = [{id:'rlGlobal',name:'Global'},{id:'rlPerIp',name:'Per IP'},{id:'rlPerKey',name:'Per API Key'},{id:'rlPerModel',name:'Per Model'}];
+  const warnings = [], errors = [], parsed = {};
+  for (const f of fields) {
+    const val = document.getElementById(f.id)?.value?.trim();
+    if (!val) { parsed[f.id] = null; continue; }
+    const p = _parseQuota(val);
+    if (p && p.error) { errors.push(f.name + ': ' + p.error); document.getElementById(f.id).style.borderColor = 'var(--red)'; }
+    else { document.getElementById(f.id).style.borderColor = ''; parsed[f.id] = p; }
+  }
+  const rpm = {};
+  for (const f of fields) if (parsed[f.id]) rpm[f.id] = _toRpm(parsed[f.id]);
+  if (rpm.rlGlobal && rpm.rlPerIp && rpm.rlPerIp > rpm.rlGlobal) warnings.push('Per IP (' + _fmtRpm(rpm.rlPerIp) + ') > Global (' + _fmtRpm(rpm.rlGlobal) + ')');
+  if (rpm.rlPerIp && rpm.rlPerKey && rpm.rlPerKey > rpm.rlPerIp) warnings.push('Per API Key (' + _fmtRpm(rpm.rlPerKey) + ') > Per IP (' + _fmtRpm(rpm.rlPerIp) + ')');
+  if (rpm.rlGlobal && rpm.rlPerKey && rpm.rlPerKey > rpm.rlGlobal) warnings.push('Per API Key (' + _fmtRpm(rpm.rlPerKey) + ') > Global (' + _fmtRpm(rpm.rlGlobal) + ')');
+  if (rpm.rlPerModel && rpm.rlPerKey && rpm.rlPerModel > rpm.rlPerKey) warnings.push('Per Model (' + _fmtRpm(rpm.rlPerModel) + ') > Per API Key (' + _fmtRpm(rpm.rlPerKey) + ')');
+  const el = document.getElementById('rlWarning');
+  if (errors.length) { el.innerHTML = '⛔ ' + errors.join('<br>⛔ '); el.classList.add('visible'); el.style.color = 'var(--red)'; el.style.background = 'rgba(207,34,46,0.06)'; el.style.borderColor = 'rgba(207,34,46,0.2)'; return false; }
+  else if (warnings.length) { el.innerHTML = '⚠ ' + warnings.join('<br>⚠ '); el.classList.add('visible'); el.style.color = ''; el.style.background = ''; el.style.borderColor = ''; return true; }
+  else { el.classList.remove('visible'); return true; }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#rlGlobal,#rlPerIp,#rlPerKey,#rlPerModel').forEach(el => el.addEventListener('input', _validateRlQuotas));
+});
+
+async function saveRateLimitSettings() {
+  if (!_validateRlQuotas()) { showToast(t('toast.error'), 'error'); return; }
+  const payload = { rate_limit: { enabled: document.getElementById('rlEnabled').checked, algorithm: document.getElementById('rlAlgorithm').value } };
+  for (const [id, key] of [['rlGlobal','global'],['rlPerIp','per_ip'],['rlPerKey','per_key'],['rlPerModel','per_model']]) {
+    const v = document.getElementById(id)?.value?.trim();
+    payload.rate_limit[key] = v || null;
+  }
+  try { await api.put('/admin/api/config/server', payload); await loadConfig(); showToast(t('toast.saved')); } catch { showToast(t('toast.error'), 'error'); }
 }
 
 // --- Database Cleanup ---
