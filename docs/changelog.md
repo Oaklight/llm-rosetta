@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [Unreleased]
+## v0.10.0 — 2026-08-26
 
 ### Added
 
