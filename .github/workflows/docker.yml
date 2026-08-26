@@ -132,15 +132,11 @@ jobs:
       - name: List downloaded binaries
         run: ls -lhR build/
 
-      - name: Prepare multi-arch build context
+      - name: Prepare build context
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
           SUFFIX="${{ matrix.binary_suffix }}"
-
-          mkdir -p build/linux-amd64 build/linux-arm64
-          cp build/llm-rosetta-gateway-${VERSION}-linux-x86_64${SUFFIX} build/linux-amd64/llm-rosetta-gateway
-          cp build/llm-rosetta-gateway-${VERSION}-linux-arm64${SUFFIX} build/linux-arm64/llm-rosetta-gateway
-          chmod +x build/linux-amd64/llm-rosetta-gateway build/linux-arm64/llm-rosetta-gateway
+          ls -lh build/
 
       - uses: docker/login-action@v3
 
@@ -149,6 +145,13 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.variant }} image (amd64)
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          SUFFIX="${{ matrix.binary_suffix }}"
+          cp build/llm-rosetta-gateway-${VERSION}-linux-x86_64${SUFFIX} build/llm-rosetta-gateway
+          chmod +x build/llm-rosetta-gateway
+        
+      - name: Build and push ${{ matrix.variant }} amd64
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -157,13 +160,20 @@ jobs:
           push: true
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            BINARY=build/linux-amd64/llm-rosetta-gateway
+            BINARY=build/llm-rosetta-gateway
           tags: |
             oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-${{ matrix.variant }}-amd64
           cache-from: type=gha,scope=${{ matrix.variant }}-amd64
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}-amd64
 
       - name: Build and push ${{ matrix.variant }} image (arm64)
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          SUFFIX="${{ matrix.binary_suffix }}"
+          cp build/llm-rosetta-gateway-${VERSION}-linux-arm64${SUFFIX} build/llm-rosetta-gateway
+          chmod +x build/llm-rosetta-gateway
+
+      - name: Build and push ${{ matrix.variant }} arm64
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -172,7 +182,7 @@ jobs:
           push: true
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
-            BINARY=build/linux-arm64/llm-rosetta-gateway
+            BINARY=build/llm-rosetta-gateway
           tags: |
             oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-${{ matrix.variant }}-arm64
           cache-from: type=gha,scope=${{ matrix.variant }}-arm64
