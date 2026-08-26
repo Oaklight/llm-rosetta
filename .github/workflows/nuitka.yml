@@ -102,7 +102,7 @@ jobs:
       - name: Install package and Nuitka
         run: |
           pip install --upgrade pip
-          pip install -e .
+          pip install -e ".[profiling]"
           pip install "nuitka[onefile]" ordered-set
 
       - name: Create entry script
@@ -133,6 +133,7 @@ jobs:
             --output-dir=build \
             --output-filename=${{ steps.meta.outputs.artifact }}${{ matrix.os == 'windows' && '.exe' || '' }} \
             --include-package=llm_rosetta \
+            --include-package=pyinstrument \
             --include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
             --include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
             --nofollow-import-to=pytest \
