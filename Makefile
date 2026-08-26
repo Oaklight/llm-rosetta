@@ -126,6 +126,8 @@ NUITKA_FLAGS = \
 	--include-package=llm_rosetta \
 	--include-package=pyinstrument \
 	--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
+	--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
+	--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
 	--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
 	--nofollow-import-to=pytest \
 	--nofollow-import-to=setuptools \
@@ -167,6 +169,8 @@ build-binary-musl:
 				--include-package=llm_rosetta \
 				--include-package=pyinstrument \
 				--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
+				--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
+				--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
 				--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
 				--nofollow-import-to=pytest \
 				--nofollow-import-to=setuptools \
