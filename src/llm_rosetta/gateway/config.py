@@ -287,6 +287,10 @@ class GatewayConfig:
             self._raw_providers
         )
 
+        self.provider_preflight_token_count = (
+            self._parse_preflight_token_count_overrides(self._raw_providers)
+        )
+
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
@@ -437,6 +441,17 @@ class GatewayConfig:
         for pname, pcfg in raw_providers.items():
             if isinstance(pcfg, dict) and "hoist_system_messages" in pcfg:
                 result[pname] = bool(pcfg["hoist_system_messages"])
+        return result
+
+    @staticmethod
+    def _parse_preflight_token_count_overrides(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> dict[str, bool]:
+        """Extract per-provider preflight_token_count overrides."""
+        result: dict[str, bool] = {}
+        for pname, pcfg in raw_providers.items():
+            if isinstance(pcfg, dict) and "preflight_token_count" in pcfg:
+                result[pname] = bool(pcfg["preflight_token_count"])
         return result
 
     @staticmethod
@@ -735,6 +750,7 @@ class GatewayConfig:
         hoist_system = self.provider_hoist_system_messages.get(
             provider_name, _shim.hoist_system_messages if _shim else True
         )
+        preflight = self.provider_preflight_token_count.get(provider_name, False)
 
         route = ResolvedRoute(
             source_provider=source_provider,
@@ -747,6 +763,7 @@ class GatewayConfig:
             flatten_system=flatten_system,
             supports_custom_tools=custom_tools,
             hoist_system_messages=hoist_system,
+            preflight_token_count=preflight,
         )
 
         pinfo = self.providers[provider_name]

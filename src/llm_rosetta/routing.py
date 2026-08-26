@@ -55,6 +55,7 @@ class ResolvedRoute:
     flatten_system: bool = False
     supports_custom_tools: bool = False
     hoist_system_messages: bool = True
+    preflight_token_count: bool = False
 
 
 class Router(Protocol):

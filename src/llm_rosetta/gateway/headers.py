@@ -27,3 +27,11 @@ def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str
         extra_headers["OpenResponses-Version"] = or_version
 
     return extra_headers
+
+
+def get_preflight_tokens_override(request: Any) -> bool | None:
+    """Return the per-request preflight token count override, or None."""
+    value = request.headers.get("x-rosetta-preflight-tokens")
+    if value is None:
+        return None
+    return value.strip().lower() in ("true", "1", "yes")
