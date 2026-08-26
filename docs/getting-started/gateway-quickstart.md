@@ -12,11 +12,13 @@ Get a format-translating HTTP proxy running in under 5 minutes.
 pip install "llm-rosetta[gateway]"
 ```
 
-Or use Docker:
+Or use Docker (Alpine binary, ~21 MB):
 
 ```bash
 docker pull oaklight/llm-rosetta-gateway:latest
 ```
+
+Or download a standalone binary from [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) — no Python needed.
 
 ## 2. Create a config file
 

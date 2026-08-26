@@ -6,6 +6,19 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [Unreleased]
+
+### Added
+
+- **Standalone Nuitka binaries** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): pre-compiled single-file executables for 6 platforms — linux-x86_64 (glibc + musl), linux-arm64 (glibc + musl), macOS arm64, and Windows x86_64. No Python runtime required. Includes pyinstrument profiling support.
+- **Binary-based Docker images** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): three image variants — `alpine` (musl binary, ~21 MB, default), `glibc` (busybox:glibc, ~25 MB), and `python` (pip-based, ~80 MB). Alpine variant tagged as `:latest` and `:<version>`.
+- **Makefile build targets** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): `build-binary`, `build-binary-musl`, `build-docker-alpine`, `build-docker-glibc`, `build-docker-python` for local and CI builds.
+
+### Changed
+
+- **Docker privilege model** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): replaced su-exec/PUID/PGID with Docker-native `USER appuser` + `--user` flag. Use `docker run --user $(id -u):$(id -g)` for custom UID mapping.
+- **Docker default image** — `:latest` now points to the Alpine binary image (~21 MB) instead of the Python-based image (~80 MB). The Python image is still available as `:<version>-python`.
+
 ## v0.9.0 — 2026-08-21
 
 ### Added
