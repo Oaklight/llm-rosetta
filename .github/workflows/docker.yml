@@ -23,6 +23,15 @@ permissions:
   contents: read
 
 jobs:
+  # ── Build binaries (only for manual trigger) ──────────
+  # When called from release.yml, binaries are already built by the parent.
+  binaries:
+    if: github.event_name == 'workflow_dispatch'
+    uses: ./.github/workflows/nuitka.yml
+    with:
+      ref: v${{ inputs.tag }}
+      platforms: linux-x86_64,linux-arm64,linux-x86_64-musl,linux-arm64-musl
+
   # ── Python-based image (pip install) ──────────────────
   build-python:
     runs-on: ubuntu-latest
@@ -59,9 +68,10 @@ jobs:
           exit 1
 
       - uses: docker/login-action@v3
+        if: secrets.DOCKERHUB_USERNAME != ''
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME || '' }}
-          password: ${{ secrets.DOCKERHUB_TOKEN || '' }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push python image
         uses: docker/build-push-action@v6
@@ -79,6 +89,8 @@ jobs:
 
   # ── Binary-based images (Alpine + glibc) ──────────────
   build-binary-images:
+    needs: binaries
+    if: always() && (needs.binaries.result == 'success' || needs.binaries.result == 'skipped')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -86,7 +98,7 @@ jobs:
         include:
           - variant: alpine
             base_image: alpine
-            binary_suffix: musl
+            binary_suffix: -musl
             tags_extra: true
           - variant: glibc
             base_image: busybox:glibc
@@ -105,12 +117,17 @@ jobs:
           VERSION="${VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Download binaries
+      - name: Download amd64 binary
         uses: actions/download-artifact@v4
         with:
-          pattern: llm-rosetta-gateway-*-linux-*${{ matrix.binary_suffix && format('-{0}', matrix.binary_suffix) || '' }}
+          name: llm-rosetta-gateway-${{ steps.meta.outputs.version }}-linux-x86_64${{ matrix.binary_suffix }}
           path: build/
-          merge-multiple: true
+
+      - name: Download arm64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: llm-rosetta-gateway-${{ steps.meta.outputs.version }}-linux-arm64${{ matrix.binary_suffix }}
+          path: build/
 
       - name: List downloaded binaries
         run: ls -lhR build/
@@ -119,17 +136,17 @@ jobs:
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
           SUFFIX="${{ matrix.binary_suffix }}"
-          SUFFIX_DASH="${SUFFIX:+-$SUFFIX}"
 
           mkdir -p build/linux-amd64 build/linux-arm64
-          cp build/llm-rosetta-gateway-${VERSION}-linux-x86_64${SUFFIX_DASH} build/linux-amd64/llm-rosetta-gateway
-          cp build/llm-rosetta-gateway-${VERSION}-linux-arm64${SUFFIX_DASH} build/linux-arm64/llm-rosetta-gateway
+          cp build/llm-rosetta-gateway-${VERSION}-linux-x86_64${SUFFIX} build/linux-amd64/llm-rosetta-gateway
+          cp build/llm-rosetta-gateway-${VERSION}-linux-arm64${SUFFIX} build/linux-arm64/llm-rosetta-gateway
           chmod +x build/linux-amd64/llm-rosetta-gateway build/linux-arm64/llm-rosetta-gateway
 
       - uses: docker/login-action@v3
+        if: secrets.DOCKERHUB_USERNAME != ''
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME || '' }}
-          password: ${{ secrets.DOCKERHUB_TOKEN || '' }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push ${{ matrix.variant }} image (amd64)
         uses: docker/build-push-action@v6
@@ -168,13 +185,11 @@ jobs:
           VARIANT="${{ matrix.variant }}"
           IMAGE="oaklight/llm-rosetta-gateway"
 
-          # Create variant manifest
           docker buildx imagetools create \
             -t "$IMAGE:${VERSION}-${VARIANT}" \
             "$IMAGE:${VERSION}-${VARIANT}-amd64" \
             "$IMAGE:${VERSION}-${VARIANT}-arm64"
 
-          # Alpine variant also gets the default tags
           if [ "${{ matrix.tags_extra }}" = "true" ]; then
             docker buildx imagetools create \
               -t "$IMAGE:${VERSION}" \
