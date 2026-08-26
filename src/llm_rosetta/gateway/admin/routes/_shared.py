@@ -151,10 +151,13 @@ def _build_provider_entry(
         if existing_enabled is not None:
             entry["enabled"] = existing_enabled
 
-    if "supports_custom_tools" in body:
-        entry["supports_custom_tools"] = bool(body["supports_custom_tools"])
-    if "hoist_system_messages" in body:
-        entry["hoist_system_messages"] = bool(body["hoist_system_messages"])
+    for flag in (
+        "supports_custom_tools",
+        "hoist_system_messages",
+        "preflight_token_count",
+    ):
+        if flag in body:
+            entry[flag] = bool(body[flag])
     if "timeout" in body and body["timeout"] not in (None, ""):
         entry["timeout"] = float(body["timeout"])
 
