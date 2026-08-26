@@ -142,8 +142,8 @@ jobs:
           SECS=$((ELAPSED % 60))
 
           BINARY="build/${{ steps.meta.outputs.artifact }}${{ matrix.os == 'windows' && '.exe' || '' }}"
-          BINARY_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || stat -f%z "$BINARY")
-          BINARY_SIZE_MB=$(echo "scale=1; $BINARY_SIZE / 1048576" | bc)
+          BINARY_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || stat -f%z "$BINARY" 2>/dev/null || python -c "import os; print(os.path.getsize('$BINARY'))")
+          BINARY_SIZE_MB=$(python -c "print(f'{int($BINARY_SIZE)/1048576:.1f}')")
 
           echo "============================================"
           echo "  Nuitka Build Statistics"
