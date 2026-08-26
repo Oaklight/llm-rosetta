@@ -15,7 +15,6 @@ Downstream SSE formatting lives in :mod:`transport.sse_format`.
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import time
 from collections.abc import AsyncIterator
@@ -613,12 +612,11 @@ def _build_preflight_body(
 ) -> dict[str, Any]:
     """Build a minimal non-streaming request body for token counting.
 
-    Returns a deep copy of *target_body* with ``max_tokens=1``,
-    streaming disabled, and thinking/reasoning stripped so the upstream
-    returns a cheap response whose ``usage`` contains exact
-    ``input_tokens`` / ``prompt_tokens``.
+    Uses a shallow copy of *target_body* (messages/tools are read-only)
+    and only deep-copies nested dicts that are mutated, to avoid
+    duplicating large conversation histories.
     """
-    body = copy.deepcopy(target_body)
+    body = dict(target_body)
 
     # Disable streaming
     body.pop("stream", None)
@@ -626,10 +624,11 @@ def _build_preflight_body(
 
     # Set minimal output and deterministic sampling
     if target_provider == "google":
-        gc = body.setdefault("generationConfig", {})
+        gc = dict(body.get("generationConfig", {}))
         gc["maxOutputTokens"] = 1
         gc["temperature"] = 0
         gc.pop("responseModalities", None)
+        body["generationConfig"] = gc
     elif target_provider in ("openai_responses", "open_responses"):
         body["max_output_tokens"] = 1
         body["temperature"] = 0
@@ -641,7 +640,9 @@ def _build_preflight_body(
     body.pop("thinking", None)
     body.pop("reasoning", None)
     if isinstance(body.get("metadata"), dict):
-        body["metadata"].pop("thinking", None)
+        body["metadata"] = {
+            k: v for k, v in body["metadata"].items() if k != "thinking"
+        }
 
     return body
 
