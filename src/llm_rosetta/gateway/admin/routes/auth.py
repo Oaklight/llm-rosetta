@@ -30,7 +30,10 @@ async def serve_admin_html(request: Any) -> Response:
         body=_admin_html_cache[cache_key],
         status_code=200,
         content_type="text/html; charset=utf-8",
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
@@ -47,7 +50,10 @@ async def serve_admin_static(request: Any, **kwargs: Any) -> Response:
         body=data,
         status_code=200,
         content_type=content_type,
-        headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
