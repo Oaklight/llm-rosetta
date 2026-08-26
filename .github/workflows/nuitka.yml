@@ -38,12 +38,7 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          PKG_VER=$(python3 -c "
-          import re, pathlib
-          text = pathlib.Path('src/llm_rosetta/__init__.py').read_text(encoding='utf-8')
-          m = re.search(r'__version__\s*=\"(.+?)\"', text)
-          print(m.group(1))
-          ")
+          PKG_VER=$(grep -oP '__version__\s*=\s*"\K[^"]+' src/llm_rosetta/__init__.py)
           SHORT_SHA=$(git rev-parse --short HEAD)
           if git describe --exact-match --tags HEAD >/dev/null 2>&1; then
             VERSION="$PKG_VER"
