@@ -2184,7 +2184,9 @@ function _fmtRpm(v) { return v >= 1 ? Math.round(v) + ' req/min' : (v * 60).toFi
 
 function onRlToggle() {
   const on = document.getElementById('rlEnabled').checked;
-  document.getElementById('rlEnabledLabel').textContent = on ? t('label.enabled') : t('label.disabled');
+  const lbl = document.getElementById('rlEnabledLabel');
+  lbl.textContent = on ? t('label.enabled') : t('label.disabled');
+  lbl.setAttribute('data-i18n', on ? 'label.enabled' : 'label.disabled');
   document.getElementById('rlFields').classList.toggle('disabled', !on);
   document.getElementById('rlAlgorithm').disabled = !on;
 }
