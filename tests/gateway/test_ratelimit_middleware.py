@@ -72,6 +72,7 @@ class FakeConfig:
         self.rate_limit_exclude = (
             exclude if exclude is not None else ["/health", "/admin"]
         )
+        self.rate_limit_trust_proxy = False
 
 
 def _run(coro):
@@ -106,17 +107,24 @@ class TestDetectFormat:
 
 
 class TestExtractClientIp:
-    def test_x_forwarded_for_single(self):
-        req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
-        assert _extract_client_ip(req) == "1.2.3.4"
-
-    def test_x_forwarded_for_chain(self):
-        req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8"})
-        assert _extract_client_ip(req) == "1.2.3.4"
-
-    def test_x_real_ip(self):
-        req = FakeRequest(headers={"x-real-ip": "10.0.0.1"})
+    def test_xff_ignored_by_default(self):
+        req = FakeRequest(
+            headers={"x-forwarded-for": "1.2.3.4"},
+            client_addr=("10.0.0.1", 1),
+        )
         assert _extract_client_ip(req) == "10.0.0.1"
+
+    def test_xff_trusted_when_enabled(self):
+        req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
+        assert _extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+
+    def test_xff_chain_takes_first(self):
+        req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8"})
+        assert _extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+
+    def test_x_real_ip_trusted(self):
+        req = FakeRequest(headers={"x-real-ip": "10.0.0.1"})
+        assert _extract_client_ip(req, trust_proxy=True) == "10.0.0.1"
 
     def test_client_addr_fallback(self):
         req = FakeRequest(client_addr=("192.168.1.1", 9999))

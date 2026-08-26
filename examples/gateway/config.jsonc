@@ -78,18 +78,21 @@
   // Server settings
   "server": {
     "host": "0.0.0.0",
-    "port": 8765
+    "port": 8765,
 
     // Rate limiting (disabled by default).
     // Quota strings: "N/unit" (e.g. "100/m", "10/s", "10000/d").
     // Recommended hierarchy: global >= per_ip >= per_key >= per_model.
+    // Set trust_proxy to true when behind a reverse proxy that sets X-Forwarded-For.
     // "rate_limit": {
     //   "enabled": true,
     //   "algorithm": "sliding_window",
     //   "global": "600/m",
     //   "per_ip": "120/m",
     //   "per_key": "60/m",
-    //   "per_model": "30/m"
+    //   "per_model": "30/m",
+    //   "trust_proxy": false,
+    //   "exclude_paths": ["/health", "/admin"]
     // }
   }
 }

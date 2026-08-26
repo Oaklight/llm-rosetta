@@ -562,6 +562,9 @@ class GatewayConfig:
         self.rate_limit_exclude: list[str] = rl.get(
             "exclude_paths", ["/health", "/admin"]
         )
+        # When True, trust X-Forwarded-For / X-Real-IP for per-IP limiting.
+        # Default False — use direct peer address (safe when exposed directly).
+        self.rate_limit_trust_proxy: bool = bool(rl.get("trust_proxy", False))
 
     def _apply_debug_settings(self, _debug: dict[str, Any]) -> None:
         """Parse debug/logging settings with env-var overrides.

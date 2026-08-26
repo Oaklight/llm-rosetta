@@ -98,6 +98,7 @@ class RateLimitState:
     __slots__ = (
         "enabled",
         "exclude_prefixes",
+        "trust_proxy",
         "_global",
         "_per_ip",
         "_per_key",
@@ -107,6 +108,7 @@ class RateLimitState:
     def __init__(self) -> None:
         self.enabled: bool = False
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
+        self.trust_proxy: bool = False
         self._global: RateLimiter | None = None
         self._per_ip: RateLimiter | None = None
         self._per_key: RateLimiter | None = None
@@ -116,6 +118,7 @@ class RateLimitState:
         """Recreate limiters from the current config (counters reset)."""
         self.enabled = config.rate_limit_enabled
         self.exclude_prefixes = list(config.rate_limit_exclude)
+        self.trust_proxy = config.rate_limit_trust_proxy
         algo = config.rate_limit_algorithm
         self._global = _build_limiter(algo, config.rate_limit_global)
         self._per_ip = _build_limiter(algo, config.rate_limit_per_ip)
@@ -154,7 +157,7 @@ def _rate_limit_response(
     path: str, result: RateLimitResult, dimension: str
 ) -> Response:
     """Build a format-aware 429 response with standard rate-limit headers."""
-    retry_secs = math.ceil(result.retry_after or 1)
+    retry_secs = math.ceil(max(result.retry_after or 0, 1))
     message = f"Rate limit exceeded ({dimension}). Please retry after {retry_secs}s."
     fmt = _detect_format(path)
 
@@ -215,13 +218,15 @@ def _extract_model(request: Any) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-def _extract_client_ip(request: Any) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
+def _extract_client_ip(request: Any, *, trust_proxy: bool = False) -> str:
+    """Extract client IP, only trusting proxy headers when explicitly enabled."""
+    if trust_proxy:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real_ip = request.headers.get("x-real-ip")
+        if real_ip:
+            return real_ip.strip()
     return request.client_addr[0] if request.client_addr else "unknown"
 
 
@@ -237,7 +242,12 @@ def _check_limiter(
     path: str,
     tightest: RateLimitResult | None,
 ) -> tuple[Response | None, RateLimitResult | None]:
-    """Acquire from a single limiter; return (429 response, updated tightest)."""
+    """Acquire from a single limiter; return (429 response, updated tightest).
+
+    Each acquire() consumes quota even if a later dimension denies the
+    request.  This is intentional — global quota reflects total server
+    load including rejected requests from individual dimensions.
+    """
     if limiter is None:
         return None, tightest
     result = limiter.acquire(key)
@@ -279,7 +289,11 @@ def create_rate_limit_hook(
             return denied
 
         denied, tightest = _check_limiter(
-            state._per_ip, _extract_client_ip(request), "per_ip", path, tightest
+            state._per_ip,
+            _extract_client_ip(request, trust_proxy=state.trust_proxy),
+            "per_ip",
+            path,
+            tightest,
         )
         if denied:
             return denied
