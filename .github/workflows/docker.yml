@@ -68,7 +68,7 @@ jobs:
           exit 1
 
       - uses: docker/login-action@v3
-        if: secrets.DOCKERHUB_USERNAME != ''
+
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -79,7 +79,7 @@ jobs:
           context: .
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          push: true
           build-args: |
             PACKAGE_VERSION=${{ steps.meta.outputs.version }}
           tags: |
@@ -143,7 +143,7 @@ jobs:
           chmod +x build/linux-amd64/llm-rosetta-gateway build/linux-arm64/llm-rosetta-gateway
 
       - uses: docker/login-action@v3
-        if: secrets.DOCKERHUB_USERNAME != ''
+
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -154,7 +154,7 @@ jobs:
           context: .
           file: docker/Dockerfile.binary
           platforms: linux/amd64
-          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          push: true
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
             BINARY=build/linux-amd64/llm-rosetta-gateway
@@ -169,7 +169,7 @@ jobs:
           context: .
           file: docker/Dockerfile.binary
           platforms: linux/arm64
-          push: ${{ secrets.DOCKERHUB_USERNAME != '' }}
+          push: true
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
             BINARY=build/linux-arm64/llm-rosetta-gateway
@@ -179,7 +179,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}-arm64
 
       - name: Create multi-arch manifest
-        if: secrets.DOCKERHUB_USERNAME != ''
+
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
           VARIANT="${{ matrix.variant }}"
