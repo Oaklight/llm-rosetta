@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llm-rosetta — Neon Style</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  /* Neon's actual palette — extracted from neon.com */
+  --bg:#fff;--bg-card:#fafafa;--bg-hover:#f3f3f3;--border:#e4e5e7;
+  --text:#18191b;--text-dim:#616469;--text-muted:#949798;
+  /* The green family — Neon's signature */
+  --accent:#34d59a;            /* CTA green */
+  --accent-hover:#2bc48c;
+  --accent-on:#18191b;         /* text on green bg */
+  --green-bg:#cae6d9;          /* light green section bg */
+  --green-bg-deep:#285d49;     /* dark green section bg */
+  --green-subtle:rgba(52,213,154,.06);
+  /* Complementary red — Neon uses this for warnings */
+  --red:#ff3621;
+  --red-subtle:rgba(255,54,33,.06);
+  /* Other semantics */
+  --orange:#d97706;--blue:#2563eb;--purple:#7c3aed;
+  --r:4px;
+  --font:'Inter',system-ui,sans-serif;
+  --mono:'JetBrains Mono','SF Mono',monospace;
+  --dot:rgba(0,0,0,.04);--grid:rgba(0,0,0,.04);
+}
+[data-theme="dark"]{
+  --bg:#0a0a0b;--bg-card:#131315;--bg-hover:#1a1a1c;--border:#242628;
+  --text:#e4e5e7;--text-dim:#949798;--text-muted:#616469;
+  --accent:#34d59a;
+  --accent-hover:#4de0ab;
+  --accent-on:#0a0a0b;
+  --green-bg:#1a2e26;          /* dark: muted deep green bg */
+  --green-bg-deep:#285d49;
+  --green-subtle:rgba(52,213,154,.08);
+  --red:#ff5647;
+  --red-subtle:rgba(255,86,71,.08);
+  --orange:#fbbf24;--blue:#60a5fa;--purple:#a78bfa;
+  --dot:rgba(255,255,255,.025);--grid:rgba(255,255,255,.025);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;transition:background .2s,color .2s}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* ── Header ── */
+.hdr{border-bottom:1px solid var(--border);padding:13px 0;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);position:sticky;top:0;z-index:10}
+.hdr-in{display:flex;align-items:center;justify-content:space-between}
+.logo{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;letter-spacing:-.02em}
+.logo-dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.logo span{color:var(--text-dim);font-weight:400}
+.hdr-r{display:flex;align-items:center;gap:10px}
+.hdr-clock{font-size:11px;color:var(--text-muted);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.t-btn{font-size:12px;padding:5px 10px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg-card);cursor:pointer;color:var(--text-dim);font-family:var(--font);transition:all .15s}
+.t-btn:hover{border-color:var(--text-dim);color:var(--text)}
+
+/* ── Tabs ── */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{padding:11px 16px;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;font-weight:500;transition:all .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--accent)}
+
+.content{padding:24px 0}
+
+/* ═══ Green banner section — Neon's signature green bg ═══ */
+.green-banner{
+  background:var(--green-bg);border:1px solid color-mix(in srgb,var(--accent) 15%,var(--border));
+  border-radius:var(--r);padding:18px 20px;margin-bottom:20px;
+  display:flex;align-items:center;justify-content:space-between;
+}
+.green-banner .banner-text{font-size:13px;font-weight:500;color:var(--text)}
+.green-banner .banner-text strong{font-weight:600}
+[data-theme="dark"] .green-banner .banner-text{color:var(--accent)}
+.green-banner .banner-stat{font-size:24px;font-weight:700;color:var(--green-bg-deep);font-variant-numeric:tabular-nums}
+[data-theme="dark"] .green-banner .banner-stat{color:var(--accent)}
+
+/* ═══ Stats — with dot-grid overlay ═══ */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s;
+}
+/* Subtle cross-hatch */
+.stat::before{
+  content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background:
+    repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
+    repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px);
+}
+.stat:hover{border-color:var(--text-dim)}
+.stat .lb{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:4px;position:relative}
+.stat .vl{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em;position:relative}
+.stat .vl.g{color:var(--green-bg-deep)}
+[data-theme="dark"] .stat .vl.g{color:var(--accent)}
+.stat .vl.r{color:var(--red)}
+/* Bottom accent bar */
+.stat-bar{position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--border)}
+.stat-bar i{display:block;height:100%;background:var(--accent)}
+
+/* ═══ Chart — dot grid bg, dashed guides ═══ */
+.chart-sec{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px;margin-bottom:24px;position:relative;overflow:hidden;
+}
+.chart-sec::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
+  background-size:16px 16px;
+}
+.chart-title{font-size:12px;font-weight:500;color:var(--text-muted);margin-bottom:12px;position:relative;text-transform:uppercase;letter-spacing:.4px}
+.bars-w{position:relative;height:100px}
+.bars{display:flex;align-items:flex-end;gap:3px;height:100%;position:relative;z-index:1;border-bottom:1px dashed var(--border)}
+.bar{flex:1;background:var(--accent);border-radius:2px 2px 0 0;opacity:.4;transition:opacity .15s}
+.bar:hover{opacity:.8}
+/* Red bars for errors */
+.bar.err{background:var(--red)}
+.hg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.hg span{border-bottom:1px dashed color-mix(in srgb,var(--border) 60%,transparent)}
+.xlb{display:flex;margin-top:5px;position:relative;z-index:1}
+.xlb span{flex:1;text-align:center;font-size:9px;color:var(--text-muted);font-family:var(--mono)}
+
+/* ═══ Section ═══ */
+.sec{margin-bottom:24px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sec-h h2{font-size:14px;font-weight:600}
+
+/* ═══ Buttons ═══ */
+.btn{padding:6px 13px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;font-size:13px;font-family:var(--font);font-weight:500;transition:all .15s}
+.btn:hover{border-color:var(--text-dim)}
+.btn-p{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:600}
+.btn-p:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-d{color:var(--red);border-color:color-mix(in srgb,var(--red) 20%,var(--border))}
+.btn-d:hover{background:var(--red-subtle);border-color:var(--red)}
+.btn-s{padding:3px 9px;font-size:12px}
+.srch{padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:13px;font-family:var(--mono);width:180px;transition:border-color .15s}
+.srch:focus{outline:none;border-color:var(--text-dim)}
+.srch::placeholder{color:var(--text-muted)}
+
+/* ═══ Cards ═══ */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:14px;transition:border-color .2s;position:relative}
+.card:hover{border-color:var(--text-dim)}
+.card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.card-n{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.sd{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.sd.off{background:var(--text-muted)}
+.fld{font-size:12px;color:var(--text-dim);margin-bottom:2px}
+.fld code{font-family:var(--mono);color:var(--text);background:var(--bg-hover);padding:1px 4px;border-radius:3px;font-size:11px}
+.card-a{margin-top:10px;display:flex;gap:6px}
+
+/* ═══ Badges — green + red matching pair ═══ */
+.bdg{display:inline-block;padding:2px 7px;border-radius:var(--r);font-size:11px;font-weight:600}
+.bdg-ok{background:var(--green-subtle);color:var(--green-bg-deep)}
+[data-theme="dark"] .bdg-ok{color:var(--accent)}
+.bdg-err{background:var(--red-subtle);color:var(--red)}
+.bdg-st{background:color-mix(in srgb,var(--blue) 8%,transparent);color:var(--blue)}
+.cap{display:inline-flex;padding:1px 5px;border-radius:var(--r);font-size:10px;font-weight:600;margin-left:4px}
+.cap-l{background:color-mix(in srgb,var(--purple) 8%,transparent);color:var(--purple)}
+.cap-e{background:var(--green-subtle);color:var(--green-bg-deep)}
+[data-theme="dark"] .cap-e{color:var(--accent)}
+
+/* ═══ Toggle ═══ */
+.tog{position:relative;display:inline-block;width:32px;height:17px}
+.tog input{opacity:0;width:0;height:0}
+.tog i{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:17px;transition:.15s}
+.tog i::before{content:'';position:absolute;height:11px;width:11px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.15s}
+.tog input:checked+i{background:var(--accent)}
+.tog input:checked+i::before{transform:translateX(15px)}
+
+/* ═══ Table ═══ */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--text-muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.6px}
+tr:hover td{background:var(--bg-hover)}
+
+/* ═══ Toast — green and red pair ═══ */
+.toasts{display:flex;gap:8px;margin-top:12px}
+.tst{padding:7px 14px;border-radius:var(--r);font-size:13px;font-weight:500}
+.tst-ok{background:var(--accent);color:var(--accent-on)}
+.tst-err{background:var(--red);color:#fff}
+
+/* ═══ Login — clean card, green only on CTA ═══ */
+.login-w{display:flex;justify-content:center;margin:24px 0}
+.login{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--r);padding:32px;width:340px;text-align:center;
+}
+.login h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.login p{color:var(--text-dim);font-size:13px;margin-bottom:18px;position:relative}
+.login input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:10px;position:relative}
+.login input:focus{outline:none;border-color:var(--text-dim)}
+.login .lbtn{width:100%;padding:8px;border:none;border-radius:var(--r);background:var(--accent);color:var(--accent-on);font-size:14px;font-weight:600;cursor:pointer;position:relative;transition:background .15s}
+.login .lbtn:hover{background:var(--accent-hover)}
+
+/* ═══ Green section highlight — for emphasis areas ═══ */
+.green-section{
+  background:var(--green-bg);
+  border:1px solid color-mix(in srgb,var(--accent) 12%,var(--border));
+  border-radius:var(--r);padding:16px;margin-bottom:12px;
+}
+.green-section .sec-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--green-bg-deep);margin-bottom:8px}
+[data-theme="dark"] .green-section .sec-label{color:var(--accent)}
+
+@media(max-width:768px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="hdr"><div class="container hdr-in">
+  <div class="logo"><span class="logo-dot"></span>llm-rosetta <span>gateway</span></div>
+  <div class="hdr-r">
+    <span class="hdr-clock">18:37 UTC</span>
+    <button class="t-btn" onclick="toggleTheme()">◐ Theme</button>
+    <button class="btn btn-s">Logout</button>
+  </div>
+</div></div>
+
+<div class="container">
+<div class="tabs"><div class="tab active">Providers</div><div class="tab">Models</div><div class="tab">API Keys</div><div class="tab">Dashboard</div><div class="tab">Request Log</div></div>
+<div class="content">
+
+<!-- Green banner — Neon's signature green bg section -->
+<div class="green-banner">
+  <div class="banner-text"><strong>Gateway active</strong> — 12 providers configured, all systems operational</div>
+  <div class="banner-stat">99.2%</div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat"><div class="lb">Total Requests</div><div class="vl">2,431</div><div class="stat-bar"><i style="width:75%"></i></div></div>
+  <div class="stat"><div class="lb">Error Rate</div><div class="vl r">4.9%</div><div class="stat-bar"><i style="width:5%;background:var(--red)"></i></div></div>
+  <div class="stat"><div class="lb">Active Streams</div><div class="vl">0</div><div class="stat-bar"><i style="width:0"></i></div></div>
+  <div class="stat"><div class="lb">Uptime</div><div class="vl g">3d 14h</div><div class="stat-bar"><i style="width:95%"></i></div></div>
+</div>
+
+<!-- Chart — green bars + red error bars -->
+<div class="chart-sec">
+  <div class="chart-title">Throughput (req/s)</div>
+  <div class="bars-w">
+    <div class="hg"><span></span><span></span><span></span><span></span></div>
+    <div class="bars">
+      <div class="bar" style="height:35%"></div><div class="bar" style="height:50%"></div><div class="bar" style="height:42%"></div>
+      <div class="bar" style="height:68%"></div><div class="bar err" style="height:20%"></div><div class="bar" style="height:72%"></div>
+      <div class="bar" style="height:90%"></div><div class="bar" style="height:65%"></div><div class="bar" style="height:48%"></div>
+      <div class="bar" style="height:55%"></div><div class="bar" style="height:78%"></div><div class="bar err" style="height:15%"></div>
+      <div class="bar" style="height:60%"></div><div class="bar" style="height:45%"></div><div class="bar" style="height:70%"></div>
+      <div class="bar" style="height:95%"></div><div class="bar" style="height:88%"></div><div class="bar" style="height:52%"></div>
+      <div class="bar" style="height:40%"></div><div class="bar" style="height:62%"></div>
+    </div>
+  </div>
+  <div class="xlb"><span>00</span><span></span><span></span><span>03</span><span></span><span></span><span>06</span><span></span><span></span><span>09</span><span></span><span></span><span>12</span><span></span><span></span><span>15</span><span></span><span></span><span>18</span><span></span></div>
+</div>
+
+<!-- Controls -->
+<div class="sec">
+  <div class="sec-h"><h2>Controls</h2></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-p">+ Add Provider</button><button class="btn">Clone</button><button class="btn">Edit</button><button class="btn btn-d">Delete</button>
+    <input class="srch" placeholder="Search...">
+    <label class="tog"><input type="checkbox" checked><i></i></label>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:12px;align-items:center;flex-wrap:wrap">
+    <span class="bdg bdg-ok">200 OK</span><span class="bdg bdg-err">500 Error</span><span class="bdg bdg-st">Streaming</span>
+    <span class="cap cap-l">LLM</span><span class="cap cap-e">Embedding</span>
+  </div>
+  <div class="toasts"><span class="tst tst-ok">Provider saved</span><span class="tst tst-err">Connection failed</span></div>
+</div>
+
+<!-- Providers — with green server settings section -->
+<div class="sec">
+  <div class="sec-h"><h2>Providers</h2><button class="btn btn-p btn-s">+ Add</button></div>
+
+  <!-- Green-bg server settings (like Neon's green section areas) -->
+  <div class="green-section">
+    <div class="sec-label">Server Settings</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="srch" placeholder="Global proxy URL..." style="flex:1;max-width:360px">
+      <button class="btn btn-s">Save</button>
+      <button class="btn btn-s">Network Diagnostics</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="card-h"><span class="card-n"><span class="sd"></span>Anthropic Official<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><i></i></label></div><div class="fld">Type: <code>anthropic</code></div><div class="fld">Base URL: <code>https://api.anthropic.com</code></div><div class="fld">API Key: <code>sk-a***oAAA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card"><div class="card-h"><span class="card-n"><span class="sd"></span>OpenAI Chat<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><i></i></label></div><div class="fld">Type: <code>openai</code></div><div class="fld">Base URL: <code>https://api.openai.com/v1</code></div><div class="fld">API Key: <code>sk-p***O7AA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card"><div class="card-h"><span class="card-n"><span class="sd off"></span>Gemini<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox"><i></i></label></div><div class="fld">Type: <code>google</code></div><div class="fld">Base URL: <code>https://generativelanguage.googleapis.com</code></div><div class="fld">API Key: <code>AQ.A***x4Aw</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="sec">
+  <div class="sec-h"><h2>Per-Provider Breakdown</h2></div>
+  <table><thead><tr><th>Provider</th><th>Requests</th><th>Error Rate</th><th>Status</th></tr></thead><tbody>
+    <tr><td>anthropic</td><td>2,063</td><td>3.2%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>openai_chat</td><td>332</td><td>8.1%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>google</td><td>6</td><td>33%</td><td><span class="bdg bdg-err">Degraded</span></td></tr>
+  </tbody></table>
+</div>
+
+<!-- Login with green-tinted bg -->
+<div class="sec">
+  <div class="sec-h"><h2>Login</h2></div>
+  <div class="login-w"><div class="login">
+    <h2>llm-rosetta gateway</h2>
+    <p>Admin panel is password-protected</p>
+    <input type="password" placeholder="Password">
+    <button class="lbtn">Login</button>
+  </div></div>
+</div>
+
+</div></div>
+
+<script>
+function toggleTheme(){const d=document.documentElement;d.getAttribute('data-theme')==='dark'?d.removeAttribute('data-theme'):d.setAttribute('data-theme','dark')}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active')});
+</script>
+</body>
+</html>

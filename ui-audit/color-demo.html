@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="en" data-scheme="minimal" data-mode="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llm-rosetta gateway — Theme Preview</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ═══ Minimal ═══ */
+[data-scheme="minimal"]{
+  --bg:#fff;--bg-card:#fafafa;--bg-hover:#f5f5f5;--border:#eaeaea;
+  --text:#171717;--text-dim:#666;--text-muted:#999;
+  --accent:#171717;--accent-hover:#000;--accent-subtle:rgba(0,0,0,.04);--accent-on:#fff;
+  --green:#1a7f37;--green-subtle:rgba(26,127,55,.08);--green-bg:#f0faf4;--green-deep:#1a7f37;
+  --red:#e5484d;--red-subtle:rgba(229,72,77,.06);
+  --orange:#bd5b00;--blue:#0070f3;--purple:#7c3aed;
+  --r:6px;--bar-color:var(--text);--bar-op:.15;--bar-hov:.4;
+  --dot:transparent;--grid:transparent;
+  --th-tt:none;--th-ls:0;--th-w:400;--th-fs:12px;--th-c:var(--text-dim);
+  --badge-r:20px;--badge-w:500;
+}
+[data-scheme="minimal"][data-mode="dark"]{
+  --bg:#000;--bg-card:#0a0a0a;--bg-hover:#111;--border:#222;
+  --text:#ededed;--text-dim:#888;--text-muted:#555;
+  --accent:#ededed;--accent-hover:#fff;--accent-subtle:rgba(255,255,255,.06);--accent-on:#000;
+  --green:#45a557;--green-subtle:rgba(69,165,87,.08);--green-bg:#0d1f12;--green-deep:#45a557;
+  --red:#e5484d;--red-subtle:rgba(229,72,77,.08);
+  --orange:#f1a10d;--blue:#3291ff;--purple:#a78bfa;
+}
+
+/* ═══ Emerald ═══ */
+[data-scheme="emerald"]{
+  --bg:#fff;--bg-card:#fafafa;--bg-hover:#f3f3f3;--border:#e4e5e7;
+  --text:#18191b;--text-dim:#616469;--text-muted:#949798;
+  --accent:#34d59a;--accent-hover:#2bc48c;--accent-subtle:rgba(52,213,154,.06);--accent-on:#18191b;
+  --green:#059669;--green-subtle:rgba(5,150,105,.06);--green-bg:#cae6d9;--green-deep:#285d49;
+  --red:#ff3621;--red-subtle:rgba(255,54,33,.06);
+  --orange:#d97706;--blue:#2563eb;--purple:#7c3aed;
+  --r:4px;--bar-color:var(--accent);--bar-op:.4;--bar-hov:.8;
+  --dot:rgba(0,0,0,.04);--grid:rgba(0,0,0,.04);
+  --th-tt:uppercase;--th-ls:.6px;--th-w:500;--th-fs:10px;--th-c:var(--text-muted);
+  --badge-r:10px;--badge-w:600;
+}
+[data-scheme="emerald"][data-mode="dark"]{
+  --bg:#0a0a0b;--bg-card:#131315;--bg-hover:#1a1a1c;--border:#242628;
+  --text:#e4e5e7;--text-dim:#949798;--text-muted:#616469;
+  --accent:#34d59a;--accent-hover:#4de0ab;--accent-subtle:rgba(52,213,154,.08);--accent-on:#0a0a0b;
+  --green:#34d399;--green-subtle:rgba(52,211,153,.08);--green-bg:#1a2e26;--green-deep:#34d399;
+  --red:#ff5647;--red-subtle:rgba(255,86,71,.08);
+  --orange:#fbbf24;--blue:#60a5fa;--purple:#a78bfa;
+  --dot:rgba(255,255,255,.025);--grid:rgba(255,255,255,.025);
+}
+
+/* ═══ Base ═══ */
+:root{--font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','SF Mono',monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.5;transition:background .2s,color .2s}
+.ct{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* Dot grid bg */
+.dot-bg{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:24px 24px}
+.wrap{position:relative;z-index:1}
+
+/* ── Switcher ── */
+.sw-bar{display:flex;align-items:center;gap:16px;padding:10px 0;border-bottom:1px solid var(--border)}
+.sw-g{display:flex;align-items:center;gap:6px}
+.sw-l{color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:.4px;font-size:10px}
+.sw{display:flex;border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.sw button{padding:4px 12px;font-size:12px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;font-family:var(--font);transition:all .1s;border-right:1px solid var(--border)}
+.sw button:last-child{border-right:none}
+.sw button.a{background:var(--accent);color:var(--accent-on);font-weight:500}
+.sw button:hover:not(.a){background:var(--bg-hover)}
+
+/* ── Header ── */
+.hdr{border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(10px);position:sticky;top:0;z-index:10}
+.hdr-in{display:flex;align-items:center;justify-content:space-between;height:48px}
+.logo{font-size:13px;font-weight:500;display:flex;align-items:center}
+.logo-stone{margin-right:8px;flex-shrink:0}
+[data-scheme="emerald"] .logo-stone{color:var(--accent)}
+.logo .sep{color:var(--border);margin:0 6px;font-size:20px;font-weight:100}
+.logo .org{color:var(--text-dim)}
+.logo .proj{font-weight:600}
+.hdr-r{display:flex;align-items:center;gap:6px}
+.hdr-clock{font-size:11px;color:var(--text-muted);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.hdr-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.ib{background:none;border:1px solid transparent;cursor:pointer;color:var(--text-dim);font-size:12px;padding:4px 8px;border-radius:var(--r);font-family:var(--font);transition:all .1s}
+.ib:hover{color:var(--text);border-color:var(--border)}
+
+/* ── Tabs ── */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{padding:10px 15px;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;font-weight:400;transition:color .1s}
+.tab:hover{color:var(--text)}
+.tab.a{color:var(--text);border-bottom-color:var(--accent);font-weight:500}
+[data-scheme="minimal"] .tab.a{border-bottom-color:var(--text)}
+
+.content{padding:22px 0}
+
+/* ── Status banner ── */
+.banner{border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;background:var(--green-bg)}
+.banner .b-t{font-size:13px;font-weight:500}
+.banner .b-t strong{font-weight:600}
+.banner .b-v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--green-deep)}
+
+/* ── Stats ── */
+[data-scheme="minimal"] .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-bottom:24px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+[data-scheme="minimal"] .stats .stat{background:var(--bg);padding:16px 18px;border-radius:0}
+[data-scheme="emerald"] .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+[data-scheme="emerald"] .stats .stat{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;position:relative;overflow:hidden;transition:border-color .2s}
+[data-scheme="emerald"] .stats .stat::before{content:'';position:absolute;inset:0;pointer-events:none;opacity:.5;background:repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),repeating-linear-gradient(0deg,var(--grid) 0 1px,transparent 1px 28px)}
+[data-scheme="emerald"] .stats .stat:hover{border-color:var(--text-dim)}
+.stat .lb{font-size:11px;color:var(--text-dim);margin-bottom:2px;position:relative}
+[data-scheme="emerald"] .stat .lb{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.7px;font-weight:600;margin-bottom:4px}
+.stat .vl{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em;position:relative}
+.stat .vl.g{color:var(--green)}
+.stat .vl.r{color:var(--red)}
+.stat-bar{display:none;position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--border)}
+[data-scheme="emerald"] .stat-bar{display:block}
+.stat-bar i{display:block;height:100%;background:var(--accent)}
+
+/* ── Chart ── */
+.chart-sec{border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:24px;background:var(--bg-card);position:relative;overflow:hidden}
+[data-scheme="minimal"] .chart-sec{background:var(--bg)}
+.chart-sec::after{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);background-size:16px 16px}
+.chart-t{font-size:12px;color:var(--th-c);margin-bottom:12px;position:relative;z-index:1;text-transform:var(--th-tt);letter-spacing:var(--th-ls);font-weight:var(--th-w)}
+.bars-w{position:relative;height:80px}
+[data-scheme="emerald"] .bars-w{height:100px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:100%;border-bottom:1px solid var(--border);position:relative;z-index:1}
+[data-scheme="emerald"] .bars{gap:3px;border-bottom-style:dashed}
+.bar{flex:1;background:var(--bar-color);border-radius:1px 1px 0 0;opacity:var(--bar-op);transition:opacity .15s}
+.bar:hover{opacity:var(--bar-hov)}
+.bar.err{background:var(--red)}
+.hg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.hg span{border-bottom:1px solid var(--bg-hover)}
+[data-scheme="emerald"] .hg span{border-bottom:1px dashed color-mix(in srgb,var(--border) 60%,transparent)}
+.xlb{display:flex;margin-top:4px;position:relative;z-index:1}
+.xlb span{flex:1;text-align:center;font-size:9px;color:var(--text-muted);font-family:var(--mono)}
+
+/* ── Section ── */
+.sec{margin-bottom:24px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sec-h h2{font-size:14px;font-weight:600}
+
+/* ── Highlight section (Server Settings etc.) ── */
+.hl-sec{border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:12px;background:var(--green-bg)}
+.hl-sec .hl-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--green-deep);margin-bottom:8px}
+
+/* ── Buttons ── */
+.btn{padding:5px 12px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg-card);color:var(--text);cursor:pointer;font-size:13px;font-family:var(--font);font-weight:400;transition:all .1s}
+[data-scheme="minimal"] .btn:not(.btn-p):not(.btn-df):not(.btn-dis){background:var(--bg)}
+.btn:hover{border-color:var(--text-dim)}
+.btn-p{background:var(--accent);border-color:var(--accent);color:var(--accent-on);font-weight:500}
+[data-scheme="emerald"] .btn-p{font-weight:600}
+.btn-p:hover{background:var(--accent-hover);border-color:var(--accent-hover)}
+.btn-d{color:var(--red)}
+.btn-d:hover{border-color:var(--red);background:var(--red-subtle)}
+.btn-df{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-df:hover{filter:brightness(.9)}
+.btn-s{padding:3px 8px;font-size:12px}
+.btn-dis{background:var(--border);color:var(--text-dim);cursor:not-allowed;border-color:var(--border)}
+
+/* ── Segmented control ── */
+.seg{display:inline-flex;border-radius:var(--r);overflow:hidden;border:1px solid var(--border)}
+.seg button{padding:5px 16px;font-size:13px;font-weight:500;cursor:pointer;border:none;border-right:1px solid var(--border);background:transparent;color:var(--text-dim);font-family:var(--font);transition:all .1s}
+.seg button:last-child{border-right:none}
+.seg button.a{background:var(--accent);color:var(--accent-on)}
+.seg button:hover:not(.a){background:var(--bg-hover)}
+
+/* ── Search / Input ── */
+.srch{padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:13px;font-family:var(--mono);width:180px;transition:border-color .1s}
+.srch:focus{outline:none;border-color:var(--text-dim)}
+.srch::placeholder{color:var(--text-muted)}
+.sel{padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:13px;font-family:var(--font);cursor:pointer}
+
+/* ── Cards ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:14px;transition:border-color .15s}
+[data-scheme="minimal"] .card:not(.disabled){background:var(--bg)}
+.card:hover{border-color:var(--text-dim)}
+.disabled{opacity:.45;pointer-events:none;user-select:none}
+.card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.card-n{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+.sd{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.sd.off{background:var(--text-muted)}
+.fld{font-size:12px;color:var(--text-dim);margin-bottom:2px}
+.fld code{font-family:var(--mono);color:var(--text);background:var(--bg-hover);padding:1px 4px;border-radius:3px;font-size:11px}
+.card-a{margin-top:10px;display:flex;gap:6px}
+
+/* ── Badges ── */
+.bdg{display:inline-block;padding:2px 7px;border-radius:var(--badge-r);font-size:11px;font-weight:var(--badge-w)}
+.bdg-ok{background:var(--green-subtle);color:var(--green)}
+.bdg-err{background:var(--red-subtle);color:var(--red)}
+.bdg-st{background:color-mix(in srgb,var(--blue) 8%,transparent);color:var(--blue)}
+.cap{display:inline-flex;padding:1px 5px;border-radius:10px;font-size:10px;font-weight:var(--badge-w);margin-left:4px}
+.cap-l{background:color-mix(in srgb,var(--purple) 8%,transparent);color:var(--purple)}
+.cap-e{background:var(--green-subtle);color:var(--green)}
+.cap-r{background:color-mix(in srgb,var(--orange) 8%,transparent);color:var(--orange)}
+.cap-v{background:color-mix(in srgb,var(--blue) 8%,transparent);color:var(--blue)}
+
+/* ── Toggle ── */
+.tog{position:relative;display:inline-block;width:32px;height:17px}
+.tog input{opacity:0;width:0;height:0}
+.tog i{position:absolute;cursor:pointer;inset:0;background:var(--text-muted);border-radius:16px;transition:.15s}
+.tog i::before{content:'';position:absolute;height:11px;width:11px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.15s}
+.tog input:checked+i{background:var(--accent)}
+.tog input:checked+i::before{transform:translateX(15px);background:var(--accent-on)}
+
+/* ── Table ── */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--th-c);font-weight:var(--th-w);font-size:var(--th-fs);text-transform:var(--th-tt);letter-spacing:var(--th-ls)}
+tr:hover td{background:var(--bg-hover)}
+
+/* ── Filters ── */
+.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+
+/* ── Pagination ── */
+.pag{display:flex;align-items:center;gap:10px;margin-top:12px;justify-content:center}
+.pag .info{font-size:13px;color:var(--text-dim)}
+
+/* ── Toast ── */
+.toasts{display:flex;gap:8px;margin-top:12px}
+.tst{padding:6px 14px;border-radius:var(--r);font-size:13px;font-weight:500}
+.tst-ok{background:color-mix(in srgb,var(--green) 60%,#000);color:#fff}
+.tst-err{background:var(--red);color:#fff}
+
+/* ── Modal ── */
+.modal-demo{border:1px solid var(--border);border-radius:calc(var(--r) + 4px);padding:24px;background:var(--bg-card);max-width:440px}
+[data-scheme="minimal"] .modal-demo{background:var(--bg)}
+.modal-demo h3{font-size:16px;font-weight:600;margin-bottom:14px}
+.fg{margin-bottom:12px}
+.fg label{display:block;font-size:12px;color:var(--text-dim);margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+.fg input,.fg select{width:100%;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:14px;font-family:var(--mono)}
+.fg input:focus,.fg select:focus{outline:none;border-color:var(--text-dim)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+
+/* ── Settings section ── */
+.settings-sec{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:8px}
+[data-scheme="minimal"] .settings-sec{background:var(--bg)}
+.settings-sec-t{font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.settings-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13px}
+.settings-row>label:not(.tog){font-size:12px;color:var(--text-dim);min-width:80px;font-weight:500}
+
+/* ── Chip ── */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;color:var(--text-dim);transition:all .1s;background:var(--bg-card)}
+[data-scheme="minimal"] .chip{background:var(--bg)}
+.chip.a{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
+.chip:hover:not(.a){border-color:var(--text-dim)}
+
+/* ── Net diagnostics ── */
+.nd{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.nd-item{font-size:12px;padding:3px 8px;border-radius:var(--r);background:var(--bg);border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px}
+.nd-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.nd-dot.ok{background:var(--green)}
+.nd-dot.fail{background:var(--red)}
+
+/* ── Login ── */
+.login-w{display:flex;justify-content:center;margin:24px 0}
+.login{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:320px;text-align:center}
+[data-scheme="minimal"] .login{background:var(--bg)}
+.login h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.login p{color:var(--text-dim);font-size:13px;margin-bottom:18px}
+.login input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:10px}
+.login input:focus{outline:none;border-color:var(--text-dim)}
+.login .lbtn{width:100%;padding:7px;border:none;border-radius:var(--r);background:var(--accent);color:var(--accent-on);font-size:14px;font-weight:500;cursor:pointer}
+[data-scheme="emerald"] .login .lbtn{font-weight:600}
+.login .lbtn:hover{background:var(--accent-hover)}
+
+/* ── Footer ── */
+.ft{position:fixed;bottom:0;left:0;right:0;padding:4px 12px;font-size:11px;font-family:var(--mono);color:var(--text-dim);background:var(--bg-card);border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:14px;z-index:10}
+[data-scheme="minimal"] .ft{background:var(--bg)}
+.ft .k{opacity:.7}
+.ft .v{font-weight:500;color:var(--text)}
+body{padding-bottom:26px}
+
+@media(max-width:768px){.stats,[data-scheme="minimal"] .stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="dot-bg"></div>
+<div class="wrap">
+
+<!-- Switcher -->
+<div class="ct"><div class="sw-bar">
+  <div class="sw-g"><span class="sw-l">Scheme</span><div class="sw" id="sSw"><button class="a" onclick="setS('minimal')">Minimal</button><button onclick="setS('emerald')">Emerald</button></div></div>
+  <div class="sw-g"><span class="sw-l">Mode</span><div class="sw" id="mSw"><button class="a" onclick="setM('light')">Light</button><button onclick="setM('dark')">Dark</button></div></div>
+</div></div>
+
+<!-- Header -->
+<div class="hdr"><div class="ct hdr-in">
+  <div class="logo"><svg class="logo-stone" width="18" height="20" viewBox="30 15 490 500" fill="currentColor"><path d="M517.486,415.436c0.337-10.662-2.645-21.362-2.186-31.946c0.104-2.383,2.01-4.503,2.108-6.856c0.224-5.123-1.094-12.078-2.783-16.199c-2.005-4.876-1.412-11.114-1.056-16.876c0.364-5.948-0.337-11.613-0.302-17.481c0.032-5.949-1.42-13.37-0.303-18.385c0.879-3.942-0.33-8.747,0.15-12.657c0.16-1.338,1.264-1.625,1.51-2.714c0.619-2.77-1.697-2.805-1.734-4.672c-0.029-1.617,1.736-3.225,1.885-4.975c1.461-2.973-2.27-8.188-1.435-10.624c4.884-14.208-8.189-27.443-12.882-36.995c-0.107-0.213-0.163-0.498-0.227-0.751c-3.78-15.151-8.43-27.13-13.788-41.065c-1.83-4.754-6.049-8.707-7.609-13.639c-1.554-4.897-5.108-9.426-7.912-13.412c-6.642-9.449-14.541-22.274-13.789-35.865c-5.982-6.516-6.025-18.484-8.968-28.481c-1.271-4.324-1.987-8.805-2.938-13.41c-0.848-4.12-2.336-10.568-2.107-14.316c0.034-0.58,0.769-1.086,0.677-1.734c-0.082-0.605-1.245-0.973-1.432-1.507c-0.963-2.749-1.016-6.586-2.188-10.021c-1.068-3.144-2.287-6.941-2.709-9.57c-0.292-1.816-0.06-3.24-1.06-4.219c-0.875-0.862-2.073-0.938-2.333-1.884c-0.489-1.774,0.812-2.497,0.828-3.844c0.037-2.636-2.719-6.575-3.013-9.719c-0.06-0.637,0.508-1.332,0.453-1.885c-0.227-2.279-3.252-4.138-4.673-5.577c-1.801-1.817-4.263-7.63-4.898-10.096c-0.563-2.185,0.269-6.075-0.979-7.233c-0.678-0.628-5.99-1.043-6.705-1.055c-11.179-0.182-22.744-2.707-35.336-2.334c-8.48,0.248-17.349,0.549-25.621,1.43c-8.398,0.896-15.511,3.436-23.434,4.295c-4.529,0.493-7.395,1.949-11.074,2.789c-7.996,1.821-16.231,2.542-22.982,4.896c-2.835,0.99-7.999,2.398-9.568,4.369c-1.954,2.456-1.418,1.908-4.446,1.961c-1.076,0.018-2.439,0.861-3.689,1.054c-1.441,0.222-2.678-0.496-3.993-0.451c-1.94,0.063-5.872,2.212-7.912,3.013c-2.668,1.049-5.445,2.238-8.062,2.939c-14.249,3.825-26.219,10.313-38.804,15.974c-2.188,0.984-4.832,3.687-6.782,4.222c-6.635,1.818-9.655,6.199-15.445,8.739c-2.678,1.174-7.474,1.465-10.022,3.241c-3.667,2.554-7.35,5.925-11.681,8.438c-2.967,1.725-3.828,0.66-4.971,3.467c-0.484,1.188-3.384,0.665-4.521,1.432c-5.494,3.698-9.747,9.499-14.994,14.089c-2.839,2.483-5.974,3.545-8.666,5.878c-2.852,2.471-5.758,3.918-8.891,5.727c-1.539,0.888-2.467,3.479-4.068,4.219c-4.075,1.885-7.688,4.221-11.001,7.157c-0.253,0.227-0.481,0.563-0.603,0.754c-7.208,11.45-19.581,18.104-30.59,25.24c-4.56,1.655-6.601,9.579-7.083,15.296c-0.181,2.133,1.065,3.624,0.978,5.727c-0.071,1.759-1.382,2.621-1.278,4.37c0.13,2.237,0.112,2.602-0.454,4.37c-0.871,2.721,0.821,6.027,0.679,9.192c-0.294,6.475-2.229,12.436-2.714,17.933c-0.246,2.793,1.92,6.202,0.979,8.74c-3.327,8.989-1.601,21.352-0.302,31.419c0.671,5.203-0.852,10.42-0.979,15.674c-0.138,5.633,0.667,11.447,0.377,16.425c-0.356,6.083-3.051,12.252-2.789,18.084c0.274,6.118,2.162,11.822,3.542,17.177c1.98,7.69-0.084,13.81-2.488,19.142c-2.469,5.481-0.662,10.812-1.507,17.103c-0.289,2.147-2.058,3.698-1.733,6.782c0.268,2.528,1.22,5.094,1.281,7.458c0.09,3.479-1.292,5.838-0.3,9.491c1.024,3.785-0.123,5.893-0.754,9.271c-1.771,9.468-4.062,17.833-2.487,29.156c0.57,4.099,1.707,7.421,2.109,11.379c0.438,4.324-2.393,6.833-2.562,10.774c-0.419,9.722,0.302,20.438-1.884,29.01c-0.98,3.84,0.736,5.628,1.207,8.665c0.381,2.464-0.408,6.214-1.281,9.04c-1.013,3.276,0.181,5.997,1.055,8.518c1.83,5.272,0.393,12.444-0.074,18.158c-0.523,6.398-0.662,12.438-0.453,19.14c0.205,6.532-1.265,13.024-0.375,19.664c0.779,5.84,1.958,11.213,1.958,18.536c0,6.773-0.009,13.483-0.301,19.892c-0.339,7.448,3.687,9.896,11.151,9.494c3.281-0.179,6.552-1.353,9.193-0.228c2.422,1.035,4.59,2.694,7.685,2.864c1.319,0.071,2.631-0.837,3.54-0.755c2.593,0.238,5.408,2.394,8.74,2.111c4.717-0.398,8.548,0.599,13.036,1.883c3.714,1.062,6.799,2.975,10.699,3.391c0.729,0.077,1.161-0.827,1.81-0.829c2.908-0.006,5.466,1.573,8.739,1.132c3.108-0.425,6.406-0.449,9.343-0.381c6.407,0.155,11.405-2.597,15.673-4.744c0.297-0.151,0.713-0.297,1.054-0.378c7.206-1.699,13.731-5.656,20.797-7.988c2.574-0.849,6.429,0,9.268-0.149c4.967-0.259,11.181-1.188,16.351,0.754c5.926,2.224,10.864,0.626,16.575,1.434c2.836,0.396,4.938,0.72,7.761,0.828c9.764,0.365,19.824-4.838,29.086-5.5c0.069-0.008,0.142-0.048,0.226-0.076c5.338-1.881,13.043-1.643,17.858-1.279c8.242,0.619,18.024,2.572,25.392-1.131c3.197-1.608,7.421-3.271,11.149-3.691c4.511-0.509,9.386,1.467,13.717,0.604c0.785-0.158,0.581-1.142,1.503-1.207c0.628-0.047,1.18,0.476,1.887,0.453c11.967-0.371,25.109-2.761,34.584-7.009c6.783-3.043,10.252-7.743,18.76-9.346c3.316-0.622,6.641-3.288,9.193-4.894c5.144-3.244,15.776-4.445,18.384-9.799c5.611-11.496,22.205-12.391,28.86-22.454c0.062-0.089,0.233-0.243,0.301-0.298c4.781-4.051,9.657-8.058,13.789-12.811c1.965-2.263,5.113-3.604,7.084-6.179c1.993-2.609,3.996-4.981,6.327-7.01c4.581-3.98,8.182-9.443,12.583-14.014c6.802-7.063,12.256-15.313,18.61-22.229c1.583-1.721,7.535-4.843,7.985-7.08C521.088,437.059,517.157,426.032,517.486,415.436z"/></svg><span class="org">llm-rosetta</span><span class="sep">/</span><span class="proj">gateway</span></div>
+  <div class="hdr-r">
+    <span class="hdr-clock">18:37 UTC</span>
+    <span class="hdr-sep"></span>
+    <button class="ib">◐</button>
+    <button class="ib">⚙</button>
+    <span class="hdr-sep"></span>
+    <button class="btn btn-s">Logout</button>
+  </div>
+</div></div>
+
+<!-- Tabs -->
+<div class="ct"><div class="tabs">
+  <div class="tab a">Providers</div><div class="tab">Models</div><div class="tab">API Keys</div><div class="tab">Dashboard</div><div class="tab">Request Log</div>
+</div></div>
+
+<div class="ct"><div class="content">
+
+<!-- Banner -->
+<div class="banner">
+  <div class="b-t"><strong>Gateway active</strong> — 12 providers, all operational</div>
+  <div class="b-v">99.2%</div>
+</div>
+
+<!-- Stats -->
+<div class="stats">
+  <div class="stat"><div class="lb">Total Requests</div><div class="vl">2,431</div><div class="stat-bar"><i style="width:75%"></i></div></div>
+  <div class="stat"><div class="lb">Error Rate</div><div class="vl r">4.9%</div><div class="stat-bar"><i style="width:5%;background:var(--red)"></i></div></div>
+  <div class="stat"><div class="lb">Active Streams</div><div class="vl">0</div><div class="stat-bar"><i style="width:0"></i></div></div>
+  <div class="stat"><div class="lb">Uptime</div><div class="vl g">3d 14h</div><div class="stat-bar"><i style="width:95%"></i></div></div>
+</div>
+
+<!-- Chart -->
+<div class="chart-sec">
+  <div class="chart-t">Throughput (req/s)</div>
+  <div class="bars-w">
+    <div class="hg"><span></span><span></span><span></span></div>
+    <div class="bars">
+      <div class="bar" style="height:35%"></div><div class="bar" style="height:50%"></div><div class="bar" style="height:42%"></div>
+      <div class="bar" style="height:68%"></div><div class="bar err" style="height:20%"></div><div class="bar" style="height:72%"></div>
+      <div class="bar" style="height:90%"></div><div class="bar" style="height:65%"></div><div class="bar" style="height:48%"></div>
+      <div class="bar" style="height:55%"></div><div class="bar" style="height:78%"></div><div class="bar err" style="height:15%"></div>
+      <div class="bar" style="height:60%"></div><div class="bar" style="height:45%"></div><div class="bar" style="height:70%"></div>
+      <div class="bar" style="height:95%"></div><div class="bar" style="height:88%"></div><div class="bar" style="height:52%"></div>
+      <div class="bar" style="height:40%"></div><div class="bar" style="height:62%"></div>
+    </div>
+  </div>
+  <div class="xlb"><span>00</span><span></span><span></span><span>03</span><span></span><span></span><span>06</span><span></span><span></span><span>09</span><span></span><span></span><span>12</span><span></span><span></span><span>15</span><span></span><span></span><span>18</span><span></span></div>
+</div>
+
+<!-- Buttons, Badges, Toggles, Toasts -->
+<div class="sec">
+  <div class="sec-h"><h2>Buttons</h2></div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-p">+ Add Provider</button>
+    <button class="btn">Clone</button>
+    <button class="btn">Edit</button>
+    <button class="btn btn-d">Delete</button>
+    <button class="btn btn-df btn-s">Cleanup All</button>
+    <button class="btn btn-dis btn-s" disabled>Disabled</button>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Segmented Controls & Chips</h2></div>
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div class="seg"><button class="a">All</button><button>LLM</button><button>Embedding</button><button>Rerank</button></div>
+    <div style="display:flex;gap:6px"><span class="chip a">text</span><span class="chip">vision</span><span class="chip">tools</span><span class="chip">reasoning</span></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Badges & Capability Tags</h2></div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <span class="bdg bdg-ok">200 OK</span>
+    <span class="bdg bdg-err">500 Error</span>
+    <span class="bdg bdg-st">Streaming</span>
+    <span class="cap cap-l">LLM</span>
+    <span class="cap cap-e">Embedding</span>
+    <span class="cap cap-r">Rerank</span>
+    <span class="cap cap-v">Vision</span>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Inputs & Selects</h2></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <input class="srch" placeholder="Search providers...">
+    <select class="sel"><option>All Providers</option><option>anthropic</option><option>openai</option></select>
+    <select class="sel"><option>All Status</option><option>4xx</option><option>5xx</option></select>
+    <label class="tog"><input type="checkbox" checked><i></i></label>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Toasts & Diagnostics</h2></div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span class="tst tst-ok">Provider saved</span>
+    <span class="tst tst-err">Connection failed</span>
+  </div>
+  <div class="nd">
+    <span class="nd-item"><span class="nd-dot ok"></span>api.anthropic.com</span>
+    <span class="nd-item"><span class="nd-dot ok"></span>api.openai.com</span>
+    <span class="nd-item"><span class="nd-dot fail"></span>api.example.com</span>
+  </div>
+</div>
+
+<!-- Server Settings (highlight section) -->
+<div class="sec">
+  <div class="sec-h"><h2>Server Settings</h2></div>
+  <div class="hl-sec">
+    <div class="hl-label">Global Proxy</div>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="srch" placeholder="e.g. http://192.168.200.1:7890" style="flex:1;max-width:360px">
+      <button class="btn btn-s">Save</button>
+      <button class="btn btn-s">Network Diagnostics</button>
+    </div>
+  </div>
+</div>
+
+<!-- Provider Cards -->
+<div class="sec">
+  <div class="sec-h"><h2>Providers</h2><button class="btn btn-p btn-s">+ Add</button></div>
+  <div class="grid">
+    <div class="card"><div class="card-h"><span class="card-n"><span class="sd"></span>Anthropic Official <span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><i></i></label></div><div class="fld">Type: <code>anthropic</code></div><div class="fld">Base URL: <code>https://api.anthropic.com</code></div><div class="fld">API Key: <code>sk-a***oAAA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card"><div class="card-h"><span class="card-n"><span class="sd"></span>OpenAI Chat <span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><i></i></label></div><div class="fld">Type: <code>openai</code></div><div class="fld">Base URL: <code>https://api.openai.com/v1</code></div><div class="fld">API Key: <code>sk-p***O7AA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card disabled"><div class="card-h"><span class="card-n"><span class="sd off"></span>Gemini <span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox"><i></i></label></div><div class="fld">Type: <code>google</code></div><div class="fld">Base URL: <code>https://generativelanguage.googleapis.com</code></div><div class="fld">API Key: <code>AQ.A***x4Aw</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+  </div>
+</div>
+
+<!-- Table with filters and pagination -->
+<div class="sec">
+  <div class="sec-h"><h2>Per-Provider Breakdown</h2><button class="btn btn-s">Rebuild Counters</button></div>
+  <div class="filters">
+    <select class="sel"><option>All Phases</option><option>conversion</option><option>upstream</option></select>
+    <select class="sel"><option>All Status</option><option>4xx</option><option>5xx</option></select>
+    <input class="srch" placeholder="Filter model..." style="width:140px">
+    <button class="btn btn-s btn-d" style="font-size:11px">✕ Reset</button>
+  </div>
+  <table><thead><tr><th>Provider</th><th>Requests</th><th>Error Rate</th><th>Status</th></tr></thead><tbody>
+    <tr><td>anthropic</td><td>2,063</td><td>3.2%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>openai_chat</td><td>332</td><td>8.1%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>google</td><td>6</td><td>33%</td><td><span class="bdg bdg-err">Degraded</span></td></tr>
+    <tr class="disabled"><td>deepseek</td><td>0</td><td>—</td><td><span class="bdg bdg-st">Disabled</span></td></tr>
+  </tbody></table>
+  <div class="pag">
+    <button class="btn btn-s" disabled>← Prev</button>
+    <span class="info">Page 1 / 1</span>
+    <button class="btn btn-s" disabled>Next →</button>
+  </div>
+</div>
+
+<!-- Modal demo -->
+<div class="sec">
+  <div class="sec-h"><h2>Modal (inline demo)</h2></div>
+  <div class="modal-demo">
+    <h3>Edit Provider</h3>
+    <div class="fg"><label>Name</label><input value="Anthropic Official"></div>
+    <div class="fg"><label>Base URL</label><input value="https://api.anthropic.com"></div>
+    <div class="fg"><label>Provider Type</label><select><option>anthropic</option><option>openai</option><option>google</option></select></div>
+    <div class="fg"><label>API Key</label><input type="password" value="sk-ant-xxxx"></div>
+    <div class="modal-actions">
+      <button class="btn">Cancel</button>
+      <button class="btn btn-p">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings section demo -->
+<div class="sec">
+  <div class="sec-h"><h2>Settings Panel</h2></div>
+  <div class="settings-sec">
+    <div class="settings-sec-t">Appearance & Display</div>
+    <div class="settings-row"><label>Theme</label><select class="sel" style="width:120px"><option>Light</option><option>Dark</option></select></div>
+    <div class="settings-row"><label>Language</label><select class="sel" style="width:120px"><option>English</option><option>中文</option></select></div>
+    <div class="settings-row"><label>Auto-refresh</label><label class="tog"><input type="checkbox" checked><i></i></label></div>
+  </div>
+  <div class="settings-sec">
+    <div class="settings-sec-t">Rate Limiting</div>
+    <div class="settings-row"><label>Enabled</label><label class="tog"><input type="checkbox"><i></i></label></div>
+    <div class="disabled">
+      <div class="settings-row"><label>Global</label><input class="srch" value="1000/m" style="width:100px"></div>
+      <div class="settings-row"><label>Per IP</label><input class="srch" value="120/m" style="width:100px"></div>
+      <div class="settings-row"><label>Per Key</label><input class="srch" value="60/m" style="width:100px"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Login -->
+<div class="sec">
+  <div class="sec-h"><h2>Login</h2></div>
+  <div class="login-w"><div class="login">
+    <h2>llm-rosetta gateway</h2>
+    <p>Admin panel is password-protected</p>
+    <input type="password" placeholder="Password">
+    <button class="lbtn">Login</button>
+  </div></div>
+</div>
+
+</div></div>
+
+<!-- Footer -->
+<div class="ft">
+  <span><span class="k">db:</span> <span class="v">sqlite</span></span>
+  <span><span class="k">size:</span> <span class="v">2.4 MB</span></span>
+  <span><span class="k">rows:</span> <span class="v">2,431</span></span>
+</div>
+
+</div>
+
+<script>
+function setS(s){
+  document.documentElement.setAttribute('data-scheme',s);
+  document.querySelectorAll('#sSw button').forEach(b=>b.classList.toggle('a',b.textContent===(s==='minimal'?'Minimal':'Emerald')));
+}
+function setM(m){
+  document.documentElement.setAttribute('data-mode',m);
+  document.querySelectorAll('#mSw button').forEach(b=>b.classList.toggle('a',b.textContent===(m==='light'?'Light':'Dark')));
+}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('a'));t.classList.add('a')});
+</script>
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>llm-rosetta — Vercel Style</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root {
+  --bg:#fff;--bg-card:#fafafa;--bg-hover:#f5f5f5;--border:#eaeaea;
+  --text:#171717;--text-dim:#666;--text-muted:#999;
+  --accent:#171717;--accent-hover:#000;
+  --green:#1a7f37;--red:#e5484d;--orange:#bd5b00;--blue:#0070f3;--purple:#7c3aed;
+  --r:6px;--font:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono','SF Mono',monospace;
+}
+[data-theme="dark"]{
+  --bg:#000;--bg-card:#0a0a0a;--bg-hover:#111;--border:#222;
+  --text:#ededed;--text-dim:#888;--text-muted:#555;
+  --accent:#ededed;--accent-hover:#fff;
+  --green:#45a557;--red:#e5484d;--orange:#f1a10d;--blue:#3291ff;--purple:#a78bfa;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;transition:background .15s,color .15s}
+.container{max-width:1100px;margin:0 auto;padding:0 24px}
+
+/* ── Header — Vercel's breadcrumb nav ── */
+.hdr{border-bottom:1px solid var(--border);padding:0}
+.hdr-in{display:flex;align-items:center;justify-content:space-between;height:48px}
+.logo{font-size:13px;font-weight:500;display:flex;align-items:center;gap:0}
+.logo-tri{font-size:18px;line-height:1;margin-right:8px}
+.logo .sep{color:var(--border);margin:0 6px;font-size:20px;font-weight:100}
+.logo .org{color:var(--text-dim)}
+.logo .proj{font-weight:600}
+.hdr-r{display:flex;align-items:center;gap:6px}
+.hdr-clock{font-size:11px;color:var(--text-muted);font-family:var(--mono)}
+.hdr-sep{width:1px;height:20px;background:var(--border);margin:0 4px}
+.ib{background:none;border:none;cursor:pointer;color:var(--text-dim);font-size:13px;padding:6px 8px;border-radius:var(--r);font-family:var(--font);transition:color .1s}
+.ib:hover{color:var(--text)}
+
+/* ── Tabs ── */
+.tabs{display:flex;border-bottom:1px solid var(--border)}
+.tab{padding:10px 14px;font-size:13px;color:var(--text-dim);border-bottom:2px solid transparent;cursor:pointer;transition:color .1s;font-weight:400}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:var(--text);font-weight:500}
+
+.content{padding:20px 0}
+
+/* ── Stats — Vercel merged grid ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-bottom:24px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--bg);padding:16px 18px}
+.stat .lb{font-size:12px;color:var(--text-dim);margin-bottom:2px}
+.stat .vl{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+.stat .vl.g{color:var(--green)}
+.stat .vl.r{color:var(--red)}
+
+/* ── Chart — Vercel style: flat black/white bars, minimal ── */
+.chart-sec{border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:24px;background:var(--bg)}
+.chart-title{font-size:12px;color:var(--text-dim);margin-bottom:12px}
+.bars-w{position:relative;height:80px}
+.bars{display:flex;align-items:flex-end;gap:2px;height:100%;border-bottom:1px solid var(--border)}
+.bar{flex:1;background:var(--text);border-radius:1px 1px 0 0;opacity:.15;transition:opacity .1s}
+.bar:hover{opacity:.4}
+.hg{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.hg span{border-bottom:1px solid var(--bg-hover)}
+.xlb{display:flex;margin-top:4px}
+.xlb span{flex:1;text-align:center;font-size:9px;color:var(--text-muted);font-family:var(--mono)}
+
+/* ── Section ── */
+.sec{margin-bottom:24px}
+.sec-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sec-h h2{font-size:14px;font-weight:600}
+
+/* ── Buttons — razor flat ── */
+.btn{padding:5px 12px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;font-size:13px;font-family:var(--font);font-weight:400;transition:all .1s}
+.btn:hover{border-color:var(--text)}
+.btn-p{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:500}
+.btn-p:hover{background:var(--accent-hover)}
+.btn-d{color:var(--red)}
+.btn-d:hover{border-color:var(--red);background:color-mix(in srgb,var(--red) 6%,transparent)}
+.btn-s{padding:3px 8px;font-size:12px}
+.srch{padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);color:var(--text);font-size:13px;font-family:var(--mono);width:180px;transition:border-color .1s}
+.srch:focus{outline:none;border-color:var(--text-dim)}
+.srch::placeholder{color:var(--text-muted)}
+
+/* ── Cards — zero decoration ── */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:14px;transition:border-color .15s}
+.card:hover{border-color:var(--text-dim)}
+.card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.card-n{font-size:14px;font-weight:600}
+.fld{font-size:12px;color:var(--text-dim);margin-bottom:2px}
+.fld code{font-family:var(--mono);color:var(--text);background:var(--bg-hover);padding:1px 4px;border-radius:3px;font-size:11px}
+.card-a{margin-top:10px;display:flex;gap:6px}
+
+/* ── Badges — pill shape, very subtle ── */
+.bdg{display:inline-block;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:500}
+.bdg-ok{background:color-mix(in srgb,var(--green) 8%,transparent);color:var(--green)}
+.bdg-err{background:color-mix(in srgb,var(--red) 8%,transparent);color:var(--red)}
+.bdg-st{background:var(--bg-hover);color:var(--text)}
+.cap{display:inline-flex;padding:1px 5px;border-radius:10px;font-size:10px;font-weight:500;margin-left:4px}
+.cap-l{background:color-mix(in srgb,var(--purple) 8%,transparent);color:var(--purple)}
+.cap-e{background:color-mix(in srgb,var(--green) 8%,transparent);color:var(--green)}
+
+/* ── Toggle ── */
+.tog{position:relative;display:inline-block;width:30px;height:16px}
+.tog input{opacity:0;width:0;height:0}
+.tog b{position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:16px;transition:.15s}
+.tog b::before{content:'';position:absolute;height:10px;width:10px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.15s}
+.tog input:checked+b{background:var(--accent)}
+.tog input:checked+b::before{transform:translateX(14px)}
+
+/* ── Table — Vercel: normal case headers, lightweight ── */
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}
+th{color:var(--text-dim);font-weight:400;font-size:12px}
+tr:hover td{background:var(--bg-hover)}
+
+/* ── Toast ── */
+.toasts{display:flex;gap:8px;margin-top:12px}
+.tst{padding:6px 14px;border-radius:var(--r);font-size:13px;font-weight:500}
+.tst-ok{background:var(--accent);color:var(--bg)}
+.tst-err{background:var(--red);color:#fff}
+
+/* ── Login ── */
+.login-w{display:flex;justify-content:center;margin:24px 0}
+.login{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:32px;width:320px;text-align:center}
+.login h2{font-size:16px;font-weight:600;margin-bottom:4px}
+.login p{color:var(--text-dim);font-size:13px;margin-bottom:18px}
+.login input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);color:var(--text);font-size:14px;margin-bottom:10px}
+.login input:focus{outline:none;border-color:var(--text-dim)}
+.login .lbtn{width:100%;padding:7px;border:none;border-radius:var(--r);background:var(--accent);color:var(--bg);font-size:14px;font-weight:500;cursor:pointer}
+.login .lbtn:hover{background:var(--accent-hover)}
+
+@media(max-width:768px){.stats{grid-template-columns:repeat(2,1fr)}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<div class="hdr"><div class="container hdr-in">
+  <div class="logo"><span class="logo-tri">▲</span><span class="org">llm-rosetta</span><span class="sep">/</span><span class="proj">gateway</span></div>
+  <div class="hdr-r">
+    <span class="hdr-clock">18:37 UTC</span>
+    <span class="hdr-sep"></span>
+    <button class="ib" onclick="toggleTheme()">◐</button>
+    <button class="ib">⚙</button>
+    <span class="hdr-sep"></span>
+    <button class="btn btn-s">Logout</button>
+  </div>
+</div></div>
+
+<div class="container">
+<div class="tabs"><div class="tab active">Providers</div><div class="tab">Models</div><div class="tab">API Keys</div><div class="tab">Dashboard</div><div class="tab">Request Log</div></div>
+<div class="content">
+
+<div class="stats">
+  <div class="stat"><div class="lb">Total Requests</div><div class="vl">2,431</div></div>
+  <div class="stat"><div class="lb">Error Rate</div><div class="vl g">4.9%</div></div>
+  <div class="stat"><div class="lb">Active Streams</div><div class="vl">0</div></div>
+  <div class="stat"><div class="lb">Uptime</div><div class="vl">3d 14h</div></div>
+</div>
+
+<!-- Chart — Vercel flat style -->
+<div class="chart-sec">
+  <div class="chart-title">Throughput (req/s)</div>
+  <div class="bars-w">
+    <div class="hg"><span></span><span></span><span></span></div>
+    <div class="bars">
+      <div class="bar" style="height:35%"></div><div class="bar" style="height:50%"></div><div class="bar" style="height:42%"></div>
+      <div class="bar" style="height:68%"></div><div class="bar" style="height:85%"></div><div class="bar" style="height:72%"></div>
+      <div class="bar" style="height:90%"></div><div class="bar" style="height:65%"></div><div class="bar" style="height:48%"></div>
+      <div class="bar" style="height:55%"></div><div class="bar" style="height:78%"></div><div class="bar" style="height:82%"></div>
+      <div class="bar" style="height:60%"></div><div class="bar" style="height:45%"></div><div class="bar" style="height:70%"></div>
+      <div class="bar" style="height:95%"></div><div class="bar" style="height:88%"></div><div class="bar" style="height:52%"></div>
+      <div class="bar" style="height:40%"></div><div class="bar" style="height:62%"></div>
+    </div>
+  </div>
+  <div class="xlb"><span>00</span><span></span><span></span><span>03</span><span></span><span></span><span>06</span><span></span><span></span><span>09</span><span></span><span></span><span>12</span><span></span><span></span><span>15</span><span></span><span></span><span>18</span><span></span></div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Controls</h2></div>
+  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-p">+ Add Provider</button><button class="btn">Clone</button><button class="btn">Edit</button><button class="btn btn-d">Delete</button>
+    <input class="srch" placeholder="Search..."><label class="tog"><input type="checkbox" checked><b></b></label>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:10px;align-items:center;flex-wrap:wrap">
+    <span class="bdg bdg-ok">200 OK</span><span class="bdg bdg-err">500 Error</span><span class="bdg bdg-st">Streaming</span>
+    <span class="cap cap-l">LLM</span><span class="cap cap-e">Embedding</span>
+  </div>
+  <div class="toasts"><span class="tst tst-ok">Provider saved</span><span class="tst tst-err">Connection failed</span></div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Providers</h2><button class="btn btn-p btn-s">+ Add</button></div>
+  <div class="grid">
+    <div class="card"><div class="card-h"><span class="card-n">Anthropic Official<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><b></b></label></div><div class="fld">Type: <code>anthropic</code></div><div class="fld">Base URL: <code>https://api.anthropic.com</code></div><div class="fld">API Key: <code>sk-a***oAAA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card"><div class="card-h"><span class="card-n">OpenAI Chat<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><b></b></label></div><div class="fld">Type: <code>openai</code></div><div class="fld">Base URL: <code>https://api.openai.com/v1</code></div><div class="fld">API Key: <code>sk-p***O7AA</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+    <div class="card"><div class="card-h"><span class="card-n">Gemini<span class="cap cap-l">LLM</span></span><label class="tog"><input type="checkbox" checked><b></b></label></div><div class="fld">Type: <code>google</code></div><div class="fld">Base URL: <code>https://generativelanguage.googleapis.com</code></div><div class="fld">API Key: <code>AQ.A***x4Aw</code></div><div class="card-a"><button class="btn btn-s">Clone</button><button class="btn btn-s">Edit</button><button class="btn btn-s btn-d">Delete</button></div></div>
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Per-Provider Breakdown</h2></div>
+  <table><thead><tr><th>Provider</th><th>Requests</th><th>Error Rate</th><th>Status</th></tr></thead><tbody>
+    <tr><td>anthropic</td><td>2,063</td><td>3.2%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>openai_chat</td><td>332</td><td>8.1%</td><td><span class="bdg bdg-ok">Healthy</span></td></tr>
+    <tr><td>google</td><td>6</td><td>33%</td><td><span class="bdg bdg-err">Degraded</span></td></tr>
+  </tbody></table>
+</div>
+
+<div class="sec">
+  <div class="sec-h"><h2>Login</h2></div>
+  <div class="login-w"><div class="login">
+    <h2>llm-rosetta gateway</h2>
+    <p>Admin panel is password-protected</p>
+    <input type="password" placeholder="Password">
+    <button class="lbtn">Login</button>
+  </div></div>
+</div>
+
+</div></div>
+<script>
+function toggleTheme(){const d=document.documentElement;d.getAttribute('data-theme')==='dark'?d.removeAttribute('data-theme'):d.setAttribute('data-theme','dark')}
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active')});
+</script>
+</body>
+</html>
