@@ -22,7 +22,8 @@ export const _CAP_ICONS = {
 
 export const S = {
   currentTab: localStorage.getItem('llm-rosetta-tab') || 'providers',
-  currentTheme: localStorage.getItem('llm-rosetta-theme') || 'light',
+  currentScheme: localStorage.getItem('llm-rosetta-scheme') || 'minimal',
+  currentMode: localStorage.getItem('llm-rosetta-mode') || 'light',
   currentLang: localStorage.getItem('llm-rosetta-lang') || 'en',
   configData: null,
   _credentialVisible: true,

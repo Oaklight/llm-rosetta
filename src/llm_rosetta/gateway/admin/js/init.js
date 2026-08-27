@@ -1,7 +1,7 @@
 import { S } from './state.js';
 import { t, setLang, applyI18n } from './i18n.js';
 import {
-  setTheme, api, showToast, closeModal, esc,
+  setScheme, setMode, setTheme, api, showToast, closeModal, esc,
   _startInactivityTracking, _stopInactivityTracking,
 } from './core.js';
 import { checkAuthAndInit, showLoginOverlay } from './auth.js';
