@@ -6,8 +6,12 @@ import { api, showToast, closeModal, esc, inlineConfirm } from './core.js';
 // ── helpers (module-private) ──
 
 function _activateSegChild(el) {
-  el.parentElement.querySelectorAll(':scope > div').forEach(s => s.classList.remove('active'));
+  el.parentElement.querySelectorAll(':scope > div').forEach(s => {
+    s.classList.remove('active');
+    if (s.hasAttribute('role')) { s.setAttribute('aria-checked', 'false'); s.setAttribute('tabindex', '-1'); }
+  });
   el.classList.add('active');
+  if (el.hasAttribute('role')) { el.setAttribute('aria-checked', 'true'); el.setAttribute('tabindex', '0'); }
 }
 
 function _getModelType(info) {
