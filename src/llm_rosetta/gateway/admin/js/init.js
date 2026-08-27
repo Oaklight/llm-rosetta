@@ -31,26 +31,45 @@ function initApp() {
 }
 
 // ===================== Tabs =====================
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-    tab.classList.add('active');
-    const id = tab.dataset.tab;
-    document.getElementById('tab-' + id).classList.add('active');
-    S.currentTab = id;
-    localStorage.setItem('llm-rosetta-tab', id);
-    stopTimers();
-    if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-    if (id === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
-    if (id === 'providers' || id === 'models') { loadConfig(); }
-    if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
+function activateTab(tab) {
+  const allTabs = document.querySelectorAll('.tab[role="tab"]');
+  allTabs.forEach(t => {
+    t.classList.remove('active');
+    t.setAttribute('aria-selected', 'false');
+    t.setAttribute('tabindex', '-1');
+  });
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  tab.setAttribute('aria-selected', 'true');
+  tab.setAttribute('tabindex', '0');
+  const id = tab.dataset.tab;
+  document.getElementById('tab-' + id).classList.add('active');
+  S.currentTab = id;
+  localStorage.setItem('llm-rosetta-tab', id);
+  stopTimers();
+  if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
+  if (id === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (id === 'providers' || id === 'models') { loadConfig(); }
+  if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
+}
+
+document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
+  tab.addEventListener('click', () => activateTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    const tabs = Array.from(document.querySelectorAll('.tab[role="tab"]'));
+    const idx = tabs.indexOf(tab);
+    let target = null;
+    if (e.key === 'ArrowRight') target = tabs[(idx + 1) % tabs.length];
+    else if (e.key === 'ArrowLeft') target = tabs[(idx - 1 + tabs.length) % tabs.length];
+    else if (e.key === 'Home') target = tabs[0];
+    else if (e.key === 'End') target = tabs[tabs.length - 1];
+    if (target) { e.preventDefault(); target.focus(); activateTab(target); }
   });
 });
 
 if (S.currentTab !== 'providers') {
   const savedTab = document.querySelector(`.tab[data-tab="${S.currentTab}"]`);
-  if (savedTab) savedTab.click();
+  if (savedTab) activateTab(savedTab);
 }
 
 function stopTimers() {
@@ -81,7 +100,12 @@ document.addEventListener('keydown', e => {
 // ===================== System Clock =====================
 (function initClock() {
   const el = document.getElementById('systemClock');
-  function tick() { el.textContent = new Date().toLocaleTimeString(); }
+  function tick() {
+    const now = new Date();
+    const time = now.toLocaleTimeString();
+    const tz = now.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+    el.textContent = time + ' ' + tz;
+  }
   tick();
   setInterval(tick, 1000);
 })();
@@ -149,6 +173,31 @@ document.addEventListener('click', function(e) {
   if (!e.target.closest('.model-more-menu')) {
     document.querySelectorAll('.more-menu').forEach(m => m.style.display = 'none');
   }
+});
+
+// ===================== Seg-control keyboard navigation =====================
+document.querySelectorAll('.seg-control[role="radiogroup"]').forEach(group => {
+  group.addEventListener('keydown', (e) => {
+    const items = Array.from(group.querySelectorAll('[role="radio"]'));
+    const idx = items.indexOf(e.target);
+    if (idx < 0) return;
+    let target = null;
+    if (e.key === 'ArrowRight') target = items[(idx + 1) % items.length];
+    else if (e.key === 'ArrowLeft') target = items[(idx - 1 + items.length) % items.length];
+    if (target) { e.preventDefault(); target.focus(); target.click(); }
+  });
+});
+
+// ===================== Modal focus trap =====================
+document.querySelectorAll('.modal-overlay, .settings-popup').forEach(overlay => {
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusable = overlay.querySelectorAll('button, [href], input:not([type="hidden"]), select, textarea, [tabindex]:not([tabindex="-1"])');
+    if (!focusable.length) return;
+    const first = focusable[0], last = focusable[focusable.length - 1];
+    if (e.shiftKey) { if (document.activeElement === first) { e.preventDefault(); last.focus(); } }
+    else { if (document.activeElement === last) { e.preventDefault(); first.focus(); } }
+  });
 });
 
 // ===================== Start =====================
