@@ -373,7 +373,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
   padding: 40px 20px; color: var(--text-dim); text-align: center;
 }
 .empty-state-icon {
-  font-size: 36px; margin-bottom: 12px; opacity: 0.4;
+  margin-bottom: 10px; color: var(--text-dim); opacity: 0.5;
 }
 .empty-state-text { font-size: 13px; line-height: 1.5; }
 
