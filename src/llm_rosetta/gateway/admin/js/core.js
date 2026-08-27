@@ -9,34 +9,34 @@
 import { S, INACTIVITY_TIMEOUT_MS } from './state.js';
 import { t } from './i18n.js';
 
-// ===================== Themes =====================
-const THEMES = {
-  light: {
-    '--bg':'#ffffff','--bg-card':'#f6f8fa','--bg-hover':'#eef1f5','--border':'#d1d9e0',
-    '--text':'#1f2328','--text-dim':'#656d76','--accent':'#0969da','--accent-hover':'#0550ae',
-    '--green':'#1a7f37','--red':'#cf222e','--orange':'#bf8700','--blue':'#0969da','--purple':'#8250df',
-  },
-  dark: {
-    '--bg':'#0f1117','--bg-card':'#1a1d27','--bg-hover':'#242838','--border':'#2d3148',
-    '--text':'#e4e7ef','--text-dim':'#8b90a5','--accent':'#6366f1','--accent-hover':'#818cf8',
-    '--green':'#22c55e','--red':'#ef4444','--orange':'#f59e0b','--blue':'#3b82f6','--purple':'#a78bfa',
-  },
-};
+// ===================== Scheme + Mode =====================
+const VALID_SCHEMES = ['minimal', 'emerald'];
+const VALID_MODES = ['light', 'dark'];
+
+function setScheme(scheme) {
+  if (!VALID_SCHEMES.includes(scheme)) scheme = 'minimal';
+  document.documentElement.setAttribute('data-scheme', scheme);
+  S.currentScheme = scheme;
+  localStorage.setItem('llm-rosetta-scheme', scheme);
+  const el = document.getElementById('settingsSchemeSelect');
+  if (el) el.value = scheme;
+  if (S.currentTab === 'dashboard') window.loadMetrics?.();
+}
+
+function setMode(mode) {
+  if (!VALID_MODES.includes(mode)) mode = 'light';
+  document.documentElement.setAttribute('data-mode', mode);
+  S.currentMode = mode;
+  localStorage.setItem('llm-rosetta-mode', mode);
+  const el = document.getElementById('settingsModeSelect');
+  if (el) el.value = mode;
+  if (S.currentTab === 'dashboard') window.loadMetrics?.();
+}
 
 function setTheme(name) {
-  // Backward compat: map old theme names to light/dark
-  if (!THEMES[name]) name = (name === 'light') ? 'light' : 'dark';
-  const vars = THEMES[name];
-  if (!vars) return;
-  const root = document.documentElement;
-  for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
-  S.currentTheme = name;
-  localStorage.setItem('llm-rosetta-theme', name);
-  // Sync settings popup dropdown if open
-  const ts = document.getElementById('settingsThemeSelect');
-  if (ts) ts.value = name;
-  // Redraw charts if on dashboard tab
-  if (S.currentTab === 'dashboard') window.loadMetrics?.();
+  if (name === 'light') { setScheme('minimal'); setMode('light'); }
+  else if (name === 'dark') { setScheme('minimal'); setMode('dark'); }
+  else { setScheme(name.split('-')[0] || 'minimal'); setMode(name.split('-')[1] || 'light'); }
 }
 
 // ===================== API =====================
@@ -188,14 +188,14 @@ function fmtBytesShort(n) {
 
 // ===================== Window globals =====================
 Object.assign(window, {
-  setTheme, api, doLogout, copyText, copyProviderEntry,
+  setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
   showToast, closeModal, inlineConfirm, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
-  THEMES, setTheme, _adminHeaders, api, showToast, closeModal,
+  setScheme, setMode, setTheme, _adminHeaders, api, showToast, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   inlineConfirm, doLogout,

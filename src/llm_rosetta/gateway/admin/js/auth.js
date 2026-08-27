@@ -11,8 +11,10 @@ let _tokenCountdownTimer = null;
 function openSettings() {
   const popup = document.getElementById('settingsPopup');
   // Sync theme & language
-  const ts = document.getElementById('settingsThemeSelect');
-  if (ts) ts.value = S.currentTheme;
+  const ss = document.getElementById('settingsSchemeSelect');
+  if (ss) ss.value = S.currentScheme;
+  const ms = document.getElementById('settingsModeSelect');
+  if (ms) ms.value = S.currentMode;
   const ls = document.getElementById('settingsLangSelect');
   if (ls) ls.value = S.currentLang;
   // Version

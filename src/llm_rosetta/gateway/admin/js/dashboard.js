@@ -662,7 +662,7 @@ function drawChart(canvasId, series, key, unit) {
   ctx.lineTo(padL + chartW, padT + chartH);
   ctx.lineTo(padL, padT + chartH);
   ctx.closePath();
-  ctx.fillStyle = accentColor.startsWith('#') ? accentColor + '14' : 'rgba(99,102,241,0.08)';
+  ctx.fillStyle = cs.getPropertyValue('--accent-subtle').trim() || 'rgba(0,0,0,0.08)';
   ctx.fill();
 }
 
