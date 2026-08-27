@@ -13,6 +13,22 @@ from ..static import load_admin_html, load_static_file
 # Cached HTML — loaded once on first request, per custom_head value.
 _admin_html_cache: dict[str, str] = {}
 
+_FAVICON_SVG = (
+    b"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>"
+    b"<text y='.9em' font-size='90'>\xf0\x9f\x94\x80</text></svg>"
+)
+
+
+async def serve_favicon(request: Any) -> Response:
+    """Serve an inline SVG favicon (unauthenticated)."""
+    return Response(
+        body=_FAVICON_SVG,
+        status_code=200,
+        content_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 # Cached static assets (CSS/JS) — populated on first request per path.
 _static_cache: dict[str, tuple[bytes, str]] = {}
 

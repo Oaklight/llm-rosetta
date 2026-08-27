@@ -304,8 +304,12 @@ async function copyModalKey() {
 // ── Provider filter / view ──────────────────────────────────────────
 
 function _activateSegChild(el) {
-  el.parentElement.querySelectorAll(':scope > div').forEach(s => s.classList.remove('active'));
+  el.parentElement.querySelectorAll(':scope > div').forEach(s => {
+    s.classList.remove('active');
+    if (s.hasAttribute('role')) { s.setAttribute('aria-checked', 'false'); s.setAttribute('tabindex', '-1'); }
+  });
   el.classList.add('active');
+  if (el.hasAttribute('role')) { el.setAttribute('aria-checked', 'true'); el.setAttribute('tabindex', '0'); }
 }
 
 function switchProviderFilter(el, filter) {
@@ -664,7 +668,10 @@ async function loadConfig() {
   try {
     S.configData = await api.get('/admin/api/config');
     S._credentialVisible = S.configData.credential_visible !== false;
-    document.getElementById('configPath').textContent = S.configData.config_path || '';
+    const cpEl = document.getElementById('configPath');
+    const fullPath = S.configData.config_path || '';
+    cpEl.textContent = fullPath.split('/').pop() || fullPath;
+    cpEl.title = fullPath;
     document.getElementById('globalProxy').value = (S.configData.server && S.configData.server.proxy) || '';
     renderProviders();
     window.renderModels();

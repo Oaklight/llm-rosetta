@@ -31,7 +31,7 @@ api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.Con
 )
 
 # Paths that never require authentication
-_PUBLIC_PATHS = frozenset({"/health"})
+_PUBLIC_PATHS = frozenset({"/health", "/favicon.ico"})
 
 # Route prefix → key extraction strategy
 _ROUTE_EXTRACTORS: list[tuple[str, str]] = [

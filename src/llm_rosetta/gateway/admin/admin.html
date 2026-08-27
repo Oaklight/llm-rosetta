@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>llm-rosetta Gateway — Admin</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔀</text></svg>">
 <link rel="stylesheet" href="/admin/static/css/base.css">
 <link rel="stylesheet" href="/admin/static/css/components.css">
 </head>
@@ -36,19 +37,19 @@
   </div>
 </div>
 
-<div class="tabs">
-  <div class="tab active" data-tab="providers" data-i18n="tab.providers">Providers</div>
-  <div class="tab" data-tab="models" data-i18n="tab.models">Models</div>
-  <div class="tab" data-tab="keys" data-i18n="tab.keys">API Keys</div>
-  <div class="tab" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
-  <div class="tab" data-tab="logs" data-i18n="tab.logs">Request Log</div>
+<div class="tabs" role="tablist">
+  <div class="tab active" role="tab" tabindex="0" aria-selected="true" data-tab="providers" data-i18n="tab.providers">Providers</div>
+  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="models" data-i18n="tab.models">Models</div>
+  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="keys" data-i18n="tab.keys">API Keys</div>
+  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
+  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="logs" data-i18n="tab.logs">Request Log</div>
   <div style="flex:1"></div>
   <div class="config-path" id="configPath"></div>
 </div>
 
 <div class="content">
   <!-- Providers Tab -->
-  <div class="tab-panel active" id="tab-providers">
+  <div class="tab-panel active" id="tab-providers" role="tabpanel">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.server">Server Settings</h2>
@@ -71,11 +72,11 @@
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.providers">Providers</h2>
-        <div class="seg-control" id="providerSeg">
-          <div class="active" onclick="switchProviderFilter(this,'all')"><span data-i18n="filter.all">All</span></div>
-          <div onclick="switchProviderFilter(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
-          <div onclick="switchProviderFilter(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
-          <div onclick="switchProviderFilter(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
+        <div class="seg-control" id="providerSeg" role="radiogroup" aria-label="Provider filter">
+          <div class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchProviderFilter(this,'all')"><span data-i18n="filter.all">All</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchProviderFilter(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchProviderFilter(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchProviderFilter(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
         </div>
       </div>
       <div class="provider-toolbar" id="providerToolbar">
@@ -92,7 +93,7 @@
   </div>
 
   <!-- Models Tab -->
-  <div class="tab-panel" id="tab-models">
+  <div class="tab-panel" id="tab-models" role="tabpanel">
     <div class="section">
       <!-- Row 1: Title + count + buttons -->
       <div class="section-header">
@@ -108,11 +109,11 @@
         <select id="modelProviderFilter" onchange="renderModels()">
           <option value="" data-i18n="filter.allProviders">All Providers</option>
         </select>
-        <div class="seg-control" id="modelTypeSeg">
-          <div class="active" onclick="switchModelDomain(this,'all')"><span data-i18n="filter.all">All</span></div>
-          <div onclick="switchModelDomain(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
-          <div onclick="switchModelDomain(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
-          <div onclick="switchModelDomain(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
+        <div class="seg-control" id="modelTypeSeg" role="radiogroup" aria-label="Model type filter">
+          <div class="active" role="radio" aria-checked="true" tabindex="0" onclick="switchModelDomain(this,'all')"><span data-i18n="filter.all">All</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchModelDomain(this,'llm')"><span data-i18n="label.llm">LLM</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchModelDomain(this,'embedding')"><span data-i18n="label.embedding">Embedding</span></div>
+          <div role="radio" aria-checked="false" tabindex="-1" onclick="switchModelDomain(this,'rerank')"><span data-i18n="label.rerank">Rerank</span></div>
         </div>
         <input id="modelSearch" placeholder="Search models..." oninput="renderModels()" data-i18n-placeholder="label.searchModels" style="max-width:200px">
         <button class="btn-reset" id="modelResetBtn" onclick="resetModelFilters()" data-i18n="btn.resetFilters">✕ Reset</button>
@@ -140,7 +141,7 @@
   </div>
 
   <!-- API Keys Tab -->
-  <div class="tab-panel" id="tab-keys">
+  <div class="tab-panel" id="tab-keys" role="tabpanel">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.apiKeys">API Keys</h2>
@@ -160,7 +161,7 @@
   </div>
 
   <!-- Dashboard Tab -->
-  <div class="tab-panel" id="tab-dashboard">
+  <div class="tab-panel" id="tab-dashboard" role="tabpanel">
     <div class="stats-grid" id="statsGrid"></div>
     <div class="chart-row">
       <div class="chart-box">
@@ -204,7 +205,10 @@
         </tr></thead>
         <tbody id="profilingResults"></tbody>
       </table></div>
-      <div id="profilingEmpty" class="empty" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
+      <div id="profilingEmpty" class="empty-state">
+        <div class="empty-state-icon">📊</div>
+        <div class="empty-state-text" data-i18n="profiling.empty">No profiling results. Enable profiling and send requests.</div>
+      </div>
     </div>
     <div class="section" id="captureSection">
       <h2 style="margin-bottom:12px" data-i18n="section.capture">Content Capture</h2>
@@ -228,7 +232,10 @@
         </tr></thead>
         <tbody id="captureResults"></tbody>
       </table></div>
-      <div id="captureEmpty" class="empty" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
+      <div id="captureEmpty" class="empty-state">
+        <div class="empty-state-icon">📸</div>
+        <div class="empty-state-text" data-i18n="capture.empty">No captures. Enable capture and send requests.</div>
+      </div>
     </div>
 
     <!-- Error Dumps Section -->
@@ -308,7 +315,10 @@
         </tr></thead>
         <tbody id="dumpTable"></tbody>
       </table></div>
-      <div id="dumpEmpty" class="empty" data-i18n="dump.empty">No error dumps recorded.</div>
+      <div id="dumpEmpty" class="empty-state">
+        <div class="empty-state-icon">🗂️</div>
+        <div class="empty-state-text" data-i18n="dump.empty">No error dumps recorded.</div>
+      </div>
       <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:16px;font-size:13px;color:var(--text-dim)">
         <button class="btn btn-sm" onclick="changeDumpPage(-1)" id="dumpPrevPage" disabled>← Prev</button>
         <span id="dumpPageInfo">Page 1 / 1</span>
@@ -318,7 +328,7 @@
   </div>
 
   <!-- Clear Dumps Confirm Modal -->
-  <div class="modal-overlay" id="clearDumpsModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="clearDumpsModal">
     <div class="modal" style="width:400px">
       <h3 data-i18n="confirm.clearDumps">Clear All Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
@@ -331,7 +341,7 @@
   </div>
 
   <!-- Export Error Dumps Modal -->
-  <div class="modal-overlay" id="exportDumpsModal">
+  <div class="modal-overlay" role="dialog" aria-modal="true" id="exportDumpsModal">
     <div class="modal" style="width:400px">
       <h3 data-i18n="export.title">Export Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="export.hint">Select a date range (optional). Leave empty to export all.</p>
@@ -348,7 +358,7 @@
   </div>
 
   <!-- Request Log Tab -->
-  <div class="tab-panel" id="tab-logs">
+  <div class="tab-panel" id="tab-logs" role="tabpanel">
     <div class="filters">
       <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
       <select id="filterProvider"><option value="" data-i18n="filter.allProviders">All Providers</option></select>
@@ -373,7 +383,7 @@
 </div>
 
 <!-- Settings Popup (wide section-card layout) -->
-<div class="settings-popup" id="settingsPopup" onclick="this.classList.remove('open')">
+<div class="settings-popup" id="settingsPopup" role="dialog" aria-modal="true" onclick="this.classList.remove('open')">
   <div class="settings-popup-panel" onclick="event.stopPropagation()">
     <h3 data-i18n="modal.settings">Settings</h3>
 
@@ -586,7 +596,7 @@
 </div>
 
 <!-- Provider Modal -->
-<div class="modal-overlay" id="providerModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="providerModal">
   <div class="modal modal-wide">
     <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
 
@@ -711,7 +721,7 @@
 </div>
 
 <!-- Model Modal -->
-<div class="modal-overlay" id="modelModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="modelModal">
   <div class="modal">
     <h3 id="modelModalTitle" data-i18n="modal.addModel">Add Model</h3>
 
@@ -830,7 +840,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Fetch Models Modal -->
-<div class="modal-overlay" id="fetchModelsModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="fetchModelsModal">
   <div class="modal modal-wide">
     <h3 data-i18n="modal.fetchModels">Fetch Models from Provider</h3>
     <div class="form-group">
@@ -876,7 +886,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Cleanup Confirmation Modal -->
-<div class="modal-overlay" id="cleanupConfirmModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="cleanupConfirmModal">
   <div class="modal">
     <h3 data-i18n="confirm.cleanupTitle">Database Cleanup</h3>
     <p id="cleanupConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
@@ -894,7 +904,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Delete Confirmation Modal -->
-<div class="modal-overlay" id="deleteConfirmModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="deleteConfirmModal">
   <div class="modal">
     <h3 data-i18n="confirm.deleteProviderTitle">Delete Provider</h3>
     <p id="deleteConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
@@ -912,7 +922,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Matryoshka Dimensions Modal -->
-<div class="modal-overlay" id="matryoshkaModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="matryoshkaModal">
   <div class="modal" style="max-width:360px">
     <h3 data-i18n="test.matryoshka">Matryoshka</h3>
     <div class="form-group">
@@ -927,7 +937,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Test Result Modal -->
-<div class="modal-overlay" id="testModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="testModal">
   <div class="modal modal-wide">
     <h3 id="testModalTitle">Test Result</h3>
     <div class="test-meta" id="testMeta"></div>
@@ -951,7 +961,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- API Key Modal -->
-<div class="modal-overlay" id="keyModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="keyModal">
   <div class="modal">
     <h3 id="keyModalTitle" data-i18n="modal.generateKey">Generate API Key</h3>
     <div class="form-group">
@@ -974,7 +984,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 </div>
 
 <!-- Key Created Modal -->
-<div class="modal-overlay" id="keyCreatedModal">
+<div class="modal-overlay" role="dialog" aria-modal="true" id="keyCreatedModal">
   <div class="modal">
     <h3 data-i18n="modal.keyCreated">Key Created</h3>
     <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px" data-i18n="keys.copyWarning">Copy this key now. It will not be shown again in full.</p>
