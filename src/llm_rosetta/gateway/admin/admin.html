@@ -38,18 +38,18 @@
 </div>
 
 <div class="tabs" role="tablist">
-  <div class="tab active" role="tab" tabindex="0" aria-selected="true" data-tab="providers" data-i18n="tab.providers">Providers</div>
-  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="models" data-i18n="tab.models">Models</div>
-  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="keys" data-i18n="tab.keys">API Keys</div>
-  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
-  <div class="tab" role="tab" tabindex="-1" aria-selected="false" data-tab="logs" data-i18n="tab.logs">Request Log</div>
+  <div class="tab active" role="tab" id="tabBtn-providers" tabindex="0" aria-selected="true" aria-controls="tab-providers" data-tab="providers" data-i18n="tab.providers">Providers</div>
+  <div class="tab" role="tab" id="tabBtn-models" tabindex="-1" aria-selected="false" aria-controls="tab-models" data-tab="models" data-i18n="tab.models">Models</div>
+  <div class="tab" role="tab" id="tabBtn-keys" tabindex="-1" aria-selected="false" aria-controls="tab-keys" data-tab="keys" data-i18n="tab.keys">API Keys</div>
+  <div class="tab" role="tab" id="tabBtn-dashboard" tabindex="-1" aria-selected="false" aria-controls="tab-dashboard" data-tab="dashboard" data-i18n="tab.dashboard">Dashboard</div>
+  <div class="tab" role="tab" id="tabBtn-logs" tabindex="-1" aria-selected="false" aria-controls="tab-logs" data-tab="logs" data-i18n="tab.logs">Request Log</div>
   <div style="flex:1"></div>
   <div class="config-path" id="configPath"></div>
 </div>
 
 <div class="content">
   <!-- Providers Tab -->
-  <div class="tab-panel active" id="tab-providers" role="tabpanel">
+  <div class="tab-panel active" id="tab-providers" role="tabpanel" aria-labelledby="tabBtn-providers">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.server">Server Settings</h2>
@@ -93,7 +93,7 @@
   </div>
 
   <!-- Models Tab -->
-  <div class="tab-panel" id="tab-models" role="tabpanel">
+  <div class="tab-panel" id="tab-models" role="tabpanel" aria-labelledby="tabBtn-models">
     <div class="section">
       <!-- Row 1: Title + count + buttons -->
       <div class="section-header">
@@ -141,7 +141,7 @@
   </div>
 
   <!-- API Keys Tab -->
-  <div class="tab-panel" id="tab-keys" role="tabpanel">
+  <div class="tab-panel" id="tab-keys" role="tabpanel" aria-labelledby="tabBtn-keys">
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.apiKeys">API Keys</h2>
@@ -161,7 +161,7 @@
   </div>
 
   <!-- Dashboard Tab -->
-  <div class="tab-panel" id="tab-dashboard" role="tabpanel">
+  <div class="tab-panel" id="tab-dashboard" role="tabpanel" aria-labelledby="tabBtn-dashboard">
     <div class="stats-grid" id="statsGrid"></div>
     <div class="chart-row">
       <div class="chart-box">
@@ -358,7 +358,7 @@
   </div>
 
   <!-- Request Log Tab -->
-  <div class="tab-panel" id="tab-logs" role="tabpanel">
+  <div class="tab-panel" id="tab-logs" role="tabpanel" aria-labelledby="tabBtn-logs">
     <div class="filters">
       <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
       <select id="filterProvider"><option value="" data-i18n="filter.allProviders">All Providers</option></select>
