@@ -62,9 +62,11 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
     Run a local HTTP proxy that translates between formats in real time:
 
     ```text
-    Client (OpenAI format) ──→ Gateway ──→ Anthropic API
-    Client (Anthropic format) ──→ Gateway ──→ Google API
-    Client (Google format) ──→ Gateway ──→ Any provider
+    Client (Chat Completions)  ──→ Gateway ──→ Anthropic API
+    Client (Responses API)     ──→ Gateway ──→ Google API
+    Client (Open Responses)    ──→ Gateway ──→ Any provider
+    Client (Anthropic format)  ──→ Gateway ──→ OpenAI API
+    Client (Google format)     ──→ Gateway ──→ Any provider
     ```
 
     ```bash
