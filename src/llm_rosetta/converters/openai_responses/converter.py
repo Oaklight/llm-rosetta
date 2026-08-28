@@ -770,12 +770,18 @@ class OpenAIResponsesConverter(BaseConverter):
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        events.append(
-            ReasoningDeltaEvent(
-                type="reasoning_delta",
-                reasoning=chunk.get("delta", ""),
-            )
+        event = ReasoningDeltaEvent(
+            type="reasoning_delta",
+            reasoning=chunk.get("delta", ""),
         )
+        if (
+            isinstance(context, OpenAIResponsesStreamContext)
+            and context._reasoning_item_id
+        ):
+            cast(dict[str, Any], event)["provider_metadata"] = {
+                "responses_reasoning_id": context._reasoning_item_id,
+            }
+        events.append(event)
 
     def _handle_p_refusal_delta_to_ir(
         self,
@@ -824,6 +830,13 @@ class OpenAIResponsesConverter(BaseConverter):
                 if output_index is not None:
                     start_event_tc["tool_call_index"] = output_index
                 events.append(start_event_tc)
+
+            elif item_type == "reasoning" and isinstance(
+                context, OpenAIResponsesStreamContext
+            ):
+                item_id = item.get("id", "")
+                if item_id:
+                    context._reasoning_item_id = item_id
 
             elif item_type == "message":
                 # Message-level output item — no IR event needed.
@@ -900,6 +913,25 @@ class OpenAIResponsesConverter(BaseConverter):
                 call_id = item.get("call_id", "")
                 if call_id:
                     context.set_tool_call_args(call_id, item.get("input", ""))
+        elif item_type == "reasoning" and isinstance(
+            context, OpenAIResponsesStreamContext
+        ):
+            item_id = item.get("id", "")
+            if item_id:
+                context._reasoning_item_id = item_id
+            encrypted_content = item.get("encrypted_content")
+            if encrypted_content:
+                context._reasoning_encrypted_content = str(encrypted_content)
+                event = ReasoningDeltaEvent(
+                    type="reasoning_delta",
+                    reasoning="",
+                    signature=str(encrypted_content),
+                )
+                if item_id:
+                    cast(dict[str, Any], event)["provider_metadata"] = {
+                        "responses_reasoning_id": item_id,
+                    }
+                events.append(event)
 
     def _handle_p_function_call_args_delta_to_ir(
         self,
@@ -1348,11 +1380,17 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         ctx = context if isinstance(context, OpenAIResponsesStreamContext) else None
+        provider_metadata = cast(dict[str, Any], event).get("provider_metadata") or {}
+        source_item_id = provider_metadata.get("responses_reasoning_id", "")
+        if not isinstance(source_item_id, str):
+            source_item_id = ""
 
         if ctx is not None and ctx._reasoning_item_id == "":
             output_index = ctx.next_output_index()
             ctx._reasoning_output_index = output_index
-            item_id = generate_reasoning_id(ctx.response_id, output_index)
+            item_id = source_item_id or generate_reasoning_id(
+                ctx.response_id, output_index
+            )
             ctx._reasoning_item_id = item_id
 
             results.append(
@@ -1376,6 +1414,12 @@ class OpenAIResponsesConverter(BaseConverter):
                     "part": {"type": "summary_text", "text": ""},
                 }
             )
+
+        signature = event.get("signature", "")
+        if ctx is not None and source_item_id and signature:
+            ctx._reasoning_encrypted_content = signature
+            if not event["reasoning"]:
+                return results
 
         reasoning_text = event["reasoning"]
         if ctx is not None:
@@ -1582,19 +1626,22 @@ class OpenAIResponsesConverter(BaseConverter):
 
         # Reasoning item comes first in output array
         if context._reasoning_item_id:
-            output.append(
-                {
-                    "id": context._reasoning_item_id,
-                    "type": "reasoning",
-                    "summary": [
-                        {
-                            "type": "summary_text",
-                            "text": context._reasoning_accumulated_text,
-                        }
-                    ],
-                    "status": "completed",
-                }
-            )
+            reasoning_item: dict[str, Any] = {
+                "id": context._reasoning_item_id,
+                "type": "reasoning",
+                "summary": [
+                    {
+                        "type": "summary_text",
+                        "text": context._reasoning_accumulated_text,
+                    }
+                ],
+                "status": "completed",
+            }
+            if context._reasoning_encrypted_content:
+                reasoning_item["encrypted_content"] = (
+                    context._reasoning_encrypted_content
+                )
+            output.append(reasoning_item)
 
         accumulated = context.accumulated_text
         if accumulated:
@@ -1715,16 +1762,19 @@ class OpenAIResponsesConverter(BaseConverter):
                 "part": {"type": "summary_text", "text": accumulated},
             }
         )
+        reasoning_item: dict[str, Any] = {
+            "id": item_id,
+            "type": "reasoning",
+            "summary": [{"type": "summary_text", "text": accumulated}],
+            "status": "completed",
+        }
+        if context._reasoning_encrypted_content:
+            reasoning_item["encrypted_content"] = context._reasoning_encrypted_content
         results.append(
             {
                 "type": ResponsesEventType.OUTPUT_ITEM_DONE,
                 "output_index": output_index,
-                "item": {
-                    "id": item_id,
-                    "type": "reasoning",
-                    "summary": [{"type": "summary_text", "text": accumulated}],
-                    "status": "completed",
-                },
+                "item": reasoning_item,
             }
         )
 
