@@ -644,6 +644,81 @@ class TestConversionPipeline:
             }
         ]
 
+    def test_anthropic_reasoning_request_omits_unproven_native_item(self):
+        """Anthropic thinking is not portable as a native Responses input item."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("anthropic", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "claude-sonnet-4-20250514",
+                "max_tokens": 1024,
+                "messages": [
+                    {"role": "user", "content": "Question"},
+                    {
+                        "role": "assistant",
+                        "content": [
+                            {
+                                "type": "thinking",
+                                "thinking": "Let me reason about this",
+                                "signature": "sig_abc",
+                            },
+                            {"type": "text", "text": "Answer"},
+                        ],
+                    },
+                    {"role": "user", "content": "Follow-up"},
+                ],
+            }
+        )
+        assert [item["type"] for item in target["input"]] == [
+            "message",
+            "message",
+            "message",
+        ]
+        assistant = target["input"][1]
+        assert assistant["content"] == [{"type": "output_text", "text": "Answer"}]
+        assert not any(
+            str(item.get("id", "")).startswith("rs_") for item in target["input"]
+        )
+
+    def test_google_reasoning_request_omits_unproven_native_item(self):
+        """Google thought part is not portable as a native Responses input item."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("google", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gemini-2.5-flash",
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "Question"}],
+                    },
+                    {
+                        "role": "model",
+                        "parts": [
+                            {"thought": True, "text": "Internal reasoning"},
+                            {"text": "Answer"},
+                        ],
+                    },
+                    {
+                        "role": "user",
+                        "parts": [{"text": "Follow-up"}],
+                    },
+                ],
+            }
+        )
+        assert [item["type"] for item in target["input"]] == [
+            "message",
+            "message",
+            "message",
+        ]
+        assistant = target["input"][1]
+        assert assistant["content"] == [{"type": "output_text", "text": "Answer"}]
+        assert not any(
+            str(item.get("id", "")).startswith("rs_") for item in target["input"]
+        )
+
     def test_chat_tool_list_content_to_responses(self):
         """Chat tool list content converts to Responses input blocks."""
         from llm_rosetta.pipeline import ConversionPipeline
