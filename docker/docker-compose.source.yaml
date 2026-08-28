@@ -1,0 +1,44 @@
+# Source-build compose file — builds the image from this checkout.
+#
+# The image version is docker/docker-compose.yaml: it runs the published
+# oaklight/llm-rosetta-gateway image and needs nothing from the working tree.
+# This file instead builds docker/Dockerfile.source, which installs
+# packages/llm-rosetta and packages/llm-rosetta-gateway from ../ (the
+# repository root).  Run one or the other, not both — each publishes 8765.
+#
+#   mkdir -p config            # once, from the repository root; the container
+#                              # runs as uid 1000 and cannot create it
+#   docker compose -f docker/docker-compose.source.yaml up -d --build
+#
+# Same limits, user ids and config volume as the image file; no container_name,
+# so compose names the container per project.  The project name is explicit so
+# `docker ps` / `docker compose down` never mix this stack with the image
+# file's, which keeps the directory default ("docker").
+
+name: llm-rosetta-source
+
+services:
+  llm-rosetta-gateway-source:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.source
+    image: llm-rosetta-gateway:src
+    ports:
+      - "8765:8765" # Gateway API + admin panel
+    volumes:
+      - ../config:/config # Repository root's config directory
+    environment:
+      # Not read by the image today (follow-up #1481): the app user is fixed at
+      # uid 1000, so a config/ directory it writes must belong to that uid.
+      # Kept for symmetry with the image file.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      # API keys — referenced as ${ENV_VAR} in config.jsonc
+      # - OPENAI_API_KEY=sk-xxx
+      # - ADMIN_PASSWORD=change-me
+    restart: unless-stopped
+    # Raise fd limit — the gateway holds many concurrent upstream connections
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536

@@ -1,3 +1,7 @@
+# This is the image version: it runs the published
+# oaklight/llm-rosetta-gateway image.  To build from this checkout instead,
+# see docker/docker-compose.source.yaml.
+#
 # NOTE: Inside the container, "localhost" / "127.0.0.1" refers to the
 # container itself, NOT the host machine. If your config.jsonc uses a
 # proxy or base_url pointing to the host (e.g. a local proxy server),
@@ -25,8 +29,11 @@ services:
       #
       # - ~/.globus:/home/appuser/.globus            # Globus token file (rw for refresh)
     environment:
-      - PUID=${PUID:-1000} # Match your host user's UID
-      - PGID=${PGID:-1000} # Match your host user's GID
+      # Not read by the image today (follow-up #1481): the app user is fixed at
+      # uid 1000, so a config/ directory it writes must belong to that uid.
+      # Kept for symmetry with the source file.
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
       # API keys — referenced as ${ENV_VAR} in config.jsonc
       # - OPENAI_API_KEY=sk-xxx
       # - ANTHROPIC_API_KEY=sk-ant-xxx
