@@ -12,6 +12,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Admin UI color system redesign** (PRs [#564](https://github.com/Oaklight/llm-rosetta/pull/564), [#566](https://github.com/Oaklight/llm-rosetta/pull/566), [#571](https://github.com/Oaklight/llm-rosetta/pull/571)): replaced the single light/dark theme with a two-scheme system — **Minimal** (Vercel-inspired pure B&W) and **Emerald** (Neon-inspired green accent), each with light and dark modes (4 total combinations). Architecture moved from JS-driven `THEMES` object to CSS-driven compound selectors (`[data-scheme][data-mode]`). Settings UI now has separate Scheme and Mode selectors.
 - **Admin UI typography and consistency** (PR [#570](https://github.com/Oaklight/llm-rosetta/pull/570)): consolidated font sizes from 10 discrete steps to 7. Extracted `.btn-disabled` class to replace inline disabled styles. Normalized elevation model — removed box-shadow from settings sections, unified to border-hover pattern. Standardized form input font-family (mono for code inputs, sans for selects).
+- **Admin UI responsive layout** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)): tab bar overflow scroll on mobile, table-scroll wrappers, content max-width 1400px, provider card grid 280px min for 4-column layout, settings popup padding reduced on mobile.
 - **Admin UI CSS variable architecture** (PR [#571](https://github.com/Oaklight/llm-rosetta/pull/571)): migrated scheme-specific structural differences (table header typography, badge radius, chart bar colors) from CSS selector overrides to custom properties. Adding a new scheme now requires only one variable block in `base.css`.
 
 ### Fixed
@@ -21,8 +22,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Emoji empty-state icons replaced** with SVG line icons (bar-chart, camera, folder) matching the minimal design language.
 - **Rosetta Stone SVG favicon** — replaced the emoji favicon (🔀) with the project's Rosetta Stone silhouette, served as both inline `<link rel="icon">` and server-side `/favicon.ico`.
 
+- **Admin UI config path abbreviated** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — shows filename only with full path in tooltip. System clock now shows timezone abbreviation.
+- **Admin UI toast centered** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — toast notifications now centered horizontally instead of pinned to bottom-right.
+
 ### Added
 
+- **Admin UI accessibility** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)): ARIA roles (`tablist`/`tab`/`tabpanel`, `radiogroup`/`radio`, `dialog`), arrow key navigation for tabs and segmented controls, focus trap for modals and settings popup.
 - **Rosetta Stone header logo** — SVG silhouette icon in the admin panel header.
 - **GitHub repo icon** — `design/logo/out/rosetta-icon-github.svg` for GitHub repository settings.
 - **Admin UI i18n** — added Scheme/Mode selector labels in English and Chinese.
