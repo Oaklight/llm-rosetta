@@ -259,6 +259,7 @@ class TestOpenAIResponsesContentOps:
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
+        assert result is not None
         assert result["type"] == "reasoning"
         assert result["summary"] == [{"type": "summary_text", "text": "thinking..."}]
 
@@ -268,6 +269,7 @@ class TestOpenAIResponsesContentOps:
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
+        assert result is not None
         assert result["type"] == "reasoning"
         assert result["summary"] == []
 
@@ -279,6 +281,7 @@ class TestOpenAIResponsesContentOps:
             provider_metadata={"responses_reasoning_id": "rs_abc123"},
         )
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["type"] == "reasoning"
         assert result["id"] == "rs_abc123"
 
@@ -297,6 +300,7 @@ class TestOpenAIResponsesContentOps:
             },
         )
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
         assert result["summary"] == original_summary
 
     def test_p_reasoning_to_ir_with_content(self):
@@ -365,6 +369,7 @@ class TestOpenAIResponsesContentOps:
         ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert ir is not None
         restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir)
+        assert restored is not None
         assert restored["id"] == "rs_abc123"
         assert restored["summary"] == provider["summary"]
 
