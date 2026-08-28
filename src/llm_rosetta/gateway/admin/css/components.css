@@ -20,7 +20,7 @@ th, td {
   text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
-th { color: var(--th-c); font-weight: var(--th-w); font-size: var(--th-fs); text-transform: var(--th-tt); letter-spacing: var(--th-ls); }
+th { color: var(--th-color); font-weight: var(--th-weight); font-size: var(--th-size); text-transform: var(--th-transform); letter-spacing: var(--th-spacing); }
 tr:hover td { background: var(--bg-hover); }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
@@ -214,7 +214,7 @@ canvas { width: 100%; height: 160px; }
 
 /* Status badge */
 .badge {
-  display: inline-block; padding: 2px 8px; border-radius: var(--badge-r); font-size: 11px; font-weight: var(--badge-w);
+  display: inline-block; padding: 2px 8px; border-radius: var(--badge-radius); font-size: 11px; font-weight: var(--badge-weight);
 }
 .badge-ok { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
 .badge-error { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
@@ -428,9 +428,6 @@ body { padding-bottom: 26px; }
   background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
   background-size:24px 24px;
 }
-
-/* Table header typography */
-
 /* Stat cards: Emerald gets cross-hatch grid + bottom bar */
 [data-scheme="emerald"] .stat-card { position:relative;overflow:hidden; }
 [data-scheme="emerald"] .stat-card::before {
@@ -443,8 +440,5 @@ body { padding-bottom: 26px; }
 /* Stat cards: Minimal gets merged grid layout */
 [data-scheme="minimal"] .stats-grid { gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden; }
 [data-scheme="minimal"] .stat-card { border-radius:0;border:none;background:var(--bg); }
-
-/* Badge border-radius */
-
 /* Primary button font-weight */
 [data-scheme="emerald"] .btn-primary { font-weight:600; }

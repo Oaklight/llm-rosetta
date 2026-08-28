@@ -3,7 +3,24 @@
   --mono: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
 }
 
-/* ═══ Minimal — pure B&W, flat, hairline ═══ */
+/* ═══ Minimal — structural variables (shared across light/dark) ═══ */
+[data-scheme="minimal"] {
+  --radius: 6px;
+  --dot: transparent;
+  --grid: transparent;
+  --bar-color: var(--text);
+  --bar-opacity: .15;
+  --bar-hover: .4;
+  --th-transform: none;
+  --th-spacing: 0;
+  --th-weight: 400;
+  --th-size: 12px;
+  --th-color: var(--text-dim);
+  --badge-radius: 20px;
+  --badge-weight: 500;
+}
+
+/* Minimal Light — colors */
 [data-scheme="minimal"][data-mode="light"] {
   --bg: #fff;
   --bg-card: #fafafa;
@@ -25,21 +42,9 @@
   --orange: #bd5b00;
   --blue: #0070f3;
   --purple: #7c3aed;
-  --radius: 6px;
-  --dot: transparent;
-  --grid: transparent;
-  --bar-color: var(--text);
-  --bar-op: .15;
-  --bar-hov: .4;
-  --th-tt: none;
-  --th-ls: 0;
-  --th-w: 400;
-  --th-fs: 12px;
-  --th-c: var(--text-dim);
-  --badge-r: 20px;
-  --badge-w: 500;
-  --text-muted: #999;
 }
+
+/* Minimal Dark — colors */
 [data-scheme="minimal"][data-mode="dark"] {
   --bg: #000;
   --bg-card: #0a0a0a;
@@ -61,12 +66,26 @@
   --orange: #f1a10d;
   --blue: #3291ff;
   --purple: #a78bfa;
-  --radius: 6px;
-  --dot: transparent;
-  --grid: transparent;
 }
 
-/* ═══ Emerald — green accent, geometric, dot-grid ═══ */
+/* ═══ Emerald — structural variables (shared across light/dark) ═══ */
+[data-scheme="emerald"] {
+  --radius: 4px;
+  --dot: rgba(0,0,0,.04);
+  --grid: rgba(0,0,0,.04);
+  --bar-color: var(--accent);
+  --bar-opacity: .4;
+  --bar-hover: .8;
+  --th-transform: uppercase;
+  --th-spacing: .6px;
+  --th-weight: 500;
+  --th-size: 10px;
+  --th-color: var(--text-muted);
+  --badge-radius: 10px;
+  --badge-weight: 600;
+}
+
+/* Emerald Light — colors */
 [data-scheme="emerald"][data-mode="light"] {
   --bg: #fff;
   --bg-card: #fafafa;
@@ -88,20 +107,9 @@
   --orange: #d97706;
   --blue: #2563eb;
   --purple: #7c3aed;
-  --radius: 4px;
-  --dot: rgba(0,0,0,.04);
-  --grid: rgba(0,0,0,.04);
-  --bar-color: var(--accent);
-  --bar-op: .4;
-  --bar-hov: .8;
-  --th-tt: uppercase;
-  --th-ls: .6px;
-  --th-w: 500;
-  --th-fs: 10px;
-  --th-c: var(--text-muted);
-  --badge-r: 10px;
-  --badge-w: 600;
 }
+
+/* Emerald Dark — colors + dark-specific dot/grid overrides */
 [data-scheme="emerald"][data-mode="dark"] {
   --bg: #0a0a0b;
   --bg-card: #131315;
@@ -123,10 +131,10 @@
   --orange: #fbbf24;
   --blue: #60a5fa;
   --purple: #a78bfa;
-  --radius: 4px;
   --dot: rgba(255,255,255,.025);
   --grid: rgba(255,255,255,.025);
 }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
 /* Hide main content until auth check completes to prevent flash of unauthenticated content */
