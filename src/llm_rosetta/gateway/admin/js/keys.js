@@ -28,7 +28,7 @@ function renderKeys() {
   const tbody = document.getElementById('keysTable');
   const keys = (S.keysData && S.keysData.keys) || [];
   if (keys.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
     return;
   }
   tbody.innerHTML = keys.map(k => {
@@ -36,7 +36,6 @@ function renderKeys() {
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
-      <td><code>${esc((k.allowed_shims || ['*']).join(', '))}</code></td>
       <td>${created}</td>
       <td style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
@@ -46,16 +45,13 @@ function renderKeys() {
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
   document.getElementById('keyManual').value = '';
-  document.getElementById('keyAllowedShims').value = '*';
   document.getElementById('keyModal').classList.add('open');
 }
 
 async function generateKey() {
   const label = document.getElementById('keyLabel').value.trim();
   const manual = document.getElementById('keyManual').value.trim();
-  const shimsRaw = document.getElementById('keyAllowedShims').value.trim();
-  const allowed_shims = shimsRaw ? shimsRaw.split(',').map(s => s.trim()).filter(Boolean) : ['*'];
-  const body = {label, allowed_shims};
+  const body = {label};
   if (manual) body.key = manual;
   const res = await api.post('/admin/api/keys', body);
   if (res.ok) {
