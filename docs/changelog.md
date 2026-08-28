@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [未发布]
+## v0.11.0 — 2026-08-28
 
 ### 变更
 
@@ -24,6 +24,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Admin UI 配置路径简化** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — 仅显示文件名，完整路径在 tooltip 中。系统时钟现在显示时区缩写。
 - **Admin UI Toast 居中** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — Toast 通知现在水平居中，不再固定在右下角。
+- **OpenAI Responses reasoning 输入生命周期** (PR [#569](https://github.com/Oaklight/llm-rosetta/pull/569))：修复 output-only 字段（`status: "completed"`、合成 `rs_` ID）泄漏到 Responses 请求输入项的问题。来自 Chat/Anthropic/Google 的无来源证明的 reasoning 现在被省略而非分配虚假身份。有真实 Responses 来源的 reasoning 保留原始 ID 和 summary，但移除 output-only 的 status。修复 [#568](https://github.com/Oaklight/llm-rosetta/issues/568)。
+- **Admin UI "Allowed Shims" 隐藏** (PR [#574](https://github.com/Oaklight/llm-rosetta/pull/574))：从 API 密钥页面移除了令人困惑的 "Allowed Shims" 列和弹窗输入框——"shim" 是内部概念。后端存储不变（默认 `["*"]`）。
 
 ### 新增
 
