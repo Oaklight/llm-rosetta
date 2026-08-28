@@ -12,7 +12,7 @@
 .btn-danger-fill { background: var(--red); color: #fff; border-color: var(--red); }
 .btn-danger-fill:hover { background: color-mix(in srgb, var(--red) 85%, #000); border-color: color-mix(in srgb, var(--red) 85%, #000); color: #fff; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn-disabled, .btn[disabled] { background: var(--border); color: var(--text-dim); cursor: not-allowed; border-color: var(--border); opacity: 0.6; pointer-events: none; }
+.btn-disabled, .btn[disabled] { background: var(--border); color: var(--text-dim); cursor: not-allowed; border-color: var(--border); opacity: 0.6; }
 
 /* Tables */
 table { width: 100%; border-collapse: collapse; }
@@ -166,10 +166,10 @@ code.copyable:hover { background: var(--bg-hover); }
 .form-group { margin-bottom: 14px; }
 .form-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
 .form-group input, .form-group select {
-.form-group input { font-family: var(--mono); }
   width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border);
   border-radius: var(--radius); color: var(--text); font-size: 14px;
 }
+.form-group input { font-family: var(--mono); }
 .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
 /* Multi-key entry list (auto-switches from single input when comma-separated keys detected) */
 .multi-key-list { display:flex;flex-direction:column;gap:4px;margin-top:4px; }
