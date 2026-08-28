@@ -410,6 +410,7 @@ async function checkAuthAndInit() {
 
 // --- Named exports for cross-module imports ---
 export {
+  openSettings,
   checkAuthAndInit,
   showLoginOverlay,
   _refreshTokenDisplay,

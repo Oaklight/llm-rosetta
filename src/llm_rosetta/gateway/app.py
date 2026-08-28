@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import (
@@ -643,91 +645,79 @@ def _install_root_redirect(app: App, target: str | None) -> None:
         return Response(body=b"", status_code=307, headers={"Location": target})
 
 
-def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
-    """Create the httpserver application."""
-    global _config
-    _config = config
+@dataclass
+class GatewayExtensions:
+    """Extension points for downstream projects that wrap the gateway.
 
-    # Expose global proxy as env vars so downstream code (e.g. image
-    # downloads in converters) can use it without threading config through.
-    import os
+    Pass an instance to :func:`create_app` to customise transport, auth,
+    middleware, routes, and admin panel without duplicating the factory.
+    All fields are optional — defaults preserve the standard gateway behaviour.
+    """
 
-    if config.proxy:
-        os.environ.setdefault("HTTP_PROXY", config.proxy)
-        os.environ.setdefault("HTTPS_PROXY", config.proxy)
+    transport: Any | None = None
+    """Pre-built transport instance.  When *None*, an :class:`HttpTransport`
+    is created from *config.upstream_timeout*."""
 
-    from .transport import HttpTransport
+    before_hooks: list[Callable] = field(default_factory=list)
+    """Extra ``before_request`` hooks registered **after** built-in auth."""
 
-    metadata_store = ProviderMetadataStore()
-    transport = HttpTransport(timeout=config.upstream_timeout)
+    after_hooks: list[Callable] = field(default_factory=list)
+    """Extra ``after_request`` hooks registered **after** built-in CORS."""
 
-    app = App(max_body_size=50_000_000, read_timeout=config.read_timeout)
+    extra_routes: list[tuple[str, list[str], Callable]] = field(default_factory=list)
+    """Additional routes as ``(path, methods, handler)`` tuples."""
 
-    # --- Routes ---
-    app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
-    app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
-    app.route("/v1/rerank", methods=["POST"])(handle_rerank)
-    app.route("/v2/rerank", methods=["POST"])(handle_rerank)
-    app.route("/v1/messages", methods=["POST"])(handle_anthropic)
-    app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
-    app.route("/v1/models", methods=["GET"])(handle_list_models)
-    app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
-    app.route("/v1beta/models/<path:model_path>", methods=["POST"])(handle_google_genai)
-    app.route("/health", methods=["GET"])(handle_health)
-    app.route("/health/live", methods=["GET"])(handle_health_live)
-    app.route("/health/ready", methods=["GET"])(handle_health_ready)
+    branding: dict | None = None
+    """Admin panel branding dict forwarded to :func:`setup_admin`."""
 
-    _install_root_redirect(app, config.root_redirect)
+    custom_head: str | None = None
+    """Extra ``<head>`` HTML injected into the admin page."""
 
-    # --- Auth (SQLite keystore + config fallback) ---
-    internal_token, keystore, auth_state = _setup_auth(config, config_path)
-    app.before_request(create_auth_hook(auth_state))
+    disabled_tabs: list[str] | None = None
+    """Admin tabs to hide (e.g. ``["keys"]``)."""
 
-    # --- Rate Limiting (after auth so api_key_context_var is set) ---
-    from .ratelimit import (
-        RateLimitState,
-        create_rate_limit_hook,
-        create_rate_limit_after_hook,
-    )
+    config_io: Any | None = None
+    """Custom :class:`ConfigIO` for admin config persistence."""
 
-    rate_limit_state = RateLimitState()
-    rate_limit_state.rebuild(config)
-    app.before_request(create_rate_limit_hook(rate_limit_state))
-    app.rate_limit_state = rate_limit_state  # type: ignore
-    app.after_request(create_rate_limit_after_hook())
+    max_body_size: int | None = None
+    """Override the default 50 MB max request body size."""
 
-    # --- CORS ---
-    # Admin API endpoints are restricted to same-origin by default.
-    # /v1/* proxy endpoints remain open (Access-Control-Allow-Origin: *).
-    # The list of allowed origins for admin can be overridden via
-    # server.admin_cors_origins in config (default [] = same-origin only).
-    _admin_cors_origins: list[str] = config.admin_cors_origins
+    enable_rate_limiting: bool = True
+    """Set to *False* to skip built-in rate-limiting middleware."""
 
-    def _is_admin_path(path: str) -> bool:
-        return path.startswith("/admin/") or path == "/admin"
+    skip_default_routes: bool = False
+    """When *True*, the standard proxy routes are **not** registered.
+    Use this when the downstream project provides its own handlers."""
+
+    skip_builtin_auth: bool = False
+    """When *True*, the API-key auth hook is **not** registered.
+    ``_setup_auth`` still runs (admin needs *internal_token*)."""
+
+    skip_admin_setup: bool = False
+    """When *True*, :func:`setup_admin` is **not** called.
+    The downstream project is responsible for calling it later
+    (e.g. after async initialisation)."""
+
+
+def _is_admin_path(path: str) -> bool:
+    """Check whether *path* is an admin panel path."""
+    return path.startswith("/admin/") or path == "/admin"
+
+
+def _install_cors(app: App, admin_cors_origins: list[str]) -> None:
+    """Register CORS after-request hook and OPTIONS preflight handler."""
 
     def _apply_cors(response: Any, origin: str | None) -> None:
-        """Set CORS headers on *response* for admin requests.
-
-        When *_admin_cors_origins* is non-empty the request Origin is reflected
-        only if it matches the allow-list; otherwise no CORS header is emitted
-        so browsers fall back to same-origin behaviour.
-        """
-        if _admin_cors_origins and origin and origin in _admin_cors_origins:
+        if admin_cors_origins and origin and origin in admin_cors_origins:
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Vary"] = "Origin"
             response.headers["Access-Control-Allow-Methods"] = "*"
             response.headers["Access-Control-Allow-Headers"] = "*"
-        # Default: no header -> same-origin only (browser blocks cross-origin).
 
     @app.after_request
     async def add_cors_headers(request: Any, response: Any) -> Any:
         if _is_admin_path(request.path):
-            # Restricted CORS for admin endpoints: same-origin only by default,
-            # or explicit allow-list via server.admin_cors_origins.
             _apply_cors(response, request.headers.get("origin"))
-            # Prevent reverse-proxy caching of admin API responses (e.g. Caddy/Souin).
-            # Uses the full directive set that Souin recognises as NO-STORE-DIRECTIVE.
             if request.path.startswith("/admin/api/"):
                 response.headers.setdefault(
                     "Cache-Control", "no-cache, no-store, must-revalidate"
@@ -749,6 +739,104 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
             _apply_cors(resp, request.headers.get("origin"))
         return resp
 
+
+def _install_rate_limiting(app: App, config: GatewayConfig) -> None:
+    """Set up rate-limiting before/after hooks and attach state to *app*."""
+    from .ratelimit import (
+        RateLimitState,
+        create_rate_limit_after_hook,
+        create_rate_limit_hook,
+    )
+
+    rate_limit_state = RateLimitState()
+    rate_limit_state.rebuild(config)
+    app.before_request(create_rate_limit_hook(rate_limit_state))
+    app.rate_limit_state = rate_limit_state  # type: ignore
+    app.after_request(create_rate_limit_after_hook())
+
+
+def create_app(
+    config: GatewayConfig,
+    config_path: str | None = None,
+    extensions: GatewayExtensions | None = None,
+) -> App:
+    """Create the httpserver application."""
+    global _config
+    _config = config
+    ext = extensions or GatewayExtensions()
+
+    # Expose global proxy as env vars so downstream code (e.g. image
+    # downloads in converters) can use it without threading config through.
+    import os
+
+    if config.proxy:
+        os.environ.setdefault("HTTP_PROXY", config.proxy)
+        os.environ.setdefault("HTTPS_PROXY", config.proxy)
+
+    from .transport import HttpTransport
+
+    metadata_store = ProviderMetadataStore()
+    transport = (
+        ext.transport
+        if ext.transport is not None
+        else HttpTransport(timeout=config.upstream_timeout)
+    )
+
+    app = App(
+        max_body_size=ext.max_body_size
+        if ext.max_body_size is not None
+        else 50_000_000,
+        read_timeout=config.read_timeout,
+    )
+
+    # --- Routes ---
+    if not ext.skip_default_routes:
+        app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
+        app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
+        app.route("/v1/rerank", methods=["POST"])(handle_rerank)
+        app.route("/v2/rerank", methods=["POST"])(handle_rerank)
+        app.route("/v1/messages", methods=["POST"])(handle_anthropic)
+        app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
+        app.route("/v1/models", methods=["GET"])(handle_list_models)
+        app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
+        app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
+            handle_google_genai
+        )
+        app.route("/health", methods=["GET"])(handle_health)
+        app.route("/health/live", methods=["GET"])(handle_health_live)
+        app.route("/health/ready", methods=["GET"])(handle_health_ready)
+
+    _install_root_redirect(app, config.root_redirect)
+
+    # --- Auth (SQLite keystore + config fallback) ---
+    internal_token, keystore, auth_state = _setup_auth(config, config_path)
+    if not ext.skip_builtin_auth:
+        app.before_request(create_auth_hook(auth_state))
+
+    # --- Rate Limiting (after auth so api_key_context_var is set) ---
+    if ext.enable_rate_limiting:
+        _install_rate_limiting(app, config)
+
+    # --- Extension hooks (after built-in auth/rate-limit) ---
+    for hook in ext.before_hooks:
+        app.before_request(hook)
+
+    _install_cors(app, config.admin_cors_origins)
+
+    for hook in ext.after_hooks:
+        app.after_request(hook)
+
+    # --- Extension routes ---
+    for path, methods, handler in ext.extra_routes:
+        app.route(path, methods=methods)(handler)
+
+    # --- .well-known ---
+    @app.route("/.well-known/change-password", methods=["GET"])
+    async def well_known_change_password(request: Any) -> Response:
+        return Response(
+            body=b"", status_code=302, headers={"Location": "/admin#change-password"}
+        )
+
     @app.errorhandler(404)
     async def handle_404(request: Any, exc: Any) -> Response:
         resp = JSONResponse({"error": "Not Found"}, status_code=404)
@@ -769,6 +857,8 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
 
     register_admin_routes(app)
 
+    # --- Extension routes (post-admin, for overrides) ---
+
     # --- App-level state ---
     app.transport = transport  # type: ignore
     app.metadata_store = metadata_store  # type: ignore
@@ -776,7 +866,16 @@ def create_app(config: GatewayConfig, config_path: str | None = None) -> App:
     app.auth_state = auth_state  # type: ignore
     app.keystore = keystore  # type: ignore
 
-    setup_admin(app, config, config_path)
+    if not ext.skip_admin_setup:
+        setup_admin(
+            app,
+            config,
+            config_path,
+            config_io=ext.config_io,
+            disabled_tabs=ext.disabled_tabs,
+            custom_head=ext.custom_head,
+            branding=ext.branding,
+        )
 
     return app
 

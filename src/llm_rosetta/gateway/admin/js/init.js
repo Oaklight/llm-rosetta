@@ -4,7 +4,7 @@ import {
   setScheme, setMode, setTheme, api, showToast, closeModal, esc,
   _startInactivityTracking, _stopInactivityTracking,
 } from './core.js';
-import { checkAuthAndInit, showLoginOverlay } from './auth.js';
+import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
 import { loadConfig, renderProviders } from './providers.js';
 import { renderModels } from './models.js';
 import './fetch-models.js';
@@ -28,6 +28,7 @@ function initApp() {
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (S.currentTab === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (location.hash === "#change-password") { openSettings(); history.replaceState(null, "", location.pathname); }
 }
 
 // ===================== Tabs =====================
