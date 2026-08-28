@@ -420,9 +420,9 @@ body { padding-bottom: 26px; }
 
 /* ═══ Scheme-specific structural overrides ═══ */
 
-/* Dot-grid background (Emerald only — Minimal has --dot:transparent so this is a no-op) */
+/* Dot-grid background (Emerald only) */
 [data-scheme="emerald"] body::before {
-  content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  content:'';position:fixed;inset:0;pointer-events:none;z-index:-1;
   background-image:radial-gradient(circle,var(--dot) 1px,transparent 1px);
   background-size:24px 24px;
 }
