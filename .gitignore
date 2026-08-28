@@ -239,3 +239,15 @@ theme-matrix-out/
 REVIEW_*
 TEMP_*
 tmp/
+
+# Runtime and local deployment (docker/docker-compose.yaml)
+# .env and the database files are already covered above; these are the
+# entries the repository did not carry.  /config/, /data/ and /config.jsonc
+# are root-anchored so nested package directories named the same stay tracked.
+.env.*
+/config/
+/config.jsonc
+/config.jsonc.*
+/data/
+docker-compose.override.yml
+*.pid
