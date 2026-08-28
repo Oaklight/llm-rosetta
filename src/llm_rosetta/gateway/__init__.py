@@ -9,7 +9,7 @@ Usage::
     python -m llm_rosetta.gateway --config config.jsonc
 
     # Programmatic usage
-    from llm_rosetta.gateway import create_app, GatewayConfig, load_config
+    from llm_rosetta.gateway import create_app, GatewayConfig, GatewayExtensions, load_config
 
     raw = load_config("config.jsonc")
     app = create_app(GatewayConfig(raw))
@@ -17,7 +17,7 @@ Usage::
 
 # httpserver and httpclient are vendored in _vendor/ — no external deps needed.
 
-from .app import create_app
+from .app import GatewayExtensions, create_app
 from .cli import main
 from .config import ConfigIO, GatewayConfig, JsoncConfigIO, discover_config, load_config
 from .proxy import ProviderMetadataStore
@@ -27,6 +27,7 @@ __all__ = [
     "GatewayConfig",
     "JsoncConfigIO",
     "ProviderMetadataStore",
+    "GatewayExtensions",
     "create_app",
     "discover_config",
     "load_config",
