@@ -25,9 +25,9 @@ from .proxy import ProviderMetadataStore
 __all__ = [
     "ConfigIO",
     "GatewayConfig",
+    "GatewayExtensions",
     "JsoncConfigIO",
     "ProviderMetadataStore",
-    "GatewayExtensions",
     "create_app",
     "discover_config",
     "load_config",
