@@ -20,7 +20,7 @@ th, td {
   text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
-th { color: var(--text-dim); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+th { color: var(--th-c); font-weight: var(--th-w); font-size: var(--th-fs); text-transform: var(--th-tt); letter-spacing: var(--th-ls); }
 tr:hover td { background: var(--bg-hover); }
 .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
@@ -214,7 +214,7 @@ canvas { width: 100%; height: 160px; }
 
 /* Status badge */
 .badge {
-  display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+  display: inline-block; padding: 2px 8px; border-radius: var(--badge-r); font-size: 11px; font-weight: var(--badge-w);
 }
 .badge-ok { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
 .badge-error { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
@@ -430,8 +430,6 @@ body { padding-bottom: 26px; }
 }
 
 /* Table header typography */
-[data-scheme="emerald"] th { text-transform:uppercase;letter-spacing:.6px;font-weight:500;font-size:10px;color:var(--text-dim); }
-[data-scheme="minimal"] th { text-transform:none;letter-spacing:0;font-weight:400;font-size:12px; }
 
 /* Stat cards: Emerald gets cross-hatch grid + bottom bar */
 [data-scheme="emerald"] .stat-card { position:relative;overflow:hidden; }
@@ -447,8 +445,6 @@ body { padding-bottom: 26px; }
 [data-scheme="minimal"] .stat-card { border-radius:0;border:none;background:var(--bg); }
 
 /* Badge border-radius */
-[data-scheme="minimal"] .badge { border-radius:20px; }
-[data-scheme="emerald"] .badge { border-radius:10px; }
 
 /* Primary button font-weight */
 [data-scheme="emerald"] .btn-primary { font-weight:600; }
