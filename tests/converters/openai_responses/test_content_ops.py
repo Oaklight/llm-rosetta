@@ -253,17 +253,21 @@ class TestOpenAIResponsesContentOps:
 
     # ==================== Reasoning ====================
 
-    def test_ir_reasoning_to_p(self):
-        """Test IR ReasoningPart → OpenAI Responses reasoning item."""
+    def test_ir_reasoning_to_output_item(self):
+        """Test IR ReasoningPart → OpenAI Responses reasoning output item."""
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+            ir_reasoning, output_item=True
+        )
         assert result["type"] == "reasoning"
         assert result["summary"] == [{"type": "summary_text", "text": "thinking..."}]
 
-    def test_ir_reasoning_to_p_empty(self):
-        """Test IR ReasoningPart with no reasoning → empty summary."""
+    def test_ir_reasoning_to_output_item_empty(self):
+        """Test IR ReasoningPart with no reasoning → empty output summary."""
         ir_reasoning = cast(ReasoningPart, {"type": "reasoning"})
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+            ir_reasoning, output_item=True
+        )
         assert result["type"] == "reasoning"
         assert result["summary"] == []
 
@@ -344,7 +348,9 @@ class TestOpenAIResponsesContentOps:
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
         original = ReasoningPart(type="reasoning", reasoning="Step by step analysis")
-        provider = OpenAIResponsesContentOps.ir_reasoning_to_p(original)
+        provider = OpenAIResponsesContentOps.ir_reasoning_to_p(
+            original, output_item=True
+        )
         restored = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert restored is not None
         assert restored["reasoning"] == original["reasoning"]
@@ -454,54 +460,85 @@ class TestOpenAIResponsesContentOps:
         )
 
 
-class TestReasoningIdGeneration:
-    """Tests for reasoning item id and status generation (#407)."""
+class TestReasoningDirection:
+    """Tests for request provenance and response lifecycle fields."""
 
-    def test_generates_id_without_provider_metadata(self):
-        ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
+    def test_request_without_responses_id_is_not_portable(self):
+        ir_reasoning = ReasoningPart(
+            type="reasoning",
+            reasoning="thinking...",
+            signature="arbitrary-signature",
+        )
         result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
-        assert "id" in result
+        assert result is None
+
+    def test_request_preserves_responses_origin_fields_without_status(self):
+        summary = [{"type": "summary_text", "text": "thinking..."}]
+        ir_reasoning = ReasoningPart(
+            type="reasoning",
+            reasoning="thinking...",
+            signature="real-encrypted-content",
+            provider_metadata={
+                "responses_reasoning_id": "rs_original_123",
+                "responses_reasoning_summary": summary,
+            },
+        )
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        assert result is not None
+        assert result["id"] == "rs_original_123"
+        assert result["summary"] == summary
+        assert result["encrypted_content"] == "real-encrypted-content"
+        assert "status" not in result
+
+    def test_output_generates_id_and_status(self):
+        ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+            ir_reasoning, output_item=True
+        )
+        assert result is not None
         assert result["id"].startswith("rs_")
-
-    def test_generates_status(self):
-        ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result["status"] == "completed"
 
-    def test_preserves_original_id(self):
+    def test_output_preserves_original_id(self):
         ir_reasoning = ReasoningPart(
             type="reasoning",
             reasoning="thinking...",
             provider_metadata={"responses_reasoning_id": "rs_original_123"},
         )
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+            ir_reasoning, output_item=True
+        )
+        assert result is not None
         assert result["id"] == "rs_original_123"
         assert result["status"] == "completed"
 
-    def test_deterministic_with_response_id(self):
+    def test_output_id_deterministic_with_response_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
         r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(
-            ir, response_id="resp_abc", reasoning_index=0
+            ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
         r2 = OpenAIResponsesContentOps.ir_reasoning_to_p(
-            ir, response_id="resp_abc", reasoning_index=0
+            ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
+        assert r1 is not None and r2 is not None
         assert r1["id"] == r2["id"]
 
-    def test_different_index_different_id(self):
+    def test_output_index_changes_generated_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
         r0 = OpenAIResponsesContentOps.ir_reasoning_to_p(
-            ir, response_id="resp_abc", reasoning_index=0
+            ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
         r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(
-            ir, response_id="resp_abc", reasoning_index=1
+            ir, output_item=True, response_id="resp_abc", reasoning_index=1
         )
+        assert r0 is not None and r1 is not None
         assert r0["id"] != r1["id"]
 
-    def test_uuid_fallback_without_response_id(self):
+    def test_output_uuid_fallback_without_response_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
-        r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir)
-        r2 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir)
+        r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        r2 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        assert r1 is not None and r2 is not None
         assert r1["id"].startswith("rs_")
         assert r2["id"].startswith("rs_")
         assert r1["id"] != r2["id"]

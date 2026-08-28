@@ -728,6 +728,9 @@ class TestOpenAIResponsesConverter:
         types = [item["type"] for item in output]
         assert "reasoning" in types
         assert "message" in types
+        reasoning = next(item for item in output if item["type"] == "reasoning")
+        assert reasoning["id"].startswith("rs_")
+        assert reasoning["status"] == "completed"
 
     # ==================== messages_to_provider / messages_from_provider ====================
 

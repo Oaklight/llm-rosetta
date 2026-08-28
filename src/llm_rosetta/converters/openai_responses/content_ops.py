@@ -244,33 +244,42 @@ class OpenAIResponsesContentOps(BaseContentOps):
     # ==================== Reasoning ====================
 
     @staticmethod
-    def ir_reasoning_to_p(ir_reasoning: ReasoningPart, **kwargs: Any) -> dict:
+    def ir_reasoning_to_p(
+        ir_reasoning: ReasoningPart,
+        *,
+        output_item: bool = False,
+        **kwargs: Any,
+    ) -> dict | None:
         """IR ReasoningPart → OpenAI Responses reasoning item.
 
         Args:
             ir_reasoning: IR reasoning part.
+            output_item: Whether to serialize a response output lifecycle item.
 
         Returns:
-            OpenAI Responses reasoning item dict.
+            OpenAI Responses reasoning item, or ``None`` when a request item has
+            no proven Responses-origin identity.
         """
+        metadata = ir_reasoning.get("provider_metadata") or {}
+        item_id = metadata.get("responses_reasoning_id")
+        if not output_item and not item_id:
+            return None
+
         result: dict[str, Any] = {
             "type": "reasoning",
         }
 
-        # Recover the original reasoning item id for round-trip fidelity.
-        metadata = ir_reasoning.get("provider_metadata") or {}
-        item_id = metadata.get("responses_reasoning_id")
         if not item_id:
             response_id = kwargs.get("response_id", "")
             reasoning_index = kwargs.get("reasoning_index", 0)
             item_id = generate_reasoning_id(response_id, reasoning_index)
         result["id"] = item_id
-        result["status"] = "completed"
+        if output_item:
+            result["status"] = "completed"
 
-        # Recover structured summary if available, otherwise use flat content.
-        summary = metadata.get("responses_reasoning_summary")
-        if summary:
-            result["summary"] = summary
+        # Preserve an explicit structured summary, including an empty list.
+        if "responses_reasoning_summary" in metadata:
+            result["summary"] = metadata["responses_reasoning_summary"]
         else:
             content = ir_reasoning.get("reasoning", "")
             # The Responses API uses a summary array, not a flat content field.
@@ -332,7 +341,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
         raw_content = provider_reasoning.get("content")
         if raw_content:
             metadata["responses_reasoning_content"] = raw_content
-            if not reasoning_content:
+            if not reasoning_content and isinstance(raw_content, str):
                 reasoning_content = raw_content
 
         part = ReasoningPart(type="reasoning")

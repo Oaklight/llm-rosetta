@@ -453,6 +453,7 @@ class OpenAIResponsesConverter(BaseConverter):
                     provider_response["output"].append(
                         self.content_ops.ir_reasoning_to_p(
                             part,
+                            output_item=True,
                             response_id=ir_response.get("id", ""),
                             reasoning_index=reasoning_index,
                         )
