@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [Unreleased]
+## v0.11.0 — 2026-08-28
 
 ### Changed
 
@@ -24,6 +24,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Admin UI config path abbreviated** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — shows filename only with full path in tooltip. System clock now shows timezone abbreviation.
 - **Admin UI toast centered** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — toast notifications now centered horizontally instead of pinned to bottom-right.
+- **OpenAI Responses reasoning input lifecycle** (PR [#569](https://github.com/Oaklight/llm-rosetta/pull/569)): fixed output-only fields (`status: "completed"`, synthetic `rs_` IDs) leaking into Responses request input items. Unproven cross-format reasoning (from Chat/Anthropic/Google) is now omitted rather than assigned a fake identity. Proven Responses-origin reasoning preserves the real ID and summary but strips output-only status. Fixes [#568](https://github.com/Oaklight/llm-rosetta/issues/568).
+- **Admin UI "Allowed Shims" hidden** (PR [#574](https://github.com/Oaklight/llm-rosetta/pull/574)): removed the confusing "Allowed Shims" column and modal input from the API keys page — "shim" is an internal concept. Backend storage unchanged (defaults to `["*"]`).
 
 ### Added
 
