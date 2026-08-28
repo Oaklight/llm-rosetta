@@ -141,7 +141,7 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 .settings-popup-panel h3 {
-  margin-bottom: 20px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em;
+  margin-bottom: 20px; font-size: 16px; font-weight: 600; letter-spacing: -0.01em;
   display: flex; align-items: center; gap: 8px;
 }
 .settings-popup-panel h3::before {
@@ -151,10 +151,10 @@ a { color: var(--accent); text-decoration: none; }
 .settings-section {
   background: var(--bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 16px 18px; margin-bottom: 10px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+  
+  transition: border-color 0.2s ease;
 }
-.settings-section:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+.settings-section:hover { border-color: var(--text-dim); }
 .settings-section-title {
   font-size: 11px; font-weight: 700; color: var(--text-dim);
   text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px;
