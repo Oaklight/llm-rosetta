@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1
+
+# Source build — installs both distributions from the repository tree.
+#
+# The release image (docker/Dockerfile) installs wheels from dist/ or PyPI and
+# remains the path `make build-docker` and the release workflow use.  This
+# file exists for building a container straight from a checkout, e.g. through
+# docker/docker-compose.source.yaml.
+#
+# Only the files a package build reads are copied: the manifests, their
+# READMEs and src/.  Copying packages/ wholesale would carry anything a
+# developer keeps beside the code into the image.
+
+ARG PYTHON_VERSION=3.12
+ARG REGISTRY_MIRROR
+FROM ${REGISTRY_MIRROR:-docker.io}/python:${PYTHON_VERSION}-alpine AS base
+
+ARG PYPI_MIRROR
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+RUN addgroup -g 1000 appgroup && \
+    adduser -D -u 1000 -G appgroup appuser
+
+COPY packages/llm-rosetta/pyproject.toml packages/llm-rosetta/README*.md \
+     /app/packages/llm-rosetta/
+COPY packages/llm-rosetta/src/ /app/packages/llm-rosetta/src/
+COPY packages/llm-rosetta-gateway/pyproject.toml packages/llm-rosetta-gateway/README*.md \
+     /app/packages/llm-rosetta-gateway/
+COPY packages/llm-rosetta-gateway/src/ /app/packages/llm-rosetta-gateway/src/
+
+RUN if [ -n "$PYPI_MIRROR" ]; then \
+        pip install -i "$PYPI_MIRROR" --no-cache-dir \
+            ./packages/llm-rosetta ./packages/llm-rosetta-gateway; \
+    else \
+        pip install --no-cache-dir \
+            ./packages/llm-rosetta ./packages/llm-rosetta-gateway; \
+    fi && \
+    pip uninstall -y pip setuptools 2>/dev/null || true
+
+RUN mkdir -p /config && chown appuser:appgroup /config
+VOLUME /config
+
+COPY --chmod=755 docker/entrypoint.sh /entrypoint.sh
+
+USER appuser
+EXPOSE 8765
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["llm-rosetta-gateway", "--config", "/config/config.jsonc", "--host", "0.0.0.0"]

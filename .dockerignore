@@ -1,14 +1,17 @@
 # ── Secrets & credentials (CRITICAL) ──────────────────
-.env
-.env.*
-.envrc
-*.key
-*.pem
-*.p12
-*.jks
-credentials*
-service-account*
-config.jsonc
+# Patterns match the path relative to the build context, so a bare name only
+# covers the root; the `**/` forms keep a stray credential out of the context
+# wherever it sits (the source build copies from packages/, so this matters).
+**/.env
+**/.env.*
+**/.envrc
+**/*.key
+**/*.pem
+**/*.p12
+**/*.jks
+**/credentials*
+**/service-account*
+**/config.jsonc
 
 # ── Git ───────────────────────────────────────────────
 .git/
