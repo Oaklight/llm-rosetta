@@ -6,6 +6,28 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [未发布]
+
+### 变更
+
+- **Admin UI 配色系统重设计** (PRs [#564](https://github.com/Oaklight/llm-rosetta/pull/564), [#566](https://github.com/Oaklight/llm-rosetta/pull/566), [#571](https://github.com/Oaklight/llm-rosetta/pull/571))：将单一的明/暗主题替换为双配色方案系统 — **Minimal**（Vercel 风格纯黑白）和 **Emerald**（Neon 风格绿色主题），各有明暗两种模式（共 4 种组合）。架构从 JS 驱动的 `THEMES` 对象迁移到 CSS 复合选择器（`[data-scheme][data-mode]`）。设置面板现有独立的配色方案和模式选择器。
+- **Admin UI 字体与一致性** (PR [#570](https://github.com/Oaklight/llm-rosetta/pull/570))：将字号从 10 级收敛到 7 级。提取 `.btn-disabled` 类替代内联禁用样式。统一海拔模型——移除设置区域的阴影，统一为 border-hover 模式。标准化表单输入字体（代码输入用等宽字体，下拉选择用无衬线字体）。
+- **Admin UI CSS 变量架构** (PR [#571](https://github.com/Oaklight/llm-rosetta/pull/571))：将配色方案的结构差异（表头排版、徽章圆角、图表柱形颜色）从 CSS 选择器覆盖迁移到自定义属性。新增配色方案现在只需在 `base.css` 中添加一个变量块。
+
+### 修复
+
+- **Admin UI CSS bug** (PR [#564](https://github.com/Oaklight/llm-rosetta/pull/564))：修复未定义的 `var(--hover)`、合并重复的 `.btn-danger` 定义、为暗色主题添加 `--purple`、将所有硬编码颜色替换为 CSS 变量和 `color-mix()`。
+- **错误转储覆盖率** (PRs [#572](https://github.com/Oaklight/llm-rosetta/pull/572), [#573](https://github.com/Oaklight/llm-rosetta/pull/573))：为 4 个之前未覆盖的失败路径添加 `dump_error()` — 请求阶段转换错误（400）、非流式连接错误（502）、响应阶段转换错误（502）和流式中间错误块。提取 `DumpContext` 数据类简化参数传递。
+- **Emoji 空状态图标** 替换为 SVG 线条图标（柱状图、相机、文件夹），匹配极简设计语言。
+- **Rosetta Stone SVG favicon** — 将 emoji favicon（🔀）替换为项目的罗塞塔石碑轮廓，同时作为 `<link rel="icon">` 和服务端 `/favicon.ico` 提供。
+
+### 新增
+
+- **Rosetta Stone 头部标志** — 管理面板头部的 SVG 石碑轮廓图标。
+- **GitHub 仓库图标** — `design/logo/out/rosetta-icon-github.svg`，用于 GitHub 仓库设置。
+- **Admin UI 国际化** — 新增配色方案/模式选择器的中英文标签。
+- **设计演示** — `design/ui` 分支上的主题对比演示（Minimal、Emerald、Vercel、Neon、Metallic 风格）。
+
 ## v0.10.0 — 2026-08-26
 
 ### 新增
