@@ -62,9 +62,11 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
     运行本地 HTTP 代理，实时在格式之间转换：
 
     ```text
-    客户端（OpenAI 格式）──→ 网关 ──→ Anthropic API
-    客户端（Anthropic 格式）──→ 网关 ──→ Google API
-    客户端（Google 格式）──→ 网关 ──→ 任意提供商
+    客户端（Chat Completions）──→ 网关 ──→ Anthropic API
+    客户端（Responses API）   ──→ 网关 ──→ Google API
+    客户端（Open Responses）  ──→ 网关 ──→ 任意提供商
+    客户端（Anthropic 格式）  ──→ 网关 ──→ OpenAI API
+    客户端（Google 格式）     ──→ 网关 ──→ 任意提供商
     ```
 
     ```bash
