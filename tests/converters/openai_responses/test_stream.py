@@ -9,6 +9,7 @@ from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.openai_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
+from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -597,6 +598,164 @@ class TestStreamRoundTrip:
         )
         assert restored["item_id"] == "call_abc"
         assert restored["delta"] == '{"q": "test"}'
+
+
+class TestForcedResponsesStreamPipeline:
+    """Forced Responses-to-Responses streaming through the public pipeline."""
+
+    @staticmethod
+    def _reasoning_chunks(
+        item_id: str, text: str, encrypted_content: str | None
+    ) -> list[dict[str, Any]]:
+        final_item = {
+            "id": item_id,
+            "type": "reasoning",
+            "summary": [{"type": "summary_text", "text": text}],
+            "status": "completed",
+        }
+        if encrypted_content is not None:
+            final_item["encrypted_content"] = encrypted_content
+        return [
+            {
+                "type": "response.created",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "in_progress",
+                    "output": [],
+                },
+            },
+            {
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "id": item_id,
+                    "type": "reasoning",
+                    "summary": [],
+                    "status": "in_progress",
+                },
+            },
+            {
+                "type": "response.reasoning_summary_part.added",
+                "item_id": item_id,
+                "output_index": 0,
+                "summary_index": 0,
+                "part": {"type": "summary_text", "text": ""},
+            },
+            {
+                "type": "response.reasoning_summary_text.delta",
+                "item_id": item_id,
+                "output_index": 0,
+                "summary_index": 0,
+                "delta": text,
+            },
+            {
+                "type": "response.reasoning_summary_text.done",
+                "item_id": item_id,
+                "output_index": 0,
+                "summary_index": 0,
+                "text": text,
+            },
+            {
+                "type": "response.reasoning_summary_part.done",
+                "item_id": item_id,
+                "output_index": 0,
+                "summary_index": 0,
+                "part": {"type": "summary_text", "text": text},
+            },
+            {
+                "type": "response.output_item.done",
+                "output_index": 0,
+                "item": final_item,
+            },
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "completed",
+                    "output": [final_item],
+                },
+            },
+        ]
+
+    @staticmethod
+    def _run(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        pipeline = ConversionPipeline(
+            "openai_responses", "openai_responses", force_conversion=True
+        )
+        pipeline.convert_request(
+            {"model": "gpt-test", "input": "hello", "stream": True}
+        )
+        processor = pipeline.create_stream_processor()
+        return [event for chunk in chunks for event in processor.process_chunk(chunk)]
+
+    @staticmethod
+    def _reasoning_projection(events: list[dict[str, Any]]) -> dict[str, Any]:
+        added = next(
+            event
+            for event in events
+            if event["type"] == "response.output_item.added"
+            and event["item"]["type"] == "reasoning"
+        )
+        delta = next(
+            event
+            for event in events
+            if event["type"] == "response.reasoning_summary_text.delta"
+        )
+        done = next(
+            event
+            for event in events
+            if event["type"] == "response.output_item.done"
+            and event["item"]["type"] == "reasoning"
+        )
+        completed = next(
+            event for event in events if event["type"] == "response.completed"
+        )
+        completed_reasoning = next(
+            item
+            for item in completed["response"]["output"]
+            if item["type"] == "reasoning"
+        )
+        return {
+            "added_id": added["item"]["id"],
+            "delta_id": delta["item_id"],
+            "done_id": done["item"]["id"],
+            "done_blob": done["item"].get("encrypted_content"),
+            "completed_id": completed_reasoning["id"],
+            "completed_blob": completed_reasoning.get("encrypted_content"),
+        }
+
+    def test_reasoning_done_preserves_source_id_and_encrypted_content(self):
+        """The completed reasoning item is authoritative for its ID/blob pair."""
+        events = self._run(self._reasoning_chunks("rs_real", "step 1", "enc_final"))
+
+        assert self._reasoning_projection(events) == {
+            "added_id": "rs_real",
+            "delta_id": "rs_real",
+            "done_id": "rs_real",
+            "done_blob": "enc_final",
+            "completed_id": "rs_real",
+            "completed_blob": "enc_final",
+        }
+
+    def test_reasoning_without_encrypted_content_remains_valid(self):
+        """A valid no-blob stream stays consistent and gains no fabricated blob."""
+        events = self._run(self._reasoning_chunks("rs_plain", "plain", None))
+        observed = self._reasoning_projection(events)
+        item_ids = {
+            observed["added_id"],
+            observed["delta_id"],
+            observed["done_id"],
+            observed["completed_id"],
+        }
+
+        assert len(item_ids) == 1
+        assert next(iter(item_ids)).startswith("rs_")
+        assert observed["done_blob"] is None
+        assert observed["completed_blob"] is None
 
 
 class TestStreamResponseFromProviderWithContext:
@@ -2130,6 +2289,51 @@ class TestReasoningStreamingLifecycle:
         ]
         assert len(deltas) == 2
         assert deltas[0]["item_id"] == deltas[1]["item_id"]
+
+    def test_reasoning_without_responses_provenance_uses_generated_id(self):
+        """Cross-format reasoning uses one generated ID for its full lifecycle."""
+        events = self._run_stream(
+            [
+                {"type": "stream_start", "response_id": "resp_1", "model": "m"},
+                {"type": "reasoning_delta", "reasoning": "step 1"},
+                {"type": "finish", "finish_reason": {"reason": "stop"}},
+                {"type": "stream_end"},
+            ]
+        )
+        added = next(
+            event
+            for event in events
+            if event["type"] == "response.output_item.added"
+            and event["item"]["type"] == "reasoning"
+        )
+        delta = next(
+            event
+            for event in events
+            if event["type"] == "response.reasoning_summary_text.delta"
+        )
+        done = next(
+            event
+            for event in events
+            if event["type"] == "response.output_item.done"
+            and event["item"]["type"] == "reasoning"
+        )
+        completed = next(
+            event for event in events if event["type"] == "response.completed"
+        )
+        completed_reasoning = next(
+            item
+            for item in completed["response"]["output"]
+            if item["type"] == "reasoning"
+        )
+        item_ids = {
+            added["item"]["id"],
+            delta["item_id"],
+            done["item"]["id"],
+            completed_reasoning["id"],
+        }
+
+        assert len(item_ids) == 1
+        assert next(iter(item_ids)).startswith("rs_")
 
 
 class TestStreamingResponseIdPrefix:

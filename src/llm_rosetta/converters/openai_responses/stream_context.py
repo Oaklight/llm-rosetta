@@ -49,6 +49,7 @@ class OpenAIResponsesStreamContext(StreamContext):
     _reasoning_item_id: str = ""
     _reasoning_output_index: int = -1
     _reasoning_accumulated_text: str = ""
+    _reasoning_encrypted_content: str = ""
 
     def next_output_index(self) -> int:
         """Allocate the next output_index.
