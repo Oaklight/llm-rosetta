@@ -327,6 +327,18 @@ async def handle_non_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=400,
+            error_phase="conversion",
+            upstream_url=str(provider_info.base_url),
+        )
         return error_response_for_source(route.source_provider, 400, str(exc)), profile
 
     profile.update(pipeline.profile)
@@ -356,6 +368,19 @@ async def handle_non_streaming(
         )
     except UpstreamConnectionError as exc:
         profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=502,
+            error_phase="upstream",
+            upstream_url=str(provider_info.base_url),
+        )
         if capture_state is not None:
             capture_state.record(
                 CapturedRequest(
@@ -433,6 +458,19 @@ async def handle_non_streaming(
         )
     except ConversionError as exc:
         profile.update(pipeline.profile)
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=502,
+            error_phase="response",
+            upstream_url=str(provider_info.base_url),
+        )
         return error_response_for_source(route.source_provider, 502, str(exc)), profile
 
     # Merge response-phase timings from pipeline
@@ -517,6 +555,13 @@ async def _stream_event_generator(
     request_log: Any | None = None,
     capture_record: CapturedRequest | None = None,
     capture_state: CaptureState | None = None,
+    persistence: Any | None = None,
+    request_body: dict | None = None,
+    converted_body: dict | None = None,
+    source_provider_name: str | None = None,
+    target_provider_name: str | None = None,
+    provider_name: str | None = None,
+    upstream_url: str | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
 
@@ -551,6 +596,20 @@ async def _stream_event_generator(
                         json.dumps(chunk)[:2000],
                         endpoint=model,
                         is_streaming=True,
+                    )
+                    dump_error(
+                        persistence,
+                        request_body=request_body,
+                        response_text=json.dumps(chunk)[:2000],
+                        converted_body=converted_body,
+                        model=model,
+                        source_provider=source_provider_name,
+                        target_provider=target_provider_name,
+                        provider_name=provider_name,
+                        status_code=getattr(stream, "status_code", 200),
+                        error_phase="stream_chunk",
+                        upstream_url=upstream_url,
+                        request_log_id=entry_id,
                     )
                     for event in build_stream_error_events(
                         source_provider, stream_error
@@ -746,6 +805,18 @@ async def handle_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
+        dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=400,
+            error_phase="conversion",
+            upstream_url=str(provider_info.base_url),
+        )
         return error_response_for_source(route.source_provider, 400, str(exc)), profile
 
     profile.update(pipeline.profile)
@@ -891,6 +962,13 @@ async def handle_streaming(
                 request_log=request_log,
                 capture_record=_capture_record,
                 capture_state=capture_state,
+                persistence=persistence,
+                request_body=body,
+                converted_body=target_body,
+                source_provider_name=route.source_provider,
+                target_provider_name=route.target_provider,
+                provider_name=route.provider_name,
+                upstream_url=str(provider_info.base_url),
             ),
             content_type="text/event-stream",
         ),
