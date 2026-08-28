@@ -39,6 +39,7 @@ from .logging import (
     log_upstream_error,
 )
 from .sanitize import sanitize_upstream_error
+
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -53,6 +54,19 @@ from .transport.sse_format import (
 )
 
 logger = get_logger()
+
+
+@dataclass
+class DumpContext:
+    """Bundles error-dump parameters passed through streaming pipelines."""
+
+    persistence: Any | None = None
+    request_body: dict | None = None
+    converted_body: dict | None = None
+    source_provider: str | None = None
+    target_provider: str | None = None
+    provider_name: str | None = None
+    upstream_url: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -555,13 +569,7 @@ async def _stream_event_generator(
     request_log: Any | None = None,
     capture_record: CapturedRequest | None = None,
     capture_state: CaptureState | None = None,
-    persistence: Any | None = None,
-    request_body: dict | None = None,
-    converted_body: dict | None = None,
-    source_provider_name: str | None = None,
-    target_provider_name: str | None = None,
-    provider_name: str | None = None,
-    upstream_url: str | None = None,
+    dump_ctx: DumpContext | None = None,
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
 
@@ -597,18 +605,19 @@ async def _stream_event_generator(
                         endpoint=model,
                         is_streaming=True,
                     )
+                    _dc = dump_ctx or DumpContext()
                     dump_error(
-                        persistence,
-                        request_body=request_body,
+                        _dc.persistence,
+                        request_body=_dc.request_body,
                         response_text=json.dumps(chunk)[:2000],
-                        converted_body=converted_body,
+                        converted_body=_dc.converted_body,
                         model=model,
-                        source_provider=source_provider_name,
-                        target_provider=target_provider_name,
-                        provider_name=provider_name,
-                        status_code=getattr(stream, "status_code", 200),
+                        source_provider=_dc.source_provider,
+                        target_provider=_dc.target_provider,
+                        provider_name=_dc.provider_name,
+                        status_code=getattr(stream, "status_code", 0),
                         error_phase="stream_chunk",
-                        upstream_url=upstream_url,
+                        upstream_url=_dc.upstream_url,
                         request_log_id=entry_id,
                     )
                     for event in build_stream_error_events(
@@ -962,13 +971,15 @@ async def handle_streaming(
                 request_log=request_log,
                 capture_record=_capture_record,
                 capture_state=capture_state,
-                persistence=persistence,
-                request_body=body,
-                converted_body=target_body,
-                source_provider_name=route.source_provider,
-                target_provider_name=route.target_provider,
-                provider_name=route.provider_name,
-                upstream_url=str(provider_info.base_url),
+                dump_ctx=DumpContext(
+                    persistence=persistence,
+                    request_body=body,
+                    converted_body=target_body,
+                    source_provider=route.source_provider,
+                    target_provider=route.target_provider,
+                    provider_name=route.provider_name,
+                    upstream_url=str(provider_info.base_url),
+                ),
             ),
             content_type="text/event-stream",
         ),
