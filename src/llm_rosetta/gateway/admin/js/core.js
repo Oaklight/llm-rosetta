@@ -36,7 +36,7 @@ function setMode(mode) {
 function setTheme(name) {
   if (name === 'light') { setScheme('minimal'); setMode('light'); }
   else if (name === 'dark') { setScheme('minimal'); setMode('dark'); }
-  else { setScheme(name.split('-')[0] || 'minimal'); setMode(name.split('-')[1] || 'light'); }
+  else { setScheme('minimal'); setMode('light'); }
 }
 
 // ===================== API =====================
