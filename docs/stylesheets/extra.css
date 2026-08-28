@@ -1,3 +1,4 @@
-[data-md-color-scheme="slate"] .md-header .md-logo img {
+[data-md-color-scheme="slate"] .md-logo img,
+[data-md-color-scheme="slate"] .md-content img[src*="rosetta_stone"] {
   filter: invert(1);
 }
