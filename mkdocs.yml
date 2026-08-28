@@ -9,6 +9,8 @@ copyright: Copyright &copy; 2024 Peng Ding
 theme:
   name: material
   custom_dir: overrides
+  logo: images/rosetta_stone.svg
+  favicon: images/rosetta_stone.svg
   language: zh
   palette:
     - media: "(prefers-color-scheme)"
