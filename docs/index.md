@@ -105,7 +105,6 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons, and
 | **Auto Detection** | Detect provider format from request structure |
 | **Gateway + Admin Panel** | HTTP proxy with web UI for config, metrics, and logs |
 | **Type Safe** | Full TypedDict annotations for all types |
-| **Zero Overhead** | Pure dict transformations, no validation cost |
 
 ---
 
