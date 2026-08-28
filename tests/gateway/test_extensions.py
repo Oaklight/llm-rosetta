@@ -41,11 +41,13 @@ class TestSkipDefaultRoutes:
         ext = GatewayExtensions(skip_default_routes=True)
         app = create_app(_minimal_cfg(), extensions=ext)
         patterns = _route_patterns(app)
+        assert patterns, "route introspection returned nothing"
         assert "^/v1/chat/completions$" not in patterns
 
     def test_default_routes_present(self):
         app = create_app(_minimal_cfg())
         patterns = _route_patterns(app)
+        assert patterns, "route introspection returned nothing"
         assert "^/v1/chat/completions$" in patterns
 
 
@@ -109,28 +111,28 @@ class TestExtraRoutes:
         )
         app = create_app(_minimal_cfg(), extensions=ext)
         patterns = _route_patterns(app)
+        assert patterns, "route introspection returned nothing"
         assert "^/custom/endpoint$" in patterns
 
 
 class TestExtraHooks:
-    def test_before_hooks_registered(self):
-        calls = []
-
+    def test_before_request_handlers_wired(self):
         async def my_hook(request):
-            calls.append("before")
             return None
 
         ext = GatewayExtensions(before_hooks=[my_hook])
         app = create_app(_minimal_cfg(), extensions=ext)
-        assert app is not None
+        hooks = getattr(app, "_before_request_handlers", [])
+        assert my_hook in hooks, "before_hook not found in app hook list"
 
-    def test_after_hooks_registered(self):
+    def test_after_request_handlers_wired(self):
         async def my_hook(request, response):
             return response
 
         ext = GatewayExtensions(after_hooks=[my_hook])
         app = create_app(_minimal_cfg(), extensions=ext)
-        assert app is not None
+        hooks = getattr(app, "_after_request_handlers", [])
+        assert my_hook in hooks, "after_hook not found in app hook list"
 
 
 class TestAdminSetup:
@@ -181,5 +183,6 @@ class TestCombinedExtensions:
         assert app.max_body_size == 100 * 1024 * 1024
         assert not hasattr(app, "rate_limit_state")
         patterns = _route_patterns(app)
+        assert patterns, "route introspection returned nothing"
         assert "^/v1/chat/completions$" not in patterns
         assert "^/admin/api/custom/env$" in patterns

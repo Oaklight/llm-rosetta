@@ -830,7 +830,7 @@ def create_app(
     for path, methods, handler in ext.extra_routes:
         app.route(path, methods=methods)(handler)
 
-    # --- .well-known ---
+    # --- .well-known (always registered, not a proxy route) ---
     @app.route("/.well-known/change-password", methods=["GET"])
     async def well_known_change_password(request: Any) -> Response:
         return Response(
@@ -856,8 +856,6 @@ def create_app(
     from .admin.routes import register_admin_routes
 
     register_admin_routes(app)
-
-    # --- Extension routes (post-admin, for overrides) ---
 
     # --- App-level state ---
     app.transport = transport  # type: ignore
