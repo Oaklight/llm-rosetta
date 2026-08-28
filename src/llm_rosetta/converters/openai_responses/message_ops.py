@@ -210,9 +210,6 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 if pt_meta:
                     content_parts.append(pt_meta)
                     continue
-                # Legacy hidden reasoning text has no Responses item provenance.
-                if part.get("reasoning"):
-                    continue
                 content_parts.append({"type": "output_text", "text": part["text"]})
             elif is_tool_call_part(part):
                 tool_items.append(self.tool_ops.ir_tool_call_to_p(part))
