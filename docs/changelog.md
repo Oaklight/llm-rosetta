@@ -12,6 +12,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Admin UI 配色系统重设计** (PRs [#564](https://github.com/Oaklight/llm-rosetta/pull/564), [#566](https://github.com/Oaklight/llm-rosetta/pull/566), [#571](https://github.com/Oaklight/llm-rosetta/pull/571))：将单一的明/暗主题替换为双配色方案系统 — **Minimal**（Vercel 风格纯黑白）和 **Emerald**（Neon 风格绿色主题），各有明暗两种模式（共 4 种组合）。架构从 JS 驱动的 `THEMES` 对象迁移到 CSS 复合选择器（`[data-scheme][data-mode]`）。设置面板现有独立的配色方案和模式选择器。
 - **Admin UI 字体与一致性** (PR [#570](https://github.com/Oaklight/llm-rosetta/pull/570))：将字号从 10 级收敛到 7 级。提取 `.btn-disabled` 类替代内联禁用样式。统一海拔模型——移除设置区域的阴影，统一为 border-hover 模式。标准化表单输入字体（代码输入用等宽字体，下拉选择用无衬线字体）。
+- **Admin UI 响应式布局** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565))：移动端标签栏溢出滚动、表格滚动包裹、内容区最大宽度 1400px、Provider 卡片网格 280px 最小宽度支持 4 列、移动端设置面板内边距缩小。
 - **Admin UI CSS 变量架构** (PR [#571](https://github.com/Oaklight/llm-rosetta/pull/571))：将配色方案的结构差异（表头排版、徽章圆角、图表柱形颜色）从 CSS 选择器覆盖迁移到自定义属性。新增配色方案现在只需在 `base.css` 中添加一个变量块。
 
 ### 修复
@@ -21,8 +22,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Emoji 空状态图标** 替换为 SVG 线条图标（柱状图、相机、文件夹），匹配极简设计语言。
 - **Rosetta Stone SVG favicon** — 将 emoji favicon（🔀）替换为项目的罗塞塔石碑轮廓，同时作为 `<link rel="icon">` 和服务端 `/favicon.ico` 提供。
 
+- **Admin UI 配置路径简化** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — 仅显示文件名，完整路径在 tooltip 中。系统时钟现在显示时区缩写。
+- **Admin UI Toast 居中** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — Toast 通知现在水平居中，不再固定在右下角。
+
 ### 新增
 
+- **Admin UI 无障碍性** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565))：ARIA 角色（`tablist`/`tab`/`tabpanel`、`radiogroup`/`radio`、`dialog`）、标签和分段控件的方向键导航、弹窗焦点陷阱。
 - **Rosetta Stone 头部标志** — 管理面板头部的 SVG 石碑轮廓图标。
 - **GitHub 仓库图标** — `design/logo/out/rosetta-icon-github.svg`，用于 GitHub 仓库设置。
 - **Admin UI 国际化** — 新增配色方案/模式选择器的中英文标签。
