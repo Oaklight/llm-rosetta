@@ -349,6 +349,20 @@ class TestOpenAIResponsesContentOps:
         assert result["signature"] == "enc_sig_xyz"
         assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
 
+    def test_p_reasoning_to_ir_list_content_not_stringified(self):
+        """List content with empty summary stays structured, not stringified."""
+        raw_content = [{"type": "reasoning_text", "text": "raw"}]
+        provider = {
+            "type": "reasoning",
+            "id": "rs_abc",
+            "summary": [],
+            "content": raw_content,
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result.get("reasoning", "") == ""
+        assert result["provider_metadata"]["responses_reasoning_content"] == raw_content
+
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
         original = ReasoningPart(type="reasoning", reasoning="Step by step analysis")
