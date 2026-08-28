@@ -6,6 +6,28 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [Unreleased]
+
+### Changed
+
+- **Admin UI color system redesign** (PRs [#564](https://github.com/Oaklight/llm-rosetta/pull/564), [#566](https://github.com/Oaklight/llm-rosetta/pull/566), [#571](https://github.com/Oaklight/llm-rosetta/pull/571)): replaced the single light/dark theme with a two-scheme system — **Minimal** (Vercel-inspired pure B&W) and **Emerald** (Neon-inspired green accent), each with light and dark modes (4 total combinations). Architecture moved from JS-driven `THEMES` object to CSS-driven compound selectors (`[data-scheme][data-mode]`). Settings UI now has separate Scheme and Mode selectors.
+- **Admin UI typography and consistency** (PR [#570](https://github.com/Oaklight/llm-rosetta/pull/570)): consolidated font sizes from 10 discrete steps to 7. Extracted `.btn-disabled` class to replace inline disabled styles. Normalized elevation model — removed box-shadow from settings sections, unified to border-hover pattern. Standardized form input font-family (mono for code inputs, sans for selects).
+- **Admin UI CSS variable architecture** (PR [#571](https://github.com/Oaklight/llm-rosetta/pull/571)): migrated scheme-specific structural differences (table header typography, badge radius, chart bar colors) from CSS selector overrides to custom properties. Adding a new scheme now requires only one variable block in `base.css`.
+
+### Fixed
+
+- **Admin UI CSS bugs** (PR [#564](https://github.com/Oaklight/llm-rosetta/pull/564)): fixed undefined `var(--hover)` in fetch-models list, consolidated duplicate `.btn-danger` definitions, added `--purple` to dark theme, replaced all hardcoded hex/rgba colors with CSS variables and `color-mix()`.
+- **Error dump coverage** (PRs [#572](https://github.com/Oaklight/llm-rosetta/pull/572), [#573](https://github.com/Oaklight/llm-rosetta/pull/573)): added `dump_error()` to 4 previously uninstrumented failure paths — request-phase conversion errors (400), non-streaming connection errors (502), response-phase conversion errors (502), and mid-stream error chunks. Extracted `DumpContext` dataclass for cleaner parameter passing.
+- **Emoji empty-state icons replaced** with SVG line icons (bar-chart, camera, folder) matching the minimal design language.
+- **Rosetta Stone SVG favicon** — replaced the emoji favicon (🔀) with the project's Rosetta Stone silhouette, served as both inline `<link rel="icon">` and server-side `/favicon.ico`.
+
+### Added
+
+- **Rosetta Stone header logo** — SVG silhouette icon in the admin panel header.
+- **GitHub repo icon** — `design/logo/out/rosetta-icon-github.svg` for GitHub repository settings.
+- **Admin UI i18n** — added Scheme/Mode selector labels in English and Chinese.
+- **Design demos** — theme comparison demos on `design/ui` branch (Minimal, Emerald, Vercel, Neon, Metallic styles).
+
 ## v0.10.0 — 2026-08-26
 
 ### Added
