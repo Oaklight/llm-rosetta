@@ -192,8 +192,8 @@ class TestOpenAIResponsesMessageOps:
         assert result[0]["content"][0]["type"] == "output_text"
         assert result[1]["type"] == "function_call"
 
-    def test_assistant_reasoning_to_p(self):
-        """Test assistant with reasoning → reasoning item."""
+    def test_assistant_unproven_reasoning_is_not_request_portable(self):
+        """Assistant reasoning without Responses provenance is skipped."""
         messages = cast(
             list[Message],
             [
@@ -207,10 +207,12 @@ class TestOpenAIResponsesMessageOps:
             ],
         )
         result, warnings = self.message_ops.ir_messages_to_p(messages)
-        # Reasoning items come first, then message
-        assert len(result) == 2
-        assert result[0]["type"] == "reasoning"
-        assert result[1]["type"] == "message"
+        assert len(result) == 1
+        assert result[0]["type"] == "message"
+        assert result[0]["content"] == [
+            {"type": "output_text", "text": "The answer is 42"}
+        ]
+        assert warnings == []
 
     def test_tool_message_to_p(self):
         """Test IR tool message → function_call_output items."""

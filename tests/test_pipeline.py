@@ -510,6 +510,140 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
+    def test_chat_reasoning_request_omits_unproven_native_item(self):
+        """Chat reasoning is not portable as a native Responses input item."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-5",
+                "messages": [
+                    {"role": "user", "content": "Question"},
+                    {
+                        "role": "assistant",
+                        "content": "Answer",
+                        "reasoning_content": "Thinking",
+                    },
+                    {"role": "user", "content": "Follow-up"},
+                ],
+            }
+        )
+        assert [item["type"] for item in target["input"]] == [
+            "message",
+            "message",
+            "message",
+        ]
+        assert [item["role"] for item in target["input"]] == [
+            "user",
+            "assistant",
+            "user",
+        ]
+        assistant = target["input"][1]
+        assert assistant["content"] == [{"type": "output_text", "text": "Answer"}]
+        visible_text = [
+            part["text"]
+            for item in target["input"]
+            for part in item.get("content", [])
+            if "text" in part
+        ]
+        assert "Thinking" not in visible_text
+        assert not any(
+            str(item.get("id", "")).startswith("rs_") for item in target["input"]
+        )
+        assert "store" not in target
+
+    def test_chat_function_call_request_keeps_completed_status(self):
+        """Reasoning status handling does not alter function-call request items."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-5",
+                "messages": [
+                    {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_status",
+                                "type": "function",
+                                "function": {"name": "lookup", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    {
+                        "role": "tool",
+                        "tool_call_id": "call_status",
+                        "content": "result",
+                    },
+                ],
+            }
+        )
+        function_call = next(
+            item for item in target["input"] if item["type"] == "function_call"
+        )
+        assert function_call["status"] == "completed"
+
+    def test_responses_reasoning_request_preserves_fields_without_status(self):
+        """Request conversion preserves reasoning metadata except output-only status."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        summary = [{"type": "summary_text", "text": "Thinking"}]
+        pipeline = ConversionPipeline("openai_responses", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-5",
+                "input": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_original",
+                        "summary": summary,
+                        "encrypted_content": "opaque-signature",
+                        "status": "completed",
+                    }
+                ],
+            }
+        )
+        assert [item["type"] for item in target["input"]] == ["reasoning"]
+        reasoning = target["input"][0]
+        assert reasoning["id"] == "rs_original"
+        assert reasoning["summary"] == summary
+        assert reasoning["encrypted_content"] == "opaque-signature"
+        assert "status" not in reasoning
+
+    def test_responses_reasoning_request_preserves_explicit_empty_summary(self):
+        """Responses provenance fields survive request round-trip exactly."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        raw_content = [{"type": "reasoning_text", "text": "Raw reasoning"}]
+        pipeline = ConversionPipeline("openai_responses", "openai_responses")
+        target = pipeline.convert_request(
+            {
+                "model": "gpt-5",
+                "input": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_empty_summary",
+                        "summary": [],
+                        "content": raw_content,
+                        "encrypted_content": "opaque-signature",
+                        "status": "completed",
+                    }
+                ],
+            }
+        )
+        assert target["input"] == [
+            {
+                "type": "reasoning",
+                "id": "rs_empty_summary",
+                "summary": [],
+                "content": raw_content,
+                "encrypted_content": "opaque-signature",
+            }
+        ]
+
     def test_chat_tool_list_content_to_responses(self):
         """Chat tool list content converts to Responses input blocks."""
         from llm_rosetta.pipeline import ConversionPipeline

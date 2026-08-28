@@ -151,8 +151,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 # Tool results become separate function_call_output items
                 extra_items.append(self.tool_ops.ir_tool_result_to_p(part))
             elif is_reasoning_part(part):
-                # Reasoning becomes a separate reasoning item
-                extra_items.append(self.content_ops.ir_reasoning_to_p(part))
+                reasoning_item = self.content_ops.ir_reasoning_to_p(part)
+                if reasoning_item is not None:
+                    extra_items.append(reasoning_item)
             else:
                 warnings.append(
                     f"Unsupported content part type in {role} message: {part.get('type')}"
@@ -209,17 +210,16 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 if pt_meta:
                     content_parts.append(pt_meta)
                     continue
-                # Check if it's reasoning text (legacy format)
+                # Legacy hidden reasoning text has no Responses item provenance.
                 if part.get("reasoning"):
-                    reasoning_items.append(
-                        {"type": "reasoning", "content": part["text"]}
-                    )
-                else:
-                    content_parts.append({"type": "output_text", "text": part["text"]})
+                    continue
+                content_parts.append({"type": "output_text", "text": part["text"]})
             elif is_tool_call_part(part):
                 tool_items.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_reasoning_part(part):
-                reasoning_items.append(self.content_ops.ir_reasoning_to_p(part))
+                reasoning_item = self.content_ops.ir_reasoning_to_p(part)
+                if reasoning_item is not None:
+                    reasoning_items.append(reasoning_item)
             else:
                 warnings.append(
                     f"Unsupported content part type in assistant message: "
