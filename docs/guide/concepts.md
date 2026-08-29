@@ -12,9 +12,14 @@ With N LLM providers, direct conversion between every pair requires N×(N-1) con
 
 LLM-Rosetta introduces a central **Intermediate Representation (IR)** as the hub. Each provider only needs one converter to/from the IR, reducing the total to 2×N converters (8 for 4 providers).
 
-```text
-Provider A ←→ IR ←→ Provider B
-Provider C ←→ IR ←→ Provider D
+```mermaid
+graph LR
+    A["OpenAI Chat<br/><small>openai_chat</small>"] <--> IR["IR<br/><small>Hub</small>"]
+    B["OpenAI Responses<br/><small>openai_responses</small>"] <--> IR
+    C["Anthropic<br/><small>anthropic</small>"] <--> IR
+    D["Google GenAI<br/><small>google</small>"] <--> IR
+
+    style IR fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
 ## Converter Architecture

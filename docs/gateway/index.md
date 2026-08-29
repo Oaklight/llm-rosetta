@@ -6,10 +6,16 @@ title: Gateway
 
 The LLM-Rosetta Gateway is an HTTP proxy that translates between LLM provider API formats in real time. Send requests in any supported format — the gateway converts and forwards them to the configured upstream provider.
 
-```text
-Client (OpenAI format) ──→ Gateway ──→ Anthropic API
-Client (Anthropic format) ──→ Gateway ──→ OpenAI API
-Client (Google format) ──→ Gateway ──→ Any provider
+```mermaid
+graph LR
+    C1["Client<br/><small>OpenAI format</small>"] --> GW["Gateway"]
+    C2["Client<br/><small>Anthropic format</small>"] --> GW
+    C3["Client<br/><small>Google format</small>"] --> GW
+    GW --> U1["Anthropic API"]
+    GW --> U2["OpenAI API"]
+    GW --> U3["Any provider"]
+
+    style GW fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
 New here? Start with the [Gateway Quick Start](../getting-started/gateway-quickstart.md).
@@ -63,15 +69,21 @@ Requests must provide the key in the format native to each API standard (Bearer 
 
 The gateway uses LLM-Rosetta's converter pipeline:
 
-```text
-1. Incoming request (source format)
-2. source_converter.request_from_provider() → IR Request
-3. Look up model → target provider
-4. target_converter.request_to_provider() → target format
-5. Forward to upstream API
-6. target_converter.response_from_provider() → IR Response
-7. source_converter.response_to_provider() → source format
-8. Return to client
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Gateway
+    participant Upstream
+
+    Client->>Gateway: Request (source format)
+    Gateway->>Gateway: source_converter.request_from_provider() → IR
+    Gateway->>Gateway: Look up model → target provider
+    Gateway->>Gateway: target_converter.request_to_provider() → target format
+    Gateway->>Upstream: Forward request
+    Upstream-->>Gateway: Response (target format)
+    Gateway->>Gateway: target_converter.response_from_provider() → IR
+    Gateway->>Gateway: source_converter.response_to_provider() → source format
+    Gateway-->>Client: Response (source format)
 ```
 
 For streaming, the same pipeline operates at the SSE chunk level using `stream_response_from_provider()` and `stream_response_to_provider()` with `StreamContext` for stateful conversion.

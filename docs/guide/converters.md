@@ -199,3 +199,10 @@ items = fix_orphaned_tool_calls(items)
 Google's REST API and CLI tools (e.g. Gemini CLI) use camelCase (`inlineData`, `mimeType`, `functionCall`, `functionResponse`, `functionDeclarations`, `responseMimeType`, `thinkingConfig`, etc.) while the Python SDK uses snake_case. LLM-Rosetta's Google converter accepts both conventions transparently in all layers — content, tools, config, and response fields. All IR→Provider output uses camelCase for REST API compatibility.
 
 For a comprehensive list of all camelCase/snake_case field pairs and other real-world compatibility issues discovered during live testing, see the [Provider & CLI Compatibility Matrix](compatibility.md).
+
+## See Also
+
+- [Streaming](streaming.md) — convert streaming chunks with `StreamContext`
+- [Multi-Turn State Bridge](turn-bridge.md) — preserve provider metadata across HTTP turns
+- [Provider Shims](shims.md) — how providers declare field-level transforms
+- [IR Types](ir-types.md) — the Intermediate Representation type definitions
