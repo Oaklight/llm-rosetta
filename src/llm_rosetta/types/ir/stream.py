@@ -120,8 +120,10 @@ class ReasoningDeltaEvent(TypedDict):
     type: Required[Literal["reasoning_delta"]]
     reasoning: Required[str]  # The reasoning text delta
     signature: NotRequired[str]  # Anthropic thinking signature delta
+    encrypted_content: NotRequired[str]  # Responses reasoning encrypted state
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     choice_index: NotRequired[int]
+    provider_metadata: NotRequired[dict[str, Any]]
 
 
 class RefusalDeltaEvent(TypedDict):
