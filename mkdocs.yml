@@ -112,31 +112,24 @@ nav:
       - Core Concepts: guide/concepts.md
       - Library Quick Start: getting-started/library-quickstart.md
       - Gateway Quick Start: getting-started/gateway-quickstart.md
-  - IR Type System:
-      - IR Types: guide/ir-types.md
-      - API Layers: guide/api-layers.md
-      - Text Generation API Formats: guide/api-standards.md
-      - Rerank API Formats: guide/rerank-formats.md
-      - Embedding API Formats: guide/embedding-formats.md
-      - API Reference: api/types.md
-  - Library:
-      - Provider Compatibility: guide/compatibility.md
-      - Chat Converters:
+  - Guide:
+      - IR & Type System:
+          - IR Types: guide/ir-types.md
+          - API Layers: guide/api-layers.md
+          - API Formats:
+              - Text Generation: guide/api-standards.md
+              - Rerank: guide/rerank-formats.md
+              - Embedding: guide/embedding-formats.md
+      - Converters:
           - Using Converters: guide/converters.md
           - Streaming: guide/streaming.md
           - Multi-Turn State Bridge: guide/turn-bridge.md
           - Auto Detection: guide/auto-detection.md
-      - Rerank Converters: guide/rerank-formats.md
-      - Embedding Converters: guide/embedding-formats.md
       - Providers:
+          - Provider Compatibility: guide/compatibility.md
           - Provider Shims: guide/shims.md
           - Reasoning / Thinking: guide/reasoning.md
           - Provider Reasoning Behavior: guide/provider-reasoning.md
-      - API Reference:
-          - Converters: api/converters.md
-          - Tool Ops: api/tool-ops.md
-          - Shims: api/shims.md
-          - Utilities: api/utils.md
       - Examples:
           - examples/index.md
           - Cross-Provider Conversation: examples/cross-provider.md
@@ -157,10 +150,18 @@ nav:
           - CLI Cross-Format Testing: gateway/validation-cli.md
           - SDK & Integration Tests: gateway/validation-sdk.md
           - Compliance Testing: gateway/validation-comply.md
-  - Contributing:
-      - Contributing Guide: contributing/guide.md
-      - Style Guide: contributing/style-guide.md
-      - Architecture Guide: contributing/architecture.md
-      - Naming Conventions: contributing/naming-conventions.md
-  - Roadmap: roadmap.md
-  - Changelog: changelog.md
+  - Reference:
+      - api/index.md
+      - Library API:
+          - IR Types: api/types.md
+          - Converters: api/converters.md
+          - Tool Ops: api/tool-ops.md
+          - Shims: api/shims.md
+          - Utilities: api/utils.md
+      - Contributing:
+          - Contributing Guide: contributing/guide.md
+          - Style Guide: contributing/style-guide.md
+          - Architecture Guide: contributing/architecture.md
+          - Naming Conventions: contributing/naming-conventions.md
+      - Roadmap: roadmap.md
+      - Changelog: changelog.md

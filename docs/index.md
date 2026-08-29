@@ -123,12 +123,10 @@ See [API Standards](guide/api-standards.md) for detailed format comparisons, and
 ## Documentation
 
 - **[Getting Started](getting-started/installation.md)** — Installation, core concepts, and quick starts
-- **[Library](guide/converters.md)** — Converters, IR types, providers, streaming
+- **[Guide](guide/converters.md)** — Converters, IR types, providers, streaming
 - **[Gateway](gateway/index.md)** — HTTP proxy, configuration, CLI integrations, admin panel
-- **[API Reference](api/index.md)** — Library and gateway API documentation
-- **[Examples](examples/index.md)** — Cross-provider conversations, tool calling
-- **[Contributing](contributing/naming-conventions.md)** — Naming conventions and developer guidelines
-- **[Changelog](changelog.md)** — Version history
+- **[Reference](api/index.md)** — API documentation, examples, contributing, changelog
+- **[Contributing](contributing/guide.md)** — How to contribute, style guide, architecture
 
 ## Citation
 

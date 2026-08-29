@@ -32,54 +32,8 @@ See [API Standards](guide/api-standards.md) for details on each format.
 
 ---
 
-## Recently Completed
-
-### Declarative Provider Shim System
-
-!!! success "Status: Done (v0.6.0)"
-
-Providers are now defined as `provider.yaml` + optional `transforms.py` files under `shims/providers/<name>/`, automatically discovered at import time. Three composable transform primitives — `strip_fields()`, `rename_field()`, `set_defaults()` — handle field-level differences between a provider's API dialect and its base standard.
-
-7 new built-in shims added: xAI (Grok), Qwen (DashScope), Moonshot (Kimi), MiniMax, Zhipu (GLM), OpenRouter, Volcengine. The gateway proxy pipeline applies shim transforms on both request and response paths.
-
-### Zero-Dependency Gateway
-
-!!! success "Status: Done (v0.6.0)"
-
-Replaced Starlette + uvicorn + httpx with vendored zerodep `httpserver` and `httpclient` modules. The `[gateway]` extra now has zero external runtime dependencies.
-
-### Embeddings Passthrough
-
-!!! success "Status: Done (v0.6.1)"
-
-`/v1/embeddings` passthrough endpoint proxies embedding requests directly to upstream providers without IR conversion. `/v1/models` response now includes `api_standard` and per-model `capabilities` fields.
-
-### Admin Panel Enhancements
-
-!!! success "Status: Done (v0.6.1)"
-
-- **Fetch from Provider**: query upstream `/v1/models`, browse and bulk-add models
-- **Model capabilities**: `embedding` and `reasoning` capability types with dedicated test modes
-- **Provider logos**: shims can declare SVG logos displayed on admin cards
-- **Admin API**: full REST API for programmatic configuration management
-
-### SOCKS5 Proxy Support
-
-!!! success "Status: Done (v0.6.0)"
-
-Full SOCKS5 proxy support (RFC 1928/1929) via vendored httpclient v0.4.0, including username/password authentication.
-
-### Custom Tool Type in Responses API
-
-!!! success "Status: Done (v0.6.2)"
-
-OpenAI Responses API `custom` tool type (used by Codex CLI's `apply_patch`) is now handled in IR. Custom tools are downgraded to `function` at the source converter boundary with the original payload preserved in `_passthrough`, enabling round-trip fidelity.
-
-### Multi-API-Mode Providers
-
-!!! success "Status: Done (v0.6.8)"
-
-Providers that expose multiple API standards (e.g. OpenRouter with both OpenAI Chat and Anthropic endpoints, Google with native Gemini and OpenAI-compatible mode) are supported via multiple shims per provider. Naming convention: `{provider}_{api_mode}`, with no suffix for the primary mode.
+!!! info "Completed features"
+    For features already shipped, see the [Changelog](changelog.md). Key milestones include: declarative shim system (v0.6.0), zero-dependency gateway (v0.6.0), embedding/rerank IR conversion (v0.6.1+), reasoning field normalization via shims (v0.8.1), upstream timeout (v0.8.2), and multi-API-mode providers (v0.6.8).
 
 ---
 
@@ -93,12 +47,6 @@ Providers that expose multiple API standards (e.g. OpenRouter with both OpenAI C
 
 Cross-provider mapping for server-side tool types (`web_search`, `code_execution`, `computer_use`) that exist in some providers but not others.
 
-#### Reasoning Field Normalization
-
-!!! success "Status: Done (v0.8.1) — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
-
-Normalize `reasoning_content` / thinking fields across OpenAI Chat-compatible providers (e.g. DeepSeek, Qwen) via shim transforms instead of per-provider converter code. MiniMax `<think>` tag parsing, OpenRouter `reasoning` → `reasoning_content` rename, and Volcengine `encrypted_content` preservation are all handled via shim transforms.
-
 ### Shim System
 
 #### Per-Model Transforms (ModelShim)
@@ -108,12 +56,6 @@ Normalize `reasoning_content` / thinking fields across OpenAI Chat-compatible pr
 Restore `ModelShim` to enable per-model transform rules — different models from the same provider may need different field handling.
 
 ### Gateway
-
-#### Upstream Timeout
-
-!!! success "Status: Done (v0.8.2) — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
-
-Per-provider and per-model timeout overrides with `UpstreamTimeoutError` (504) distinct from connection errors (502). Circuit breaker pattern remains open for future work.
 
 #### Rate Limiting Middleware
 

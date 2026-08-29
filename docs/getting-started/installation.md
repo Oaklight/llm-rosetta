@@ -4,13 +4,14 @@ title: Installation
 
 # Installation
 
+!!! info "Requirements"
+    Python **≥ 3.10** is required. The core library has minimal dependencies (`typing_extensions>=4.0.0`).
+
 ## Library
 
 ```bash
 pip install llm-rosetta
 ```
-
-The core library has minimal dependencies (`typing_extensions>=4.0.0`).
 
 ### Provider SDKs (Optional)
 

@@ -4,6 +4,9 @@ title: Provider Reasoning Behavior
 
 # Provider Reasoning Behavior
 
+!!! note "Audience"
+    This page is for shim authors and gateway operators who need to understand provider-specific reasoning quirks. For general reasoning/thinking parameter usage, see the [Reasoning / Thinking](reasoning.md) guide instead.
+
 The [Reasoning / Thinking](reasoning.md) guide describes how LLM-Rosetta normalizes reasoning parameters through its IR layer. This page documents **how each provider actually behaves** — which effort values it accepts, how it handles disabled reasoning, what `thinking_type` semantics it enforces, and how reasoning metadata survives cross-provider round-trips.
 
 All data below comes from empirical probing against live provider APIs, not documentation alone. See [Probing methodology](#probing-methodology) for details.

@@ -4,6 +4,9 @@ title: Streaming
 
 # Streaming
 
+!!! note "Audience"
+    This page is for developers building custom streaming pipelines with the library API. If you're using the gateway, streaming works automatically — you don't need to manage `StreamContext` yourself.
+
 LLM-Rosetta supports converting streaming chunks between providers. A stateful `StreamContext` tracks session metadata, tool calls, and deferred events across the chunk sequence.
 
 ## Stream Events

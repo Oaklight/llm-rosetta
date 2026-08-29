@@ -4,6 +4,9 @@ title: Multi-Turn State Bridge
 
 # Multi-Turn State Bridge
 
+!!! note "Audience"
+    This page is for developers embedding the library in multi-turn applications or extending the gateway's bridging behavior. If you're just using the gateway as-is, cross-turn state is handled automatically by `TurnBridge` — you don't need to read this page.
+
 When a gateway proxies between two different API formats, each HTTP turn runs an independent conversion pipeline with its own `ConversionContext`. Provider-specific metadata that lives in the context is destroyed after each turn. This page explains the two-layer architecture that bridges state across turns.
 
 ## The Problem
