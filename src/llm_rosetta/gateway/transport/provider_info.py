@@ -59,7 +59,7 @@ class KeyRing:
 _VERSION_SUFFIXES = re.compile(r"/v\d+(?:beta\d?)?$", re.IGNORECASE)
 
 
-def _normalize_base_url(base_url: str, url_template: str) -> str:
+def normalize_base_url(base_url: str, url_template: str) -> str:
     """Strip trailing version prefix from *base_url* when it would
     duplicate the start of *url_template*.
 
@@ -109,7 +109,7 @@ class ProviderInfo:
                 f"got '{base_url}'"
             )
         self.name = name
-        self.base_url = _normalize_base_url(base_url.rstrip("/"), url_template)
+        self.base_url = normalize_base_url(base_url.rstrip("/"), url_template)
         self.key_ring = KeyRing(api_key)
         self._auth_header_fn = auth_header_fn
         self._url_template = url_template

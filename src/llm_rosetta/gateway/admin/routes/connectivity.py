@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-
-_VERSION_PREFIX = re.compile(r"/v\d+(?:beta\d?)?(?=/|$)", re.IGNORECASE)
+from llm_rosetta.gateway.transport.provider_info import _VERSION_SUFFIXES
 
 
 async def test_provider_connectivity(request: Any, name: str) -> Response:
@@ -79,9 +77,9 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     embedding_path = provider_cfg.get("embedding_path", "/v1/embeddings")
     if provider_cfg.get("embedding_format"):
         embed_url = f"{base_url}{embedding_path}"
-        from llm_rosetta.gateway.transport.provider_info import _normalize_base_url
+        from llm_rosetta.gateway.transport.provider_info import normalize_base_url
 
-        normalized_base = _normalize_base_url(base_url, "{base_url}" + embedding_path)
+        normalized_base = normalize_base_url(base_url, "{base_url}" + embedding_path)
         normalized_url = f"{normalized_base}{embedding_path}"
         _check_double_prefix(base_url, embedding_path, "embedding", results)
         try:
@@ -105,9 +103,9 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     rerank_path = provider_cfg.get("rerank_path", "/v1/rerank")
     if provider_cfg.get("rerank_format"):
         rerank_url = f"{base_url}{rerank_path}"
-        from llm_rosetta.gateway.transport.provider_info import _normalize_base_url
+        from llm_rosetta.gateway.transport.provider_info import normalize_base_url
 
-        normalized_base = _normalize_base_url(base_url, "{base_url}" + rerank_path)
+        normalized_base = normalize_base_url(base_url, "{base_url}" + rerank_path)
         normalized_rerank_url = f"{normalized_base}{rerank_path}"
         _check_double_prefix(base_url, rerank_path, "rerank", results)
         try:
@@ -134,7 +132,7 @@ def _check_double_prefix(
     base_url: str, path: str, endpoint_name: str, results: dict
 ) -> None:
     """Warn if base_url and path share a version prefix."""
-    m = _VERSION_PREFIX.search(base_url)
+    m = _VERSION_SUFFIXES.search(base_url)
     if m and path.startswith(m.group()):
         results["warnings"].append(
             f"{endpoint_name}: base_url ends with '{m.group()}' and "
