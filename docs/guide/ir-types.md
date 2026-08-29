@@ -56,6 +56,28 @@ ir_request: IRRequest = {
     这种规范形式确保 block 级元数据（如 Anthropic prompt caching 的 `cache_hint`）
     可以在 IR 管线中流转，无需使用 union 类型。
 
+### GenerationConfig 字段
+
+所有字段均为可选（`total=False`）：
+
+| 字段 | 类型 | 描述 | 提供商支持 |
+|------|------|------|-----------|
+| `temperature` | `float` | 采样温度 | 所有提供商 |
+| `top_p` | `float` | Nucleus 采样（0.0–1.0） | 所有提供商 |
+| `top_k` | `int` | Top-k 采样 | Anthropic、Google |
+| `max_tokens` | `int` | 最大生成 token 数 | 所有提供商（映射到各提供商特定名称） |
+| `stop_sequences` | `list[str]` | 停止序列 | 所有提供商 |
+| `truncation` | `"auto" \| "disabled"` | 截断策略 | OpenAI Responses |
+| `frequency_penalty` | `float` | 频率惩罚（−2.0 到 2.0） | OpenAI、Google |
+| `presence_penalty` | `float` | 存在惩罚（−2.0 到 2.0） | OpenAI、Google |
+| `logit_bias` | `dict[str, int]` | Logit 偏置 | OpenAI |
+| `seed` | `int` | 随机种子 | OpenAI、Google |
+| `logprobs` | `bool` | 返回 log 概率 | OpenAI |
+| `top_logprobs` | `int` | 返回的 top log 概率数量 | OpenAI |
+| `n` | `int` | 生成候选数量 | OpenAI、Google |
+
+推理/思考配置详见 [ReasoningConfig](../guide/reasoning.md)。
+
 ## IRResponse
 
 ```python
