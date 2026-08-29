@@ -1,4 +1,39 @@
+/* Dark mode: invert logo */
 [data-md-color-scheme="slate"] .md-logo img,
 [data-md-color-scheme="slate"] .md-content img[src*="rosetta_stone"] {
   filter: invert(1);
+}
+
+/* Homepage hero: tighter spacing */
+.md-content [hide~="navigation"] h1 {
+  margin-top: 0;
+}
+
+/* Tables: subtle alternating rows for readability */
+.md-typeset table:not([class]) tbody tr:nth-child(even) {
+  background-color: var(--md-default-bg-color--light);
+}
+
+/* Admonition: slightly more breathing room */
+.md-typeset .admonition,
+.md-typeset details {
+  margin-bottom: 1.2em;
+}
+
+/* Code blocks: reduce top margin when immediately following a paragraph */
+.md-typeset p + .highlight {
+  margin-top: -0.4em;
+}
+
+/* Mermaid diagrams: center and add spacing */
+.md-typeset .mermaid {
+  text-align: center;
+  margin: 1.5em 0;
+}
+
+/* Navigation tabs: prevent wrapping on medium screens */
+@media screen and (min-width: 76.25em) {
+  .md-tabs__list {
+    white-space: nowrap;
+  }
 }
