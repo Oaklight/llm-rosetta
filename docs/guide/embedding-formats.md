@@ -296,6 +296,26 @@ Information loss boundaries:
 - **Cohere multi-type → IR**: only one embedding type selected; others require `provider_extensions`
 - **Usage**: Cohere's `billed_units` and Jina's per-modality token breakdown are not preserved in IR
 
+### Library Usage
+
+```python
+from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
+from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
+
+openai_conv = OpenAIEmbeddingConverter()
+jina_conv = JinaEmbeddingConverter()
+
+# OpenAI embedding request
+openai_request = {
+    "model": "text-embedding-3-small",
+    "input": ["Hello world", "Goodbye world"],
+}
+
+# OpenAI → IR → Jina
+ir_request = openai_conv.request_from_provider(openai_request)
+jina_request, warnings = jina_conv.request_to_provider(ir_request)
+```
+
 ## Features Not Yet in IR
 
 The following provider-specific features are out of scope for the current IR and can be passed through via `provider_extensions`:

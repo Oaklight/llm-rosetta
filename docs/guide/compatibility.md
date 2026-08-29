@@ -9,6 +9,20 @@ This page documents **real-world compatibility issues** discovered during live i
 !!! info "Methodology"
     All issues below were discovered empirically — not by reading specs, but by running real CLI sessions and observing 400 errors, silent data loss, or incorrect behavior. This makes them a reliable reference for anyone building cross-provider LLM proxies or format translators.
 
+### Quick Summary
+
+| Combination | Status | Notes |
+|-------------|:------:|-------|
+| OpenAI Chat → Anthropic | ✅ | Fully working |
+| OpenAI Chat → Google | ✅ | Fully working |
+| OpenAI Responses → Anthropic | ✅ | Tool call IDs bridged via TurnBridge |
+| OpenAI Responses → OpenAI Chat | ✅ | Fully working |
+| Anthropic → OpenAI Chat | ✅ | Fully working |
+| Google GenAI → OpenAI Chat | ✅ | camelCase handled transparently |
+| Google GenAI → Anthropic | ✅ | Fully working |
+
+All combinations above have been validated with real CLI tools. Issues found during testing are documented in detail below — all have been fixed in the converter stack.
+
 ## CLI Tools Tested
 
 | CLI Tool | Native API Format | Test Configuration | Versions Tested |

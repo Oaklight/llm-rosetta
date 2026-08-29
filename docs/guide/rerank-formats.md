@@ -227,3 +227,25 @@ Information loss boundaries:
 - **Jina → Cohere**: document text is dropped (Cohere doesn't include documents in responses)
 - **Cohere → Jina/Voyage**: no document text available to include
 - **Usage**: Cohere v3's `search_units` is not convertible to token counts
+
+### Library Usage
+
+```python
+from llm_rosetta.converters.rerank.jina import JinaRerankConverter
+from llm_rosetta.converters.rerank.cohere import CohereRerankConverter
+
+jina_conv = JinaRerankConverter()
+cohere_conv = CohereRerankConverter()
+
+# Jina rerank request
+jina_request = {
+    "model": "jina-reranker-v2-base-multilingual",
+    "query": "What is deep learning?",
+    "documents": ["Neural networks...", "Decision trees...", "Transformers..."],
+    "top_n": 2,
+}
+
+# Jina → IR → Cohere
+ir_request = jina_conv.request_from_provider(jina_request)
+cohere_request, warnings = cohere_conv.request_to_provider(ir_request)
+```
