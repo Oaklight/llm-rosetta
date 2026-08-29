@@ -78,7 +78,7 @@ def _resolve_embedding_provider(
             body["model"] = upstream_model
         return _ResolvedEmbedding(
             provider_info=route.provider_info,
-            upstream_url=f"{route.provider_info.base_url}{route.embedding_path}",
+            upstream_url=route.provider_info.upstream_url(""),
             provider_name=route.provider_name,
             target_format=route.format,
             source_format=source_format,
@@ -98,7 +98,7 @@ def _resolve_embedding_provider(
 
     return _ResolvedEmbedding(
         provider_info=provider_info,
-        upstream_url=f"{provider_info.base_url}/embeddings",
+        upstream_url=f"{provider_info.base_url}/embeddings",  # chat fallback: no url_template
         provider_name=chat_route.provider_name,
     )
 

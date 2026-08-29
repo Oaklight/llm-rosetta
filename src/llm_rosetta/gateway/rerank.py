@@ -123,7 +123,7 @@ async def handle_rerank(
         )
 
     # --- Forward via transport ---
-    upstream_url = f"{route.provider_info.base_url}{route.rerank_path}"
+    upstream_url = route.provider_info.upstream_url("")
     transport: UpstreamTransport = request.app.transport
     extra_headers = build_upstream_extra_headers(request, request_id)
 

@@ -14,6 +14,7 @@ Higher-level factory logic (shim resolution, config parsing) stays in
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 
 # Type alias for auth-header builder callables
@@ -53,6 +54,36 @@ class KeyRing:
 # ---------------------------------------------------------------------------
 
 
+# Version-prefix segments that may appear at the end of base_url AND
+# at the start of a url_template path, causing duplication.
+_VERSION_SUFFIXES = re.compile(r"/v\d+(?:beta\d?)?$", re.IGNORECASE)
+
+
+def _normalize_base_url(base_url: str, url_template: str) -> str:
+    """Strip trailing version prefix from *base_url* when it would
+    duplicate the start of *url_template*.
+
+    Example: ``base_url="https://api.openai.com/v1"`` with
+    ``url_template="{base_url}/v1/embeddings"`` → strips ``/v1`` from
+    base_url to avoid ``/v1/v1/embeddings``.
+
+    Templates like ``"{base_url}/chat/completions"`` (no version prefix
+    after ``{base_url}``) are left alone — the ``/v1`` in base_url is
+    needed.
+    """
+    m = _VERSION_SUFFIXES.search(base_url)
+    if not m:
+        return base_url
+    suffix = m.group()  # e.g. "/v1", "/v1beta", "/v3"
+    # Check if the template path (after {base_url}) starts with the same segment
+    tpl_path = (
+        url_template.split("{base_url}", 1)[-1] if "{base_url}" in url_template else ""
+    )
+    if tpl_path.startswith(suffix + "/") or tpl_path == suffix:
+        return base_url[: m.start()]
+    return base_url
+
+
 class ProviderInfo:
     """Runtime representation of a single configured provider.
 
@@ -78,7 +109,7 @@ class ProviderInfo:
                 f"got '{base_url}'"
             )
         self.name = name
-        self.base_url = base_url.rstrip("/")
+        self.base_url = _normalize_base_url(base_url.rstrip("/"), url_template)
         self.key_ring = KeyRing(api_key)
         self._auth_header_fn = auth_header_fn
         self._url_template = url_template
