@@ -6,6 +6,22 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [未发布]
+
+### 新增
+
+- **Provider 连接测试** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588))：新增 `POST /admin/api/config/providers/<name>/test-connectivity` 端点，探测 provider 的 base URL 和各配置端点（models、embedding、rerank）的可达性。显示原始和规范化后的 URL 以帮助诊断双重前缀问题。Admin UI 的 provider 卡片新增"测试"按钮。
+- **`.well-known/change-password` 重定向** (PR [#579](https://github.com/Oaklight/llm-rosetta/pull/579))：`GET /.well-known/change-password` 返回 302 重定向到 `/admin#change-password`，自动打开设置面板。启用浏览器和密码管理器集成（遵循 [web 标准](https://web.dev/articles/change-password-url)）。
+
+### 修复
+
+- **Embedding 路由 `upstream_model` 映射** (PR [#586](https://github.com/Oaklight/llm-rosetta/pull/586))：embedding 专用路由现在从 `model_upstream_names` 应用 `upstream_model` 名称映射，与 chat 回退路由行为一致。此前模型别名（如 `argo:text-embedding-3-small` → `v3small`）被忽略，导致上游 404。
+- **Embedding/Rerank URL 双重版本前缀** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588))：`ProviderInfo` 现在自动检测 `base_url` 尾部的版本段（如 `/v1`）是否会与 `url_template` 路径开头重复，并自动去除。修复了 `base_url: "https://api.openai.com/v1"` + `embedding_path: "/v1/embeddings"` 产生 `/v1/v1/embeddings` 的问题。
+
+### 变更
+
+- **统一端点 URL 构造** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588))：embedding 和 rerank handler 现在使用 `ProviderInfo.upstream_url()`（基于模板）而非临时 f-string 拼接，与 chat 路径架构一致。
+
 ## v0.11.1 — 2026-08-29
 
 ### 修复
