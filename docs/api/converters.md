@@ -1,10 +1,28 @@
 ---
-title: 转换器
+title: Converters
 ---
 
-# 转换器 API
+# Converters API
 
-## Chat / Completions 转换器
+## Convenience Functions
+
+::: llm_rosetta.auto_detect.convert
+
+::: llm_rosetta.auto_detect.convert_response
+
+::: llm_rosetta.auto_detect.get_converter_for_provider
+
+## Conversion Context
+
+::: llm_rosetta.converters.base.context.ConversionContext
+
+::: llm_rosetta.converters.base.context.StreamContext
+
+## Conversion Pipeline
+
+::: llm_rosetta.pipeline.ConversionPipeline
+
+## Chat / Completions Converters
 
 ::: llm_rosetta.converters.base.converter.BaseConverter
 
@@ -16,7 +34,7 @@ title: 转换器
 
 ::: llm_rosetta.converters.google_genai.converter.GoogleGenAIConverter
 
-## Embedding 转换器
+## Embedding Converters
 
 ::: llm_rosetta.converters.base.embedding_converter.BaseEmbeddingConverter
 
@@ -28,7 +46,7 @@ title: 转换器
 
 ::: llm_rosetta.converters.embedding.cohere.CohereEmbeddingConverter
 
-## Rerank 转换器
+## Rerank Converters
 
 ::: llm_rosetta.converters.base.rerank_converter.BaseRerankConverter
 
