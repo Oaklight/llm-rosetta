@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="design/logo/out/rosetta-icon-github.svg" alt="LLM-Rosetta" width="128">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="design/logo/out/rosetta-icon-github.svg">
+    <source media="(prefers-color-scheme: light)" srcset="design/logo/out/rosetta-icon-docs.svg">
+    <img src="design/logo/out/rosetta-icon-github.svg" alt="LLM-Rosetta" width="128">
+  </picture>
 </p>
 
 <h1 align="center">LLM-Rosetta</h1>
