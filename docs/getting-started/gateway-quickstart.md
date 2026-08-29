@@ -44,7 +44,7 @@ docker pull oaklight/llm-rosetta-gateway:latest
 }
 ```
 
-提供方名称是用户自定义的字符串。`type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。
+提供方名称随你起。`type` 指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。
 
 ## 3. 启动网关
 

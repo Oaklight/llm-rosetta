@@ -20,17 +20,17 @@ hide:
   </div>
 </div>
 
-正如罗塞塔石碑使古代文字之间的翻译成为可能，LLM-Rosetta 弥合了不兼容的 LLM 提供方 API 之间的鸿沟——让你使用任意格式发送请求，并被任意提供方理解。
+罗塞塔石碑让古代文字得以互译。LLM-Rosetta 做的是类似的事——在不兼容的 LLM API 格式之间充当翻译层，让你用任意格式发请求、对接任意提供方。
 
 ---
 
 ## 问题
 
-不同的 LLM 提供方使用互不兼容的 API 格式。适用于 OpenAI 的请求无法直接发给 Anthropic 或 Google。切换提供方意味着重写集成代码。同时支持多个提供方则需要维护 N² 个转换器。
+各家 LLM 提供方的 API 格式互不相通——给 OpenAI 写的请求发不了 Anthropic，也发不了 Google。换一家就得改一遍集成代码；要同时支持多家，转换器数量会按 N² 增长。
 
-**LLM-Rosetta** 引入了中央**中间表示（IR）**作为枢纽。每个提供方只需与 IR 之间进行转换，将总数从 N² 降为 2N。
+**LLM-Rosetta** 用一套**中间表示（IR）**解决这个问题：每家提供方只需要实现一个到 IR 的转换器，转换器总数从 N² 降到 2N。
 
-Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出。
+Provider A ↔ **IR** ↔ Provider B — 任何格式进，任何格式出。
 
 ---
 
@@ -38,7 +38,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 === "作为库使用"
 
-    在代码中直接转换提供方格式——无需启动服务器：
+    在自己的代码里做格式转换，不需要起服务器：
 
     ```python
     from llm_rosetta import OpenAIChatConverter, AnthropicConverter
@@ -59,7 +59,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 === "作为网关使用"
 
-    运行本地 HTTP 代理，实时在格式之间转换：
+    起一个本地 HTTP 代理，请求进来时自动做格式转换：
 
     ```text
     客户端（Chat Completions）──→ 网关 ──→ Anthropic API
@@ -90,7 +90,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
 
-详见 [API 标准](guide/api-standards.md)了解各格式的详细对比，以及[提供方兼容性](guide/compatibility.md)查看完整的提供方支持矩阵。
+各格式的详细对比见 [API 标准](guide/api-standards.md)，完整的提供方支持矩阵见[提供方兼容性](guide/compatibility.md)。
 
 ---
 
@@ -98,25 +98,25 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 | | |
 |---|---|
-| **中枢辐射架构** | 中央 IR 格式消除 N² 转换问题 |
-| **双向转换** | 请求、响应和消息均支持双向转换 |
-| **流式支持** | 通过有状态上下文管理转换流式数据块 |
-| **工具调用** | 跨提供方的统一工具定义和调用处理 |
-| **自动检测** | 从请求结构自动识别提供方格式 |
-| **网关 + 管理面板** | HTTP 代理，内置 Web UI 管理配置、指标和日志 |
-| **类型安全** | 所有类型均有完整的 TypedDict 注解 |
+| **中枢辐射架构** | 一套 IR，解决 N² 转换问题 |
+| **双向转换** | 请求、响应、消息都能双向转 |
+| **流式支持** | 有状态地逐 chunk 转换流式数据 |
+| **工具调用** | 统一的工具定义和调用，跨提供方通用 |
+| **自动检测** | 根据请求结构自动识别来源格式 |
+| **网关 + 管理面板** | HTTP 代理 + Web UI，管配置、看指标、查日志 |
+| **类型安全** | 全量 TypedDict 注解 |
 
 ---
 
 ## 使用场景
 
-**多提供方应用** — 构建可在 LLM 提供方之间无缝切换的应用，无需更改集成代码。生产环境用 OpenAI，测试用 Claude，或让用户自选提供方。
+**多提供方应用** — 应用在多家 LLM 之间自由切换，集成代码不用动。生产跑 OpenAI、测试跑 Claude，或者让用户自己选。
 
-**AI 编程工具代理** — 运行单个网关，同时服务 Claude Code、Antigravity CLI、Codex CLI 等工具，将每个请求路由到正确的上游。
+**AI 编程工具代理** — 一个网关同时服务 Claude Code、Antigravity CLI、Codex CLI 等工具，按模型路由到对应上游。
 
-**本地模型访问** — 将网关指向 Ollama 或 LM Studio，让基于云 SDK 的工具通过自动格式转换访问本地模型。
+**本地模型访问** — 网关指向 Ollama 或 LM Studio，云 SDK 工具就能直接用本地模型，格式自动转。
 
-**API 迁移** — 从一个提供方迁移到另一个？转换现有的请求/响应处理，无需重写业务逻辑。
+**API 迁移** — 换提供方？只需要改路由配置，业务逻辑里的请求/响应处理不用重写。
 
 ---
 
@@ -130,7 +130,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 ## 引用
 
-如果您在研究中使用了 LLM-Rosetta，请引用我们的论文：
+如果你在研究中用到了 LLM-Rosetta，欢迎引用：
 
 ```bibtex
 @article{ding2026llm,

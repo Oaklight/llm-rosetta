@@ -202,7 +202,7 @@ Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inline
 
 ## 警告与错误处理
 
-生成输出的转换方法以 `list[str]` 形式返回警告——要么作为元组的第二个元素（`request_to_provider`、`messages_to_provider`），要么通过 `ConversionContext.warnings`。
+产出结果的转换方法会返回警告（`list[str]`）——有的作为返回元组的第二个元素（`request_to_provider`、`messages_to_provider`），有的通过 `ConversionContext.warnings` 获取。
 
 ```python
 anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
@@ -213,16 +213,16 @@ for w in warnings:
 # ⚠ Extension item ignored: openai:web_search_call
 ```
 
-警告是**信息性的，不是错误**——转换始终会完成。常见警告场景：
+警告是**提示性的，不是错误**——转换本身一定会完成。常见场景：
 
 | 警告 | 含义 |
 |------|------|
-| `"X does not support Y, ignored"` | 源格式中的某个特性在目标格式中没有对应项，已被丢弃 |
-| `"Extension item ignored: ..."` | Open Responses 扩展项没有可移植的 IR 表示 |
-| `"Tool chain converted to sequential calls"` | 提供方的链式工具调用模式被展平为顺序调用 |
-| `"Skipped image in tool result packing: ..."` | 工具结果中的图像无法转换 |
+| `"X does not support Y, ignored"` | 某特性在目标格式中没有对应项，被丢掉了 |
+| `"Extension item ignored: ..."` | Open Responses 扩展项在 IR 中没有对应表示 |
+| `"Tool chain converted to sequential calls"` | 链式工具调用被展平成了顺序调用 |
+| `"Skipped image in tool result packing: ..."` | 工具结果中的某张图片转换失败 |
 
-要从 `request_from_provider` 或 `response_from_provider`（不返回元组）中捕获警告，传入 `ConversionContext`：
+`request_from_provider` 和 `response_from_provider` 不返回元组，要拿警告的话传一个 `ConversionContext` 进去：
 
 ```python
 from llm_rosetta.converters.base import ConversionContext

@@ -6,7 +6,7 @@ title: 库快速开始
 
 ## Hello World
 
-最简用法：将一个 dict 转换为另一个 dict。无需 API key，无需 SDK，无需网络调用。
+最简用法：一个 dict 进去，另一个 dict 出来。不需要 API key，不需要 SDK，不走网络。
 
 ```python
 from llm_rosetta import OpenAIChatConverter, AnthropicConverter
@@ -28,7 +28,7 @@ print(anthropic_request)
 
 ## 完整转换示例
 
-包含系统消息、生成参数和多条消息的完整工作流：
+带系统消息、生成参数和多轮对话的完整例子：
 
 ```python
 from llm_rosetta import OpenAIChatConverter, AnthropicConverter

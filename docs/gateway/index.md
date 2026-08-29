@@ -4,7 +4,7 @@ title: 网关
 
 # 网关（Gateway）
 
-LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供方 API 格式之间进行转换。发送任意支持格式的请求，网关会自动转换并转发到配置的上游提供方。
+LLM-Rosetta 网关是一个 HTTP 代理——你用任意支持的 API 格式发请求过来，它自动转成上游提供方的格式再转发。
 
 ```mermaid
 graph LR
@@ -37,11 +37,11 @@ graph LR
 | `GET /health` | — | 健康检查 |
 | `GET /admin/` | — | [管理面板](admin-panel.md)（Web UI） |
 
-端点路径决定了来源格式 — 无需自动检测。
+来源格式由端点路径决定，不需要做自动检测。
 
 ## 流式传输
 
-所有提供方组合均支持流式传输。请求方式与原生 API 相同：
+所有提供方组合都支持流式。用法和原生 API 一样：
 
 ```bash
 curl http://localhost:8765/v1/chat/completions \
@@ -53,21 +53,21 @@ curl http://localhost:8765/v1/chat/completions \
   }'
 ```
 
-网关实时在提供方格式之间转换 SSE 数据块。
+网关会实时转换 SSE 数据块。
 
 ## 认证
 
-通过 `server` 配置中的网关 API Key 保护 AI 端点：
+在 `server` 配置里设一个网关 API Key 来保护端点：
 
 ```jsonc
 "server": { "api_key": "my-secret-key" }
 ```
 
-请求必须以对应 API 标准的原生格式提供 Key（Bearer token、`x-api-key` 头部等）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
+请求时按各 API 标准的原生方式传 Key（Bearer token、`x-api-key` 头等）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
 
 ## 工作原理
 
-网关使用 LLM-Rosetta 的转换器管道：
+网关内部走 LLM-Rosetta 的转换器管道：
 
 ```mermaid
 sequenceDiagram
@@ -86,4 +86,4 @@ sequenceDiagram
     网关-->>客户端: 响应（来源格式）
 ```
 
-对于流式传输，同样的管道在 SSE 数据块级别运行，使用 `stream_response_from_provider()` 和 `stream_response_to_provider()` 配合 `StreamContext` 进行有状态转换。
+流式传输走同样的管道，只是在 SSE chunk 级别运作，用 `stream_response_from_provider()` 和 `stream_response_to_provider()` 配合 `StreamContext` 做有状态转换。

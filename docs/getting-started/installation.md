@@ -15,7 +15,7 @@ pip install llm-rosetta
 
 ### Provider SDK（可选）
 
-如需直接调用 API，可安装对应 Provider 的 SDK：
+如果要直接调用 API，装上对应 Provider 的 SDK：
 
 ```bash
 # 单独安装
