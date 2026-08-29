@@ -93,6 +93,7 @@ from .profiling import (
     get_profiling_results,
     get_profiling_status,
 )
+from .connectivity import test_provider_connectivity
 from .testing import (
     cancel_test,
     get_test_result,
@@ -212,6 +213,10 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/test/<task_id>", methods=["GET"])(get_test_result)
     app.route("/admin/api/test/<task_id>/poll", methods=["POST"])(get_test_result)
     app.route("/admin/api/test/<task_id>", methods=["DELETE"])(cancel_test)
+    # Provider connectivity test
+    app.route("/admin/api/config/providers/<name>/test-connectivity", methods=["POST"])(
+        test_provider_connectivity
+    )
     # Content capture (dashboard tab)
     app.route("/admin/api/capture/status", methods=["GET"])(
         _guard("dashboard", get_capture_status)

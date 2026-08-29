@@ -486,6 +486,7 @@ function renderProviders() {
       <div class="actions" style="margin-top:auto;padding-top:12px">
         <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm btn-test-conn" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
       </div>
@@ -698,8 +699,44 @@ Object.assign(window, {
   saveProvider, deleteProvider, onDeleteConfirmInput, onDeleteConfirmClick,
   confirmDeleteProvider, toggleProvider, editProvider, copyProviderEntry,
   saveServerSettings, runNetDiag, loadConfig,
-  goToModelsForProvider, goToProviderFromModel,
+  goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
   _activateSegChild,
 });
 
 export { renderProviders, loadConfig, _activateSegChild, _getProviderCaps };
+
+// ── Provider Connectivity Test ──────────────────────────────────────
+
+async function testProviderConnectivity(name) {
+  const card = document.querySelector(`.provider-card[data-provider="${name}"]`);
+  const btn = card?.querySelector('.btn-test-conn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  try {
+    const r = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/test-connectivity`, {});
+    let msg = '';
+    if (r.reachable) {
+      msg += `✅ ${name}: reachable (${r.base_status})`;
+    } else {
+      msg += `❌ ${name}: unreachable — ${r.base_error || 'connection failed'}`;
+    }
+    const eps = r.endpoints || {};
+    for (const [ep, info] of Object.entries(eps)) {
+      const urlNote = info.normalized_url && info.normalized_url !== info.url
+        ? ` → normalized: ${info.normalized_url}`
+        : '';
+      if (info.ok) {
+        msg += `\n  ✅ ${ep}: ${info.url} (${info.status})${urlNote}`;
+      } else {
+        msg += `\n  ❌ ${ep}: ${info.url} (${info.status || info.error || 'failed'})${urlNote}`;
+      }
+    }
+    if (r.warnings?.length) {
+      msg += '\n⚠️ ' + r.warnings.join('\n⚠️ ');
+    }
+    showToast(msg, r.reachable ? 'success' : 'error');
+  } catch (e) {
+    showToast(`Test failed: ${e.message || e}`, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('btn.test'); }
+  }
+}
