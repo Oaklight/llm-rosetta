@@ -271,6 +271,13 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"] == {"effort": "high"}
 
+    def test_ir_reasoning_config_with_summary(self):
+        """Test reasoning config with summary (auto, concise, detailed)."""
+        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "high", "summary": "detailed"})
+        )
+        assert result["reasoning"] == {"effort": "high", "summary": "detailed"}
+
     def test_ir_reasoning_config_with_mode(self):
         """Test reasoning config with mode — type is NOT emitted (OpenAI rejects it)."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(

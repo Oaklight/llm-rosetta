@@ -351,14 +351,23 @@ def _apply_openai_responses_extras(
 
     Note: OpenAI Responses API does **not** accept ``reasoning.type``
     (returns 400 Unknown parameter).  Reasoning is controlled via
-    ``reasoning.effort`` only, which is already handled by the effort
-    mapping in the caller.
+    ``reasoning.effort`` and optional ``reasoning.summary`` (e.g. "auto", "concise", "detailed").
     """
     if budget_tokens is not None:
         warnings.warn(
             "OpenAI Responses API does not support reasoning budget_tokens, ignored",
             stacklevel=2,
         )
+
+    summary = ir.get("summary")
+    if summary in ("auto", "concise", "detailed"):
+        if "reasoning" not in result:
+            result["reasoning"] = {}
+        result["reasoning"]["summary"] = summary
+    elif ir.get("include_thoughts") is True:
+        if "reasoning" not in result:
+            result["reasoning"] = {}
+        result["reasoning"]["summary"] = "auto"
 
 
 def _apply_anthropic_extras(
