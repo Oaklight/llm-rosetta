@@ -6,6 +6,22 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## [Unreleased]
+
+### Added
+
+- **Provider connectivity test** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): new `POST /admin/api/config/providers/<name>/test-connectivity` endpoint probes a provider's base URL and each configured endpoint (models, embedding, rerank) for reachability. Shows raw and normalized URLs to help diagnose double-prefix issues. "Test" button added to provider cards in the admin UI.
+- **`.well-known/change-password` redirect** (PR [#579](https://github.com/Oaklight/llm-rosetta/pull/579)): `GET /.well-known/change-password` returns a 302 redirect to `/admin#change-password`, auto-opening the settings panel. Enables browser and password manager integration per the [web standard](https://web.dev/articles/change-password-url).
+
+### Fixed
+
+- **Embedding route `upstream_model` remapping** (PR [#586](https://github.com/Oaklight/llm-rosetta/pull/586)): the embedding-specific route now applies `upstream_model` name remapping from `model_upstream_names`, matching the chat fallback route. Previously model aliases (e.g. `argo:text-embedding-3-small` → `v3small`) were ignored, causing upstream 404s.
+- **Double version prefix in embedding/rerank URLs** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): `ProviderInfo` now auto-detects when `base_url` ends with a version segment (e.g. `/v1`) that would duplicate the `url_template` path start, and strips it. Fixes `base_url: "https://api.openai.com/v1"` + `embedding_path: "/v1/embeddings"` producing `/v1/v1/embeddings`.
+
+### Changed
+
+- **Unified endpoint URL construction** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): embedding and rerank handlers now use `ProviderInfo.upstream_url()` (template-based) instead of ad hoc f-string concatenation, matching the chat path architecture.
+
 ## v0.11.1 — 2026-08-29
 
 ### Fixed
