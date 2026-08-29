@@ -4,7 +4,7 @@ title: API 标准
 
 # API 标准
 
-LLM-Rosetta 支持 4 家 LLM 提供商的 5 种 API 标准。每种标准定义了各自的请求/响应结构、认证机制和流式格式。本页介绍各标准并重点说明关键差异。
+LLM-Rosetta 支持 4 家 LLM 提供方的 5 种 API 标准。每种标准定义了各自的请求/响应结构、认证机制和流式格式。本页介绍各标准并重点说明关键差异。
 
 ## 概览
 
@@ -237,7 +237,7 @@ Google 为 Gemini 模型设计的生成式 AI API。使用 `contents[]` 代替 `
 
 ## 在 LLM-Rosetta 中
 
-每种 API 标准都有对应的[转换器](converters.md)，负责在提供商格式和 [IR（中间表示）](concepts.md)之间转换。[网关](../gateway/configuration.md)通过提供商配置中的 `type` 字段选择正确的转换器：
+每种 API 标准都有对应的[转换器](converters.md)，负责在提供方格式和 [IR（中间表示）](concepts.md)之间转换。[网关](../gateway/configuration.md)通过提供方配置中的 `type` 字段选择正确的转换器：
 
 ```jsonc
 "providers": {

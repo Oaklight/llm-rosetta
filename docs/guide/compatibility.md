@@ -1,10 +1,10 @@
 ---
-title: 提供商与 CLI 兼容性
+title: 提供方与 CLI 兼容性
 ---
 
-# 提供商与 CLI 兼容性矩阵
+# 提供方与 CLI 兼容性矩阵
 
-本页面记录了在将 LLM CLI 工具通过格式转换代理（如 [argo-proxy](https://github.com/Oaklight/argo-proxy) + LLM-Rosetta）进行路由时，发现的**真实兼容性问题**。每个问题都是通过将 CLI 工具的原生 API 格式经 LLM-Rosetta IR 层转换到不同提供商后端，观察到失败后修复的。
+本页面记录了在将 LLM CLI 工具通过格式转换代理（如 [argo-proxy](https://github.com/Oaklight/argo-proxy) + LLM-Rosetta）进行路由时，发现的**真实兼容性问题**。每个问题都是通过将 CLI 工具的原生 API 格式经 LLM-Rosetta IR 层转换到不同提供方后端，观察到失败后修复的。
 
 ### 快速总结
 
@@ -21,7 +21,7 @@ title: 提供商与 CLI 兼容性
 以上所有组合均已通过真实 CLI 工具验证。测试期间发现的问题详见下文——所有问题均已在转换器中修复。
 
 !!! info "方法论"
-    以下所有问题均为经验性发现——不是通过阅读规范，而是通过运行真实 CLI 会话并观察 400 错误、静默数据丢失或错误行为发现的。这使其成为构建跨提供商 LLM 代理或格式转换器的可靠参考。
+    以下所有问题均为经验性发现——不是通过阅读规范，而是通过运行真实 CLI 会话并观察 400 错误、静默数据丢失或错误行为发现的。这使其成为构建跨提供方 LLM 代理或格式转换器的可靠参考。
 
 ## 测试的 CLI 工具
 
@@ -34,7 +34,7 @@ title: 提供商与 CLI 兼容性
 ```mermaid
 graph LR
     A[CLI 工具] -->|原生格式| B[argo-proxy]
-    B -->|LLM-Rosetta IR| C[目标提供商 API]
+    B -->|LLM-Rosetta IR| C[目标提供方 API]
     B -->|格式检测| D[LLM-Rosetta 转换器]
     D -->|IR 往返| B
 ```
@@ -46,7 +46,7 @@ graph LR
 !!! bug "严重性：严重 — 导致静默数据丢失"
 
 **受影响 CLI**：Gemini CLI
-**提供商组合**：Google GenAI → 任意目标
+**提供方组合**：Google GenAI → 任意目标
 
 Google 的 REST API 和 Gemini CLI 使用 **camelCase** 字段名（`inlineData`、`mimeType`、`fileUri`、`functionCall`、`functionResponse`），而 Python SDK 约定使用 **snake_case**（`inline_data`、`mime_type`、`file_uri`）。LLM-Rosetta 的 Google 转换器最初只接受 snake_case，导致二进制内容被静默丢弃。
 
@@ -74,11 +74,11 @@ Google 的 REST API 和 Gemini CLI 使用 **camelCase** 字段名（`inlineData`
 !!! bug "严重性：严重 — 导致 ValueError 崩溃"
 
 **受影响 CLI**：Gemini CLI
-**提供商组合**：Google GenAI → OpenAI Chat / Anthropic / OpenAI Responses
+**提供方组合**：Google GenAI → OpenAI Chat / Anthropic / OpenAI Responses
 
 Google 的 `p_image_to_ir()` 生成的 `ImagePart` 使用顶层 `data` 和 `media_type` 字段。但目标转换器的 `ir_image_to_p()` 方法仅检查 `image_url`（URL 字符串）或嵌套的 `image_data`（包含 `data` + `media_type` 的字典）——顶层字段布局未被识别。
 
-**症状**：将 Google 图片内容转换为其他提供商格式时出现 `ValueError: Image part must have either image_url or image_data`。
+**症状**：将 Google 图片内容转换为其他提供方格式时出现 `ValueError: Image part must have either image_url or image_data`。
 
 **修复**：为三个目标转换器（OpenAI Chat、Anthropic、OpenAI Responses）的 `ir_image_to_p()` 添加了对顶层 `data` + `media_type` 字段的兜底处理。
 
@@ -93,7 +93,7 @@ Google 的 `p_image_to_ir()` 生成的 `ImagePart` 使用顶层 `data` 和 `medi
 !!! warning "严重性：高 — 导致孤立工具调用错误"
 
 **受影响 CLI**：Gemini CLI
-**提供商组合**：Google GenAI → OpenAI Chat
+**提供方组合**：Google GenAI → OpenAI Chat
 
 Google 的 `functionCall` 不携带 ID 字段。P→IR 转换时，LLM-Rosetta 生成基于 UUID 的 `tool_call_id`。当 Gemini CLI 发回 `functionResponse` 时，它使用**自己的** ID（格式：`{name}_{timestamp}_{index}`），造成 ID 不匹配。
 
@@ -108,7 +108,7 @@ Google 的 `functionCall` 不携带 ID 字段。P→IR 转换时，LLM-Rosetta �
 !!! warning "严重性：高 — 导致 OpenAI 返回 400 错误"
 
 **受影响 CLI**：Gemini CLI（使用长 MCP 工具名时）
-**提供商组合**：Google GenAI → OpenAI Chat
+**提供方组合**：Google GenAI → OpenAI Chat
 
 之前的 ID 格式 `call_{name}_{8hex}` 可能超过 OpenAI 的 40 字符限制。MCP 工具名如 `mcp_toolregistry-hub-server_datetime-now` 会产生 54 字符的 ID。
 
@@ -127,11 +127,11 @@ Google 的 `functionCall` 不携带 ID 字段。P→IR 转换时，LLM-Rosetta �
 !!! warning "严重性：高 — 破坏孤立工具调用检测"
 
 **受影响 CLI**：Gemini CLI、Claude Code
-**提供商组合**：Google GenAI → OpenAI Chat、Anthropic → OpenAI Chat
+**提供方组合**：Google GenAI → OpenAI Chat、Anthropic → OpenAI Chat
 
-不同提供商以不同方式表示工具结果：
+不同提供方以不同方式表示工具结果：
 
-| 提供商 | 工具结果位置 | 角色 |
+| 提供方 | 工具结果位置 | 角色 |
 |--------|------------|------|
 | Google GenAI | `role: "user"` Content 中的 `functionResponse` 部分 | `user` |
 | Anthropic | `role: "user"` 消息中的 `tool_result` 块 | `user` |
@@ -153,7 +153,7 @@ IR 使用 `role: "tool"`（OpenAI 约定）。当源转换器保留原始 `role:
 !!! bug "严重性：严重 — 导致 400 错误"
 
 **受影响 CLI**：Gemini CLI
-**提供商组合**：Google GenAI → OpenAI Chat
+**提供方组合**：Google GenAI → OpenAI Chat
 
 当 Google Content 消息同时包含 `functionResponse` 和 `inlineData` 部分时，自然的部分顺序会将内容部分排在工具结果之前。但 OpenAI Chat 严格要求 `assistant(tool_calls)` 之后紧跟 `tool(response)` —— 中间插入任何 `user` 消息都会触发 400 错误。
 
@@ -172,7 +172,7 @@ IR 使用 `role: "tool"`（OpenAI 约定）。当源转换器保留原始 `role:
 !!! warning "严重性：高 — 导致上游拒绝请求"
 
 **受影响 CLI**：OpenCode、Gemini CLI
-**提供商组合**：任意 → Google Vertex AI、任意 → OpenAI
+**提供方组合**：任意 → Google Vertex AI、任意 → OpenAI
 
 严格的端点（Vertex AI、OpenAI）拒绝包含非标准 JSON Schema 关键字的工具参数 schema。常见违规项：
 
@@ -192,7 +192,7 @@ IR 使用 `role: "tool"`（OpenAI 约定）。当源转换器保留原始 `role:
 !!! note "严重性：低 — 导致空函数名"
 
 **受影响 CLI**：Gemini CLI
-**提供商组合**：Google GenAI → 任意目标
+**提供方组合**：Google GenAI → 任意目标
 
 Google 内建工具（`googleSearch`、`codeExecution`）作为没有 `name` 字段的工具条目出现。转换器试图创建空名称的 `ToolDefinition` 对象。
 
@@ -209,7 +209,7 @@ Google 内建工具（`googleSearch`、`codeExecution`）作为没有 `name` 字
 !!! bug "严重性：严重 — 导致工具参数为空"
 
 **受影响 CLI**：Gemini CLI、Claude Code
-**提供商组合**：任意来源 → 任意目标（流式模式）
+**提供方组合**：任意来源 → 任意目标（流式模式）
 
 OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册了工具调用，但在流式传输期间从未调用 `append_tool_call_args()` 累积参数增量。仅 OpenAI Responses 转换器正确处理。
 
@@ -224,7 +224,7 @@ OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册�
 !!! bug "严重性：严重 — 导致响应内容静默丢失"
 
 **受影响 CLI**：Claude Code
-**提供商组合**：OpenAI Chat → Anthropic（SSE 输出）
+**提供方组合**：OpenAI Chat → Anthropic（SSE 输出）
 
 将 OpenAI Chat 流式响应转换为 Anthropic SSE 格式时，`content_block_stop` 事件未在 `message_delta` 之前发送。Claude Code 要求完整的内容块生命周期事件。
 
@@ -239,7 +239,7 @@ OpenAI Chat、Anthropic 和 Google GenAI 转换器在 `StreamContext` 中注册�
 !!! note "严重性：中等 — 导致流过早终止"
 
 **受影响 CLI**：全部（通过 Argo API）
-**提供商组合**：Argo 后端 → 任意目标
+**提供方组合**：Argo 后端 → 任意目标
 
 Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空的预检 chunk。OpenAI Chat 转换器将其视为流结束。
 
@@ -251,12 +251,12 @@ Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空
 
 ### 7. 工具调用/结果配对
 
-!!! warning "严重性：高 — 导致严格提供商返回 400 错误"
+!!! warning "严重性：高 — 导致严格提供方返回 400 错误"
 
 **受影响 CLI**：Gemini CLI、Claude Code
-**提供商组合**：任意 → OpenAI Chat、任意 → Anthropic、任意 → OpenAI Responses
+**提供方组合**：任意 → OpenAI Chat、任意 → Anthropic、任意 → OpenAI Responses
 
-OpenAI（Chat 和 Responses）和 Anthropic 严格要求每个 `tool_call` 都有匹配的 `tool_result`，反之亦然。Google GenAI 是唯一容忍不匹配的提供商。在跨格式转换中，ID 不匹配、角色规范化问题或不完整的对话历史可能产生孤立的工具调用或结果。
+OpenAI（Chat 和 Responses）和 Anthropic 严格要求每个 `tool_call` 都有匹配的 `tool_result`，反之亦然。Google GenAI 是唯一容忍不匹配的提供方。在跨格式转换中，ID 不匹配、角色规范化问题或不完整的对话历史可能产生孤立的工具调用或结果。
 
 **修复**：`fix_orphaned_tool_calls()`（逐转换器）和 `fix_orphaned_tool_calls_ir()`（IR 层级）自动检测和修复配对问题：
 
@@ -269,9 +269,9 @@ OpenAI（Chat 和 Responses）和 Anthropic 严格要求每个 `tool_call` 都�
 
 ---
 
-## 提供商比较矩阵
+## 提供方比较矩阵
 
-各问题类别对不同提供商组合的影响总结：
+各问题类别对不同提供方组合的影响总结：
 
 | 问题 | Google→OpenAI | Google→Anthropic | Google→Responses | Anthropic→OpenAI | Anthropic→Responses | OpenAI→Anthropic |
 |------|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -297,8 +297,8 @@ OpenAI（Chat 和 Responses）和 Anthropic 严格要求每个 `tool_call` 都�
 
 3. **流式传输倍增边缘用例。** 非流式模式中存在的每个问题在流式模式中同样存在——加上增量累积、事件生命周期和 chunk 排序等额外问题。
 
-4. **工具调用配对是 400 错误的头号来源。** 严格的提供商在单个工具调用/结果对不匹配时就会拒绝整个请求。这需要预防性（正确的 ID 生成）和纠正性（孤立检测）双重措施。
+4. **工具调用配对是 400 错误的头号来源。** 严格的提供方在单个工具调用/结果对不匹配时就会拒绝整个请求。这需要预防性（正确的 ID 生成）和纠正性（孤立检测）双重措施。
 
-5. **Google GenAI 是最"宽容"的提供商。** 它容忍缺失的工具结果、不匹配的 ID 和混合内容排序。这使其成为较差的测试目标——问题只在将 Google 转换_到_更严格的提供商时才会暴露。
+5. **Google GenAI 是最"宽容"的提供方。** 它容忍缺失的工具结果、不匹配的 ID 和混合内容排序。这使其成为较差的测试目标——问题只在将 Google 转换_到_更严格的提供方时才会暴露。
 
-6. **内建工具需要特殊处理。** 提供商特有的工具（Google Search、Code Execution）不映射到通用工具定义 schema，必须在转换过程中过滤掉。
+6. **内建工具需要特殊处理。** 提供方特有的工具（Google Search、Code Execution）不映射到通用工具定义 schema，必须在转换过程中过滤掉。

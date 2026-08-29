@@ -1,5 +1,5 @@
 site_name: LLM-Rosetta
-site_description: LLM-Rosetta - LLM 提供商之间的统一消息格式转换库
+site_description: LLM-Rosetta - LLM 提供方之间的统一消息格式转换库
 site_author: Peng Ding
 site_url: https://llm-rosetta.readthedocs.io/zh-cn/latest
 repo_name: Oaklight/llm-rosetta
@@ -125,14 +125,14 @@ nav:
           - 流式处理: guide/streaming.md
           - 多轮状态桥接: guide/turn-bridge.md
           - 自动检测: guide/auto-detection.md
-      - 提供商:
-          - 提供商兼容性: guide/compatibility.md
-          - 提供商 Shim: guide/shims.md
+      - 提供方:
+          - 提供方兼容性: guide/compatibility.md
+          - 提供方 Shim: guide/shims.md
           - 推理 / 思考参数: guide/reasoning.md
-          - 提供商推理行为: guide/provider-reasoning.md
+          - 提供方推理行为: guide/provider-reasoning.md
       - 示例:
           - examples/index.md
-          - 跨提供商对话: examples/cross-provider.md
+          - 跨提供方对话: examples/cross-provider.md
           - 工具调用: examples/tool-calling.md
   - 网关:
       - gateway/index.md

@@ -60,13 +60,13 @@ ir_request: IRRequest = {
 
 所有字段均为可选（`total=False`）：
 
-| 字段 | 类型 | 描述 | 提供商支持 |
+| 字段 | 类型 | 描述 | 提供方支持 |
 |------|------|------|-----------|
-| `temperature` | `float` | 采样温度 | 所有提供商 |
-| `top_p` | `float` | Nucleus 采样（0.0–1.0） | 所有提供商 |
+| `temperature` | `float` | 采样温度 | 所有提供方 |
+| `top_p` | `float` | Nucleus 采样（0.0–1.0） | 所有提供方 |
 | `top_k` | `int` | Top-k 采样 | Anthropic、Google |
-| `max_tokens` | `int` | 最大生成 token 数 | 所有提供商（映射到各提供商特定名称） |
-| `stop_sequences` | `list[str]` | 停止序列 | 所有提供商 |
+| `max_tokens` | `int` | 最大生成 token 数 | 所有提供方（映射到各提供方特定名称） |
+| `stop_sequences` | `list[str]` | 停止序列 | 所有提供方 |
 | `truncation` | `"auto" \| "disabled"` | 截断策略 | OpenAI Responses |
 | `frequency_penalty` | `float` | 频率惩罚（−2.0 到 2.0） | OpenAI、Google |
 | `presence_penalty` | `float` | 存在惩罚（−2.0 到 2.0） | OpenAI、Google |
@@ -134,7 +134,7 @@ tool_msg = create_tool_result_message(call_id, [
 ])
 ```
 
-三个提供商（Anthropic、OpenAI Responses、Google GenAI）原生支持多模态工具结果。OpenAI Chat 使用双重编码策略——工具消息中 `json.dumps()` 加上携带可视内容的合成用户消息——实现无损往返转换。
+三个提供方（Anthropic、OpenAI Responses、Google GenAI）原生支持多模态工具结果。OpenAI Chat 使用双重编码策略——工具消息中 `json.dumps()` 加上携带可视内容的合成用户消息——实现无损往返转换。
 
 ## 辅助函数
 

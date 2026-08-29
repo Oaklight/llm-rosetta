@@ -14,13 +14,13 @@ converter = OpenAIChatConverter()
 
 ## 转换请求
 
-### 提供商 → IR
+### 提供方 → IR
 
 ```python
 ir_request = converter.request_from_provider(provider_request)
 ```
 
-### IR → 提供商
+### IR → 提供方
 
 ```python
 provider_request, warnings = converter.request_to_provider(ir_request)
@@ -31,10 +31,10 @@ provider_request, warnings = converter.request_to_provider(ir_request)
 ## 转换响应
 
 ```python
-# 提供商响应 → IR
+# 提供方响应 → IR
 ir_response = converter.response_from_provider(provider_response_dict)
 
-# IR → 提供商响应
+# IR → 提供方响应
 provider_response = converter.response_to_provider(ir_response)
 ```
 
@@ -47,7 +47,7 @@ ir_messages = converter.messages_from_provider(provider_messages)
 provider_messages, warnings = converter.messages_to_provider(ir_messages)
 ```
 
-## 跨提供商工作流
+## 跨提供方工作流
 
 ```python
 from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
@@ -90,11 +90,11 @@ rest_body, warnings = google_conv.request_to_provider(ir_request, output_format=
 
 ## 元数据保留（无损往返）
 
-默认情况下，LLM-Rosetta 执行**仅语义**转换——没有 IR 等价物的提供商特有字段会被剥离。这对大多数跨提供商工作流来说足够了，但当你需要**无损往返**（同一提供商 A → IR → A）时，可以启用元数据保留模式。
+默认情况下，LLM-Rosetta 执行**仅语义**转换——没有 IR 等价物的提供方特有字段会被剥离。这对大多数跨提供方工作流来说足够了，但当你需要**无损往返**（同一提供方 A → IR → A）时，可以启用元数据保留模式。
 
 ### 工作原理
 
-通过 `ConversionContext` 传入 `metadata_mode="preserve"`，在 `from_provider` 阶段捕获提供商特有字段，在 `to_provider` 阶段重新注入：
+通过 `ConversionContext` 传入 `metadata_mode="preserve"`，在 `from_provider` 阶段捕获提供方特有字段，在 `to_provider` 阶段重新注入：
 
 ```python
 from llm_rosetta import OpenAIResponsesConverter
@@ -103,12 +103,12 @@ from llm_rosetta.converters.base import ConversionContext
 converter = OpenAIResponsesConverter()
 ctx = ConversionContext(options={"metadata_mode": "preserve"})
 
-# 提供商 → IR（捕获回显字段、逐项元数据）
+# 提供方 → IR（捕获回显字段、逐项元数据）
 ir_request = converter.request_from_provider(provider_request, context=ctx)
 
 # ... 按需修改 IR ...
 
-# IR → 同一提供商（重新注入保留的字段）
+# IR → 同一提供方（重新注入保留的字段）
 provider_request, warnings = converter.request_to_provider(ir_request, context=ctx)
 ```
 
@@ -119,11 +119,11 @@ ir_response = converter.response_from_provider(provider_response, context=ctx)
 provider_response = converter.response_to_provider(ir_response, context=ctx)
 ```
 
-### 各提供商保留的字段
+### 各提供方保留的字段
 
-每个转换器保留不同的提供商特有字段：
+每个转换器保留不同的提供方特有字段：
 
-| 提供商 | 保留字段 |
+| 提供方 | 保留字段 |
 |--------|----------|
 | OpenAI Responses | 28+ 请求回显字段（temperature、tools、reasoning、truncation 等）、逐输出项元数据（id、status、annotations、logprobs）、`RESPONSES_REQUIRED_DEFAULTS` |
 | Anthropic | `stop_sequence`、`container`、citations、OpenRouter 扩展 usage 字段 |
@@ -132,15 +132,15 @@ provider_response = converter.response_to_provider(ir_response, context=ctx)
 
 ### 网关：自动保留模式
 
-LLM-Rosetta 网关对所有转换自动使用保留模式——流式和非流式均适用。这确保了当客户端以格式 A 发送请求且上游也是格式 A（直通场景）时，所有提供商特有字段在往返中不丢失。
+LLM-Rosetta 网关对所有转换自动使用保留模式——流式和非流式均适用。这确保了当客户端以格式 A 发送请求且上游也是格式 A（直通场景）时，所有提供方特有字段在往返中不丢失。
 
 ### Strip 模式（默认）
 
-当 `metadata_mode` 为 `"strip"`（默认值）时，仅 IR 映射的字段在转换中保留。这是跨提供商工作流的推荐模式，因为提供商特有字段与目标格式无关。
+当 `metadata_mode` 为 `"strip"`（默认值）时，仅 IR 映射的字段在转换中保留。这是跨提供方工作流的推荐模式，因为提供方特有字段与目标格式无关。
 
-## 提供商方言差异
+## 提供方方言差异
 
-不同 LLM 提供商对同一概念性操作有着细微不同的要求。LLM-Rosetta 在转换过程中自动处理这些**方言差异**，无需手动干预。
+不同 LLM 提供方对同一概念性操作有着细微不同的要求。LLM-Rosetta 在转换过程中自动处理这些**方言差异**，无需手动干预。
 
 ### 工具 Schema 清理
 
@@ -154,7 +154,7 @@ LLM-Rosetta 的 `sanitize_schema()`（位于 `converters.base.tools`）会在所
 
 ### 工具调用/结果配对（严格校验）
 
-大多数 LLM 提供商**严格要求**工具调用和工具结果必须双向配对。任何方向的不匹配都会导致 **400 错误**：
+大多数 LLM 提供方**严格要求**工具调用和工具结果必须双向配对。任何方向的不匹配都会导致 **400 错误**：
 
 | 方向 | OpenAI | Anthropic | Google |
 |---|---|---|---|
@@ -198,7 +198,7 @@ items = fix_orphaned_tool_calls(items)
 
 Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inlineData`、`mimeType`、`functionCall`、`functionResponse`、`functionDeclarations`、`responseMimeType`、`thinkingConfig` 等），而 Python SDK 使用 snake_case。LLM-Rosetta 的 Google 转换器在所有层级（内容、工具、配置和响应字段）透明地接受两种命名约定。所有 IR→Provider 输出使用 camelCase 以兼容 REST API。
 
-有关所有 camelCase/snake_case 字段对及其他在实际测试中发现的真实兼容性问题的完整列表，请参阅[提供商与 CLI 兼容性矩阵](compatibility.md)。
+有关所有 camelCase/snake_case 字段对及其他在实际测试中发现的真实兼容性问题的完整列表，请参阅[提供方与 CLI 兼容性矩阵](compatibility.md)。
 
 ## 警告与错误处理
 
@@ -219,7 +219,7 @@ for w in warnings:
 |------|------|
 | `"X does not support Y, ignored"` | 源格式中的某个特性在目标格式中没有对应项，已被丢弃 |
 | `"Extension item ignored: ..."` | Open Responses 扩展项没有可移植的 IR 表示 |
-| `"Tool chain converted to sequential calls"` | 提供商的链式工具调用模式被展平为顺序调用 |
+| `"Tool chain converted to sequential calls"` | 提供方的链式工具调用模式被展平为顺序调用 |
 | `"Skipped image in tool result packing: ..."` | 工具结果中的图像无法转换 |
 
 要从 `request_from_provider` 或 `response_from_provider`（不返回元组）中捕获警告，传入 `ConversionContext`：
@@ -235,6 +235,6 @@ print(ctx.warnings)  # list[str]
 ## 另请参阅
 
 - [流式处理](streaming.md) — 使用 `StreamContext` 转换流式数据块
-- [多轮状态桥接](turn-bridge.md) — 跨 HTTP 轮次保留提供商元数据
-- [提供商 Shim](shims.md) — 提供商如何声明字段级转换
+- [多轮状态桥接](turn-bridge.md) — 跨 HTTP 轮次保留提供方元数据
+- [提供方 Shim](shims.md) — 提供方如何声明字段级转换
 - [IR 类型](ir-types.md) — 中间表示类型定义

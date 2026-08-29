@@ -4,7 +4,7 @@ title: 工具调用
 
 # 工具调用
 
-LLM-Rosetta 提供统一的工具定义格式，适用于所有提供商。
+LLM-Rosetta 提供统一的工具定义格式，适用于所有提供方。
 
 ## 以 IR 格式定义工具
 
@@ -32,7 +32,7 @@ tools = [
 ]
 ```
 
-## 跨提供商工具调用
+## 跨提供方工具调用
 
 ```python
 from llm_rosetta import OpenAIChatConverter, AnthropicConverter
@@ -70,7 +70,7 @@ ir_request["model"] = "claude-sonnet-4-20250514"
 anthropic_req, _ = anthropic_conv.request_to_provider(ir_request)
 ```
 
-工具定义和工具调用结果会自动转换为每个提供商的原生格式。
+工具定义和工具调用结果会自动转换为每个提供方的原生格式。
 
 ## 多模态工具结果
 
@@ -91,9 +91,9 @@ result = generate_chart(**tool_call["function"]["arguments"])
 tool_msg = create_tool_result_message(tool_call["id"], result)
 ```
 
-### 提供商支持
+### 提供方支持
 
-| 提供商 | 多模态工具结果 | 处理方式 |
+| 提供方 | 多模态工具结果 | 处理方式 |
 |-------|:------------:|---------|
 | Anthropic | 原生支持 | 内容块（text、image、document） |
 | OpenAI Responses | 原生支持 | 内容块（input_text、input_image、input_file） |
@@ -104,7 +104,7 @@ tool_msg = create_tool_result_message(tool_call["id"], result)
 
 ## 自定义工具调用（OpenAI Responses API）
 
-OpenAI Responses API 支持 `"type": "custom"` 工具变体，供部分扩展和集成使用。llm-rosetta 对其提供端到端支持：接收、流式传输以及跨提供商转发。
+OpenAI Responses API 支持 `"type": "custom"` 工具变体，供部分扩展和集成使用。llm-rosetta 对其提供端到端支持：接收、流式传输以及跨提供方转发。
 
 ### 请求
 
@@ -180,9 +180,9 @@ llm-rosetta 会将其规范化为 IR 中 `type: "function"` 的工具调用，�
 
 无需额外处理——流式转换器会累积各个 delta，并通过与普通函数调用相同的 IR 流式接口将其输出。
 
-### 跨提供商行为
+### 跨提供方行为
 
-Anthropic 和 Google 没有原生的 `"custom"` 工具类型。当 llm-rosetta 将包含自定义工具的请求转发给这两个提供商时，会合成一个带有单个字符串参数（`input`）的标准 function 工具，确保该工具仍可被调用：
+Anthropic 和 Google 没有原生的 `"custom"` 工具类型。当 llm-rosetta 将包含自定义工具的请求转发给这两个提供方时，会合成一个带有单个字符串参数（`input`）的标准 function 工具，确保该工具仍可被调用：
 
 ```json
 {
@@ -201,4 +201,4 @@ Anthropic 和 Google 没有原生的 `"custom"` 工具类型。当 llm-rosetta �
 }
 ```
 
-在返回路径上，合成的 function call 结果会在到达原始客户端之前被转换回 `custom_tool_call` 输出条目——整个往返过程对上游提供商和下游消费者均透明。
+在返回路径上，合成的 function call 结果会在到达原始客户端之前被转换回 `custom_tool_call` 输出条目——整个往返过程对上游提供方和下游消费者均透明。

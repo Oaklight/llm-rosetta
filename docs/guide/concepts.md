@@ -6,11 +6,11 @@ title: 核心概念
 
 ## N² 问题
 
-有 N 个 LLM 提供商时，每对之间的直接转换需要 N×(N-1) 个转换器。4 个提供商就需要维护 12 个转换器。
+有 N 个 LLM 提供方时，每对之间的直接转换需要 N×(N-1) 个转换器。4 个提供方就需要维护 12 个转换器。
 
 ## 中枢辐射解决方案
 
-LLM-Rosetta 引入中央**中间表示（IR）**作为枢纽。每个提供商只需一个与 IR 之间的转换器，总数降为 2×N（4 个提供商仅需 8 个）。
+LLM-Rosetta 引入中央**中间表示（IR）**作为枢纽。每个提供方只需一个与 IR 之间的转换器，总数降为 2×N（4 个提供方仅需 8 个）。
 
 ```mermaid
 graph LR
@@ -49,9 +49,9 @@ graph LR
 
 - **`warnings`** — 累积的转换注意事项（如不支持的特性被丢弃）
 - **`options`** — 结构化转换选项（如 `output_format`、`metadata_mode`）
-- **`metadata`** — 不透明存储，用于提供商特有状态
+- **`metadata`** — 不透明存储，用于提供方特有状态
 
-`metadata_mode` 选项（`"strip"` 或 `"preserve"`）控制提供商特有字段是否在往返中保留。详见[使用转换器 — 元数据保留](converters.md#元数据保留无损往返)。
+`metadata_mode` 选项（`"strip"` 或 `"preserve"`）控制提供方特有字段是否在往返中保留。详见[使用转换器 — 元数据保留](converters.md#元数据保留无损往返)。
 
 `StreamContext` 继承自 `ConversionContext`，增加了会话级元数据、工具调用追踪和生命周期标志，用于有状态的流式转换。详见[流式处理](streaming.md)指南。
 

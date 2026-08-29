@@ -4,7 +4,7 @@ title: 网关
 
 # 网关（Gateway）
 
-LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供商 API 格式之间进行转换。发送任意支持格式的请求，网关会自动转换并转发到配置的上游提供商。
+LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供方 API 格式之间进行转换。发送任意支持格式的请求，网关会自动转换并转发到配置的上游提供方。
 
 ```mermaid
 graph LR
@@ -13,7 +13,7 @@ graph LR
     C3["客户端<br/><small>Google 格式</small>"] --> GW
     GW --> U1["Anthropic API"]
     GW --> U2["OpenAI API"]
-    GW --> U3["任意提供商"]
+    GW --> U3["任意提供方"]
 
     style GW fill:#f9a825,stroke:#f57f17,color:#000
 ```
@@ -41,7 +41,7 @@ graph LR
 
 ## 流式传输
 
-所有提供商组合均支持流式传输。请求方式与原生 API 相同：
+所有提供方组合均支持流式传输。请求方式与原生 API 相同：
 
 ```bash
 curl http://localhost:8765/v1/chat/completions \
@@ -53,7 +53,7 @@ curl http://localhost:8765/v1/chat/completions \
   }'
 ```
 
-网关实时在提供商格式之间转换 SSE 数据块。
+网关实时在提供方格式之间转换 SSE 数据块。
 
 ## 认证
 
@@ -77,7 +77,7 @@ sequenceDiagram
 
     客户端->>网关: 请求（来源格式）
     网关->>网关: source_converter.request_from_provider() → IR
-    网关->>网关: 查找模型 → 目标提供商
+    网关->>网关: 查找模型 → 目标提供方
     网关->>网关: target_converter.request_to_provider() → 目标格式
     网关->>上游: 转发请求
     上游-->>网关: 响应（目标格式）

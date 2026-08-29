@@ -72,7 +72,7 @@ text = extract_text_content(ir_response["choices"][0]["message"])
 ```python
 from llm_rosetta import detect_provider, convert
 
-# 从请求结构自动检测提供商
+# 从请求结构自动检测提供方
 provider = detect_provider(some_request)
 
 # 一步完成转换
@@ -83,5 +83,5 @@ converted = convert(some_request, target_provider="anthropic")
 
 - [核心概念](../guide/concepts.md) — 了解中枢辐射架构
 - [使用转换器](../guide/converters.md) — 转换器详细用法和元数据保留
-- [流式处理](../guide/streaming.md) — 跨提供商转换流式数据块
+- [流式处理](../guide/streaming.md) — 跨提供方转换流式数据块
 - [IR 类型](../guide/ir-types.md) — 中间表示类型系统

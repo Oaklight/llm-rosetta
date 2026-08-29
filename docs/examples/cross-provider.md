@@ -1,21 +1,21 @@
 ---
-title: 跨提供商对话
+title: 跨提供方对话
 ---
 
-# 跨提供商对话
+# 跨提供方对话
 
-此示例展示了在两个不同 LLM 提供商之间交替进行多轮对话，使用 LLM-Rosetta 实现消息的无缝转换。
+此示例展示了在两个不同 LLM 提供方之间交替进行多轮对话，使用 LLM-Rosetta 实现消息的无缝转换。
 
 ## 概念
 
 ```text
-轮次 1: 用户 → 提供商 A → IR 响应 → 追加到历史
-轮次 2: 用户 → IR 历史 → 提供商 B 请求 → 提供商 B → IR 响应
-轮次 3: 用户 → IR 历史 → 提供商 A 请求 → 提供商 A → IR 响应
+轮次 1: 用户 → 提供方 A → IR 响应 → 追加到历史
+轮次 2: 用户 → IR 历史 → 提供方 B 请求 → 提供方 B → IR 响应
+轮次 3: 用户 → IR 历史 → 提供方 A 请求 → 提供方 A → IR 响应
 ...
 ```
 
-对话历史以 IR 格式维护。每次 API 调用前，完整历史被转换为目标提供商的格式。
+对话历史以 IR 格式维护。每次 API 调用前，完整历史被转换为目标提供方的格式。
 
 ## 示例：OpenAI ↔ Anthropic
 
@@ -43,7 +43,7 @@ def chat(user_text: str, use_provider: str = "openai"):
         "generation": {"temperature": 0.7, "max_tokens": 1000},
     }
 
-    # 转换为提供商格式并调用 API
+    # 转换为提供方格式并调用 API
     if use_provider == "openai":
         req, _ = openai_conv.request_to_provider(ir_request)
         response = openai_client.chat.completions.create(**req)
@@ -59,7 +59,7 @@ def chat(user_text: str, use_provider: str = "openai"):
 
     return extract_text_content(assistant_msg)
 
-# 在提供商之间交替
+# 在提供方之间交替
 print(chat("你好！", "openai"))
 print(chat("请告诉我更多。", "anthropic"))
 print(chat("谢谢！", "openai"))

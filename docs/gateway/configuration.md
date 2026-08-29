@@ -9,9 +9,9 @@ title: 配置
 !!! tip "配置重载"
     网关**不会**监视配置文件的变更。要应用更改，可以重启网关进程，或通过[管理面板](admin-panel.md) / [Admin API](../api/admin.md) 操作——通过管理界面所做的更改会热重载且自动持久化回配置文件。
 
-## 提供商
+## 提供方
 
-每个提供商条目需要 `api_key`、`base_url`，以及可选的 `type` 字段指定 API 标准：
+每个提供方条目需要 `api_key`、`base_url`，以及可选的 `type` 字段指定 API 标准：
 
 ```jsonc
 "providers": {
@@ -21,13 +21,13 @@ title: 配置
 }
 ```
 
-提供商名称是用户自定义的字符串（如 `"my-openai"`、`"prod-claude"`）。`type` 字段指定使用哪种 API 标准。
+提供方名称是用户自定义的字符串（如 `"my-openai"`、`"prod-claude"`）。`type` 字段指定使用哪种 API 标准。
 
 可用类型：`openai_chat`、`openai_responses`、`anthropic`、`google`。
 
 ### 使用 Shim
 
-除了 `type`，还可以使用 `shim` 字段引用已注册的提供商 shim。Shim 是一个轻量级身份卡片，声明了提供商使用的基础 API 标准、连接默认值和字段级转换规则。
+除了 `type`，还可以使用 `shim` 字段引用已注册的提供方 shim。Shim 是一个轻量级身份卡片，声明了提供方使用的基础 API 标准、连接默认值和字段级转换规则。
 
 ```jsonc
 "providers": {
@@ -67,24 +67,24 @@ Shim 支持 `max_images` 和 `max_images_pattern` 字段，用于对每次请求
 可通过 `register_shim()` 注册自定义 shim 实现同样的限制逻辑。
 
 !!! tip "解析优先级"
-    提供商类型解析顺序为：`shim` → `type` → 提供商名称（兜底）。
+    提供方类型解析顺序为：`shim` → `type` → 提供方名称（兜底）。
 
 !!! note "向后兼容"
-    如果 `shim` 和 `type` 都省略，提供商名称本身将用作类型。这意味着使用旧格式（提供商名称为 `openai_chat`、`anthropic` 等）的配置无需修改即可继续使用。
+    如果 `shim` 和 `type` 都省略，提供方名称本身将用作类型。这意味着使用旧格式（提供方名称为 `openai_chat`、`anthropic` 等）的配置无需修改即可继续使用。
 
-### 启用 / 禁用提供商
+### 启用 / 禁用提供方
 
-每个提供商支持 `enabled` 字段（默认 `true`）。禁用的提供商及其关联模型将从路由中静默排除：
+每个提供方支持 `enabled` 字段（默认 `true`）。禁用的提供方及其关联模型将从路由中静默排除：
 
 ```jsonc
 "my-openai": { "type": "openai_chat", "api_key": "sk-...", "base_url": "https://api.openai.com/v1", "enabled": false }
 ```
 
-这在需要临时下线提供商但不删除配置时很有用。[管理面板](admin-panel.md)提供了切换开关来操作此功能。
+这在需要临时下线提供方但不删除配置时很有用。[管理面板](admin-panel.md)提供了切换开关来操作此功能。
 
 ### API 密钥轮转
 
-每个提供商支持通过逗号分隔配置多个 API 密钥，网关以轮询方式依次使用：
+每个提供方支持通过逗号分隔配置多个 API 密钥，网关以轮询方式依次使用：
 
 ```jsonc
 "my-openai": { "type": "openai_chat", "api_key": "sk-key1,sk-key2,sk-key3", "base_url": "https://api.openai.com/v1" }
@@ -98,9 +98,9 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 "my-openai": { "type": "openai_chat", "api_key": "${OPENAI_API_KEY}", "base_url": "https://api.openai.com/v1" }
 ```
 
-### 逐提供商代理
+### 逐提供方代理
 
-可为单个提供商指定代理：
+可为单个提供方指定代理：
 
 ```jsonc
 "my-anthropic": { "type": "anthropic", "api_key": "sk-ant-...", "base_url": "https://api.anthropic.com", "proxy": "http://proxy:8080" }
@@ -108,7 +108,7 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 
 ## 代理配置
 
-可在 `server` 部分设置全局代理，适用于所有提供商（除非逐提供商覆盖）：
+可在 `server` 部分设置全局代理，适用于所有提供方（除非逐提供方覆盖）：
 
 ```jsonc
 {
@@ -163,7 +163,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 ## 模型路由
 
-`models` 部分将模型名称映射到提供商：
+`models` 部分将模型名称映射到提供方：
 
 ```jsonc
 "models": {
@@ -240,7 +240,7 @@ API Key 也支持 `${ENV_VAR}` 替换：
 ```
 
 !!! tip
-    如果网关对公网开放，强烈建议设置 `admin_password`，防止未授权访问提供商配置和请求日志。
+    如果网关对公网开放，强烈建议设置 `admin_password`，防止未授权访问提供方配置和请求日志。
 
 !!! warning "未解析的占位符"
     如果 `admin_password` 包含未解析的 `${ENV_VAR}` 占位符（即环境变量未在启动时设置），网关会**拒绝启动**并输出清晰的错误信息，防止将字面量字符串 `${ADMIN_PASSWORD}` 作为密码使用。
@@ -327,9 +327,9 @@ API Key 也支持 `${ENV_VAR}` 替换：
 
 `status` 字段取值：所有服务方正常时为 `"ok"`，一个或多个服务方异常时为 `"degraded"`。
 
-## Embedding 提供商
+## Embedding 提供方
 
-网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。Embedding 提供商和模型独立于 chat 提供商配置：
+网关可以代理 `/v1/embeddings` 请求，支持跨格式 IR 转换（OpenAI ↔ Cohere ↔ Jina ↔ Voyage）。Embedding 提供方和模型独立于 chat 提供方配置：
 
 ```jsonc
 {
@@ -347,13 +347,13 @@ API Key 也支持 `${ENV_VAR}` 替换：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `embedding_providers` | `dict` | `{}` | Embedding 上游的提供商配置（格式同 `providers`） |
-| `embedding_models` | `dict` | `{}` | 模型 → 提供商映射 |
+| `embedding_providers` | `dict` | `{}` | Embedding 上游的提供方配置（格式同 `providers`） |
+| `embedding_models` | `dict` | `{}` | 模型 → 提供方映射 |
 | `default_embedding_format` | `str` | `"openai"` | 源格式兜底。选项：`openai`、`cohere`、`jina`、`voyage` |
 
-未配置 `embedding_providers` 时，`/v1/embeddings` 回退到透传模式（直接转发给 chat 提供商，不做 IR 转换）。
+未配置 `embedding_providers` 时，`/v1/embeddings` 回退到透传模式（直接转发给 chat 提供方，不做 IR 转换）。
 
-## Rerank 提供商
+## Rerank 提供方
 
 网关可以代理 `/v1/rerank` 和 `/v2/rerank` 请求，支持跨格式 IR 转换（Jina ↔ Cohere ↔ Voyage）：
 
@@ -373,8 +373,8 @@ API Key 也支持 `${ENV_VAR}` 替换：
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `rerank_providers` | `dict` | `{}` | Rerank 上游的提供商配置 |
-| `rerank_models` | `dict` | `{}` | 模型 → 提供商映射 |
+| `rerank_providers` | `dict` | `{}` | Rerank 上游的提供方配置 |
+| `rerank_models` | `dict` | `{}` | 模型 → 提供方映射 |
 | `default_rerank_format` | `str` | `"jina"` | 源格式兜底。选项：`jina`、`cohere`、`voyage` |
 
 `/v2/rerank` 端点会根据 URL 路径自动检测 Cohere 源格式。
@@ -388,7 +388,7 @@ API Key 也支持 `${ENV_VAR}` 替换：
     "openai-resp":    { "type": "openai_responses",  "api_key": "${OPENAI_API_KEY}",    "base_url": "https://api.openai.com/v1" },
     "anthropic-prod": { "type": "anthropic",         "api_key": "${ANTHROPIC_API_KEY}",  "base_url": "https://api.anthropic.com" },
     "google-prod":    { "type": "google",            "api_key": "${GOOGLE_API_KEY}",     "base_url": "https://generativelanguage.googleapis.com" },
-    // 基于 Shim 的提供商 — base_url 和 transforms 自动解析
+    // 基于 Shim 的提供方 — base_url 和 transforms 自动解析
     "deepseek":       { "shim": "deepseek",          "api_key": "${DEEPSEEK_API_KEY}" },
     "volcengine":     { "shim": "volcengine",         "api_key": "${VOLCENGINE_API_KEY}", "base_url": "https://ark.cn-beijing.volces.com/api/v3" }
   },

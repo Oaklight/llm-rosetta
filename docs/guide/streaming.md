@@ -7,21 +7,21 @@ title: 流式处理
 !!! note "目标读者"
     本页面面向使用库 API 构建自定义流式管线的开发者。如果你使用的是网关，流式处理会自动工作——你不需要自己管理 `StreamContext`。
 
-LLM-Rosetta 支持在提供商之间转换流式数据块。有状态的 `StreamContext` 在数据块序列中追踪会话元数据、工具调用和延迟事件。
+LLM-Rosetta 支持在提供方之间转换流式数据块。有状态的 `StreamContext` 在数据块序列中追踪会话元数据、工具调用和延迟事件。
 
 ```mermaid
 sequenceDiagram
-    participant 提供商 A as Provider A
+    participant 提供方 A as Provider A
     participant 源转换器 as Source Converter
     participant IR 事件 as IR Events
     participant 目标转换器 as Target Converter
-    participant 提供商 B as Provider B
+    participant 提供方 B as Provider B
 
-    提供商 A->>源转换器: SSE chunks
+    提供方 A->>源转换器: SSE chunks
     源转换器->>IR 事件: stream_response_from_provider()
     Note over IR 事件: TextDeltaEvent, ToolCallStartEvent,<br/>FinishEvent, UsageEvent, ...
     IR 事件->>目标转换器: IR stream events
-    目标转换器->>提供商 B: stream_response_to_provider()
+    目标转换器->>提供方 B: stream_response_to_provider()
     Note over 源转换器,目标转换器: StreamContext 在整个序列中追踪状态
 ```
 
@@ -45,7 +45,7 @@ sequenceDiagram
 
 ## 转换流式数据块
 
-使用 `stream_response_from_provider()` 将提供商原生数据块转换为 IR 事件：
+使用 `stream_response_from_provider()` 将提供方原生数据块转换为 IR 事件：
 
 ```python
 from llm_rosetta import OpenAIChatConverter
@@ -63,7 +63,7 @@ for chunk in provider_stream:
             print(event["text"], end="")
 ```
 
-使用 `stream_response_to_provider()` 将 IR 事件转换回目标提供商格式：
+使用 `stream_response_to_provider()` 将 IR 事件转换回目标提供方格式：
 
 ```python
 from llm_rosetta import AnthropicConverter
@@ -108,11 +108,11 @@ ctx = StreamContext(options={"metadata_mode": "preserve"})
 
 ### 会话元数据
 
-转换器从第一个提供商数据块中填充以下字段：
+转换器从第一个提供方数据块中填充以下字段：
 
 | 字段 | 类型 | 描述 |
 |------|------|------|
-| `response_id` | `str` | 提供商响应 ID（如 `chatcmpl-xxx`） |
+| `response_id` | `str` | 提供方响应 ID（如 `chatcmpl-xxx`） |
 | `model` | `str` | 响应中的模型名称 |
 | `created` | `int` | Unix 时间戳 |
 | `current_block_index` | `int` | 当前从 0 开始的内容块索引 |
@@ -157,7 +157,7 @@ ctx.get_tool_call_item_id("call_abc")  # "item_xyz"
 
 ## 延迟事件缓冲
 
-某些提供商在不同的 chunk 中发送 usage 和 finish 信息，或在单个帧中组合 text 和 finish。为防止重复终端事件和事件膨胀，`StreamContext` 提供缓冲方法：
+某些提供方在不同的 chunk 中发送 usage 和 finish 信息，或在单个帧中组合 text 和 finish。为防止重复终端事件和事件膨胀，`StreamContext` 提供缓冲方法：
 
 ```python
 # 缓冲 usage 以便后续合并到 finish 事件
@@ -169,9 +169,9 @@ ctx.buffer_finish({"stop_reason": "end_turn"})
 finish = ctx.pop_pending_finish()  # 返回 dict 并清空缓冲
 ```
 
-此模式在转换器内部使用，将 usage 合并到 finish 事件中，避免跨提供商转换时产生独立的 `UsageEvent` + `FinishEvent` 对导致输出流膨胀。
+此模式在转换器内部使用，将 usage 合并到 finish 事件中，避免跨提供方转换时产生独立的 `UsageEvent` + `FinishEvent` 对导致输出流膨胀。
 
-## 跨提供商流式转换
+## 跨提供方流式转换
 
 完整示例：将 OpenAI Chat SSE → IR → Anthropic SSE：
 
@@ -198,7 +198,7 @@ for chunk in openai_stream:
 
 基类 `stream_response_to_provider()` 使用类级分派表（`_TO_P_DISPATCH`）将每个 IR 事件类型路由到对应的处理器方法。各 provider converter 通过 `_post_process_to_provider()` 钩子定制输出——例如，OpenAI Chat 在每个 chunk 中注入 `id`、`object`、`model` 和 `created` envelope 字段。
 
-## 提供商特定 StreamContext
+## 提供方特定 StreamContext
 
 OpenAI Responses API 需要额外的逐事件状态（序列号、输出 item 追踪）。`OpenAIResponsesStreamContext` 扩展了 `StreamContext` 以包含这些字段。
 

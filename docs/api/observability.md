@@ -53,8 +53,8 @@ snapshot = metrics.snapshot(series_seconds=60)
 | `export_counters()` | 返回用于持久化的计数器（不含时间序列） |
 | `load_counters(data)` | 从导出的字典恢复计数器 |
 | `rebuild_counters(rows)` | 从请求日志行重建所有计数器 |
-| `provider_health_snapshot()` | 按提供商的健康状态 |
-| `any_critical_provider()` | 任一提供商处于严重不健康状态时返回 True |
+| `provider_health_snapshot()` | 按提供方的健康状态 |
+| `any_critical_provider()` | 任一提供方处于严重不健康状态时返回 True |
 
 ---
 
@@ -88,7 +88,7 @@ entry = RequestLogEntry.create(
 | `duration_ms` | `float` | 请求耗时（毫秒） |
 | `error_detail` | `str \| None` | 错误信息（如有） |
 | `api_key_label` | `str \| None` | API 密钥标签 |
-| `target_provider_name` | `str \| None` | 提供商显示名称 |
+| `target_provider_name` | `str \| None` | 提供方显示名称 |
 | `client_ip` | `str \| None` | 客户端 IP 地址 |
 | `profile` | `dict \| None` | 性能分析数据 |
 
@@ -241,7 +241,7 @@ dump_id = dump_error(
 | `model` | `str \| None` | 请求中的模型名称 |
 | `source_provider` | `str \| None` | 源 API 格式（如 `"openai_chat"`） |
 | `target_provider` | `str \| None` | 目标 API 格式（如 `"anthropic"`） |
-| `provider_name` | `str \| None` | 人类可读的提供商名称 |
+| `provider_name` | `str \| None` | 人类可读的提供方名称 |
 | `status_code` | `int \| None` | 上游 HTTP 状态码 |
 | `error_phase` | `str \| None` | `"upstream"`、`"stream_header"`、`"stream_chunk"` 或 `"conversion"` 之一 |
 | `upstream_url` | `str \| None` | 被调用的上游 URL |

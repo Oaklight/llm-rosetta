@@ -36,7 +36,7 @@ llm-rosetta-gateway init
 
 ### `add provider <name>`
 
-添加提供商条目到配置文件：
+添加提供方条目到配置文件：
 
 ```bash
 llm-rosetta-gateway add provider openai_chat
@@ -46,7 +46,7 @@ llm-rosetta-gateway add provider anthropic --api-key "${ANTHROPIC_API_KEY}"
 | 参数 | 说明 |
 |------|------|
 | `--api-key` KEY | API 密钥或 `${ENV_VAR}` 占位符 |
-| `--base-url` URL | 提供商基础 URL（已知提供商自动填充） |
+| `--base-url` URL | 提供方基础 URL（已知提供方自动填充） |
 
 ### `add model <name>`
 
@@ -60,7 +60,7 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 
 | 参数 | 说明 |
 |------|------|
-| `--provider` NAME | 目标提供商名称 |
+| `--provider` NAME | 目标提供方名称 |
 
 ## 配置文件自动发现
 

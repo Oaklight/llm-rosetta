@@ -44,7 +44,7 @@ docker pull oaklight/llm-rosetta-gateway:latest
 }
 ```
 
-提供商名称是用户自定义的字符串。`type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。
+提供方名称是用户自定义的字符串。`type` 字段指定 API 标准（`openai_chat`、`openai_responses`、`anthropic`、`google`）。
 
 ## 3. 启动网关
 
@@ -66,7 +66,7 @@ llm-rosetta-gateway --config /path/to/config.jsonc
 
 ## 4. 发送请求
 
-使用任意提供商格式 — 网关根据模型名称自动路由：
+使用任意提供方格式 — 网关根据模型名称自动路由：
 
 ```bash
 # 发送 OpenAI 格式请求，路由到 Anthropic

@@ -302,7 +302,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### 修复
 
-- **指标按提供商名称分组** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340))：面板 breakdown 区域现在按提供商显示名称分组，而非按 API 类型（此前将所有 Anthropic 格式的提供商合并为一行）
+- **指标按提供方名称分组** ([#340](https://github.com/Oaklight/llm-rosetta/pull/340))：面板 breakdown 区域现在按提供方显示名称分组，而非按 API 类型（此前将所有 Anthropic 格式的提供方合并为一行）
 - **配置文件写入安全**：`write_config()` 现使用文件锁确保跨进程安全
 - **Vendored httpserver 更新至 0.2.1**：对格式错误的请求返回正确的 HTTP 错误响应，而非静默断开连接
 - **Vendored SSE 更新至 0.3.2**：解析器初始化使用构造函数参数，而非初始化后修改

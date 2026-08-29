@@ -12,7 +12,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 **Chat / Completions**（5 种标准）：
 
-| 提供商 | 格式 | 流式 | 工具调用 |
+| 提供方 | 格式 | 流式 | 工具调用 |
 |-------|------|:----:|:------:|
 | OpenAI Chat Completions | `openai_chat` | ✓ | ✓ |
 | OpenAI Responses | `openai_responses` | ✓ | ✓ |
@@ -26,14 +26,14 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 [网关](gateway/index.md)提供**零运行时依赖**的实时 HTTP 代理，已通过 [5 种 CLI 工具和 SDK 测试套件验证](gateway/validation.md)。网关内置[管理面板](gateway/admin-panel.md)及完整的 [REST API](api/admin.md)。
 
-**提供商 shim 层**支持通过声明式 YAML 文件添加新提供商——OpenAI 兼容提供商无需编写转换器代码。内置支持 16 个提供商。
+**提供方 shim 层**支持通过声明式 YAML 文件添加新提供方——OpenAI 兼容提供方无需编写转换器代码。内置支持 16 个提供方。
 
 详见 [API 标准](guide/api-standards.md)了解各格式详情。
 
 ---
 
 !!! info "已完成的功能"
-    已发布的功能详见[更新日志](changelog.md)。关键里程碑包括：声明式 shim 系统（v0.6.0）、零依赖网关（v0.6.0）、Embedding/Rerank IR 转换（v0.6.1+）、推理字段标准化（v0.8.1）、上游超时（v0.8.2）、多 API 模式提供商（v0.6.8）。
+    已发布的功能详见[更新日志](changelog.md)。关键里程碑包括：声明式 shim 系统（v0.6.0）、零依赖网关（v0.6.0）、Embedding/Rerank IR 转换（v0.6.1+）、推理字段标准化（v0.8.1）、上游超时（v0.8.2）、多 API 模式提供方（v0.6.8）。
 
 ---
 
@@ -45,7 +45,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 !!! tip "状态：计划中 — [#181](https://github.com/Oaklight/llm-rosetta/issues/181)"
 
-跨提供商映射服务端工具类型（`web_search`、`code_execution`、`computer_use`），这些工具类型在部分提供商中存在但在其他提供商中不存在。
+跨提供方映射服务端工具类型（`web_search`、`code_execution`、`computer_use`），这些工具类型在部分提供方中存在但在其他提供方中不存在。
 
 ### Shim 系统
 
@@ -53,7 +53,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 !!! tip "状态：计划中 — [#192](https://github.com/Oaklight/llm-rosetta/issues/192)"
 
-恢复 `ModelShim` 以支持每模型的转换规则——同一提供商的不同模型可能需要不同的字段处理。
+恢复 `ModelShim` 以支持每模型的转换规则——同一提供方的不同模型可能需要不同的字段处理。
 
 ### 网关
 
@@ -69,19 +69,19 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 在网关错误响应中包含上游错误上下文，方便调试。
 
-#### 每提供商费用追踪
+#### 每提供方费用追踪
 
 !!! note "状态：开放 — [#131](https://github.com/Oaklight/llm-rosetta/issues/131)"
 
-按提供商追踪 token 使用费用，在管理面板仪表盘中展示。
+按提供方追踪 token 使用费用，在管理面板仪表盘中展示。
 
 #### 故障转移与负载均衡
 
 !!! note "状态：开放 — [#129](https://github.com/Oaklight/llm-rosetta/issues/129)"
 
-主提供商不可用时自动故障转移到备用提供商，可选在多个提供商间负载均衡。
+主提供方不可用时自动故障转移到备用提供方，可选在多个提供方间负载均衡。
 
-### 提供商支持
+### 提供方支持
 
 #### LM Studio
 
@@ -104,7 +104,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 1. 查看 [Issue 跟踪器](https://github.com/Oaklight/llm-rosetta/issues) 中的开放问题
 2. 阅读[核心概念](guide/concepts.md)指南，了解转换器架构
 3. 参考现有转换器（如 `src/llm_rosetta/converters/openai_chat/`）作为模板
-4. 对于新提供商，优先考虑创建 [shim](guide/shims.md)——通常就够了
+4. 对于新提供方，优先考虑创建 [shim](guide/shims.md)——通常就够了
 5. 提交前运行 `pre-commit run --all-files`
 
 对于较大的功能，请先开 Issue 讨论方案。

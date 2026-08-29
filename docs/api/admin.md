@@ -116,9 +116,9 @@ GET /admin/api/config
 
 ---
 
-### 添加 / 更新提供商
+### 添加 / 更新提供方
 
-创建新提供商或更新已有提供商。支持重命名（自动更新关联的模型引用）。
+创建新提供方或更新已有提供方。支持重命名（自动更新关联的模型引用）。
 
 ```
 PUT /admin/api/config/providers/<name>
@@ -128,10 +128,10 @@ PUT /admin/api/config/providers/<name>
 
 | 字段 | 类型 | 是否必填 | 说明 |
 |------|------|---------|------|
-| `api_key` | `string` | 是* | 提供商 API Key。编辑时可省略或留空以保留原有 Key。 |
-| `base_url` | `string` | 是 | 提供商 Base URL。 |
+| `api_key` | `string` | 是* | 提供方 API Key。编辑时可省略或留空以保留原有 Key。 |
+| `base_url` | `string` | 是 | 提供方 Base URL。 |
 | `type` | `string` | 否 | API 标准或 shim 名称（如 `openai_chat`、`anthropic`）。 |
-| `proxy` | `string` | 否 | 提供商级别的代理 URL。 |
+| `proxy` | `string` | 否 | 提供方级别的代理 URL。 |
 | `rename_from` | `string` | 否 | 重命名时的原名称——旧条目将被删除，模型引用自动更新。 |
 
 **成功响应**
@@ -148,7 +148,7 @@ PUT /admin/api/config/providers/<name>
 
 ---
 
-### 删除提供商
+### 删除提供方
 
 ```
 DELETE /admin/api/config/providers/<name>?cascade=true
@@ -156,7 +156,7 @@ DELETE /admin/api/config/providers/<name>?cascade=true
 
 | 查询参数 | 类型 | 默认值 | 说明 |
 |---------|------|-------|------|
-| `cascade` | `"true"` \| `"1"` | — | 同时删除引用该提供商的模型。 |
+| `cascade` | `"true"` \| `"1"` | — | 同时删除引用该提供方的模型。 |
 
 **成功响应**
 
@@ -169,13 +169,13 @@ DELETE /admin/api/config/providers/<name>?cascade=true
 }
 ```
 
-**错误**：404（提供商不存在）、409（仍有模型引用且未设置 `cascade`）。
+**错误**：404（提供方不存在）、409（仍有模型引用且未设置 `cascade`）。
 
 ---
 
-### 切换提供商状态
+### 切换提供方状态
 
-启用或禁用提供商，无需删除。
+启用或禁用提供方，无需删除。
 
 ```
 POST /admin/api/config/providers/<name>/toggle
@@ -199,7 +199,7 @@ PUT /admin/api/config/models/<name>
 
 | 字段 | 类型 | 是否必填 | 说明 |
 |------|------|---------|------|
-| `provider` | `string` | 是 | 目标提供商名称（必须已存在）。 |
+| `provider` | `string` | 是 | 目标提供方名称（必须已存在）。 |
 | `capabilities` | `string[]` | 否 | 能力列表。默认为 `["text"]`。 |
 | `upstream_model` | `string` | 否 | 上游模型 ID（当与网关侧名称不同时使用）。 |
 | `rename_from` | `string` | 否 | 重命名时的原名称。 |
@@ -278,7 +278,7 @@ POST /admin/api/config/reload
 
 ### 获取上游模型列表
 
-查询提供商的 `/v1/models` 端点以发现可用模型。
+查询提供方的 `/v1/models` 端点以发现可用模型。
 
 ```
 GET /admin/api/config/providers/<name>/models
@@ -294,13 +294,13 @@ GET /admin/api/config/providers/<name>/models
 }
 ```
 
-**错误**：404（提供商不存在）、502（上游连接或 HTTP 错误）。
+**错误**：404（提供方不存在）、502（上游连接或 HTTP 错误）。
 
 ---
 
 ### 批量添加模型
 
-一次为指定提供商添加多个模型。
+一次为指定提供方添加多个模型。
 
 ```
 POST /admin/api/config/models
@@ -310,7 +310,7 @@ POST /admin/api/config/models
 
 | 字段 | 类型 | 是否必填 | 说明 |
 |------|------|---------|------|
-| `provider` | `string` | 是 | 目标提供商名称。 |
+| `provider` | `string` | 是 | 目标提供方名称。 |
 | `models` | `string[]` | 是 | 要添加的模型 ID 列表。 |
 | `prefix` | `string` | 否 | 添加到每个模型名称前的前缀。使用前缀时，原始 ID 存储为 `upstream_model`。 |
 | `capabilities` | `string[]` | 否 | 所有添加模型的能力列表。默认为 `["text", "vision", "tools"]`。 |
@@ -328,9 +328,9 @@ POST /admin/api/config/models
 
 ---
 
-### 查看提供商 API Key
+### 查看提供方 API Key
 
-返回提供商未脱敏的 API Key。仅在配置中 `server.credential_visible` 为 `true`
+返回提供方未脱敏的 API Key。仅在配置中 `server.credential_visible` 为 `true`
 时可用。
 
 ```
@@ -343,7 +343,7 @@ GET /admin/api/config/providers/<name>/key
 {"api_key": "sk-abc123..."}
 ```
 
-**错误**：403（凭证可见性已禁用）、404（提供商不存在）。
+**错误**：403（凭证可见性已禁用）、404（提供方不存在）。
 
 ---
 
@@ -538,7 +538,7 @@ GET /admin/api/requests?limit=50&offset=0&model=gpt-4o&provider=openai&status=ok
 | `limit` | `int` | `50` | 每页条数。 |
 | `offset` | `int` | `0` | 跳过的条目数。 |
 | `model` | `string` | — | 按模型名称过滤。 |
-| `provider` | `string` | — | 按目标提供商过滤。 |
+| `provider` | `string` | — | 按目标提供方过滤。 |
 | `status` | `"ok"` \| `"error"` | — | `ok` = 2xx/3xx，`error` = 4xx/5xx。 |
 
 **响应**
@@ -832,7 +832,7 @@ GET /admin/api/error-dumps?limit=50&offset=0
 | `offset` | `int` | `0` | 跳过的条目数。 |
 | `model` | `string` | — | 按模型名称过滤。 |
 | `error_phase` | `string` | — | 按错误发生阶段过滤。 |
-| `provider` | `string` | — | 按目标提供商过滤。 |
+| `provider` | `string` | — | 按目标提供方过滤。 |
 
 **响应**
 

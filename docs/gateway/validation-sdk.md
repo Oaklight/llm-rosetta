@@ -75,7 +75,7 @@ python -m pytest tests/integration/test_anthropic_rest_e2e.py -v
 
 ## SDK 测试套件（`llm_api_simple_tests`）
 
-[llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) 套件使用官方 SDK 为每个提供商运行 5 个标准化测试。
+[llm_api_simple_tests](https://github.com/Oaklight/llm_api_simple_tests) 套件使用官方 SDK 为每个提供方运行 5 个标准化测试。
 
 ### 通过网关的 Anthropic SDK
 

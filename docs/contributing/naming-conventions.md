@@ -14,7 +14,7 @@ LLM-Rosetta 在两个域之间进行转换：
 | 缩写 | 含义 |
 |---|---|
 | `ir` | 中间表示（Intermediate Representation）— 中枢格式 |
-| `p` | 提供商（Provider）— 任意提供商特定格式（OpenAI、Anthropic 等） |
+| `p` | 提供方（Provider）— 任意提供方特定格式（OpenAI、Anthropic 等） |
 
 ## 规则 1：内部函数使用 `{source}_X_to_{target}`
 
@@ -42,11 +42,11 @@ p_tool_definition_to_ir(tool: dict) -> IRTool
 ### 流式处理 handler
 
 ```python
-# 提供商事件 → IR 事件 (P→IR)
+# 提供方事件 → IR 事件 (P→IR)
 _handle_p_choice_to_ir(event)
 _handle_p_content_block_delta_to_ir(event)
 
-# IR 事件 → 提供商事件 (IR→P)
+# IR 事件 → 提供方事件 (IR→P)
 _handle_ir_text_delta_to_p(event)
 _handle_ir_tool_call_start_to_p(event)
 ```
@@ -54,10 +54,10 @@ _handle_ir_tool_call_start_to_p(event)
 ### 构建辅助函数
 
 ```python
-# 从提供商 usage 数据构建 IR usage (P→IR)
+# 从提供方 usage 数据构建 IR usage (P→IR)
 _build_p_usage_to_ir(p_usage: dict) -> IRUsage
 
-# 从 IR usage 数据构建提供商 usage (IR→P)
+# 从 IR usage 数据构建提供方 usage (IR→P)
 _build_ir_usage_to_p(ir_usage: IRUsage) -> dict
 ```
 

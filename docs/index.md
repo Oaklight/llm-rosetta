@@ -9,7 +9,7 @@ hide:
   <img src="images/rosetta_stone.svg" alt="Rosetta Stone" style="width: 96px; flex-shrink: 0;">
   <div>
     <h1 style="margin: 0 0 0.2em 0;">LLM-Rosetta</h1>
-    <p style="margin: 0; font-size: 1.1em; opacity: 0.85;">用于 LLM 提供商 API 之间的统一消息格式转换库。</p>
+    <p style="margin: 0; font-size: 1.1em; opacity: 0.85;">用于 LLM 提供方 API 之间的统一消息格式转换库。</p>
     <p style="margin: 0.4em 0 0 0;">
       <a href="https://pypi.org/project/llm-rosetta/"><img src="https://img.shields.io/pypi/v/llm-rosetta?color=green" alt="PyPI"></a>
       <a href="https://github.com/Oaklight/llm-rosetta/releases/latest"><img src="https://img.shields.io/github/v/release/Oaklight/llm-rosetta?color=green" alt="Release"></a>
@@ -20,15 +20,15 @@ hide:
   </div>
 </div>
 
-正如罗塞塔石碑使古代文字之间的翻译成为可能，LLM-Rosetta 弥合了不兼容的 LLM 提供商 API 之间的鸿沟——让你使用任意格式发送请求，并被任意提供商理解。
+正如罗塞塔石碑使古代文字之间的翻译成为可能，LLM-Rosetta 弥合了不兼容的 LLM 提供方 API 之间的鸿沟——让你使用任意格式发送请求，并被任意提供方理解。
 
 ---
 
 ## 问题
 
-不同的 LLM 提供商使用互不兼容的 API 格式。适用于 OpenAI 的请求无法直接发给 Anthropic 或 Google。切换提供商意味着重写集成代码。同时支持多个提供商则需要维护 N² 个转换器。
+不同的 LLM 提供方使用互不兼容的 API 格式。适用于 OpenAI 的请求无法直接发给 Anthropic 或 Google。切换提供方意味着重写集成代码。同时支持多个提供方则需要维护 N² 个转换器。
 
-**LLM-Rosetta** 引入了中央**中间表示（IR）**作为枢纽。每个提供商只需与 IR 之间进行转换，将总数从 N² 降为 2N。
+**LLM-Rosetta** 引入了中央**中间表示（IR）**作为枢纽。每个提供方只需与 IR 之间进行转换，将总数从 N² 降为 2N。
 
 Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出。
 
@@ -38,7 +38,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 === "作为库使用"
 
-    在代码中直接转换提供商格式——无需启动服务器：
+    在代码中直接转换提供方格式——无需启动服务器：
 
     ```python
     from llm_rosetta import OpenAIChatConverter, AnthropicConverter
@@ -64,9 +64,9 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
     ```text
     客户端（Chat Completions）──→ 网关 ──→ Anthropic API
     客户端（Responses API）   ──→ 网关 ──→ Google API
-    客户端（Open Responses）  ──→ 网关 ──→ 任意提供商
+    客户端（Open Responses）  ──→ 网关 ──→ 任意提供方
     客户端（Anthropic 格式）  ──→ 网关 ──→ OpenAI API
-    客户端（Google 格式）     ──→ 网关 ──→ 任意提供商
+    客户端（Google 格式）     ──→ 网关 ──→ 任意提供方
     ```
 
     ```bash
@@ -82,7 +82,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 ## 支持的 API 标准
 
-| 提供商 | API 标准 | ProviderType |
+| 提供方 | API 标准 | ProviderType |
 |--------|---------|:------------:|
 | OpenAI | Chat Completions | `openai_chat` |
 | OpenAI | Responses | `openai_responses` |
@@ -90,7 +90,7 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
 
-详见 [API 标准](guide/api-standards.md)了解各格式的详细对比，以及[提供商兼容性](guide/compatibility.md)查看完整的提供商支持矩阵。
+详见 [API 标准](guide/api-standards.md)了解各格式的详细对比，以及[提供方兼容性](guide/compatibility.md)查看完整的提供方支持矩阵。
 
 ---
 
@@ -101,8 +101,8 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 | **中枢辐射架构** | 中央 IR 格式消除 N² 转换问题 |
 | **双向转换** | 请求、响应和消息均支持双向转换 |
 | **流式支持** | 通过有状态上下文管理转换流式数据块 |
-| **工具调用** | 跨提供商的统一工具定义和调用处理 |
-| **自动检测** | 从请求结构自动识别提供商格式 |
+| **工具调用** | 跨提供方的统一工具定义和调用处理 |
+| **自动检测** | 从请求结构自动识别提供方格式 |
 | **网关 + 管理面板** | HTTP 代理，内置 Web UI 管理配置、指标和日志 |
 | **类型安全** | 所有类型均有完整的 TypedDict 注解 |
 
@@ -110,20 +110,20 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 
 ## 使用场景
 
-**多提供商应用** — 构建可在 LLM 提供商之间无缝切换的应用，无需更改集成代码。生产环境用 OpenAI，测试用 Claude，或让用户自选提供商。
+**多提供方应用** — 构建可在 LLM 提供方之间无缝切换的应用，无需更改集成代码。生产环境用 OpenAI，测试用 Claude，或让用户自选提供方。
 
 **AI 编程工具代理** — 运行单个网关，同时服务 Claude Code、Antigravity CLI、Codex CLI 等工具，将每个请求路由到正确的上游。
 
 **本地模型访问** — 将网关指向 Ollama 或 LM Studio，让基于云 SDK 的工具通过自动格式转换访问本地模型。
 
-**API 迁移** — 从一个提供商迁移到另一个？转换现有的请求/响应处理，无需重写业务逻辑。
+**API 迁移** — 从一个提供方迁移到另一个？转换现有的请求/响应处理，无需重写业务逻辑。
 
 ---
 
 ## 文档目录
 
 - **[快速入门](getting-started/installation.md)** — 安装、核心概念和快速开始
-- **[指南](guide/converters.md)** — 转换器、IR 类型、提供商、流式处理
+- **[指南](guide/converters.md)** — 转换器、IR 类型、提供方、流式处理
 - **[网关](gateway/index.md)** — HTTP 代理、配置、CLI 工具集成、管理面板
 - **[参考](api/index.md)** — API 文档、示例、贡献指南、更新日志
 - **[贡献](contributing/guide.md)** — 如何贡献、风格指南、架构指南

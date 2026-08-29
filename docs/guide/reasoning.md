@@ -4,15 +4,15 @@ title: 推理 / 思考参数
 
 # 推理 / 思考参数
 
-现代 LLM 可以在生成最终回答之前进行显式的思维链推理。各提供商通过不同的参数名称、结构和语义来暴露这一能力。LLM-Rosetta 的 `ReasoningConfig` 提供了统一的 IR 层，映射到所有支持的提供商。
+现代 LLM 可以在生成最终回答之前进行显式的思维链推理。各提供方通过不同的参数名称、结构和语义来暴露这一能力。LLM-Rosetta 的 `ReasoningConfig` 提供了统一的 IR 层，映射到所有支持的提供方。
 
-## 提供商对比
+## 提供方对比
 
 ### 模式控制
 
-各提供商如何控制推理的开启、关闭或自动模式：
+各提供方如何控制推理的开启、关闭或自动模式：
 
-| 提供商 | 参数 | 取值 |
+| 提供方 | 参数 | 取值 |
 |--------|------|------|
 | **Anthropic** | `thinking.type` | `"adaptive"`（模型自行决定）、`"enabled"`（始终开启，需要 `budget_tokens`）、`"disabled"`（关闭） |
 | **OpenAI Chat** | *（隐式）* | 推理模型（o1、o3 等）上始终自动启用，无显式开关 |
@@ -21,9 +21,9 @@ title: 推理 / 思考参数
 
 ### 努力级别
 
-模型应投入多少推理"努力"。各提供商支持的粒度不同：
+模型应投入多少推理"努力"。各提供方支持的粒度不同：
 
-| 提供商 | 参数 | 支持的值 |
+| 提供方 | 参数 | 支持的值 |
 |--------|------|----------|
 | **Anthropic** | `thinking.effort` | `"low"`、`"medium"`、`"high"`、`"max"`（需要 `type: "adaptive"`） |
 | **OpenAI Chat** | `reasoning_effort` | `"low"`、`"medium"`、`"high"` |
@@ -34,7 +34,7 @@ title: 推理 / 思考参数
 
 模型可用于推理的最大 token 数：
 
-| 提供商 | 参数 | 是否支持 |
+| 提供方 | 参数 | 是否支持 |
 |--------|------|:---:|
 | **Anthropic** | `thinking.budget_tokens` | 支持（`type: "enabled"` 时必需） |
 | **OpenAI Chat** | *（无）* | 不支持 |
@@ -77,11 +77,11 @@ class ReasoningConfig(TypedDict, total=False):
 
 ### 字段语义
 
-- **`mode`** -- 控制推理行为：`"enabled"`（始终开启）、`"disabled"`（关闭）或 `"auto"`（由模型决定）。省略则由提供商使用默认行为。
+- **`mode`** -- 控制推理行为：`"enabled"`（始终开启）、`"disabled"`（关闭）或 `"auto"`（由模型决定）。省略则由提供方使用默认行为。
 - **`effort`** -- 模型在推理上应投入多少"努力"。这是一个独立于 mode 的横切关注点。
-- **`budget_tokens`** -- 推理 token 数的硬上限。仅对支持该功能的提供商有效（Anthropic、Google）。
+- **`budget_tokens`** -- 推理 token 数的硬上限。仅对支持该功能的提供方有效（Anthropic、Google）。
 
-## IR 到提供商的映射
+## IR 到提供方的映射
 
 ### `mode: "enabled"`（无 effort、无 budget）
 
@@ -273,7 +273,7 @@ ir_request: IRRequest = {
 
 ## 努力级别映射
 
-IR 支持六个努力级别。实际映射由各提供商 shim 的 `effort_map` 声明，以下是内置 shim 的默认映射：
+IR 支持六个努力级别。实际映射由各提供方 shim 的 `effort_map` 声明，以下是内置 shim 的默认映射：
 
 | IR effort | Anthropic | OpenAI Chat | OpenAI Responses | Google GenAI |
 |-----------|-----------|-------------|------------------|-------------|
@@ -289,15 +289,15 @@ IR 支持六个努力级别。实际映射由各提供商 shim 的 `effort_map` 
 — = Google shim 的 `effort_field` 为 `"none"`，effort 不发送给上游
 
 !!! info "Shim 驱动的 effort 映射"
-    effort 映射现在由各提供商的 `provider.yaml` 中的 `reasoning.effort_map` 声明，不再硬编码在转换器中。同时 `max_effort` 可以声明最高允许的 effort 级别（例如 OpenAI 的 `max_effort: high` 会将 `xhigh`/`max` 截断为 `high`）。
+    effort 映射现在由各提供方的 `provider.yaml` 中的 `reasoning.effort_map` 声明，不再硬编码在转换器中。同时 `max_effort` 可以声明最高允许的 effort 级别（例如 OpenAI 的 `max_effort: high` 会将 `xhigh`/`max` 截断为 `high`）。
 
     如果 IR effort 不在目标 shim 的 `effort_map` 中，会发出警告并跳过。
 
-## 提供商到 IR 的映射（反向）
+## 提供方到 IR 的映射（反向）
 
-将提供商原生请求转换为 IR 时的映射：
+将提供方原生请求转换为 IR 时的映射：
 
-| 提供商字段 | IR 字段 |
+| 提供方字段 | IR 字段 |
 |------------|---------|
 | `thinking.type = "enabled"` | `mode: "enabled"` |
 | `thinking.type = "adaptive"` | `mode: "auto"` |
@@ -320,36 +320,36 @@ IR 支持六个努力级别。实际映射由各提供商 shim 的 `effort_map` 
 
 IR 使用显式的 `mode: "auto" | "enabled" | "disabled"` 而非布尔值：
 
-1. **与提供商直接对齐。** Anthropic 的 `thinking.type` 有三个值（`"adaptive"`、`"enabled"`、`"disabled"`），OpenAI Responses 的 `reasoning.type` 同样如此。三态 `mode` 实现了 1:1 映射，支持无损往返转换。
-2. **省略仍然有效。** 当 `mode` 未设置时，提供商使用其默认行为 -- 即思考能力模型的自动推理。这与 `mode: "auto"` 不同，后者是显式请求自适应行为。
+1. **与提供方直接对齐。** Anthropic 的 `thinking.type` 有三个值（`"adaptive"`、`"enabled"`、`"disabled"`），OpenAI Responses 的 `reasoning.type` 同样如此。三态 `mode` 实现了 1:1 映射，支持无损往返转换。
+2. **省略仍然有效。** 当 `mode` 未设置时，提供方使用其默认行为 -- 即思考能力模型的自动推理。这与 `mode: "auto"` 不同，后者是显式请求自适应行为。
 3. **effort 作为横切关注点。** 单独设置 `effort`（不设 `mode`）可以让模型自行决定是否推理，同时控制推理时投入的努力程度。
 
 ### 为什么 effort 有 6 个级别
 
-IR 支持 `minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`，使其成为所有提供商级别的**超集**：
+IR 支持 `minimal`、`low`、`medium`、`high`、`xhigh` 和 `max`，使其成为所有提供方级别的**超集**：
 
-- Google 支持 `minimal`，但其他提供商不支持（降级为 `low`）
+- Google 支持 `minimal`，但其他提供方不支持（降级为 `low`）
 - Anthropic 支持 `xhigh` 和 `max`，但 OpenAI 不支持（被 `max_effort: high` 截断）
-- 中间三个级别（`low`、`medium`、`high`）被所有提供商普遍支持
+- 中间三个级别（`low`、`medium`、`high`）被所有提供方普遍支持
 
-这确保了同一提供商内的无损往返转换，同时在跨提供商时提供尽力而为的映射。
+这确保了同一提供方内的无损往返转换，同时在跨提供方时提供尽力而为的映射。
 
 ### Shim 驱动的 effort 映射
 
-从 v0.6.8 起，effort 映射不再硬编码在各转换器中，而是由提供商 shim 的 `ReasoningCapability` 配置声明。运行时流程：
+从 v0.6.8 起，effort 映射不再硬编码在各转换器中，而是由提供方 shim 的 `ReasoningCapability` 配置声明。运行时流程：
 
-1. 网关加载提供商 shim，将 `provider.yaml` 中的 `reasoning` 段解析为 `ReasoningCapability`
+1. 网关加载提供方 shim，将 `provider.yaml` 中的 `reasoning` 段解析为 `ReasoningCapability`
 2. 请求到达时，`_inject_shim_reasoning()` 将 `ReasoningCapability` 注入转换上下文
 3. 各转换器的 `ir_reasoning_config_to_p` 委托给 `apply_reasoning_config()`，传入 shim 配置
 4. `apply_reasoning_config()` 先调用 `normalize_reasoning_input()` 归一化输入，然后按 `effort_map` 和 `max_effort` 映射
 
-详细的 `ReasoningCapability` 字段和 YAML 配置请参见 [提供商 Shim · 推理配置](shims.md#推理配置)。
+详细的 `ReasoningCapability` 字段和 YAML 配置请参见 [提供方 Shim · 推理配置](shims.md#推理配置)。
 
 ### 预算 token：仅 Anthropic 和 Google 支持
 
 OpenAI（Chat 和 Responses）不支持显式的推理预算控制。当 IR 中设置了 `budget_tokens` 且目标为 OpenAI 时，将发出警告并静默丢弃该字段。这是设计意图 -- IR 是超集，有损转换会被显式标记。
 
-## 完整示例：跨提供商推理
+## 完整示例：跨提供方推理
 
 ```python
 from llm_rosetta import convert

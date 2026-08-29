@@ -4,9 +4,9 @@ title: Tool Ops
 
 # Tool Ops API
 
-`tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供商原生格式之间转换工具定义——无需实例化完整的转换器管道。
+`tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供方原生格式之间转换工具定义——无需实例化完整的转换器管道。
 
-所有导入均为懒加载，只有在首次调用对应提供商的函数时才会加载其依赖。
+所有导入均为懒加载，只有在首次调用对应提供方的函数时才会加载其依赖。
 
 ## IR ToolDefinition 格式
 
@@ -14,12 +14,12 @@ title: Tool Ops
 
 | 字段 | 类型 | 是否必填 | 描述 |
 |---|---|---|---|
-| `type` | `"function"` \| `"mcp"` | ✓ | 工具类型。目前各提供商普遍支持 `"function"`。 |
+| `type` | `"function"` \| `"mcp"` | ✓ | 工具类型。目前各提供方普遍支持 `"function"`。 |
 | `name` | `str` | ✓ | 函数名（推荐使用 snake_case）。 |
 | `description` | `str` | ✓ | 工具功能的自然语言描述。 |
 | `parameters` | `dict` | ✓ | 描述函数参数的 JSON Schema 对象。 |
 | `required_parameters` | `list[str]` | 可选 | 必填参数名列表（转换时会合并进 JSON Schema）。 |
-| `metadata` | `dict` | 可选 | 额外字段直通；各提供商转换器可自行使用或忽略。 |
+| `metadata` | `dict` | 可选 | 额外字段直通；各提供方转换器可自行使用或忽略。 |
 
 ```python
 ir_tool: ToolDefinition = {
@@ -37,11 +37,11 @@ ir_tool: ToolDefinition = {
 }
 ```
 
-## 各提供商的 wire 格式
+## 各提供方的 wire 格式
 
-每个提供商对工具的序列化方式各不相同，下表列出转换后的顶层结构：
+每个提供方对工具的序列化方式各不相同，下表列出转换后的顶层结构：
 
-| 提供商 | 输出结构 |
+| 提供方 | 输出结构 |
 |---|---|
 | `openai_chat` | `{"type": "function", "function": {"name": …, "description": …, "parameters": {…}}}` |
 | `openai_responses` | `{"type": "function", "name": …, "description": …, "parameters": {…}}` |
@@ -64,7 +64,7 @@ ir_tool = {
     },
 }
 
-# ---- IR → 提供商格式 ----
+# ---- IR → 提供方格式 ----
 openai_tool    = tool_ops.to_openai_chat(ir_tool)
 responses_tool = tool_ops.to_openai_responses(ir_tool)
 anthropic_tool = tool_ops.to_anthropic(ir_tool)
@@ -73,7 +73,7 @@ google_tool    = tool_ops.to_google_genai(ir_tool)
 # 统一调度写法
 same_tool = tool_ops.to_provider(ir_tool, provider="anthropic")
 
-# ---- 提供商格式 → IR ----
+# ---- 提供方格式 → IR ----
 recovered = tool_ops.from_openai_chat(openai_tool)
 recovered = tool_ops.from_anthropic(anthropic_tool)
 recovered = tool_ops.from_provider(anthropic_tool, provider="anthropic")
@@ -119,7 +119,7 @@ tool_ops.to_google_genai(ir_tool)
     `to_google_genai` 始终将转换后的工具包裹在 `{"function_declarations": [...]}` 中。
     同样，当输入包含多个函数声明时，`from_google_genai` 可能返回**列表**。
 
-## 支持的提供商
+## 支持的提供方
 
 | 规范名称 | 可接受的别名 |
 |---|---|
@@ -161,7 +161,7 @@ ir_recovered = list(itertools.chain.from_iterable(
 
 ## 错误处理
 
-`to_provider` 和 `from_provider` 在提供商名称不可识别时抛出 `ValueError`：
+`to_provider` 和 `from_provider` 在提供方名称不可识别时抛出 `ValueError`：
 
 ```python
 try:
@@ -171,7 +171,7 @@ except ValueError as exc:
 # Unknown provider: 'unknown'. Supported: openai_chat, openai_responses, ...
 ```
 
-各提供商的快捷函数（`to_anthropic` 等）不进行名称解析，不会因提供商名称抛出 `ValueError`。
+各提供方的快捷函数（`to_anthropic` 等）不进行名称解析，不会因提供方名称抛出 `ValueError`。
 
 ---
 
@@ -183,9 +183,9 @@ except ValueError as exc:
 
 ---
 
-## 按提供商快捷方法
+## 按提供方快捷方法
 
-### IR 转提供商格式
+### IR 转提供方格式
 
 ::: llm_rosetta.tool_ops.to_openai_chat
 
@@ -195,7 +195,7 @@ except ValueError as exc:
 
 ::: llm_rosetta.tool_ops.to_google_genai
 
-### 提供商格式转 IR
+### 提供方格式转 IR
 
 ::: llm_rosetta.tool_ops.from_openai_chat
 

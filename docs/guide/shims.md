@@ -1,12 +1,12 @@
 ---
-title: 提供商 Shim
+title: 提供方 Shim
 ---
 
-# 提供商 Shim
+# 提供方 Shim
 
-LLM-Rosetta 仅使用四个**转换器** —— 每种 API 标准一个（OpenAI Chat、OpenAI Responses、Anthropic、Google）。但 LLM 生态中有更多*提供商*（DeepSeek、xAI、Qwen、Moonshot 等）遵循其中某一标准，只有细微差异。
+LLM-Rosetta 仅使用四个**转换器** —— 每种 API 标准一个（OpenAI Chat、OpenAI Responses、Anthropic、Google）。但 LLM 生态中有更多*提供方*（DeepSeek、xAI、Qwen、Moonshot 等）遵循其中某一标准，只有细微差异。
 
-**Shim 层**弥合了这一差距。Shim 是一张轻量级的身份卡，声明提供商使用哪个转换器，同时携带连接默认值和可选的**转换规则（transforms）**，用于适配提供商特有的请求/响应字段差异。
+**Shim 层**弥合了这一差距。Shim 是一张轻量级的身份卡，声明提供方使用哪个转换器，同时携带连接默认值和可选的**转换规则（transforms）**，用于适配提供方特有的请求/响应字段差异。
 
 ## 架构
 
@@ -21,13 +21,13 @@ ProviderShim ("deepseek")
 └── pre_ir_transforms: ()
 ```
 
-- **ProviderShim** —— 提供商身份：名称、基础转换器类型、默认 URL、默认 API 密钥环境变量、Logo URL，以及可选的转换规则。
-- **Transforms** —— 纯 `dict → dict` 函数，围绕转换器应用。`post_ir_transforms` 将输出请求适配为提供商方言；`pre_ir_transforms` 标准化输入响应。
+- **ProviderShim** —— 提供方身份：名称、基础转换器类型、默认 URL、默认 API 密钥环境变量、Logo URL，以及可选的转换规则。
+- **Transforms** —— 纯 `dict → dict` 函数，围绕转换器应用。`post_ir_transforms` 将输出请求适配为提供方方言；`pre_ir_transforms` 标准化输入响应。
 
 !!! note "向后兼容别名"
     旧字段名 `to_transforms` 和 `from_transforms` 仍作为别名被接受 —— 在 `ProviderShim` 构造函数参数和 `transforms.py` 导出中均可使用。
 
-### 声明式提供商目录
+### 声明式提供方目录
 
 内置 shim 以目录结构定义在 `shims/providers/` 下：
 
@@ -35,9 +35,9 @@ ProviderShim ("deepseek")
 src/llm_rosetta/shims/providers/
 ├── __init__.py              # 自动发现：扫描子目录
 ├── openai/
-│   └── provider.yaml        # 提供商身份（YAML）
+│   └── provider.yaml        # 提供方身份（YAML）
 ├── deepseek/
-│   ├── provider.yaml        # 提供商身份
+│   ├── provider.yaml        # 提供方身份
 │   └── transforms.py        # 字段级转换规则
 ├── volcengine/
 │   ├── provider.yaml
@@ -45,7 +45,7 @@ src/llm_rosetta/shims/providers/
 └── ...
 ```
 
-每个提供商子目录包含：
+每个提供方子目录包含：
 
 - **`provider.yaml`**（必需）—— 声明 `name`、`base`、`default_base_url`、`default_api_key_env` 和 `logo`
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
@@ -70,7 +70,7 @@ post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
 pre_ir_transforms = ()
 ```
 
-导入时，`shims/__init__.py` 自动扫描所有提供商目录并注册，然后发现通过 entry point 声明的插件 shim。
+导入时，`shims/__init__.py` 自动扫描所有提供方目录并注册，然后发现通过 entry point 声明的插件 shim。
 
 ## Shim 生命周期
 
@@ -144,11 +144,11 @@ def register_shims():
 ```
 
 !!! note
-    当插件注册了与内置同名的 shim 时，内置 shim 会被静默覆盖（输出 INFO 日志）。这是有意设计——允许插件定制内置提供商的行为。
+    当插件注册了与内置同名的 shim 时，内置 shim 会被静默覆盖（输出 INFO 日志）。这是有意设计——允许插件定制内置提供方的行为。
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 16 个提供商 shim：
+LLM-Rosetta 内置 16 个提供方 shim：
 
 | 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|---------|--------------|-----------------|---------|
@@ -178,10 +178,10 @@ LLM-Rosetta 内置 16 个提供商 shim：
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `disabled` | `"omit"` \| `"thinking_disabled"` \| `"thinking_budget_zero"` | `mode: disabled` 时的序列化策略：`omit` 不发送任何参数，`thinking_disabled` 发送 `{"thinking": {"type": "disabled"}}`，`thinking_budget_zero` 发送 `{"thinking_config": {"thinking_budget": 0}}` |
-| `effort_field` | `"reasoning_effort"` \| `"reasoning.effort"` \| `"output_config.effort"` \| `"thinking_level"` \| `"none"` | effort 值在提供商请求中的序列化位置；`"none"` 表示提供商不支持 effort |
+| `effort_field` | `"reasoning_effort"` \| `"reasoning.effort"` \| `"output_config.effort"` \| `"thinking_level"` \| `"none"` | effort 值在提供方请求中的序列化位置；`"none"` 表示提供方不支持 effort |
 | `max_effort` | `EffortLevel` \| `null` | 最高允许的归一化 effort 级别；超过此值的 effort 会被截断到该级别 |
 | `thinking_type` | `"enabled"` \| `"adaptive"` \| `null` | 强制 `thinking.type` 为该值；`null` 表示不覆盖 |
-| `effort_map` | `dict[str, str]` | 从归一化 IR effort 到提供商特定 effort 字符串的映射 |
+| `effort_map` | `dict[str, str]` | 从归一化 IR effort 到提供方特定 effort 字符串的映射 |
 
 ### 配置示例
 
@@ -220,7 +220,7 @@ LLM-Rosetta 内置 16 个提供商 shim：
 
 ### 按模型覆盖（`model_overrides`）
 
-当同一提供商下不同模型有不同推理能力时，使用 `model_overrides` 声明按模型的配置。每个覆盖项继承提供商级默认值，按**上游模型 ID**（别名解析后）为键：
+当同一提供方下不同模型有不同推理能力时，使用 `model_overrides` 声明按模型的配置。每个覆盖项继承提供方级默认值，按**上游模型 ID**（别名解析后）为键：
 
 ```yaml
 name: argo--anthropic
@@ -239,7 +239,7 @@ reasoning:
 
 当网关代理处理请求时：
 
-1. `_inject_shim_reasoning()` 从目标提供商的 shim 中提取 `ReasoningCapability`，注入转换上下文的 `ctx.options["reasoning_cap"]`。如果上游模型有 `model_overrides` 条目，则使用该覆盖配置
+1. `_inject_shim_reasoning()` 从目标提供方的 shim 中提取 `ReasoningCapability`，注入转换上下文的 `ctx.options["reasoning_cap"]`。如果上游模型有 `model_overrides` 条目，则使用该覆盖配置
 2. 各转换器的 `request_to_provider` 将 `reasoning_cap` 传给 `ir_reasoning_config_to_p`
 3. `ir_reasoning_config_to_p` 委托给 `apply_reasoning_config()`，按 shim 配置执行：
     - 输入归一化（`none` → disabled）
@@ -247,7 +247,7 @@ reasoning:
     - effort 截断（按 `cap.max_effort`）
     - effort 映射（按 `cap.effort_map`）
     - `thinking_type` 覆盖（如强制 `enabled` → `adaptive`，用于 Vertex AI 模型）
-    - 结构化传透（mode、budget_tokens 等提供商特定字段）
+    - 结构化传透（mode、budget_tokens 等提供方特定字段）
 
 没有声明 `reasoning` 段的 shim 使用基础转换器类型的内置默认配置。
 
@@ -256,7 +256,7 @@ reasoning:
 
 ## Argo Shim
 
-`argo--openai_chat` 和 `argo--anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供商统一暴露在单一端点之后。
+`argo--openai_chat` 和 `argo--anthropic` 面向 **Argo 网关** —— 这是某些机构（如 Argonne 国家实验室）使用的代理层，将多个上游 LLM 提供方统一暴露在单一端点之后。
 
 两个 shim 都使用 `model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
 
@@ -291,13 +291,13 @@ OpenAI 兼容 shim，附带一个 transform：`max_tokens` → `max_completion_t
 
 ## 能力标志
 
-除推理配置外，shim 还可以声明影响转换器行为的提供商级能力标志：
+除推理配置外，shim 还可以声明影响转换器行为的提供方级能力标志：
 
 | 字段 | 类型 | 默认值 | 描述 |
 |------|------|--------|------|
-| `supports_custom_tools` | `bool` | `False` | 提供商 API 是否原生支持 `{type: "custom"}` 工具定义。`False` 时，自定义工具降级为函数包装并合成 JSON schema。 |
+| `supports_custom_tools` | `bool` | `False` | 提供方 API 是否原生支持 `{type: "custom"}` 工具定义。`False` 时，自定义工具降级为函数包装并合成 JSON schema。 |
 | `hoist_system_messages` | `bool` | `True` | 将对话中间的 system/developer 消息改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。 |
-| `multimodal_tool_result` | `bool \| None` | `None` | 提供商是否原生支持工具结果中的多模态内容（图片、文件）。`None` 使用转换器的类级默认值。`True` 强制原生透传；`False` 强制双重编码（文本回退 + 合成 user 消息）。 |
+| `multimodal_tool_result` | `bool \| None` | `None` | 提供方是否原生支持工具结果中的多模态内容（图片、文件）。`None` 使用转换器的类级默认值。`True` 强制原生透传；`False` 强制双重编码（文本回退 + 合成 user 消息）。 |
 
 `provider.yaml` 示例：
 
@@ -313,7 +313,7 @@ multimodal_tool_result: false
 
 ## 转换规则（Transforms）
 
-转换规则是纯 `dict → dict` 函数，用于弥合提供商实际 API 方言与对应基础转换器所期望的"标准"格式之间的差异。它们处理字段级差异（剥离不支持的字段、重命名参数、注入默认值）—— **不**处理语义级 API 标准转换，那是转换器的职责。
+转换规则是纯 `dict → dict` 函数，用于弥合提供方实际 API 方言与对应基础转换器所期望的"标准"格式之间的差异。它们处理字段级差异（剥离不支持的字段、重命名参数、注入默认值）—— **不**处理语义级 API 标准转换，那是转换器的职责。
 
 ### 内置转换原语
 
@@ -388,7 +388,7 @@ resolve_base("unknown")        # → "unknown"（直接透传）
 
 ### 编程式注册
 
-为任何 OpenAI 兼容服务注册自定义提供商 shim：
+为任何 OpenAI 兼容服务注册自定义提供方 shim：
 
 ```python
 from llm_rosetta import ProviderShim, register_shim
@@ -406,9 +406,9 @@ register_shim(my_shim)
 
 注册后，shim 名称可在所有地方使用 —— `get_converter_for_provider()`、`resolve_base()`、`convert()` 和网关配置。
 
-### 添加 YAML 提供商
+### 添加 YAML 提供方
 
-要向内置注册表添加新提供商：
+要向内置注册表添加新提供方：
 
 1. 在 `src/llm_rosetta/shims/providers/<name>/` 下创建目录
 2. 添加 `provider.yaml`，包含必填字段：
@@ -421,7 +421,7 @@ register_shim(my_shim)
     logo: https://example.com/logo.svg
     ```
 
-3. 如果提供商有字段级差异，可选添加 `transforms.py`：
+3. 如果提供方有字段级差异，可选添加 `transforms.py`：
 
     ```python
     from llm_rosetta.shims.transforms import strip_fields
@@ -430,7 +430,7 @@ register_shim(my_shim)
     pre_ir_transforms = ()
     ```
 
-提供商在导入时自动发现并注册。
+提供方在导入时自动发现并注册。
 
 ### 列出和移除 Shim
 
@@ -464,14 +464,14 @@ unregister_shim("my-provider")
 }
 ```
 
-提供商类型的解析顺序：
+提供方类型的解析顺序：
 
 1. `"shim"` 字段 —— 通过 shim 注册表解析为基础转换器类型
 2. `"type"` 字段 —— 直接用作转换器类型
-3. 提供商配置键名 —— 作为后备
+3. 提供方配置键名 —— 作为后备
 
 当找到 shim 时：
 
 - `default_base_url` 和 `default_api_key_env` 在配置未明确指定时作为后备值使用
-- `post_ir_transforms` 应用于发送给上游提供商的请求
+- `post_ir_transforms` 应用于发送给上游提供方的请求
 - `pre_ir_transforms` 应用于接收到的响应/流式 chunk，在转换之前执行
