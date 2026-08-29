@@ -291,6 +291,52 @@ class TestAnthropicConfigOps:
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 4096
 
+    def test_ir_reasoning_config_display_summarized(self):
+        """Test IR summary=auto → thinking.display=summarized."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "auto", "summary": "auto"})
+        )
+        assert result["thinking"]["display"] == "summarized"
+
+    def test_ir_reasoning_config_display_omitted(self):
+        """Test IR summary=none → thinking.display=omitted."""
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"mode": "auto", "summary": "none"})
+        )
+        assert result["thinking"]["display"] == "omitted"
+
+    def test_p_reasoning_config_display_summarized_to_ir(self):
+        """Test inbound: thinking.display=summarized → IR summary=auto."""
+        result = AnthropicConfigOps.p_reasoning_config_to_ir(
+            {"thinking": {"type": "adaptive", "display": "summarized"}}
+        )
+        assert result["summary"] == "auto"
+        assert result["include_thoughts"] is True
+
+    def test_p_reasoning_config_display_omitted_to_ir(self):
+        """Test inbound: thinking.display=omitted → IR summary=none."""
+        result = AnthropicConfigOps.p_reasoning_config_to_ir(
+            {"thinking": {"type": "adaptive", "display": "omitted"}}
+        )
+        assert result["summary"] == "none"
+        assert result["include_thoughts"] is False
+
+    def test_reasoning_display_round_trip_summarized(self):
+        """Test round-trip: display=summarized → IR → display=summarized."""
+        provider_input = {"thinking": {"type": "adaptive", "display": "summarized"}}
+        ir = AnthropicConfigOps.p_reasoning_config_to_ir(provider_input)
+        assert ir["summary"] == "auto"
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(ir)
+        assert result["thinking"]["display"] == "summarized"
+
+    def test_reasoning_display_round_trip_omitted(self):
+        """Test round-trip: display=omitted → IR → display=omitted."""
+        provider_input = {"thinking": {"type": "adaptive", "display": "omitted"}}
+        ir = AnthropicConfigOps.p_reasoning_config_to_ir(provider_input)
+        assert ir["summary"] == "none"
+        result = AnthropicConfigOps.ir_reasoning_config_to_p(ir)
+        assert result["thinking"]["display"] == "omitted"
+
     # ==================== Cache Config ====================
 
     def test_ir_cache_config_warning(self):

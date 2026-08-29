@@ -295,6 +295,13 @@ class OpenAIChatConfigOps(BaseConfigOps):
             else:
                 result["effort"] = effort
 
+        # reasoning.summary (OpenAI Chat Completions)
+        reasoning = provider_reasoning.get("reasoning")
+        if isinstance(reasoning, dict):
+            summary = reasoning.get("summary")
+            if isinstance(summary, str):
+                result["summary"] = summary
+
         # DeepSeek/Volcengine thinking extension
         thinking = provider_reasoning.get("thinking")
         if isinstance(thinking, dict):

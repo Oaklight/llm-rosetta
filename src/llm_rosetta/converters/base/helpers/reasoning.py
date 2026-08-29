@@ -327,7 +327,7 @@ def _apply_openai_chat_extras(
     cap: ReasoningCapability | None = None,
     max_tokens: int | None = None,
 ) -> None:
-    """OpenAI Chat extras: thinking object for mode/budget_tokens (DeepSeek ext)."""
+    """OpenAI Chat extras: thinking object for mode/budget_tokens (DeepSeek ext), summary."""
     thinking: dict[str, Any] = {}
     if mode:
         # IR "auto" is not a valid upstream value; map to "adaptive"
@@ -337,6 +337,16 @@ def _apply_openai_chat_extras(
         thinking["budget_tokens"] = budget_tokens
     if thinking:
         result["thinking"] = thinking
+
+    summary = ir.get("summary")
+    if summary in ("auto", "concise", "detailed"):
+        if "reasoning" not in result:
+            result["reasoning"] = {}
+        result["reasoning"]["summary"] = summary
+    elif ir.get("include_thoughts") is True:
+        if "reasoning" not in result:
+            result["reasoning"] = {}
+        result["reasoning"]["summary"] = "auto"
 
     _apply_thinking_type_override(result, cap, max_tokens)
 
@@ -403,6 +413,17 @@ def _apply_anthropic_extras(
         result["thinking"] = thinking
     elif budget_tokens is not None:
         result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
+
+    # Map IR summary → Anthropic thinking.display
+    if "thinking" in result:
+        summary = ir.get("summary")
+        if summary == "none" or ir.get("include_thoughts") is False:
+            result["thinking"]["display"] = "omitted"
+        elif (
+            summary in ("auto", "concise", "detailed")
+            or ir.get("include_thoughts") is True
+        ):
+            result["thinking"]["display"] = "summarized"
 
     _apply_thinking_type_override(result, cap, max_tokens)
 
