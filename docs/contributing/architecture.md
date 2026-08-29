@@ -77,6 +77,14 @@ Passthrough data is tagged with a converter dialect such as `openai_responses` o
 
 The base `stream_response_to_provider()` implementation uses a class-level dispatch table (`_TO_P_DISPATCH`) to route IR stream events to handler methods. Provider converters customize behavior through the `_post_process_to_provider()` hook rather than reimplementing the dispatch logic.
 
+## Design Philosophy: Why Everything Goes Through IR
+
+The gateway forces IR conversion for all routes, including same-format — this is intentional. The project started as (and still primarily is) a translation library, and the gateway's core value is built on top of that: cross-format conversion is what makes it more than just another proxy.
+
+Same-format IR round-trip is the most basic fidelity check. If we can't round-trip a single format without information loss, then cross-format translation doesn't stand a chance either. That's the main reason everything goes through IR, and the conversion overhead has been kept low enough that it hasn't been a practical issue.
+
+The pipeline had no passthrough path at all until `25924518` (Aug 2026). We added it, together with a fidelity checker, to make it easier to do shadow-comparison testing — diff passthrough output against converted output to catch round-trip regressions. It's a testing tool, not a production path we expect people to rely on.
+
 ## Round-Trip Compatibility
 
 All conversion paths must maintain **round-trip compatibility**. Every change must be tested against these scenarios:
