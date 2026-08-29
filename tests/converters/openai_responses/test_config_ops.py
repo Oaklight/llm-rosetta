@@ -278,6 +278,15 @@ class TestOpenAIResponsesConfigOps:
         )
         assert result["reasoning"] == {"effort": "high", "summary": "detailed"}
 
+    def test_reasoning_summary_round_trip(self):
+        """Test round-trip: summary preserved through IR."""
+        original = {"reasoning": {"effort": "high", "summary": "concise"}}
+        ir = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(original)
+        assert ir["effort"] == "high"
+        assert ir["summary"] == "concise"
+        restored = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(ir)
+        assert restored["reasoning"] == {"effort": "high", "summary": "concise"}
+
     def test_ir_reasoning_config_with_mode(self):
         """Test reasoning config with mode — type is NOT emitted (OpenAI rejects it)."""
         result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
