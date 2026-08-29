@@ -123,12 +123,10 @@ Provider A ↔ **IR** ↔ Provider B — 任意格式输入，任意格式输出
 ## 文档目录
 
 - **[快速入门](getting-started/installation.md)** — 安装、核心概念和快速开始
-- **[库](guide/converters.md)** — 转换器、IR 类型、提供商、流式处理
+- **[指南](guide/converters.md)** — 转换器、IR 类型、提供商、流式处理
 - **[网关](gateway/index.md)** — HTTP 代理、配置、CLI 工具集成、管理面板
-- **[API 参考](api/index.md)** — 库和网关 API 文档
-- **[示例](examples/index.md)** — 跨提供商对话、工具调用
-- **[贡献](contributing/naming-conventions.md)** — 命名约定和开发者指南
-- **[更新日志](changelog.md)** — 版本历史
+- **[参考](api/index.md)** — API 文档、示例、贡献指南、更新日志
+- **[贡献](contributing/guide.md)** — 如何贡献、风格指南、架构指南
 
 ## 引用
 

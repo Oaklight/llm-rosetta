@@ -6,7 +6,10 @@ title: 网关验证报告
 
 本页汇总了 LLM-Rosetta 网关（通过 [argo-proxy](https://github.com/Oaklight/argo-proxy)）与真实 CLI 工具、SDK 测试套件和跨格式路由的端到端验证结果。
 
-!!! info "最后更新：2026-04-12"
+!!! warning "本页内容可能已过时"
+    最后验证版本为 llm-rosetta **v0.5.0**（2026-04-12）。当前最新版本为 **v0.11.1**——自本次验证以来已有大量功能变更。下方的路由矩阵和集成结果在方向上仍然准确，但具体行为可能有所不同。计划进行重新验证。
+
+!!! info "原始测试环境"
     使用 llm-rosetta v0.5.0 和 argo-proxy v3.0.0b7
 
 ## 跨格式路由矩阵

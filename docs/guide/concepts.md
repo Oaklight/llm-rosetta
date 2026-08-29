@@ -50,23 +50,8 @@ LLM-Rosetta 引入中央**中间表示（IR）**作为枢纽。每个提供商�
 
 `StreamContext` 继承自 `ConversionContext`，增加了会话级元数据、工具调用追踪和生命周期标志，用于有状态的流式转换。详见[流式处理](streaming.md)指南。
 
-基类 `stream_response_to_provider()` 实现使用类级分派表（`_TO_P_DISPATCH`）将 IR 流式事件路由到处理器方法。各 provider converter 通过 `_post_process_to_provider()` 钩子定制行为，无需重新实现分派逻辑。
-
-## Provider 特定数据保留
-
-LLM-Rosetta 将 portable IR 数据、可持久化的 provider passthrough 数据和单次转换上下文状态分为三层：
-
-| 层 | 生命周期 | 用途 |
-|----|----------|------|
-| Portable IR（`Message`、内容部分、工具、推理） | 可序列化、可复用 | 可在不同 provider 格式之间转换的语义 |
-| `ProviderPassthroughEvent` / `ProviderPassthroughItem` | 可序列化、可复用 | 没有 portable 表达的 provider 原生 chunk 或 item |
-| `ConversionContext` / `StreamContext` | 单次转换管线 | warning、option、echo 字段、原始 ID/status/annotation，以及响应重建状态 |
-
-`ProviderPassthroughEvent` 携带 provider 原生流式 chunk。`ProviderPassthroughItem` 携带非流式请求/历史 item；`IRResponse.provider_passthrough_items` 保存独立的非流式输出 item 及其原始位置。
-
-Passthrough 数据带有 converter dialect 标签，例如 `openai_responses` 或 `anthropic`。目标 dialect 相同时恢复原生 payload 的副本；目标格式不同时丢弃。语义 item 会产生 conversion warning；生命周期/心跳 stream event 为避免 warning 泛滥而静默丢弃。
-
-`ConversionContext` 仍然必要，因为它承担不同职责：它是单次 request/response 管线内的临时 side channel，不会序列化进 conversation history。Provider passthrough carrier 是可持久化的 IR 数据，可以跨缓存、持久化和后续 HTTP 请求继续存在。
+!!! tip "深入了解"
+    关于 passthrough 数据模型（`ProviderPassthroughEvent`、`ProviderPassthroughItem`）、三层保留架构和转换器分派内部机制的详细说明，请参阅[架构指南](../contributing/architecture.md)。
 
 ## IR 消息类型
 

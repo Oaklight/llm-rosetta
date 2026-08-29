@@ -32,54 +32,8 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
 ---
 
-## 近期完成
-
-### 声明式提供商 Shim 系统
-
-!!! success "状态：已完成（v0.6.0）"
-
-提供商现在通过 `shims/providers/<name>/` 下的 `provider.yaml` + 可选 `transforms.py` 文件定义，导入时自动发现。三个可组合的转换原语——`strip_fields()`、`rename_field()`、`set_defaults()`——处理提供商 API 方言与其基础标准之间的字段差异。
-
-新增 7 个内置 shim：xAI (Grok)、Qwen (DashScope)、Moonshot (Kimi)、MiniMax、Zhipu (GLM)、OpenRouter、Volcengine。网关代理管道在请求和响应路径上均应用 shim 转换。
-
-### 零依赖网关
-
-!!! success "状态：已完成（v0.6.0）"
-
-使用 vendored 的零依赖 `httpserver` 和 `httpclient` 模块替换了 Starlette + uvicorn + httpx。`[gateway]` extra 现在零外部运行时依赖。
-
-### Embeddings 透传
-
-!!! success "状态：已完成（v0.6.1）"
-
-`/v1/embeddings` 透传端点直接将嵌入请求代理到上游提供商，无需 IR 转换。`/v1/models` 响应现在包含 `api_standard` 和每模型 `capabilities` 字段。
-
-### 管理面板增强
-
-!!! success "状态：已完成（v0.6.1）"
-
-- **从提供商获取**：查询上游 `/v1/models`，浏览并批量添加模型
-- **模型能力**：`embedding` 和 `reasoning` 能力类型及专用测试模式
-- **提供商 Logo**：shim 可声明 SVG logo 显示在管理卡片上
-- **Admin API**：用于编程配置管理的完整 REST API
-
-### SOCKS5 代理支持
-
-!!! success "状态：已完成（v0.6.0）"
-
-通过 vendored httpclient v0.4.0 支持完整的 SOCKS5 代理（RFC 1928/1929），包括用户名/密码认证。
-
-### Responses API 自定义工具类型
-
-!!! success "状态：已完成（v0.6.2）"
-
-OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使用）现已在 IR 中处理。自定义工具在源转换器边界降级为 `function`，原始 payload 保存在 `_passthrough` 中，实现往返保真。
-
-### 多 API 模式提供商
-
-!!! success "状态：已完成（v0.6.8）"
-
-支持同时暴露多种 API 标准的提供商（如 OpenRouter 同时提供 OpenAI Chat 和 Anthropic 端点，Google 同时提供原生 Gemini 和 OpenAI 兼容模式）。通过为每个提供商注册多个 shim 实现，命名约定：`{provider}_{api_mode}`，主模式无后缀。
+!!! info "已完成的功能"
+    已发布的功能详见[更新日志](changelog.md)。关键里程碑包括：声明式 shim 系统（v0.6.0）、零依赖网关（v0.6.0）、Embedding/Rerank IR 转换（v0.6.1+）、推理字段标准化（v0.8.1）、上游超时（v0.8.2）、多 API 模式提供商（v0.6.8）。
 
 ---
 
@@ -93,12 +47,6 @@ OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使
 
 跨提供商映射服务端工具类型（`web_search`、`code_execution`、`computer_use`），这些工具类型在部分提供商中存在但在其他提供商中不存在。
 
-#### 推理字段标准化
-
-!!! success "状态：已完成（v0.8.1） — [#185](https://github.com/Oaklight/llm-rosetta/issues/185)"
-
-通过 shim 转换（而非逐提供商的转换器代码）标准化 OpenAI Chat 兼容提供商的 `reasoning_content` / 思考字段。MiniMax `<think>` 标签解析、OpenRouter `reasoning` → `reasoning_content` 重命名、Volcengine `encrypted_content` 保留均通过 shim transforms 实现。
-
 ### Shim 系统
 
 #### 每模型转换（ModelShim）
@@ -108,12 +56,6 @@ OpenAI Responses API 的 `custom` 工具类型（Codex CLI 的 `apply_patch` 使
 恢复 `ModelShim` 以支持每模型的转换规则——同一提供商的不同模型可能需要不同的字段处理。
 
 ### 网关
-
-#### 上游超时
-
-!!! success "状态：已完成（v0.8.2） — [#121](https://github.com/Oaklight/llm-rosetta/issues/121)"
-
-支持每提供商和每模型的超时覆盖，`UpstreamTimeoutError`（504）与连接错误（502）区分。熔断器模式保留为未来工作。
 
 #### 速率限制中间件
 

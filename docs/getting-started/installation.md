@@ -4,13 +4,14 @@ title: 安装
 
 # 安装
 
+!!! info "环境要求"
+    需要 Python **≥ 3.10**。核心库依赖极少（`typing_extensions>=4.0.0`）。
+
 ## 库
 
 ```bash
 pip install llm-rosetta
 ```
-
-核心库依赖极少（`typing_extensions>=4.0.0`）。
 
 ### Provider SDK（可选）
 
