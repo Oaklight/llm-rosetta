@@ -149,6 +149,22 @@ class GoogleGenAIConverter(BaseConverter):
     # ==================== Top-level Interfaces ====================
 
     @staticmethod
+    def _thinking_config_to_rest(tc: dict[str, Any]) -> dict[str, Any]:
+        """Convert SDK-style thinking_config to REST camelCase format."""
+        _FIELD_MAP = {
+            "thinking_level": "thinkingLevel",
+            "thinking_budget": "thinkingBudget",
+            "include_thoughts": "includeThoughts",
+        }
+        rest_tc: dict[str, Any] = {}
+        for snake, camel in _FIELD_MAP.items():
+            if snake in tc:
+                rest_tc[camel] = tc[snake]
+            elif camel in tc:
+                rest_tc[camel] = tc[camel]
+        return rest_tc
+
+    @staticmethod
     def _to_rest_body(sdk_request: dict[str, Any]) -> dict[str, Any]:
         """Convert SDK-style request dict to Google REST API format.
 
@@ -193,6 +209,16 @@ class GoogleGenAIConverter(BaseConverter):
         for key in _GENERATION_KEYS:
             if key in config:
                 generation_config[key] = config[key]
+
+        if "thinking_config" in config and isinstance(config["thinking_config"], dict):
+            rest_tc = GoogleGenAIConverter._thinking_config_to_rest(
+                config["thinking_config"]
+            )
+            if rest_tc:
+                generation_config["thinkingConfig"] = rest_tc
+        elif "thinkingConfig" in config and isinstance(config["thinkingConfig"], dict):
+            generation_config["thinkingConfig"] = config["thinkingConfig"]
+
         if generation_config:
             body["generationConfig"] = generation_config
 

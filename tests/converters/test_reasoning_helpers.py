@@ -234,7 +234,7 @@ class TestAnthropicShim:
 
 
 class TestGoogleShim:
-    """Google: disabled → thinkingBudget=0, effort skipped."""
+    """Google: disabled → thinkingBudget=0, effort → thinking_level."""
 
     cap = DEFAULT_REASONING_CAPS["google"]
 
@@ -246,19 +246,14 @@ class TestGoogleShim:
         )
         assert result["thinking_config"]["thinking_budget"] == 0
 
-    def test_effort_skipped(self):
-        """Google doesn't support thinkingLevel, effort is dropped."""
-        import warnings
-
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = apply_reasoning_config(
-                cast(ReasoningConfig, {"effort": "high"}),
-                self.cap,
-                converter_type="google",
-            )
-        # effort_field is "none" and effort_map is empty → nothing emitted
-        assert result == {}
+    def test_effort_emits_thinking_level(self):
+        """Google supports thinkingLevel mapped from effort."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high"}),
+            self.cap,
+            converter_type="google",
+        )
+        assert result["thinking_config"]["thinking_level"] == "high"
 
     def test_budget_still_works(self):
         result = apply_reasoning_config(
