@@ -200,6 +200,38 @@ Google's REST API and CLI tools (e.g. Gemini CLI) use camelCase (`inlineData`, `
 
 For a comprehensive list of all camelCase/snake_case field pairs and other real-world compatibility issues discovered during live testing, see the [Provider & CLI Compatibility Matrix](compatibility.md).
 
+## Warnings and Error Handling
+
+Conversion methods that produce output return warnings as a `list[str]` — either as the second element of a tuple (`request_to_provider`, `messages_to_provider`) or via `ConversionContext.warnings`.
+
+```python
+anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
+
+for w in warnings:
+    print(f"⚠ {w}")
+# ⚠ Anthropic does not support max_tool_calls, ignored
+# ⚠ Extension item ignored: openai:web_search_call
+```
+
+Warnings are **informational, not errors** — the conversion always completes. Common warning scenarios:
+
+| Warning | Meaning |
+|---------|---------|
+| `"X does not support Y, ignored"` | A feature from the source format has no equivalent in the target format and was dropped |
+| `"Extension item ignored: ..."` | An Open Responses extension item has no portable IR representation |
+| `"Tool chain converted to sequential calls"` | A provider's chained tool-call pattern was flattened |
+| `"Skipped image in tool result packing: ..."` | An image in a tool result couldn't be converted |
+
+To capture warnings from `request_from_provider` or `response_from_provider` (which don't return a tuple), pass a `ConversionContext`:
+
+```python
+from llm_rosetta.converters.base import ConversionContext
+
+ctx = ConversionContext()
+ir_request = openai_conv.request_from_provider(openai_request, context=ctx)
+print(ctx.warnings)  # list[str]
+```
+
 ## See Also
 
 - [Streaming](streaming.md) — convert streaming chunks with `StreamContext`

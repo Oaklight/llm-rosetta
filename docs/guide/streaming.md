@@ -9,6 +9,22 @@ title: Streaming
 
 LLM-Rosetta supports converting streaming chunks between providers. A stateful `StreamContext` tracks session metadata, tool calls, and deferred events across the chunk sequence.
 
+```mermaid
+sequenceDiagram
+    participant Provider A
+    participant Source Converter
+    participant IR Events
+    participant Target Converter
+    participant Provider B
+
+    Provider A->>Source Converter: SSE chunks
+    Source Converter->>IR Events: stream_response_from_provider()
+    Note over IR Events: TextDeltaEvent, ToolCallStartEvent,<br/>FinishEvent, UsageEvent, ...
+    IR Events->>Target Converter: IR stream events
+    Target Converter->>Provider B: stream_response_to_provider()
+    Note over Source Converter,Target Converter: StreamContext tracks state<br/>across the full sequence
+```
+
 ## Stream Events
 
 Streaming produces a sequence of `IRStreamEvent` types:
