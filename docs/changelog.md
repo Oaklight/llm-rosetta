@@ -6,6 +6,19 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## v0.11.1 — 2026-08-29
+
+### 修复
+
+- **OpenAI Responses reasoning 加密状态** (PR [#576](https://github.com/Oaklight/llm-rosetta/pull/576))：强制同格式 Responses→Responses 流式转换现在保留 `response.output_item.done` 中的 `encrypted_content` 和源 reasoning item ID。此前 IR round-trip 会丢失两者，导致需要回放完成态 reasoning 的客户端（如 `store: false` / ZDR 流程）无法正常工作。修复 [#575](https://github.com/Oaklight/llm-rosetta/issues/575)。
+- **Google GenAI reasoning 配置 round-trip** (PRs [#582](https://github.com/Oaklight/llm-rosetta/pull/582), [#583](https://github.com/Oaklight/llm-rosetta/pull/583), [#584](https://github.com/Oaklight/llm-rosetta/pull/584))：从 REST `generationConfig` 中解析入站 `thinkingConfig`，将 reasoning effort 映射到 `thinkingLevel`，在所有转换器间转发 `summary`/`include_thoughts`。
+- **Responses API reasoning summary 转发** (PR [#581](https://github.com/Oaklight/llm-rosetta/pull/581))：在出站 Responses API 请求中转发 `reasoning.summary`。
+
+### 变更
+
+- **Gateway `create_app` 可组合化** (PR [#578](https://github.com/Oaklight/llm-rosetta/pull/578))：通过 `GatewayExtensions` 重构 `create_app` 以支持扩展。
+- **IR `ReasoningDeltaEvent`** 新增 `encrypted_content` 和 `provider_metadata` 字段声明，与 `ToolCallStartEvent` 保持一致。
+
 ## v0.11.0 — 2026-08-28
 
 ### 变更
