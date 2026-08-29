@@ -73,6 +73,9 @@ def _resolve_embedding_provider(
             if source_format != route.format
             else None
         )
+        upstream_model = config.model_upstream_names.get(model)
+        if upstream_model:
+            body["model"] = upstream_model
         return _ResolvedEmbedding(
             provider_info=route.provider_info,
             upstream_url=f"{route.provider_info.base_url}{route.embedding_path}",
