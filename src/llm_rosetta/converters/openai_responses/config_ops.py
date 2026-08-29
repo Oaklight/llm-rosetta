@@ -290,6 +290,9 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             else:
                 result["effort"] = effort
 
+        if "summary" in reasoning and isinstance(reasoning["summary"], str):
+            result["summary"] = reasoning["summary"]
+
         return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
