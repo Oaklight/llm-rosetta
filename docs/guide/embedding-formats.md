@@ -296,6 +296,26 @@ OpenAI 请求 ──→ IR ──→ Google 请求
 - **Cohere 多格式 → IR**：仅选择一种 embedding 类型；其他需要 `provider_extensions`
 - **用量**：Cohere 的 `billed_units` 和 Jina 的多模态 token 细分不保留在 IR 中
 
+### 库级用法
+
+```python
+from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
+from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
+
+openai_conv = OpenAIEmbeddingConverter()
+jina_conv = JinaEmbeddingConverter()
+
+# OpenAI embedding 请求
+openai_request = {
+    "model": "text-embedding-3-small",
+    "input": ["Hello world", "Goodbye world"],
+}
+
+# OpenAI → IR → Jina
+ir_request = openai_conv.request_from_provider(openai_request)
+jina_request, warnings = jina_conv.request_to_provider(ir_request)
+```
+
 ## 尚未纳入 IR 的特性
 
 以下 provider 特有功能不在当前 IR 范围内，可通过 `provider_extensions` 透传：

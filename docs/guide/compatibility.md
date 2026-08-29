@@ -6,6 +6,20 @@ title: 提供商与 CLI 兼容性
 
 本页面记录了在将 LLM CLI 工具通过格式转换代理（如 [argo-proxy](https://github.com/Oaklight/argo-proxy) + LLM-Rosetta）进行路由时，发现的**真实兼容性问题**。每个问题都是通过将 CLI 工具的原生 API 格式经 LLM-Rosetta IR 层转换到不同提供商后端，观察到失败后修复的。
 
+### 快速总结
+
+| 组合 | 状态 | 备注 |
+|------|:----:|------|
+| OpenAI Chat → Anthropic | ✅ | 完全可用 |
+| OpenAI Chat → Google | ✅ | 完全可用 |
+| OpenAI Responses → Anthropic | ✅ | Tool call ID 通过 TurnBridge 桥接 |
+| OpenAI Responses → OpenAI Chat | ✅ | 完全可用 |
+| Anthropic → OpenAI Chat | ✅ | 完全可用 |
+| Google GenAI → OpenAI Chat | ✅ | camelCase 透明处理 |
+| Google GenAI → Anthropic | ✅ | 完全可用 |
+
+以上所有组合均已通过真实 CLI 工具验证。测试期间发现的问题详见下文——所有问题均已在转换器中修复。
+
 !!! info "方法论"
     以下所有问题均为经验性发现——不是通过阅读规范，而是通过运行真实 CLI 会话并观察 400 错误、静默数据丢失或错误行为发现的。这使其成为构建跨提供商 LLM 代理或格式转换器的可靠参考。
 

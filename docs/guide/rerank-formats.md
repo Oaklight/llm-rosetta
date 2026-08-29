@@ -227,3 +227,25 @@ Cohere 响应 ──→ IR ──→ Jina 响应
 - **Jina → Cohere**：文档文本被丢弃（Cohere 响应中不包含文档）
 - **Cohere → Jina/Voyage**：无文档文本可供包含
 - **用量**：Cohere v3 的 `search_units` 无法转换为 token 数
+
+### 库级用法
+
+```python
+from llm_rosetta.converters.rerank.jina import JinaRerankConverter
+from llm_rosetta.converters.rerank.cohere import CohereRerankConverter
+
+jina_conv = JinaRerankConverter()
+cohere_conv = CohereRerankConverter()
+
+# Jina rerank 请求
+jina_request = {
+    "model": "jina-reranker-v2-base-multilingual",
+    "query": "What is deep learning?",
+    "documents": ["Neural networks...", "Decision trees...", "Transformers..."],
+    "top_n": 2,
+}
+
+# Jina → IR → Cohere
+ir_request = jina_conv.request_from_provider(jina_request)
+cohere_request, warnings = cohere_conv.request_to_provider(ir_request)
+```
