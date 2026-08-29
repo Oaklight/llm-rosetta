@@ -291,6 +291,14 @@ class AnthropicConfigOps(BaseConfigOps):
             if budget_tokens is not None:
                 result["budget_tokens"] = budget_tokens
 
+            display = thinking.get("display")
+            if display == "omitted":
+                result["include_thoughts"] = False
+                result["summary"] = "none"
+            elif display == "summarized":
+                result["include_thoughts"] = True
+                result["summary"] = "auto"
+
         # effort lives in output_config, not thinking
         output_config = provider_reasoning.get("output_config")
         if isinstance(output_config, dict):

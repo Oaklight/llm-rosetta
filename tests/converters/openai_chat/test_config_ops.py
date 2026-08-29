@@ -7,7 +7,7 @@ import pytest
 from typing import cast
 
 from llm_rosetta.converters.openai_chat.config_ops import OpenAIChatConfigOps
-from llm_rosetta.types.ir import CacheConfig, GenerationConfig
+from llm_rosetta.types.ir import CacheConfig, GenerationConfig, ReasoningConfig
 
 
 class TestOpenAIChatConfigOps:
@@ -253,6 +253,33 @@ class TestOpenAIChatConfigOps:
         assert result["reasoning_effort"] == "high"
         assert result["thinking"]["type"] == "enabled"
         assert result["thinking"]["budget_tokens"] == 4096
+
+    def test_ir_reasoning_config_with_summary(self):
+        """Test reasoning config with summary → reasoning.summary."""
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
+            cast(ReasoningConfig, {"effort": "high", "summary": "detailed"})
+        )
+        assert result["reasoning_effort"] == "high"
+        assert result["reasoning"]["summary"] == "detailed"
+
+    def test_p_reasoning_config_summary_to_ir(self):
+        """Test inbound: reasoning.summary → IR summary."""
+        result = OpenAIChatConfigOps.p_reasoning_config_to_ir(
+            {"reasoning_effort": "high", "reasoning": {"summary": "concise"}}
+        )
+        assert result["effort"] == "high"
+        assert result["summary"] == "concise"
+
+    def test_reasoning_summary_round_trip(self):
+        """Test round-trip: summary preserved through IR."""
+        original = {
+            "reasoning_effort": "high",
+            "reasoning": {"summary": "detailed"},
+        }
+        ir = OpenAIChatConfigOps.p_reasoning_config_to_ir(original)
+        assert ir["summary"] == "detailed"
+        result = OpenAIChatConfigOps.ir_reasoning_config_to_p(ir)
+        assert result["reasoning"]["summary"] == "detailed"
 
     # ==================== Cache Config ====================
 

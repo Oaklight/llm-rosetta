@@ -288,6 +288,100 @@ class TestDeepSeekShim:
 # ── Custom shim override ──────────────────────────────────────────────────
 
 
+class TestSummaryIncludeThoughtsCrossFormat:
+    """Cross-format behavior: summary/include_thoughts only supported by Google and Responses."""
+
+    def test_summary_forwarded_to_google(self):
+        """IR summary=auto → Google include_thoughts=True."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "summary": "auto"}),
+            DEFAULT_REASONING_CAPS["google"],
+            converter_type="google",
+        )
+        assert result["thinking_config"]["include_thoughts"] is True
+
+    def test_summary_forwarded_to_responses(self):
+        """IR summary=detailed → Responses reasoning.summary=detailed."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "summary": "detailed"}),
+            DEFAULT_REASONING_CAPS["openai_responses"],
+            converter_type="openai_responses",
+        )
+        assert result["reasoning"]["summary"] == "detailed"
+
+    def test_summary_forwarded_to_openai_chat(self):
+        """IR summary=detailed → OpenAI Chat reasoning.summary=detailed."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "summary": "detailed"}),
+            DEFAULT_REASONING_CAPS["openai_chat"],
+            converter_type="openai_chat",
+        )
+        assert result["reasoning"]["summary"] == "detailed"
+
+    def test_summary_to_anthropic_display_summarized(self):
+        """IR summary=concise → Anthropic thinking.display=summarized."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "summary": "concise"}),
+            DEFAULT_REASONING_CAPS["anthropic"],
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["display"] == "summarized"
+
+    def test_summary_none_to_anthropic_display_omitted(self):
+        """IR summary=none → Anthropic thinking.display=omitted."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "summary": "none"}),
+            DEFAULT_REASONING_CAPS["anthropic"],
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["display"] == "omitted"
+
+    def test_include_thoughts_true_to_openai_chat(self):
+        """IR include_thoughts=True → OpenAI Chat reasoning.summary=auto."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
+            DEFAULT_REASONING_CAPS["openai_chat"],
+            converter_type="openai_chat",
+        )
+        assert result["reasoning"]["summary"] == "auto"
+
+    def test_include_thoughts_true_to_anthropic(self):
+        """IR include_thoughts=True → Anthropic thinking.display=summarized."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
+            DEFAULT_REASONING_CAPS["anthropic"],
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["display"] == "summarized"
+
+    def test_include_thoughts_false_to_anthropic(self):
+        """IR include_thoughts=False → Anthropic thinking.display=omitted."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "include_thoughts": False}),
+            DEFAULT_REASONING_CAPS["anthropic"],
+            converter_type="anthropic",
+        )
+        assert result["thinking"]["display"] == "omitted"
+
+    def test_include_thoughts_true_to_responses_fallback(self):
+        """IR include_thoughts=True → Responses reasoning.summary=auto (fallback)."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
+            DEFAULT_REASONING_CAPS["openai_responses"],
+            converter_type="openai_responses",
+        )
+        assert result["reasoning"]["summary"] == "auto"
+
+    def test_summary_none_to_google(self):
+        """IR summary=none → Google include_thoughts=False."""
+        result = apply_reasoning_config(
+            cast(ReasoningConfig, {"effort": "medium", "summary": "none"}),
+            DEFAULT_REASONING_CAPS["google"],
+            converter_type="google",
+        )
+        assert result["thinking_config"]["include_thoughts"] is False
+
+
 class TestCustomShim:
     """Verify that custom ReasoningCapability overrides work."""
 
