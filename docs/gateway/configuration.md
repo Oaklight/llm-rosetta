@@ -6,6 +6,9 @@ title: Configuration
 
 This page covers the gateway's configuration file format in detail.
 
+!!! tip "Configuration reload"
+    The gateway does **not** watch the config file for changes. To apply changes, either restart the gateway process or use the [Admin Panel](admin-panel.md) / [Admin API](../api/admin.md) — changes made through the admin interface are hot-reloaded without restart and persisted back to the config file.
+
 ## Providers
 
 Each provider entry requires an `api_key`, `base_url`, and optionally a `type` specifying the API standard:

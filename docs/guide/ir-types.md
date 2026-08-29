@@ -56,6 +56,28 @@ ir_request: IRRequest = {
     This canonical form ensures block-level metadata (such as `cache_hint` for Anthropic
     prompt caching) can flow through the IR pipeline without union types.
 
+### GenerationConfig Fields
+
+All fields are optional (`total=False`):
+
+| Field | Type | Description | Provider Support |
+|-------|------|-------------|-----------------|
+| `temperature` | `float` | Sampling temperature | All providers |
+| `top_p` | `float` | Nucleus sampling (0.0–1.0) | All providers |
+| `top_k` | `int` | Top-k sampling | Anthropic, Google |
+| `max_tokens` | `int` | Maximum tokens to generate | All providers (mapped to provider-specific names) |
+| `stop_sequences` | `list[str]` | Stop sequences | All providers |
+| `truncation` | `"auto" \| "disabled"` | Truncation strategy | OpenAI Responses |
+| `frequency_penalty` | `float` | Frequency penalty (−2.0 to 2.0) | OpenAI, Google |
+| `presence_penalty` | `float` | Presence penalty (−2.0 to 2.0) | OpenAI, Google |
+| `logit_bias` | `dict[str, int]` | Logit bias | OpenAI |
+| `seed` | `int` | Random seed | OpenAI, Google |
+| `logprobs` | `bool` | Return log probabilities | OpenAI |
+| `top_logprobs` | `int` | Number of top log probabilities | OpenAI |
+| `n` | `int` | Number of response candidates | OpenAI, Google |
+
+For reasoning/thinking configuration, see [ReasoningConfig](../guide/reasoning.md).
+
 ## IRResponse
 
 ```python
