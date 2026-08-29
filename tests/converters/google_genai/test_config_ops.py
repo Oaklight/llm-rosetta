@@ -368,6 +368,44 @@ class TestGoogleGenAIConfigOps:
         restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
         assert restored["mode"] == "disabled"
 
+    def test_reasoning_config_include_thoughts_round_trip(self):
+        """Test round-trip: include_thoughts=True → include_thoughts in thinkingConfig → IR."""
+        original = cast(
+            ReasoningConfig,
+            {"effort": "high", "summary": "auto", "include_thoughts": True},
+        )
+        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        assert provider["thinking_config"]["include_thoughts"] is True
+        restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["include_thoughts"] is True
+        assert restored["summary"] == "auto"
+        assert restored["effort"] == "high"
+
+    def test_reasoning_config_include_thoughts_false_round_trip(self):
+        """Test round-trip: include_thoughts=False → preserved."""
+        original = cast(
+            ReasoningConfig,
+            {"effort": "medium", "summary": "none", "include_thoughts": False},
+        )
+        provider = GoogleGenAIConfigOps.ir_reasoning_config_to_p(original)
+        assert provider["thinking_config"]["include_thoughts"] is False
+        restored = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert restored["include_thoughts"] is False
+        assert restored["summary"] == "none"
+
+    def test_p_reasoning_include_thoughts_inbound(self):
+        """Test inbound: includeThoughts in thinkingConfig → IR include_thoughts + summary."""
+        provider = {
+            "thinking_config": {
+                "thinking_level": "high",
+                "include_thoughts": True,
+            }
+        }
+        result = GoogleGenAIConfigOps.p_reasoning_config_to_ir(provider)
+        assert result["include_thoughts"] is True
+        assert result["summary"] == "auto"
+        assert result["effort"] == "high"
+
     # ==================== Cache Config ====================
 
     def test_ir_cache_config_key(self):

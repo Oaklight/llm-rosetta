@@ -327,6 +327,18 @@ class GoogleGenAIConfigOps(BaseConfigOps):
                 if "mode" not in result:
                     result["mode"] = "auto"
 
+            include = thinking_config.get(
+                "include_thoughts", thinking_config.get("includeThoughts")
+            )
+            if include is True:
+                result["include_thoughts"] = True
+                if "summary" not in result:
+                    result["summary"] = "auto"
+            elif include is False:
+                result["include_thoughts"] = False
+                if "summary" not in result:
+                    result["summary"] = "none"
+
         return cast(ReasoningConfig, result)
 
     # ==================== Cache Config ====================
