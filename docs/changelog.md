@@ -6,6 +6,19 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
+## v0.11.1 — 2026-08-29
+
+### Fixed
+
+- **OpenAI Responses reasoning encrypted state** (PR [#576](https://github.com/Oaklight/llm-rosetta/pull/576)): forced same-format Responses→Responses streaming conversion now preserves `encrypted_content` and the source reasoning item ID from `response.output_item.done`. Previously the IR round-trip dropped both, breaking clients that replay completed reasoning state (e.g. `store: false` / ZDR flows). Fixes [#575](https://github.com/Oaklight/llm-rosetta/issues/575).
+- **Google GenAI reasoning config round-trip** (PRs [#582](https://github.com/Oaklight/llm-rosetta/pull/582), [#583](https://github.com/Oaklight/llm-rosetta/pull/583), [#584](https://github.com/Oaklight/llm-rosetta/pull/584)): parse `thinkingConfig` from REST `generationConfig` on inbound, map reasoning effort to `thinkingLevel`, forward `summary`/`include_thoughts` across all converters.
+- **Responses API reasoning summary forwarding** (PR [#581](https://github.com/Oaklight/llm-rosetta/pull/581)): forward `reasoning.summary` in outbound Responses API requests.
+
+### Changed
+
+- **Gateway `create_app` composable** (PR [#578](https://github.com/Oaklight/llm-rosetta/pull/578)): refactored `create_app` via `GatewayExtensions` for extensibility.
+- **IR `ReasoningDeltaEvent`** now declares `encrypted_content` and `provider_metadata` fields, consistent with `ToolCallStartEvent`.
+
 ## v0.11.0 — 2026-08-28
 
 ### Changed
