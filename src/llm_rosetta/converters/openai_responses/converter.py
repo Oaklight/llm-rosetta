@@ -834,6 +834,8 @@ class OpenAIResponsesConverter(BaseConverter):
             elif item_type == "reasoning" and isinstance(
                 context, OpenAIResponsesStreamContext
             ):
+                # Capture early so deltas can carry the source ID;
+                # done event re-confirms authoritatively.
                 item_id = item.get("id", "")
                 if item_id:
                     context._reasoning_item_id = item_id
@@ -922,6 +924,8 @@ class OpenAIResponsesConverter(BaseConverter):
             encrypted_content = item.get("encrypted_content")
             if encrypted_content:
                 context._reasoning_encrypted_content = str(encrypted_content)
+                # Zero-text delta carries encrypted_content through IR;
+                # suppressed on the outbound side when reasoning is empty.
                 event = ReasoningDeltaEvent(
                     type="reasoning_delta",
                     reasoning="",
