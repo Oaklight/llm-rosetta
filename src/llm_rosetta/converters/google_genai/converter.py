@@ -394,9 +394,17 @@ class GoogleGenAIConverter(BaseConverter):
                 response_mime_source
             )
 
-        # Reasoning config (snake + camel)
-        if "thinking_config" in config or "thinkingConfig" in config:
-            ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(config)
+        # Reasoning config (snake + camel) — check SDK config, then REST generationConfig
+        reasoning_source = config
+        if not ("thinking_config" in config or "thinkingConfig" in config):
+            reasoning_source = gen_source
+        if (
+            "thinking_config" in reasoning_source
+            or "thinkingConfig" in reasoning_source
+        ):
+            ir_request["reasoning"] = self.config_ops.p_reasoning_config_to_ir(
+                reasoning_source
+            )
 
         return ir_request
 
