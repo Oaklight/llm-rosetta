@@ -135,7 +135,7 @@ class TestEmbeddingUrlConstruction:
 class TestRerankUrlConstruction:
     def _rerank_upstream_url(self, cfg: GatewayConfig, model: str) -> str:
         route = cfg.resolve_rerank(model)
-        return f"{route.provider_info.base_url}{route.rerank_path}"
+        return route.provider_info.upstream_url("")
 
     def test_base_url_no_v1_default_path(self):
         cfg = _config_with_provider(
