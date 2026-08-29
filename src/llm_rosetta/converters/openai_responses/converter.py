@@ -778,7 +778,7 @@ class OpenAIResponsesConverter(BaseConverter):
             isinstance(context, OpenAIResponsesStreamContext)
             and context._reasoning_item_id
         ):
-            cast(dict[str, Any], event)["provider_metadata"] = {
+            event["provider_metadata"] = {
                 "responses_reasoning_id": context._reasoning_item_id,
             }
         events.append(event)
@@ -925,10 +925,10 @@ class OpenAIResponsesConverter(BaseConverter):
                 event = ReasoningDeltaEvent(
                     type="reasoning_delta",
                     reasoning="",
-                    signature=str(encrypted_content),
+                    encrypted_content=str(encrypted_content),
                 )
                 if item_id:
-                    cast(dict[str, Any], event)["provider_metadata"] = {
+                    event["provider_metadata"] = {
                         "responses_reasoning_id": item_id,
                     }
                 events.append(event)
@@ -1380,7 +1380,7 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> list[dict[str, Any]]:
         results: list[dict[str, Any]] = []
         ctx = context if isinstance(context, OpenAIResponsesStreamContext) else None
-        provider_metadata = cast(dict[str, Any], event).get("provider_metadata") or {}
+        provider_metadata = event.get("provider_metadata") or {}
         source_item_id = provider_metadata.get("responses_reasoning_id", "")
         if not isinstance(source_item_id, str):
             source_item_id = ""
@@ -1415,9 +1415,9 @@ class OpenAIResponsesConverter(BaseConverter):
                 }
             )
 
-        signature = event.get("signature", "")
-        if ctx is not None and source_item_id and signature:
-            ctx._reasoning_encrypted_content = signature
+        enc = event.get("encrypted_content", "")
+        if ctx is not None and source_item_id and enc:
+            ctx._reasoning_encrypted_content = enc
             if not event["reasoning"]:
                 return results
 
