@@ -4,9 +4,9 @@ title: 提供方 Shim
 
 # 提供方 Shim
 
-LLM-Rosetta 仅使用四个**转换器** —— 每种 API 标准一个（OpenAI Chat、OpenAI Responses、Anthropic、Google）。但 LLM 生态中有更多*提供方*（DeepSeek、xAI、Qwen、Moonshot 等）遵循其中某一标准，只有细微差异。
+LLM-Rosetta 只有四个**转换器**——每种 API 标准一个（OpenAI Chat、OpenAI Responses、Anthropic、Google）。但实际的 LLM 提供方远不止这四家（DeepSeek、xAI、Qwen、Moonshot……），它们大多跟着某一标准走，只有一些字段级别的差异。
 
-**Shim 层**弥合了这一差距。Shim 是一张轻量级的身份卡，声明提供方使用哪个转换器，同时携带连接默认值和可选的**转换规则（transforms）**，用于适配提供方特有的请求/响应字段差异。
+**Shim 层**就是用来处理这些差异的。一个 shim 本质上是一张身份卡：声明这个提供方用哪个转换器、默认连接到哪里，以及需要做哪些字段级的**转换规则（transforms）**。
 
 ## 架构
 
@@ -21,8 +21,8 @@ ProviderShim ("deepseek")
 └── pre_ir_transforms: ()
 ```
 
-- **ProviderShim** —— 提供方身份：名称、基础转换器类型、默认 URL、默认 API 密钥环境变量、Logo URL，以及可选的转换规则。
-- **Transforms** —— 纯 `dict → dict` 函数，围绕转换器应用。`post_ir_transforms` 将输出请求适配为提供方方言；`pre_ir_transforms` 标准化输入响应。
+- **ProviderShim** — 提供方身份信息：名称、基础转换器类型、默认 URL、API 密钥环境变量、Logo，以及转换规则。
+- **Transforms** — 纯 `dict → dict` 函数，在转换器前后执行。`post_ir_transforms` 把输出请求调整成提供方的方言；`pre_ir_transforms` 把输入响应归一化回标准格式。
 
 !!! note "向后兼容别名"
     旧字段名 `to_transforms` 和 `from_transforms` 仍作为别名被接受 —— 在 `ProviderShim` 构造函数参数和 `transforms.py` 导出中均可使用。

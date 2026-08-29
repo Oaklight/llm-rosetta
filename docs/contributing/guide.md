@@ -33,9 +33,9 @@ title: 贡献指南
 ## Pull Request
 
 - 保持 PR 聚焦——每个 PR 只包含一个功能或修复
-- 简要描述改了什么以及为什么
-- 明确标注任何破坏性变更
-- 提交前确保 `make lint` 通过
+- 简要说明改了什么、为什么要改
+- 有破坏性变更的话明确标出来
+- 提交前跑一遍 `make lint`
 - Merge 策略：rebase（可使用 `scripts/merge-pr.sh` 进行本地 rebase 合并）
 
 ## AI 辅助贡献

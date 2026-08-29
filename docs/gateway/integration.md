@@ -4,9 +4,9 @@ title: 网关集成指南
 
 # 网关集成指南
 
-llm-rosetta 网关可以作为代理管道 + 管理面板嵌入到下游项目中。与运行独立的 `llm-rosetta-gateway` CLI 不同，你的项目直接导入网关内部模块，将其接入自己的 HTTP 应用、配置系统和启动流程。
+llm-rosetta 网关可以作为代理管道 + 管理面板嵌入到你自己的项目里。不用跑独立的 `llm-rosetta-gateway` CLI——直接导入网关模块，接入你的 HTTP 应用、配置系统和启动流程。
 
-本指南涵盖集成接口：`ConfigIO` 协议、`setup_admin()` 参数、遥测对接和品牌定制。典型的集成示例是 [argo-proxy](https://github.com/Oaklight/argo-proxy)，它在网关之上封装了自己的 YAML 配置、模型注册表和认证层。
+这页讲集成接口：`ConfigIO` 协议、`setup_admin()` 参数、遥测对接和品牌定制。[argo-proxy](https://github.com/Oaklight/argo-proxy) 是一个典型的集成案例，它在网关之上包了自己的 YAML 配置、模型注册表和认证层。
 
 ## ConfigIO 协议
 

@@ -4,9 +4,9 @@ title: Rerank API 格式
 
 # Rerank API 格式
 
-Rerank API 可以根据查询对一组文档按相关性重新排序。与有事实标准（OpenAI Chat）的聊天补全不同，rerank API **没有统一标准** —— 每个 provider 定义了自己的请求/响应结构。
+Rerank API 根据查询对一组文档按相关性重排。和聊天补全不同，rerank **没有统一标准**——每家提供方的请求/响应结构各不相同。
 
-LLM-Rosetta 识别了 **3 个格式族**，覆盖所有主流 rerank provider。每种格式由专用 converter 处理，通过 IR 实现跨 provider 的 rerank 转换。
+LLM-Rosetta 识别出 **3 个格式族**，覆盖主流 rerank 提供方。每种格式有专用 converter，通过 IR 做跨提供方转换。
 
 ## 概览
 

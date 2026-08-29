@@ -4,9 +4,9 @@ title: Embedding API 格式
 
 # Embedding API 格式
 
-Embedding API 将文本转换为稠密向量表示，用于语义搜索、聚类和分类。与没有统一标准的 rerank API 不同，embedding API 有一个由 OpenAI 设立的**事实标准** —— 但仍然存在显著的分歧，尤其是 Google GenAI 和 Cohere。
+Embedding API 把文本转成稠密向量，用于语义搜索、聚类和分类。虽然 OpenAI 的格式算是**事实标准**，但 Google GenAI 和 Cohere 的差异还是不小。
 
-LLM-Rosetta 识别了 **5 个格式族**，覆盖所有主流 embedding provider。每种格式由专用 converter 处理，通过 IR 实现跨 provider 的 embedding 转换。
+LLM-Rosetta 识别出 **5 个格式族**，覆盖主流 embedding 提供方。每种格式有专用 converter，通过 IR 做跨提供方转换。
 
 ## 概览
 
