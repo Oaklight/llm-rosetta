@@ -5,5 +5,11 @@ default_api_key_env: GOOGLE_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/google.svg
 reasoning:
   disabled: thinking_budget_zero
-  effort_field: none
-  effort_map: {}
+  effort_field: thinking_level
+  effort_map:
+    minimal: minimal
+    low: low
+    medium: medium
+    high: high
+    xhigh: high
+    max: high

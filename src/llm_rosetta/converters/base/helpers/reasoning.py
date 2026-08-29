@@ -68,8 +68,15 @@ _DEFAULT_ANTHROPIC = ReasoningCapability(
 
 _DEFAULT_GOOGLE = ReasoningCapability(
     disabled="thinking_budget_zero",
-    effort_field="none",
-    effort_map={},
+    effort_field="thinking_level",
+    effort_map={
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "high",
+        "max": "high",
+    },
 )
 
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
@@ -397,14 +404,24 @@ def _apply_google_extras(
     mode: str | None,
     budget_tokens: int | None,
 ) -> None:
-    """Google extras: thinking_config with thinking_budget."""
+    """Google extras: thinking_config with thinking_budget and include_thoughts."""
     thinking_config = result.get("thinking_config", {})
 
-    if mode == "auto" and budget_tokens is None:
+    if (
+        mode == "auto"
+        and budget_tokens is None
+        and "thinking_level" not in thinking_config
+    ):
         thinking_config["thinking_budget"] = -1
 
     if budget_tokens is not None:
         thinking_config["thinking_budget"] = budget_tokens
+
+    summary = ir.get("summary")
+    if summary in ("auto", "concise", "detailed") or ir.get("include_thoughts") is True:
+        thinking_config["include_thoughts"] = True
+    elif summary == "none" or ir.get("include_thoughts") is False:
+        thinking_config["include_thoughts"] = False
 
     if thinking_config:
         result["thinking_config"] = thinking_config

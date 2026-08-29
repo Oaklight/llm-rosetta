@@ -134,6 +134,8 @@ class ReasoningConfig(TypedDict, total=False):
     mode: Literal["auto", "enabled", "disabled"]
     effort: ReasoningEffortLevel  # Reasoning effort level (normalised)
     budget_tokens: int  # Max tokens for reasoning — Anthropic/Google: budget_tokens
+    summary: str  # Reasoning summary mode ("auto", "concise", "detailed", "none")
+    include_thoughts: bool  # Explicit flag for Google/Gemini thought inclusion
 
 
 # ============================================================================

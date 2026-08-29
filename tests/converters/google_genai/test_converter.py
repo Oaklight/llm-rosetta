@@ -1238,3 +1238,22 @@ class TestGooglePromptBlockHandling:
         assert len(content) == 1
         assert content[0]["type"] == "refusal"
         assert content[0]["refusal"] == "I cannot help."
+
+    def test_to_rest_body_preserves_thinking_config(self):
+        """Test _to_rest_body lifts thinking_config to generationConfig.thinkingConfig."""
+        sdk_request = {
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "config": {
+                "temperature": 0.7,
+                "thinking_config": {
+                    "thinking_level": "high",
+                    "include_thoughts": True,
+                },
+            },
+        }
+        rest_body = self.converter._to_rest_body(sdk_request)
+        assert rest_body["generationConfig"]["temperature"] == 0.7
+        assert rest_body["generationConfig"]["thinkingConfig"] == {
+            "thinkingLevel": "high",
+            "includeThoughts": True,
+        }
