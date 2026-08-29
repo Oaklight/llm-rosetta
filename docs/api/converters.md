@@ -4,6 +4,24 @@ title: Converters
 
 # Converters API
 
+## Convenience Functions
+
+::: llm_rosetta.auto_detect.convert
+
+::: llm_rosetta.auto_detect.convert_response
+
+::: llm_rosetta.auto_detect.get_converter_for_provider
+
+## Conversion Context
+
+::: llm_rosetta.converters.base.context.ConversionContext
+
+::: llm_rosetta.converters.base.context.StreamContext
+
+## Conversion Pipeline
+
+::: llm_rosetta.pipeline.ConversionPipeline
+
 ## Chat / Completions Converters
 
 ::: llm_rosetta.converters.base.converter.BaseConverter
