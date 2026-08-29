@@ -1239,6 +1239,45 @@ class TestGooglePromptBlockHandling:
         assert content[0]["type"] == "refusal"
         assert content[0]["refusal"] == "I cannot help."
 
+    def test_rest_thinking_config_round_trip(self):
+        """REST generationConfig.thinkingConfig survives request round-trip (regression for #584)."""
+        rest_request = {
+            "contents": [{"role": "user", "parts": [{"text": "What is 2+2?"}]}],
+            "generationConfig": {
+                "thinkingConfig": {
+                    "thinkingLevel": "low",
+                    "includeThoughts": True,
+                }
+            },
+        }
+        ir = self.converter.request_from_provider(rest_request)
+        assert ir["reasoning"]["effort"] == "low"
+        assert ir["reasoning"]["include_thoughts"] is True
+        target, _ = self.converter.request_to_provider(ir)
+        config = target.get("config", {})
+        assert config["thinking_config"]["thinking_level"] == "low"
+        assert config["thinking_config"]["include_thoughts"] is True
+
+    def test_rest_thinking_config_not_lost_in_pipeline(self):
+        """Pipeline Google→Google preserves thinkingConfig from REST format (regression for #584)."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipeline = ConversionPipeline("google", "google")
+        rest_request = {
+            "contents": [{"role": "user", "parts": [{"text": "test"}]}],
+            "generationConfig": {
+                "thinkingConfig": {
+                    "thinkingLevel": "high",
+                    "includeThoughts": True,
+                }
+            },
+        }
+        target = pipeline.convert_request(rest_request)
+        gen_config = target.get("generationConfig", {})
+        assert "thinkingConfig" in gen_config
+        assert gen_config["thinkingConfig"]["thinkingLevel"] == "high"
+        assert gen_config["thinkingConfig"]["includeThoughts"] is True
+
     def test_to_rest_body_preserves_thinking_config(self):
         """Test _to_rest_body lifts thinking_config to generationConfig.thinkingConfig."""
         sdk_request = {
