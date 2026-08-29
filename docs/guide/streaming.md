@@ -9,6 +9,22 @@ title: 流式处理
 
 LLM-Rosetta 支持在提供商之间转换流式数据块。有状态的 `StreamContext` 在数据块序列中追踪会话元数据、工具调用和延迟事件。
 
+```mermaid
+sequenceDiagram
+    participant 提供商 A as Provider A
+    participant 源转换器 as Source Converter
+    participant IR 事件 as IR Events
+    participant 目标转换器 as Target Converter
+    participant 提供商 B as Provider B
+
+    提供商 A->>源转换器: SSE chunks
+    源转换器->>IR 事件: stream_response_from_provider()
+    Note over IR 事件: TextDeltaEvent, ToolCallStartEvent,<br/>FinishEvent, UsageEvent, ...
+    IR 事件->>目标转换器: IR stream events
+    目标转换器->>提供商 B: stream_response_to_provider()
+    Note over 源转换器,目标转换器: StreamContext 在整个序列中追踪状态
+```
+
 ## 流式事件
 
 流式处理产生一系列 `IRStreamEvent` 类型：

@@ -200,6 +200,38 @@ Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inline
 
 有关所有 camelCase/snake_case 字段对及其他在实际测试中发现的真实兼容性问题的完整列表，请参阅[提供商与 CLI 兼容性矩阵](compatibility.md)。
 
+## 警告与错误处理
+
+生成输出的转换方法以 `list[str]` 形式返回警告——要么作为元组的第二个元素（`request_to_provider`、`messages_to_provider`），要么通过 `ConversionContext.warnings`。
+
+```python
+anthropic_request, warnings = anthropic_conv.request_to_provider(ir_request)
+
+for w in warnings:
+    print(f"⚠ {w}")
+# ⚠ Anthropic does not support max_tool_calls, ignored
+# ⚠ Extension item ignored: openai:web_search_call
+```
+
+警告是**信息性的，不是错误**——转换始终会完成。常见警告场景：
+
+| 警告 | 含义 |
+|------|------|
+| `"X does not support Y, ignored"` | 源格式中的某个特性在目标格式中没有对应项，已被丢弃 |
+| `"Extension item ignored: ..."` | Open Responses 扩展项没有可移植的 IR 表示 |
+| `"Tool chain converted to sequential calls"` | 提供商的链式工具调用模式被展平为顺序调用 |
+| `"Skipped image in tool result packing: ..."` | 工具结果中的图像无法转换 |
+
+要从 `request_from_provider` 或 `response_from_provider`（不返回元组）中捕获警告，传入 `ConversionContext`：
+
+```python
+from llm_rosetta.converters.base import ConversionContext
+
+ctx = ConversionContext()
+ir_request = openai_conv.request_from_provider(openai_request, context=ctx)
+print(ctx.warnings)  # list[str]
+```
+
 ## 另请参阅
 
 - [流式处理](streaming.md) — 使用 `StreamContext` 转换流式数据块
