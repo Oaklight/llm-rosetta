@@ -6,10 +6,16 @@ title: 网关
 
 LLM-Rosetta 网关是一个 HTTP 代理服务，可以实时在 LLM 提供商 API 格式之间进行转换。发送任意支持格式的请求，网关会自动转换并转发到配置的上游提供商。
 
-```text
-客户端 (OpenAI 格式) ──→ 网关 ──→ Anthropic API
-客户端 (Anthropic 格式) ──→ 网关 ──→ OpenAI API
-客户端 (Google 格式) ──→ 网关 ──→ 任意提供商
+```mermaid
+graph LR
+    C1["客户端<br/><small>OpenAI 格式</small>"] --> GW["网关"]
+    C2["客户端<br/><small>Anthropic 格式</small>"] --> GW
+    C3["客户端<br/><small>Google 格式</small>"] --> GW
+    GW --> U1["Anthropic API"]
+    GW --> U2["OpenAI API"]
+    GW --> U3["任意提供商"]
+
+    style GW fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
 初次使用？从[网关快速开始](../getting-started/gateway-quickstart.md)入手。
@@ -63,15 +69,21 @@ curl http://localhost:8765/v1/chat/completions \
 
 网关使用 LLM-Rosetta 的转换器管道：
 
-```text
-1. 接收请求（来源格式）
-2. source_converter.request_from_provider() → IR 请求
-3. 查找模型 → 目标提供商
-4. target_converter.request_to_provider() → 目标格式
-5. 转发到上游 API
-6. target_converter.response_from_provider() → IR 响应
-7. source_converter.response_to_provider() → 来源格式
-8. 返回客户端
+```mermaid
+sequenceDiagram
+    participant 客户端 as Client
+    participant 网关 as Gateway
+    participant 上游 as Upstream
+
+    客户端->>网关: 请求（来源格式）
+    网关->>网关: source_converter.request_from_provider() → IR
+    网关->>网关: 查找模型 → 目标提供商
+    网关->>网关: target_converter.request_to_provider() → 目标格式
+    网关->>上游: 转发请求
+    上游-->>网关: 响应（目标格式）
+    网关->>网关: target_converter.response_from_provider() → IR
+    网关->>网关: source_converter.response_to_provider() → 来源格式
+    网关-->>客户端: 响应（来源格式）
 ```
 
 对于流式传输，同样的管道在 SSE 数据块级别运行，使用 `stream_response_from_provider()` 和 `stream_response_to_provider()` 配合 `StreamContext` 进行有状态转换。

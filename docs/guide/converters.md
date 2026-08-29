@@ -199,3 +199,10 @@ items = fix_orphaned_tool_calls(items)
 Google 的 REST API 和 CLI 工具（如 Gemini CLI）使用 camelCase（`inlineData`、`mimeType`、`functionCall`、`functionResponse`、`functionDeclarations`、`responseMimeType`、`thinkingConfig` 等），而 Python SDK 使用 snake_case。LLM-Rosetta 的 Google 转换器在所有层级（内容、工具、配置和响应字段）透明地接受两种命名约定。所有 IR→Provider 输出使用 camelCase 以兼容 REST API。
 
 有关所有 camelCase/snake_case 字段对及其他在实际测试中发现的真实兼容性问题的完整列表，请参阅[提供商与 CLI 兼容性矩阵](compatibility.md)。
+
+## 另请参阅
+
+- [流式处理](streaming.md) — 使用 `StreamContext` 转换流式数据块
+- [多轮状态桥接](turn-bridge.md) — 跨 HTTP 轮次保留提供商元数据
+- [提供商 Shim](shims.md) — 提供商如何声明字段级转换
+- [IR 类型](ir-types.md) — 中间表示类型定义

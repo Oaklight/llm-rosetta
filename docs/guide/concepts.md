@@ -12,9 +12,14 @@ title: 核心概念
 
 LLM-Rosetta 引入中央**中间表示（IR）**作为枢纽。每个提供商只需一个与 IR 之间的转换器，总数降为 2×N（4 个提供商仅需 8 个）。
 
-```text
-提供商 A ←→ IR ←→ 提供商 B
-提供商 C ←→ IR ←→ 提供商 D
+```mermaid
+graph LR
+    A["OpenAI Chat<br/><small>openai_chat</small>"] <--> IR["IR<br/><small>Hub</small>"]
+    B["OpenAI Responses<br/><small>openai_responses</small>"] <--> IR
+    C["Anthropic<br/><small>anthropic</small>"] <--> IR
+    D["Google GenAI<br/><small>google</small>"] <--> IR
+
+    style IR fill:#f9a825,stroke:#f57f17,color:#000
 ```
 
 ## 转换器架构
