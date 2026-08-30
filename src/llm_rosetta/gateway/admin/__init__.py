@@ -71,6 +71,7 @@ def setup_admin(
     disabled_tabs: list[str] | None = None,
     custom_head: str | None = None,
     branding: dict[str, Any] | None = None,
+    data_dir: str | None = None,
 ) -> None:
     """Initialize admin panel state on the app.
 
@@ -121,13 +122,17 @@ def setup_admin(
         config_io = JsoncConfigIO()
     metrics = MetricsCollector()
 
-    # Set up SQLite persistence alongside the config file
+    # Set up SQLite persistence — explicit data_dir > config field > config-path default
     persistence: PersistenceManager | None = None
-    if config_path:
-        data_dir = os.path.join(os.path.dirname(config_path), "data")
+    resolved_data_dir = (
+        data_dir
+        or getattr(config, "data_dir", None)
+        or (os.path.join(os.path.dirname(config_path), "data") if config_path else None)
+    )
+    if resolved_data_dir:
         success_max, error_max = _resolve_log_caps(config)
         persistence = PersistenceManager(
-            data_dir, success_max=success_max, error_max=error_max
+            resolved_data_dir, success_max=success_max, error_max=error_max
         )
 
         # Restore persisted metrics counters

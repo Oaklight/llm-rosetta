@@ -873,6 +873,7 @@ def create_app(
             disabled_tabs=ext.disabled_tabs,
             custom_head=ext.custom_head,
             branding=ext.branding,
+            data_dir=config.data_dir,
         )
 
     return app
