@@ -250,6 +250,17 @@ def _cmd_set_password(args: argparse.Namespace) -> None:
 _KNOWN_PROVIDERS = known_provider_types()
 
 
+def _resolve_data_dir(config_path: str, args: argparse.Namespace) -> str:
+    """Resolve the data directory from CLI flag, config file, or default."""
+    if getattr(args, "data_dir", None):
+        return args.data_dir
+    raw = load_config(config_path)
+    configured = raw.get("server", {}).get("data_dir")
+    if configured:
+        return configured
+    return os.path.join(os.path.dirname(config_path), "data")
+
+
 def _cmd_db_cleanup(args: argparse.Namespace) -> None:
     """Run age-based database cleanup."""
     from llm_rosetta.observability import PersistenceManager
@@ -259,7 +270,7 @@ def _cmd_db_cleanup(args: argparse.Namespace) -> None:
         print("No config file found. Use --config to specify one.", file=sys.stderr)
         sys.exit(1)
 
-    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    data_dir = _resolve_data_dir(config_path, args)
     db_path = os.path.join(data_dir, "gateway.db")
     if not os.path.exists(db_path):
         print(f"Database not found: {db_path}", file=sys.stderr)
@@ -298,7 +309,7 @@ def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
         print("No config file found. Use --config to specify one.", file=sys.stderr)
         sys.exit(1)
 
-    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    data_dir = _resolve_data_dir(config_path, args)
     db_path = os.path.join(data_dir, "gateway.db")
     if not os.path.exists(db_path):
         print(f"Database not found: {db_path}", file=sys.stderr)
@@ -331,7 +342,7 @@ def _cmd_db_cleanup_errors(args: argparse.Namespace) -> None:
         print("No config file found. Use --config to specify one.", file=sys.stderr)
         sys.exit(1)
 
-    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    data_dir = _resolve_data_dir(config_path, args)
     db_path = os.path.join(data_dir, "gateway.db")
     if not os.path.exists(db_path):
         print(f"Database not found: {db_path}", file=sys.stderr)
@@ -368,7 +379,7 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
         print("No config file found. Use --config to specify one.", file=sys.stderr)
         sys.exit(1)
 
-    data_dir = os.path.join(os.path.dirname(config_path), "data")
+    data_dir = _resolve_data_dir(config_path, args)
     db_path = os.path.join(data_dir, "gateway.db")
     if not os.path.exists(db_path):
         print(f"Database not found: {db_path}", file=sys.stderr)
@@ -462,6 +473,11 @@ def main() -> None:
         help="HTTP/SOCKS proxy URL for upstream requests (overrides config)",
     )
     parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Directory for gateway.db and other persistent data (overrides config)",
+    )
+    parser.add_argument(
         "--verbose",
         "-v",
         action="store_true",
@@ -510,6 +526,11 @@ def main() -> None:
 
     # ``db`` subcommands
     db_parser = sub.add_parser("db", help="Database maintenance commands")
+    db_parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Directory containing gateway.db (overrides config)",
+    )
     db_sub = db_parser.add_subparsers(dest="db_type")
     cleanup_parser = db_sub.add_parser(
         "cleanup", help="Delete all records older than max-age-days and vacuum"
@@ -583,6 +604,8 @@ def main() -> None:
     # CLI --proxy overrides config-level server.proxy
     if args.proxy:
         raw_config.setdefault("server", {})["proxy"] = args.proxy
+    if args.data_dir:
+        raw_config.setdefault("server", {})["data_dir"] = args.data_dir
 
     config = GatewayConfig(raw_config)
 
