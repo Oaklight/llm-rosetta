@@ -44,6 +44,9 @@ EffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
 #: How the provider expects ``thinking.type`` to be serialised.
 ThinkingType = Literal["enabled", "adaptive"]
 
+#: Tool search capability mode.
+ToolSearchMode = Literal["disabled", "native", "bridge"]
+
 #: How outbound unsigned reasoning blocks are handled.
 UnsignedReasoningBlocks = Literal["as_is", "preserve"]
 
@@ -136,6 +139,10 @@ class ProviderShim:
             (default) defers to the converter's class-level flag.
             ``True`` forces native multimodal pass-through; ``False``
             forces dual-encoding (text fallback + synthetic user message).
+        tool_search_mode: How tool_search is handled.  ``"disabled"`` (default)
+            drops tool_search items.  ``"native"`` passes through the provider's
+            native protocol.  ``"bridge"`` emulates via BM25 search over request
+            tool schemas.
     """
 
     name: str
@@ -153,6 +160,7 @@ class ProviderShim:
     supports_custom_tools: bool = False
     hoist_system_messages: bool = True
     multimodal_tool_result: bool | None = None
+    tool_search_mode: ToolSearchMode = "disabled"
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -201,6 +209,7 @@ class ProviderShim:
             "supports_custom_tools": False,
             "hoist_system_messages": True,
             "multimodal_tool_result": None,
+            "tool_search_mode": "disabled",
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

@@ -203,6 +203,7 @@ def _load_single_provider(
         response_id_prefix=cfg.get("response_id_prefix", ""),
         supports_custom_tools=cfg.get("supports_custom_tools", False),
         multimodal_tool_result=cfg.get("multimodal_tool_result"),
+        tool_search_mode=cfg.get("tool_search_mode", "disabled"),
     )
     register_shim(shim)
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)

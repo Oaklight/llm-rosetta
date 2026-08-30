@@ -17,3 +17,4 @@ reasoning:
     max: high
 
 supports_custom_tools: true
+tool_search_mode: native
