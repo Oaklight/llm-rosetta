@@ -232,3 +232,87 @@ class TestStreamContextFromBase:
         derived = OpenAIResponsesStreamContext.from_base(base)
         derived.register_tool_call("call_1", "fn_a")
         assert derived._tool_call_order == ["call_1"]
+
+
+# ---------------------------------------------------------------------------
+# Multi-choice (n>1) dedup
+# ---------------------------------------------------------------------------
+
+
+class TestMultiChoiceFinishDedup:
+    """With n>1, each choice finishes independently — no cross-contamination."""
+
+    @staticmethod
+    def _make_multi_choice_chunks():
+        base = {
+            "id": "chatcmpl-multi",
+            "object": "chat.completion.chunk",
+            "model": "gpt-4",
+            "created": 1700000000,
+        }
+        return [
+            # Both choices start with text
+            {
+                **base,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": "A"},
+                        "finish_reason": None,
+                    },
+                    {
+                        "index": 1,
+                        "delta": {"role": "assistant", "content": "B"},
+                        "finish_reason": None,
+                    },
+                ],
+            },
+            # Choice 0 finishes first
+            {
+                **base,
+                "choices": [
+                    {"index": 0, "delta": {}, "finish_reason": "stop"},
+                ],
+            },
+            # Choice 1 finishes
+            {
+                **base,
+                "choices": [
+                    {"index": 1, "delta": {}, "finish_reason": "stop"},
+                ],
+            },
+            # Repeated finish on BOTH choices with late usage
+            {
+                **base,
+                "choices": [
+                    {"index": 0, "delta": {}, "finish_reason": "stop"},
+                    {"index": 1, "delta": {}, "finish_reason": "stop"},
+                ],
+                "usage": {
+                    "prompt_tokens": 10,
+                    "completion_tokens": 4,
+                    "total_tokens": 14,
+                },
+            },
+        ]
+
+    def test_each_choice_finishes_exactly_once(self):
+        ir_events, _ = _collect_ir(self._make_multi_choice_chunks())
+        finish_events = [e for e in ir_events if e.get("type") == "finish"]
+        assert len(finish_events) == 2
+
+    def test_choice_indexes_tracked(self):
+        _, ctx = _collect_ir(self._make_multi_choice_chunks())
+        assert ctx.is_choice_finished(0)
+        assert ctx.is_choice_finished(1)
+
+    def test_usage_still_captured(self):
+        ir_events, _ = _collect_ir(self._make_multi_choice_chunks())
+        usage_events = [e for e in ir_events if e.get("type") == "usage"]
+        assert len(usage_events) == 1
+        assert usage_events[0]["usage"]["total_tokens"] == 14
+
+    def test_stream_end_emitted_once(self):
+        ir_events, _ = _collect_ir(self._make_multi_choice_chunks())
+        end_events = [e for e in ir_events if e.get("type") == "stream_end"]
+        assert len(end_events) == 1
