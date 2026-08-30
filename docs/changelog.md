@@ -8,19 +8,25 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.11.2 — 2026-08-30
+
 ### Added
 
+- **Native `tool_search` passthrough** (PR [#593](https://github.com/Oaklight/llm-rosetta/pull/593)): vendor `sparse_search`, add `tool_search_mode` to shim schema, and support native `tool_search` passthrough in both streaming and non-streaming Responses API paths.
 - **Provider connectivity test** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): new `POST /admin/api/config/providers/<name>/test-connectivity` endpoint probes a provider's base URL and each configured endpoint (models, embedding, rerank) for reachability. Shows raw and normalized URLs to help diagnose double-prefix issues. "Test" button added to provider cards in the admin UI.
 - **`.well-known/change-password` redirect** (PR [#579](https://github.com/Oaklight/llm-rosetta/pull/579)): `GET /.well-known/change-password` returns a 302 redirect to `/admin#change-password`, auto-opening the settings panel. Enables browser and password manager integration per the [web standard](https://web.dev/articles/change-password-url).
 
 ### Fixed
 
+- **Duplicate chat finish events** (PR [#592](https://github.com/Oaklight/llm-rosetta/pull/592)): deduplicate `finish_reason` when upstream repeats it on the same choice index (e.g. OpenAI with `stream_options.include_usage`). Adds per-choice finish tracking to `StreamContext`. Fixes [#589](https://github.com/Oaklight/llm-rosetta/issues/589).
 - **Embedding route `upstream_model` remapping** (PR [#586](https://github.com/Oaklight/llm-rosetta/pull/586)): the embedding-specific route now applies `upstream_model` name remapping from `model_upstream_names`, matching the chat fallback route. Previously model aliases (e.g. `argo:text-embedding-3-small` → `v3small`) were ignored, causing upstream 404s.
 - **Double version prefix in embedding/rerank URLs** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): `ProviderInfo` now auto-detects when `base_url` ends with a version segment (e.g. `/v1`) that would duplicate the `url_template` path start, and strips it. Fixes `base_url: "https://api.openai.com/v1"` + `embedding_path: "/v1/embeddings"` producing `/v1/v1/embeddings`.
+- **Logo icon centering** (commit [f4c89e3](https://github.com/Oaklight/llm-rosetta/commit/f4c89e3)): center stone silhouette in icon SVGs, switch to transparent background with `prefers-color-scheme` media query for automatic dark/light theme adaptation.
 
 ### Changed
 
 - **Unified endpoint URL construction** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): embedding and rerank handlers now use `ProviderInfo.upstream_url()` (template-based) instead of ad hoc f-string concatenation, matching the chat path architecture.
+- **Vendor updates** (PR [#594](https://github.com/Oaklight/llm-rosetta/pull/594)): httpclient 0.4.5→0.4.6, sse 0.3.2→0.3.3.
 
 ## v0.11.1 — 2026-08-29
 
