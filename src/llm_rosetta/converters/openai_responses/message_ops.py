@@ -423,14 +423,14 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     current_message = None
                 ir_input.append(self._make_system_event(item))
 
-            elif item_type in self._PASSTHROUGH_INPUT_TYPES or (
-                isinstance(item_type, str) and ":" in item_type
-            ):
+            elif self._is_passthrough_item_type(item_type):
                 current_message = self._handle_p_extension_item(
                     item, current_message, ir_input
                 )
 
-        if current_message and current_message.get("content"):
+        if current_message and (
+            current_message.get("content") or current_message.get("metadata")
+        ):
             ir_input.append(current_message)
 
         return ir_input
@@ -444,6 +444,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             "timestamp": item.get("timestamp", ""),
             "message": item.get("message", ""),
         }
+
+    @classmethod
+    def _is_passthrough_item_type(cls, item_type: Any) -> bool:
+        """Check if an item type should be handled as passthrough."""
+        if item_type in cls._PASSTHROUGH_INPUT_TYPES:
+            return True
+        return isinstance(item_type, str) and ":" in item_type
 
     @staticmethod
     def _handle_p_extension_item(
