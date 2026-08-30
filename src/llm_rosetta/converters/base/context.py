@@ -137,6 +137,7 @@ class StreamContext(ConversionContext):
     # Lifecycle flags
     _started: bool = field(default=False, repr=False)
     _ended: bool = field(default=False, repr=False)
+    _finished_choice_indexes: set[int] = field(default_factory=set, repr=False)
 
     # Tool call accumulation for streaming
     _tool_call_args: dict[str, str] = field(default_factory=dict, repr=False)
@@ -311,6 +312,24 @@ class StreamContext(ConversionContext):
     def mark_ended(self) -> None:
         """Mark the stream as ended."""
         self._ended = True
+
+    def mark_choice_finished(self, choice_index: int) -> bool:
+        """Record the first finish for a choice.
+
+        Args:
+            choice_index: Provider choice index.
+
+        Returns:
+            ``True`` only when this is the first finish for the choice.
+        """
+        if choice_index in self._finished_choice_indexes:
+            return False
+        self._finished_choice_indexes.add(choice_index)
+        return True
+
+    def is_choice_finished(self, choice_index: int) -> bool:
+        """Return whether a choice has already emitted its first finish."""
+        return choice_index in self._finished_choice_indexes
 
     @property
     def is_started(self) -> bool:
