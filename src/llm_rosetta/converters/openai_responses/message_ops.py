@@ -344,6 +344,10 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         }
     )
 
+    _PASSTHROUGH_INPUT_TYPES = frozenset(
+        {"tool_search_call", "tool_search_output", "additional_tools"}
+    )
+
     _TOOL_RESULT_TYPES = frozenset(
         {"function_call_output", "custom_tool_call_output", "mcp_call_output"}
     )
@@ -362,7 +366,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
             item_type in {"message", "reasoning"} or item_type in cls._TOOL_CALL_TYPES
         )
 
-    def p_messages_to_ir(
+    def p_messages_to_ir(  # noqa: C901
         self,
         provider_messages: list[Any],
         **kwargs: Any,
@@ -419,7 +423,9 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     current_message = None
                 ir_input.append(self._make_system_event(item))
 
-            elif isinstance(item_type, str) and ":" in item_type:
+            elif item_type in self._PASSTHROUGH_INPUT_TYPES or (
+                isinstance(item_type, str) and ":" in item_type
+            ):
                 current_message = self._handle_p_extension_item(
                     item, current_message, ir_input
                 )

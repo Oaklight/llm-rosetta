@@ -20,7 +20,7 @@ from ...types.ir import (
     is_reasoning_part,
     is_refusal_part,
 )
-from ...types.ir.passthrough import ProviderPassthroughItem
+from ...types.ir.passthrough import ProviderPassthroughEvent, ProviderPassthroughItem
 from ...types.ir.request import IRRequest
 from ...types.ir.response import IRResponse, UsageInfo
 from ...types.ir.stream import (
@@ -853,6 +853,15 @@ class OpenAIResponsesConverter(BaseConverter):
                 if phase and context is not None:
                     context.metadata["_responses_phase"] = phase
 
+            elif item_type in ("tool_search_call", "tool_search_output"):
+                events.append(
+                    ProviderPassthroughEvent(
+                        type="provider_passthrough",
+                        provider=self._CONVERTER_TAG,
+                        payload=dict(chunk),
+                    )
+                )
+
     def _handle_p_content_part_added_to_ir(
         self,
         chunk: dict[str, Any],
@@ -936,6 +945,14 @@ class OpenAIResponsesConverter(BaseConverter):
                         "responses_reasoning_id": item_id,
                     }
                 events.append(event)
+        elif item_type in ("tool_search_call", "tool_search_output"):
+            events.append(
+                ProviderPassthroughEvent(
+                    type="provider_passthrough",
+                    provider=self._CONVERTER_TAG,
+                    payload=dict(chunk),
+                )
+            )
 
     def _handle_p_function_call_args_delta_to_ir(
         self,
