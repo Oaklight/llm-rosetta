@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.2"
+# version = "0.3.3"
 # deps = ["httpclient"]
 # tier = "subsystem"
 # category = "network"
@@ -78,17 +78,18 @@ __all__ = [
 
 
 def _ensure_sibling_path(name: str) -> str:
-    """Return the sibling module directory and prepend it to ``sys.path``."""
-    sibling_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", name)
-    if sibling_dir not in sys.path:
-        sys.path.insert(0, sibling_dir)
-    return sibling_dir
+    """Add sibling module paths to ``sys.path`` for flat and nested layouts."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    for candidate in [base, os.path.normpath(os.path.join(base, "..", name))]:
+        if candidate not in sys.path:
+            sys.path.insert(0, candidate)
+    return base
 
 
 # ── Sibling httpclient import (guarded) ──
 
 try:
-    _httpclient_dir = _ensure_sibling_path("httpclient")
+    _ensure_sibling_path("httpclient")
     from httpclient import HttpConnectionError as _HttpConnectionError
     from httpclient import HttpTimeoutError as _HttpTimeoutError
     from httpclient import async_get as _http_async_get
