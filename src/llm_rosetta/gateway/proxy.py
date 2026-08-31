@@ -395,7 +395,7 @@ async def handle_non_streaming(
             error_phase="upstream",
             upstream_url=str(provider_info.base_url),
         )
-        if capture_state is not None and capture_state.should_capture():
+        if capture_state is not None:
             capture_state.record(
                 CapturedRequest(
                     original_request=body,
@@ -438,7 +438,7 @@ async def handle_non_streaming(
             error_phase="upstream",
             upstream_url=str(provider_info.base_url),
         )
-        if capture_state is not None and capture_state.should_capture():
+        if capture_state is not None:
             capture_state.record(
                 CapturedRequest(
                     original_request=body,
@@ -491,7 +491,7 @@ async def handle_non_streaming(
     profile.update(pipeline.profile)
 
     # Content capture (non-streaming): record all three stages
-    if capture_state is not None and capture_state.should_capture():
+    if capture_state is not None:
         capture_state.record(
             CapturedRequest(
                 original_request=body,
@@ -948,7 +948,7 @@ async def handle_streaming(
     # The generator will fill in upstream_response and status_code
     # after the stream completes.
     _capture_record: CapturedRequest | None = None
-    if capture_state is not None and capture_state.should_capture():
+    if capture_state is not None and capture_state.enabled:
         _capture_record = CapturedRequest(
             original_request=body,
             converted_body=target_body,

@@ -58,10 +58,10 @@ class CapturedRequest:
 class CaptureState:
     """In-memory content capture controller.
 
-    Thread-safe.  Call :meth:`should_capture` from the request path to
-    atomically claim a capture slot; if it returns ``True``, the caller
-    must later call :meth:`record` with the populated
-    :class:`CapturedRequest`.
+    Thread-safe.  :meth:`record` internally gates on the enabled state
+    and atomically claims a capture slot, so callers never need to
+    pre-check — simply call ``record()`` and it will no-op when capture
+    is disabled or all slots have been consumed.
     """
 
     MAX_RESULTS = 20
@@ -88,20 +88,31 @@ class CaptureState:
 
     # -- Request path -------------------------------------------------------
 
-    def should_capture(self) -> bool:
-        """Atomically claim a capture slot.  Returns True if this
-        request should be captured."""
+    @property
+    def enabled(self) -> bool:
+        """Read-only flag indicating whether capture is active.
+
+        Useful as a performance hint to skip expensive record
+        construction (e.g. in the streaming path).  Not required for
+        correctness — ``record()`` is always safe to call.
+        """
+        return self._enabled
+
+    def record(self, captured: CapturedRequest) -> None:
+        """Atomically claim a slot and store *captured*.
+
+        No-op when capture is disabled or all slots have been consumed,
+        so callers never need to gate externally.
+        """
         with self._lock:
-            if not self._enabled or self._remaining <= 0:
-                return False
+            if not self._enabled:
+                return
+            if self._remaining <= 0:
+                self._enabled = False
+                return
             self._remaining -= 1
             if self._remaining <= 0:
                 self._enabled = False
-            return True
-
-    def record(self, captured: CapturedRequest) -> None:
-        """Store a completed capture."""
-        with self._lock:
             self._results.append(captured)
             if len(self._results) > self.MAX_RESULTS:
                 self._results = self._results[-self.MAX_RESULTS :]
