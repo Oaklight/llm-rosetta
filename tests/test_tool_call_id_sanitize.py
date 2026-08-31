@@ -170,3 +170,34 @@ class TestSanitizationInConverters:
             }
         )
         assert call_result["id"] == result_result["tool_call_id"]
+
+    def test_google_genai_tool_call_sanitized(self):
+        from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+
+        ir_tool_call = {
+            "type": "tool_call",
+            "tool_call_id": "bad\nid_with_newline",
+            "tool_name": "test_fn",
+            "tool_input": {"x": 1},
+            "tool_type": "function",
+        }
+        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tool_call)
+        fc = result.get("functionCall", {})
+        assert "\n" not in fc.get("id", "")
+        assert re.match(r"^[a-zA-Z0-9_-]+$", fc["id"])
+
+    def test_openai_responses_tool_call_sanitized(self):
+        from llm_rosetta.converters.openai_responses.tool_ops import (
+            OpenAIResponsesToolOps,
+        )
+
+        ir_tool_call = {
+            "type": "tool_call",
+            "tool_call_id": "bad\nid_with_newline",
+            "tool_name": "test_fn",
+            "tool_input": {"x": 1},
+            "tool_type": "function",
+        }
+        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tool_call)
+        assert "\n" not in result.get("call_id", "")
+        assert re.match(r"^[a-zA-Z0-9_-]+$", result["call_id"])

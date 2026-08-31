@@ -48,7 +48,7 @@ def sanitize_tool_call_id(
         conforms.
     """
     if not raw_id:
-        return raw_id
+        return raw_id or ""
 
     sanitized = _INVALID_CHARS.sub("_", raw_id)
 
