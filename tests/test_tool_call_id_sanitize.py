@@ -116,8 +116,7 @@ class TestSanitizationInConverters:
         ir_tool_result = {
             "type": "tool_result",
             "tool_call_id": "bad\nid",
-            "tool_name": "test_fn",
-            "content": "ok",
+            "result": "ok",
         }
         result = OpenAIChatToolOps.ir_tool_result_to_p(ir_tool_result)
         assert "\n" not in result["tool_call_id"]
@@ -131,7 +130,7 @@ class TestSanitizationInConverters:
             "tool_name": "test_fn",
             "tool_input": {"x": 1},
             "tool_type": "function",
-        }
+        }  # type: ignore[typeddict-item]
         result = AnthropicToolOps.ir_tool_call_to_p(ir_tool_call)
         assert len(result["id"]) <= 64
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
@@ -142,8 +141,7 @@ class TestSanitizationInConverters:
         ir_tool_result = {
             "type": "tool_result",
             "tool_call_id": "has spaces and.dots",
-            "tool_name": "test_fn",
-            "content": [{"type": "text", "text": "ok"}],
+            "result": [{"type": "text", "text": "ok"}],
         }
         result = AnthropicToolOps.ir_tool_result_to_p(ir_tool_result)
         assert result["tool_use_id"] == "has_spaces_and_dots"
