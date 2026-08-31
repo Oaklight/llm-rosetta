@@ -642,6 +642,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             output = str(result_content)
 
+        # Sanitize here to match the ID registered by ir_tool_call_to_p / streaming start.
+        # Non-streaming ctx may be None (falls back to "function"), which is correct.
         call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
         ctx = kwargs.get("context")
         tool_type = ctx.get_tool_type(call_id) if ctx is not None else "function"
