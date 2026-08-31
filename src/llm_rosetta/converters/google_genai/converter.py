@@ -44,7 +44,11 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ..base.helpers import (
+    fix_orphaned_tool_calls_ir,
+    sanitize_tool_call_id,
+    strip_orphaned_tool_config,
+)
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
@@ -1098,7 +1102,7 @@ class GoogleGenAIConverter(BaseConverter):
                     args = {}
                 fc: dict[str, Any] = {"name": tool_name, "args": args}
                 if call_id:
-                    fc["id"] = call_id
+                    fc["id"] = sanitize_tool_call_id(call_id)
                 parts.append({"functionCall": fc})
 
         finish_chunk: dict[str, Any] = {

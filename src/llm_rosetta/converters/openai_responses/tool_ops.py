@@ -28,7 +28,12 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import extract_part_ids, log_orphan_warnings, sanitize_schema
+from ..base.helpers import (
+    extract_part_ids,
+    log_orphan_warnings,
+    sanitize_schema,
+    sanitize_tool_call_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -426,7 +431,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
             OpenAI Responses tool call item dict.
         """
         tool_type = ir_tool_call.get("tool_type", "function")
-        tool_call_id = ir_tool_call.get("tool_call_id", ir_tool_call.get("id", ""))
+        tool_call_id = sanitize_tool_call_id(
+            ir_tool_call.get("tool_call_id", ir_tool_call.get("id", ""))
+        )
         tool_name = ir_tool_call.get("tool_name", ir_tool_call.get("name", ""))
         tool_input = ir_tool_call.get("tool_input", ir_tool_call.get("arguments", {}))
 
@@ -635,7 +642,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             output = str(result_content)
 
-        call_id = ir_tool_result["tool_call_id"]
+        call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
         ctx = kwargs.get("context")
         tool_type = ctx.get_tool_type(call_id) if ctx is not None else "function"
 

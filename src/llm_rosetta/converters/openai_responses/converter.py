@@ -39,7 +39,11 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ..base.helpers import (
+    fix_orphaned_tool_calls_ir,
+    sanitize_tool_call_id,
+    strip_orphaned_tool_config,
+)
 from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
@@ -1464,7 +1468,7 @@ class OpenAIResponsesConverter(BaseConverter):
         event: ToolCallStartEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
-        call_id = event["tool_call_id"]
+        call_id = sanitize_tool_call_id(event["tool_call_id"])
         tool_name = event["tool_name"]
         tool_type = event.get("tool_type", "function")
         pm = event.get("provider_metadata") or {}
@@ -1513,7 +1517,7 @@ class OpenAIResponsesConverter(BaseConverter):
         event: ToolCallDeltaEvent,
         context: StreamContext | None,
     ) -> dict[str, Any]:
-        call_id = event["tool_call_id"]
+        call_id = sanitize_tool_call_id(event["tool_call_id"])
         delta = event["arguments_delta"]
         tc_index = event.get("tool_call_index")
 

@@ -35,7 +35,11 @@ from ...types.ir.stream import (
 )
 from ..base import BaseConverter
 from ..base.context import ConversionContext, StreamContext
-from ..base.helpers import fix_orphaned_tool_calls_ir, strip_orphaned_tool_config
+from ..base.helpers import (
+    fix_orphaned_tool_calls_ir,
+    sanitize_tool_call_id,
+    strip_orphaned_tool_config,
+)
 from ._constants import OPENAI_CHAT_REASON_FROM_PROVIDER, OPENAI_CHAT_REASON_TO_PROVIDER
 from .config_ops import OpenAIChatConfigOps
 from .content_ops import OpenAIChatContentOps
@@ -999,11 +1003,12 @@ class OpenAIChatConverter(BaseConverter):
         choice_index = event.get("choice_index", 0)
         tc_index = event.get("tool_call_index", 0)
         tool_type = event.get("tool_type", "function")
+        call_id = sanitize_tool_call_id(event["tool_call_id"])
 
         if tool_type == "custom":
             tc_entry: dict[str, Any] = {
                 "index": tc_index,
-                "id": event["tool_call_id"],
+                "id": call_id,
                 "type": "custom",
                 "custom": {
                     "name": event["tool_name"],
@@ -1013,7 +1018,7 @@ class OpenAIChatConverter(BaseConverter):
         else:
             tc_entry = {
                 "index": tc_index,
-                "id": event["tool_call_id"],
+                "id": call_id,
                 "type": "function",
                 "function": {
                     "name": event["tool_name"],
@@ -1022,9 +1027,7 @@ class OpenAIChatConverter(BaseConverter):
             }
 
         if context is not None:
-            context.register_tool_call(
-                event["tool_call_id"], event["tool_name"], tool_type
-            )
+            context.register_tool_call(call_id, event["tool_name"], tool_type)
 
         chunk = {
             "choices": [
