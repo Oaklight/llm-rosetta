@@ -55,6 +55,8 @@ def sanitize_tool_call_id(
     if len(sanitized) <= max_length:
         return sanitized
 
+    # Hash the sanitized form (not raw) — two raw IDs differing only in
+    # which invalid chars they use will collide, but this is acceptable.
     digest = hashlib.sha256(sanitized.encode()).hexdigest()[:_HASH_SUFFIX_LEN]
     truncated_len = max_length - _HASH_SUFFIX_LEN - 1  # 1 for separator
     return f"{sanitized[:truncated_len]}_{digest}"
