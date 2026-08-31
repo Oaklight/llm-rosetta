@@ -24,7 +24,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import log_orphan_warnings, sanitize_schema
+from ..base.helpers import log_orphan_warnings, sanitize_schema, sanitize_tool_call_id
 
 logger = logging.getLogger(__name__)
 
@@ -382,7 +382,7 @@ class OpenAIChatToolOps(BaseToolOps):
                     else str(tool_input)
                 )
             result: dict[str, Any] = {
-                "id": ir_tool_call["tool_call_id"],
+                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
                 "type": "custom",
                 "custom": {
                     "name": ir_tool_call["tool_name"],
@@ -397,7 +397,7 @@ class OpenAIChatToolOps(BaseToolOps):
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
         )
         result = {
-            "id": ir_tool_call["tool_call_id"],
+            "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
             "type": "function",
             "function": {
                 "name": ir_tool_call["tool_name"],
@@ -488,7 +488,7 @@ class OpenAIChatToolOps(BaseToolOps):
 
         return {
             "role": "tool",
-            "tool_call_id": ir_tool_result["tool_call_id"],
+            "tool_call_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
             "content": content,
         }
 

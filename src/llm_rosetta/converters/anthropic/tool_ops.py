@@ -33,6 +33,7 @@ from ..base.helpers import (
     extract_part_ids,
     log_orphan_warnings,
     sanitize_schema,
+    sanitize_tool_call_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -315,14 +316,14 @@ class AnthropicToolOps(BaseToolOps):
         if tool_type == "web_search":
             result = {
                 "type": "server_tool_use",
-                "id": ir_tool_call["tool_call_id"],
+                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
                 "name": "web_search",
                 "input": tool_input,
             }
         else:
             result = {
                 "type": "tool_use",
-                "id": ir_tool_call["tool_call_id"],
+                "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
                 "name": ir_tool_call["tool_name"],
                 "input": tool_input,
             }
@@ -404,7 +405,7 @@ class AnthropicToolOps(BaseToolOps):
         """
         result: dict[str, Any] = {
             "type": "tool_result",
-            "tool_use_id": ir_tool_result["tool_call_id"],
+            "tool_use_id": sanitize_tool_call_id(ir_tool_result["tool_call_id"]),
         }
 
         content = ir_tool_result.get("result", "")

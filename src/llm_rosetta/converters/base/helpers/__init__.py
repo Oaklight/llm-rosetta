@@ -11,6 +11,7 @@ Modules:
     reasoning       — Shim-driven reasoning configuration helpers.
     schema          — JSON Schema sanitization for provider compatibility.
     tool_call_unwind — Unwind parallel tool calls into sequential pairs.
+    tool_call_id    — Tool call ID sanitization for provider compatibility.
     tool_content    — Multimodal content block conversion inside tool results.
 """
 
@@ -25,6 +26,7 @@ from .tool_orphan_fix import (
     strip_orphaned_tool_config,
 )
 from .schema import convert_nullable_to_type_array, sanitize_schema
+from .tool_call_id import sanitize_tool_call_id
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .tool_call_unwind import unwind_parallel_tool_calls_ir
 from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
@@ -38,6 +40,7 @@ __all__ = [
     # schema
     "convert_nullable_to_type_array",
     "sanitize_schema",
+    "sanitize_tool_call_id",
     # reasoning
     "DEFAULT_REASONING_CAPS",
     "apply_reasoning_config",

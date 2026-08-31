@@ -25,7 +25,7 @@ from ...types.ir import (
 )
 from ...types.ir.tools import ToolCallConfig
 from ..base import BaseToolOps
-from ..base.helpers import sanitize_schema
+from ..base.helpers import sanitize_schema, sanitize_tool_call_id
 from ._constants import generate_tool_call_id
 
 
@@ -323,7 +323,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         }
         tool_call_id = ir_tool_call.get("tool_call_id")
         if tool_call_id:
-            func_call["id"] = tool_call_id
+            func_call["id"] = sanitize_tool_call_id(tool_call_id)
 
         part: dict[str, Any] = {"functionCall": func_call}
 
@@ -412,7 +412,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         }
         tool_call_id = ir_tool_result.get("tool_call_id")
         if tool_call_id:
-            func_response["id"] = tool_call_id
+            func_response["id"] = sanitize_tool_call_id(tool_call_id)
 
         return {"functionResponse": func_response}
 
@@ -468,7 +468,7 @@ class GoogleGenAIToolOps(BaseToolOps):
         }
         tool_call_id = ir_tool_result.get("tool_call_id")
         if tool_call_id:
-            func_response["id"] = tool_call_id
+            func_response["id"] = sanitize_tool_call_id(tool_call_id)
 
         return {"functionResponse": func_response}
 
