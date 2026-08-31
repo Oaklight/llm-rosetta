@@ -152,7 +152,7 @@ class TestSanitizationInConverters:
 
         raw_id = "call-bad\nid-0\nfc_other_0"
 
-        call_result = OpenAIChatToolOps.ir_tool_call_to_p(
+        call_result = OpenAIChatToolOps.ir_tool_call_to_p(  # type: ignore[arg-type]
             {
                 "type": "tool_call",
                 "tool_call_id": raw_id,
@@ -161,7 +161,7 @@ class TestSanitizationInConverters:
                 "tool_type": "function",
             }
         )
-        result_result = OpenAIChatToolOps.ir_tool_result_to_p(
+        result_result = OpenAIChatToolOps.ir_tool_result_to_p(  # type: ignore[arg-type]
             {
                 "type": "tool_result",
                 "tool_call_id": raw_id,
