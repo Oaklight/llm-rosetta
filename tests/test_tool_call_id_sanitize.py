@@ -130,7 +130,7 @@ class TestSanitizationInConverters:
             "tool_name": "test_fn",
             "tool_input": {"x": 1},
             "tool_type": "function",
-        }  # type: ignore[typeddict-item]  # ty: ignore[invalid-argument-type]
+        }
         result = AnthropicToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
         assert len(result["id"]) <= 64
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["id"])
@@ -152,7 +152,7 @@ class TestSanitizationInConverters:
 
         raw_id = "call-bad\nid-0\nfc_other_0"
 
-        call_result = OpenAIChatToolOps.ir_tool_call_to_p(  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        call_result = OpenAIChatToolOps.ir_tool_call_to_p(
             {
                 "type": "tool_call",
                 "tool_call_id": raw_id,
@@ -161,7 +161,7 @@ class TestSanitizationInConverters:
                 "tool_type": "function",
             }
         )
-        result_result = OpenAIChatToolOps.ir_tool_result_to_p(  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
+        result_result = OpenAIChatToolOps.ir_tool_result_to_p(
             {
                 "type": "tool_result",
                 "tool_call_id": raw_id,
