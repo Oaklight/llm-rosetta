@@ -32,7 +32,7 @@ function openSettings() {
   const ar = document.getElementById('settingsAutoRefresh');
   if (ar) ar.value = localStorage.getItem('dashboardRefreshMs') || '3000';
   const ed = document.getElementById('settingsErrorDumps');
-  if (ed) ed.checked = S.configData?.debug?.error_dumps !== false;
+  if (ed) { ed.checked = S.configData?.debug?.error_dumps !== false; ed.setAttribute('aria-checked', ed.checked); }
   // Sync log retention
   if (S.configData?.server?.request_log) {
     const sm = document.getElementById('settingsSuccessMax');
@@ -45,7 +45,7 @@ function openSettings() {
   // Sync rate limiting
   const rl = S.configData?.server?.rate_limit || {};
   const rlEn = document.getElementById('rlEnabled');
-  if (rlEn) { rlEn.checked = !!rl.enabled; onRlToggle(); }
+  if (rlEn) { rlEn.checked = !!rl.enabled; rlEn.setAttribute('aria-checked', rlEn.checked); onRlToggle(); }
   const rlAlgo = document.getElementById('rlAlgorithm');
   if (rlAlgo && rl.algorithm) rlAlgo.value = rl.algorithm;
   const rlG = document.getElementById('rlGlobal');
@@ -59,7 +59,7 @@ function openSettings() {
   _validateRlQuotas();
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
-  if (cv) cv.checked = S.configData?.server?.credential_visible !== false;
+  if (cv) { cv.checked = S.configData?.server?.credential_visible !== false; cv.setAttribute('aria-checked', cv.checked); }
   // Sync token
   _refreshTokenDisplay();
   // Sync rotate interval
