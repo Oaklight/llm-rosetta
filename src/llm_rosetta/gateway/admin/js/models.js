@@ -144,7 +144,7 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   document.getElementById('reasoningBudgetRatio').value = configOverride.budget_tokens_default_ratio != null ? configOverride.budget_tokens_default_ratio : '';
   document.getElementById('reasoningDisabled').value = configOverride.disabled || '';
 
-  document.getElementById('modelModal').classList.add('open');
+  openModal('modelModal');
 }
 
 function onModelTypeChange() {
@@ -321,7 +321,7 @@ function renderModels() {
       <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
-        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${modelType === 'embedding' ? 'embedding' : modelType === 'rerank' ? 'rerank' : 'text'}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
@@ -343,12 +343,12 @@ function renderModels() {
             `}
           </div>
         </div>
-        <button class="btn btn-sm" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
-          <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
+          <div style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" aria-label="${t('btn.clone')} ${esc(name)}" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
           <div style="border-top:1px solid var(--border);margin:2px 0"></div>
-          <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
+          <div style="padding:7px 14px;font-size:13px;cursor:pointer;color:var(--danger, #cf222e)" onmouseenter="this.style.background='#fff1f0'" onmouseleave="this.style.background=''" aria-label="${t('btn.delete')} ${esc(name)}" onclick="this.closest('.more-menu').style.display='none';deleteModel('${esc(name)}', this)">${t('btn.delete')}</div>
         </div>
       </td>
     </tr>`;

@@ -92,7 +92,8 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // Close popups/modals on Escape key
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    document.getElementById('settingsPopup').classList.remove('open');
+    const sp = document.getElementById('settingsPopup');
+    if (sp && sp.classList.contains('open')) closeModal('settingsPopup');
     const testModal = document.getElementById('testModal');
     if (testModal && testModal.classList.contains('open')) closeModal('testModal');
   }

@@ -70,7 +70,8 @@ function openSettings() {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('settingsPwError').textContent = '';
-  popup.classList.toggle('open');
+  if (popup.classList.contains('open')) { closeModal('settingsPopup'); }
+  else { openModal('settingsPopup'); }
 }
 
 async function saveSettingsField(field, value) {
@@ -185,7 +186,7 @@ function openCleanupConfirm(target) {
   document.getElementById('cleanupConfirmBtn').disabled = true;
   const btn = document.getElementById('cleanupConfirmBtn');
   btn.style.background = '#ccc'; btn.style.color = '#888'; btn.style.cursor = 'not-allowed';
-  document.getElementById('cleanupConfirmModal').classList.add('open');
+  openModal('cleanupConfirmModal');
   document.getElementById('cleanupConfirmInput').focus();
 }
 
@@ -226,7 +227,7 @@ async function onCleanupConfirmClick() {
 function openExportDumpsModal() {
   document.getElementById('exportStartDate').value = '';
   document.getElementById('exportEndDate').value = '';
-  document.getElementById('exportDumpsModal').classList.add('open');
+  openModal('exportDumpsModal');
 }
 
 async function doExportDumps() {

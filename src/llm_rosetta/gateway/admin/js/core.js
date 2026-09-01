@@ -128,9 +128,19 @@ function showToast(msg, type='success') {
 }
 
 // ===================== Modal =====================
+const _modalTriggers = new Map();
+
+function openModal(id) {
+  _modalTriggers.set(id, document.activeElement);
+  document.getElementById(id).classList.add('open');
+}
+
 function closeModal(id) {
   document.getElementById(id).classList.remove('open');
   if (id === 'testModal') window._abortPendingTest?.();
+  const trigger = _modalTriggers.get(id);
+  _modalTriggers.delete(id);
+  if (trigger && typeof trigger.focus === 'function') trigger.focus();
 }
 
 // ===================== Inline Confirm =====================
@@ -189,13 +199,13 @@ function fmtBytesShort(n) {
 // ===================== Window globals =====================
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
-  showToast, closeModal, inlineConfirm, esc, formatDuration,
+  showToast, openModal, closeModal, inlineConfirm, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
-  setScheme, setMode, setTheme, _adminHeaders, api, showToast, closeModal,
+  setScheme, setMode, setTheme, _adminHeaders, api, showToast, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   inlineConfirm, doLogout,

@@ -143,7 +143,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
     document.getElementById('provRerankPath').value = '';
   }
   toggleProvCapSection();
-  document.getElementById('providerModal').classList.add('open');
+  openModal('providerModal');
   // When editing, fetch the real (unmasked) key
   if (name && S._credentialVisible) {
     api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
@@ -478,16 +478,16 @@ function renderProviders() {
       <div class="card-header">
         <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)} ${capBadges}</div>
         <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
-          <input type="checkbox" ${enabled ? 'checked' : ''} onchange="toggleProvider('${esc(name)}')">
+          <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
         </label>
       </div>
       ${fieldsHtml}
       <div class="actions" style="margin-top:auto;padding-top:12px">
-        <button class="btn btn-sm" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
-        <button class="btn btn-sm" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm btn-test-conn" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
+        <button class="btn btn-sm" aria-label="${t('btn.clone')} ${esc(name)}" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
+        <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
+        <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
+        <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
       </div>
     </div>`;
@@ -561,7 +561,7 @@ function deleteProvider(name) {
   } else {
     el.style.display = 'none';
   }
-  document.getElementById('deleteConfirmModal').classList.add('open');
+  openModal('deleteConfirmModal');
   document.getElementById('deleteConfirmInput').focus();
 }
 
