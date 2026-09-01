@@ -17,6 +17,7 @@ function openFetchModelsModal() {
   }
   // Reset state
   S._fetchedModels = [];
+  S._fetchUpstreamMap = {};
   S._fetchProvider = '';
   document.getElementById('fetchModelsContent').style.display = 'none';
   document.getElementById('fetchModelsLoading').style.display = 'none';
@@ -70,6 +71,7 @@ async function doFetchModels() {
       return;
     }
     S._fetchedModels = data.models || [];
+    S._fetchUpstreamMap = data.upstream_map || {};
     if (S._fetchedModels.length === 0) {
       document.getElementById('fetchModelsError').textContent = t('fetch.noModels');
       document.getElementById('fetchModelsError').style.display = 'block';
@@ -154,6 +156,7 @@ async function bulkAddFetchedModels() {
         models: toAdd,
         prefix: prefix,
         capabilities: _getFetchCapabilities(),
+        upstream_map: S._fetchUpstreamMap,
       });
       if (res.ok) {
         addedCount = (res.added || []).length;

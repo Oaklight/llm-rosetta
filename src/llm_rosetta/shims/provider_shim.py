@@ -326,3 +326,8 @@ def _reset_registry() -> None:
     from llm_rosetta.auto_detect import _converter_cache
 
     _converter_cache.clear()
+
+    # Clear convention-based model list transforms.
+    from llm_rosetta.shims.providers import _model_list_transforms
+
+    _model_list_transforms.clear()
