@@ -154,6 +154,8 @@ nav:
       - api/index.md
       - Library API:
           - IR Types: api/types.md
+          - IR Reasoning Types: api/ir-types.md
+          - Reasoning Capability: api/reasoning.md
           - Converters: api/converters.md
           - Tool Ops: api/tool-ops.md
           - Shims: api/shims.md
