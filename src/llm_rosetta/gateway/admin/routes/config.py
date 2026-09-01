@@ -844,6 +844,47 @@ def _format_connection_error(exc: Exception, url: str) -> str:
     return f"Failed to connect to upstream: {err_str}"
 
 
+def _extract_model_ids(
+    body: dict[str, Any],
+    ptype: str,
+    shim_name: str | None,
+    id_field: str | None,
+) -> tuple[list[str], dict[str, str]]:
+    """Extract model IDs from an upstream ``/models`` response body.
+
+    Returns ``(model_ids, upstream_map)``.  When a shim provides a
+    ``model_list_transform`` hook, it is used to derive human-readable
+    slugs and the mapping back to internal upstream IDs.
+    """
+    from llm_rosetta.shims.providers import get_model_list_transform
+
+    mlt = get_model_list_transform(shim_name) if shim_name else None
+
+    upstream_map: dict[str, str] = {}
+    model_ids: list[str] = []
+
+    if mlt is not None:
+        raw_entries = (
+            body.get("models", []) if ptype == "google" else body.get("data", [])
+        )
+        model_ids, upstream_map = mlt(raw_entries)
+    elif ptype == "google":
+        for m in body.get("models", []):
+            name = m.get("name", "")
+            if name.startswith("models/"):
+                name = name[len("models/") :]
+            model_ids.append(m.get(id_field, name) if id_field else name)
+    else:
+        for m in body.get("data", []):
+            model_ids.append(
+                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
+            )
+
+    model_ids = [m for m in model_ids if m]
+    model_ids.sort()
+    return model_ids, upstream_map
+
+
 async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     """Fetch the model list from an upstream provider's /v1/models endpoint."""
     from llm_rosetta.shims import get_shim
@@ -908,32 +949,16 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     shim = get_shim(shim_name) if shim_name else None
     id_field = shim.model_id_field if shim and shim.model_id_field else None
 
-    # Normalize response — different providers return different formats
-    model_ids: list[str] = []
-    if ptype == "google":
-        # Google: {"models": [{"name": "models/gemini-...", ...}]}
-        for m in body.get("models", []):
-            name = m.get("name", "")
-            if name.startswith("models/"):
-                name = name[len("models/") :]
-            model_ids.append(m.get(id_field, name) if id_field else name)
-    else:
-        # Anthropic & OpenAI-compatible: {"data": [{"id": "...", ...}]}
-        for m in body.get("data", []):
-            model_ids.append(
-                m.get(id_field, m.get("id", "")) if id_field else m.get("id", "")
-            )
+    model_ids, upstream_map = _extract_model_ids(body, ptype, shim_name, id_field)
 
-    model_ids = [m for m in model_ids if m]
-    model_ids.sort()
-
-    return JSONResponse(
-        {
-            "provider": provider_name,
-            "api_standard": ptype,
-            "models": model_ids,
-        }
-    )
+    result: dict[str, Any] = {
+        "provider": provider_name,
+        "api_standard": ptype,
+        "models": model_ids,
+    }
+    if upstream_map:
+        result["upstream_map"] = upstream_map
+    return JSONResponse(result)
 
 
 async def bulk_add_models(request: Any) -> Response:
@@ -948,6 +973,7 @@ async def bulk_add_models(request: Any) -> Response:
     provider = body.get("provider")
     models_to_add: list[str] = body.get("models", [])
     prefix = body.get("prefix", "")
+    upstream_map: dict[str, str] = body.get("upstream_map", {})
 
     if not provider or not models_to_add:
         return JSONResponse(
@@ -982,10 +1008,13 @@ async def bulk_add_models(request: Any) -> Response:
                 "provider": provider,
                 "capabilities": body.get("capabilities", ["text", "vision", "tools"]),
             }
-            # When a prefix is used, the gateway name differs from the
-            # upstream model id — store the original as upstream_model so the
-            # proxy handler can substitute it before forwarding.
-            if prefix:
+            # Set upstream_model when the gateway-facing name differs from
+            # what the upstream provider expects.  The upstream_map (from a
+            # shim's model_list_transform) takes precedence, then prefix.
+            mapped_upstream = upstream_map.get(model_id)
+            if mapped_upstream:
+                entry["upstream_model"] = mapped_upstream
+            elif prefix:
                 entry["upstream_model"] = model_id
             models_section[display_name] = entry
             added.append(display_name)

@@ -55,6 +55,8 @@ import importlib.util
 import logging
 from importlib.metadata import entry_points
 from pathlib import Path
+from typing import Any
+from collections.abc import Callable
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
@@ -63,6 +65,18 @@ from ..provider_shim import ProviderShim, ReasoningCapability, register_shim
 logger = logging.getLogger(__name__)
 
 _PROVIDERS_DIR = Path(__file__).parent
+
+# Convention-based model list transforms registered by shim transforms modules.
+# Each entry maps a shim name to a callable with signature:
+#   (raw_entries: list[dict]) -> tuple[list[str], dict[str, str]]
+_model_list_transforms: dict[str, Callable[..., Any]] = {}
+
+
+def get_model_list_transform(
+    shim_name: str,
+) -> Callable[..., Any] | None:
+    """Return the model_list_transform for *shim_name*, or ``None``."""
+    return _model_list_transforms.get(shim_name)
 
 
 def _parse_reasoning_cap(
@@ -101,12 +115,16 @@ def _parse_reasoning_cap(
 
 def _load_transforms(
     provider_dir: Path, *, group: str | None = None, _builtin: bool = True
-) -> tuple[tuple, tuple, tuple]:
-    """Import transforms.py if present, return (pre_ir_transforms, post_ir_transforms, ir_transforms).
+) -> tuple[tuple, tuple, tuple, Any]:
+    """Import transforms.py if present, return (pre, post, ir, module).
 
     Accepts both new names (``pre_ir_transforms``, ``post_ir_transforms``)
     and legacy names (``from_transforms``, ``to_transforms``) from the
     transforms module.  New names take precedence if both are present.
+
+    The fourth element is the loaded module object (or ``None`` when no
+    ``transforms.py`` exists).  Callers can inspect it for convention-based
+    hooks such as ``model_list_transform``.
 
     Args:
         provider_dir: Path to the leaf provider directory.
@@ -117,7 +135,7 @@ def _load_transforms(
     """
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
-        return (), (), ()
+        return (), (), (), None
     prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
     if group is not None:
         module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
@@ -126,7 +144,7 @@ def _load_transforms(
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
-        return (), (), ()
+        return (), (), (), None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     # New names take precedence; fall back to legacy names.
@@ -151,6 +169,7 @@ def _load_transforms(
         pre,
         post,
         getattr(mod, "ir_transforms", ()),
+        mod,
     )
 
 
@@ -174,7 +193,9 @@ def _load_single_provider(
         logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
         return None
 
-    pre_t, post_t, ir_t = _load_transforms(provider_dir, group=group, _builtin=_builtin)
+    pre_t, post_t, ir_t, transforms_mod = _load_transforms(
+        provider_dir, group=group, _builtin=_builtin
+    )
 
     # Parse optional reasoning capability config from YAML.
     reasoning_cfg = cfg.get("reasoning")
@@ -214,6 +235,14 @@ def _load_single_provider(
         tool_search_mode=cfg.get("tool_search_mode", "disabled"),
     )
     register_shim(shim)
+
+    # Register convention-based model_list_transform if the transforms
+    # module exports one (e.g. Argo shims that slug-ify display names).
+    if transforms_mod is not None:
+        mlt = getattr(transforms_mod, "model_list_transform", None)
+        if mlt is not None:
+            _model_list_transforms[shim.name] = mlt
+
     logger.debug("Registered provider shim: %s (base=%s)", shim.name, shim.base)
     return shim
 

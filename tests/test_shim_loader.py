@@ -32,9 +32,10 @@ class TestLoadTransforms:
 
     def test_no_transforms_file(self, tmp_path: Path):
         """Returns empty tuples when transforms.py does not exist."""
-        from_t, to_t, ir_t = _load_transforms(tmp_path)
+        from_t, to_t, ir_t, mod = _load_transforms(tmp_path)
         assert from_t == ()
         assert to_t == ()
+        assert mod is None
 
     def test_transforms_with_to_only(self, tmp_path: Path):
         """Loads post_ir_transforms from transforms.py."""
@@ -45,9 +46,10 @@ class TestLoadTransforms:
             post_ir_transforms = (strip_fields("foo"),)
         """)
         )
-        from_t, to_t, ir_t = _load_transforms(tmp_path)
+        from_t, to_t, ir_t, mod = _load_transforms(tmp_path)
         assert from_t == ()
         assert len(to_t) == 1
+        assert mod is not None
         # Verify the transform works
         body = {"foo": 1, "bar": 2}
         result = to_t[0](body)
@@ -64,9 +66,10 @@ class TestLoadTransforms:
             pre_ir_transforms = (rename_field("a", "b"),)
         """)
         )
-        from_t, to_t, ir_t = _load_transforms(tmp_path)
+        from_t, to_t, ir_t, mod = _load_transforms(tmp_path)
         assert len(from_t) == 1
         assert len(to_t) == 1
+        assert mod is not None
 
 
 class TestLoadProviders:
