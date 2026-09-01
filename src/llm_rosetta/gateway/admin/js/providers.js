@@ -318,11 +318,23 @@ function switchProviderFilter(el, filter) {
   renderProviders();
 }
 
+// Below this width a row layout has no room left, so list view falls back to
+// cards. The preference is still remembered — only the class is dropped.
+const _LIST_VIEW_MIN_WIDTH = 700;
+const _listViewViable = window.matchMedia(`(min-width: ${_LIST_VIEW_MIN_WIDTH}px)`);
+
+function _applyProviderView() {
+  const useList = _providerViewMode === 'list' && _listViewViable.matches;
+  document.getElementById('providerGrid')?.classList.toggle('list-view', useList);
+}
+
+_listViewViable.addEventListener('change', _applyProviderView);
+
 function setProviderView(mode) {
   _providerViewMode = mode;
   localStorage.setItem('provider-view', mode);
   _updateViewToggle();
-  renderProviders();
+  _applyProviderView();
 }
 
 function _updateViewToggle() {
@@ -408,7 +420,7 @@ function renderProviders() {
   document.getElementById('providerSearch').style.display = totalCount > 6 ? '' : 'none';
 
   // Apply view mode class
-  grid.classList.toggle('list-view', _providerViewMode === 'list');
+  _applyProviderView();
   _updateViewToggle();
 
   if (totalCount === 0) {
@@ -452,55 +464,45 @@ function renderProviders() {
     return;
   }
 
-  const isList = _providerViewMode === 'list';
+  // One markup shape for both views — layout is decided entirely by CSS.
+  // See design/ui/provider-list-responsive.html and issue #611.
   grid.innerHTML = entries.map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
     const logo = shimLogo[typeName];
     const logoHtml = logo
-      ? `<img class="provider-logo" src="${esc(logo)}" alt="">`
-      : (isList ? '<span class="provider-logo-placeholder"></span>' : '');
-    const fieldsHtml = isList
-      ? `<div class="field" title="Type: ${esc(typeName)}"><code>${esc(typeName)}</code></div>
-         <div class="field" title="${esc(cfg.base_url || '')}"><code>${esc(cfg.base_url || '')}</code></div>`
-      : `<div class="field">Type: <code>${esc(typeName)}</code></div>
-         <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
-         ${S._credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}`;
-    const provCaps = _getProviderCaps(cfg, name);
-    const capBadges = _capBadgesHtml(provCaps);
+      ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
+      : '<span class="pc-logo pc-logo-empty"></span>';
+    const baseUrl = cfg.base_url || '';
+    const apiKeyField = S._credentialVisible
+      ? `<div class="pc-field" data-label="${t('card.apiKey')}" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>`
+      : '';
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
-      ? `<span class="model-link" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
-      : (isList ? '<span class="model-link-placeholder"></span>' : '');
-    // Endpoint details are in Edit modal — badges on card are sufficient
-    const toggleHtml = `
-        <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
+      ? `<span class="pc-models" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
+      : '<span class="pc-models pc-models-empty"></span>';
+    return `
+    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
+      <div class="pc-head">
+        <div class="pc-name">${logoHtml}<span class="pc-name-text">${esc(name)}</span></div>
+        <label class="pc-toggle toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
-        </label>`;
-    const actionsHtml = `<div class="actions">
+        </label>
+      </div>
+      <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name))}</div>
+      <div class="pc-meta">
+        <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>
+        <div class="pc-field" data-label="${t('card.baseUrl')}" title="${esc(baseUrl)}"><code>${esc(baseUrl)}</code></div>
+        ${apiKeyField}
+      </div>
+      <div class="pc-actions">
         <button class="btn btn-sm" aria-label="${t('btn.clone')} ${esc(name)}" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
         <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
-      </div>`;
-    const nameCol = isList
-      ? `<div class="card-header">
-          <div class="name" style="display:flex;align-items:center;gap:6px;min-width:0">${logoHtml}<span class="name-text">${esc(name)}</span></div>
-          ${toggleHtml}
-        </div>
-        <div class="field badges">${capBadges}</div>`
-      : `<div class="card-header">
-          <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)}</div>
-          ${toggleHtml}
-        </div>
-        <div class="card-badges">${capBadges}</div>`;
-    return `
-    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
-      ${nameCol}
-      ${fieldsHtml}
-      ${actionsHtml}
+      </div>
     </div>`;
   }).join('');
 }
