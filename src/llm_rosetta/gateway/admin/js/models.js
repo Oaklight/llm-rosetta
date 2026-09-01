@@ -321,7 +321,7 @@ function renderModels() {
       <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
-        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${modelType === 'embedding' ? 'embedding' : modelType === 'rerank' ? 'rerank' : 'text'}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
