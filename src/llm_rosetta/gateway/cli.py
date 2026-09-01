@@ -257,6 +257,8 @@ def _resolve_data_dir(config_path: str, args: argparse.Namespace) -> str:
     raw = load_config(config_path)
     configured = raw.get("server", {}).get("data_dir")
     if configured:
+        if not os.path.isabs(configured):
+            return os.path.join(os.path.dirname(config_path), configured)
         return configured
     return os.path.join(os.path.dirname(config_path), "data")
 
@@ -528,7 +530,7 @@ def main() -> None:
     db_parser = sub.add_parser("db", help="Database maintenance commands")
     db_parser.add_argument(
         "--data-dir",
-        default=None,
+        default=argparse.SUPPRESS,
         help="Directory containing gateway.db (overrides config)",
     )
     db_sub = db_parser.add_subparsers(dest="db_type")

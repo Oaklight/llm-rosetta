@@ -124,11 +124,18 @@ def setup_admin(
 
     # Set up SQLite persistence — explicit data_dir > config field > config-path default
     persistence: PersistenceManager | None = None
-    resolved_data_dir = (
-        data_dir
-        or getattr(config, "data_dir", None)
-        or (os.path.join(os.path.dirname(config_path), "data") if config_path else None)
-    )
+    resolved_data_dir: str | None = data_dir
+    if not resolved_data_dir:
+        configured = getattr(config, "data_dir", None)
+        if configured:
+            if config_path and not os.path.isabs(configured):
+                resolved_data_dir = os.path.join(
+                    os.path.dirname(config_path), configured
+                )
+            else:
+                resolved_data_dir = configured
+        elif config_path:
+            resolved_data_dir = os.path.join(os.path.dirname(config_path), "data")
     if resolved_data_dir:
         success_max, error_max = _resolve_log_caps(config)
         persistence = PersistenceManager(
