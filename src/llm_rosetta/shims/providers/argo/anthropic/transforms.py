@@ -24,6 +24,10 @@ from llm_rosetta.shims.transforms import (
     hoist_late_system_messages,
 )
 
+# Re-export shared Argo model list transform for convention-based hook
+# discovery by the shim loader.
+from ..model_utils import model_list_transform  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -132,23 +136,3 @@ pre_ir_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )
 ir_transforms = (hoist_late_system_messages(), auto_cache_breakpoints())
-
-
-def model_list_transform(raw_entries: list[dict]) -> tuple[list[str], dict[str, str]]:
-    """Transform raw ARGO model entries into (display_names, upstream_map).
-
-    ARGO's /models endpoint returns entries where ``id`` is a human-readable
-    name ("Claude Opus 5") and ``internal_id`` is the compact upstream ID
-    ("claudeopus5"). This converts to slug-style display names suitable
-    for gateway routing.
-    """
-    model_ids: list[str] = []
-    upstream_map: dict[str, str] = {}
-    for m in raw_entries:
-        display = m.get("id", "").replace(" ", "-").lower()
-        upstream = m.get("internal_id", m.get("id", ""))
-        if display:
-            model_ids.append(display)
-            if display != upstream:
-                upstream_map[display] = upstream
-    return model_ids, upstream_map
