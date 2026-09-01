@@ -306,8 +306,12 @@ class OpenAIChatConfigOps(BaseConfigOps):
         thinking = provider_reasoning.get("thinking")
         if isinstance(thinking, dict):
             thinking_type = thinking.get("type")
-            if thinking_type:
-                result["mode"] = thinking_type
+            if thinking_type == "adaptive":
+                result["mode"] = "auto"
+            elif thinking_type == "enabled":
+                result["mode"] = "enabled"
+            elif thinking_type == "disabled":
+                result["mode"] = "disabled"
             budget = thinking.get("budget_tokens")
             if budget is not None:
                 result["budget_tokens"] = budget
