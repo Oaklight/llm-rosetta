@@ -864,7 +864,9 @@ def _extract_model_ids(
     model_ids: list[str] = []
 
     if mlt is not None:
-        raw_entries = body.get("data", []) or body.get("models", [])
+        raw_entries: list[dict[str, Any]] = (
+            body.get("data", []) if "data" in body else body.get("models", [])
+        )
         model_ids, upstream_map = mlt(raw_entries)
     elif ptype == "google":
         for m in body.get("models", []):
