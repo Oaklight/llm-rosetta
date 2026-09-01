@@ -363,8 +363,8 @@ async function renderDumps() {
         <td><span class="badge badge-error">${e.status_code||'-'}</span></td>
         <td><span style="font-size:11px;color:var(--red);font-family:var(--mono);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
         <td style="white-space:nowrap">
-          <button class="btn btn-sm" onclick="viewDump(${JSON.stringify(e.dump_id||e.id)})" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <button class="btn btn-sm" onclick="downloadDump(${JSON.stringify(e.dump_id||e.id)})" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
+          <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
         </td>
       </tr>`;
     }).join('');
