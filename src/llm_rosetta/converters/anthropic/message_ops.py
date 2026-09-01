@@ -205,7 +205,7 @@ class AnthropicMessageOps(BaseMessageOps):
                 anthropic_content.append(self.tool_ops.ir_tool_call_to_p(part))
             elif is_reasoning_part(part):
                 unsigned_policy = (
-                    reasoning_cap.unsigned_reasoning_blocks
+                    reasoning_cap.unsigned_blocks
                     if reasoning_cap is not None
                     else "as_is"
                 )

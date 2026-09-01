@@ -5,15 +5,11 @@ default_api_key_env: OPENAI_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/openai.svg
 response_id_prefix: "chatcmpl-"
 reasoning:
-  disabled: omit
   effort_field: reasoning_effort
-  max_effort: high
-  effort_map:
-    minimal: minimal
-    low: low
-    medium: medium
-    high: high
-    xhigh: high
-    max: high
+  effort_range: [minimal, high]
+  visibility_modes:
+    auto: auto
+    concise: concise
+    detailed: detailed
 
 supports_custom_tools: true

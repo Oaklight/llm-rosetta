@@ -134,14 +134,16 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   // Update inherit option labels: show "value (inherited)" or just "(inherit)"
   const inh = t('label.inherited');
   const ttInherit = document.querySelector('#reasoningThinkingType option[value=""]');
-  ttInherit.textContent = reasoning.thinking_type ? reasoning.thinking_type + ' (' + inh + ')' : '(' + inh + ')';
+  const tmSummary = reasoning.thinking_modes ? Object.keys(reasoning.thinking_modes).join('/') : null;
+  ttInherit.textContent = tmSummary ? tmSummary + ' (' + inh + ')' : '(' + inh + ')';
   const br = document.getElementById('reasoningBudgetRatio');
-  br.placeholder = reasoning.budget_tokens_default_ratio != null ? reasoning.budget_tokens_default_ratio + ' (' + inh + ')' : '(' + inh + ')';
+  br.placeholder = reasoning.budget_ratio != null ? reasoning.budget_ratio + ' (' + inh + ')' : '(' + inh + ')';
   const dsInherit = document.querySelector('#reasoningDisabled option[value=""]');
-  dsInherit.textContent = reasoning.disabled ? reasoning.disabled + ' (' + inh + ')' : '(' + inh + ')';
+  const hasDisabled = reasoning.thinking_modes && reasoning.thinking_modes.disabled;
+  dsInherit.textContent = hasDisabled ? 'thinking_disabled (' + inh + ')' : 'omit (' + inh + ')';
   // Set values — config override if present, otherwise blank (inheriting)
   document.getElementById('reasoningThinkingType').value = configOverride.thinking_type || '';
-  document.getElementById('reasoningBudgetRatio').value = configOverride.budget_tokens_default_ratio != null ? configOverride.budget_tokens_default_ratio : '';
+  document.getElementById('reasoningBudgetRatio').value = configOverride.budget_ratio != null ? configOverride.budget_ratio : '';
   document.getElementById('reasoningDisabled').value = configOverride.disabled || '';
 
   openModal('modelModal');
@@ -389,7 +391,7 @@ async function saveModel() {
     const disabledStrategy = document.getElementById('reasoningDisabled').value || null;
     const override = {};
     if (thinkingType) override.thinking_type = thinkingType;
-    if (budgetRatioStr !== '') override.budget_tokens_default_ratio = parseFloat(budgetRatioStr);
+    if (budgetRatioStr !== '') override.budget_ratio = parseFloat(budgetRatioStr);
     if (disabledStrategy) override.disabled = disabledStrategy;
     if (Object.keys(override).length > 0) body.reasoning_override = override;
   }

@@ -85,10 +85,11 @@ def _resolve_model_reasoning(
 
     return {
         "source": source,
-        "thinking_type": cap.thinking_type,
-        "disabled": cap.disabled,
+        "thinking_modes": cap.thinking_modes,
         "effort_field": cap.effort_field,
-        "budget_tokens_default_ratio": cap.budget_tokens_default_ratio,
+        "effort_range": list(cap.effort_range) if cap.effort_range else None,
+        "budget_ratio": cap.budget_ratio,
+        "visibility_modes": cap.visibility_modes,
         "config_override": config_override,
     }
 

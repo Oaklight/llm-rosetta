@@ -4,13 +4,9 @@ default_base_url: https://ark.cn-beijing.volces.com/api/v3
 default_api_key_env: VOLCENGINE_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/volcengine.svg
 reasoning:
-  disabled: thinking_disabled
-  thinking_type: enabled
-  max_effort: high
-  effort_map:
-    minimal: minimal
-    low: low
-    medium: medium
-    high: high
-    xhigh: high
-    max: high
+  thinking_modes:
+    auto: auto
+    enabled: enabled
+    disabled: disabled
+  effort_field: reasoning_effort
+  effort_range: [minimal, high]

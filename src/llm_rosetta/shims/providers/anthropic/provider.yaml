@@ -5,15 +5,17 @@ default_api_key_env: ANTHROPIC_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/anthropic.svg
 response_id_prefix: "msg_"
 reasoning:
-  disabled: thinking_disabled
+  thinking_modes:
+    auto: adaptive
+    enabled: enabled
+    disabled: disabled
   effort_field: output_config.effort
-  effort_map:
-    minimal: low
-    low: low
-    medium: medium
-    high: high
-    xhigh: xhigh
-    max: max
+  effort_range: [low, max]
+  visibility_modes:
+    auto: summarized
+    concise: summarized
+    detailed: summarized
+    none: omitted
   # Anthropic Official thinking support matrix (tested 2026-06-18):
   #   Haiku 4.5:  enabled+budget only (adaptive → 400, effort → 400)
   #   Sonnet 4.6: both enabled+budget and adaptive work
@@ -23,10 +25,10 @@ reasoning:
   # Haiku rejects it (400), so disable effort emission for Haiku.
   model_overrides:
     claude-haiku-4-5-20251001:
-      thinking_type: enabled
-      budget_tokens_default_ratio: 0.8
+      thinking_modes: {enabled: enabled, disabled: disabled}
+      budget_ratio: 0.8
       effort_field: none
     claude-opus-4-7:
-      thinking_type: adaptive
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claude-opus-4-8:
-      thinking_type: adaptive
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}

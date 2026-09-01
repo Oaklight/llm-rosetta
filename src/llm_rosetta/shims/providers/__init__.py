@@ -65,6 +65,40 @@ logger = logging.getLogger(__name__)
 _PROVIDERS_DIR = Path(__file__).parent
 
 
+def _parse_reasoning_cap(
+    cfg: dict,
+    *,
+    base: ReasoningCapability | None = None,
+) -> ReasoningCapability:
+    """Parse a reasoning config dict into a :class:`ReasoningCapability`.
+
+    When *base* is provided (model_overrides), unset fields inherit from it.
+    """
+    _d = base  # shorthand for fallback defaults
+
+    # effort_range: YAML gives [floor, ceiling] list → tuple
+    raw_range = cfg.get("effort_range", _d.effort_range if _d else None)
+    effort_range = tuple(raw_range) if isinstance(raw_range, list) else raw_range
+
+    return ReasoningCapability(
+        thinking_modes=cfg.get("thinking_modes", _d.thinking_modes if _d else None),
+        thinking_default=cfg.get(
+            "thinking_default", _d.thinking_default if _d else None
+        ),
+        effort_field=cfg.get(
+            "effort_field", _d.effort_field if _d else "reasoning_effort"
+        ),
+        effort_range=effort_range,
+        budget_ratio=cfg.get("budget_ratio", _d.budget_ratio if _d else None),
+        visibility_modes=cfg.get(
+            "visibility_modes", _d.visibility_modes if _d else None
+        ),
+        unsigned_blocks=cfg.get(
+            "unsigned_blocks", _d.unsigned_blocks if _d else "as_is"
+        ),
+    )
+
+
 def _load_transforms(
     provider_dir: Path, *, group: str | None = None, _builtin: bool = True
 ) -> tuple[tuple, tuple, tuple]:
@@ -146,19 +180,7 @@ def _load_single_provider(
     reasoning_cfg = cfg.get("reasoning")
     reasoning_cap: ReasoningCapability | None = None
     if isinstance(reasoning_cfg, dict):
-        reasoning_cap = ReasoningCapability(
-            disabled=reasoning_cfg.get("disabled", "omit"),
-            effort_field=reasoning_cfg.get("effort_field", "reasoning_effort"),
-            max_effort=reasoning_cfg.get("max_effort"),
-            thinking_type=reasoning_cfg.get("thinking_type"),
-            unsigned_reasoning_blocks=reasoning_cfg.get(
-                "unsigned_reasoning_blocks", "as_is"
-            ),
-            effort_map=reasoning_cfg.get("effort_map", {}),
-            budget_tokens_default_ratio=reasoning_cfg.get(
-                "budget_tokens_default_ratio"
-            ),
-        )
+        reasoning_cap = _parse_reasoning_cap(reasoning_cfg)
 
     # Parse per-model reasoning overrides (inherit provider defaults).
     model_reasoning: dict[str, ReasoningCapability] | None = None
@@ -170,22 +192,8 @@ def _load_single_provider(
             if not isinstance(overrides, dict):
                 continue
             assert reasoning_cap is not None  # model_overrides requires reasoning
-            model_reasoning[model_id] = ReasoningCapability(
-                disabled=overrides.get("disabled", reasoning_cap.disabled),
-                effort_field=overrides.get("effort_field", reasoning_cap.effort_field),
-                max_effort=overrides.get("max_effort", reasoning_cap.max_effort),
-                thinking_type=overrides.get(
-                    "thinking_type", reasoning_cap.thinking_type
-                ),
-                unsigned_reasoning_blocks=overrides.get(
-                    "unsigned_reasoning_blocks",
-                    reasoning_cap.unsigned_reasoning_blocks,
-                ),
-                effort_map=overrides.get("effort_map", reasoning_cap.effort_map),
-                budget_tokens_default_ratio=overrides.get(
-                    "budget_tokens_default_ratio",
-                    reasoning_cap.budget_tokens_default_ratio,
-                ),
+            model_reasoning[model_id] = _parse_reasoning_cap(
+                overrides, base=reasoning_cap
             )
 
     shim = ProviderShim(

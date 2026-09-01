@@ -35,17 +35,15 @@ from llm_rosetta.shims.transforms import (
 # ---------------------------------------------------------------------------
 
 _REASONING_CAP = ReasoningCapability(
-    disabled="omit",
     effort_field="reasoning_effort",
-    effort_map={"low": "low", "medium": "medium", "high": "high"},
+    effort_range=("low", "high"),
 )
 
 _MODEL_REASONING_CAP = ReasoningCapability(
-    disabled="thinking_disabled",
+    thinking_modes={"auto": "adaptive", "enabled": "enabled", "disabled": "disabled"},
     effort_field="output_config.effort",
-    thinking_type="enabled",
-    effort_map={"low": "low", "high": "high"},
-    budget_tokens_default_ratio=0.8,
+    effort_range=("low", "high"),
+    budget_ratio=0.8,
 )
 
 
@@ -152,11 +150,10 @@ class TestEnforceReasoning:
     def test_config_override_highest_priority(self):
         ctx = ConversionContext()
         shim = _make_shim(reasoning=_REASONING_CAP)
-        enforce_reasoning(ctx, shim, config_override={"thinking_type": "adaptive"})
+        override_modes = {"auto": "adaptive", "disabled": "disabled"}
+        enforce_reasoning(ctx, shim, config_override={"thinking_modes": override_modes})
         cap = ctx.options["reasoning_cap"]
-        assert cap.thinking_type == "adaptive"
-        # Other fields inherited from base
-        assert cap.disabled == _REASONING_CAP.disabled
+        assert cap.thinking_modes == override_modes
         assert cap.effort_field == _REASONING_CAP.effort_field
 
     def test_config_override_on_model_override(self):
@@ -167,12 +164,11 @@ class TestEnforceReasoning:
             model_reasoning={"gpt-4": _MODEL_REASONING_CAP},
         )
         enforce_reasoning(
-            ctx, shim, model="gpt-4", config_override={"disabled": "block"}
+            ctx, shim, model="gpt-4", config_override={"budget_ratio": 0.5}
         )
         cap = ctx.options["reasoning_cap"]
-        assert cap.disabled == "block"
-        # Rest inherited from model-level
-        assert cap.thinking_type == _MODEL_REASONING_CAP.thinking_type
+        assert cap.budget_ratio == 0.5
+        assert cap.thinking_modes == _MODEL_REASONING_CAP.thinking_modes
 
     def test_accepts_registered_name(self):
         ctx = ConversionContext()
@@ -458,35 +454,35 @@ class TestApplyIrTransforms:
 
 class TestApplyConfigReasoningOverride:
     def test_partial_override(self):
+        modes = {"auto": "adaptive", "disabled": "disabled"}
         result = _apply_config_reasoning_override(
-            _REASONING_CAP, {"thinking_type": "adaptive"}
+            _REASONING_CAP, {"thinking_modes": modes}
         )
-        assert result.thinking_type == "adaptive"
-        assert result.disabled == _REASONING_CAP.disabled
+        assert result.thinking_modes == modes
         assert result.effort_field == _REASONING_CAP.effort_field
-        assert result.effort_map == _REASONING_CAP.effort_map
+        assert result.effort_range == _REASONING_CAP.effort_range
 
     def test_full_override(self):
         override = {
-            "disabled": "block",
+            "thinking_modes": {"enabled": "enabled"},
+            "thinking_default": "enabled",
             "effort_field": "custom_effort",
-            "max_effort": "high",
-            "thinking_type": "enabled",
-            "unsigned_reasoning_blocks": "drop",
-            "effort_map": {"a": "b"},
-            "budget_tokens_default_ratio": 0.5,
+            "effort_range": ["low", "high"],
+            "budget_ratio": 0.5,
+            "visibility_modes": {"auto": "auto"},
+            "unsigned_blocks": "preserve",
         }
         result = _apply_config_reasoning_override(_REASONING_CAP, override)
-        assert result.disabled == "block"
         assert result.effort_field == "custom_effort"
-        assert result.thinking_type == "enabled"
-        assert result.budget_tokens_default_ratio == 0.5
+        assert result.thinking_modes == {"enabled": "enabled"}
+        assert result.budget_ratio == 0.5
+        assert result.effort_range == ("low", "high")
 
     def test_empty_override_preserves_base(self):
         result = _apply_config_reasoning_override(_REASONING_CAP, {})
-        assert result.disabled == _REASONING_CAP.disabled
         assert result.effort_field == _REASONING_CAP.effort_field
-        assert result.effort_map == _REASONING_CAP.effort_map
+        assert result.effort_range == _REASONING_CAP.effort_range
+        assert result.thinking_modes == _REASONING_CAP.thinking_modes
 
 
 # ---------------------------------------------------------------------------
