@@ -42,7 +42,9 @@
     "cohere": {
       "api_key": "${COHERE_API_KEY}",
       "base_url": "https://api.cohere.com",
-      "models_path": "/v1/models",
+      // Cohere paginates /v1/models (default 20, no rerank models);
+      // page_size=100 returns the full list including rerank models.
+      "models_path": "/v1/models?page_size=100",
       "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg",
       "embedding_format": "cohere",
       "embedding_path": "/v2/embed",
