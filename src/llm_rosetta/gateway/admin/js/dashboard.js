@@ -699,7 +699,7 @@ function drawLatencyChart(canvasId, series) {
     }
   }
 
-  const maxMs = points.length > 0 ? Math.max(...points.map(p => p.ms), 1) : 1;
+  const maxMs = points.reduce((m, p) => Math.max(m, p.ms), 1);
 
   _drawAxes(ctx, w, h, cs, maxMs, padL, padR, padT, padB);
 
@@ -716,15 +716,17 @@ function drawLatencyChart(canvasId, series) {
   const tMax = series[series.length - 1].t;
   const tRange = tMax - tMin || 1;
 
+  ctx.strokeStyle = blueColor;
+  ctx.lineWidth = 1;
   for (const p of points) {
     const x = padL + ((p.t - tMin) / tRange) * chartW;
     const y = padT + chartH - (p.ms / maxMs) * chartH;
     ctx.beginPath();
     ctx.arc(x, y, 4, 0, Math.PI * 2);
-    ctx.fillStyle = blueColor + '66';
+    ctx.globalAlpha = 0.4;
+    ctx.fillStyle = blueColor;
     ctx.fill();
-    ctx.strokeStyle = blueColor;
-    ctx.lineWidth = 1;
+    ctx.globalAlpha = 1.0;
     ctx.stroke();
   }
 }
