@@ -864,9 +864,7 @@ def _extract_model_ids(
     model_ids: list[str] = []
 
     if mlt is not None:
-        raw_entries = (
-            body.get("models", []) if ptype == "google" else body.get("data", [])
-        )
+        raw_entries = body.get("data", []) or body.get("models", [])
         model_ids, upstream_map = mlt(raw_entries)
     elif ptype == "google":
         for m in body.get("models", []):
@@ -902,13 +900,17 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     pinfo = config.providers[provider_name]
     ptype = config.provider_types.get(provider_name, "unknown")
 
-    # Build the models listing URL based on provider type
-    if ptype == "google":
+    # Build the models listing URL.  Explicit ``models_path`` in the
+    # provider config takes precedence (e.g. ``/v1/models`` for Jina).
+    raw_cfg = getattr(config, "_raw_providers", {}).get(provider_name, {})
+    explicit_path = raw_cfg.get("models_path")
+    if explicit_path:
+        models_url = f"{pinfo.base_url}{explicit_path}"
+    elif ptype == "google":
         models_url = f"{pinfo.base_url}/v1beta/models"
     elif ptype == "anthropic":
         models_url = f"{pinfo.base_url}/v1/models"
     else:
-        # OpenAI-compatible (openai_chat, openai_responses, etc.)
         models_url = f"{pinfo.base_url}/models"
 
     headers = pinfo.auth_headers()
@@ -1004,10 +1006,13 @@ async def bulk_add_models(request: Any) -> Response:
             if display_name in models_section:
                 skipped.append(display_name)
                 continue
+            model_type = body.get("type", "llm")
             entry: dict[str, Any] = {
                 "provider": provider,
                 "capabilities": body.get("capabilities", ["text", "vision", "tools"]),
             }
+            if model_type != "llm":
+                entry["type"] = model_type
             # Set upstream_model when the gateway-facing name differs from
             # what the upstream provider expects.  The upstream_map (from a
             # shim's model_list_transform) takes precedence, then prefix.

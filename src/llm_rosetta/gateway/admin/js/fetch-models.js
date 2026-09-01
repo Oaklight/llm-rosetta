@@ -43,12 +43,17 @@ function onFetchTypeChange() {
 function _getFetchCapabilities() {
   const type = document.querySelector('input[name="fetchModelType"]:checked').value;
   if (type === 'embedding') return ['embedding'];
+  if (type === 'rerank') return ['rerank'];
   const caps = [];
   if (document.getElementById('fetchCapText').checked) caps.push('text');
   if (document.getElementById('fetchCapVision').checked) caps.push('vision');
   if (document.getElementById('fetchCapTools').checked) caps.push('tools');
   if (document.getElementById('fetchCapReasoning').checked) caps.push('reasoning');
   return caps.length > 0 ? caps : ['text'];
+}
+
+function _getFetchModelType() {
+  return document.querySelector('input[name="fetchModelType"]:checked').value;
 }
 
 async function doFetchModels() {
@@ -151,10 +156,12 @@ async function bulkAddFetchedModels() {
 
     // Add new models
     if (toAdd.length > 0) {
+      const modelType = _getFetchModelType();
       const res = await api.post('/admin/api/config/models', {
         provider: S._fetchProvider,
         models: toAdd,
         prefix: prefix,
+        type: modelType,
         capabilities: _getFetchCapabilities(),
         upstream_map: S._fetchUpstreamMap,
       });

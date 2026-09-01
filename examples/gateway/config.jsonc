@@ -32,6 +32,7 @@
     "jina": {
       "api_key": "${JINA_API_KEY}",
       "base_url": "https://api.jina.ai",
+      "models_path": "/v1/models",
       "embedding_format": "jina",
       "embedding_path": "/v1/embeddings",
       "rerank_format": "jina",
@@ -40,6 +41,7 @@
     "cohere": {
       "api_key": "${COHERE_API_KEY}",
       "base_url": "https://api.cohere.com",
+      "models_path": "/v1/models",
       "embedding_format": "cohere",
       "embedding_path": "/v2/embed",
       "rerank_format": "cohere",
