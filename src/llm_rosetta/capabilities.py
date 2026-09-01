@@ -21,6 +21,7 @@ appropriate pipeline stages.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
@@ -29,6 +30,8 @@ from llm_rosetta.shims.provider_shim import (
     ReasoningCapability,
     resolve_shim,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _apply_config_reasoning_override(
@@ -154,9 +157,6 @@ def strip_reasoning_for_non_reasoning(
 
     reasoning = ir_request.pop("reasoning", None)
     if reasoning:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.info(
             "[%s] model=%s: stripped reasoning config (model lacks 'reasoning' capability)",
             request_id,
