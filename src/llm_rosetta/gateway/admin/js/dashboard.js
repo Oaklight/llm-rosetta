@@ -467,7 +467,7 @@ function openClearDumpsConfirm() {
   document.getElementById('clearDumpsInput').value = '';
   const btn = document.getElementById('clearDumpsBtn');
   btn.disabled = true; btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
-  document.getElementById('clearDumpsModal').classList.add('open');
+  openModal('clearDumpsModal');
   document.getElementById('clearDumpsInput').focus();
 }
 

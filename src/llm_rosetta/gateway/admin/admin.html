@@ -397,7 +397,7 @@
 </div>
 
 <!-- Settings Popup (wide section-card layout) -->
-<div class="settings-popup" id="settingsPopup" role="dialog" aria-modal="true" onclick="this.classList.remove('open')">
+<div class="settings-popup" id="settingsPopup" role="dialog" aria-modal="true" onclick="closeModal('settingsPopup')">
   <div class="settings-popup-panel" onclick="event.stopPropagation()">
     <h3 data-i18n="modal.settings">Settings</h3>
 
@@ -451,14 +451,14 @@
         <div class="settings-popup-item">
           <label data-i18n="label.errorDumps">Error Detail Log</label>
           <label class="toggle-label">
-            <input type="checkbox" id="settingsErrorDumps" onchange="saveSettingsField('errorDumps',this.checked)">
+            <input type="checkbox" id="settingsErrorDumps" role="switch" onchange="this.setAttribute('aria-checked',this.checked);saveSettingsField('errorDumps',this.checked)">
             <span data-i18n="label.enabled">Enabled</span>
           </label>
         </div>
         <div class="settings-popup-item">
           <label data-i18n="label.credentialReveal">Credential Reveal</label>
           <label class="toggle-label">
-            <input type="checkbox" id="settingsCredentialVisible" onchange="saveSettingsField('credentialVisible',this.checked)">
+            <input type="checkbox" id="settingsCredentialVisible" role="switch" onchange="this.setAttribute('aria-checked',this.checked);saveSettingsField('credentialVisible',this.checked)">
             <span data-i18n="label.disabled">Disabled</span>
           </label>
         </div>
@@ -475,7 +475,7 @@
         <div class="settings-popup-item">
           <label data-i18n="label.rlEnabled">Enabled</label>
           <label class="toggle-label">
-            <input type="checkbox" id="rlEnabled" onchange="onRlToggle()">
+            <input type="checkbox" id="rlEnabled" role="switch" onchange="this.setAttribute('aria-checked',this.checked);onRlToggle()">
             <span id="rlEnabledLabel" data-i18n="label.disabled">Disabled</span>
           </label>
         </div>

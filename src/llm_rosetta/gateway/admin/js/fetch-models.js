@@ -31,7 +31,7 @@ function openFetchModelsModal() {
   document.getElementById('fetchCapTools').checked = true;
   document.getElementById('fetchCapReasoning').checked = false;
   document.getElementById('fetchCapsRow').style.display = '';
-  document.getElementById('fetchModelsModal').classList.add('open');
+  openModal('fetchModelsModal');
 }
 
 function onFetchTypeChange() {

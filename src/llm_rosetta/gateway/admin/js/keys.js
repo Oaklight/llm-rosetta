@@ -45,7 +45,7 @@ function renderKeys() {
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
   document.getElementById('keyManual').value = '';
-  document.getElementById('keyModal').classList.add('open');
+  openModal('keyModal');
 }
 
 async function generateKey() {
@@ -59,7 +59,7 @@ async function generateKey() {
     showToast(t('toast.keySaved'));
     // Show the created key for one-time copy
     document.getElementById('createdKeyValue').value = res.key.key;
-    document.getElementById('keyCreatedModal').classList.add('open');
+    openModal('keyCreatedModal');
     loadKeys();
   } else {
     showToast(res.error || 'Failed', 'error');
@@ -102,7 +102,7 @@ function rotateKey(id, label, btn) {
       showToast(t('toast.keyRotated', {label}));
       // Show the new key for one-time copy
       document.getElementById('createdKeyValue').value = res.key;
-      document.getElementById('keyCreatedModal').classList.add('open');
+      openModal('keyCreatedModal');
       loadKeys();
     } else {
       showToast(res.error || 'Failed', 'error');

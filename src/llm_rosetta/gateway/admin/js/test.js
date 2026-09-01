@@ -99,7 +99,7 @@ function _newTestSignal() {
 function promptMatryoshka(model) {
   S._matryoshkaModel = model;
   document.getElementById('matryoshkaDim').value = '256';
-  document.getElementById('matryoshkaModal').classList.add('open');
+  openModal('matryoshkaModal');
   document.getElementById('matryoshkaDim').focus();
 }
 function confirmMatryoshka() {
@@ -138,7 +138,7 @@ async function runTest(model, type, extraParam) {
     imgDetails.style.display = 'none';
     imgBody.innerHTML = '';
   }
-  document.getElementById('testModal').classList.add('open');
+  openModal('testModal');
 
   const payload = buildTestPayload(model, type, extraParam);
   reqBody.textContent = truncatePayloadForDisplay(payload);
