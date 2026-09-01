@@ -181,7 +181,7 @@ tr:hover td { background: var(--bg-hover); }
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
 }
 /* API key is redundant in a row — the column budget is better spent elsewhere */
-.provider-grid.list-view .pc-field:nth-child(3) { display: none; }
+.provider-grid.list-view .pc-field[data-field="api-key"] { display: none; }
 .provider-grid.list-view .pc-actions { margin-top: 0; padding-top: 0; flex-wrap: nowrap; }
 .provider-grid.list-view .pc-models,
 .provider-grid.list-view .pc-models-empty {

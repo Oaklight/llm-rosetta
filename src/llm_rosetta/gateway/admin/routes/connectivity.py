@@ -50,7 +50,9 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         "warnings": [],
     }
 
-    # 1. Probe base URL
+    # 1. Probe base URL — deliberately unauthenticated. This only answers
+    # "can we reach the host at all", so an auth rejection would be noise;
+    # any HTTP response, including 401/404, proves reachability.
     try:
         resp = await client.get(base_url)
         results["reachable"] = True

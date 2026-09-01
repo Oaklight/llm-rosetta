@@ -120,12 +120,25 @@ function copyProviderEntry(name) {
 }
 
 // ===================== Toast =====================
-function showToast(msg, type='success', html=false) {
+function _renderToast(type, delay, apply) {
   const el = document.getElementById('toast');
-  if (html) el.innerHTML = msg; else el.textContent = msg;
+  apply(el);
   el.className = 'toast show ' + type;
-  const delay = html ? 5000 : 3000;
-  setTimeout(() => { el.className = 'toast'; if (html) el.innerHTML = ''; }, delay);
+  setTimeout(() => { el.className = 'toast'; el.textContent = ''; }, delay);
+}
+
+/** Show a plain-text toast. Text is never parsed as HTML. */
+function showToast(msg, type = 'success') {
+  _renderToast(type, 3000, el => { el.textContent = msg; });
+}
+
+/**
+ * Show a toast built from markup. The caller owns escaping — every
+ * interpolated value must already have gone through esc().
+ * Prefer showToast() unless you need structured rows.
+ */
+function showToastHtml(trustedHtml, type = 'success') {
+  _renderToast(type, 5000, el => { el.innerHTML = trustedHtml; });
 }
 
 // ===================== Modal =====================
@@ -200,13 +213,13 @@ function fmtBytesShort(n) {
 // ===================== Window globals =====================
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
-  showToast, openModal, closeModal, inlineConfirm, esc, formatDuration,
+  showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
-  setScheme, setMode, setTheme, _adminHeaders, api, showToast, openModal, closeModal,
+  setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong,
   inlineConfirm, doLogout,

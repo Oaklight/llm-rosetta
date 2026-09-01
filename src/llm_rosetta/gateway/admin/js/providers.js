@@ -8,7 +8,7 @@
 
 import { S, _CAP_ICONS } from './state.js';
 import { t } from './i18n.js';
-import { api, showToast, closeModal, esc, copyText, inlineConfirm } from './core.js';
+import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from './core.js';
 
 // ── Module-local state ──────────────────────────────────────────────
 
@@ -355,7 +355,12 @@ function _getProviderCaps(cfg, provName) {
     const t = typeof m === 'object' ? (m.type || 'llm') : 'llm';
     return p === provName && t === 'llm';
   });
-  if (hasLlmModels || cfg.type || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
+  // A `type` only implies LLM when it names a registered LLM shim. The
+  // registry holds converter shims only, so embedding/rerank providers like
+  // voyage or jina carry a `type` that isn't in it.
+  const llmShims = (S.configData && S.configData.registered_shims) || [];
+  const typeIsLlmShim = !!cfg.type && llmShims.some(s => s.name === cfg.type);
+  if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
   if (cfg.embedding_format) caps.push('embedding');
   if (cfg.rerank_format) caps.push('rerank');
   if (caps.length === 0) caps.push('llm');
@@ -475,7 +480,7 @@ function renderProviders() {
       : '<span class="pc-logo pc-logo-empty"></span>';
     const baseUrl = cfg.base_url || '';
     const apiKeyField = S._credentialVisible
-      ? `<div class="pc-field" data-label="${t('card.apiKey')}" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>`
+      ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>`
       : '';
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
@@ -520,8 +525,9 @@ async function saveProvider() {
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {base_url: baseUrl, proxy};
-  if (isLlm) body.type = provType;
-  else body.type = '';
+  // Empty string clears the type: _build_provider_entry only copies `type`
+  // when truthy, so the key is dropped from the saved entry.
+  body.type = isLlm ? provType : '';
   if (urlTemplate) body.url_template = urlTemplate;
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
@@ -738,7 +744,7 @@ async function testProviderConnectivity(name) {
       if (info.ok) {
         lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">ok</span></div>`);
       } else {
-        const reason = info.status ? `${info.status}` : (info.error || 'failed');
+        const reason = esc(info.status ? `${info.status}` : (info.error || 'failed'));
         lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} (may not be supported by this provider)</span></div>`);
       }
     }
@@ -747,7 +753,7 @@ async function testProviderConnectivity(name) {
         lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(w)}</span></div>`);
       }
     }
-    showToast(lines.join(''), r.reachable ? 'success' : 'error', true);
+    showToastHtml(lines.join(''), r.reachable ? 'success' : 'error');
   } catch (e) {
     showToast(`Test failed: ${e.message || e}`, 'error');
   } finally {
