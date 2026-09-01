@@ -55,8 +55,8 @@ import importlib.util
 import logging
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import Any
 from collections.abc import Callable
+from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
@@ -67,14 +67,16 @@ logger = logging.getLogger(__name__)
 _PROVIDERS_DIR = Path(__file__).parent
 
 # Convention-based model list transforms registered by shim transforms modules.
-# Each entry maps a shim name to a callable with signature:
-#   (raw_entries: list[dict]) -> tuple[list[str], dict[str, str]]
-_model_list_transforms: dict[str, Callable[..., Any]] = {}
+# Each entry maps a shim name to a callable that converts upstream model
+# entries into (display_ids, upstream_map).
+ModelListTransform = Callable[[list[dict[str, Any]]], tuple[list[str], dict[str, str]]]
+
+_model_list_transforms: dict[str, ModelListTransform] = {}
 
 
 def get_model_list_transform(
     shim_name: str,
-) -> Callable[..., Any] | None:
+) -> ModelListTransform | None:
     """Return the model_list_transform for *shim_name*, or ``None``."""
     return _model_list_transforms.get(shim_name)
 
