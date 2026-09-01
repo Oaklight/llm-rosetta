@@ -59,7 +59,7 @@ class ReasoningConfig(TypedDict, total=False):
     mode: IRMode
     effort: IREffort
     budget_tokens: int
-    summary: str  # "auto", "concise", "detailed", "none"
+    summary: IRVisibility
     include_thoughts: bool  # Google/Gemini thought inclusion flag
 
 
