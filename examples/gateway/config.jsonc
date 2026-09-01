@@ -33,6 +33,7 @@
       "api_key": "${JINA_API_KEY}",
       "base_url": "https://api.jina.ai",
       "models_path": "/v1/models",
+      "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/jina.svg",
       "embedding_format": "jina",
       "embedding_path": "/v1/embeddings",
       "rerank_format": "jina",
@@ -42,6 +43,7 @@
       "api_key": "${COHERE_API_KEY}",
       "base_url": "https://api.cohere.com",
       "models_path": "/v1/models",
+      "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg",
       "embedding_format": "cohere",
       "embedding_path": "/v2/embed",
       "rerank_format": "cohere",
@@ -50,6 +52,7 @@
     "voyage": {
       "api_key": "${VOYAGE_API_KEY}",
       "base_url": "https://api.voyageai.com",
+      "logo": "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/voyage.svg",
       "embedding_format": "voyage",
       "embedding_path": "/v1/embeddings",
       "rerank_format": "voyage",

@@ -2,11 +2,21 @@
 
 from __future__ import annotations
 
+import pytest
+
 from llm_rosetta.shims.providers import (
     _jina_model_list_transform,
     _cohere_model_list_transform,
     get_model_list_transform,
+    load_providers,
 )
+
+
+@pytest.fixture(autouse=True)
+def _ensure_transforms_loaded():
+    """Repopulate built-in transforms in case another test reset the registry."""
+    load_providers()
+    yield
 
 
 class TestJinaModelListTransform:
@@ -45,7 +55,10 @@ class TestJinaModelListTransform:
         assert upstream == {}
 
     def test_registered(self):
-        assert get_model_list_transform("jina") is _jina_model_list_transform
+        t = get_model_list_transform("jina")
+        assert t is not None
+        ids, _ = t([{"id": "jina-ai/test"}])
+        assert ids == ["test"]
 
 
 class TestCohereModelListTransform:
@@ -77,4 +90,7 @@ class TestCohereModelListTransform:
         assert upstream == {}
 
     def test_registered(self):
-        assert get_model_list_transform("cohere") is _cohere_model_list_transform
+        t = get_model_list_transform("cohere")
+        assert t is not None
+        ids, _ = t([{"name": "test-model"}])
+        assert ids == ["test-model"]

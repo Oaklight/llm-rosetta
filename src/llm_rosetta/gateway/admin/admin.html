@@ -667,6 +667,15 @@
       <input id="provTimeout" type="number" min="1" step="1" placeholder="">
       <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.timeoutHint">Leave blank to use the global default. Per-model overrides take precedence.</div>
     </div>
+    <div class="form-group">
+      <label data-i18n="label.modelsPath">Models Path <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="provModelsPath" placeholder="/v1/models">
+      <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.modelsPathHint">Override the model listing endpoint path. Leave blank for auto-detection.</div>
+    </div>
+    <div class="form-group">
+      <label data-i18n="label.logoUrl">Logo URL <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
+      <input id="provLogo" placeholder="https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/...">
+    </div>
 
     <!-- LLM Endpoint panel -->
     <div class="endpoint-section visible" id="provLlmSection">
