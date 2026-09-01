@@ -873,7 +873,13 @@ def create_app(
             disabled_tabs=ext.disabled_tabs,
             custom_head=ext.custom_head,
             branding=ext.branding,
-            data_dir=config.data_dir,
+            data_dir=(
+                os.path.join(os.path.dirname(config_path), config.data_dir)
+                if config.data_dir
+                and config_path
+                and not os.path.isabs(config.data_dir)
+                else config.data_dir
+            ),
         )
 
     return app
