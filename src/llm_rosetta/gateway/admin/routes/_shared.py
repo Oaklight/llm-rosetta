@@ -161,18 +161,21 @@ def _build_provider_entry(
     if "timeout" in body and body["timeout"] not in (None, ""):
         entry["timeout"] = float(body["timeout"])
 
-    # Embedding/rerank endpoint config (unified provider format)
-    for ep_key in (
+    # Optional provider-level fields: set when truthy, clear when
+    # explicitly sent as empty (so the admin UI can remove them).
+    for opt_key in (
+        "models_path",
+        "logo",
         "embedding_format",
         "embedding_path",
         "rerank_format",
         "rerank_path",
     ):
-        val = body.get(ep_key)
+        val = body.get(opt_key)
         if val:
-            entry[ep_key] = val
-        elif ep_key in body and not val:
-            entry.pop(ep_key, None)
+            entry[opt_key] = val
+        elif opt_key in body:
+            entry.pop(opt_key, None)
 
     return entry
 

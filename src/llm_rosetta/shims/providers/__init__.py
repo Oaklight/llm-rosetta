@@ -118,10 +118,6 @@ def _cohere_model_list_transform(
     return ids, {}
 
 
-register_model_list_transform("jina", _jina_model_list_transform)
-register_model_list_transform("cohere", _cohere_model_list_transform)
-
-
 def _parse_reasoning_cap(
     cfg: dict,
     *,
@@ -349,6 +345,8 @@ def load_providers() -> list[ProviderShim]:
     1. Scans the built-in ``providers/`` directory.
     2. Discovers entry points in the ``llm_rosetta.shim_providers`` group
        and calls each one to let plugins register their own shims.
+    3. Registers built-in model list transforms for providers without
+       shim directories (Jina, Cohere).
 
     Returns:
         Combined list of all registered :class:`ProviderShim` instances
@@ -359,6 +357,10 @@ def load_providers() -> list[ProviderShim]:
 
     # 2. Plugin shims via entry points
     shims.extend(_load_plugin_shims())
+
+    # 3. Built-in transforms for providers without shim directories
+    register_model_list_transform("jina", _jina_model_list_transform)
+    register_model_list_transform("cohere", _cohere_model_list_transform)
 
     return shims
 

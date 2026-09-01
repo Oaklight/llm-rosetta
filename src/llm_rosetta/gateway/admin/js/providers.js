@@ -120,6 +120,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   preflightCb.checked = !!(provCfg && provCfg.preflight_token_count);
   document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
   document.getElementById('provTimeout').placeholder = (S.configData.server && S.configData.server.upstream_timeout) || 300;
+  document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
+  document.getElementById('provLogo').value = (provCfg && provCfg.logo) || '';
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   // Populate embedding/rerank capability checkboxes
   const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
@@ -474,7 +476,7 @@ function renderProviders() {
   grid.innerHTML = entries.map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
-    const logo = shimLogo[typeName];
+    const logo = shimLogo[typeName] || cfg.logo || '';
     const logoHtml = logo
       ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
       : '<span class="pc-logo pc-logo-empty"></span>';
@@ -550,6 +552,8 @@ async function saveProvider() {
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
+  body.models_path = document.getElementById('provModelsPath').value.trim();
+  body.logo = document.getElementById('provLogo').value.trim();
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
