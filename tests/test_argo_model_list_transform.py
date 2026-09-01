@@ -39,13 +39,19 @@ class TestModelListTransform:
         assert ids == ["argo:claude-opus-5"]
         assert upstream == {"argo:claude-opus-5": "claudeopus5"}
 
-    def test_missing_internal_id_falls_back_to_id(self):
-        """When internal_id is absent, the raw id is used as upstream value."""
-        raw = [{"id": "Some Model"}]
+    def test_no_internal_id_passthrough(self):
+        """When internal_id is absent, the raw id is passed through as-is."""
+        raw = [{"id": "argo:claude-opus-5"}]
         ids, upstream = model_list_transform(raw)
-        assert ids == ["argo:some-model"]
-        # Display "argo:some-model" differs from raw id "Some Model" → mapped.
-        assert upstream == {"argo:some-model": "Some Model"}
+        assert ids == ["argo:claude-opus-5"]
+        assert upstream == {}
+
+    def test_no_internal_id_plain_name(self):
+        """A plain model name without internal_id passes through unchanged."""
+        raw = [{"id": "gpt-4o"}]
+        ids, upstream = model_list_transform(raw)
+        assert ids == ["gpt-4o"]
+        assert upstream == {}
 
     def test_display_always_has_prefix(self):
         """Even when slug matches internal_id, argo: prefix causes a mapping."""
@@ -72,10 +78,6 @@ class TestModelListTransform:
         raw = [{"id": "  Claude Opus 5  ", "internal_id": "claudeopus5"}]
         ids, upstream = model_list_transform(raw)
         assert ids == ["argo:claude-opus-5"]
-        assert "argo:claude-opus-5" not in [
-            "argo:-claude-opus-5-",
-            "argo:-claude-opus-5",
-        ]
 
     def test_empty_list(self):
         """Empty input returns empty results."""
@@ -89,3 +91,13 @@ class TestModelListTransform:
         ids, upstream = model_list_transform(raw)
         assert ids == []
         assert upstream == {}
+
+    def test_mixed_with_and_without_internal_id(self):
+        """Entries with internal_id get transformed; without get passed through."""
+        raw = [
+            {"id": "Claude Opus 5", "internal_id": "claudeopus5"},
+            {"id": "argo:claude-opus-4.7"},
+        ]
+        ids, upstream = model_list_transform(raw)
+        assert ids == ["argo:claude-opus-5", "argo:claude-opus-4.7"]
+        assert upstream == {"argo:claude-opus-5": "claudeopus5"}
