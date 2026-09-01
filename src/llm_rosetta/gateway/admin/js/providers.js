@@ -343,7 +343,7 @@ function _getProviderCaps(cfg, provName) {
     const t = typeof m === 'object' ? (m.type || 'llm') : 'llm';
     return p === provName && t === 'llm';
   });
-  if (hasLlmModels || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
+  if (hasLlmModels || cfg.type || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
   if (cfg.embedding_format) caps.push('embedding');
   if (cfg.rerank_format) caps.push('rerank');
   if (caps.length === 0) caps.push('llm');
@@ -471,7 +471,7 @@ function renderProviders() {
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
       ? `<span class="model-link" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
-      : '';
+      : (isList ? '<span class="model-link-placeholder"></span>' : '');
     // Endpoint details are in Edit modal — badges on card are sufficient
     const toggleHtml = `
         <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
@@ -485,12 +485,20 @@ function renderProviders() {
         <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
       </div>`;
+    const nameCol = isList
+      ? `<div class="card-header">
+          <div class="name" style="display:flex;align-items:center;gap:6px;min-width:0">${logoHtml}<span class="name-text">${esc(name)}</span></div>
+          ${toggleHtml}
+        </div>
+        <div class="field badges">${capBadges}</div>`
+      : `<div class="card-header">
+          <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)}</div>
+          ${toggleHtml}
+        </div>
+        <div class="card-badges">${capBadges}</div>`;
     return `
     <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
-      <div class="card-header">
-        <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)} ${capBadges}</div>
-        ${toggleHtml}
-      </div>
+      ${nameCol}
       ${fieldsHtml}
       ${actionsHtml}
     </div>`;
@@ -511,6 +519,7 @@ async function saveProvider() {
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {base_url: baseUrl, proxy};
   if (isLlm) body.type = provType;
+  else body.type = '';
   if (urlTemplate) body.url_template = urlTemplate;
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
@@ -713,30 +722,30 @@ export { renderProviders, loadConfig, _activateSegChild, _getProviderCaps };
 async function testProviderConnectivity(name) {
   const card = document.querySelector(`.provider-card[data-provider="${name}"]`);
   const btn = card?.querySelector('.btn-test-conn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
   try {
     const r = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/test-connectivity`, {});
-    let msg = '';
+    const lines = [];
     if (r.reachable) {
-      msg += `✅ ${name}: reachable (${r.base_status})`;
+      lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">connected</span></div>`);
     } else {
-      msg += `❌ ${name}: unreachable — ${r.base_error || 'connection failed'}`;
+      lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${esc(r.base_error || 'connection failed')}</span></div>`);
     }
     const eps = r.endpoints || {};
     for (const [ep, info] of Object.entries(eps)) {
-      const urlNote = info.normalized_url && info.normalized_url !== info.url
-        ? ` → normalized: ${info.normalized_url}`
-        : '';
       if (info.ok) {
-        msg += `\n  ✅ ${ep}: ${info.url} (${info.status})${urlNote}`;
+        lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">ok</span></div>`);
       } else {
-        msg += `\n  ❌ ${ep}: ${info.url} (${info.status || info.error || 'failed'})${urlNote}`;
+        const reason = info.status ? `${info.status}` : (info.error || 'failed');
+        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} (may not be supported by this provider)</span></div>`);
       }
     }
     if (r.warnings?.length) {
-      msg += '\n⚠️ ' + r.warnings.join('\n⚠️ ');
+      for (const w of r.warnings) {
+        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(w)}</span></div>`);
+      }
     }
-    showToast(msg, r.reachable ? 'success' : 'error');
+    showToast(lines.join(''), r.reachable ? 'success' : 'error', true);
   } catch (e) {
     showToast(`Test failed: ${e.message || e}`, 'error');
   } finally {
