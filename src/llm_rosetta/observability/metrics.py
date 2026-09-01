@@ -84,7 +84,7 @@ class _RollingWindow:
                         "count": bucket.count,
                         "avg_ms": round(avg_ms, 2),
                         "errors": bucket.error_count,
-                        "latencies": bucket.latencies,
+                        "latencies": bucket.latencies[:],
                     }
                 )
             else:
