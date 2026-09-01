@@ -48,8 +48,10 @@ tr:hover td { background: var(--bg-hover); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:#fff; }
 /* Capability badges for provider cards */
-.cap-badge { display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;margin-left:4px;vertical-align:middle; }
-.cap-badge svg { width:10px;height:10px;flex-shrink:0; }
+/* Capability badges are secondary metadata — kept small so a provider with
+   all three still fits its column without squeezing the base URL. */
+.cap-badge { display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:10px;font-size:9px;font-weight:600;letter-spacing:.02em;margin-left:4px;vertical-align:middle; }
+.cap-badge svg { width:9px;height:9px;flex-shrink:0; }
 .cap-badge-llm { background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent); }
 .cap-badge-embedding { background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green); }
 .cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
