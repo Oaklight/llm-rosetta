@@ -154,6 +154,8 @@ nav:
       - api/index.md
       - 库 API:
           - IR 类型: api/types.md
+          - IR 推理类型: api/ir-types.md
+          - 推理能力配置: api/reasoning.md
           - 转换器: api/converters.md
           - Tool Ops: api/tool-ops.md
           - Shims: api/shims.md
