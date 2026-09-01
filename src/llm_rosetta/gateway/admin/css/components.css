@@ -109,14 +109,15 @@ tr:hover td { background: var(--bg-hover); }
 .pill-toggle.is-off .pill-off { background:var(--border);color:var(--text); }
 .pill-toggle.is-off .pill-on { background:var(--bg-card);color:var(--text-dim); }
 .btn-test-embed { color:var(--orange) !important;font-weight:600; }
+.provider-card { display: flex; flex-direction: column; }
 .provider-card .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.provider-card .actions { margin-top: 12px; display: flex; gap: 8px; }
-/* List view — CSS grid for column alignment across rows */
+.provider-card .actions { margin-top: auto; padding-top: 12px; display: flex; gap: 8px; }
+/* List view — compact single-line rows */
 .provider-grid.list-view { grid-template-columns: 1fr; gap: 4px; }
 .provider-grid.list-view .provider-card {
   display: grid;
-  grid-template-columns: minmax(140px, 1.2fr) minmax(80px, 0.8fr) minmax(100px, 1.2fr) minmax(80px, 1fr) auto;
-  align-items: center; gap: 4px 12px; padding: 8px 16px;
+  grid-template-columns: minmax(140px, 1.5fr) minmax(80px, 0.8fr) minmax(120px, 2fr) auto;
+  align-items: center; gap: 0 16px; padding: 6px 16px;
 }
 .provider-grid.list-view .provider-card .card-header { margin-bottom: 0; overflow: hidden; }
 .provider-grid.list-view .provider-card .card-header .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -126,12 +127,13 @@ tr:hover td { background: var(--bg-hover); }
 .provider-grid.list-view .provider-card .field code {
   max-width: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.provider-grid.list-view .provider-card .actions { margin-top: 0; justify-self: end; white-space: nowrap; }
+.provider-grid.list-view .provider-card .actions { margin-top: 0; padding-top: 0; justify-self: end; white-space: nowrap; }
 /* View toggle buttons */
 .view-toggle { display:inline-flex;gap:2px;margin-left:8px; }
 .view-toggle .btn { padding:4px 6px; }
 .view-toggle .btn.active { color:var(--accent);border-color:var(--accent); }
-.provider-card .provider-logo { width: 16px; height: 16px; vertical-align: middle; margin-right: 4px; }
+.provider-card .provider-logo { width: 16px; height: 16px; vertical-align: middle; margin-right: 4px; flex-shrink: 0; }
+.provider-card .provider-logo-placeholder { display: inline-block; width: 16px; height: 16px; flex-shrink: 0; margin-right: 4px; }
 .type-logo-wrapper { display: flex; align-items: center; gap: 8px; }
 .type-logo-wrapper select { flex: 1; }
 .type-logo-wrapper .type-logo-preview { width: 20px; height: 20px; flex-shrink: 0; }
