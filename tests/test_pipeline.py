@@ -12,6 +12,7 @@ import pytest
 from llm_rosetta.capabilities import (
     _apply_config_reasoning_override,
     enforce_reasoning,
+    strip_reasoning_for_non_reasoning,
 )
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms
@@ -181,6 +182,43 @@ class TestEnforceReasoning:
         ctx = ConversionContext()
         enforce_reasoning(ctx, "nonexistent")
         assert "reasoning_cap" not in ctx.options
+
+
+# ---------------------------------------------------------------------------
+# strip_reasoning_for_non_reasoning
+# ---------------------------------------------------------------------------
+
+
+class TestStripReasoningForNonReasoning:
+    def test_strips_when_no_reasoning_cap(self):
+        """Reasoning config stripped when model lacks 'reasoning' capability."""
+        ir = _simple_ir_request()
+        ir["reasoning"] = {"mode": "auto", "effort": "high"}
+        result = strip_reasoning_for_non_reasoning(ir, model_capabilities=["text"])
+        assert "reasoning" not in result
+
+    def test_keeps_when_reasoning_cap_present(self):
+        """Reasoning config kept when model has 'reasoning' capability."""
+        ir = _simple_ir_request()
+        ir["reasoning"] = {"mode": "auto", "effort": "high"}
+        result = strip_reasoning_for_non_reasoning(
+            ir, model_capabilities=["text", "reasoning"]
+        )
+        assert result["reasoning"]["mode"] == "auto"
+        assert result["reasoning"]["effort"] == "high"
+
+    def test_noop_when_caps_none(self):
+        """No-op when model_capabilities is None (unknown)."""
+        ir = _simple_ir_request()
+        ir["reasoning"] = {"mode": "enabled"}
+        result = strip_reasoning_for_non_reasoning(ir, model_capabilities=None)
+        assert result["reasoning"]["mode"] == "enabled"
+
+    def test_noop_when_no_reasoning_in_request(self):
+        """No-op when request has no reasoning config."""
+        ir = _simple_ir_request()
+        result = strip_reasoning_for_non_reasoning(ir, model_capabilities=["text"])
+        assert "reasoning" not in result
 
 
 # ---------------------------------------------------------------------------

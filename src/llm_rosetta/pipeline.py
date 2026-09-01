@@ -33,6 +33,7 @@ from llm_rosetta.capabilities import (
     enforce_vision,
     get_custom_tool_names,
     restore_custom_tool_calls,
+    strip_reasoning_for_non_reasoning,
     unwrap_custom_tool_input,
 )
 from llm_rosetta.converters.base.context import ConversionContext
@@ -511,6 +512,14 @@ class ConversionPipeline:
         # Capability enforcement: vision (post-IR) + shim IR transforms
         t0 = time.perf_counter()
         ir_request = enforce_vision(
+            ir_request,
+            model_capabilities=self._model_capabilities,
+            model=self._upstream_model or body.get("model") or "",
+            request_id=request_id,
+        )
+
+        # Capability enforcement: reasoning (post-IR)
+        ir_request = strip_reasoning_for_non_reasoning(
             ir_request,
             model_capabilities=self._model_capabilities,
             model=self._upstream_model or body.get("model") or "",

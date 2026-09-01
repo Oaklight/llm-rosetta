@@ -11,6 +11,7 @@ adaptation) and from **converter logic** (API-standard translation).
 Functions follow the ``enforce_*`` naming convention:
 
 - :func:`enforce_reasoning` — configure reasoning output mode (pre-IR)
+- :func:`strip_reasoning_for_non_reasoning` — strip reasoning for non-reasoning models (post-IR)
 - :func:`enforce_vision` — strip images for non-vision models (post-IR)
 - :func:`enforce_custom_tools` — downgrade custom tools for non-supporting providers (post-IR)
 
@@ -121,6 +122,48 @@ def enforce_reasoning(
         cap = _apply_config_reasoning_override(cap, config_override)
     if cap is not None:
         ctx.options["reasoning_cap"] = cap
+
+
+def strip_reasoning_for_non_reasoning(
+    ir_request: dict[str, Any],
+    *,
+    model_capabilities: list[str] | None = None,
+    model: str = "",
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Strip reasoning config from the IR request if the model lacks reasoning capability.
+
+    Must be called **after** source → IR conversion (operates on the IR
+    dict, not the raw provider body).
+
+    No-op when *model_capabilities* is ``None`` (unknown) or includes
+    ``"reasoning"``.
+
+    Args:
+        ir_request: The IR request dict — **always use the return value**.
+        model_capabilities: Declared capabilities of the model.
+        model: Upstream model identifier (for logging).
+        request_id: Request identifier (for logging).
+
+    Returns:
+        The IR request with reasoning config removed, or the original
+        request if the model has reasoning capability.
+    """
+    if model_capabilities is None or "reasoning" in model_capabilities:
+        return ir_request
+
+    reasoning = ir_request.pop("reasoning", None)
+    if reasoning:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.info(
+            "[%s] model=%s: stripped reasoning config (model lacks 'reasoning' capability)",
+            request_id,
+            model,
+        )
+
+    return ir_request
 
 
 def enforce_vision(
