@@ -182,15 +182,13 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "anthropic"
 
-    def test_argo_anthropic_preserves_unsigned_reasoning_blocks(self):
+    def test_argo_anthropic_preserves_unsigned_blocks(self):
         shim = get_shim("argo--anthropic")
         assert shim is not None
         assert shim.reasoning is not None
-        assert shim.reasoning.unsigned_reasoning_blocks == "preserve"
+        assert shim.reasoning.unsigned_blocks == "preserve"
         assert shim.model_reasoning is not None
-        assert (
-            shim.model_reasoning["claudeopus47"].unsigned_reasoning_blocks == "preserve"
-        )
+        assert shim.model_reasoning["claudeopus47"].unsigned_blocks == "preserve"
 
     def test_google_base_type(self):
         shim = get_shim("google")
@@ -285,8 +283,9 @@ class TestGroupedProviders:
         assert anth is not None and anth.reasoning is not None
         assert oai is not None and oai.reasoning is not None
         assert anth.reasoning.effort_field == "output_config.effort"
-        assert anth.reasoning.effort_map["xhigh"] == "xhigh"
-        assert oai.reasoning.effort_map["max"] == "max"
+        assert anth.reasoning.effort_range == ("low", "max")
+        # Argo OpenAI has no effort_range (full ladder)
+        assert oai.reasoning.effort_range is None
 
     def test_argo_anthropic_model_reasoning_overrides(self):
         """Argo anthropic has model_reasoning for claudeopus47."""
@@ -295,16 +294,22 @@ class TestGroupedProviders:
         assert anth.model_reasoning is not None
         assert "claudeopus47" in anth.model_reasoning
         override = anth.model_reasoning["claudeopus47"]
-        assert override.thinking_type == "adaptive"
-        # Inherits provider defaults for other fields
+        assert override.thinking_modes == {
+            "auto": "adaptive",
+            "enabled": "adaptive",
+            "disabled": "disabled",
+        }
         assert override.effort_field == "output_config.effort"
-        assert override.effort_map["xhigh"] == "xhigh"
+        assert override.effort_range == ("low", "max")
 
-    def test_argo_anthropic_provider_thinking_type(self):
-        """Argo anthropic provider-level thinking_type is enabled."""
+    def test_argo_anthropic_provider_thinking_modes(self):
+        """Argo anthropic provider-level thinking_modes includes all three modes."""
         anth = get_shim("argo--anthropic")
         assert anth is not None and anth.reasoning is not None
-        assert anth.reasoning.thinking_type == "enabled"
+        assert anth.reasoning.thinking_modes is not None
+        assert "auto" in anth.reasoning.thinking_modes
+        assert "enabled" in anth.reasoning.thinking_modes
+        assert "disabled" in anth.reasoning.thinking_modes
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""

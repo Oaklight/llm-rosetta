@@ -4,17 +4,20 @@ default_base_url: https://apps.inside.anl.gov/argoapi
 default_api_key_env: ARGO_API_KEY
 model_id_field: internal_id
 reasoning:
-  disabled: thinking_disabled
+  thinking_modes:
+    auto: adaptive
+    enabled: enabled
+    disabled: disabled
+  thinking_default: auto
   effort_field: output_config.effort
-  thinking_type: enabled
-  unsigned_reasoning_blocks: preserve
-  effort_map:
-    minimal: low
-    low: low
-    medium: medium
-    high: high
-    xhigh: xhigh
-    max: max
+  effort_range: [low, max]
+  budget_ratio: 0.8
+  visibility_modes:
+    auto: summarized
+    concise: summarized
+    detailed: summarized
+    none: omitted
+  unsigned_blocks: preserve
   # Argo Anthropic thinking support matrix (tested 2026-06-18):
   #   claudehaiku45:  enabled+budget only (adaptive → 400)
   #   claudesonnet4:  enabled+budget only (adaptive → 400)
@@ -22,12 +25,12 @@ reasoning:
   #   claudeopus47+:  adaptive only (enabled → 400)
   model_overrides:
     claudehaiku45:
-      thinking_type: enabled
-      budget_tokens_default_ratio: 0.8
+      thinking_modes: {enabled: enabled, disabled: disabled}
+      budget_ratio: 0.8
     claudesonnet4:
-      thinking_type: enabled
-      budget_tokens_default_ratio: 0.8
+      thinking_modes: {enabled: enabled, disabled: disabled}
+      budget_ratio: 0.8
     claudeopus47:
-      thinking_type: adaptive
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claudeopus48:
-      thinking_type: adaptive
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}

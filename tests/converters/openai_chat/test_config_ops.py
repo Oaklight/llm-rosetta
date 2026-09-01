@@ -173,10 +173,10 @@ class TestOpenAIChatConfigOps:
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"effort": "max"})
         assert result["reasoning_effort"] == "high"
 
-    def test_ir_reasoning_config_budget_tokens(self):
-        """Test budget_tokens → thinking.budget_tokens."""
+    def test_ir_reasoning_config_budget_tokens_no_thinking_support(self):
+        """Test budget_tokens silently dropped for standard OpenAI (no thinking_modes)."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"budget_tokens": 1000})
-        assert result["thinking"]["budget_tokens"] == 1000
+        assert "thinking" not in result
 
     def test_ir_reasoning_config_mode_disabled(self):
         """Test mode: disabled → omit (OpenAI shim strategy)."""
@@ -186,28 +186,26 @@ class TestOpenAIChatConfigOps:
         # OpenAI disabled strategy is 'omit' → empty result
         assert result == {}
 
-    def test_ir_reasoning_config_mode_enabled(self):
-        """Test mode: enabled → thinking.type = enabled."""
+    def test_ir_reasoning_config_mode_enabled_no_thinking_support(self):
+        """Standard OpenAI: mode=enabled without thinking_modes → no thinking block."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p({"mode": "enabled"})
-        assert result["thinking"]["type"] == "enabled"
+        assert "thinking" not in result
 
-    def test_ir_reasoning_config_mode_auto_with_effort(self):
-        """Test mode: auto outputs reasoning_effort and thinking.type=adaptive."""
+    def test_ir_reasoning_config_mode_auto_effort_no_thinking_support(self):
+        """Standard OpenAI: mode=auto → effort only, no thinking block."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "auto", "effort": "medium"}
         )
         assert result["reasoning_effort"] == "medium"
-        # IR "auto" maps to "adaptive" (DeepSeek/Volcengine vocabulary)
-        assert result["thinking"]["type"] == "adaptive"
+        assert "thinking" not in result
 
-    def test_ir_reasoning_config_all_fields(self):
-        """Test mode + effort + budget_tokens coexistence."""
+    def test_ir_reasoning_config_all_fields_no_thinking_support(self):
+        """Standard OpenAI: all fields but no thinking_modes → effort only."""
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(
             {"mode": "enabled", "effort": "high", "budget_tokens": 4096}
         )
         assert result["reasoning_effort"] == "high"
-        assert result["thinking"]["type"] == "enabled"
-        assert result["thinking"]["budget_tokens"] == 4096
+        assert "thinking" not in result
 
     def test_ir_reasoning_config_effort_only_no_thinking(self):
         """Test effort-only does not produce thinking object."""
@@ -249,10 +247,10 @@ class TestOpenAIChatConfigOps:
             "thinking": {"type": "enabled", "budget_tokens": 4096},
         }
         ir = OpenAIChatConfigOps.p_reasoning_config_to_ir(original)
+        # Without thinking_modes cap, thinking block not produced
         result = OpenAIChatConfigOps.ir_reasoning_config_to_p(ir)
         assert result["reasoning_effort"] == "high"
-        assert result["thinking"]["type"] == "enabled"
-        assert result["thinking"]["budget_tokens"] == 4096
+        assert "thinking" not in result
 
     def test_ir_reasoning_config_with_summary(self):
         """Test reasoning config with summary → reasoning.summary."""

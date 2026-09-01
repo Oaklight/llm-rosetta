@@ -21,9 +21,14 @@ Contains various configuration parameters for controlling model generation behav
 
 from typing import Any, Literal, TypedDict
 
-# Normalised IR effort levels — the canonical ladder used internally.
-# External "none" maps to mode: disabled, not an effort level.
-ReasoningEffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
+# Reasoning types live in their own module; re-exported here for compat.
+from .reasoning import (  # noqa: F401, E402
+    IREffort,
+    IRMode,
+    IRVisibility,
+    ReasoningConfig,
+    ReasoningEffortLevel,
+)
 
 # ============================================================================
 # 生成控制配置 Generation control configuration
@@ -98,45 +103,7 @@ class GenerationConfig(TypedDict, total=False):
     n: int
 
 
-# ============================================================================
-# 推理配置 Reasoning configuration
-# ============================================================================
-
-
-class ReasoningConfig(TypedDict, total=False):
-    """Reasoning/thinking configuration.
-
-    Controls whether and how the model performs explicit reasoning.
-
-    Provider mappings for ``mode``:
-    - ``"auto"``: Model decides when/how much to think.
-      Anthropic: ``thinking.type="adaptive"``,
-      Google: ``thinking_budget=-1``
-    - ``"enabled"``: Explicit thinking with budget control.
-      Anthropic: ``thinking.type="enabled"`` + ``budget_tokens``,
-      OpenAI Responses: ``reasoning.type="enabled"``
-    - ``"disabled"``: No thinking.
-      Anthropic: ``thinking.type="disabled"``,
-      Google: ``thinking_budget=0``,
-      OpenAI Responses: ``reasoning.type="disabled"``
-
-    Provider mappings for ``effort``:
-    - Anthropic: ``output_config.effort``
-    - OpenAI Chat: ``reasoning_effort``
-    - OpenAI Responses: ``reasoning.effort``
-    - Google: ``thinking_config.thinking_level``
-
-    Provider mappings for ``budget_tokens``:
-    - Anthropic: ``thinking.budget_tokens``
-    - Google: ``thinking_config.thinking_budget``
-    """
-
-    mode: Literal["auto", "enabled", "disabled"]
-    effort: ReasoningEffortLevel  # Reasoning effort level (normalised)
-    budget_tokens: int  # Max tokens for reasoning — Anthropic/Google: budget_tokens
-    summary: str  # Reasoning summary mode ("auto", "concise", "detailed", "none")
-    include_thoughts: bool  # Explicit flag for Google/Gemini thought inclusion
-
+# ReasoningConfig lives in reasoning.py; re-exported above.
 
 # ============================================================================
 # 流式输出配置 Streaming configuration
@@ -194,6 +161,10 @@ class CacheConfig(TypedDict, total=False):
 __all__ = [
     # 生成控制配置 Generation control configuration
     "GenerationConfig",
+    # 推理 IR 词汇 Reasoning IR vocabulary
+    "IRMode",
+    "IREffort",
+    "IRVisibility",
     # 推理配置 Reasoning configuration
     "ReasoningConfig",
     "ReasoningEffortLevel",

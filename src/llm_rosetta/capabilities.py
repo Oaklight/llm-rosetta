@@ -39,18 +39,17 @@ def _apply_config_reasoning_override(
     Only fields present in *override* are replaced; the rest inherit
     from *base*.
     """
+    raw_range = override.get("effort_range", base.effort_range)
+    effort_range = tuple(raw_range) if isinstance(raw_range, list) else raw_range
+
     return ReasoningCapability(
-        disabled=override.get("disabled", base.disabled),
+        thinking_modes=override.get("thinking_modes", base.thinking_modes),
+        thinking_default=override.get("thinking_default", base.thinking_default),
         effort_field=override.get("effort_field", base.effort_field),
-        max_effort=override.get("max_effort", base.max_effort),
-        thinking_type=override.get("thinking_type", base.thinking_type),
-        unsigned_reasoning_blocks=override.get(
-            "unsigned_reasoning_blocks", base.unsigned_reasoning_blocks
-        ),
-        effort_map=override.get("effort_map", base.effort_map),
-        budget_tokens_default_ratio=override.get(
-            "budget_tokens_default_ratio", base.budget_tokens_default_ratio
-        ),
+        effort_range=effort_range,
+        budget_ratio=override.get("budget_ratio", base.budget_ratio),
+        visibility_modes=override.get("visibility_modes", base.visibility_modes),
+        unsigned_blocks=override.get("unsigned_blocks", base.unsigned_blocks),
     )
 
 

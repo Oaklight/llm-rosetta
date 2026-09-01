@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Literal
 
+from ..types.ir.configs import IREffort, IRMode  # re-exported
 from .transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
@@ -26,69 +27,80 @@ logger = logging.getLogger(__name__)
 # Reasoning capability config
 # ---------------------------------------------------------------------------
 
-#: How a provider handles "reasoning disabled".
-DisabledStrategy = Literal["omit", "thinking_disabled", "thinking_budget_zero"]
+# Provider-side types — strategy enums for shim behavior.
 
-#: Where the provider expects the effort value to be serialised.
-EffortField = Literal[
-    "reasoning_effort",  # OpenAI Chat top-level
-    "reasoning.effort",  # OpenAI Responses nested
-    "output_config.effort",  # Anthropic
-    "thinking_level",  # Google thinking_config.thinking_level
-    "none",  # Provider has no effort field
-]
-
-#: Normalised IR effort ladder level.
-EffortLevel = Literal["minimal", "low", "medium", "high", "xhigh", "max"]
-
-#: How the provider expects ``thinking.type`` to be serialised.
-ThinkingType = Literal["enabled", "adaptive"]
+#: How outbound unsigned reasoning blocks are handled.
+UnsignedBlocks = Literal["as_is", "preserve"]
 
 #: Tool search capability mode.
 ToolSearchMode = Literal["disabled", "native", "bridge"]
 
-#: How outbound unsigned reasoning blocks are handled.
-UnsignedReasoningBlocks = Literal["as_is", "preserve"]
-
-#: Mapping from normalised IR effort levels to provider-specific values.
-#: Any IR level absent from the map is unsupported and will be warned/skipped.
-EffortMap = dict[str, str]  # e.g. {"minimal": "low", "max": "high"}
+# Backward-compat aliases (deprecated — will be removed in a future version)
+EffortLevel = IREffort
+DisabledStrategy = Literal["omit", "thinking_disabled", "thinking_budget_zero"]
+ThinkingType = Literal["enabled", "adaptive"]
+UnsignedReasoningBlocks = UnsignedBlocks
+EffortMap = dict[str, str]
+EffortField = str
 
 
 @dataclass(frozen=True)
 class ReasoningCapability:
-    """Declares how a provider handles reasoning effort and disabled state.
+    """How a provider handles reasoning / thinking configuration.
 
-    Attributes:
-        disabled: How to serialise ``mode: disabled``.
-        effort_field: Where the provider expects the effort value.
-        max_effort: Highest normalised effort this shim should emit.
-        thinking_type: Force ``thinking.type`` to this value.
-        unsigned_reasoning_blocks: Policy for outbound unsigned reasoning blocks.
-        effort_map: Map from normalised IR effort to provider effort string.
-        budget_tokens_default_ratio: When ``thinking_type`` is ``"enabled"``
-            but no ``budget_tokens`` is provided, derive a default budget as
-            ``max(1024, int(max_tokens * ratio))`` clamped to ``max_tokens - 1``.
-            Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
-            When ``None``, the existing ``"adaptive"`` fallback is used instead.
+    Each field group controls one dimension of reasoning behavior.
+    IR-side values use the fixed vocabulary from ``types.ir.configs``;
+    provider-side values are free strings specific to each upstream API.
+
+    Reference: https://llm-rosetta.readthedocs.io/en/latest/api/reasoning/
+
+    Naming convention:
+    - ``_modes``: IR value → provider value mapping (dict)
+    - ``_field``: provider-side field path (str)
+    - ``_range``: IR-side constraint interval (tuple)
     """
 
-    disabled: DisabledStrategy = "omit"
-    effort_field: EffortField = "reasoning_effort"
-    max_effort: EffortLevel | None = None
-    thinking_type: ThinkingType | None = None
-    unsigned_reasoning_blocks: UnsignedReasoningBlocks = "as_is"
-    effort_map: EffortMap = field(
-        default_factory=lambda: {
-            "minimal": "low",
-            "low": "low",
-            "medium": "medium",
-            "high": "high",
-            "xhigh": "high",
-            "max": "high",
-        }
-    )
-    budget_tokens_default_ratio: float | None = None
+    # ── Thinking toggle ──────────────────────────────────────────────
+    # Maps IR mode → provider thinking type value.
+    # None = provider does not support a thinking block.
+    # Example: {"auto": "adaptive", "enabled": "enabled", "disabled": "disabled"}
+    # IR modes not present in the map are silently dropped.
+    thinking_modes: dict[str, str] | None = None
+
+    # Default IR mode when the request has no explicit mode.
+    # Must be a key in thinking_modes.
+    thinking_default: IRMode | None = None
+
+    # ── Effort ───────────────────────────────────────────────────────
+    # Provider-side field path for the effort value.
+    # "reasoning_effort"       → {reasoning_effort: v}
+    # "reasoning.effort"       → {reasoning: {effort: v}}
+    # "output_config.effort"   → {output_config: {effort: v}}
+    # "thinking_level"         → {thinking_config: {thinking_level: v}}
+    # "none"                   → provider does not accept effort
+    effort_field: str = "reasoning_effort"
+
+    # Supported IR effort range [floor, ceiling].
+    # Values outside are clamped to the nearest boundary.
+    # None = full IR ladder (minimal–max).
+    effort_range: tuple[IREffort, IREffort] | None = None
+
+    # ── Budget ───────────────────────────────────────────────────────
+    # Derive budget_tokens as max(1024, int(max_tokens × ratio)),
+    # clamped to max_tokens − 1.  None = no automatic derivation.
+    budget_ratio: float | None = None
+
+    # ── Visibility ───────────────────────────────────────────────────
+    # Maps IR summary value → provider visibility value.
+    # None = use converter default (hardcoded per API standard).
+    # IR values not in the map → field is omitted from the request.
+    # Example (Anthropic):  {"auto": "summarized", "none": "omitted"}
+    # Example (OpenAI):     {"auto": "auto", "concise": "concise", "detailed": "detailed"}
+    visibility_modes: dict[str, str] | None = None
+
+    # ── Response handling ────────────────────────────────────────────
+    # How to handle unsigned (non-redacted) reasoning blocks in responses.
+    unsigned_blocks: UnsignedBlocks = "as_is"
 
 
 # ---------------------------------------------------------------------------

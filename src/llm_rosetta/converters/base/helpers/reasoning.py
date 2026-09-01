@@ -22,61 +22,30 @@ import warnings
 from typing import Any, cast
 
 from llm_rosetta.shims.provider_shim import ReasoningCapability
-from llm_rosetta.types.ir.configs import ReasoningConfig
+from llm_rosetta.types.ir.reasoning import ReasoningConfig
 
 # ── Default reasoning capability configs per base converter type ──────────
 # Used as fallback when no shim-level config is present.
 
 _DEFAULT_OPENAI_CHAT = ReasoningCapability(
-    disabled="omit",
     effort_field="reasoning_effort",
-    effort_map={
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "high",
-        "max": "high",
-    },
+    effort_range=("minimal", "high"),
 )
 
 _DEFAULT_OPENAI_RESPONSES = ReasoningCapability(
-    disabled="omit",
     effort_field="reasoning.effort",
-    effort_map={
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "high",
-        "max": "high",
-    },
+    effort_range=("minimal", "high"),
 )
 
 _DEFAULT_ANTHROPIC = ReasoningCapability(
-    disabled="thinking_disabled",
+    thinking_modes={"auto": "adaptive", "enabled": "enabled", "disabled": "disabled"},
     effort_field="output_config.effort",
-    effort_map={
-        "minimal": "low",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "xhigh",
-        "max": "max",
-    },
+    effort_range=("low", "max"),
 )
 
 _DEFAULT_GOOGLE = ReasoningCapability(
-    disabled="thinking_budget_zero",
     effort_field="thinking_level",
-    effort_map={
-        "minimal": "minimal",
-        "low": "low",
-        "medium": "medium",
-        "high": "high",
-        "xhigh": "high",
-        "max": "high",
-    },
+    effort_range=("minimal", "high"),
 )
 
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
@@ -87,16 +56,13 @@ DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
 }
 
 
-# ── Input normalisation ────────────────────────────────────────────────────
+# ── IR effort ladder ──────────────────────────────────────────────────────
 
-_EFFORT_RANK: dict[str, int] = {
-    "minimal": 0,
-    "low": 1,
-    "medium": 2,
-    "high": 3,
-    "xhigh": 4,
-    "max": 5,
-}
+_EFFORT_LADDER: list[str] = ["minimal", "low", "medium", "high", "xhigh", "max"]
+_EFFORT_RANK: dict[str, int] = {v: i for i, v in enumerate(_EFFORT_LADDER)}
+
+
+# ── Input normalisation ────────────────────────────────────────────────────
 
 
 def normalize_reasoning_input(
@@ -112,7 +78,6 @@ def normalize_reasoning_input(
     effort = result.get("effort")
 
     if effort == "none":
-        # ``none`` means disabled, not an effort level.
         result["mode"] = "disabled"
         del result["effort"]
 
@@ -131,25 +96,14 @@ def apply_reasoning_config(
 ) -> dict[str, Any]:
     """Convert IR ``ReasoningConfig`` → provider parameters using *cap*.
 
-    This is the single function each converter's ``ir_reasoning_config_to_p``
-    should delegate to.  It handles:
-
-    1. **Input normalisation** (``none`` → disabled).
-    2. **Disabled serialisation** according to ``cap.disabled``.
-    3. **Effort mapping** via ``cap.effort_map`` and ``cap.effort_field``.
-    4. **Pass-through** of ``mode`` and ``budget_tokens`` for converters
-       that support thinking objects (Anthropic, Google, OpenAI Chat extensions).
-
-    Args:
-        ir_reasoning: Normalised IR reasoning config.
-        cap: Provider's reasoning capability descriptor.
-        converter_type: The base converter type string (for extra pass-through
-            logic).
-
-    Returns:
-        Dict of provider-specific request fields to merge.
+    Handles:
+    1. Input normalisation (``none`` → disabled).
+    2. Disabled serialisation via ``cap.thinking_modes``.
+    3. Effort clamping via ``cap.effort_range`` and placement via
+       ``cap.effort_field``.
+    4. Converter-specific structural pass-through (thinking blocks,
+       budget, visibility).
     """
-    # 1. Normalise input.
     ir = normalize_reasoning_input(ir_reasoning)
 
     mode = ir.get("mode")
@@ -158,62 +112,60 @@ def apply_reasoning_config(
 
     result: dict[str, Any] = {}
 
-    # 2. Disabled mode.
+    # Disabled mode — delegate to converter-specific handlers for
+    # converters that have special disabled serialisation (Google uses
+    # thinking_budget=0), otherwise use thinking_modes lookup.
     if mode == "disabled":
+        if converter_type == "google":
+            _apply_google_extras(ir, result, mode, budget_tokens, cap)
+            return result
         return _serialize_disabled(cap)
 
-    # 3. Effort mapping.
+    # Effort clamping + placement.
     if effort is not None:
-        effort = _cap_effort(effort, cap)
-        provider_effort = cap.effort_map.get(effort)
-        if provider_effort is None:
-            warnings.warn(
-                f"Effort level '{effort}' not in shim effort_map, skipping",
-                stacklevel=2,
-            )
-        else:
-            effort_fields = _serialize_effort(cap.effort_field, provider_effort)
-            _deep_merge(result, effort_fields)
+        effort = _clamp_effort(effort, cap)
+        effort_fields = _serialize_effort(cap.effort_field, effort)
+        _deep_merge(result, effort_fields)
 
-    # 4. Converter-specific structural pass-through.
+    # Converter-specific structural pass-through.
     if converter_type == "openai_chat":
         _apply_openai_chat_extras(ir, result, mode, budget_tokens, cap, max_tokens)
     elif converter_type == "openai_responses":
-        _apply_openai_responses_extras(ir, result, mode, budget_tokens)
+        _apply_openai_responses_extras(ir, result, mode, budget_tokens, cap)
     elif converter_type == "anthropic":
         _apply_anthropic_extras(
             ir, result, mode, effort, budget_tokens, cap, max_tokens
         )
     elif converter_type == "google":
-        _apply_google_extras(ir, result, mode, budget_tokens)
+        _apply_google_extras(ir, result, mode, budget_tokens, cap)
 
     return result
 
 
-# ── Effort capping ──────────────────────────────────────────────────────────
+# ── Effort clamping ──────────────────────────────────────────────────────────
 
 
-def _cap_effort(effort: str, cap: ReasoningCapability) -> str:
-    if cap.max_effort is None:
+def _clamp_effort(effort: str, cap: ReasoningCapability) -> str:
+    """Clamp *effort* to ``cap.effort_range`` boundaries."""
+    if cap.effort_range is None:
         return effort
-    effort_rank = _EFFORT_RANK.get(effort)
-    max_rank = _EFFORT_RANK.get(cap.max_effort)
-    if effort_rank is None or max_rank is None or effort_rank <= max_rank:
+    floor, ceiling = cap.effort_range
+    rank = _EFFORT_RANK.get(effort)
+    lo = _EFFORT_RANK.get(floor)
+    hi = _EFFORT_RANK.get(ceiling)
+    if rank is None or lo is None or hi is None:
         return effort
-    return cap.max_effort
+    clamped = max(lo, min(hi, rank))
+    return _EFFORT_LADDER[clamped]
 
 
 # ── Disabled serialisation ─────────────────────────────────────────────────
 
 
 def _serialize_disabled(cap: ReasoningCapability) -> dict[str, Any]:
-    """Serialize disabled state according to the shim strategy."""
-    if cap.disabled == "omit":
-        return {}
-    elif cap.disabled == "thinking_disabled":
-        return {"thinking": {"type": "disabled"}}
-    elif cap.disabled == "thinking_budget_zero":
-        return {"thinking_config": {"thinking_budget": 0}}
+    """Serialize disabled state using ``cap.thinking_modes``."""
+    if cap.thinking_modes and "disabled" in cap.thinking_modes:
+        return {"thinking": {"type": cap.thinking_modes["disabled"]}}
     return {}
 
 
@@ -243,7 +195,6 @@ def _serialize_effort(
         return {"output_config": {"effort": provider_effort}}
     if effort_field == "thinking_level":
         return {"thinking_config": {"thinking_level": provider_effort}}
-    # Unknown field — fall back to flat key
     warnings.warn(
         f"Unknown effort_field '{effort_field}', using as flat key",
         stacklevel=3,
@@ -265,7 +216,6 @@ def _deep_merge(target: dict[str, Any], source: dict[str, Any]) -> None:
 
 # ── Budget tokens default derivation ──────────────────────────────────────
 
-#: Anthropic's minimum budget_tokens value (per official docs).
 _MIN_BUDGET_TOKENS = 1024
 
 
@@ -273,47 +223,72 @@ def _derive_budget_tokens(
     cap: ReasoningCapability,
     max_tokens: int | None,
 ) -> int | None:
-    """Derive ``budget_tokens`` from ``cap.budget_tokens_default_ratio`` and *max_tokens*.
+    """Derive ``budget_tokens`` from ``cap.budget_ratio`` and *max_tokens*.
 
     Returns ``None`` when derivation is impossible (no ratio configured,
     no ``max_tokens``, or ``max_tokens`` too small to satisfy the minimum).
     """
-    if cap.budget_tokens_default_ratio is None or max_tokens is None:
+    if cap.budget_ratio is None or max_tokens is None:
         return None
     if max_tokens <= _MIN_BUDGET_TOKENS:
-        # Can't satisfy budget_tokens >= 1024 AND < max_tokens.
         return None
-    budget = max(_MIN_BUDGET_TOKENS, int(max_tokens * cap.budget_tokens_default_ratio))
-    # Anthropic requires budget_tokens < max_tokens.
+    budget = max(_MIN_BUDGET_TOKENS, int(max_tokens * cap.budget_ratio))
     return min(budget, max_tokens - 1)
 
 
-def _apply_thinking_type_override(
+# ── Thinking block helpers ────────────────────────────────────────────────
+
+
+def _resolve_thinking_type(
+    mode: str | None,
+    cap: ReasoningCapability,
+) -> str | None:
+    """Look up the provider thinking type for an IR *mode* via ``cap.thinking_modes``.
+
+    Returns ``None`` when the provider doesn't support a thinking block
+    or the specific mode is not in the map.
+    """
+    if not cap.thinking_modes:
+        return None
+    effective_mode = mode or cap.thinking_default
+    if effective_mode is None:
+        return None
+    return cap.thinking_modes.get(effective_mode)
+
+
+def _apply_visibility(
+    ir: ReasoningConfig,
     result: dict[str, Any],
     cap: ReasoningCapability | None,
-    max_tokens: int | None,
+    *,
+    target_key: str = "reasoning",
+    target_subkey: str = "summary",
 ) -> None:
-    """Apply shim ``thinking_type`` override to the ``thinking`` dict.
+    """Apply visibility mapping from ``cap.visibility_modes`` or converter defaults.
 
-    When the shim declares a preferred thinking type, reconcile it with
-    what is already set — deriving ``budget_tokens`` from the ratio when
-    switching to ``"enabled"``, or stripping it when falling back to
-    ``"adaptive"``.
+    When ``visibility_modes`` is configured, uses the mapping.
+    Otherwise falls back to the converter's hardcoded default behavior
+    (writing to ``{target_key}.{target_subkey}``).
     """
-    if cap is None or cap.thinking_type is None or "thinking" not in result:
+    summary = ir.get("summary")
+    include_thoughts = ir.get("include_thoughts")
+
+    if cap and cap.visibility_modes:
+        if summary and summary in cap.visibility_modes:
+            result.setdefault(target_key, {})[target_subkey] = cap.visibility_modes[
+                summary
+            ]
+        elif include_thoughts is True and "auto" in cap.visibility_modes:
+            result.setdefault(target_key, {})[target_subkey] = cap.visibility_modes[
+                "auto"
+            ]
         return
-    current_type = result["thinking"].get("type")
-    target_type = cap.thinking_type
-    if target_type == "enabled" and "budget_tokens" not in result["thinking"]:
-        derived = _derive_budget_tokens(cap, max_tokens)
-        if derived is not None:
-            result["thinking"]["budget_tokens"] = derived
-        else:
-            target_type = "adaptive"
-    if current_type != target_type:
-        result["thinking"]["type"] = target_type
-        if target_type == "adaptive" and "budget_tokens" in result["thinking"]:
-            del result["thinking"]["budget_tokens"]
+
+    # Fallback: converter default behavior (summary pass-through)
+    if summary in ("auto", "concise", "detailed"):
+        result.setdefault(target_key, {})[target_subkey] = summary
+    elif include_thoughts is True:
+        result.setdefault(target_key, {})[target_subkey] = "auto"
 
 
 # ── Converter-specific pass-through extras ─────────────────────────────────
@@ -328,27 +303,26 @@ def _apply_openai_chat_extras(
     max_tokens: int | None = None,
 ) -> None:
     """OpenAI Chat extras: thinking object for mode/budget_tokens (DeepSeek ext), summary."""
-    thinking: dict[str, Any] = {}
-    if mode:
-        # IR "auto" is not a valid upstream value; map to "adaptive"
-        # (DeepSeek/Volcengine vocabulary).
-        thinking["type"] = "adaptive" if mode == "auto" else mode
-    if budget_tokens is not None:
-        thinking["budget_tokens"] = budget_tokens
-    if thinking:
-        result["thinking"] = thinking
+    if cap:
+        thinking_type = _resolve_thinking_type(mode, cap)
+        if thinking_type is not None:
+            thinking: dict[str, Any] = {"type": thinking_type}
+            if budget_tokens is not None:
+                # "enabled" requires budget_tokens; "adaptive" ignores it.
+                if thinking_type == "enabled" or thinking_type not in (
+                    "adaptive",
+                    "disabled",
+                ):
+                    thinking["budget_tokens"] = budget_tokens
+            elif thinking_type == "enabled":
+                derived = _derive_budget_tokens(cap, max_tokens)
+                if derived is not None:
+                    thinking["budget_tokens"] = derived
+                elif cap.thinking_modes and "auto" in cap.thinking_modes:
+                    thinking["type"] = cap.thinking_modes["auto"]
+            result["thinking"] = thinking
 
-    summary = ir.get("summary")
-    if summary in ("auto", "concise", "detailed"):
-        if "reasoning" not in result:
-            result["reasoning"] = {}
-        result["reasoning"]["summary"] = summary
-    elif ir.get("include_thoughts") is True:
-        if "reasoning" not in result:
-            result["reasoning"] = {}
-        result["reasoning"]["summary"] = "auto"
-
-    _apply_thinking_type_override(result, cap, max_tokens)
+    _apply_visibility(ir, result, cap)
 
 
 def _apply_openai_responses_extras(
@@ -356,12 +330,12 @@ def _apply_openai_responses_extras(
     result: dict[str, Any],
     mode: str | None,
     budget_tokens: int | None,
+    cap: ReasoningCapability | None = None,
 ) -> None:
     """OpenAI Responses extras.
 
-    Note: OpenAI Responses API does **not** accept ``reasoning.type``
-    (returns 400 Unknown parameter).  Reasoning is controlled via
-    ``reasoning.effort`` and optional ``reasoning.summary`` (e.g. "auto", "concise", "detailed").
+    OpenAI Responses API does **not** accept ``reasoning.type``.
+    Reasoning is controlled via ``reasoning.effort`` + ``reasoning.summary``.
     """
     if budget_tokens is not None:
         warnings.warn(
@@ -369,15 +343,7 @@ def _apply_openai_responses_extras(
             stacklevel=2,
         )
 
-    summary = ir.get("summary")
-    if summary in ("auto", "concise", "detailed"):
-        if "reasoning" not in result:
-            result["reasoning"] = {}
-        result["reasoning"]["summary"] = summary
-    elif ir.get("include_thoughts") is True:
-        if "reasoning" not in result:
-            result["reasoning"] = {}
-        result["reasoning"]["summary"] = "auto"
+    _apply_visibility(ir, result, cap)
 
 
 def _apply_anthropic_extras(
@@ -390,42 +356,78 @@ def _apply_anthropic_extras(
     max_tokens: int | None = None,
 ) -> None:
     """Anthropic extras: thinking object with type/budget_tokens."""
-    if mode == "enabled":
-        if budget_tokens is not None:
-            result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
-        else:
-            # Try to derive budget from ratio before falling back to adaptive.
-            derived = _derive_budget_tokens(cap, max_tokens) if cap else None
-            if derived is not None:
-                result["thinking"] = {"type": "enabled", "budget_tokens": derived}
-            else:
-                warnings.warn(
-                    "Anthropic 'enabled' thinking requires budget_tokens, "
-                    "falling back to 'adaptive'",
-                    stacklevel=2,
-                )
-                thinking_val: dict[str, Any] = {"type": "adaptive"}
-                result["thinking"] = thinking_val
-    elif mode == "auto" or effort is not None:
-        thinking: dict[str, Any] = {"type": "adaptive"}
-        if budget_tokens is not None:
-            thinking["budget_tokens"] = budget_tokens
-        result["thinking"] = thinking
-    elif budget_tokens is not None:
-        result["thinking"] = {"type": "enabled", "budget_tokens": budget_tokens}
+    thinking_type = _resolve_thinking_type(mode, cap) if cap else None
 
-    # Map IR summary → Anthropic thinking.display
+    if thinking_type is None and cap and cap.thinking_modes:
+        if effort is not None and "auto" in cap.thinking_modes:
+            thinking_type = cap.thinking_modes["auto"]
+        elif budget_tokens is not None and "enabled" in cap.thinking_modes:
+            thinking_type = cap.thinking_modes["enabled"]
+
+    if thinking_type is not None:
+        result["thinking"] = _build_anthropic_thinking(
+            thinking_type, budget_tokens, cap, max_tokens
+        )
+
     if "thinking" in result:
-        summary = ir.get("summary")
-        if summary == "none" or ir.get("include_thoughts") is False:
-            result["thinking"]["display"] = "omitted"
-        elif (
-            summary in ("auto", "concise", "detailed")
-            or ir.get("include_thoughts") is True
-        ):
-            result["thinking"]["display"] = "summarized"
+        _apply_anthropic_visibility(ir, result, cap)
 
-    _apply_thinking_type_override(result, cap, max_tokens)
+
+def _build_anthropic_thinking(
+    thinking_type: str,
+    budget_tokens: int | None,
+    cap: ReasoningCapability | None,
+    max_tokens: int | None,
+) -> dict[str, Any]:
+    """Build the Anthropic ``thinking`` dict for a given type."""
+    if thinking_type != "enabled":
+        obj: dict[str, Any] = {"type": thinking_type}
+        if budget_tokens is not None:
+            obj["budget_tokens"] = budget_tokens
+        return obj
+
+    # "enabled" requires budget_tokens
+    if budget_tokens is not None:
+        return {"type": thinking_type, "budget_tokens": budget_tokens}
+    derived = _derive_budget_tokens(cap, max_tokens) if cap else None
+    if derived is not None:
+        return {"type": thinking_type, "budget_tokens": derived}
+    fallback = (
+        cap.thinking_modes.get("auto") if cap and cap.thinking_modes else "adaptive"
+    )
+    if fallback:
+        warnings.warn(
+            f"Anthropic 'enabled' thinking requires budget_tokens, "
+            f"falling back to '{fallback}'",
+            stacklevel=2,
+        )
+    return {"type": fallback or thinking_type}
+
+
+def _apply_anthropic_visibility(
+    ir: ReasoningConfig,
+    result: dict[str, Any],
+    cap: ReasoningCapability | None,
+) -> None:
+    """Map IR summary → Anthropic ``thinking.display``."""
+    summary = ir.get("summary")
+    include_thoughts = ir.get("include_thoughts")
+
+    if cap and cap.visibility_modes:
+        if summary and summary in cap.visibility_modes:
+            result["thinking"]["display"] = cap.visibility_modes[summary]
+        elif include_thoughts is False and "none" in cap.visibility_modes:
+            result["thinking"]["display"] = cap.visibility_modes["none"]
+        elif (
+            include_thoughts is True or summary in ("auto", "concise", "detailed")
+        ) and "auto" in cap.visibility_modes:
+            result["thinking"]["display"] = cap.visibility_modes["auto"]
+        return
+
+    if summary == "none" or include_thoughts is False:
+        result["thinking"]["display"] = "omitted"
+    elif summary in ("auto", "concise", "detailed") or include_thoughts is True:
+        result["thinking"]["display"] = "summarized"
 
 
 def _apply_google_extras(
@@ -433,11 +435,14 @@ def _apply_google_extras(
     result: dict[str, Any],
     mode: str | None,
     budget_tokens: int | None,
+    cap: ReasoningCapability | None = None,
 ) -> None:
     """Google extras: thinking_config with thinking_budget and include_thoughts."""
     thinking_config = result.get("thinking_config", {})
 
-    if (
+    if mode == "disabled":
+        thinking_config["thinking_budget"] = 0
+    elif (
         mode == "auto"
         and budget_tokens is None
         and "thinking_level" not in thinking_config
@@ -447,6 +452,7 @@ def _apply_google_extras(
     if budget_tokens is not None:
         thinking_config["thinking_budget"] = budget_tokens
 
+    # Google visibility: include_thoughts boolean
     summary = ir.get("summary")
     if summary in ("auto", "concise", "detailed") or ir.get("include_thoughts") is True:
         thinking_config["include_thoughts"] = True

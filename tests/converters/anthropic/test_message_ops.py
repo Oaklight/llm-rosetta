@@ -221,7 +221,7 @@ class TestAnthropicMessageOps:
                 }
             ],
         )
-        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        cap = ReasoningCapability(unsigned_blocks="preserve")
         result, warnings = self.message_ops.ir_messages_to_p(
             ir_messages, reasoning_cap=cap
         )
@@ -248,7 +248,7 @@ class TestAnthropicMessageOps:
             list[Message],
             [{"role": "assistant", "content": [reasoning_part]}],
         )
-        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        cap = ReasoningCapability(unsigned_blocks="preserve")
         result, warnings = self.message_ops.ir_messages_to_p(
             ir_messages, reasoning_cap=cap
         )
@@ -279,7 +279,7 @@ class TestAnthropicMessageOps:
                 }
             ],
         )
-        cap = ReasoningCapability(unsigned_reasoning_blocks="preserve")
+        cap = ReasoningCapability(unsigned_blocks="preserve")
         result, warnings = self.message_ops.ir_messages_to_p(
             ir_messages, reasoning_cap=cap
         )

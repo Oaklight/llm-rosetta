@@ -4,14 +4,7 @@ default_base_url: https://apps.inside.anl.gov/argoapi/v1
 default_api_key_env: ARGO_API_KEY
 model_id_field: internal_id
 reasoning:
-  disabled: omit
   effort_field: reasoning_effort
-  effort_map:
-    minimal: minimal
-    low: low
-    medium: medium
-    high: high
-    xhigh: xhigh
-    max: max
+  # effort_range not set = full IR ladder (minimal–max)
 
 supports_custom_tools: true
