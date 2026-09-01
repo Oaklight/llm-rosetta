@@ -321,9 +321,8 @@ function switchProviderFilter(el, filter) {
 function setProviderView(mode) {
   _providerViewMode = mode;
   localStorage.setItem('provider-view', mode);
-  const grid = document.getElementById('providerGrid');
-  grid.classList.toggle('list-view', mode === 'list');
   _updateViewToggle();
+  renderProviders();
 }
 
 function _updateViewToggle() {
@@ -458,11 +457,12 @@ function renderProviders() {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
     const logo = shimLogo[typeName];
-    const logoHtml = logo ? `<img class="provider-logo" src="${esc(logo)}" alt="">` : '';
+    const logoHtml = logo
+      ? `<img class="provider-logo" src="${esc(logo)}" alt="">`
+      : (isList ? '<span class="provider-logo-placeholder"></span>' : '');
     const fieldsHtml = isList
       ? `<div class="field" title="Type: ${esc(typeName)}"><code>${esc(typeName)}</code></div>
-         <div class="field" title="${esc(cfg.base_url || '')}"><code>${esc(cfg.base_url || '')}</code></div>
-         ${S._credentialVisible ? `<div class="field" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>` : '<div class="field"></div>'}`
+         <div class="field" title="${esc(cfg.base_url || '')}"><code>${esc(cfg.base_url || '')}</code></div>`
       : `<div class="field">Type: <code>${esc(typeName)}</code></div>
          <div class="field">Base URL: <code>${esc(cfg.base_url || '')}</code></div>
          ${S._credentialVisible ? `<div class="field">API Key: <code>${esc(cfg.api_key || '')}</code></div>` : ''}`;
@@ -473,23 +473,26 @@ function renderProviders() {
       ? `<span class="model-link" onclick="goToModelsForProvider('${esc(name)}')">${modelCount} model${modelCount !== 1 ? 's' : ''} →</span>`
       : '';
     // Endpoint details are in Edit modal — badges on card are sufficient
-    return `
-    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}" style="display:flex;flex-direction:column">
-      <div class="card-header">
-        <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)} ${capBadges}</div>
+    const toggleHtml = `
         <label class="toggle" title="${enabled ? t('provider.enabled') : t('provider.disabled')}">
           <input type="checkbox" ${enabled ? 'checked' : ''} role="switch" aria-checked="${enabled}" aria-label="${esc(name)}" onchange="this.setAttribute('aria-checked',this.checked);toggleProvider('${esc(name)}')">
           <span class="slider"></span>
-        </label>
-      </div>
-      ${fieldsHtml}
-      <div class="actions" style="margin-top:auto;padding-top:12px">
+        </label>`;
+    const actionsHtml = `<div class="actions">
         <button class="btn btn-sm" aria-label="${t('btn.clone')} ${esc(name)}" onclick="copyProviderEntry('${esc(name)}')">${t('btn.clone')}</button>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider('${esc(name)}')">${t('btn.edit')}</button>
         <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity('${esc(name)}')">${t('btn.test')}</button>
         <button class="btn btn-sm btn-danger" aria-label="${t('btn.delete')} ${esc(name)}" onclick="deleteProvider('${esc(name)}')">${t('btn.delete')}</button>
         ${modelLink}
+      </div>`;
+    return `
+    <div class="provider-card${enabled ? '' : ' disabled'}" data-provider="${esc(name)}">
+      <div class="card-header">
+        <div class="name" style="display:flex;align-items:center;gap:6px">${logoHtml}${esc(name)} ${capBadges}</div>
+        ${toggleHtml}
       </div>
+      ${fieldsHtml}
+      ${actionsHtml}
     </div>`;
   }).join('');
 }
