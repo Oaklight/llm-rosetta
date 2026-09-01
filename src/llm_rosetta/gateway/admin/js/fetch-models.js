@@ -105,9 +105,11 @@ function renderFetchedModels() {
   list.innerHTML = models.map(m => {
     const displayName = prefix ? prefix + m : m;
     const exists = displayName in existingModels;
+    const upstreamId = S._fetchUpstreamMap ? S._fetchUpstreamMap[m] : '';
+    const upstreamHint = upstreamId ? ` <span style="font-size:11px;color:var(--text-dim)">→ ${esc(upstreamId)}</span>` : '';
     return `<label${exists ? ' style="opacity:0.6"' : ''}>
       <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' checked data-exists="true"' : ''}>
-      <span>${esc(m)}</span>${exists ? ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
+      <span>${esc(m)}</span>${upstreamHint}${exists ? ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
     </label>`;
   }).join('');
 

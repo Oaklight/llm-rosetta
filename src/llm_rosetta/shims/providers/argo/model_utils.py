@@ -30,10 +30,12 @@ def model_list_transform(
     upstream_map: dict[str, str] = {}
     for m in raw_entries:
         raw_id = m.get("id", "")
-        display = re.sub(r"[^a-z0-9]+", "-", raw_id.lower()).strip("-")
+        slug = re.sub(r"[^a-z0-9]+", "-", raw_id.lower()).strip("-")
+        if not slug:
+            continue
+        display = f"argo:{slug}"
         upstream = m.get("internal_id", raw_id)
-        if display:
-            model_ids.append(display)
-            if display != upstream:
-                upstream_map[display] = upstream
+        model_ids.append(display)
+        if display != upstream:
+            upstream_map[display] = upstream
     return model_ids, upstream_map
