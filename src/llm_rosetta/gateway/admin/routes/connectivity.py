@@ -39,6 +39,10 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     timeout = float(provider_cfg.get("timeout", 10))
     client = AsyncClient(timeout=min(timeout, 10), proxy=proxy)
 
+    # Build auth headers from provider config (same as fetch-models)
+    pinfo = config.providers.get(name) if hasattr(config, "providers") else None
+    auth_headers = pinfo.auth_headers() if pinfo else {}
+
     results: dict[str, Any] = {
         "provider": name,
         "base_url": base_url,
@@ -56,10 +60,20 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         results["base_status"] = None
         results["base_error"] = str(exc)
 
-    # 2. Check for models endpoint (OpenAI convention)
-    models_url = f"{base_url}/models"
+    # 2. Check models endpoint (type-aware URL, same as fetch_upstream_models)
+    ptype = (
+        config.provider_types.get(name, "unknown")
+        if hasattr(config, "provider_types")
+        else "unknown"
+    )
+    if ptype == "google":
+        models_url = f"{base_url}/v1beta/models"
+    elif ptype == "anthropic":
+        models_url = f"{base_url}/v1/models"
+    else:
+        models_url = f"{base_url}/models"
     try:
-        resp = await client.get(models_url)
+        resp = await client.get(models_url, headers=auth_headers)
         results["endpoints"]["models"] = {
             "url": models_url,
             "status": resp.status_code,
@@ -73,53 +87,41 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             "error": str(exc),
         }
 
-    # 3. Check embedding endpoint if configured
-    embedding_path = provider_cfg.get("embedding_path", "/v1/embeddings")
+    # 3. Check embedding endpoint if configured (POST-only, so just verify reachable)
     if provider_cfg.get("embedding_format"):
+        embedding_path = provider_cfg.get("embedding_path", "/v1/embeddings")
         embed_url = f"{base_url}{embedding_path}"
-        from llm_rosetta.gateway.transport.provider_info import normalize_base_url
-
-        normalized_base = normalize_base_url(base_url, "{base_url}" + embedding_path)
-        normalized_url = f"{normalized_base}{embedding_path}"
         _check_double_prefix(base_url, embedding_path, "embedding", results)
         try:
-            resp = await client.get(embed_url)
+            resp = await client.post(embed_url, headers=auth_headers, json={})
             results["endpoints"]["embedding"] = {
                 "url": embed_url,
-                "normalized_url": normalized_url,
                 "status": resp.status_code,
                 "ok": resp.status_code != 404,
             }
         except Exception as exc:
             results["endpoints"]["embedding"] = {
                 "url": embed_url,
-                "normalized_url": normalized_url,
                 "status": None,
                 "ok": False,
                 "error": str(exc),
             }
 
-    # 4. Check rerank endpoint if configured
-    rerank_path = provider_cfg.get("rerank_path", "/v1/rerank")
+    # 4. Check rerank endpoint if configured (POST-only, so just verify reachable)
     if provider_cfg.get("rerank_format"):
+        rerank_path = provider_cfg.get("rerank_path", "/v1/rerank")
         rerank_url = f"{base_url}{rerank_path}"
-        from llm_rosetta.gateway.transport.provider_info import normalize_base_url
-
-        normalized_base = normalize_base_url(base_url, "{base_url}" + rerank_path)
-        normalized_rerank_url = f"{normalized_base}{rerank_path}"
         _check_double_prefix(base_url, rerank_path, "rerank", results)
         try:
-            resp = await client.get(rerank_url)
+            resp = await client.post(rerank_url, headers=auth_headers, json={})
             results["endpoints"]["rerank"] = {
                 "url": rerank_url,
-                "normalized_url": normalized_rerank_url,
                 "status": resp.status_code,
                 "ok": resp.status_code != 404,
             }
         except Exception as exc:
             results["endpoints"]["rerank"] = {
                 "url": rerank_url,
-                "normalized_url": normalized_rerank_url,
                 "status": None,
                 "ok": False,
                 "error": str(exc),

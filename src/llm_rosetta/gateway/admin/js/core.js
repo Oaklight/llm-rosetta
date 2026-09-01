@@ -120,11 +120,12 @@ function copyProviderEntry(name) {
 }
 
 // ===================== Toast =====================
-function showToast(msg, type='success') {
+function showToast(msg, type='success', html=false) {
   const el = document.getElementById('toast');
-  el.textContent = msg;
+  if (html) el.innerHTML = msg; else el.textContent = msg;
   el.className = 'toast show ' + type;
-  setTimeout(() => el.className = 'toast', 3000);
+  const delay = html ? 5000 : 3000;
+  setTimeout(() => { el.className = 'toast'; if (html) el.innerHTML = ''; }, delay);
 }
 
 // ===================== Modal =====================
