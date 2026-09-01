@@ -5,6 +5,8 @@ default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 reasoning:
   thinking_modes:
+    # No "auto" — DeepSeek R1 requires explicit enable/disable.
+    # mode:auto requests will produce effort only, no thinking block.
     enabled: enabled
     disabled: disabled
   effort_field: reasoning_effort

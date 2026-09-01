@@ -112,9 +112,11 @@ def apply_reasoning_config(
 
     result: dict[str, Any] = {}
 
-    # Disabled mode — delegate to converter-specific handlers for
-    # converters that have special disabled serialisation (Google uses
-    # thinking_budget=0), otherwise use thinking_modes lookup.
+    # Disabled mode — most providers use thinking_modes["disabled"] via
+    # _serialize_disabled, but Google disables via thinking_budget=0 (not
+    # a type field), so it must go through _apply_google_extras instead.
+    # Do NOT add thinking_modes to Google's shim — _serialize_disabled
+    # would produce the wrong structure (thinking.type vs thinking_config).
     if mode == "disabled":
         if converter_type == "google":
             _apply_google_extras(ir, result, mode, budget_tokens, cap)

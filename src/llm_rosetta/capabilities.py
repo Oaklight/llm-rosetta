@@ -38,16 +38,37 @@ def _apply_config_reasoning_override(
 
     Only fields present in *override* are replaced; the rest inherit
     from *base*.
+
+    Legacy compat: accepts old field names (``thinking_type``,
+    ``disabled``, ``budget_tokens_default_ratio``) from existing
+    admin UI configs and maps them to the new schema.
     """
     raw_range = override.get("effort_range", base.effort_range)
     effort_range = tuple(raw_range) if isinstance(raw_range, list) else raw_range
 
+    # Legacy compat: old admin UI sends thinking_type/disabled as scalars.
+    thinking_modes = override.get("thinking_modes", base.thinking_modes)
+    if "thinking_type" in override and "thinking_modes" not in override:
+        tt = override["thinking_type"]
+        if base.thinking_modes:
+            thinking_modes = {**base.thinking_modes}
+            for ir_mode, prov_val in list(thinking_modes.items()):
+                if ir_mode in ("auto", "enabled"):
+                    thinking_modes[ir_mode] = tt
+        else:
+            thinking_modes = {"auto": tt, "enabled": tt, "disabled": "disabled"}
+
+    budget = override.get(
+        "budget_ratio",
+        override.get("budget_tokens_default_ratio", base.budget_ratio),
+    )
+
     return ReasoningCapability(
-        thinking_modes=override.get("thinking_modes", base.thinking_modes),
+        thinking_modes=thinking_modes,
         thinking_default=override.get("thinking_default", base.thinking_default),
         effort_field=override.get("effort_field", base.effort_field),
         effort_range=effort_range,
-        budget_ratio=override.get("budget_ratio", base.budget_ratio),
+        budget_ratio=budget,
         visibility_modes=override.get("visibility_modes", base.visibility_modes),
         unsigned_blocks=override.get("unsigned_blocks", base.unsigned_blocks),
     )
