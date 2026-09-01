@@ -13,8 +13,8 @@ async function loadMetrics() {
   try {
     const data = await api.get('/admin/api/metrics?seconds=60');
     renderStats(data);
-    drawChart('chartThroughput', data.series, 'count', 'req/s');
-    drawChart('chartLatency', data.series, 'avg_ms', 'ms');
+    drawThroughputChart('chartThroughput', data.series);
+    drawLatencyChart('chartLatency', data.series);
     renderProviderBreakdown(data);
     renderPersistence(data.persistence, data.total_requests);
     loadProfilingStatus();
@@ -590,7 +590,7 @@ async function rebuildMetrics() {
   } catch (e) { showToast('Rebuild failed', 'error'); }
 }
 
-function drawChart(canvasId, series, key, unit) {
+function _chartSetup(canvasId) {
   const canvas = document.getElementById(canvasId);
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
@@ -599,23 +599,17 @@ function drawChart(canvasId, series, key, unit) {
   canvas.height = rect.height * dpr;
   ctx.scale(dpr, dpr);
   const w = rect.width, h = rect.height;
-
   ctx.clearRect(0, 0, w, h);
-
-  // Read theme colors from CSS variables
   const cs = getComputedStyle(document.documentElement);
-  const gridColor = cs.getPropertyValue('--border').trim();
-  const dimColor = cs.getPropertyValue('--text-dim').trim();
-  const accentColor = cs.getPropertyValue('--accent').trim();
+  return { canvas, ctx, w, h, cs };
+}
 
-  const values = series.map(s => s[key]);
-  const maxVal = Math.max(...values, 1);
-
-  const padL = 40, padR = 8, padT = 8, padB = 24;
+function _drawAxes(ctx, w, h, cs, maxVal, padL, padR, padT, padB) {
   const chartW = w - padL - padR;
   const chartH = h - padT - padB;
+  const gridColor = cs.getPropertyValue('--border').trim();
+  const dimColor = cs.getPropertyValue('--text-dim').trim();
 
-  // Grid lines
   ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   for (let i = 0; i <= 4; i++) {
@@ -623,47 +617,116 @@ function drawChart(canvasId, series, key, unit) {
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(w - padR, y); ctx.stroke();
   }
 
-  // Y-axis labels
   ctx.fillStyle = dimColor;
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'right';
   for (let i = 0; i <= 4; i++) {
     const y = padT + (chartH / 4) * i;
-    const val = maxVal * (1 - i/4);
+    const val = maxVal * (1 - i / 4);
     ctx.fillText(val.toFixed(val >= 10 ? 0 : 1), padL - 6, y + 3);
   }
 
-  // X-axis labels
   ctx.textAlign = 'center';
   ctx.fillText('-60s', padL, h - 4);
-  ctx.fillText('-30s', padL + chartW/2, h - 4);
+  ctx.fillText('-30s', padL + chartW / 2, h - 4);
   ctx.fillText('now', padL + chartW, h - 4);
+}
+
+function drawThroughputChart(canvasId, series) {
+  const { ctx, w, h, cs } = _chartSetup(canvasId);
+  const padL = 40, padR = 8, padT = 8, padB = 24;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  const values = series.map(s => s.count);
+  const maxVal = Math.max(...values, 1);
+
+  _drawAxes(ctx, w, h, cs, maxVal, padL, padR, padT, padB);
 
   if (values.length === 0 || Math.max(...values) === 0) {
-    ctx.fillStyle = dimColor;
+    ctx.fillStyle = cs.getPropertyValue('--text-dim').trim();
     ctx.font = '13px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(t('empty.data'), padL + chartW/2, padT + chartH/2);
+    ctx.fillText(t('empty.data'), padL + chartW / 2, padT + chartH / 2);
     return;
   }
 
-  // Line
-  ctx.strokeStyle = accentColor;
-  ctx.lineWidth = 1.5;
+  const accentColor = cs.getPropertyValue('--accent').trim();
+  const fillColor = cs.getPropertyValue('--accent-subtle').trim() || 'rgba(0,0,0,0.08)';
+  const n = values.length;
+  const stepW = chartW / n;
+
+  // Step-after fill
   ctx.beginPath();
-  for (let i = 0; i < values.length; i++) {
-    const x = padL + (i / (values.length - 1)) * chartW;
+  ctx.moveTo(padL, padT + chartH);
+  for (let i = 0; i < n; i++) {
+    const x = padL + i * stepW;
+    const y = padT + chartH - (values[i] / maxVal) * chartH;
+    ctx.lineTo(x, y);
+    ctx.lineTo(x + stepW, y);
+  }
+  ctx.lineTo(padL + chartW, padT + chartH);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  // Step-after stroke
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const x = padL + i * stepW;
     const y = padT + chartH - (values[i] / maxVal) * chartH;
     if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    ctx.lineTo(x + stepW, y);
   }
+  ctx.strokeStyle = accentColor;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
+}
 
-  // Fill
-  ctx.lineTo(padL + chartW, padT + chartH);
-  ctx.lineTo(padL, padT + chartH);
-  ctx.closePath();
-  ctx.fillStyle = cs.getPropertyValue('--accent-subtle').trim() || 'rgba(0,0,0,0.08)';
-  ctx.fill();
+function drawLatencyChart(canvasId, series) {
+  const { ctx, w, h, cs } = _chartSetup(canvasId);
+  const padL = 40, padR = 8, padT = 8, padB = 24;
+  const chartW = w - padL - padR;
+  const chartH = h - padT - padB;
+
+  // Collect all individual latency points with their time offset
+  const points = [];
+  for (const entry of series) {
+    if (entry.latencies) {
+      for (const ms of entry.latencies) {
+        points.push({ t: entry.t, ms });
+      }
+    }
+  }
+
+  const maxMs = points.length > 0 ? Math.max(...points.map(p => p.ms), 1) : 1;
+
+  _drawAxes(ctx, w, h, cs, maxMs, padL, padR, padT, padB);
+
+  if (points.length === 0) {
+    ctx.fillStyle = cs.getPropertyValue('--text-dim').trim();
+    ctx.font = '13px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(t('empty.data'), padL + chartW / 2, padT + chartH / 2);
+    return;
+  }
+
+  const blueColor = cs.getPropertyValue('--blue').trim();
+  const tMin = series[0].t;
+  const tMax = series[series.length - 1].t;
+  const tRange = tMax - tMin || 1;
+
+  for (const p of points) {
+    const x = padL + ((p.t - tMin) / tRange) * chartW;
+    const y = padT + chartH - (p.ms / maxMs) * chartH;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = blueColor + '66';
+    ctx.fill();
+    ctx.strokeStyle = blueColor;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
 }
 
 // ===================== Window globals =====================
@@ -680,7 +743,7 @@ Object.assign(window, {
   onDumpModelFilterChange, closeDumpModelSearch,
   onDumpTimeRangeChange, closeDumpTimeCustom, resetDumpFilters,
   renderPersistence, renderStats, renderProviderBreakdown,
-  rebuildMetrics, drawChart,
+  rebuildMetrics, drawThroughputChart, drawLatencyChart,
 });
 
 export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown, rebuildMetrics };

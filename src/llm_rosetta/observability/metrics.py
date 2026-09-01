@@ -27,6 +27,7 @@ class _Bucket:
     count: int = 0
     total_duration_ms: float = 0.0
     error_count: int = 0
+    latencies: list[float] = field(default_factory=list)
 
 
 class _RollingWindow:
@@ -50,6 +51,7 @@ class _RollingWindow:
             self._buckets[key] = bucket
         bucket.count += 1
         bucket.total_duration_ms += duration_ms
+        bucket.latencies.append(round(duration_ms, 2))
         if is_error:
             bucket.error_count += 1
 
@@ -78,14 +80,23 @@ class _RollingWindow:
                 avg_ms = bucket.total_duration_ms / bucket.count if bucket.count else 0
                 series.append(
                     {
-                        "t": key - now,  # negative offset (seconds ago)
+                        "t": key - now,
                         "count": bucket.count,
                         "avg_ms": round(avg_ms, 2),
                         "errors": bucket.error_count,
+                        "latencies": bucket.latencies,
                     }
                 )
             else:
-                series.append({"t": key - now, "count": 0, "avg_ms": 0, "errors": 0})
+                series.append(
+                    {
+                        "t": key - now,
+                        "count": 0,
+                        "avg_ms": 0,
+                        "errors": 0,
+                        "latencies": [],
+                    }
+                )
         return series
 
 
