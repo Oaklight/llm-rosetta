@@ -11,6 +11,7 @@ nested messages. The converter handles this structural difference.
 
 import logging
 import time
+from collections import defaultdict
 from collections.abc import Mapping
 from typing import Any, cast
 
@@ -98,10 +99,16 @@ def _qualify_tool_name(namespace: str, name: str, used_names: set[str]) -> str |
     qualified = f"{namespace}_{name}"
     if len(qualified) > _MAX_TOOL_NAME_LEN:
         max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
-        qualified = (
-            f"{namespace[:max_ns]}_{name}" if max_ns > 0 else name[:_MAX_TOOL_NAME_LEN]
-        )
-    if qualified in used_names and qualified != name:
+        if max_ns > 0:
+            qualified = f"{namespace[:max_ns]}_{name}"
+        else:
+            logger.warning(
+                "Tool name %r too long to qualify with namespace %r",
+                name,
+                namespace,
+            )
+            return None
+    if qualified in used_names:
         logger.warning("Qualified name %r still collides; keeping %r", qualified, name)
         return None
     return qualified
@@ -542,8 +549,6 @@ class OpenAIResponsesConverter(BaseConverter):
         Returns a new list; renamed entries are shallow-copied to avoid
         mutating cached references.
         """
-        from collections import defaultdict
-
         name_indices: dict[str, list[int]] = defaultdict(list)
         for i, tool in enumerate(ir_tools):
             name_indices[tool["name"]].append(i)
