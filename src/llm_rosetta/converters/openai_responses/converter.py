@@ -282,7 +282,7 @@ class OpenAIResponsesConverter(BaseConverter):
         # `{"role": "assistant", "content": ""}`.
         top_level_tools = list(provider_request.get("tools") or [])
         nested_tools, input_items = harvest_additional_tools(
-            input_items, context.warnings, top_level_tools
+            input_items, context.warnings
         )
 
         if isinstance(input_items, list):

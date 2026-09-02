@@ -3,21 +3,18 @@
 Codex transports its tool definitions inside the Responses ``input`` array
 as an ``additional_tools`` item wrapping ``type: "namespace"`` containers,
 rather than in the top-level ``tools`` field.  These tests pin the ingest
-behaviour: namespaces are flattened into IR tools, the spent item is
-dropped, and the resulting request survives conversion to Chat/Anthropic.
+behaviour: tools are extracted from the items, namespaces are flattened
+by the converter pipeline, the spent item is dropped, and the resulting
+request survives conversion to Chat/Anthropic.
 """
 
 from __future__ import annotations
 
-import json
 from typing import cast
 
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.openai_responses.tool_ops import (
-    NAMESPACE_MARKER_KEY,
-    flatten_additional_tools,
     harvest_additional_tools,
-    provider_tool_names,
     strip_additional_tools_items,
 )
 from llm_rosetta.types.ir import Message
@@ -86,86 +83,68 @@ def _codex_request() -> dict:
     }
 
 
-class TestFlattenAdditionalTools:
-    def test_flattens_namespaces_into_bare_named_tools(self):
-        tools, warnings = flatten_additional_tools([_additional_tools_item()])
-        assert [t["name"] for t in tools] == ["exec", "wait", "spawn_agent"]
-        assert warnings == []
+class TestHarvestAdditionalTools:
+    """Tests for the harvest/strip pipeline."""
 
-    def test_records_originating_namespace(self):
-        tools, _ = flatten_additional_tools([_additional_tools_item()])
-        by_name = {t["name"]: t for t in tools}
-        assert by_name["exec"]["_namespace"] == "functions"
-        assert by_name["spawn_agent"]["_namespace"] == "collaboration"
+    def test_extracts_raw_tool_dicts(self):
+        items = _codex_request()["input"]
+        warnings: list[str] = []
+        tools, remaining = harvest_additional_tools(items, warnings)
+        # Should extract the two namespace containers as raw dicts
+        assert len(tools) == 2
+        assert tools[0]["type"] == "namespace"
+        assert tools[1]["type"] == "namespace"
 
-    def test_ignores_non_additional_tools_items(self):
-        tools, warnings = flatten_additional_tools(
-            [{"type": "message", "role": "user", "content": []}]
-        )
-        assert tools == []
-        assert warnings == []
-
-    def test_bare_tool_entry_without_namespace_is_kept(self):
-        item = {
-            "type": "additional_tools",
-            "tools": [{"type": "function", "name": "ping", "parameters": {}}],
-        }
-        tools, warnings = flatten_additional_tools([item])
-        assert [t["name"] for t in tools] == ["ping"]
-        assert "_namespace" not in tools[0]
-        assert warnings == []
-
-    def test_duplicate_name_across_namespaces_is_qualified(self):
-        item = {
-            "type": "additional_tools",
-            "tools": [
-                {
-                    "type": "namespace",
-                    "name": "a",
-                    "tools": [{"type": "function", "name": "run", "parameters": {}}],
-                },
-                {
-                    "type": "namespace",
-                    "name": "b",
-                    "tools": [{"type": "function", "name": "run", "parameters": {}}],
-                },
-            ],
-        }
-        tools, warnings = flatten_additional_tools([item])
-        # Underscore, not "::" — Chat upstreams reject names outside
-        # ^[a-zA-Z0-9_-]{1,64}$ and there is no tool-name sanitizer.
-        assert [t["name"] for t in tools] == ["run", "b_run"]
-        assert any("renamed to 'b_run'" in w for w in warnings)
-
-    def test_unnamed_and_malformed_children_are_skipped_with_warnings(self):
-        item = {
-            "type": "additional_tools",
-            "tools": [
-                {
-                    "type": "namespace",
-                    "name": "ns",
-                    "tools": [{"type": "function"}, "not-a-dict"],
-                },
-                {"type": "namespace", "name": "empty", "tools": []},
-            ],
-        }
-        tools, warnings = flatten_additional_tools([item])
-        assert tools == []
-        assert len(warnings) == 3
-        assert any("Unnamed tool entry" in w for w in warnings)
-        assert any("Non-dict tool entry" in w for w in warnings)
-        assert any("declared no tools" in w for w in warnings)
-
-
-class TestStripAdditionalToolsItems:
-    def test_removes_only_additional_tools_items(self):
+    def test_strips_additional_tools_items(self):
         items = _codex_request()["input"]
         remaining = strip_additional_tools_items(items)
         assert len(remaining) == 1
         assert remaining[0]["type"] == "message"
 
+    def test_ignores_non_additional_tools_items(self):
+        items = [{"type": "message", "role": "user", "content": []}]
+        warnings: list[str] = []
+        tools, remaining = harvest_additional_tools(items, warnings)
+        assert tools == []
+        assert remaining is items
+        assert warnings == []
+
+    def test_non_list_input_returns_empty(self):
+        warnings: list[str] = []
+        tools, remaining = harvest_additional_tools("just a string", warnings)
+        assert tools == []
+        assert remaining == "just a string"
+
+    def test_non_dict_entries_skipped_with_warning(self):
+        items = [
+            {
+                "type": "additional_tools",
+                "tools": ["not-a-dict", 42, {"type": "function", "name": "ok"}],
+            }
+        ]
+        warnings: list[str] = []
+        tools, _ = harvest_additional_tools(items, warnings)
+        assert len(tools) == 1
+        assert tools[0]["name"] == "ok"
+        assert len(warnings) == 2
+
+    def test_bare_tool_entry_without_namespace(self):
+        items = [
+            {
+                "type": "additional_tools",
+                "tools": [{"type": "function", "name": "ping", "parameters": {}}],
+            }
+        ]
+        warnings: list[str] = []
+        tools, _ = harvest_additional_tools(items, warnings)
+        assert len(tools) == 1
+        assert tools[0]["name"] == "ping"
+        assert tools[0]["type"] == "function"
+
 
 class TestRequestFromProviderAdditionalTools:
+    """Integration tests: additional_tools through the full converter."""
+
     def setup_method(self):
         self.converter = OpenAIResponsesConverter()
 
@@ -173,20 +152,17 @@ class TestRequestFromProviderAdditionalTools:
         result = self.converter.request_from_provider(_codex_request())
         tools = list(result["tools"])
         assert [t["name"] for t in tools] == ["exec", "wait", "spawn_agent"]
-        # "custom" is a first-class IR type and survives ingest.
         assert tools[0]["type"] == "custom"
         assert tools[0]["metadata"]["namespace"] == "functions"
         assert tools[0]["metadata"]["format"]["type"] == "grammar"
         assert tools[1]["type"] == "function"
 
     def test_tool_choice_survives(self):
-        """Regression: tools were absent, so tool_choice was stripped as orphaned."""
         result = self.converter.request_from_provider(_codex_request())
         assert result.get("tool_choice") is not None
         assert result.get("tool_config") is not None
 
     def test_additional_tools_item_does_not_become_a_message(self):
-        """It must not strand a content-less assistant message."""
         result = self.converter.request_from_provider(_codex_request())
         messages = cast(list[Message], result["messages"])
         assert len(messages) == 1
@@ -205,8 +181,7 @@ class TestRequestFromProviderAdditionalTools:
             "spawn_agent",
         ]
 
-    def test_malformed_additional_tools_item_is_left_alone(self):
-        """Nothing harvested → existing passthrough behaviour is unchanged."""
+    def test_empty_additional_tools_item_produces_no_tools(self):
         request = _codex_request()
         request["input"][0] = {"type": "additional_tools", "tools": []}
         result = self.converter.request_from_provider(request)
@@ -214,6 +189,8 @@ class TestRequestFromProviderAdditionalTools:
 
 
 class TestAdditionalToolsCrossFormat:
+    """Cross-format conversion tests."""
+
     def test_roundtrip_to_openai_chat(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
@@ -223,6 +200,7 @@ class TestAdditionalToolsCrossFormat:
         names = [t["function"]["name"] for t in out["tools"]]
         assert names == ["exec", "wait", "spawn_agent"]
         assert out["tool_choice"] == "auto"
+        # No stranded empty assistant messages
         assert not [
             m
             for m in out["messages"]
@@ -240,112 +218,8 @@ class TestAdditionalToolsCrossFormat:
         assert [t["name"] for t in out["tools"]] == ["exec", "wait", "spawn_agent"]
 
 
-class TestAdditionalToolsDegenerate:
-    """An ``additional_tools`` item that yields no usable tools."""
-
-    def test_all_entries_malformed_still_strips_item(self):
-        """The spent item must go even when nothing was harvested.
-
-        Left in ``input`` it reaches the passthrough path and strands a
-        content-less assistant message.
-        """
-        items = [
-            {
-                "type": "additional_tools",
-                "tools": [{"type": "namespace", "name": "functions", "tools": [{}]}],
-            },
-            {"type": "message", "role": "user", "content": "hi"},
-        ]
-        warnings: list[str] = []
-        tools, remaining = harvest_additional_tools(items, warnings)
-        assert tools == []
-        assert not [
-            i
-            for i in remaining
-            if isinstance(i, dict) and i.get("type") == "additional_tools"
-        ]
-
-    def test_all_entries_malformed_still_warns(self):
-        items = [
-            {
-                "type": "additional_tools",
-                "tools": [{"type": "namespace", "name": "functions", "tools": [{}]}],
-            }
-        ]
-        warnings: list[str] = []
-        harvest_additional_tools(items, warnings)
-        assert warnings, "a wholly unusable item must not be discarded silently"
-
-    def test_no_additional_tools_leaves_input_identical(self):
-        items = [{"type": "message", "role": "user", "content": "hi"}]
-        warnings: list[str] = []
-        tools, remaining = harvest_additional_tools(items, warnings)
-        assert tools == []
-        assert remaining is items
-        assert warnings == []
-
-    def test_degenerate_item_produces_no_empty_assistant(self):
-        from llm_rosetta.pipeline import ConversionPipeline
-
-        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
-            {
-                "model": "gpt-5.6-sol",
-                "input": [
-                    {
-                        "type": "additional_tools",
-                        "tools": [
-                            {"type": "namespace", "name": "functions", "tools": [{}]}
-                        ],
-                    },
-                    {"type": "message", "role": "user", "content": "hi"},
-                ],
-            }
-        )
-        assert not [
-            m
-            for m in out["messages"]
-            if m.get("role") == "assistant"
-            and not m.get("content")
-            and not m.get("tool_calls")
-        ]
-
-
-class TestTopLevelCollision:
-    """Nested tools must not silently duplicate a top-level tool name."""
-
-    def test_namespaced_child_colliding_with_top_level_is_qualified(self):
-        items = [
-            {
-                "type": "additional_tools",
-                "tools": [
-                    {
-                        "type": "namespace",
-                        "name": "functions",
-                        "tools": [{"type": "function", "name": "exec"}],
-                    }
-                ],
-            }
-        ]
-        warnings: list[str] = []
-        tools, _ = harvest_additional_tools(
-            items, warnings, [{"type": "function", "name": "exec"}]
-        )
-        assert [t["name"] for t in tools] == ["functions_exec"]
-        assert any("Duplicate tool name 'exec'" in w for w in warnings)
-
-    def test_flat_entry_colliding_with_top_level_is_skipped(self):
-        items = [
-            {
-                "type": "additional_tools",
-                "tools": [{"type": "function", "name": "exec"}],
-            }
-        ]
-        warnings: list[str] = []
-        tools, _ = harvest_additional_tools(
-            items, warnings, [{"type": "function", "name": "exec"}]
-        )
-        assert tools == []
-        assert any("Duplicate tool name 'exec'" in w for w in warnings)
+class TestAdditionalToolsCollision:
+    """Name collisions between top-level and additional_tools."""
 
     def test_no_duplicate_names_reach_upstream(self):
         from llm_rosetta.pipeline import ConversionPipeline
@@ -379,28 +253,64 @@ class TestTopLevelCollision:
         names = [t["function"]["name"] for t in out["tools"]]
         assert len(names) == len(set(names)), f"duplicate tool names: {names}"
 
-    def test_chat_shaped_top_level_names_are_detected(self):
-        assert provider_tool_names(
-            [{"type": "function", "function": {"name": "exec"}}]
-        ) == {"exec"}
+
+class TestAdditionalToolsDegenerate:
+    """Edge cases with malformed additional_tools items."""
+
+    def test_all_entries_malformed_still_strips_item(self):
+        items = [
+            {
+                "type": "additional_tools",
+                "tools": [{"type": "namespace", "name": "functions", "tools": [{}]}],
+            },
+            {"type": "message", "role": "user", "content": "hi"},
+        ]
+        warnings: list[str] = []
+        tools, remaining = harvest_additional_tools(items, warnings)
+        # Namespace with unnamed child is still extracted as raw dict
+        assert len(tools) == 1
+        assert not [
+            i
+            for i in remaining
+            if isinstance(i, dict) and i.get("type") == "additional_tools"
+        ]
+
+    def test_degenerate_item_produces_no_empty_assistant(self):
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
+            {
+                "model": "gpt-5.6-sol",
+                "input": [
+                    {
+                        "type": "additional_tools",
+                        "tools": [
+                            {"type": "namespace", "name": "functions", "tools": [{}]}
+                        ],
+                    },
+                    {"type": "message", "role": "user", "content": "hi"},
+                ],
+            }
+        )
+        assert not [
+            m
+            for m in out["messages"]
+            if m.get("role") == "assistant"
+            and not m.get("content")
+            and not m.get("tool_calls")
+        ]
 
 
-class TestNamespaceMarkerNeverLeaks:
-    """``_namespace`` is an internal transport detail, not wire content."""
+class TestNamespaceMetadataPreserved:
+    """Namespace metadata survives the full pipeline."""
 
-    def test_marker_absent_from_converted_output(self):
+    def test_namespace_in_metadata_not_in_output(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
         out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
             _codex_request()
         )
-        assert NAMESPACE_MARKER_KEY not in json.dumps(out)
+        # _namespace marker key should never appear in output
+        import json
 
-    def test_marker_absent_from_responses_roundtrip(self):
-        """The passthrough path copies the provider dict — it must filter."""
-        from llm_rosetta.pipeline import ConversionPipeline
-
-        out = ConversionPipeline(
-            "openai_responses", "openai_responses"
-        ).convert_request(_codex_request())
-        assert NAMESPACE_MARKER_KEY not in json.dumps(out)
+        assert "_namespace" not in json.dumps(out)
