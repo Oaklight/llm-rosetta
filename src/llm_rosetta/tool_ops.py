@@ -164,7 +164,9 @@ def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None
     return OpenAIChatToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
-def from_openai_responses(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
+def from_openai_responses(
+    provider_tool: Any, **kwargs: Any
+) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
     from .converters.openai_responses import OpenAIResponsesToolOps
 

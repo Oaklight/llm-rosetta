@@ -166,6 +166,76 @@ def _synthesize_passthrough_tool(
     )
 
 
+def _flatten_namespace_tool(
+    provider_tool: dict[str, Any],
+) -> list[ToolDefinition]:
+    """Expand a ``type: "namespace"`` container into individual IR tools.
+
+    Iterates child tools, converts each via ``p_tool_definition_to_ir``,
+    and tags every result with namespace metadata for future round-trip.
+
+    Nested namespaces (namespace inside namespace) are skipped with a
+    warning — no real-world use case exists, and the OpenAI function-name
+    constraint ``^[a-zA-Z0-9_-]+$`` prohibits hierarchical separators.
+    """
+    namespace_name = provider_tool.get("name", "")
+    namespace_desc = provider_tool.get("description", "")
+    children = provider_tool.get("tools", [])
+    if not children:
+        return []
+
+    results: list[ToolDefinition] = []
+    for i, child in enumerate(children):
+        if not isinstance(child, dict):
+            logger.warning(
+                "Skipping non-dict child at index %d in namespace %r",
+                i,
+                namespace_name,
+            )
+            continue
+
+        child_type = child.get("type", "function")
+        if child_type == "namespace":
+            logger.warning(
+                "Skipping nested namespace %r inside %r — "
+                "only one level of nesting is supported",
+                child.get("name", ""),
+                namespace_name,
+            )
+            continue
+
+        child_name = child.get("name") or (
+            child.get("function", {}).get("name")
+            if isinstance(child.get("function"), dict)
+            else None
+        )
+        if not child_name:
+            logger.warning(
+                "Skipping unnamed child at index %d in namespace %r",
+                i,
+                namespace_name,
+            )
+            continue
+
+        converted = OpenAIResponsesToolOps.p_tool_definition_to_ir(child)
+        if converted is None:
+            continue
+
+        items = converted if isinstance(converted, list) else [converted]
+        for item in items:
+            meta = dict(item.get("metadata", {}))
+            meta["namespace"] = namespace_name
+            if namespace_desc:
+                meta["namespace_description"] = namespace_desc
+            if child.get("defer_loading"):
+                meta["defer_loading"] = True
+            item_copy = dict(item)
+            item_copy["metadata"] = meta
+            results.append(cast(ToolDefinition, item_copy))
+
+    return results
+
+
 def _build_function_call_item(
     ir_tool_call: ToolCallPart,
     tool_call_id: str,
@@ -256,12 +326,16 @@ class OpenAIResponsesToolOps(BaseToolOps):
         return result
 
     @staticmethod
-    def p_tool_definition_to_ir(provider_tool: Any, **kwargs: Any) -> ToolDefinition:
+    def p_tool_definition_to_ir(
+        provider_tool: Any, **kwargs: Any
+    ) -> ToolDefinition | list[ToolDefinition]:
         """OpenAI Responses tool definition → IR ToolDefinition.
 
         Handles both flat format (Responses API native) and nested format
-        (with ``function`` key).  Non-function tool types without a ``name``
-        field (e.g. ``web_search``) are stored as passthrough so they can be
+        (with ``function`` key).  ``type: "namespace"`` containers are
+        expanded into individual child tools via ``_flatten_namespace_tool``.
+        Non-function tool types without a ``name`` field (e.g.
+        ``web_search``) are stored as passthrough so they can be
         round-tripped without modification.  Named non-function tools (e.g.
         Codex ``"custom"`` ``apply_patch``) are downgraded to IR
         ``type: "function"`` so the request passes IR validation; this
@@ -273,7 +347,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
             provider_tool: OpenAI Responses tool definition dict.
 
         Returns:
-            IR ToolDefinition.
+            IR ToolDefinition, or list of ToolDefinitions for namespace
+            containers.
         """
         _IR_ALLOWED_TYPES = {"function", "mcp", "custom"}
 
@@ -288,6 +363,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
             }
         else:
             tool_type = provider_tool.get("type", "function")
+            if tool_type == "namespace":
+                return _flatten_namespace_tool(provider_tool)
             # Non-function tools outside the IR type set (e.g. web_search or
             # Codex custom apply_patch) are stored as passthrough to avoid
             # lossy conversion. IR ``type`` is forced to "function" to

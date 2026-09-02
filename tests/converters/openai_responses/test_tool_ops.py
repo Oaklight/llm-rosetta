@@ -81,6 +81,7 @@ class TestOpenAIResponsesToolOps:
             },
         }
         result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(result, dict)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
         assert result["description"] == "Get weather"
@@ -102,6 +103,7 @@ class TestOpenAIResponsesToolOps:
             },
         }
         result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(result, dict)
         assert result["type"] == "function"
         assert result["name"] == "search"
         assert result["description"] == "Search"
@@ -125,6 +127,7 @@ class TestOpenAIResponsesToolOps:
             },
         }
         result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        assert isinstance(result, dict)
         assert result["type"] == "custom"
         assert result["name"] == "apply_patch"
         assert result["description"] == "Apply a unified-diff style patch."
@@ -150,6 +153,7 @@ class TestOpenAIResponsesToolOps:
         )
         provider = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         restored = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider)
+        assert isinstance(restored, dict)
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
 
