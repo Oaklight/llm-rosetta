@@ -173,6 +173,10 @@ If you use LLM-Rosetta in your research, please cite our paper:
 
 Contributions are welcome! Please visit the [GitHub repository](https://github.com/Oaklight/llm-rosetta) to get started.
 
+## Community
+
+Feel free to discuss the project via [GitHub Issues](https://github.com/Oaklight/llm-rosetta/issues) or the [LINUX DO](https://linux.do/) community.
+
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
