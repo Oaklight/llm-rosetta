@@ -304,6 +304,17 @@ class TestDedupIrToolNames:
         ]
         result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
         assert len(result[1]["name"]) <= 64
+        assert result[0]["name"] != result[1]["name"]
+
+    def test_very_long_name_skips_qualify(self):
+        long_name = "x" * 64
+        tools = [
+            self._ir_tool(long_name),
+            self._ir_tool(long_name, "ns"),
+        ]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        # Name too long to qualify — namespaced tool keeps original name
+        assert result[1]["name"] == long_name
 
     def test_single_tool_no_dedup(self):
         tools = [self._ir_tool("only_one", "ns")]
