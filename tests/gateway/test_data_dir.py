@@ -155,3 +155,133 @@ class TestArgparseSubparserClobber:
 
         args = parser.parse_args(["db", "cleanup"])
         assert args.data_dir is None
+
+
+class TestKeysDbDataDir:
+    """keys.db should default to data_dir when available."""
+
+    def _make_config(self, tmp_path, server_extra=None):
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        config_path = str(tmp_path / "config.jsonc")
+        server = {}
+        if server_extra:
+            server.update(server_extra)
+        raw = {
+            "providers": {"t": {"api_key": "k", "base_url": "http://x"}},
+            "models": {"m": "t"},
+            "server": server,
+        }
+        _write_config(config_path, server)
+        config = GatewayConfig(raw)
+        return config, config_path
+
+    def test_keys_db_defaults_to_data_dir(self, tmp_path):
+        """Fresh start, no existing keys.db → created in data_dir."""
+        from llm_rosetta.gateway.app import _setup_auth
+
+        config, config_path = self._make_config(tmp_path)
+        data_dir = str(tmp_path / "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        try:
+            assert str(keystore._db_path) == os.path.join(data_dir, "keys.db")
+        finally:
+            keystore.close()
+
+    def test_keys_db_legacy_fallback(self, tmp_path):
+        """keys.db exists at old config-sibling location → uses old path."""
+        import sqlite3
+
+        from llm_rosetta.gateway.app import _setup_auth
+
+        config, config_path = self._make_config(tmp_path)
+        data_dir = str(tmp_path / "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+        # Create a legacy keys.db next to config
+        old_path = str(tmp_path / "keys.db")
+        conn = sqlite3.connect(old_path)
+        conn.execute("CREATE TABLE test (id INTEGER)")
+        conn.close()
+
+        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        try:
+            assert str(keystore._db_path) == old_path
+        finally:
+            keystore.close()
+
+    def test_keys_db_explicit_api_keys_db_wins(self, tmp_path):
+        """config.api_keys_db set → uses that, ignores data_dir."""
+        from llm_rosetta.gateway.app import _setup_auth
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        explicit = str(tmp_path / "custom" / "my-keys.db")
+        raw = {
+            "providers": {"t": {"api_key": "k", "base_url": "http://x"}},
+            "models": {"m": "t"},
+            "server": {"api_keys_db": explicit},
+        }
+        config = GatewayConfig(raw)
+        config_path = str(tmp_path / "config.jsonc")
+        _write_config(config_path)
+
+        data_dir = str(tmp_path / "data")
+        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        try:
+            assert str(keystore._db_path) == explicit
+        finally:
+            keystore.close()
+
+    def test_keys_db_new_location_preferred(self, tmp_path):
+        """keys.db exists in both old and data_dir → uses data_dir."""
+        import sqlite3
+
+        from llm_rosetta.gateway.app import _setup_auth
+
+        config, config_path = self._make_config(tmp_path)
+        data_dir = str(tmp_path / "data")
+        os.makedirs(data_dir, exist_ok=True)
+
+        # Create keys.db in both locations
+        for path in [str(tmp_path / "keys.db"), os.path.join(data_dir, "keys.db")]:
+            conn = sqlite3.connect(path)
+            conn.execute("CREATE TABLE test (id INTEGER)")
+            conn.close()
+
+        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        try:
+            assert str(keystore._db_path) == os.path.join(data_dir, "keys.db")
+        finally:
+            keystore.close()
+
+    def test_resolve_data_dir_for_app(self, tmp_path):
+        """_resolve_data_dir_for_app mirrors _resolve_data_dir behavior."""
+        from llm_rosetta.gateway.app import _resolve_data_dir_for_app
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        config_path = str(tmp_path / "config.jsonc")
+        _write_config(config_path)
+
+        # No data_dir in config → default
+        raw = {
+            "providers": {"t": {"api_key": "k", "base_url": "http://x"}},
+            "models": {"m": "t"},
+            "server": {},
+        }
+        config = GatewayConfig(raw)
+        result = _resolve_data_dir_for_app(config, config_path)
+        assert result == str(tmp_path / "data")
+
+        # Relative data_dir → resolved against config dir
+        raw["server"]["data_dir"] = "my-data"
+        config = GatewayConfig(raw)
+        result = _resolve_data_dir_for_app(config, config_path)
+        assert result == str(tmp_path / "my-data")
+
+        # Absolute data_dir → used as-is
+        raw["server"]["data_dir"] = "/absolute/path"
+        config = GatewayConfig(raw)
+        result = _resolve_data_dir_for_app(config, config_path)
+        assert result == "/absolute/path"
