@@ -579,8 +579,25 @@ def _flush_now(app: App) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _setup_auth(
+def _resolve_data_dir_for_app(
     config: GatewayConfig, config_path: str | None
+) -> str | None:
+    """Resolve data directory from config, anchoring relative paths to config dir."""
+    import os
+
+    if config.data_dir:
+        if config_path and not os.path.isabs(config.data_dir):
+            return os.path.join(os.path.dirname(config_path), config.data_dir)
+        return config.data_dir
+    if config_path:
+        return os.path.join(os.path.dirname(config_path), "data")
+    return None
+
+
+def _setup_auth(
+    config: GatewayConfig,
+    config_path: str | None,
+    data_dir: str | None = None,
 ) -> tuple[str, KeyStore, AuthState]:
     """Create KeyStore, import config keys, build AuthState."""
     import os
@@ -590,6 +607,25 @@ def _setup_auth(
 
     if config.api_keys_db:
         keys_db_path = config.api_keys_db
+    elif data_dir:
+        new_path = os.path.join(data_dir, "keys.db")
+        old_path = (
+            os.path.join(os.path.dirname(os.path.abspath(config_path)), "keys.db")
+            if config_path
+            else None
+        )
+        if os.path.exists(new_path):
+            keys_db_path = new_path
+        elif old_path and os.path.exists(old_path):
+            keys_db_path = old_path
+            logger.warning(
+                "Using keys.db from legacy location %s — "
+                "move it to %s to silence this warning.",
+                old_path,
+                new_path,
+            )
+        else:
+            keys_db_path = new_path
     elif config_path:
         keys_db_path = os.path.join(
             os.path.dirname(os.path.abspath(config_path)), "keys.db"
@@ -808,8 +844,13 @@ def create_app(
 
     _install_root_redirect(app, config.root_redirect)
 
+    # --- Resolve data directory (shared by keystore + persistence) ---
+    resolved_data_dir = _resolve_data_dir_for_app(config, config_path)
+
     # --- Auth (SQLite keystore + config fallback) ---
-    internal_token, keystore, auth_state = _setup_auth(config, config_path)
+    internal_token, keystore, auth_state = _setup_auth(
+        config, config_path, data_dir=resolved_data_dir
+    )
     if not ext.skip_builtin_auth:
         app.before_request(create_auth_hook(auth_state))
 
@@ -873,13 +914,7 @@ def create_app(
             disabled_tabs=ext.disabled_tabs,
             custom_head=ext.custom_head,
             branding=ext.branding,
-            data_dir=(
-                os.path.join(os.path.dirname(config_path), config.data_dir)
-                if config.data_dir
-                and config_path
-                and not os.path.isabs(config.data_dir)
-                else config.data_dir
-            ),
+            data_dir=resolved_data_dir,
         )
 
     return app
