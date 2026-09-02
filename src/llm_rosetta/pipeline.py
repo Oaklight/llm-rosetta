@@ -237,7 +237,7 @@ class ConversionPipeline:
         upstream_model: str | None = None,
         model_capabilities: list[str] | None = None,
         reasoning_config_override: dict[str, Any] | None = None,
-        supports_custom_tools: bool = False,
+        supports_custom_tools: bool | None = None,
         hoist_system_messages: bool = True,
         force_conversion: bool = True,
         fidelity_mode: Literal["critical", "full"] | None = None,

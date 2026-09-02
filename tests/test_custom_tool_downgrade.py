@@ -158,6 +158,30 @@ class TestEnforceCustomTools:
         assert result["tools"][0]["type"] == "function"
         assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
 
+    def test_config_override_false_overrides_shim_true(self):
+        """A gateway config saying False must beat a shim saying True.
+
+        Regression: ``config_override`` was compared with ``not supports``,
+        so an explicit False was indistinguishable from unset and fell back
+        to the shim — making ``supports_custom_tools: false`` inert for any
+        provider whose shim declared support.
+        """
+        shim = _make_shim(supports=True)
+        tool = dict(CUSTOM_TOOL_IR)
+        tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
+        ir = {"tools": [tool]}
+        result = enforce_custom_tools(ir, shim=shim, config_override=False)
+        assert result["tools"][0]["type"] == "function"
+        assert result["tools"][0]["metadata"]["_downgraded_from"] == "custom"
+
+    def test_config_override_none_defers_to_shim_true(self):
+        shim = _make_shim(supports=True)
+        tool = dict(CUSTOM_TOOL_IR)
+        tool["metadata"] = copy.deepcopy(CUSTOM_TOOL_IR.get("metadata", {}))
+        ir = {"tools": [tool]}
+        result = enforce_custom_tools(ir, shim=shim, config_override=None)
+        assert result["tools"][0]["type"] == "custom"
+
     def test_config_override_default_defers_to_shim(self):
         shim = _make_shim(supports=False)
         tool = dict(CUSTOM_TOOL_IR)

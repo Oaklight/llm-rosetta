@@ -221,7 +221,7 @@ def enforce_custom_tools(
     ir_request: dict[str, Any],
     *,
     shim: ProviderShim | str | None = None,
-    config_override: bool = False,
+    config_override: bool | None = None,
 ) -> dict[str, Any]:
     """Downgrade custom tools to functions for providers that lack support.
 
@@ -233,23 +233,29 @@ def enforce_custom_tools(
     restore it.
 
     Resolution: ``config_override`` carries the pre-resolved value from
-    ``config.resolve()`` (config override > shim default > False).
-    Direct callers may omit it and pass ``shim`` instead.
+    ``config.resolve()`` (config override > shim default > False) and is
+    authoritative when not ``None``.  Direct callers may omit it and pass
+    ``shim`` instead, in which case the shim's default is used.
+
+    ``None`` and ``False`` are distinct: ``None`` means "unset, fall back to
+    the shim", while ``False`` means "this provider does not support custom
+    tools" and must not be overridden by a shim that claims otherwise.
 
     No-op when the effective value is True.
 
     Args:
         ir_request: The IR request dict — **always use the return value**.
-        shim: Provider shim (name or object).  Used as fallback when
-            ``config_override`` is False and no gateway config is set.
-        config_override: Pre-resolved supports_custom_tools value.
+        shim: Provider shim (name or object).  Used as fallback only when
+            ``config_override`` is ``None``.
+        config_override: Pre-resolved supports_custom_tools value, or
+            ``None`` to defer to ``shim``.
 
     Returns:
         The IR request with custom tools downgraded, or the original
         request unchanged.
     """
     supports = config_override
-    if not supports and shim is not None:
+    if supports is None and shim is not None:
         resolved = resolve_shim(shim) if isinstance(shim, str) else shim
         supports = resolved.supports_custom_tools if resolved is not None else False
     if supports:
