@@ -61,7 +61,7 @@ from ._constants import (
 from .config_ops import OpenAIResponsesConfigOps
 from .content_ops import OpenAIResponsesContentOps
 from .message_ops import OpenAIResponsesMessageOps
-from .tool_ops import OpenAIResponsesToolOps
+from .tool_ops import OpenAIResponsesToolOps, harvest_additional_tools
 from .utils import build_message_preamble_events, resolve_call_id
 
 
@@ -274,13 +274,24 @@ class OpenAIResponsesConverter(BaseConverter):
                     "content": [{"type": "input_text", "text": input_items}],
                 }
             ]
+        # Codex transports its tool definitions inside `input` as
+        # `additional_tools` items instead of the top-level `tools` field.
+        # Harvest them before message conversion so the spent items can be
+        # dropped: routed through the passthrough path they would strand a
+        # content-less assistant message, which the Chat converter emits as
+        # `{"role": "assistant", "content": ""}`.
+        top_level_tools = list(provider_request.get("tools") or [])
+        nested_tools, input_items = harvest_additional_tools(
+            input_items, context.warnings, top_level_tools
+        )
+
         if isinstance(input_items, list):
             ir_messages = self.message_ops.p_messages_to_ir(input_items)
             ir_request["messages"] = ir_messages
 
         # 3. Tools (with process-level cache)
         # Filter out disabled tools before caching (external_web_access=False)
-        tools = provider_request.get("tools")
+        tools = top_level_tools + nested_tools
         if tools:
             active_tools = [
                 t

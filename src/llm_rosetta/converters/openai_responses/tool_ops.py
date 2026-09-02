@@ -14,6 +14,7 @@ format with type/name/description/parameters at the top level.
 
 import json
 import logging
+from collections.abc import Iterable
 from typing import Any, cast
 
 from ..base.helpers.tool_content import (
@@ -36,6 +37,18 @@ from ..base.helpers import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: Responses input item type that carries tool definitions inline (Codex).
+ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
+
+#: Tool container type that groups child tools under a hierarchical name.
+NAMESPACE_TOOL_TYPE = "namespace"
+
+#: Key used to smuggle the originating namespace through to
+#: :meth:`OpenAIResponsesToolOps.p_tool_definition_to_ir`, which lifts it into
+#: ``metadata["namespace"]``.  Part of the provider-format dict (not IR) so the
+#: per-entry tool cache keys namespaced duplicates apart.
+NAMESPACE_MARKER_KEY = "_namespace"
 
 
 # ==================== Orphaned Tool Call Fix ====================
@@ -152,6 +165,13 @@ def _synthesize_passthrough_tool(
             hint += f", syntax: {fmt_syntax}"
         hint += "]"
         desc = f"{desc}\n\n{hint}" if desc else hint
+    # Keep the marker out of the round-trip payload — it is an internal
+    # transport detail, not part of the provider's tool definition.
+    passthrough = {k: v for k, v in provider_tool.items() if k != NAMESPACE_MARKER_KEY}
+    meta: dict[str, Any] = {"provider_type": tool_type}
+    namespace = provider_tool.get(NAMESPACE_MARKER_KEY)
+    if namespace:
+        meta["namespace"] = namespace
     return cast(
         ToolDefinition,
         {
@@ -159,8 +179,8 @@ def _synthesize_passthrough_tool(
             "name": provider_tool.get("name", tool_type),
             "description": desc,
             "parameters": synth_params,
-            "_passthrough": dict(provider_tool),
-            "metadata": {"provider_type": tool_type},
+            "_passthrough": passthrough,
+            "metadata": meta,
             "required_parameters": synth_params.get("required", []),
         },
     )
@@ -265,6 +285,211 @@ def _build_function_call_item(
         "arguments": arguments,
         "status": "completed",
     }
+
+
+# ==================== additional_tools / namespace flattening ====================
+
+
+def _flatten_namespace_child(
+    child: Any,
+    namespace: str,
+    seen: set[str],
+    warnings: list[str],
+) -> dict[str, Any] | None:
+    """Normalise one namespace child into a top-level provider tool dict.
+
+    Args:
+        child: Candidate child tool definition.
+        namespace: Name of the enclosing namespace (``""`` when the entry
+            sat directly under ``additional_tools``).
+        seen: Names already claimed; mutated to record this one.
+        warnings: Sink for human-readable skip/rename notes.
+
+    Returns:
+        A provider-format tool dict, or ``None`` if the child was unusable.
+    """
+    where = f"namespace '{namespace}'" if namespace else "additional_tools"
+    if not isinstance(child, dict):
+        warnings.append(f"Non-dict tool entry in {where} — skipped")
+        return None
+
+    name = child.get("name")
+    if not name or not isinstance(name, str):
+        warnings.append(f"Unnamed tool entry in {where} — skipped")
+        return None
+
+    flat = dict(child)
+    if name in seen:
+        qualified = f"{namespace}_{name}" if namespace else name
+        if qualified in seen:
+            warnings.append(
+                f"Duplicate tool name '{name}' in {where} — skipped "
+                f"(both '{name}' and '{qualified}' already taken)"
+            )
+            return None
+        warnings.append(
+            f"Duplicate tool name '{name}' in {where} — renamed to '{qualified}'"
+        )
+        flat["name"] = qualified
+        name = qualified
+
+    seen.add(name)
+    if namespace:
+        flat[NAMESPACE_MARKER_KEY] = namespace
+    return flat
+
+
+def provider_tool_names(tools: Iterable[Any]) -> set[str]:
+    """Collect declared names from a list of provider-format tool dicts.
+
+    Handles both the Responses flat shape (``{"name": ...}``) and the Chat
+    nested shape (``{"function": {"name": ...}}``).
+
+    Args:
+        tools: Provider-format tool definitions; non-dicts are ignored.
+
+    Returns:
+        The set of non-empty string names found.
+    """
+    names: set[str] = set()
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        name = tool.get("name")
+        if not name and isinstance(tool.get("function"), dict):
+            name = tool["function"].get("name")
+        if isinstance(name, str) and name:
+            names.add(name)
+    return names
+
+
+def flatten_additional_tools(
+    input_items: list[Any],
+    existing_names: Iterable[str] = (),
+) -> tuple[list[dict[str, Any]], list[str]]:
+    """Harvest tool definitions carried by ``additional_tools`` input items.
+
+    Codex sends its tool definitions inside the ``input`` array rather than
+    in the top-level ``tools`` field::
+
+        {"type": "additional_tools", "role": "developer",
+         "tools": [{"type": "namespace", "name": "functions",
+                    "tools": [{"type": "function", "name": "exec", ...}]}]}
+
+    Each ``namespace`` container is expanded into its child tools; entries
+    that are already plain tool definitions are taken as-is.
+
+    Child names are kept **bare** (``exec``, not ``functions::exec``).
+    OpenAI-compatible Chat upstreams constrain function names to
+    ``^[a-zA-Z0-9_-]{1,64}$``, and llm-rosetta has no tool-name sanitizer
+    (only :func:`~llm_rosetta.converters.base.helpers.sanitize_tool_call_id`
+    for IDs), so a ``::``-qualified name would reach the upstream verbatim
+    and be rejected.  Collisions between namespaces are resolved by
+    qualifying the later one as ``<namespace>_<name>``, which stays inside
+    the permitted charset.
+
+    Args:
+        input_items: The raw Responses ``input`` list.
+        existing_names: Names already claimed by the top-level ``tools``
+            field.  Seeded into the collision set so a nested tool cannot
+            silently duplicate a top-level one.
+
+    Returns:
+        A ``(tools, warnings)`` pair.  *tools* are provider-format tool
+        dicts ready for ``p_tool_definition_to_ir``; *warnings* describe
+        entries that were skipped or renamed.
+    """
+    tools: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    seen: set[str] = set(existing_names)
+
+    for item in input_items:
+        if not isinstance(item, dict) or item.get("type") != ADDITIONAL_TOOLS_ITEM_TYPE:
+            continue
+
+        for entry in item.get("tools") or []:
+            if not isinstance(entry, dict):
+                warnings.append("Non-dict entry in additional_tools — skipped")
+                continue
+
+            if entry.get("type") != NAMESPACE_TOOL_TYPE:
+                flat = _flatten_namespace_child(entry, "", seen, warnings)
+                if flat is not None:
+                    tools.append(flat)
+                continue
+
+            namespace = entry.get("name") or ""
+            children = entry.get("tools") or []
+            if not children:
+                warnings.append(f"Namespace '{namespace}' declared no tools — skipped")
+                continue
+            for child in children:
+                flat = _flatten_namespace_child(child, namespace, seen, warnings)
+                if flat is not None:
+                    tools.append(flat)
+
+    return tools, warnings
+
+
+def strip_additional_tools_items(input_items: list[Any]) -> list[Any]:
+    """Drop ``additional_tools`` items from a Responses ``input`` list.
+
+    Called once their tool definitions have been harvested by
+    :func:`flatten_additional_tools`.  Leaving them in place would route
+    them through the passthrough path, which strands a content-less
+    assistant message that the Chat converter emits as
+    ``{"role": "assistant", "content": ""}``.
+    """
+    return [
+        item
+        for item in input_items
+        if not (
+            isinstance(item, dict) and item.get("type") == ADDITIONAL_TOOLS_ITEM_TYPE
+        )
+    ]
+
+
+def harvest_additional_tools(
+    input_items: Any,
+    warnings: list[str],
+    existing_tools: Iterable[Any] = (),
+) -> tuple[list[dict[str, Any]], Any]:
+    """Extract ``additional_tools`` definitions and drop the spent items.
+
+    Composes :func:`flatten_additional_tools` and
+    :func:`strip_additional_tools_items` into the single step the request
+    converter needs.
+
+    Stripping is keyed on an ``additional_tools`` item being *present*, not
+    on tools being successfully harvested.  An item whose every entry is
+    malformed still yields no tools, but leaving it in ``input`` would route
+    it through the passthrough path and strand a content-less assistant
+    message — the very failure
+    :func:`strip_additional_tools_items` exists to prevent.  Warnings are
+    forwarded in that case too, so a wholly unusable item is reported rather
+    than discarded silently.
+
+    Args:
+        input_items: The raw Responses ``input`` value (list or otherwise).
+        warnings: Conversion warning sink, extended in place.
+        existing_tools: Provider-format tools from the top-level ``tools``
+            field, used to detect nested/top-level name collisions.
+
+    Returns:
+        A ``(tools, input_items)`` pair.
+    """
+    if not isinstance(input_items, list):
+        return [], input_items
+
+    stripped = strip_additional_tools_items(input_items)
+    if len(stripped) == len(input_items):
+        return [], input_items  # no additional_tools items present
+
+    nested_tools, nested_warnings = flatten_additional_tools(
+        input_items, provider_tool_names(existing_tools)
+    )
+    warnings.extend(nested_warnings)
+    return nested_tools, stripped
 
 
 class OpenAIResponsesToolOps(BaseToolOps):
@@ -404,6 +629,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
         fmt = provider_tool.get("format")
         if fmt:
             meta["format"] = fmt
+        namespace = provider_tool.get(NAMESPACE_MARKER_KEY)
+        if namespace:
+            meta["namespace"] = namespace
         result["metadata"] = meta
         return cast(ToolDefinition, result)
 
