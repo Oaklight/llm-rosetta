@@ -9,6 +9,7 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
+import logging
 import time
 from collections.abc import Mapping
 from typing import Any, cast
@@ -85,6 +86,25 @@ def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
         if parts_meta:
             meta["content_meta"] = parts_meta
     return meta
+
+
+logger = logging.getLogger(__name__)
+
+_MAX_TOOL_NAME_LEN = 64
+
+
+def _qualify_tool_name(namespace: str, name: str, used_names: set[str]) -> str | None:
+    """Build a qualified ``{namespace}_{name}`` that fits in 64 chars."""
+    qualified = f"{namespace}_{name}"
+    if len(qualified) > _MAX_TOOL_NAME_LEN:
+        max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
+        qualified = (
+            f"{namespace[:max_ns]}_{name}" if max_ns > 0 else name[:_MAX_TOOL_NAME_LEN]
+        )
+    if qualified in used_names and qualified != name:
+        logger.warning("Qualified name %r still collides; keeping %r", qualified, name)
+        return None
+    return qualified
 
 
 class OpenAIResponsesConverter(BaseConverter):
@@ -263,6 +283,7 @@ class OpenAIResponsesConverter(BaseConverter):
             if active_tools:
                 ir_tools = self._get_cached_p_tools_to_ir(active_tools)
                 if ir_tools:
+                    ir_tools = self._dedup_ir_tool_names(ir_tools)
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
@@ -508,6 +529,45 @@ class OpenAIResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
     # Cross-provider consistency helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _dedup_ir_tool_names(ir_tools: list[Any]) -> list[Any]:
+        """Rename namespaced IR tools whose names collide.
+
+        Tools originating from a namespace container may share names with
+        top-level tools or with tools from a different namespace.  This
+        method qualifies colliding names as ``{namespace}_{name}`` while
+        leaving non-namespaced (top-level) tools unchanged.
+
+        Returns a new list; renamed entries are shallow-copied to avoid
+        mutating cached references.
+        """
+        from collections import defaultdict
+
+        name_indices: dict[str, list[int]] = defaultdict(list)
+        for i, tool in enumerate(ir_tools):
+            name_indices[tool["name"]].append(i)
+
+        result = list(ir_tools)
+        used_names: set[str] = {t["name"] for t in ir_tools}
+
+        for name, indices in name_indices.items():
+            if len(indices) <= 1:
+                continue
+            for i in indices:
+                ns = (ir_tools[i].get("metadata") or {}).get("namespace")
+                if not ns:
+                    continue
+                qualified = _qualify_tool_name(ns, name, used_names)
+                if qualified is None:
+                    continue
+                copy = dict(ir_tools[i])
+                copy["name"] = qualified
+                copy["metadata"] = dict(copy.get("metadata", {}))
+                result[i] = copy
+                used_names.add(qualified)
+
+        return result
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
