@@ -690,6 +690,7 @@ class AnthropicConverter(BaseConverter):
 
             if context is not None:
                 context.register_tool_call(tool_call_id, tool_name)
+                context.block_index_to_tool_call_id[block_index] = tool_call_id
 
             start_evt = ToolCallStartEvent(
                 type="tool_call_start",
@@ -722,7 +723,11 @@ class AnthropicConverter(BaseConverter):
             events.append(evt)
         elif delta_type == "input_json_delta":
             tool_call_id = ""
-            if context is not None and context.tool_call_id_map:
+            if context is not None and chunk_block_index is not None:
+                tool_call_id = context.block_index_to_tool_call_id.get(
+                    chunk_block_index, ""
+                )
+            if not tool_call_id and context is not None and context.tool_call_id_map:
                 tool_call_id = list(context.tool_call_id_map.keys())[-1]
 
             partial_json = delta.get("partial_json", "")

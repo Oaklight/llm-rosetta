@@ -126,6 +126,7 @@ class StreamContext(ConversionContext):
     # Tool call tracking
     tool_call_id_map: dict[str, str] = field(default_factory=dict)
     tool_call_item_id_map: dict[str, str] = field(default_factory=dict)
+    block_index_to_tool_call_id: dict[int, str] = field(default_factory=dict)
 
     # Deferred event payloads
     pending_usage: dict | None = None
