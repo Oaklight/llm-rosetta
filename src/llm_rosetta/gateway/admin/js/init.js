@@ -202,6 +202,60 @@ document.querySelectorAll('.modal-overlay, .settings-popup').forEach(overlay => 
   });
 });
 
+
+// ===================== Smart hint popup positioning =====================
+document.addEventListener('mouseenter', (e) => {
+  const icon = e.target.closest('.hint-icon');
+  if (!icon) return;
+  const popup = icon.querySelector('.hint-popup');
+  if (!popup) return;
+  const rect = icon.getBoundingClientRect();
+  const pw = 280;
+  // Vertical: prefer above, fall back to below
+  popup.style.display = 'block';
+  const actualH = popup.offsetHeight;
+  const spaceAbove = rect.top;
+  const spaceBelow = window.innerHeight - rect.bottom;
+  let top;
+  if (spaceAbove >= actualH + 8) {
+    top = rect.top - actualH - 6;
+  } else {
+    top = rect.bottom + 6;
+  }
+  // Horizontal: center on icon, clamp to viewport
+  let left = rect.left + rect.width / 2 - pw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - pw - 8));
+  popup.style.top = top + 'px';
+  popup.style.left = left + 'px';
+  popup.classList.add('hint-visible');
+}, true);
+
+document.addEventListener('mouseleave', (e) => {
+  const icon = e.target.closest('.hint-icon');
+  if (!icon) return;
+  const popup = icon.querySelector('.hint-popup');
+  if (!popup) return;
+  // Small delay to allow mouse to move to popup
+  setTimeout(() => {
+    if (!icon.matches(':hover') && !popup.matches(':hover')) {
+      popup.classList.remove('hint-visible');
+      popup.style.display = 'none';
+    }
+  }, 100);
+}, true);
+
+// Also hide when mouse leaves popup itself
+document.addEventListener('mouseleave', (e) => {
+  if (!e.target.classList?.contains('hint-popup')) return;
+  const icon = e.target.closest('.hint-icon');
+  setTimeout(() => {
+    if (!icon?.matches(':hover') && !e.target.matches(':hover')) {
+      e.target.classList.remove('hint-visible');
+      e.target.style.display = 'none';
+    }
+  }, 100);
+}, true);
+
 // ===================== Start =====================
 setLang(S.currentLang);
 checkAuthAndInit();
