@@ -12,6 +12,7 @@ import { loadKeys, loadLogKeyLabels, renderKeys } from './keys.js';
 import { loadMetrics, loadDumps, renderPersistence } from './dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from './logs.js';
 import './test.js';
+import { initLogoPicker } from './logo-picker.js';
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
@@ -257,6 +258,7 @@ document.addEventListener('mouseleave', (e) => {
 }, true);
 
 // ===================== Start =====================
+initLogoPicker();
 setLang(S.currentLang);
 checkAuthAndInit();
 
