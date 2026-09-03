@@ -8,6 +8,38 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+## v0.12.0 — 2026-09-03
+
+### 新增
+
+- **Namespace 工具展开** (PR [#626](https://github.com/Oaklight/llm-rosetta/pull/626))：将 `type: "namespace"` 工具容器（Codex 使用）展开为独立的 IR 工具，附带命名空间元数据和跨命名空间去重。限定名称保持在 64 字符限制内。
+- **`additional_tools` 输入项支持** (PR [#623](https://github.com/Oaklight/llm-rosetta/pull/623))：从 Codex Responses API 的 `additional_tools` 输入项中提取工具定义。Namespace 工具通过 #626 管线自动展开。
+- **Custom tool 三态控制** (PR [#624](https://github.com/Oaklight/llm-rosetta/pull/624))：`supports_custom_tools` 现为 `None | bool` — `None` 遵从 shim 默认值，显式 `False` 即使 shim 声明支持也强制降级。Gateway 配置 `supports_custom_tools: false` 现在正确生效。
+- **可配置 `data_dir`** (PR [#619](https://github.com/Oaklight/llm-rosetta/pull/619))：gateway 持久化存储位置可通过 `--data-dir` CLI 参数或配置文件中的 `server.data_dir` 指定。Keys DB 和请求日志 DB 默认存放于此目录。
+- **Admin Logo 选择器** (PR [#630](https://github.com/Oaklight/llm-rosetta/pull/630))：紧凑图标按钮配合可搜索下拉菜单。优先显示常用 provider 图标，完整列表按需从 jsdelivr (`@lobehub/icons-static-svg`) 获取。支持自定义 URL 回退和键盘导航。
+- **Admin 布局编辑器** (PR [#629](https://github.com/Oaklight/llm-rosetta/pull/629))：`design/ui/layout-editor.html` 下的拖拽开发工具，用于原型设计 provider 弹窗字段布局，支持预览模式和 HTML 导出。
+- **Provider `models_path` 和 `logo` 配置字段** (PR [#617](https://github.com/Oaklight/llm-rosetta/pull/617))：在 gateway 配置和 admin UI 中支持 per-provider 模型列表端点路径覆盖和 logo URL。
+- **推理能力强制检查**：当上游模型未声明推理能力时，阻止 `reasoning` tool choice。
+- **Admin 图表重设计** (PR [#600](https://github.com/Oaklight/llm-rosetta/pull/600))：用阶梯图（吞吐量）+ 散点图（延迟）替换折线图，提供更准确的可视化。
+- **Admin 无障碍改进** (PRs [#603](https://github.com/Oaklight/llm-rosetta/pull/603)、[#606](https://github.com/Oaklight/llm-rosetta/pull/606))：模型开关的键盘导航、焦点陷阱、ARIA 属性。
+
+### 修复
+
+- **Anthropic 流式工具调用绑定** (PR [#628](https://github.com/Oaklight/llm-rosetta/pull/628))：使用 `chunk["index"]` 解析 `input_json_delta` 的 tool call ID，而非最后注册的 key。修复交错并行工具调用产生错误 tool ID 的问题。
+- **Admin hint 弹窗裁切** (PR [#631](https://github.com/Oaklight/llm-rosetta/pull/631))：从 CSS absolute 定位切换到 JS 驱动的 fixed 定位，智能检测上/下方向。弹窗不再被 modal 的 `overflow-y: auto` 裁切。
+- **`tool_call_id` 清理**：在 provider 输出边界清理包含下游 provider 不接受字符的 ID。
+- **`model_list_transform` 防御处理**：当 model 配置中缺少 `internal_id` 时的防御性处理。
+- **Admin 错误转储按钮**点击无响应的问题。
+- **Admin provider 列表视图**重新设计为紧凑单行布局。
+- **日志导入**移至模块级别以避免重复导入。
+
+### 变更
+
+- **Admin provider 弹窗布局**重排：Logo + Provider Name 一行，API Key 全宽，Base URL + Models Listing Path 一行（69/31），Proxy URL + Timeout 一行（69/31）。移除 Models Path 和 Timeout 字段的提示文本。
+- **Shim `ReasoningCapability` 重设计**：新增 `thinking_modes`、`effort_range` 和 `visibility_modes` 字段 (PR [#614](https://github.com/Oaklight/llm-rosetta/pull/614))。
+- **Argo shim** 在模型显示名中使用 `argo:` 前缀，并在获取对话框中显示上游 provider。
+- **Admin 响应式布局**统一 provider 卡片标记，新增响应式列表阶段 (PR [#612](https://github.com/Oaklight/llm-rosetta/pull/612))。
+
 ## v0.11.2 — 2026-08-30
 
 ### 新增
