@@ -8,6 +8,38 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+## v0.12.0 — 2026-09-03
+
+### Added
+
+- **Namespace tool flattening** (PR [#626](https://github.com/Oaklight/llm-rosetta/pull/626)): flatten `type: "namespace"` tool containers (used by Codex) into individual IR tools with namespace metadata and cross-namespace dedup. Qualified naming keeps tool names within the 64-char limit.
+- **`additional_tools` input item support** (PR [#623](https://github.com/Oaklight/llm-rosetta/pull/623)): extract tool definitions from Codex's Responses API `additional_tools` input items. Namespace tools are automatically expanded via the #626 pipeline.
+- **Custom tool tri-state** (PR [#624](https://github.com/Oaklight/llm-rosetta/pull/624)): `supports_custom_tools` is now `None | bool` — `None` defers to shim default, explicit `False` forces downgrade even when the shim says `True`. Gateway config `supports_custom_tools: false` now works correctly.
+- **Configurable `data_dir`** (PR [#619](https://github.com/Oaklight/llm-rosetta/pull/619)): gateway persistence storage location is now configurable via `--data-dir` CLI flag or `server.data_dir` in config. Keys DB and request log DB default to this directory.
+- **Admin logo picker** (PR [#630](https://github.com/Oaklight/llm-rosetta/pull/630)): compact icon button with searchable dropdown. Curated popular provider icons shown first, full list fetched on-demand from jsdelivr (`@lobehub/icons-static-svg`). Supports custom URL fallback, keyboard navigation.
+- **Admin layout editor** (PR [#629](https://github.com/Oaklight/llm-rosetta/pull/629)): drag-and-drop developer tool at `design/ui/layout-editor.html` for prototyping provider modal field layouts with preview mode and HTML export.
+- **Provider `models_path` and `logo` config fields** (PR [#617](https://github.com/Oaklight/llm-rosetta/pull/617)): per-provider model listing endpoint path override and logo URL in gateway config and admin UI.
+- **Reasoning capability enforcement** in pipeline: block `reasoning` tool choice when the upstream model does not declare reasoning capability.
+- **Admin chart redesign** (PR [#600](https://github.com/Oaklight/llm-rosetta/pull/600)): replace line charts with step (throughput) + scatter (latency) for more accurate visualization.
+- **Admin accessibility improvements** (PRs [#603](https://github.com/Oaklight/llm-rosetta/pull/603), [#606](https://github.com/Oaklight/llm-rosetta/pull/606)): keyboard navigation for model toggles, focus traps, ARIA attributes.
+
+### Fixed
+
+- **Anthropic streaming tool call binding** (PR [#628](https://github.com/Oaklight/llm-rosetta/pull/628)): use `chunk["index"]` to resolve tool call ID for `input_json_delta` instead of last-registered key. Fixes interleaved parallel tool calls producing incorrect tool IDs.
+- **Admin hint popup clipping** (PR [#631](https://github.com/Oaklight/llm-rosetta/pull/631)): switch from CSS absolute positioning to JS-driven fixed positioning with smart above/below detection. Popups no longer clipped by modal `overflow-y: auto`.
+- **`tool_call_id` sanitization** at provider output boundary: sanitize IDs that contain characters not accepted by downstream providers.
+- **Defensive `model_list_transform`** when `internal_id` is absent in model config.
+- **Admin error dump buttons** not responding to clicks.
+- **Admin provider list view** redesigned as compact single-line rows.
+- **Logging import** moved to module level to avoid repeated imports.
+
+### Changed
+
+- **Admin provider modal layout** rearranged: Logo + Provider Name row, API Key full width, Base URL + Models Listing Path row (69/31), Proxy URL + Timeout row (69/31). Hint text removed from Models Path and Timeout fields.
+- **Shim `ReasoningCapability`** redesigned with `thinking_modes`, `effort_range`, and `visibility_modes` fields (PR [#614](https://github.com/Oaklight/llm-rosetta/pull/614)).
+- **Argo shim** uses `argo:` prefix in model display names and shows upstream provider in fetch dialog.
+- **Admin responsive layout** unified provider card markup with responsive list stages (PR [#612](https://github.com/Oaklight/llm-rosetta/pull/612)).
+
 ## v0.11.2 — 2026-08-30
 
 ### Added
