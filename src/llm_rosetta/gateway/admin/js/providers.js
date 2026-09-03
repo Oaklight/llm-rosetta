@@ -9,6 +9,7 @@
 import { S, _CAP_ICONS } from './state.js';
 import { t } from './i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from './core.js';
+import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from './logo-picker.js';
 
 // ── Module-local state ──────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
   document.getElementById('provTimeout').placeholder = (S.configData.server && S.configData.server.upstream_timeout) || 300;
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
-  document.getElementById('provLogo').value = (provCfg && provCfg.logo) || '';
+  setLogoPickerValue((provCfg && provCfg.logo) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
   // Populate embedding/rerank capability checkboxes
   const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
@@ -553,7 +554,7 @@ async function saveProvider() {
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
   body.models_path = document.getElementById('provModelsPath').value.trim();
-  body.logo = document.getElementById('provLogo').value.trim();
+  body.logo = getLogoPickerValue();
   // When api_key is empty and we're editing, omit it so backend keeps the original
   if (apiKey) body.api_key = apiKey;
   // If editing and name changed, include rename_from so backend updates model references
