@@ -557,7 +557,7 @@ async function saveProvider() {
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
   const maxToolDescVal = document.getElementById('provMaxToolDescLen').value.trim();
-  body.max_tool_description_length = maxToolDescVal ? parseInt(maxToolDescVal, 10) : '';
+  body.max_tool_description_length = maxToolDescVal !== '' ? parseInt(maxToolDescVal, 10) : '';
   body.models_path = document.getElementById('provModelsPath').value.trim();
   body.logo = getLogoPickerValue();
   // When api_key is empty and we're editing, omit it so backend keeps the original

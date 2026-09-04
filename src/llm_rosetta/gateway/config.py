@@ -781,10 +781,13 @@ class GatewayConfig:
         )
         preflight = self.provider_preflight_token_count.get(provider_name, False)
 
+        _mtdl_model = self.model_max_tool_description_length.get(model)
+        _mtdl_prov = self.provider_max_tool_description_length.get(provider_name)
+        _mtdl_shim = _shim.max_tool_description_length if _shim else None
         max_tool_desc = (
-            self.model_max_tool_description_length.get(model)
-            or self.provider_max_tool_description_length.get(provider_name)
-            or (_shim.max_tool_description_length if _shim else None)
+            _mtdl_model
+            if _mtdl_model is not None
+            else (_mtdl_prov if _mtdl_prov is not None else _mtdl_shim)
         )
 
         route = ResolvedRoute(

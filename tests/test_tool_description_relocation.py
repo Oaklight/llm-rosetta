@@ -1,7 +1,6 @@
 """Tests for oversized tool description relocation."""
 
 from llm_rosetta.capabilities import (
-    MAX_TOOL_DESCRIPTION_LENGTH,
     relocate_oversized_tool_descriptions,
 )
 
@@ -40,7 +39,7 @@ class TestRelocateOversizedToolDescriptions:
 
         assert (
             result["tools"][0]["description"]
-            == "[Full documentation provided in a system message below.]"
+            == "[Full documentation for 'my_tool' provided separately.]"
         )
         assert result["tools"][0]["metadata"]["_description_relocated"] is True
         assert len(result["messages"]) == 2
@@ -62,12 +61,12 @@ class TestRelocateOversizedToolDescriptions:
 
         assert (
             result["tools"][0]["description"]
-            == "[Full documentation provided in a system message below.]"
+            == "[Full documentation for 'tool_a' provided separately.]"
         )
         assert result["tools"][1]["description"] == "short"
         assert (
             result["tools"][2]["description"]
-            == "[Full documentation provided in a system message below.]"
+            == "[Full documentation for 'tool_c' provided separately.]"
         )
         assert len(result["messages"]) == 2
         sys_text = result["messages"][-1]["content"][0]["text"]
@@ -94,11 +93,8 @@ class TestRelocateOversizedToolDescriptions:
         result = relocate_oversized_tool_descriptions(ir, max_description_length=50)
         assert (
             result["tools"][0]["description"]
-            == "[Full documentation provided in a system message below.]"
+            == "[Full documentation for 't' provided separately.]"
         )
-
-    def test_default_constant(self):
-        assert MAX_TOOL_DESCRIPTION_LENGTH == 1024
 
 
 class TestRelocationWithPipeline:

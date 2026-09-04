@@ -21,6 +21,8 @@ appropriate pipeline stages.
 
 from __future__ import annotations
 
+import copy
+
 import logging
 from typing import Any
 
@@ -395,9 +397,7 @@ def unwrap_custom_tool_input(raw: str) -> str:
 # Oversized tool description relocation
 # ---------------------------------------------------------------------------
 
-MAX_TOOL_DESCRIPTION_LENGTH = 1024
-
-_POINTER_TEMPLATE = "[Full documentation provided in a system message below.]"
+_POINTER_TEMPLATE = "[Full documentation for '{}' provided separately.]"
 
 
 def relocate_oversized_tool_descriptions(
@@ -445,9 +445,6 @@ def relocate_oversized_tool_descriptions(
     if not oversized:
         return ir_request
 
-    import copy
-    import logging
-
     logger = logging.getLogger(__name__)
 
     tools = copy.deepcopy(tools)
@@ -455,7 +452,7 @@ def relocate_oversized_tool_descriptions(
 
     sections: list[str] = []
     for idx, name, full_desc in oversized:
-        tools[idx]["description"] = _POINTER_TEMPLATE
+        tools[idx]["description"] = _POINTER_TEMPLATE.format(name)
         meta = tools[idx].get("metadata") or {}
         meta["_description_relocated"] = True
         tools[idx]["metadata"] = meta
