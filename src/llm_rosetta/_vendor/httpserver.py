@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.2.1"
+# version = "0.3.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -61,6 +61,7 @@ __all__ = [
     "JSONResponse",
     "StreamingResponse",
     "FileResponse",
+    "State",
     # Exceptions
     "HTTPException",
     # Utilities
@@ -156,6 +157,35 @@ def abort(status_code: int, message: str | None = None) -> None:
     raise HTTPException(status_code, message)
 
 
+# ── Request State ────────────────────────────────────────────────────────────
+
+
+class State:
+    """Mutable namespace for storing arbitrary per-request data.
+
+    Middleware and handlers can attach attributes freely::
+
+        @app.before_request
+        async def start_timer(req):
+            req.state.start_time = time.monotonic()
+
+    Uses ``__dict__``-based attribute access (no ``__slots__``), following
+    the same pattern as Starlette's ``State``.
+    """
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.__dict__.update(kwargs)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, State):
+            return NotImplemented
+        return self.__dict__ == other.__dict__
+
+    def __repr__(self) -> str:
+        items = ", ".join(f"{k}={v!r}" for k, v in self.__dict__.items())
+        return f"State({items})"
+
+
 # ── Request ──────────────────────────────────────────────────────────────────
 
 
@@ -172,6 +202,7 @@ class Request:
         path_params: Parameters extracted from the route pattern.
         client_addr: Client ``(host, port)`` tuple.
         app: Reference to the :class:`App` instance handling this request.
+        state: Per-request :class:`State` namespace for arbitrary data.
     """
 
     __slots__ = (
@@ -184,6 +215,7 @@ class Request:
         "path_params",
         "client_addr",
         "app",
+        "state",
         "_json",
     )
 
@@ -206,6 +238,7 @@ class Request:
         self.path_params: dict[str, Any] = {}
         self.client_addr = client_addr
         self.app = app
+        self.state = State()
         self._json: Any = _SENTINEL
 
     def json(self) -> Any:
@@ -309,9 +342,12 @@ class StreamingResponse:
         status_code: HTTP status code.
         headers: Extra response headers.
         content_type: MIME type (default ``application/octet-stream``).
+        background: Optional callable invoked after the stream completes
+            (including client disconnect).  Accepts both sync and async
+            callables.  Exceptions are logged and suppressed.
     """
 
-    __slots__ = ("_generator", "status_code", "headers", "content_type")
+    __slots__ = ("_generator", "status_code", "headers", "content_type", "background")
 
     def __init__(
         self,
@@ -319,11 +355,13 @@ class StreamingResponse:
         status_code: int = 200,
         headers: dict[str, str] | None = None,
         content_type: str = "application/octet-stream",
+        background: Callable[[], Any] | None = None,
     ):
         self._generator = generator
         self.status_code = status_code
         self.headers: dict[str, str] = headers.copy() if headers else {}
         self.content_type = content_type
+        self.background = background
 
     async def _write(self, writer: asyncio.StreamWriter) -> None:
         """Write status line, headers, then stream the body."""
@@ -360,7 +398,17 @@ class StreamingResponse:
         finally:
             aclose = getattr(self._generator, "aclose", None)
             if aclose is not None:
-                await aclose()
+                try:
+                    await aclose()
+                except Exception:
+                    logger.debug("Generator aclose failed", exc_info=True)
+            if self.background is not None:
+                try:
+                    result = self.background()
+                    if inspect.isawaitable(result):
+                        await result
+                except Exception:
+                    logger.warning("Background callback failed", exc_info=True)
 
 
 class FileResponse(Response):
@@ -636,9 +684,12 @@ class App:
         self._static_routes: list[tuple[str, str]] = []
         self._before_request_handlers: list[Callable[..., Any]] = []
         self._after_request_handlers: list[Callable[..., Any]] = []
+        self._startup_handlers: list[Callable[[], Any]] = []
+        self._shutdown_handlers: list[Callable[[], Any]] = []
         self._error_handlers: dict[int | type, Callable[..., Any]] = {}
         self._server: asyncio.Server | None = None
         self._shutdown_event: asyncio.Event | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
         self.max_body_size = max_body_size
         self.read_timeout = read_timeout
         self.port: int | None = None
@@ -752,6 +803,46 @@ class App:
             return handler
 
         return decorator
+
+    # ── Lifespan Hooks ───────────────────────────────────────────────────
+
+    def on_startup(self, handler: Callable[[], Any]) -> Callable[[], Any]:
+        """Register a startup hook.
+
+        The hook is called (with no arguments) before the server starts
+        accepting connections.  Both sync and async callables are supported.
+        Hooks run in registration order.
+
+        If a startup hook raises, the error is logged and re-raised so the
+        server does not start with failed initialization.
+
+        Example::
+
+            @app.on_startup
+            async def init_pool():
+                app.pool = await create_pool()
+        """
+        self._startup_handlers.append(handler)
+        return handler
+
+    def on_shutdown(self, handler: Callable[[], Any]) -> Callable[[], Any]:
+        """Register a shutdown hook.
+
+        The hook is called (with no arguments) after the server stops
+        accepting connections.  Both sync and async callables are supported.
+        Hooks run in **reverse** registration order (LIFO).
+
+        If a shutdown hook raises, the error is logged and the remaining
+        hooks still execute (best-effort cleanup).
+
+        Example::
+
+            @app.on_shutdown
+            async def close_pool():
+                await app.pool.close()
+        """
+        self._shutdown_handlers.append(handler)
+        return handler
 
     # ── Request Dispatch ─────────────────────────────────────────────────
 
@@ -972,6 +1063,43 @@ class App:
 
     # ── Server Lifecycle ─────────────────────────────────────────────────
 
+    async def _run_startup_hooks(self) -> None:
+        """Run all registered startup hooks in registration order.
+
+        If any hook raises, the exception is logged and re-raised so the
+        server does not start with failed initialization.
+        """
+        for hook in self._startup_handlers:
+            try:
+                result = hook()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.error(
+                    "Startup hook %r failed",
+                    getattr(hook, "__name__", repr(hook)),
+                    exc_info=True,
+                )
+                raise
+
+    async def _run_shutdown_hooks(self) -> None:
+        """Run all registered shutdown hooks in reverse registration order.
+
+        Errors are logged and suppressed so that remaining hooks still
+        execute (best-effort cleanup).
+        """
+        for hook in reversed(self._shutdown_handlers):
+            try:
+                result = hook()
+                if inspect.isawaitable(result):
+                    await result
+            except Exception:
+                logger.warning(
+                    "Shutdown hook %r failed",
+                    getattr(hook, "__name__", repr(hook)),
+                    exc_info=True,
+                )
+
     def run(
         self,
         host: str = DEFAULT_HOST,
@@ -998,33 +1126,43 @@ class App:
     async def _serve(self, host: str, port: int, *, socket: str | None = None) -> None:
         """Internal async server loop."""
         self._shutdown_event = asyncio.Event()
+        self._loop = asyncio.get_running_loop()
         self._socket_path: str | None = None
 
-        if socket:
-            server = await self._start_unix_socket(socket)
-        else:
-            server = await asyncio.start_server(
-                self._handle_connection,
-                host,
-                port,
-            )
-            addrs = server.sockets[0].getsockname() if server.sockets else (host, port)
-            self.host = addrs[0]
-            self.port = addrs[1]
-            logger.info("Serving on %s:%d", self.host, self.port)
+        try:
+            # Run startup hooks before accepting connections
+            await self._run_startup_hooks()
 
-        self._server = server
+            if socket:
+                server = await self._start_unix_socket(socket)
+            else:
+                server = await asyncio.start_server(
+                    self._handle_connection,
+                    host,
+                    port,
+                )
+                addrs = (
+                    server.sockets[0].getsockname() if server.sockets else (host, port)
+                )
+                self.host = addrs[0]
+                self.port = addrs[1]
+                logger.info("Serving on %s:%d", self.host, self.port)
 
-        loop = asyncio.get_running_loop()
-        if sys.platform != "win32":
-            for sig in (signal.SIGINT, signal.SIGTERM):
-                loop.add_signal_handler(sig, self._shutdown_event.set)
+            self._server = server
 
-        async with server:
-            await self._shutdown_event.wait()
-            logger.info("Shutting down server")
-            if self._socket_path:
-                self._cleanup_socket()
+            loop = asyncio.get_running_loop()
+            if sys.platform != "win32":
+                for sig in (signal.SIGINT, signal.SIGTERM):
+                    loop.add_signal_handler(sig, self._shutdown_event.set)
+
+            async with server:
+                await self._shutdown_event.wait()
+                logger.info("Shutting down server")
+                if self._socket_path:
+                    self._cleanup_socket()
+        finally:
+            # Run shutdown hooks after server stops accepting connections
+            await self._run_shutdown_hooks()
 
     async def _start_unix_socket(self, socket_path: str) -> asyncio.Server:
         """Start listening on a Unix domain socket.
@@ -1091,10 +1229,10 @@ class App:
     def shutdown(self) -> None:
         """Request a graceful server shutdown.
 
-        Safe to call from a request handler.
+        Safe to call from any thread or from a request handler.
         """
-        if self._shutdown_event is not None:
-            self._shutdown_event.set()
+        if self._shutdown_event is not None and self._loop is not None:
+            self._loop.call_soon_threadsafe(self._shutdown_event.set)
 
 
 # ── Handler Invocation ───────────────────────────────────────────────────────
