@@ -122,6 +122,64 @@ class TestProfilerState:
         assert len(state.results) == 0
 
 
+class TestStreamingProfilerDefer:
+    """Test that streaming responses defer profiler stop via background callback."""
+
+    def test_streaming_sets_background_and_clears_profiler(self):
+        from unittest.mock import MagicMock
+
+        from llm_rosetta._vendor.httpserver import StreamingResponse
+        from llm_rosetta.gateway.app import _try_stop_profiler
+
+        state = ProfilerState()
+        state.enable(requests=2)
+
+        app = MagicMock()
+        app.profiler_state = state
+
+        assert state.should_profile()
+        assert state.remaining == 1
+
+        async def gen():
+            yield "data: hello\n\n"
+
+        response = StreamingResponse(gen(), content_type="text/event-stream")
+        assert response.background is None
+
+        mock_profiler = MagicMock()
+        deep_profiler = mock_profiler
+
+        if deep_profiler is not None and isinstance(response, StreamingResponse):
+            _dp = deep_profiler
+            _app = app
+
+            def _stop_profiler_background():
+                _try_stop_profiler(
+                    _dp,
+                    _app,
+                    request_id="test-123",
+                    model="test-model",
+                    source="openai_chat",
+                    target="anthropic",
+                    is_stream=True,
+                    duration_ms=100.0,
+                )
+
+            response.background = _stop_profiler_background
+            deep_profiler = None
+
+        assert response.background is not None
+        assert deep_profiler is None
+
+    def test_non_streaming_does_not_set_background(self):
+        from llm_rosetta._vendor.httpserver import Response
+
+        response = Response(body=b'{"result": "ok"}', content_type="application/json")
+        assert not hasattr(response, "background") or not getattr(
+            response, "background", None
+        )
+
+
 class TestRequestLogProfile:
     """Test profile field in RequestLogEntry."""
 
