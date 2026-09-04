@@ -68,6 +68,45 @@ google_response = google_client.generate_content(**google_request)
 ir_response = google_conv.response_from_provider(google_response)
 ```
 
+## Google Interactions API
+
+Google 推出了 [Interactions API](https://ai.google.dev/gemini-api/docs/interactions) 作为新 Gemini 项目的推荐接口。LLM-Rosetta 为此格式提供了专用转换器：
+
+```python
+from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+
+interactions_conv = GoogleInteractionsConverter()
+
+# Interactions API 响应 → IR
+ir_response = interactions_conv.response_from_provider(interaction_response)
+
+# IR → Interactions API 请求
+interactions_request, warnings = interactions_conv.request_to_provider(ir_request)
+```
+
+### 与 `GoogleGenAIConverter` 的主要区别
+
+| 方面 | `GoogleGenAIConverter` | `GoogleInteractionsConverter` |
+|------|----------------------|------------------------------|
+| 端点 | `generateContent` | `/v1beta/interactions` |
+| 输入格式 | `contents[{role, parts}]` | `input`（字符串、Content[] 或 Step[]） |
+| 响应格式 | `candidates[].content.parts[]` | 类型化 `steps[]`（model_output、thought、function_call 等） |
+| 流式传输 | Candidate 分块 | `interaction.created/completed` + `step.start/delta/stop` 生命周期 |
+| 思考配置 | `thinkingBudget`（整数） | `thinking_level` 枚举（minimal/low/medium/high） |
+| 工具定义 | 嵌套的 `functionDeclarations` | 扁平的 `{type: "function", name, ...}` |
+
+### 步骤合并
+
+Interactions API 使用**类型化步骤**而非基于角色的消息。连续的 assistant 角色步骤（例如 `thought` 步骤后跟 `model_output` 步骤）会自动合并为单个 IR `AssistantMessage`，包含 `[ReasoningPart, TextPart]` 内容——与 Anthropic 转换器处理 thinking + text 块的方式一致。
+
+### Interactions 专有功能
+
+Interactions API 特有的字段通过 `provider_extensions` 保留：
+
+- `previous_interaction_id` — 服务端多轮状态
+- `background` — 长时运行的后台执行
+- `store` — 是否持久化交互
+
 ## Google：SDK 与 REST API 输出格式
 
 默认情况下，Google 转换器生成的字典包含嵌套的 `config` 键，适用于 Google GenAI Python SDK（`google.genai`）。如果你直接调用 Google REST API（例如通过 `httpx` 或 `requests`），传入 `output_format="rest"` 可获得适合 HTTP 请求的扁平化请求体：

@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增
+
+- **Google Interactions API 转换器** (Issue [#581](https://github.com/Oaklight/llm-rosetta/issues/581))：新增 `converters/google_interactions/` 模块，完整支持 Google Interactions API (`/v1beta/interactions`) 的双向格式转换。支持类型化步骤（user_input、model_output、thought、function_call、function_result）、`thinking_level` ↔ IR effort 映射、Interactions SSE 流式生命周期事件（`interaction.created/completed`、`step.start/delta/stop`）以及 MCP server 工具定义。连续的 assistant 角色步骤自动合并为单个 `AssistantMessage`。无需修改 IR 类型系统。
+
 ## v0.12.0 — 2026-09-03
 
 ### 新增
