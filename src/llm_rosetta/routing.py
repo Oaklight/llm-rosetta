@@ -56,6 +56,7 @@ class ResolvedRoute:
     supports_custom_tools: bool = False
     hoist_system_messages: bool = True
     preflight_token_count: bool = False
+    max_tool_description_length: int | None = None
 
 
 class Router(Protocol):

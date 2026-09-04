@@ -182,6 +182,7 @@ async def get_config(request: Any) -> Response:
                     "default_api_key_env": s.default_api_key_env,
                     "supports_custom_tools": s.supports_custom_tools,
                     "hoist_system_messages": s.hoist_system_messages,
+                    "max_tool_description_length": s.max_tool_description_length,
                 }
                 for s in list_shims()
             ],

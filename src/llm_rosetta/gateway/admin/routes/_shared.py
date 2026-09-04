@@ -119,6 +119,16 @@ def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
             auth_state.change_password(config.admin_password or "")
 
 
+def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -> None:
+    """Set or clear an optional integer field on a provider entry."""
+    if key in body:
+        val = body[key]
+        if val not in (None, ""):
+            entry[key] = int(val)
+        else:
+            entry.pop(key, None)
+
+
 def _build_provider_entry(
     body: dict[str, Any],
     api_key: str,
@@ -160,6 +170,7 @@ def _build_provider_entry(
             entry[flag] = bool(body[flag])
     if "timeout" in body and body["timeout"] not in (None, ""):
         entry["timeout"] = float(body["timeout"])
+    _apply_optional_int(entry, body, "max_tool_description_length")
 
     # Optional provider-level fields: set when truthy, clear when
     # explicitly sent as empty (so the admin UI can remove them).
