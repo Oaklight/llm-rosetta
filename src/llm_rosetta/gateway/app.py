@@ -329,6 +329,33 @@ async def _proxy_handler(
                 error_detail = body_bytes.decode("utf-8", errors="replace")
         response.headers["x-request-id"] = request_id
         logger.info("[%s] response status=%s", request_id, status_code)
+
+        # For streaming responses, defer profiler stop to after the
+        # generator is fully consumed via StreamingResponse.background.
+        if deep_profiler is not None and isinstance(response, StreamingResponse):
+            _dp = deep_profiler
+            _app = request.app
+            _t0 = t0
+            _rid = request_id
+            _model = model
+            _src = source_provider
+            _tgt = route.target_provider
+
+            def _stop_profiler_background() -> None:
+                _try_stop_profiler(
+                    _dp,
+                    _app,
+                    request_id=_rid,
+                    model=_model,
+                    source=_src,
+                    target=_tgt,
+                    is_stream=True,
+                    duration_ms=(time.monotonic() - _t0) * 1000,
+                )
+
+            response.background = _stop_profiler_background
+            deep_profiler = None  # prevent finally from double-stopping
+
         return response
     except Exception as exc:
         error_detail = str(exc)
