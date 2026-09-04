@@ -121,6 +121,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   preflightCb.checked = !!(provCfg && provCfg.preflight_token_count);
   document.getElementById('provTimeout').value = (provCfg && provCfg.timeout != null) ? provCfg.timeout : '';
   document.getElementById('provTimeout').placeholder = (S.configData.server && S.configData.server.upstream_timeout) || 300;
+  const maxToolDescEl = document.getElementById('provMaxToolDescLen');
+  maxToolDescEl.value = (provCfg && provCfg.max_tool_description_length != null) ? provCfg.max_tool_description_length : '';
+  maxToolDescEl.placeholder = (shimMap[provType] && shimMap[provType].max_tool_description_length) || '';
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
   setLogoPickerValue((provCfg && provCfg.logo) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
@@ -553,6 +556,8 @@ async function saveProvider() {
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
+  const maxToolDescVal = document.getElementById('provMaxToolDescLen').value.trim();
+  body.max_tool_description_length = maxToolDescVal ? parseInt(maxToolDescVal, 10) : '';
   body.models_path = document.getElementById('provModelsPath').value.trim();
   body.logo = getLogoPickerValue();
   // When api_key is empty and we're editing, omit it so backend keeps the original

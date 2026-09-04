@@ -291,6 +291,10 @@ class GatewayConfig:
             self._parse_preflight_token_count_overrides(self._raw_providers)
         )
 
+        self.provider_max_tool_description_length = (
+            self._parse_max_tool_description_length_overrides(self._raw_providers)
+        )
+
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
@@ -302,6 +306,7 @@ class GatewayConfig:
             self.model_reasoning_overrides,
             self.model_flatten_system,
             self.model_timeouts,
+            self.model_max_tool_description_length,
         ) = self._parse_model_overrides(raw_models)
 
         _server = raw.get("server", {})
@@ -455,6 +460,19 @@ class GatewayConfig:
         return result
 
     @staticmethod
+    def _parse_max_tool_description_length_overrides(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> dict[str, int]:
+        """Extract per-provider max_tool_description_length overrides."""
+        result: dict[str, int] = {}
+        for pname, pcfg in raw_providers.items():
+            if isinstance(pcfg, dict) and "max_tool_description_length" in pcfg:
+                val = pcfg["max_tool_description_length"]
+                if val is not None:
+                    result[pname] = int(val)
+        return result
+
+    @staticmethod
     def _parse_model_overrides(
         raw_models: dict[str, Any],
     ) -> tuple[
@@ -463,13 +481,15 @@ class GatewayConfig:
         dict[str, dict[str, Any]],
         dict[str, bool],
         dict[str, float],
+        dict[str, int],
     ]:
-        """Extract per-model URL templates, reasoning overrides, flatten_system, and timeouts."""
+        """Extract per-model URL templates, reasoning overrides, flatten_system, timeouts, and max_tool_description_length."""
         url_templates: dict[str, str] = {}
         stream_url_templates: dict[str, str] = {}
         reasoning_overrides: dict[str, dict[str, Any]] = {}
         flatten_system: dict[str, bool] = {}
         timeouts: dict[str, float] = {}
+        max_tool_desc_lengths: dict[str, int] = {}
         for model_name, value in raw_models.items():
             if isinstance(value, dict):
                 if "url_template" in value:
@@ -482,6 +502,13 @@ class GatewayConfig:
                     flatten_system[model_name] = bool(value["flatten_system"])
                 if "timeout" in value:
                     timeouts[model_name] = float(value["timeout"])
+                if (
+                    "max_tool_description_length" in value
+                    and value["max_tool_description_length"] is not None
+                ):
+                    max_tool_desc_lengths[model_name] = int(
+                        value["max_tool_description_length"]
+                    )
             if model_name not in flatten_system and re.search(
                 r"gemini", model_name, re.IGNORECASE
             ):
@@ -492,6 +519,7 @@ class GatewayConfig:
             reasoning_overrides,
             flatten_system,
             timeouts,
+            max_tool_desc_lengths,
         )
 
     def _apply_server_settings(self, _server: dict[str, Any]) -> None:
@@ -753,6 +781,12 @@ class GatewayConfig:
         )
         preflight = self.provider_preflight_token_count.get(provider_name, False)
 
+        max_tool_desc = (
+            self.model_max_tool_description_length.get(model)
+            or self.provider_max_tool_description_length.get(provider_name)
+            or (_shim.max_tool_description_length if _shim else None)
+        )
+
         route = ResolvedRoute(
             source_provider=source_provider,
             target_provider=cast(ProviderType, provider_type),
@@ -765,6 +799,7 @@ class GatewayConfig:
             supports_custom_tools=custom_tools,
             hoist_system_messages=hoist_system,
             preflight_token_count=preflight,
+            max_tool_description_length=max_tool_desc,
         )
 
         pinfo = self.providers[provider_name]

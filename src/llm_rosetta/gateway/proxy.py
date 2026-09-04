@@ -332,6 +332,7 @@ async def handle_non_streaming(
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
         supports_custom_tools=route.supports_custom_tools,
+        max_tool_description_length=route.max_tool_description_length,
         hoist_system_messages=route.hoist_system_messages,
     )
 
@@ -805,6 +806,7 @@ async def handle_streaming(
         model_capabilities=route.model_capabilities,
         reasoning_config_override=route.reasoning_override,
         supports_custom_tools=route.supports_custom_tools,
+        max_tool_description_length=route.max_tool_description_length,
         hoist_system_messages=route.hoist_system_messages,
     )
 

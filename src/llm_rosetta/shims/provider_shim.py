@@ -171,6 +171,7 @@ class ProviderShim:
     response_id_prefix: str = ""
     supports_custom_tools: bool = False
     hoist_system_messages: bool = True
+    max_tool_description_length: int | None = None
     multimodal_tool_result: bool | None = None
     tool_search_mode: ToolSearchMode = "disabled"
 
@@ -220,6 +221,7 @@ class ProviderShim:
             "response_id_prefix": "",
             "supports_custom_tools": False,
             "hoist_system_messages": True,
+            "max_tool_description_length": None,
             "multimodal_tool_result": None,
             "tool_search_mode": "disabled",
         }

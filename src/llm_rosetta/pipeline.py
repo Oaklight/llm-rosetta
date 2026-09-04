@@ -29,6 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     enforce_custom_tools,
+    relocate_oversized_tool_descriptions,
     enforce_reasoning,
     enforce_vision,
     get_custom_tool_names,
@@ -238,6 +239,7 @@ class ConversionPipeline:
         model_capabilities: list[str] | None = None,
         reasoning_config_override: dict[str, Any] | None = None,
         supports_custom_tools: bool | None = None,
+        max_tool_description_length: int | None = None,
         hoist_system_messages: bool = True,
         force_conversion: bool = True,
         fidelity_mode: Literal["critical", "full"] | None = None,
@@ -267,6 +269,7 @@ class ConversionPipeline:
         self._model_capabilities = model_capabilities
         self._reasoning_config_override = reasoning_config_override
         self._supports_custom_tools = supports_custom_tools
+        self._max_tool_description_length = max_tool_description_length
         self._hoist_system_messages = hoist_system_messages
         self._metadata_mode = metadata_mode
         self._google_output_format = google_output_format
@@ -531,6 +534,13 @@ class ConversionPipeline:
             ir_request,
             shim=self._target_shim,
             config_override=self._supports_custom_tools,
+        )
+
+        # Capability enforcement: oversized tool descriptions (post-custom-tools)
+        ir_request = relocate_oversized_tool_descriptions(
+            ir_request,
+            max_description_length=self._max_tool_description_length,
+            request_id=request_id,
         )
 
         # Phase 2a: Shim-driven IR transforms

@@ -8,3 +8,4 @@ reasoning:
   # effort_range not set = full IR ladder (minimal–max)
 
 supports_custom_tools: true
+max_tool_description_length: 1024
