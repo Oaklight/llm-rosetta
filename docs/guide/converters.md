@@ -68,6 +68,45 @@ google_response = google_client.generate_content(**google_request)
 ir_response = google_conv.response_from_provider(google_response)
 ```
 
+## Google Interactions API
+
+Google launched the [Interactions API](https://ai.google.dev/gemini-api/docs/interactions) as their recommended interface for new Gemini projects. LLM-Rosetta provides a dedicated converter for this format:
+
+```python
+from llm_rosetta.converters.google_interactions import GoogleInteractionsConverter
+
+interactions_conv = GoogleInteractionsConverter()
+
+# Interactions API response → IR
+ir_response = interactions_conv.response_from_provider(interaction_response)
+
+# IR → Interactions API request
+interactions_request, warnings = interactions_conv.request_to_provider(ir_request)
+```
+
+### Key differences from `GoogleGenAIConverter`
+
+| Aspect | `GoogleGenAIConverter` | `GoogleInteractionsConverter` |
+|--------|----------------------|------------------------------|
+| Endpoint | `generateContent` | `/v1beta/interactions` |
+| Input format | `contents[{role, parts}]` | `input` (string, Content[], or Step[]) |
+| Response format | `candidates[].content.parts[]` | Typed `steps[]` (model_output, thought, function_call, etc.) |
+| Streaming | Candidate chunks | `interaction.created/completed` + `step.start/delta/stop` lifecycle |
+| Thinking config | `thinkingBudget` (int) | `thinking_level` enum (minimal/low/medium/high) |
+| Tool definitions | Nested `functionDeclarations` | Flat `{type: "function", name, ...}` |
+
+### Step merging
+
+The Interactions API uses **typed steps** instead of role-based messages. Consecutive assistant-role steps (e.g. a `thought` step followed by a `model_output` step) are automatically merged into a single IR `AssistantMessage` with `[ReasoningPart, TextPart]` content — matching how the Anthropic converter handles thinking + text blocks.
+
+### Interactions-only features
+
+Fields specific to the Interactions API are preserved via `provider_extensions`:
+
+- `previous_interaction_id` — server-side multi-turn state
+- `background` — long-running background execution
+- `store` — whether to persist the interaction
+
 ## Google: SDK vs REST API Output
 
 By default, the Google converter produces a dict with a nested `config` key designed for the Google GenAI Python SDK (`google.genai`). If you are calling the Google REST API directly (e.g. via `httpx` or `requests`), pass `output_format="rest"` to get a flattened body ready for the HTTP request:

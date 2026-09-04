@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added
+
+- **Google Interactions API converter** (Issue [#581](https://github.com/Oaklight/llm-rosetta/issues/581)): new `converters/google_interactions/` module with full bidirectional conversion for Google's Interactions API (`/v1beta/interactions`). Supports typed steps (user_input, model_output, thought, function_call, function_result), `thinking_level` ↔ IR effort mapping, Interactions SSE streaming lifecycle (`interaction.created/completed`, `step.start/delta/stop`), and MCP server tool definitions. Consecutive assistant-role steps are merged into single `AssistantMessage`. No IR type changes required.
+
 ## v0.12.0 — 2026-09-03
 
 ### Added
