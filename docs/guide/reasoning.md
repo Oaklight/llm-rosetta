@@ -375,6 +375,6 @@ openai_request = convert(anthropic_request, target="openai_chat")
 # Result includes: {"reasoning_effort": "high", ...}
 
 # Convert to Google GenAI format
-google_request = convert(anthropic_request, target="google_genai")
+google_request = convert(anthropic_request, target="google_generate")
 # Result includes: {"thinking_config": {"thinking_level": "high"}, ...}
 ```

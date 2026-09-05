@@ -4,6 +4,12 @@ title: Using Converters
 
 # Using Converters
 
+!!! info "Renamed in v0.13"
+    `GoogleGenAIConverter` has been renamed to **`GoogleGenerateConverter`**.
+    The old name remains importable as a deprecated alias.
+    This avoids confusion since `google-genai` is the SDK covering both
+    the generateContent and Interactions APIs.
+
 ## Creating a Converter
 
 ```python
@@ -50,10 +56,10 @@ provider_messages, warnings = converter.messages_to_provider(ir_messages)
 ## Cross-Provider Workflow
 
 ```python
-from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta import OpenAIChatConverter, GoogleGenerateConverter
 
 openai_conv = OpenAIChatConverter()
-google_conv = GoogleGenAIConverter()
+google_conv = GoogleGenerateConverter()
 
 # OpenAI → IR
 ir_request = openai_conv.request_from_provider(openai_request)
@@ -84,9 +90,9 @@ ir_response = interactions_conv.response_from_provider(interaction_response)
 interactions_request, warnings = interactions_conv.request_to_provider(ir_request)
 ```
 
-### Key differences from `GoogleGenAIConverter`
+### Key differences from `GoogleGenerateConverter`
 
-| Aspect | `GoogleGenAIConverter` | `GoogleInteractionsConverter` |
+| Aspect | `GoogleGenerateConverter` | `GoogleInteractionsConverter` |
 |--------|----------------------|------------------------------|
 | Endpoint | `generateContent` | `/v1beta/interactions` |
 | Input format | `contents[{role, parts}]` | `input` (string, Content[], or Step[]) |
@@ -112,9 +118,9 @@ Fields specific to the Interactions API are preserved via `provider_extensions`:
 By default, the Google converter produces a dict with a nested `config` key designed for the Google GenAI Python SDK (`google.genai`). If you are calling the Google REST API directly (e.g. via `httpx` or `requests`), pass `output_format="rest"` to get a flattened body ready for the HTTP request:
 
 ```python
-from llm_rosetta import GoogleGenAIConverter
+from llm_rosetta import GoogleGenerateConverter
 
-google_conv = GoogleGenAIConverter()
+google_conv = GoogleGenerateConverter()
 
 # SDK format (default) — for google.genai SDK
 sdk_request, warnings = google_conv.request_to_provider(ir_request)

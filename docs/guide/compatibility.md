@@ -65,7 +65,7 @@ Google's REST API and Gemini CLI use **camelCase** field names (`inlineData`, `m
 
 **Fix**: Normalize camelCase keys at the dispatch entry point in `content_ops.py`, `config_ops.py`, `tool_ops.py`, `message_ops.py`, and `converter.py`. All IR→P methods output camelCase for REST API compatibility.
 
-**Version**: v0.2.5 ([content_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_genai/content_ops.py), [config_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_genai/config_ops.py))
+**Version**: v0.2.5 ([content_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_generate/content_ops.py), [config_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_generate/config_ops.py))
 
 ---
 

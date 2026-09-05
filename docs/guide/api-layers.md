@@ -14,7 +14,7 @@ Symbols you can rely on across minor versions. These are the recommended imports
 
 | Category | Symbols | Import from |
 |----------|---------|-------------|
-| Converters | `OpenAIChatConverter`, `AnthropicConverter`, `GoogleGenAIConverter`, `GoogleConverter`, `OpenAIResponsesConverter`, `BaseConverter` | `llm_rosetta` |
+| Converters | `OpenAIChatConverter`, `AnthropicConverter`, `GoogleGenerateConverter`, `GoogleConverter`, `OpenAIResponsesConverter`, `BaseConverter` | `llm_rosetta` |
 | Context | `ConversionContext`, `StreamContext` | `llm_rosetta` |
 | Convenience | `detect_provider`, `get_converter_for_provider`, `convert`, `ProviderType` | `llm_rosetta` |
 | Core IR types | `Message`, `IRRequest`, `IRResponse`, `ContentPart`, `TextPart`, `ToolCallPart`, stream events, etc. | `llm_rosetta.types.ir` |

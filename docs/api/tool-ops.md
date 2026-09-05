@@ -4,6 +4,10 @@ title: Tool Ops
 
 # Tool Ops API
 
+!!! info "Renamed in v0.13"
+    `to_google_genai()` / `from_google_genai()` → **`to_google_generate()`** / **`from_google_generate()`**.
+    Old names remain as deprecated aliases.
+
 The `tool_ops` module provides a **lightweight convenience API** for converting
 tool definitions between the IR (Intermediate Representation) and provider-native
 formats — without instantiating full converter pipelines.
@@ -73,7 +77,7 @@ ir_tool = {
 openai_tool    = tool_ops.to_openai_chat(ir_tool)
 responses_tool = tool_ops.to_openai_responses(ir_tool)
 anthropic_tool = tool_ops.to_anthropic(ir_tool)
-google_tool    = tool_ops.to_google_genai(ir_tool)
+google_tool    = tool_ops.to_google_generate(ir_tool)
 
 # Unified dispatch variant
 same_tool = tool_ops.to_provider(ir_tool, provider="anthropic")
@@ -103,7 +107,7 @@ tool_ops.to_anthropic(ir_tool)
 ### Example: Google GenAI output
 
 ```python
-tool_ops.to_google_genai(ir_tool)
+tool_ops.to_google_generate(ir_tool)
 # →
 {
     "function_declarations": [
@@ -121,8 +125,8 @@ tool_ops.to_google_genai(ir_tool)
 ```
 
 !!! note "Google wraps declarations in a list"
-    `to_google_genai` always wraps the converted tool inside
-    `{"function_declarations": [...]}`.  Likewise, `from_google_genai` can
+    `to_google_generate` always wraps the converted tool inside
+    `{"function_declarations": [...]}`.  Likewise, `from_google_generate` can
     return a **list** of IR tools when the input contains multiple declarations.
 
 ## Supported providers
@@ -153,15 +157,15 @@ ir_recovered = [t for t in ir_recovered if t is not None]
 For Google, flatten the `function_declarations` list first:
 
 ```python
-google_tools = [tool_ops.to_google_genai(t) for t in ir_tools]
+google_tools = [tool_ops.to_google_generate(t) for t in ir_tools]
 # google_tools is a list of {"function_declarations": [...]} dicts
 
-# Round-trip: each from_google_genai call may return a list
+# Round-trip: each from_google_generate call may return a list
 import itertools
 ir_recovered = list(itertools.chain.from_iterable(
     result if isinstance(result, list) else [result]
     for t in google_tools
-    if (result := tool_ops.from_google_genai(t)) is not None
+    if (result := tool_ops.from_google_generate(t)) is not None
 ))
 ```
 
@@ -201,7 +205,7 @@ and never raise `ValueError` for provider names.
 
 ::: llm_rosetta.tool_ops.to_anthropic
 
-::: llm_rosetta.tool_ops.to_google_genai
+::: llm_rosetta.tool_ops.to_google_generate
 
 ### Provider → IR
 
@@ -211,4 +215,4 @@ and never raise `ValueError` for provider names.
 
 ::: llm_rosetta.tool_ops.from_anthropic
 
-::: llm_rosetta.tool_ops.from_google_genai
+::: llm_rosetta.tool_ops.from_google_generate
