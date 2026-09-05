@@ -130,6 +130,7 @@ jobs:
         shell: bash
         run: |
           BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
+          [ -z "$BINARY" ] && exit 0
           PRE_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || python -c "import os; print(os.path.getsize('$BINARY'))")
           PRE_MB=$(python -c "print(f'{int($PRE_SIZE)/1048576:.1f}')")
 
@@ -152,6 +153,8 @@ jobs:
         shell: bash
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags || '(none)' }}
+          UPX_ENABLED: ${{ inputs.upx }}
         run: |
           END=$(date +%s)
           ELAPSED=$((END - NUITKA_START))
@@ -168,8 +171,8 @@ jobs:
           echo "  Platform:     ${{ matrix.platform }}"
           echo "  Ref:          ${{ inputs.ref }}"
           echo "  Version:      $VERSION"
-          echo "  Extra flags:  ${{ inputs.nuitka_extra_flags || '(none)' }}"
-          echo "  UPX:          ${{ inputs.upx }}"
+          echo "  Extra flags:  $EXTRA_FLAGS"
+          echo "  UPX:          $UPX_ENABLED"
           echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
           echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
           echo "--------------------------------------------"
@@ -194,8 +197,8 @@ jobs:
             echo "|--------|-------|"
             echo "| Binary size | ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes) |"
             echo "| Build time | ${MINS}m ${SECS}s |"
-            echo "| Extra flags | \`${{ inputs.nuitka_extra_flags || '(none)' }}\` |"
-            echo "| UPX | ${{ inputs.upx }} |"
+            echo "| Extra flags | \`${EXTRA_FLAGS}\` |"
+            echo "| UPX | ${UPX_ENABLED} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke test (non-Windows)
@@ -249,6 +252,7 @@ jobs:
         if: inputs.upx
         run: |
           BINARY=$(ls build/llm-rosetta-gateway-*-musl 2>/dev/null | head -1)
+          [ -z "$BINARY" ] && exit 0
           PRE_SIZE=$(stat --format=%s "$BINARY")
           PRE_MB=$(python3 -c "print(f'{int($PRE_SIZE)/1048576:.1f}')")
 
@@ -263,6 +267,8 @@ jobs:
       - name: Build statistics
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
+          EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags || '(none)' }}
+          UPX_ENABLED: ${{ inputs.upx }}
         run: |
           END=$(date +%s)
           ELAPSED=$((END - NUITKA_START))
@@ -279,8 +285,8 @@ jobs:
           echo "  Platform:     ${{ matrix.platform }}"
           echo "  Ref:          ${{ inputs.ref }}"
           echo "  Version:      $VERSION"
-          echo "  Extra flags:  ${{ inputs.nuitka_extra_flags || '(none)' }}"
-          echo "  UPX:          ${{ inputs.upx }}"
+          echo "  Extra flags:  $EXTRA_FLAGS"
+          echo "  UPX:          $UPX_ENABLED"
           echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
           echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
           echo "--------------------------------------------"
@@ -297,8 +303,8 @@ jobs:
             echo "|--------|-------|"
             echo "| Binary size | ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes) |"
             echo "| Build time | ${MINS}m ${SECS}s |"
-            echo "| Extra flags | \`${{ inputs.nuitka_extra_flags || '(none)' }}\` |"
-            echo "| UPX | ${{ inputs.upx }} |"
+            echo "| Extra flags | \`${EXTRA_FLAGS}\` |"
+            echo "| UPX | ${UPX_ENABLED} |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke test
