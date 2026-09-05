@@ -63,6 +63,55 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
 _VALID_TABS = frozenset({"providers", "models", "keys", "dashboard", "logs"})
 
 
+def _init_persistence(
+    config: Any,
+    config_path: str | None,
+    data_dir: str | None,
+    metrics: MetricsCollector,
+) -> PersistenceManager | None:
+    """Resolve data_dir, create PersistenceManager, and restore counters."""
+    resolved_data_dir: str | None = data_dir
+    if not resolved_data_dir:
+        configured = getattr(config, "data_dir", None)
+        if configured:
+            if config_path and not os.path.isabs(configured):
+                resolved_data_dir = os.path.join(
+                    os.path.dirname(config_path), configured
+                )
+            else:
+                resolved_data_dir = configured
+        elif config_path:
+            resolved_data_dir = os.path.join(os.path.dirname(config_path), "data")
+    if not resolved_data_dir:
+        return None
+
+    success_max, error_max = _resolve_log_caps(config)
+    persistence = PersistenceManager(
+        resolved_data_dir, success_max=success_max, error_max=error_max
+    )
+
+    saved_metrics = persistence.load_metrics()
+    if saved_metrics:
+        metrics.load_counters(saved_metrics)
+        logger.info(
+            "Loaded metrics from disk (total_requests=%d)",
+            metrics.total_requests,
+        )
+
+    # Auto-rebuild if persisted counters drifted from actual log entries
+    log_entries = persistence.count_log_entries()
+    if metrics.total_requests != log_entries:
+        logger.warning(
+            "Counter drift detected (counters=%d, log=%d), rebuilding from request log",
+            metrics.total_requests,
+            log_entries,
+        )
+        metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
+        persistence.save_metrics(metrics.export_counters())
+
+    return persistence
+
+
 def setup_admin(
     app: Any,
     config: GatewayConfig,
@@ -122,34 +171,7 @@ def setup_admin(
         config_io = JsoncConfigIO()
     metrics = MetricsCollector()
 
-    # Set up SQLite persistence — explicit data_dir > config field > config-path default
-    persistence: PersistenceManager | None = None
-    resolved_data_dir: str | None = data_dir
-    if not resolved_data_dir:
-        configured = getattr(config, "data_dir", None)
-        if configured:
-            if config_path and not os.path.isabs(configured):
-                resolved_data_dir = os.path.join(
-                    os.path.dirname(config_path), configured
-                )
-            else:
-                resolved_data_dir = configured
-        elif config_path:
-            resolved_data_dir = os.path.join(os.path.dirname(config_path), "data")
-    if resolved_data_dir:
-        success_max, error_max = _resolve_log_caps(config)
-        persistence = PersistenceManager(
-            resolved_data_dir, success_max=success_max, error_max=error_max
-        )
-
-        # Restore persisted metrics counters
-        saved_metrics = persistence.load_metrics()
-        if saved_metrics:
-            metrics.load_counters(saved_metrics)
-            logger.info(
-                "Loaded metrics from disk (total_requests=%d)",
-                metrics.total_requests,
-            )
+    persistence = _init_persistence(config, config_path, data_dir, metrics)
 
     # Backfill target_provider_name for legacy log entries
     if persistence is not None:
