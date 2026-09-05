@@ -53,21 +53,14 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
 
             if step_type == "user_input":
                 _flush_assistant()
-                content_list = step.get("content", [])
-                parts: list[ContentPart] = []
-                for c in content_list:
-                    ir_part = self.content_ops.p_content_to_ir(c)
-                    if ir_part:
-                        parts.append(ir_part)
+                parts = self._p_content_list_to_parts(step.get("content", []))
                 if parts:
                     messages.append(cast(Message, {"role": "user", "content": parts}))
 
             elif step_type == "model_output":
-                content_list = step.get("content", [])
-                for c in content_list:
-                    ir_part = self.content_ops.p_content_to_ir(c)
-                    if ir_part:
-                        assistant_parts.append(cast(AssistantContentPart, ir_part))
+                assistant_parts.extend(
+                    self._p_content_list_to_assistant_parts(step.get("content", []))
+                )
 
             elif step_type == "thought":
                 reasoning = self.content_ops.p_thought_to_ir(step)
@@ -85,6 +78,28 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
 
         _flush_assistant()
         return messages
+
+    def _p_content_list_to_parts(self, content_list: list) -> list[ContentPart]:
+        parts: list[ContentPart] = []
+        for c in content_list:
+            ir_part = self.content_ops.p_content_to_ir(c)
+            if isinstance(ir_part, list):
+                parts.extend(ir_part)
+            elif ir_part:
+                parts.append(ir_part)
+        return parts
+
+    def _p_content_list_to_assistant_parts(
+        self, content_list: list
+    ) -> list[AssistantContentPart]:
+        parts: list[AssistantContentPart] = []
+        for c in content_list:
+            ir_part = self.content_ops.p_content_to_ir(c)
+            if isinstance(ir_part, list):
+                parts.extend(cast(AssistantContentPart, p) for p in ir_part)
+            elif ir_part:
+                parts.append(cast(AssistantContentPart, ir_part))
+        return parts
 
     # ── IR Messages → Steps ────────────────────────────────────────
 
@@ -160,9 +175,11 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
     def ir_message_to_p(
         self, ir_message: IRInputItem, **kwargs: Any
     ) -> tuple[Any, list[str]]:
-        raise NotImplementedError("Use ir_messages_to_p_steps instead")
+        steps = self.ir_messages_to_p_steps([ir_message])
+        return steps, []
 
     def p_message_to_ir(
         self, provider_message: Any, **kwargs: Any
     ) -> IRInputItem | None:
-        raise NotImplementedError("Use p_steps_to_ir_messages instead")
+        msgs = self.p_steps_to_ir_messages([provider_message])
+        return msgs[0] if msgs else None

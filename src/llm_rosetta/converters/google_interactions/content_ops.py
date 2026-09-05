@@ -5,6 +5,7 @@ Bidirectional conversion between Interactions API Content types
 (TextContent, ImageContent, etc.) and IR content parts.
 """
 
+import logging
 from typing import Any
 
 from ...types.ir import (
@@ -16,6 +17,8 @@ from ...types.ir import (
 )
 from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleInteractionsContentOps(BaseContentOps):
@@ -110,12 +113,22 @@ class GoogleInteractionsContentOps(BaseContentOps):
     # ── Generic content dispatch ───────────────────────────────────
 
     @staticmethod
-    def p_content_to_ir(content: dict, **kwargs: Any) -> ContentPart | None:
-        """Dispatch a single Interactions Content item to IR part."""
+    def p_content_to_ir(
+        content: dict, **kwargs: Any
+    ) -> ContentPart | list[ContentPart] | None:
+        """Dispatch a single Interactions Content item to IR part(s).
+
+        Returns a list when a TextContent has annotations (text + citations).
+        """
         ops = GoogleInteractionsContentOps
         ctype = content.get("type")
         if ctype == "text":
-            return ops.p_text_to_ir(content)
+            text_part = ops.p_text_to_ir(content)
+            annotations = content.get("annotations")
+            if annotations:
+                citations = ops.p_annotations_to_ir(annotations)
+                return [text_part, *citations]
+            return text_part
         elif ctype == "image":
             return ops.p_image_to_ir(content)
         return None
@@ -124,18 +137,22 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_file_to_p(ir_file: Any, **kwargs: Any) -> Any:
+        logger.warning("File content not yet supported by Interactions converter")
         return {}
 
     @staticmethod
     def p_file_to_ir(provider_file: Any, **kwargs: Any) -> Any:
+        logger.warning("File content not yet supported by Interactions converter")
         return {"type": "file"}
 
     @staticmethod
     def ir_audio_to_p(ir_audio: Any, **kwargs: Any) -> Any:
+        logger.warning("Audio content not yet supported by Interactions converter")
         return {}
 
     @staticmethod
     def p_audio_to_ir(provider_audio: Any, **kwargs: Any) -> Any:
+        logger.warning("Audio content not yet supported by Interactions converter")
         return {"type": "audio"}
 
     @staticmethod
@@ -148,10 +165,12 @@ class GoogleInteractionsContentOps(BaseContentOps):
 
     @staticmethod
     def ir_refusal_to_p(ir_refusal: Any, **kwargs: Any) -> Any:
+        logger.warning("Refusal content not yet supported by Interactions converter")
         return {}
 
     @staticmethod
     def p_refusal_to_ir(provider_refusal: Any, **kwargs: Any) -> Any:
+        logger.warning("Refusal content not yet supported by Interactions converter")
         return {"type": "refusal", "refusal": ""}
 
     @staticmethod
