@@ -117,6 +117,7 @@ BINARY_NAME_MUSL = llm-rosetta-gateway-$(VERSION)-linux-$(BINARY_ARCH)-musl
 BINARY_DIR := build
 NUITKA_ENTRY := _nuitka_entry.py
 NUITKA_JOBS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+NUITKA_EXTRA_FLAGS ?=
 
 NUITKA_FLAGS = \
 	--standalone \
@@ -133,7 +134,8 @@ NUITKA_FLAGS = \
 	--nofollow-import-to=setuptools \
 	--nofollow-import-to=pip \
 	--nofollow-import-to=_pytest \
-	--assume-yes-for-downloads
+	--assume-yes-for-downloads \
+	$(NUITKA_EXTRA_FLAGS)
 
 # Build native binary (glibc on Linux, system libc on macOS, MSVC on Windows)
 build-binary:
@@ -177,6 +179,7 @@ build-binary-musl:
 				--nofollow-import-to=pip \
 				--nofollow-import-to=_pytest \
 				--assume-yes-for-downloads \
+				$(NUITKA_EXTRA_FLAGS) \
 				/tmp/_entry.py && \
 			rm -rf /output/_entry.* '
 	@ls -lh $(BINARY_DIR)/$(BINARY_NAME_MUSL)

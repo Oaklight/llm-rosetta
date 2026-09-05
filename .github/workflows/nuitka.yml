@@ -13,6 +13,16 @@ on:
         required: true
         type: string
         default: "all"
+      nuitka_extra_flags:
+        description: "Extra Nuitka flags for experimentation (e.g. '--lto=yes --python-flag=no_docstrings')"
+        required: false
+        type: string
+        default: ""
+      upx:
+        description: "Apply UPX compression after build (Linux/Windows only, breaks macOS code signing)"
+        required: false
+        type: boolean
+        default: false
   workflow_call:
     inputs:
       ref:
@@ -22,6 +32,14 @@ on:
         required: false
         type: string
         default: "all"
+      nuitka_extra_flags:
+        required: false
+        type: string
+        default: ""
+      upx:
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   prepare:
@@ -103,7 +121,32 @@ jobs:
 
       - name: Build binary
         shell: bash
+        env:
+          NUITKA_EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags }}
         run: make build-binary
+
+      - name: UPX compression (Linux/Windows)
+        if: inputs.upx && matrix.os != 'macos'
+        shell: bash
+        run: |
+          BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
+          PRE_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || python -c "import os; print(os.path.getsize('$BINARY'))")
+          PRE_MB=$(python -c "print(f'{int($PRE_SIZE)/1048576:.1f}')")
+
+          if [ "${{ matrix.os }}" = "linux" ]; then
+            sudo apt-get install -y upx-ucl 2>/dev/null || sudo apt-get install -y upx
+          fi
+          # Windows runners have choco; install if needed
+          if [ "${{ matrix.os }}" = "windows" ]; then
+            choco install upx -y 2>/dev/null || true
+          fi
+
+          upx --best "$BINARY" || echo "UPX compression failed (non-fatal)"
+
+          POST_SIZE=$(stat --format=%s "$BINARY" 2>/dev/null || python -c "import os; print(os.path.getsize('$BINARY'))")
+          POST_MB=$(python -c "print(f'{int($POST_SIZE)/1048576:.1f}')")
+          RATIO=$(python -c "print(f'{int($POST_SIZE)/int($PRE_SIZE)*100:.0f}')")
+          echo "UPX: ${PRE_MB} MB → ${POST_MB} MB (${RATIO}% of original)"
 
       - name: Build statistics
         shell: bash
@@ -125,6 +168,8 @@ jobs:
           echo "  Platform:     ${{ matrix.platform }}"
           echo "  Ref:          ${{ inputs.ref }}"
           echo "  Version:      $VERSION"
+          echo "  Extra flags:  ${{ inputs.nuitka_extra_flags || '(none)' }}"
+          echo "  UPX:          ${{ inputs.upx }}"
           echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
           echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
           echo "--------------------------------------------"
@@ -141,6 +186,17 @@ jobs:
           echo "  Peak memory (build dir):"
           du -sh build/ 2>/dev/null || true
           echo "============================================"
+
+          # Structured summary for cross-run comparison
+          {
+            echo "### ${{ matrix.platform }}"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Binary size | ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes) |"
+            echo "| Build time | ${MINS}m ${SECS}s |"
+            echo "| Extra flags | \`${{ inputs.nuitka_extra_flags || '(none)' }}\` |"
+            echo "| UPX | ${{ inputs.upx }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke test (non-Windows)
         if: matrix.os != 'windows'
@@ -185,7 +241,24 @@ jobs:
         run: echo "NUITKA_START=$(date +%s)" >> "$GITHUB_ENV"
 
       - name: Build musl binary
+        env:
+          NUITKA_EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags }}
         run: make build-binary-musl
+
+      - name: UPX compression (musl)
+        if: inputs.upx
+        run: |
+          BINARY=$(ls build/llm-rosetta-gateway-*-musl 2>/dev/null | head -1)
+          PRE_SIZE=$(stat --format=%s "$BINARY")
+          PRE_MB=$(python3 -c "print(f'{int($PRE_SIZE)/1048576:.1f}')")
+
+          sudo apt-get install -y upx-ucl 2>/dev/null || sudo apt-get install -y upx
+          upx --best "$BINARY" || echo "UPX compression failed (non-fatal)"
+
+          POST_SIZE=$(stat --format=%s "$BINARY")
+          POST_MB=$(python3 -c "print(f'{int($POST_SIZE)/1048576:.1f}')")
+          RATIO=$(python3 -c "print(f'{int($POST_SIZE)/int($PRE_SIZE)*100:.0f}')")
+          echo "UPX: ${PRE_MB} MB → ${POST_MB} MB (${RATIO}% of original)"
 
       - name: Build statistics
         env:
@@ -206,6 +279,8 @@ jobs:
           echo "  Platform:     ${{ matrix.platform }}"
           echo "  Ref:          ${{ inputs.ref }}"
           echo "  Version:      $VERSION"
+          echo "  Extra flags:  ${{ inputs.nuitka_extra_flags || '(none)' }}"
+          echo "  UPX:          ${{ inputs.upx }}"
           echo "  Build time:   ${MINS}m ${SECS}s (${ELAPSED}s total)"
           echo "  Binary size:  ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes)"
           echo "--------------------------------------------"
@@ -215,6 +290,16 @@ jobs:
           echo "  Peak memory (build dir):"
           du -sh build/ 2>/dev/null || true
           echo "============================================"
+
+          {
+            echo "### ${{ matrix.platform }}"
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Binary size | ${BINARY_SIZE_MB} MB (${BINARY_SIZE} bytes) |"
+            echo "| Build time | ${MINS}m ${SECS}s |"
+            echo "| Extra flags | \`${{ inputs.nuitka_extra_flags || '(none)' }}\` |"
+            echo "| UPX | ${{ inputs.upx }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Smoke test
         run: |
