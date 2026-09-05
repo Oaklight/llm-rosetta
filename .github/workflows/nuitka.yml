@@ -207,13 +207,14 @@ jobs:
         run: |
           BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
           chmod +x "$BINARY"
-          "$BINARY" --help || true
+          "$BINARY" --help
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows'
-        shell: cmd
+        shell: bash
         run: |
-          for %%f in (build\llm-rosetta-gateway-*) do %%f --help || exit 0
+          BINARY=$(ls build/llm-rosetta-gateway-* 2>/dev/null | head -1)
+          "$BINARY" --help
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -310,7 +311,7 @@ jobs:
       - name: Smoke test
         run: |
           BINARY=$(ls build/llm-rosetta-gateway-*-musl 2>/dev/null | head -1)
-          docker run --rm -v "$(pwd)/build:/b:ro" alpine "/b/$(basename $BINARY)" --help || true
+          docker run --rm -v "$(pwd)/build:/b:ro" alpine "/b/$(basename $BINARY)" --help
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
