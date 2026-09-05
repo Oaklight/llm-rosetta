@@ -136,6 +136,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
             allowed = provider_tool_choice.get("allowed_tools", {})
             tools = allowed.get("tools", [])
             if tools:
+                # IR ToolChoice only supports a single tool name; extra tools are dropped
                 return {"mode": "tool", "tool_name": tools[0]}
             mode = allowed.get("mode", "auto")
             return {"mode": mode if mode in ("auto", "any", "none") else "auto"}
