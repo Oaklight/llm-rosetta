@@ -120,14 +120,13 @@ NUITKA_JOBS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || ech
 NUITKA_EXTRA_FLAGS ?=
 
 # Modules excluded from binary — validated against src/llm_rosetta/ imports.
-# multiprocessing and concurrent have no direct usage; if a future dependency
-# (e.g. uvicorn workers) needs them, the smoke test will surface an ImportError.
+# Do NOT add concurrent (asyncio imports it unconditionally).
 NUITKA_NOFOLLOW := \
 	pytest setuptools pip _pytest \
 	tkinter unittest pydoc doctest test \
 	distutils ensurepip idlelib lib2to3 \
 	turtle turtledemo xmlrpc curses \
-	multiprocessing concurrent
+	multiprocessing
 
 NUITKA_NOFOLLOW_FLAGS := $(foreach m,$(NUITKA_NOFOLLOW),--nofollow-import-to=$m)
 
