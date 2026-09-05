@@ -4,6 +4,11 @@ title: Converters
 
 # Converters API
 
+!!! info "v0.13 重命名"
+    `GoogleGenAIConverter` → **`GoogleGenerateConverter`**。
+    `to_google_genai()` / `from_google_genai()` → `to_google_generate()` / `from_google_generate()`。
+    旧名称仍可作为弃用别名使用。
+
 ## Convenience Functions
 
 ::: llm_rosetta.auto_detect.convert
@@ -32,7 +37,7 @@ title: Converters
 
 ::: llm_rosetta.converters.anthropic.converter.AnthropicConverter
 
-::: llm_rosetta.converters.google_genai.converter.GoogleGenAIConverter
+::: llm_rosetta.converters.google_generate.converter.GoogleGenerateConverter
 
 ## Embedding Converters
 

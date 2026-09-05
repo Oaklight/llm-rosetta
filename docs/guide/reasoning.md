@@ -372,6 +372,6 @@ openai_request = convert(anthropic_request, target="openai_chat")
 # 结果包含: {"reasoning_effort": "high", ...}
 
 # 转换为 Google GenAI 格式
-google_request = convert(anthropic_request, target="google_genai")
+google_request = convert(anthropic_request, target="google_generate")
 # 结果包含: {"thinking_config": {"thinking_level": "high"}, ...}
 ```

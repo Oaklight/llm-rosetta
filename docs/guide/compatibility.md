@@ -65,7 +65,7 @@ Google 的 REST API 和 Gemini CLI 使用 **camelCase** 字段名（`inlineData`
 
 **修复**：在 `content_ops.py`、`config_ops.py`、`tool_ops.py`、`message_ops.py` 和 `converter.py` 的分发入口处规范化 camelCase 键名。所有 IR→P 方法统一输出 camelCase 以兼容 REST API。
 
-**版本**：v0.2.5（[content_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_genai/content_ops.py)、[config_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_genai/config_ops.py)）
+**版本**：v0.2.5（[content_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_generate/content_ops.py)、[config_ops](https://github.com/Oaklight/llm-rosetta/blob/main/src/llm_rosetta/converters/google_generate/config_ops.py)）
 
 ---
 

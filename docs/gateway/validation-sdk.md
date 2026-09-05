@@ -26,7 +26,7 @@ export MODEL=argo:gpt-4.1-nano  # 或其他可用模型
 python -m pytest tests/integration/ -v
 
 # 运行特定测试套件
-python -m pytest tests/integration/test_google_genai_sdk_e2e.py -v
+python -m pytest tests/integration/test_google_generate_sdk_e2e.py -v
 python -m pytest tests/integration/test_openai_chat_sdk_e2e.py -v
 python -m pytest tests/integration/test_openai_responses_rest_e2e.py -v
 python -m pytest tests/integration/test_anthropic_rest_e2e.py -v

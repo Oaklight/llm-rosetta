@@ -4,6 +4,10 @@ title: Tool Ops
 
 # Tool Ops API
 
+!!! info "v0.13 重命名"
+    `to_google_genai()` / `from_google_genai()` → **`to_google_generate()`** / **`from_google_generate()`**。
+    旧名称仍可作为弃用别名使用。
+
 `tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供方原生格式之间转换工具定义——无需实例化完整的转换器管道。
 
 所有导入均为懒加载，只有在首次调用对应提供方的函数时才会加载其依赖。
@@ -68,7 +72,7 @@ ir_tool = {
 openai_tool    = tool_ops.to_openai_chat(ir_tool)
 responses_tool = tool_ops.to_openai_responses(ir_tool)
 anthropic_tool = tool_ops.to_anthropic(ir_tool)
-google_tool    = tool_ops.to_google_genai(ir_tool)
+google_tool    = tool_ops.to_google_generate(ir_tool)
 
 # 统一调度写法
 same_tool = tool_ops.to_provider(ir_tool, provider="anthropic")
@@ -98,7 +102,7 @@ tool_ops.to_anthropic(ir_tool)
 ### 示例：Google GenAI 输出
 
 ```python
-tool_ops.to_google_genai(ir_tool)
+tool_ops.to_google_generate(ir_tool)
 # →
 {
     "function_declarations": [
@@ -116,8 +120,8 @@ tool_ops.to_google_genai(ir_tool)
 ```
 
 !!! note "Google 将声明包裹在列表中"
-    `to_google_genai` 始终将转换后的工具包裹在 `{"function_declarations": [...]}` 中。
-    同样，当输入包含多个函数声明时，`from_google_genai` 可能返回**列表**。
+    `to_google_generate` 始终将转换后的工具包裹在 `{"function_declarations": [...]}` 中。
+    同样，当输入包含多个函数声明时，`from_google_generate` 可能返回**列表**。
 
 ## 支持的提供方
 
@@ -147,15 +151,15 @@ ir_recovered = [t for t in ir_recovered if t is not None]
 对于 Google，需先展开 `function_declarations` 列表：
 
 ```python
-google_tools = [tool_ops.to_google_genai(t) for t in ir_tools]
+google_tools = [tool_ops.to_google_generate(t) for t in ir_tools]
 # google_tools 是一列 {"function_declarations": [...]} dict
 
-# 回程转换：from_google_genai 每次可能返回列表
+# 回程转换：from_google_generate 每次可能返回列表
 import itertools
 ir_recovered = list(itertools.chain.from_iterable(
     result if isinstance(result, list) else [result]
     for t in google_tools
-    if (result := tool_ops.from_google_genai(t)) is not None
+    if (result := tool_ops.from_google_generate(t)) is not None
 ))
 ```
 
@@ -193,7 +197,7 @@ except ValueError as exc:
 
 ::: llm_rosetta.tool_ops.to_anthropic
 
-::: llm_rosetta.tool_ops.to_google_genai
+::: llm_rosetta.tool_ops.to_google_generate
 
 ### 提供方格式转 IR
 
@@ -203,4 +207,4 @@ except ValueError as exc:
 
 ::: llm_rosetta.tool_ops.from_anthropic
 
-::: llm_rosetta.tool_ops.from_google_genai
+::: llm_rosetta.tool_ops.from_google_generate

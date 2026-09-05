@@ -4,6 +4,11 @@ title: 使用转换器
 
 # 使用转换器
 
+!!! info "v0.13 重命名"
+    `GoogleGenAIConverter` 已重命名为 **`GoogleGenerateConverter`**。
+    旧名称仍可导入，但会触发弃用警告。
+    此变更是因为 `google-genai` 是同时覆盖 generateContent 和 Interactions 两套 API 的 SDK 名称，用它命名单个 converter 容易造成混淆。
+
 ## 创建转换器
 
 ```python
@@ -50,10 +55,10 @@ provider_messages, warnings = converter.messages_to_provider(ir_messages)
 ## 跨提供方工作流
 
 ```python
-from llm_rosetta import OpenAIChatConverter, GoogleGenAIConverter
+from llm_rosetta import OpenAIChatConverter, GoogleGenerateConverter
 
 openai_conv = OpenAIChatConverter()
-google_conv = GoogleGenAIConverter()
+google_conv = GoogleGenerateConverter()
 
 # OpenAI → IR
 ir_request = openai_conv.request_from_provider(openai_request)
@@ -84,9 +89,9 @@ ir_response = interactions_conv.response_from_provider(interaction_response)
 interactions_request, warnings = interactions_conv.request_to_provider(ir_request)
 ```
 
-### 与 `GoogleGenAIConverter` 的主要区别
+### 与 `GoogleGenerateConverter` 的主要区别
 
-| 方面 | `GoogleGenAIConverter` | `GoogleInteractionsConverter` |
+| 方面 | `GoogleGenerateConverter` | `GoogleInteractionsConverter` |
 |------|----------------------|------------------------------|
 | 端点 | `generateContent` | `/v1beta/interactions` |
 | 输入格式 | `contents[{role, parts}]` | `input`（字符串、Content[] 或 Step[]） |
@@ -112,9 +117,9 @@ Interactions API 特有的字段通过 `provider_extensions` 保留：
 默认情况下，Google 转换器生成的字典包含嵌套的 `config` 键，适用于 Google GenAI Python SDK（`google.genai`）。如果你直接调用 Google REST API（例如通过 `httpx` 或 `requests`），传入 `output_format="rest"` 可获得适合 HTTP 请求的扁平化请求体：
 
 ```python
-from llm_rosetta import GoogleGenAIConverter
+from llm_rosetta import GoogleGenerateConverter
 
-google_conv = GoogleGenAIConverter()
+google_conv = GoogleGenerateConverter()
 
 # SDK 格式（默认）— 适用于 google.genai SDK
 sdk_request, warnings = google_conv.request_to_provider(ir_request)
