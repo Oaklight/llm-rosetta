@@ -119,6 +119,18 @@ NUITKA_ENTRY := _nuitka_entry.py
 NUITKA_JOBS := $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
 NUITKA_EXTRA_FLAGS ?=
 
+# Modules excluded from binary — validated against src/llm_rosetta/ imports.
+# multiprocessing and concurrent have no direct usage; if a future dependency
+# (e.g. uvicorn workers) needs them, the smoke test will surface an ImportError.
+NUITKA_NOFOLLOW := \
+	pytest setuptools pip _pytest \
+	tkinter unittest pydoc doctest test \
+	distutils ensurepip idlelib lib2to3 \
+	turtle turtledemo xmlrpc curses \
+	multiprocessing concurrent
+
+NUITKA_NOFOLLOW_FLAGS := $(foreach m,$(NUITKA_NOFOLLOW),--nofollow-import-to=$m)
+
 NUITKA_FLAGS = \
 	--standalone \
 	--onefile \
@@ -133,25 +145,7 @@ NUITKA_FLAGS = \
 	--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
 	--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
 	--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
-	--nofollow-import-to=pytest \
-	--nofollow-import-to=setuptools \
-	--nofollow-import-to=pip \
-	--nofollow-import-to=_pytest \
-	--nofollow-import-to=tkinter \
-	--nofollow-import-to=unittest \
-	--nofollow-import-to=pydoc \
-	--nofollow-import-to=doctest \
-	--nofollow-import-to=test \
-	--nofollow-import-to=distutils \
-	--nofollow-import-to=ensurepip \
-	--nofollow-import-to=idlelib \
-	--nofollow-import-to=lib2to3 \
-	--nofollow-import-to=turtle \
-	--nofollow-import-to=turtledemo \
-	--nofollow-import-to=xmlrpc \
-	--nofollow-import-to=curses \
-	--nofollow-import-to=multiprocessing \
-	--nofollow-import-to=concurrent \
+	$(NUITKA_NOFOLLOW_FLAGS) \
 	--assume-yes-for-downloads \
 	$(NUITKA_EXTRA_FLAGS)
 
@@ -195,25 +189,7 @@ build-binary-musl:
 				--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
 				--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
 				--include-data-dir=src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
-				--nofollow-import-to=pytest \
-				--nofollow-import-to=setuptools \
-				--nofollow-import-to=pip \
-				--nofollow-import-to=_pytest \
-				--nofollow-import-to=tkinter \
-				--nofollow-import-to=unittest \
-				--nofollow-import-to=pydoc \
-				--nofollow-import-to=doctest \
-				--nofollow-import-to=test \
-				--nofollow-import-to=distutils \
-				--nofollow-import-to=ensurepip \
-				--nofollow-import-to=idlelib \
-				--nofollow-import-to=lib2to3 \
-				--nofollow-import-to=turtle \
-				--nofollow-import-to=turtledemo \
-				--nofollow-import-to=xmlrpc \
-				--nofollow-import-to=curses \
-				--nofollow-import-to=multiprocessing \
-				--nofollow-import-to=concurrent \
+				$(NUITKA_NOFOLLOW_FLAGS) \
 				--assume-yes-for-downloads \
 				$(NUITKA_EXTRA_FLAGS) \
 				/tmp/_entry.py && \
