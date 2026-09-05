@@ -456,6 +456,12 @@ async def handle_google_generate(
         )
 
 
+async def handle_google_interactions(
+    request: Any,
+) -> Response | StreamingResponse:
+    return await _proxy_handler(request, source_provider="google_interactions")
+
+
 async def handle_list_models(request: Any) -> Response:
     """List configured models in a format compatible with OpenAI and Anthropic SDKs."""
     assert _config is not None
@@ -865,6 +871,7 @@ def create_app(
         app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
             handle_google_generate
         )
+        app.route("/v1beta/interactions", methods=["POST"])(handle_google_interactions)
         app.route("/health", methods=["GET"])(handle_health)
         app.route("/health/live", methods=["GET"])(handle_health_live)
         app.route("/health/ready", methods=["GET"])(handle_health_ready)

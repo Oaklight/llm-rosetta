@@ -19,6 +19,7 @@ from .converters import (
     GoogleConverter,
     GoogleGenerateConverter,
     GoogleGenAIConverter,  # deprecated alias
+    GoogleInteractionsConverter,
     OpenAIChatConverter,
     OpenAIResponsesConverter,
 )
@@ -48,6 +49,7 @@ __all__ = [
     "GoogleGenerateConverter",
     "GoogleGenAIConverter",  # deprecated alias
     "GoogleConverter",
+    "GoogleInteractionsConverter",
     "OpenAIResponsesConverter",
     # Conversion context
     "ConversionContext",

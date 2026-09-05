@@ -24,14 +24,15 @@ Zero required dependencies at its core; provider SDKs are optional extras.
 Provider A ──→ IR ──→ Provider B
 ```
 
-Four converters, one per API standard:
+Five converters, one per API standard:
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
 | `openai_chat` | OpenAI Chat Completions | `converters/openai_chat/` |
 | `openai_responses` | OpenAI Responses API | `converters/openai_responses/` |
 | `anthropic` | Anthropic Messages API | `converters/anthropic/` |
-| `google` | Google GenAI API | `converters/google_genai/` |
+| `google_generate` | Google generateContent API | `converters/google_generate/` |
+| `google_interactions` | Google Interactions API | `converters/google_interactions/` |
 
 Each converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
@@ -76,12 +77,13 @@ src/llm_rosetta/
 ├── __init__.py              # Public API: convert(), get_converter_for_provider()
 ├── auto_detect.py           # Provider auto-detection from request body
 ├── tool_ops.py              # Cross-provider tool call utilities
-├── converters/              # 4 bidirectional converters
+├── converters/              # 5 bidirectional converters
 │   ├── base/                # Abstract base + ConversionContext
 │   ├── openai_chat/
 │   ├── openai_responses/
 │   ├── anthropic/
-│   └── google_genai/
+│   ├── google_generate/
+│   └── google_interactions/
 ├── shims/                   # Provider/model identity cards + transforms
 │   ├── provider_shim.py
 │   ├── transforms.py
@@ -294,6 +296,40 @@ allowed — it leads to drift and missed pages.
 
 Commits in doc worktrees use `PRE_COMMIT_ALLOW_NO_CONFIG=1 git commit` since
 those branches have no `.pre-commit-config.yaml`.
+
+## Adding a new converter (checklist)
+
+When adding a converter for a new API standard, **every** item below
+must be completed before the work is considered done.  Use this as a
+gate — missing any item means the converter is not fully integrated.
+
+1. **Converter module** — `converters/<name>/` with `__init__.py`,
+   `converter.py`, `content_ops.py`, `tool_ops.py`, `config_ops.py`,
+   `message_ops.py`.  Converter class extends `BaseConverter` and
+   implements all abstract hooks.
+2. **Unit tests** — `tests/converters/<name>/` mirroring the ops modules.
+   Must include round-trip tests (provider→IR→provider).
+3. **Public API exports** — add the converter class to both
+   `converters/__init__.py` and the top-level `__init__.py` `__all__`.
+4. **Auto-detect** — add detection function and wire into
+   `detect_provider()` in `auto_detect.py`.  Add the name to
+   `ProviderType` literal.  Add to `converter_map` in
+   `get_converter_for_provider()`.
+5. **Provider shim** — create `shims/providers/<name>/provider.yaml`.
+   Add the base type to `_BASE_TYPES` in `provider_shim.py`.
+6. **Gateway route** — register a route handler in `gateway/app.py`.
+   Update `gateway/proxy.py` for error responses, stream detection,
+   stream flag injection, preflight body, and usage extraction.
+7. **CLAUDE.md** — update the converter table and repository layout
+   in this file.
+8. **Documentation** — update `docs_en/` and `docs_zh/` (both in the
+   same task): changelog, converters guide, API reference.  Push both
+   worktrees.
+9. **CI smoke test** — if applicable, add an import check in
+   `.github/workflows/ci.yml`.
+10. **`test_public_api.py`** — add the new class to `EXPECTED_EXPORTS`.
+11. **`test_shim_loader.py`** — add to expected shim set and base-type
+    mapping.
 
 ## Escalation
 
