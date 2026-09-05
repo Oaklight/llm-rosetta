@@ -124,8 +124,11 @@ NUITKA_FLAGS = \
 	--onefile \
 	--jobs=$(NUITKA_JOBS) \
 	--output-dir=$(BINARY_DIR) \
+	--lto=yes \
+	--python-flag=no_docstrings \
+	--python-flag=-O \
+	--python-flag=no_warnings \
 	--include-package=llm_rosetta \
-	--include-package=pyinstrument \
 	--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
 	--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
 	--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
@@ -134,6 +137,21 @@ NUITKA_FLAGS = \
 	--nofollow-import-to=setuptools \
 	--nofollow-import-to=pip \
 	--nofollow-import-to=_pytest \
+	--nofollow-import-to=tkinter \
+	--nofollow-import-to=unittest \
+	--nofollow-import-to=pydoc \
+	--nofollow-import-to=doctest \
+	--nofollow-import-to=test \
+	--nofollow-import-to=distutils \
+	--nofollow-import-to=ensurepip \
+	--nofollow-import-to=idlelib \
+	--nofollow-import-to=lib2to3 \
+	--nofollow-import-to=turtle \
+	--nofollow-import-to=turtledemo \
+	--nofollow-import-to=xmlrpc \
+	--nofollow-import-to=curses \
+	--nofollow-import-to=multiprocessing \
+	--nofollow-import-to=concurrent \
 	--assume-yes-for-downloads \
 	$(NUITKA_EXTRA_FLAGS)
 
@@ -160,7 +178,7 @@ build-binary-musl:
 			mkdir -p /tmp/build && tar -cf - -C /workspace --exclude=.git --exclude=__pycache__ . | tar -xf - -C /tmp/build && cd /tmp/build && \
 			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
 			pip install --break-system-packages patchelf -q && \
-			pip install --break-system-packages -e ".[profiling]" -q && \
+			pip install --break-system-packages -e "." -q && \
 			pip install --break-system-packages "nuitka[onefile]" ordered-set -q && \
 			printf "from llm_rosetta.gateway import main\nmain()\n" > /tmp/_entry.py && \
 			python -m nuitka \
@@ -168,8 +186,11 @@ build-binary-musl:
 				--jobs=$$(nproc) \
 				--output-dir=/output \
 				--output-filename=$(BINARY_NAME_MUSL) \
+				--lto=yes \
+				--python-flag=no_docstrings \
+				--python-flag=-O \
+				--python-flag=no_warnings \
 				--include-package=llm_rosetta \
-				--include-package=pyinstrument \
 				--include-data-files=src/llm_rosetta/gateway/admin/admin.html=llm_rosetta/gateway/admin/admin.html \
 				--include-data-dir=src/llm_rosetta/gateway/admin/css=llm_rosetta/gateway/admin/css \
 				--include-data-dir=src/llm_rosetta/gateway/admin/js=llm_rosetta/gateway/admin/js \
@@ -178,6 +199,21 @@ build-binary-musl:
 				--nofollow-import-to=setuptools \
 				--nofollow-import-to=pip \
 				--nofollow-import-to=_pytest \
+				--nofollow-import-to=tkinter \
+				--nofollow-import-to=unittest \
+				--nofollow-import-to=pydoc \
+				--nofollow-import-to=doctest \
+				--nofollow-import-to=test \
+				--nofollow-import-to=distutils \
+				--nofollow-import-to=ensurepip \
+				--nofollow-import-to=idlelib \
+				--nofollow-import-to=lib2to3 \
+				--nofollow-import-to=turtle \
+				--nofollow-import-to=turtledemo \
+				--nofollow-import-to=xmlrpc \
+				--nofollow-import-to=curses \
+				--nofollow-import-to=multiprocessing \
+				--nofollow-import-to=concurrent \
 				--assume-yes-for-downloads \
 				$(NUITKA_EXTRA_FLAGS) \
 				/tmp/_entry.py && \
