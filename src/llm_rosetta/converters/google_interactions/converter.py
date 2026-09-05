@@ -5,8 +5,10 @@ Top-level converter implementing bidirectional conversion between IR
 and Google Interactions API format via BaseConverter hooks.
 """
 
+import logging
 import time
 from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Any, cast
 
 from ...types.ir.request import IRRequest
@@ -45,8 +47,14 @@ _STATUS_TO_FINISH_REASON: dict[str, str] = {
 }
 
 _FINISH_REASON_TO_STATUS: dict[str, str] = {
-    v: k for k, v in _STATUS_TO_FINISH_REASON.items()
+    "stop": "completed",
+    "tool_calls": "requires_action",
+    "length": "incomplete",
+    "error": "failed",
+    "cancelled": "cancelled",
 }
+
+logger = logging.getLogger(__name__)
 
 _STEP_TYPE_TO_BLOCK_TYPE: dict[str, str] = {
     "model_output": "text",
@@ -59,8 +67,6 @@ def _parse_iso_to_epoch(iso_str: str | None) -> int:
     if not iso_str:
         return int(time.time())
     try:
-        from datetime import datetime
-
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         return int(dt.timestamp())
     except (ValueError, TypeError):
@@ -340,8 +346,6 @@ class GoogleInteractionsConverter(BaseConverter):
         steps: list[dict] = []
         if assistant_msg:
             steps = self.message_ops.ir_messages_to_p_steps([assistant_msg])
-
-        from datetime import datetime, timezone
 
         created_ts = ir_response.get("created", int(time.time()))
         created_iso = datetime.fromtimestamp(created_ts, tz=timezone.utc).isoformat()
