@@ -7,7 +7,7 @@ from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
-from llm_rosetta.converters.google_genai.converter import GoogleGenAIConverter
+from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.openai_responses.stream_context import (
     OpenAIResponsesStreamContext,
 )
@@ -203,7 +203,7 @@ class TestBaseConverterDispatch:
 
     def test_post_process_noop(self):
         # Google inherits base _post_process_ir_to_p without override
-        converter = GoogleGenAIConverter()
+        converter = GoogleGenerateConverter()
         result: dict[str, Any] = {"test": True}
         out = converter._post_process_ir_to_p(
             result,
@@ -280,7 +280,7 @@ class TestWarningsSingleSource:
 
     def test_with_context_returns_same_list_object_google(self):
         ctx = ConversionContext()
-        converter = GoogleGenAIConverter()
+        converter = GoogleGenerateConverter()
         _, warnings = converter.request_to_provider(
             self._make_ir_request(), context=ctx
         )

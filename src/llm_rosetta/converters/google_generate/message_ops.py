@@ -33,8 +33,8 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
-from .content_ops import GoogleGenAIContentOps
-from .tool_ops import GoogleGenAIToolOps
+from .content_ops import GoogleGenerateContentOps
+from .tool_ops import GoogleGenerateToolOps
 
 
 # Role mapping constants
@@ -63,7 +63,7 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
     return result_id
 
 
-class GoogleGenAIMessageOps(BaseMessageOps):
+class GoogleGenerateMessageOps(BaseMessageOps):
     """Google GenAI message conversion operations.
 
     Holds references to content_ops and tool_ops instances.
@@ -75,8 +75,8 @@ class GoogleGenAIMessageOps(BaseMessageOps):
 
     def __init__(
         self,
-        content_ops: GoogleGenAIContentOps,
-        tool_ops: GoogleGenAIToolOps,
+        content_ops: GoogleGenerateContentOps,
+        tool_ops: GoogleGenerateToolOps,
     ):
         self.content_ops = content_ops
         self.tool_ops = tool_ops

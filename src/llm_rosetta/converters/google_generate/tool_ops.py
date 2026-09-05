@@ -95,7 +95,7 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     """
     from ..base.helpers.tool_content import convert_ir_content_blocks_to_p
 
-    from .content_ops import GoogleGenAIContentOps
+    from .content_ops import GoogleGenerateContentOps
 
     result_content = (
         ir_tool_result.get("result")
@@ -105,7 +105,9 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     )
     if isinstance(result_content, list):
         if _is_content_block_list(result_content):
-            return convert_ir_content_blocks_to_p(result_content, GoogleGenAIContentOps)
+            return convert_ir_content_blocks_to_p(
+                result_content, GoogleGenerateContentOps
+            )
         import json
 
         return json.dumps(result_content)
@@ -116,7 +118,7 @@ def _get_result_content(ir_tool_result: ToolResultPart) -> Any:
     return result_content
 
 
-class GoogleGenAIToolOps(BaseToolOps):
+class GoogleGenerateToolOps(BaseToolOps):
     """Google GenAI tool conversion operations.
 
     All methods are static and stateless. Handles tool definitions,
@@ -498,9 +500,11 @@ class GoogleGenAIToolOps(BaseToolOps):
         if isinstance(content, list) and _is_content_block_list(content):
             from ..base.helpers.tool_content import convert_content_blocks_to_ir
 
-            from .content_ops import GoogleGenAIContentOps
+            from .content_ops import GoogleGenerateContentOps
 
-            result: Any = convert_content_blocks_to_ir(content, GoogleGenAIContentOps)
+            result: Any = convert_content_blocks_to_ir(
+                content, GoogleGenerateContentOps
+            )
         elif isinstance(content, (list, dict)):
             import json
 

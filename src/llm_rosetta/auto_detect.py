@@ -8,7 +8,13 @@ Utility functions for auto-detecting LLM provider request body formats
 from typing import Any, Literal
 
 ProviderType = Literal[
-    "openai_chat", "openai_responses", "open_responses", "anthropic", "google"
+    "openai_chat",
+    "openai_responses",
+    "open_responses",
+    "anthropic",
+    "google",
+    "google_generate",
+    "google_interactions",
 ]
 
 
@@ -29,6 +35,33 @@ _RESPONSES_ITEM_TYPES = frozenset(
 _ANTHROPIC_CONTENT_TYPES = frozenset(
     {"image", "tool_use", "tool_result", "thinking", "document"}
 )
+
+
+_INTERACTIONS_STEP_TYPES = frozenset(
+    {"user_input", "model_output", "thought", "function_call", "function_result"}
+)
+
+
+def _is_google_interactions_format(body: dict[str, Any]) -> bool:
+    """Check if body matches Google Interactions API format.
+
+    Interactions API uses ``input`` (string, Content list, or Step list)
+    without Responses API item types (``message``, ``function_call_output``, etc.).
+    """
+    inp = body.get("input")
+    if inp is None:
+        return False
+    if isinstance(inp, str):
+        return "contents" not in body and "messages" not in body
+    if isinstance(inp, list) and inp:
+        first = inp[0]
+        if isinstance(first, dict):
+            ftype = first.get("type", "")
+            if ftype in _INTERACTIONS_STEP_TYPES:
+                return True
+            if ftype in ("text", "image", "audio", "document", "video"):
+                return "contents" not in body and "messages" not in body
+    return False
 
 
 def _is_google_format(body: dict[str, Any]) -> bool:
@@ -112,6 +145,9 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     if ("input" in body or "output" in body) and _is_responses_format(body):
         return "openai_responses"
 
+    if _is_google_interactions_format(body):
+        return "google_interactions"
+
     if "messages" not in body:
         return None
 
@@ -152,7 +188,8 @@ def get_converter_for_provider(provider: str):
         return _converter_cache[provider]
 
     from .converters.anthropic import AnthropicConverter
-    from .converters.google_genai import GoogleConverter
+    from .converters.google_generate import GoogleGenerateConverter
+    from .converters.google_interactions import GoogleInteractionsConverter
     from .converters.openai_chat import OpenAIChatConverter
     from .converters.openai_responses import OpenAIResponsesConverter
     from .shims import resolve_base
@@ -162,7 +199,9 @@ def get_converter_for_provider(provider: str):
         "openai_responses": OpenAIResponsesConverter,
         "open_responses": OpenAIResponsesConverter,
         "anthropic": AnthropicConverter,
-        "google": GoogleConverter,
+        "google": GoogleGenerateConverter,
+        "google_generate": GoogleGenerateConverter,
+        "google_interactions": GoogleInteractionsConverter,
     }
 
     # Direct match against base converter types

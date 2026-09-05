@@ -41,8 +41,8 @@ class TestToProvider:
         assert result["name"] == "get_weather"
         assert "input_schema" in result
 
-    def test_to_google_genai(self):
-        result = tool_ops.to_google_genai(IR_TOOL)
+    def test_to_google_generate(self):
+        result = tool_ops.to_google_generate(IR_TOOL)
         # Google wraps in function_declarations
         assert "function_declarations" in result
         decl = result["function_declarations"][0]
@@ -75,9 +75,9 @@ class TestFromProvider:
         assert recovered is not None
         assert recovered["name"] == "get_weather"
 
-    def test_from_google_genai(self):
-        provider_tool = tool_ops.to_google_genai(IR_TOOL)
-        recovered = tool_ops.from_google_genai(provider_tool)
+    def test_from_google_generate(self):
+        provider_tool = tool_ops.to_google_generate(IR_TOOL)
+        recovered = tool_ops.from_google_generate(provider_tool)
         # Google may return a list of ToolDefinitions
         if isinstance(recovered, list):
             assert len(recovered) >= 1

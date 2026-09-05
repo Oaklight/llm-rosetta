@@ -170,8 +170,10 @@ class TestSanitizationInConverters:
         )
         assert call_result["id"] == result_result["tool_call_id"]
 
-    def test_google_genai_tool_call_sanitized(self):
-        from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+    def test_google_generate_tool_call_sanitized(self):
+        from llm_rosetta.converters.google_generate.tool_ops import (
+            GoogleGenerateToolOps,
+        )
 
         ir_tool_call = {
             "type": "tool_call",
@@ -180,7 +182,7 @@ class TestSanitizationInConverters:
             "tool_input": {"x": 1},
             "tool_type": "function",
         }
-        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
+        result = GoogleGenerateToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
         fc = result.get("functionCall", {})
         assert "\n" not in fc.get("id", "")
         assert re.match(r"^[a-zA-Z0-9_-]+$", fc["id"])

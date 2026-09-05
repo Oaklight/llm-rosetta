@@ -10,8 +10,8 @@ Refs: https://github.com/Oaklight/llm-rosetta/issues/225
 
 from llm_rosetta.converters.anthropic.content_ops import AnthropicContentOps
 from llm_rosetta.converters.anthropic.tool_ops import AnthropicToolOps
-from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOps
-from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
+from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
 from llm_rosetta.types.ir import ToolCallPart, ToolResultPart, ReasoningPart
 
 
@@ -35,7 +35,7 @@ class TestGoogleAnthropicToolCallRoundTrip:
         google_part = self._google_provider_tool_call()
 
         # Google → IR
-        ir = GoogleGenAIToolOps.p_tool_call_to_ir(google_part)
+        ir = GoogleGenerateToolOps.p_tool_call_to_ir(google_part)
         assert (
             ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
         )
@@ -55,7 +55,7 @@ class TestGoogleAnthropicToolCallRoundTrip:
         )
 
         # IR → Google (outbound to upstream)
-        google_out = GoogleGenAIToolOps.ir_tool_call_to_p(ir2)
+        google_out = GoogleGenerateToolOps.ir_tool_call_to_p(ir2)
         assert google_out["thoughtSignature"] == self.THOUGHT_SIG
 
     def test_tool_call_no_metadata_unaffected(self):
@@ -123,7 +123,7 @@ class TestGoogleAnthropicReasoningRoundTrip:
         google_part = self._google_thought_part()
 
         # Google → IR
-        ir = GoogleGenAIContentOps.p_reasoning_to_ir(google_part)
+        ir = GoogleGenerateContentOps.p_reasoning_to_ir(google_part)
         assert ir["reasoning"] == "Let me think about this..."
         # Google p_reasoning_to_ir may not store thought_signature in provider_metadata
         # — it stores it directly. Let's build the IR manually to test the Anthropic path.
@@ -152,7 +152,7 @@ class TestGoogleAnthropicReasoningRoundTrip:
         )
 
         # IR → Google
-        google_out = GoogleGenAIContentOps.ir_reasoning_to_p(ir2)
+        google_out = GoogleGenerateContentOps.ir_reasoning_to_p(ir2)
         assert google_out["thoughtSignature"] == self.THOUGHT_SIG
         assert google_out["thought"] is True
 

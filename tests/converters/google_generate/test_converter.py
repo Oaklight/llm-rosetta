@@ -1,14 +1,17 @@
 """
 Google GenAI Converter integration tests.
 
-Tests the top-level GoogleGenAIConverter with full request/response conversion.
+Tests the top-level GoogleGenerateConverter with full request/response conversion.
 """
 
 from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.google_genai import GoogleConverter, GoogleGenAIConverter
+from llm_rosetta.converters.google_generate import (
+    GoogleConverter,
+    GoogleGenerateConverter,
+)
 from llm_rosetta.types.ir import (
     IRRequest,
     IRResponse,
@@ -16,12 +19,12 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestGoogleGenAIConverter:
-    """Integration tests for GoogleGenAIConverter."""
+class TestGoogleGenerateConverter:
+    """Integration tests for GoogleGenerateConverter."""
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     # ==================== request_to_provider ====================
 
@@ -905,7 +908,7 @@ class TestGoogleGenAIConverter:
     def test_normalize_dict(self):
         """Test _normalize with dict input."""
         data = {"key": "value"}
-        assert GoogleGenAIConverter._normalize(data) is data
+        assert GoogleGenerateConverter._normalize(data) is data
 
     def test_normalize_pydantic(self):
         """Test _normalize with Pydantic-like object."""
@@ -914,13 +917,13 @@ class TestGoogleGenAIConverter:
             def model_dump(self):
                 return {"model": "gemini-2.0-flash"}
 
-        result = GoogleGenAIConverter._normalize(MockModel())
+        result = GoogleGenerateConverter._normalize(MockModel())
         assert result == {"model": "gemini-2.0-flash"}
 
     def test_normalize_tuple(self):
         """Test _normalize with tuple input (unwraps first element)."""
         data = ({"key": "value"}, "extra")
-        result = GoogleGenAIConverter._normalize(data)
+        result = GoogleGenerateConverter._normalize(data)
         assert result == {"key": "value"}
 
     def test_normalize_to_dict(self):
@@ -930,13 +933,13 @@ class TestGoogleGenAIConverter:
             def to_dict(self):
                 return {"key": "value"}
 
-        result = GoogleGenAIConverter._normalize(MockObj())
+        result = GoogleGenerateConverter._normalize(MockObj())
         assert result == {"key": "value"}
 
     def test_normalize_invalid(self):
         """Test _normalize raises on unsupported type."""
         with pytest.raises(TypeError, match="Cannot normalize"):
-            GoogleGenAIConverter._normalize(42)
+            GoogleGenerateConverter._normalize(42)
 
     # ==================== request_to_provider / messages_to_provider ====================
 
@@ -995,8 +998,8 @@ class TestGoogleGenAIConverter:
     # ==================== GoogleConverter Alias ====================
 
     def test_google_converter_alias(self):
-        """Test GoogleConverter is an alias for GoogleGenAIConverter."""
-        assert GoogleConverter is GoogleGenAIConverter
+        """Test GoogleConverter is an alias for GoogleGenerateConverter."""
+        assert GoogleConverter is GoogleGenerateConverter
 
     def test_google_converter_alias_works(self):
         """Test GoogleConverter alias can be instantiated and used."""
@@ -1011,11 +1014,11 @@ class TestGoogleGenAIConverter:
         assert result["model"] == "gemini-2.0-flash"
 
 
-class TestGoogleGenAIConverterFullRoundTrip:
+class TestGoogleGenerateConverterFullRoundTrip:
     """Full round-trip conversion tests."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_request_round_trip(self):
         """Test IRRequest -> Google -> IRRequest round-trip."""
@@ -1134,9 +1137,9 @@ class TestGooglePromptBlockHandling:
     """Tests for promptFeedback.blockReason and missing finishReason values (#433)."""
 
     def setup_method(self):
-        from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_prompt_block_produces_content_filter(self):
         """promptFeedback.blockReason with no candidates → content_filter finish."""

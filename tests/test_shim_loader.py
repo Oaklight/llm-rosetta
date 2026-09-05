@@ -112,6 +112,7 @@ class TestLoadProviders:
             "volcengine--openai_responses",
             "xai",
             "zhipu",
+            "google_interactions",
         }
 
     def test_all_registered_after_load(self):
@@ -132,6 +133,7 @@ class TestLoadProviders:
             "minimax--openai_chat",
             "minimax--anthropic",
             "zhipu",
+            "google_interactions",
         ):
             shim = get_shim(name)
             assert shim is not None
@@ -267,7 +269,8 @@ class TestLoadProviders:
             "openrouter--openai_chat": "openai_chat",
             "openrouter--anthropic": "anthropic",
             "anthropic": "anthropic",
-            "google": "google",
+            "google": "google_generate",
+            "google_interactions": "google_interactions",
             "deepseek": "openai_chat",
             "minimax--openai_chat": "openai_chat",
             "minimax--anthropic": "anthropic",

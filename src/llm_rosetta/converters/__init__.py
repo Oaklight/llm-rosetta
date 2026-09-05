@@ -13,7 +13,10 @@ from .embedding import (
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
-from .google_genai import GoogleConverter, GoogleGenAIConverter
+from .google_generate import GoogleConverter, GoogleGenerateConverter
+from .google_generate import (
+    GoogleGenerateConverter as GoogleGenAIConverter,
+)  # deprecated alias
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
@@ -28,7 +31,8 @@ __all__ = [
     "CohereEmbeddingConverter",
     "OpenAIChatConverter",
     "AnthropicConverter",
-    "GoogleGenAIConverter",
+    "GoogleGenerateConverter",
+    "GoogleGenAIConverter",  # deprecated alias,
     "GoogleConverter",
     "OpenAIResponsesConverter",
     "JinaRerankConverter",

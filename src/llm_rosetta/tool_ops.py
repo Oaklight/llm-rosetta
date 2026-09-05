@@ -76,9 +76,9 @@ def _get_tool_ops(provider: str) -> Any:
 
         return AnthropicToolOps
     if canonical == "google":
-        from .converters.google_genai import GoogleGenAIToolOps
+        from .converters.google_generate import GoogleGenerateToolOps
 
-        return GoogleGenAIToolOps
+        return GoogleGenerateToolOps
     raise ValueError(
         f"Unknown provider: {provider!r}. "
         f"Supported: openai_chat, openai_responses, anthropic, google "
@@ -150,11 +150,11 @@ def to_anthropic(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     return AnthropicToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
-def to_google_genai(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
+def to_google_generate(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Google GenAI format."""
-    from .converters.google_genai import GoogleGenAIToolOps
+    from .converters.google_generate import GoogleGenerateToolOps
 
-    return GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
+    return GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
@@ -180,10 +180,10 @@ def from_anthropic(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     return AnthropicToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
-def from_google_genai(
+def from_google_generate(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert Google GenAI tool definition to IR format."""
-    from .converters.google_genai import GoogleGenAIToolOps
+    from .converters.google_generate import GoogleGenerateToolOps
 
-    return GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+    return GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)

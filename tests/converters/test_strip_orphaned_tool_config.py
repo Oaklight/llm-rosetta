@@ -12,7 +12,7 @@ from typing import cast
 
 from llm_rosetta.converters.base.helpers import strip_orphaned_tool_config
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
-from llm_rosetta.converters.google_genai.converter import GoogleGenAIConverter
+from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.types.ir import ToolChoice
@@ -215,11 +215,11 @@ class TestAnthropicStripOrphanedToolConfig:
         assert not any("Stripped" in w for w in warnings)
 
 
-class TestGoogleGenAIStripOrphanedToolConfig:
+class TestGoogleGenerateStripOrphanedToolConfig:
     """Google GenAI converter strips orphaned tool_choice."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_orphaned_tool_choice_stripped(self):
         ir = _make_ir_request_with_orphaned_tool_choice()

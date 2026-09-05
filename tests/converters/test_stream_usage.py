@@ -15,7 +15,7 @@ from typing import Any, cast
 
 from llm_rosetta.converters.anthropic import AnthropicConverter
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.openai_chat import OpenAIChatConverter
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 from llm_rosetta.types.ir.stream import IRStreamEvent
@@ -350,7 +350,7 @@ class TestGoogleStreamUsage:
     """Google GenAI stream usage detail fields."""
 
     def setup_method(self) -> None:
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_stream_usage_cached_content_from_provider(self) -> None:
         """Stream chunk with cachedContentTokenCount → cache_read_tokens."""
