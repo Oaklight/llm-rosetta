@@ -193,7 +193,7 @@ class TestBuiltinShims:
     def test_google_base_type(self):
         shim = get_shim("google")
         assert shim is not None
-        assert shim.base == "google"
+        assert shim.base == "google_generate"
 
 
 # ---------------------------------------------------------------------------

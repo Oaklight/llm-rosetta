@@ -820,3 +820,80 @@ class TestDualShimPipeline:
         pipeline = ConversionPipeline("openai_chat", "anthropic", source_shim=None)
         assert pipeline._source_pre_ir_transforms == ()
         assert pipeline._source_post_ir_transforms == ()
+
+
+class TestDetectGoogleInteractions:
+    """Tests for Google Interactions API auto-detection."""
+
+    def test_detect_string_input(self):
+        body = {"model": "gemini-3.6-flash", "input": "Hello!"}
+        assert detect_provider(body) == "google_interactions"
+
+    def test_detect_step_list_input(self):
+        body = {
+            "model": "gemini-3.6-flash",
+            "input": [
+                {"type": "user_input", "content": [{"type": "text", "text": "Hi"}]},
+            ],
+        }
+        assert detect_provider(body) == "google_interactions"
+
+    def test_detect_multi_turn_steps(self):
+        body = {
+            "model": "gemini-3.6-flash",
+            "input": [
+                {"type": "user_input", "content": [{"type": "text", "text": "Hi"}]},
+                {
+                    "type": "model_output",
+                    "content": [{"type": "text", "text": "Hello!"}],
+                },
+                {"type": "user_input", "content": [{"type": "text", "text": "Bye"}]},
+            ],
+        }
+        assert detect_provider(body) == "google_interactions"
+
+    def test_detect_content_list_input(self):
+        body = {
+            "model": "gemini-3.6-flash",
+            "input": [
+                {"type": "text", "text": "Describe this."},
+                {"type": "image", "data": "base64data", "mime_type": "image/png"},
+            ],
+        }
+        assert detect_provider(body) == "google_interactions"
+
+    def test_detect_with_thinking(self):
+        body = {
+            "model": "gemini-3.6-flash",
+            "input": "Think about this.",
+            "generation_config": {"thinking_level": "medium"},
+        }
+        assert detect_provider(body) == "google_interactions"
+
+    def test_not_confused_with_google_generate_content(self):
+        """generateContent format (contents with parts) should still detect as google."""
+        body = {
+            "contents": [{"role": "user", "parts": [{"text": "Hello"}]}],
+        }
+        assert detect_provider(body) == "google"
+
+    def test_not_confused_with_openai_responses(self):
+        """OpenAI Responses input items should not match interactions."""
+        body = {
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "Hi"}],
+                },
+            ],
+        }
+        assert detect_provider(body) == "openai_responses"
+
+    def test_get_interactions_converter(self):
+        converter = get_converter_for_provider("google_interactions")
+        from llm_rosetta.converters.google_interactions import (
+            GoogleInteractionsConverter,
+        )
+
+        assert isinstance(converter, GoogleInteractionsConverter)

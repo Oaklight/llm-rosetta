@@ -99,7 +99,7 @@ def error_response_for_source(
             "type": "error",
             "error": {"type": "invalid_request_error", "message": message},
         }
-    elif source_provider == "google":
+    elif source_provider in ("google", "google_generate", "google_interactions"):
         body = {
             "error": {
                 "code": status_code,
@@ -134,7 +134,9 @@ def _inject_stream_flags(
         body["stream_options"] = {"include_usage": True}
     elif target_provider in ("openai_responses", "open_responses", "anthropic"):
         body["stream"] = True
-    # Google streaming is signaled via URL, not body
+    elif target_provider == "google_interactions":
+        body["stream"] = True
+    # Google (generateContent) streaming is signaled via URL, not body
     return body
 
 
@@ -145,9 +147,10 @@ def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -
         "openai_responses",
         "open_responses",
         "anthropic",
+        "google_interactions",
     ):
         return bool(body.get("stream", False))
-    # Google streaming is determined by the endpoint path, not the body
+    # Google (generateContent) streaming is determined by the endpoint path, not the body
     return False
 
 
@@ -692,11 +695,15 @@ def _build_preflight_body(
     body.pop("stream_options", None)
 
     # Set minimal output
-    if target_provider == "google":
+    if target_provider in ("google", "google_generate"):
         gc = dict(body.get("generationConfig", {}))
         gc["maxOutputTokens"] = 1
         gc.pop("responseModalities", None)
         body["generationConfig"] = gc
+    elif target_provider == "google_interactions":
+        gc = dict(body.get("generation_config", {}))
+        gc["max_output_tokens"] = 1
+        body["generation_config"] = gc
     elif target_provider in ("openai_responses", "open_responses"):
         body["max_output_tokens"] = 1
     else:
@@ -718,8 +725,10 @@ def _extract_preflight_input_tokens(
 ) -> int | None:
     """Extract input/prompt token count from a non-streaming response."""
     try:
-        if target_provider == "google":
+        if target_provider in ("google", "google_generate"):
             return int(response_body["usageMetadata"]["promptTokenCount"])
+        if target_provider == "google_interactions":
+            return int(response_body["usage"]["total_input_tokens"])
         usage = response_body.get("usage", {})
         if target_provider in ("openai_chat",):
             return int(usage["prompt_tokens"])

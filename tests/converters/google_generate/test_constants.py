@@ -1,6 +1,6 @@
 """Tests for Google GenAI converter constants."""
 
-from llm_rosetta.converters.google_genai._constants import (
+from llm_rosetta.converters.google_generate._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,

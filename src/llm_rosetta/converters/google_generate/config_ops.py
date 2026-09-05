@@ -27,7 +27,7 @@ from ..base import BaseConfigOps
 from ..base.helpers.reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 
 
-class GoogleGenAIConfigOps(BaseConfigOps):
+class GoogleGenerateConfigOps(BaseConfigOps):
     """Google GenAI configuration conversion operations.
 
     All methods are static and stateless.

@@ -54,10 +54,10 @@ from ._constants import (
     GOOGLE_REASON_TO_PROVIDER,
     generate_tool_call_id,
 )
-from .config_ops import GoogleGenAIConfigOps
-from .content_ops import GoogleGenAIContentOps
-from .message_ops import GoogleGenAIMessageOps
-from .tool_ops import GoogleGenAIToolOps
+from .config_ops import GoogleGenerateConfigOps
+from .content_ops import GoogleGenerateContentOps
+from .message_ops import GoogleGenerateMessageOps
+from .tool_ops import GoogleGenerateToolOps
 
 
 def _modality_list_to_dict(modality_list: list[dict]) -> dict[str, int]:
@@ -97,7 +97,7 @@ def _dict_to_modality_list(details: dict[str, int]) -> list[dict[str, Any]]:
     return result
 
 
-class GoogleGenAIConverter(BaseConverter):
+class GoogleGenerateConverter(BaseConverter):
     """Google GenAI API converter.
 
     Implements the 6 explicit conversion interfaces defined by BaseConverter.
@@ -107,11 +107,11 @@ class GoogleGenAIConverter(BaseConverter):
 
     _RESPONSE_ID_PREFIX = ""
 
-    content_ops_class = GoogleGenAIContentOps
-    tool_ops_class = GoogleGenAIToolOps
-    message_ops_class = GoogleGenAIMessageOps
-    config_ops_class = GoogleGenAIConfigOps
-    _CONVERTER_TAG = "google_genai"
+    content_ops_class = GoogleGenerateContentOps
+    tool_ops_class = GoogleGenerateToolOps
+    message_ops_class = GoogleGenerateMessageOps
+    config_ops_class = GoogleGenerateConfigOps
+    _CONVERTER_TAG = "google_generate"
     _PASSTHROUGH_RESTORE_KEY = "candidates"
 
     def __init__(self):
@@ -215,7 +215,7 @@ class GoogleGenAIConverter(BaseConverter):
                 generation_config[key] = config[key]
 
         if "thinking_config" in config and isinstance(config["thinking_config"], dict):
-            rest_tc = GoogleGenAIConverter._thinking_config_to_rest(
+            rest_tc = GoogleGenerateConverter._thinking_config_to_rest(
                 config["thinking_config"]
             )
             if rest_tc:
@@ -1147,4 +1147,4 @@ class GoogleGenAIConverter(BaseConverter):
 
 
 # Backward compatibility alias
-GoogleConverter = GoogleGenAIConverter
+GoogleConverter = GoogleGenerateConverter

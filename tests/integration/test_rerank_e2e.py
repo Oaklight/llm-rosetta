@@ -135,7 +135,9 @@ def test_jina_response_to_ir():
     assert "document" in ir["results"][0]
     assert "usage" in ir
     print(f"  model: {ir['model']}")
-    print(f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}")
+    print(
+        f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}"
+    )
     print(f"  usage: {ir.get('usage')}")
     print("  ✓ PASS")
 
@@ -150,7 +152,9 @@ def test_cohere_response_to_ir():
     assert ir["results"][0]["index"] == 0
     assert "id" in ir
     print(f"  id: {ir['id']}")
-    print(f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}")
+    print(
+        f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}"
+    )
     print("  ✓ PASS")
 
 
@@ -166,7 +170,9 @@ def test_voyage_response_to_ir():
     assert "document" in ir["results"][0]
     assert "usage" in ir
     print(f"  model: {ir['model']}")
-    print(f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}")
+    print(
+        f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}"
+    )
     print(f"  usage: {ir.get('usage')}")
     print("  ✓ PASS")
 
@@ -183,7 +189,9 @@ def test_siliconflow_response_to_ir():
     assert "usage" in ir
     assert ir["usage"]["total_tokens"] > 0
     print(f"  id: {ir.get('id')}")
-    print(f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}")
+    print(
+        f"  top result: index={ir['results'][0]['index']}, score={ir['results'][0]['relevance_score']:.4f}"
+    )
     print(f"  usage: {ir.get('usage')}")
     print("  ✓ PASS")
 
@@ -237,7 +245,9 @@ def test_request_roundtrip_all_providers():
         assert ir_back["model"] == ir_request["model"]
         assert ir_back["query"] == ir_request["query"]
         assert len(ir_back["documents"]) == len(ir_request["documents"])
-        for orig, back in zip(ir_request["documents"], ir_back["documents"], strict=True):
+        for orig, back in zip(
+            ir_request["documents"], ir_back["documents"], strict=True
+        ):
             assert orig["text"] == back["text"]
         print(f"  {name}: ✓")
     print("  ✓ ALL PASS")
@@ -264,7 +274,7 @@ if __name__ == "__main__":
             print(f"\n  ✗ FAIL: {e}")
             failed += 1
 
-    print(f"\n{'='*50}")
+    print(f"\n{'=' * 50}")
     print(f"Results: {passed} passed, {failed} failed")
     if failed:
         sys.exit(1)

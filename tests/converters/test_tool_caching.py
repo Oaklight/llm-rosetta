@@ -14,7 +14,7 @@ from llm_rosetta.converters.base.helpers.cache import (
     cache_info,
     clear_all_caches,
 )
-from llm_rosetta.converters.google_genai import GoogleConverter
+from llm_rosetta.converters.google_generate import GoogleConverter
 from llm_rosetta.converters.openai_chat import OpenAIChatConverter
 from llm_rosetta.converters.openai_responses import OpenAIResponsesConverter
 
@@ -174,7 +174,7 @@ CONVERTER_CONFIGS = [
         _openai_responses_request,
         id="openai_responses",
     ),
-    pytest.param(GoogleConverter, GOOGLE_TOOLS, _google_request, id="google_genai"),
+    pytest.param(GoogleConverter, GOOGLE_TOOLS, _google_request, id="google_generate"),
 ]
 
 

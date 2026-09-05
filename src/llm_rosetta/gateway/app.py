@@ -432,7 +432,7 @@ async def handle_openai_responses(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="openai_responses")
 
 
-async def handle_google_genai(
+async def handle_google_generate(
     request: Any, model_path: str = ""
 ) -> Response | StreamingResponse:
     if model_path.endswith(":streamGenerateContent"):
@@ -863,7 +863,7 @@ def create_app(
         app.route("/v1/models", methods=["GET"])(handle_list_models)
         app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
         app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
-            handle_google_genai
+            handle_google_generate
         )
         app.route("/health", methods=["GET"])(handle_health)
         app.route("/health/live", methods=["GET"])(handle_health_live)
