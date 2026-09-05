@@ -98,9 +98,11 @@ def _init_persistence(
             metrics.total_requests,
         )
 
-    # Auto-rebuild if persisted counters drifted from actual log entries
+    # Auto-rebuild if counters lag behind the log (ungraceful shutdown).
+    # Only rebuild when counters < log — the reverse (counters > log) is
+    # expected when log retention caps purge old entries.
     log_entries = persistence.count_log_entries()
-    if metrics.total_requests != log_entries:
+    if metrics.total_requests < log_entries:
         logger.warning(
             "Counter drift detected (counters=%d, log=%d), rebuilding from request log",
             metrics.total_requests,
