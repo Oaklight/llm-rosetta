@@ -111,7 +111,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -e ".[profiling]"
+          pip install -e "."
           pip install "nuitka[onefile]" ordered-set
 
       - name: Snapshot resources before build
