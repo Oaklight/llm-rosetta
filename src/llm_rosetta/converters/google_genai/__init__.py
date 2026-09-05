@@ -1,18 +1,31 @@
 """
-LLM-Rosetta - Google GenAI Converter Module
+Deprecated — use ``llm_rosetta.converters.google_generate`` instead.
 
-Provides the Google GenAI API converter and its component Ops classes.
+This module exists only for backward compatibility and will be removed
+in a future release.
 """
 
-from .config_ops import GoogleGenAIConfigOps
-from .content_ops import GoogleGenAIContentOps
-from .converter import GoogleConverter, GoogleGenAIConverter
-from .message_ops import GoogleGenAIMessageOps
-from .tool_ops import GoogleGenAIToolOps
+import warnings as _warnings
+
+_warnings.warn(
+    "llm_rosetta.converters.google_genai is deprecated, "
+    "use llm_rosetta.converters.google_generate instead",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+from ..google_generate import (  # noqa: F401, E402
+    GoogleConverter,
+    GoogleGenerateConfigOps as GoogleGenAIConfigOps,
+    GoogleGenerateContentOps as GoogleGenAIContentOps,
+    GoogleGenerateConverter as GoogleGenAIConverter,
+    GoogleGenerateMessageOps as GoogleGenAIMessageOps,
+    GoogleGenerateToolOps as GoogleGenAIToolOps,
+)
 
 __all__ = [
     "GoogleGenAIConverter",
-    "GoogleConverter",  # Backward compatibility alias
+    "GoogleConverter",
     "GoogleGenAIContentOps",
     "GoogleGenAIToolOps",
     "GoogleGenAIMessageOps",

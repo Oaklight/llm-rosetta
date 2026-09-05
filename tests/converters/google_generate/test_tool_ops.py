@@ -4,7 +4,7 @@ Google GenAI ToolOps unit tests.
 
 import pytest
 
-from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
 from typing import cast
 
 from llm_rosetta.types.ir import (
@@ -15,8 +15,8 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestGoogleGenAIToolOps:
-    """Unit tests for GoogleGenAIToolOps."""
+class TestGoogleGenerateToolOps:
+    """Unit tests for GoogleGenerateToolOps."""
 
     # ==================== Tool Definition ====================
 
@@ -32,7 +32,7 @@ class TestGoogleGenAIToolOps:
                 "required": ["location"],
             },
         }
-        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        result = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
         assert "function_declarations" in result
         assert len(result["function_declarations"]) == 1
         func_decl = result["function_declarations"][0]
@@ -59,7 +59,7 @@ class TestGoogleGenAIToolOps:
                 "additionalProperties": False,
             },
         }
-        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        result = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
         params = result["function_declarations"][0]["parameters"]
         assert "additionalProperties" not in params
         assert "additionalProperties" not in params["properties"]["tags"]["items"]
@@ -79,7 +79,7 @@ class TestGoogleGenAIToolOps:
                 }
             ]
         }
-        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        result = GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         assert result is not None
         assert not isinstance(result, list)
         assert result["type"] == "function"
@@ -95,8 +95,8 @@ class TestGoogleGenAIToolOps:
             "description": "Search the web",
             "parameters": {"type": "object", "properties": {}},
         }
-        provider = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
-        restored = GoogleGenAIToolOps.p_tool_definition_to_ir(provider)
+        provider = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
+        restored = GoogleGenerateToolOps.p_tool_definition_to_ir(provider)
         assert restored is not None
         assert not isinstance(restored, list)
         assert restored["name"] == ir_tool["name"]
@@ -112,7 +112,7 @@ class TestGoogleGenAIToolOps:
                 }
             ]
         }
-        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        result = GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         assert result is not None
         assert not isinstance(result, list)
         assert result["name"] == "get_weather"
@@ -126,7 +126,7 @@ class TestGoogleGenAIToolOps:
                 {"name": "tool_c", "description": "C"},
             ]
         }
-        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        result = GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(result, list)
         assert len(result) == 3
         assert result[0]["name"] == "tool_a"
@@ -137,7 +137,7 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_choice_auto(self):
         """Test IR auto tool choice → Google AUTO."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+        result = GoogleGenerateToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "auto"})
         )
         assert result is not None
@@ -145,7 +145,7 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_choice_none(self):
         """Test IR none tool choice → Google NONE."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+        result = GoogleGenerateToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "none"})
         )
         assert result is not None
@@ -153,7 +153,7 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_choice_any(self):
         """Test IR any tool choice → Google ANY."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+        result = GoogleGenerateToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "any"})
         )
         assert result is not None
@@ -161,7 +161,7 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_choice_tool(self):
         """Test IR specific tool choice → Google ANY with allowed_function_names."""
-        result = GoogleGenAIToolOps.ir_tool_choice_to_p(
+        result = GoogleGenerateToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "tool", "tool_name": "get_weather"})
         )
         assert result is not None
@@ -171,21 +171,21 @@ class TestGoogleGenAIToolOps:
 
     def test_p_tool_choice_auto(self):
         """Test Google AUTO → IR auto."""
-        result = GoogleGenAIToolOps.p_tool_choice_to_ir(
+        result = GoogleGenerateToolOps.p_tool_choice_to_ir(
             {"function_calling_config": {"mode": "AUTO"}}
         )
         assert result["mode"] == "auto"
 
     def test_p_tool_choice_none(self):
         """Test Google NONE → IR none."""
-        result = GoogleGenAIToolOps.p_tool_choice_to_ir(
+        result = GoogleGenerateToolOps.p_tool_choice_to_ir(
             {"function_calling_config": {"mode": "NONE"}}
         )
         assert result["mode"] == "none"
 
     def test_p_tool_choice_any_with_names(self):
         """Test Google ANY with allowed names → IR tool."""
-        result = GoogleGenAIToolOps.p_tool_choice_to_ir(
+        result = GoogleGenerateToolOps.p_tool_choice_to_ir(
             {
                 "function_calling_config": {
                     "mode": "ANY",
@@ -199,13 +199,13 @@ class TestGoogleGenAIToolOps:
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""
         original = cast(ToolChoice, {"mode": "auto"})
-        provider = GoogleGenAIToolOps.ir_tool_choice_to_p(original)
-        restored = GoogleGenAIToolOps.p_tool_choice_to_ir(provider)
+        provider = GoogleGenerateToolOps.ir_tool_choice_to_p(original)
+        restored = GoogleGenerateToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == original["mode"]
 
     def test_p_tool_choice_camelcase(self):
         """Test camelCase functionCallingConfig (REST format)."""
-        result = GoogleGenAIToolOps.p_tool_choice_to_ir(
+        result = GoogleGenerateToolOps.p_tool_choice_to_ir(
             {"functionCallingConfig": {"mode": "ANY"}}
         )
         assert result["mode"] == "any"
@@ -221,7 +221,7 @@ class TestGoogleGenAIToolOps:
             tool_input={"location": "NYC"},
             tool_type="function",
         )
-        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tc)
+        result = GoogleGenerateToolOps.ir_tool_call_to_p(ir_tc)
         assert "functionCall" in result
         assert result["functionCall"]["name"] == "get_weather"
         assert result["functionCall"]["args"] == {"location": "NYC"}
@@ -238,7 +238,7 @@ class TestGoogleGenAIToolOps:
                 "provider_metadata": {"google": {"thought_signature": "sig123"}},
             },
         )
-        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_tc)
+        result = GoogleGenerateToolOps.ir_tool_call_to_p(ir_tc)
         assert result["thoughtSignature"] == "sig123"
 
     def test_p_tool_call_to_ir(self):
@@ -249,7 +249,7 @@ class TestGoogleGenAIToolOps:
                 "args": {"location": "NYC"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_call_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_call_to_ir(provider)
         assert result["type"] == "tool_call"
         assert result["tool_name"] == "get_weather"
         assert result["tool_input"] == {"location": "NYC"}
@@ -263,7 +263,7 @@ class TestGoogleGenAIToolOps:
                 "args": {"query": "test"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_call_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_call_to_ir(provider)
         assert result["tool_name"] == "search"
 
     def test_p_tool_call_to_ir_with_thought_signature(self):
@@ -272,7 +272,7 @@ class TestGoogleGenAIToolOps:
             "function_call": {"name": "search", "args": {}},
             "thoughtSignature": "sig456",
         }
-        result = GoogleGenAIToolOps.p_tool_call_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_call_to_ir(provider)
         assert result["provider_metadata"]["google"]["thought_signature"] == "sig456"
 
     def test_tool_call_round_trip(self):
@@ -284,8 +284,8 @@ class TestGoogleGenAIToolOps:
             tool_input={"q": "test"},
             tool_type="function",
         )
-        provider = GoogleGenAIToolOps.ir_tool_call_to_p(original)
-        restored = GoogleGenAIToolOps.p_tool_call_to_ir(provider)
+        provider = GoogleGenerateToolOps.ir_tool_call_to_p(original)
+        restored = GoogleGenerateToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
 
@@ -298,7 +298,7 @@ class TestGoogleGenAIToolOps:
             tool_input={"location": "Tokyo"},
             tool_type="function",
         )
-        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir)
+        result = GoogleGenerateToolOps.ir_tool_call_to_p(ir)
         assert result["functionCall"]["id"] == "fyh071wz"
         assert result["functionCall"]["name"] == "get_weather"
 
@@ -311,7 +311,7 @@ class TestGoogleGenAIToolOps:
                 "id": "fyh071wz",
             }
         }
-        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
+        ir = GoogleGenerateToolOps.p_tool_call_to_ir(provider_part)
         assert ir["tool_call_id"] == "fyh071wz"
 
     def test_tool_call_id_round_trip(self):
@@ -323,8 +323,8 @@ class TestGoogleGenAIToolOps:
                 "id": "wak1n9ou",
             }
         }
-        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
-        restored = GoogleGenAIToolOps.ir_tool_call_to_p(ir)
+        ir = GoogleGenerateToolOps.p_tool_call_to_ir(provider_part)
+        restored = GoogleGenerateToolOps.ir_tool_call_to_p(ir)
         assert restored["functionCall"]["id"] == "wak1n9ou"
         assert restored["functionCall"]["name"] == "get_weather"
 
@@ -336,7 +336,7 @@ class TestGoogleGenAIToolOps:
                 "args": {"location": "Tokyo"},
             }
         }
-        ir = GoogleGenAIToolOps.p_tool_call_to_ir(provider_part)
+        ir = GoogleGenerateToolOps.p_tool_call_to_ir(provider_part)
         assert ir["tool_call_id"].startswith("call_")
 
     # ==================== Tool Result ====================
@@ -348,7 +348,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_123",
             result="Sunny, 25°C",
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         assert "functionResponse" in result
         assert result["functionResponse"]["name"] == "call_123"
         assert result["functionResponse"]["response"]["output"] == "Sunny, 25°C"
@@ -361,7 +361,7 @@ class TestGoogleGenAIToolOps:
             result="API Error",
             is_error=True,
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         assert result["functionResponse"]["response"]["error"] == "API Error"
 
     def test_ir_tool_result_to_p_with_context(self):
@@ -384,7 +384,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_123",
             result="Sunny",
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
         assert result["functionResponse"]["name"] == "get_weather"
 
     def test_ir_tool_result_to_p_with_context_no_match(self):
@@ -396,7 +396,7 @@ class TestGoogleGenAIToolOps:
             result="data",
         )
         with pytest.warns(UserWarning, match="Could not find corresponding tool call"):
-            result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(
+            result = GoogleGenerateToolOps.ir_tool_result_to_p_with_context(
                 ir_tr, ir_input
             )
         assert result["functionResponse"]["name"] == "nonexistent"
@@ -408,7 +408,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="fyh071wz",
             result="Sunny, 25C",
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir)
         assert result["functionResponse"]["id"] == "fyh071wz"
 
     def test_ir_tool_result_to_p_with_context_includes_id(self):
@@ -432,7 +432,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="fyh071wz",
             result="Sunny, 25C",
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
         assert result["functionResponse"]["name"] == "get_weather"
         assert result["functionResponse"]["id"] == "fyh071wz"
 
@@ -445,7 +445,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"output": "Sunny"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert result["tool_call_id"] == "fyh071wz"
 
     def test_p_tool_result_to_ir(self):
@@ -456,7 +456,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"output": "Sunny"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert result["type"] == "tool_result"
         assert result["tool_call_id"] == "get_weather"
         assert result["result"] == "Sunny"
@@ -470,7 +470,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"error": "API Error"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert result["is_error"] is True
         assert result["result"] == "API Error"
 
@@ -482,7 +482,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"output": "results"},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert result["tool_call_id"] == "search"
 
     def test_ir_tool_result_to_p_list_converted(self):
@@ -492,7 +492,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_list",
             result=[{"type": "text", "text": "hello"}],
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         output = result["functionResponse"]["response"]["output"]
         assert isinstance(output, list)
         assert output == [{"text": "hello"}]
@@ -517,7 +517,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_list",
             result=[{"type": "image", "image_url": "https://example.com/img.png"}],
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p_with_context(ir_tr, ir_input)
         output = result["functionResponse"]["response"]["output"]
         assert isinstance(output, list)
         # IR image_url is converted to Google inlineData (or None if URL-based download fails)
@@ -532,7 +532,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_dict",
             result={"key": "value"},
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         output = result["functionResponse"]["response"]["output"]
         assert isinstance(output, str)
         assert json.loads(output) == {"key": "value"}
@@ -548,7 +548,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"output": {"temp": 72, "unit": "F"}},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert isinstance(result["result"], str)
         assert json.loads(result["result"]) == {"temp": 72, "unit": "F"}
 
@@ -566,7 +566,7 @@ class TestGoogleGenAIToolOps:
                 },
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert isinstance(result["result"], list)
         assert len(result["result"]) == 2
         assert result["result"][0]["type"] == "text"
@@ -581,7 +581,7 @@ class TestGoogleGenAIToolOps:
             tool_call_id="call_plain",
             result=[1, 2, 3],
         )
-        result = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        result = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         output = result["functionResponse"]["response"]["output"]
         assert isinstance(output, str)
         assert json.loads(output) == [1, 2, 3]
@@ -597,7 +597,7 @@ class TestGoogleGenAIToolOps:
                 "response": {"output": [1, 2, 3]},
             }
         }
-        result = GoogleGenAIToolOps.p_tool_result_to_ir(provider)
+        result = GoogleGenerateToolOps.p_tool_result_to_ir(provider)
         assert isinstance(result["result"], str)
         assert json.loads(result["result"]) == [1, 2, 3]
 
@@ -614,11 +614,11 @@ class TestGoogleGenAIToolOps:
                 },
             ],
         )
-        google = GoogleGenAIToolOps.ir_tool_result_to_p(ir_tr)
+        google = GoogleGenerateToolOps.ir_tool_result_to_p(ir_tr)
         # Google format uses inlineData
         output = google["functionResponse"]["response"]["output"]
         assert any("inlineData" in b for b in output)
-        restored = GoogleGenAIToolOps.p_tool_result_to_ir(google)
+        restored = GoogleGenerateToolOps.p_tool_result_to_ir(google)
         assert isinstance(restored["result"], list)
         assert len(restored["result"]) == 2
         assert restored["result"][0] == {"type": "text", "text": "chart output:"}
@@ -629,12 +629,12 @@ class TestGoogleGenAIToolOps:
 
     def test_ir_tool_config_to_p(self):
         """Test IR ToolCallConfig → Google tool config (empty)."""
-        result = GoogleGenAIToolOps.ir_tool_config_to_p({"disable_parallel": True})
+        result = GoogleGenerateToolOps.ir_tool_config_to_p({"disable_parallel": True})
         assert result == {}
 
     def test_p_tool_config_to_ir(self):
         """Test Google tool config → IR ToolCallConfig (empty)."""
-        result = GoogleGenAIToolOps.p_tool_config_to_ir({})
+        result = GoogleGenerateToolOps.p_tool_config_to_ir({})
         assert result == {}
 
     # ==================== Schema Sanitization (#372) ====================
@@ -653,7 +653,7 @@ class TestGoogleGenAIToolOps:
                 },
             },
         }
-        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        result = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
         params = result["function_declarations"][0]["parameters"]
         assert "title" not in params["properties"]["command"]
         assert "title" not in params["properties"]["cwd"]
@@ -671,7 +671,7 @@ class TestGoogleGenAIToolOps:
                 },
             },
         }
-        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        result = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
         params = result["function_declarations"][0]["parameters"]
         assert params["properties"]["field"]["nullable"] is True
 
@@ -694,7 +694,7 @@ class TestGoogleGenAIToolOps:
                 }
             ]
         }
-        result = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        result = GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(result, dict)
         params = result["parameters"]
         assert params["type"] == "object"
@@ -720,7 +720,7 @@ class TestGoogleGenAIToolOps:
                 "required": ["location"],
             },
         }
-        result = GoogleGenAIToolOps.ir_tool_definition_to_p(ir_tool)
+        result = GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool)
         params = result["function_declarations"][0]["parameters"]
         assert params["type"] == "OBJECT"
         assert params["properties"]["location"]["type"] == "STRING"
@@ -744,10 +744,10 @@ class TestGoogleGenAIToolOps:
                 }
             ]
         }
-        ir = GoogleGenAIToolOps.p_tool_definition_to_ir(provider_tool)
+        ir = GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(ir, dict)
         assert ir["parameters"]["properties"]["query"]["type"] == "string"
-        restored = GoogleGenAIToolOps.ir_tool_definition_to_p(ir)
+        restored = GoogleGenerateToolOps.ir_tool_definition_to_p(ir)
         params = restored["function_declarations"][0]["parameters"]
         assert params["properties"]["query"]["type"] == "STRING"
         assert params["properties"]["limit"]["type"] == "NUMBER"
@@ -762,7 +762,7 @@ class TestGoogleGenAIToolOps:
                 "properties": {"id": {"type": "INTEGER"}},
             },
         }
-        result = GoogleGenAIToolOps.p_tool_definition_to_ir(bare)
+        result = GoogleGenerateToolOps.p_tool_definition_to_ir(bare)
         assert isinstance(result, dict)
         assert result["parameters"]["type"] == "object"
         assert result["parameters"]["properties"]["id"]["type"] == "integer"
@@ -787,7 +787,7 @@ class TestProviderMetadataPreservation:
                 "provider_metadata": {"responses_item_id": "fc_abc123"},
             },
         )
-        result = GoogleGenAIToolOps.ir_tool_call_to_p(ir_part)
+        result = GoogleGenerateToolOps.ir_tool_call_to_p(ir_part)
         assert result["_provider_metadata"] == {"responses_item_id": "fc_abc123"}
 
     def test_p_to_ir_restores_provider_metadata(self):
@@ -796,7 +796,7 @@ class TestProviderMetadataPreservation:
             "functionCall": {"name": "get_weather", "args": {"city": "London"}},
             "_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
-        result = GoogleGenAIToolOps.p_tool_call_to_ir(p_call)
+        result = GoogleGenerateToolOps.p_tool_call_to_ir(p_call)
         assert (
             result.get("provider_metadata", {}).get("responses_item_id") == "fc_abc123"
         )
@@ -808,7 +808,7 @@ class TestProviderMetadataPreservation:
             "thoughtSignature": "sig_123",
             "_provider_metadata": {"responses_item_id": "fc_abc123"},
         }
-        result = GoogleGenAIToolOps.p_tool_call_to_ir(p_call)
+        result = GoogleGenerateToolOps.p_tool_call_to_ir(p_call)
         pm = result.get("provider_metadata", {})
         assert pm.get("responses_item_id") == "fc_abc123"
         assert pm.get("google", {}).get("thought_signature") == "sig_123"
@@ -826,8 +826,8 @@ class TestProviderMetadataPreservation:
                 "provider_metadata": {"responses_item_id": "fc_abc123"},
             },
         )
-        google_call = GoogleGenAIToolOps.ir_tool_call_to_p(ir_part)
-        restored = GoogleGenAIToolOps.p_tool_call_to_ir(google_call)
+        google_call = GoogleGenerateToolOps.ir_tool_call_to_p(ir_part)
+        restored = GoogleGenerateToolOps.p_tool_call_to_ir(google_call)
         assert (
             restored.get("provider_metadata", {}).get("responses_item_id")
             == "fc_abc123"

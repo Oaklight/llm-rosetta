@@ -31,7 +31,7 @@ from ...types.ir.parts import ContentPart
 from ..base import BaseContentOps
 
 
-class GoogleGenAIContentOps(BaseContentOps):
+class GoogleGenerateContentOps(BaseContentOps):
     """Google GenAI content conversion operations.
 
     All methods are static and stateless. Handles TextPart, ImagePart,
@@ -423,9 +423,9 @@ class GoogleGenAIContentOps(BaseContentOps):
         ):
             pm = provider_part.get("_provider_metadata") or {}
             if pm.get("is_refusal"):
-                ir_parts.append(GoogleGenAIContentOps.p_refusal_to_ir(provider_part))
+                ir_parts.append(GoogleGenerateContentOps.p_refusal_to_ir(provider_part))
             else:
-                ir_parts.append(GoogleGenAIContentOps.p_text_to_ir(provider_part))
+                ir_parts.append(GoogleGenerateContentOps.p_text_to_ir(provider_part))
 
         # Handle inline_data / inlineData (image, audio, or file based on mime_type)
         raw_inline = provider_part.get("inline_data") or provider_part.get("inlineData")
@@ -442,11 +442,11 @@ class GoogleGenAIContentOps(BaseContentOps):
             mime_type = inline_data.get("mime_type", "")
 
             if mime_type.startswith("image/"):
-                ir_parts.append(GoogleGenAIContentOps.p_image_to_ir(provider_part))
+                ir_parts.append(GoogleGenerateContentOps.p_image_to_ir(provider_part))
             elif mime_type.startswith("audio/"):
-                ir_parts.append(GoogleGenAIContentOps.p_audio_to_ir(provider_part))
+                ir_parts.append(GoogleGenerateContentOps.p_audio_to_ir(provider_part))
             else:
-                ir_parts.append(GoogleGenAIContentOps.p_file_to_ir(provider_part))
+                ir_parts.append(GoogleGenerateContentOps.p_file_to_ir(provider_part))
 
         # Handle file_data / fileData (URI-based)
         raw_file = provider_part.get("file_data") or provider_part.get("fileData")

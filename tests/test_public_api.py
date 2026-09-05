@@ -27,8 +27,10 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "BaseConverter",
             "OpenAIChatConverter",
             "AnthropicConverter",
-            "GoogleGenAIConverter",
+            "GoogleGenerateConverter",
             "GoogleConverter",
+            "GoogleGenerateConverter",
+            "GoogleGenAIConverter",
             "OpenAIResponsesConverter",
             # Conversion context
             "ConversionContext",

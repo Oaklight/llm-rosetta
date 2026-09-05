@@ -6,7 +6,7 @@ import json
 from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
-from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 from llm_rosetta.types.ir.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -25,7 +25,7 @@ class TestStreamResponseFromProvider:
     """Tests for stream_response_from_provider."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     # --- Text delta ---
 
@@ -447,7 +447,7 @@ class TestStreamResponseToProvider:
     """Tests for stream_response_to_provider."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_text_delta(self):
         """TextDeltaEvent → Google chunk."""
@@ -676,7 +676,7 @@ class TestStreamRoundTrip:
     """Round-trip tests: provider → IR → provider."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_text_delta_round_trip(self):
         """Text delta round-trip preserves content."""
@@ -832,7 +832,7 @@ class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_first_chunk_emits_stream_start(self):
         """First chunk with context emits StreamStartEvent."""
@@ -1100,7 +1100,7 @@ class TestStreamResponseToProviderWithContext:
     """Tests for stream_response_to_provider with StreamContext."""
 
     def setup_method(self):
-        self.converter = GoogleGenAIConverter()
+        self.converter = GoogleGenerateConverter()
 
     def test_stream_start_produces_initial_chunk(self):
         """StreamStartEvent returns empty dict (no SDK-visible chunk)."""

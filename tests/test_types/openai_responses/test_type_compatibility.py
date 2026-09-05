@@ -6,7 +6,7 @@ This module tests:
 - If the OpenAI SDK is available, validates compatibility with SDK types
 
 Reference: tests/test_types/openai/chat/test_type_compatibility.py
-Reference: tests/test_types/google_genai/test_type_compatibility.py
+Reference: tests/test_types/google_generate/test_type_compatibility.py
 """
 
 import pytest

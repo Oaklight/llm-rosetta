@@ -643,10 +643,10 @@ class TestCrossFormatSystemCacheHint:
 
     def test_anthropic_system_cache_to_google_flattens(self):
         """Anthropic system with cache_control → IR → Google: string, no cache_control."""
-        from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+        from llm_rosetta.converters.google_generate import GoogleGenerateConverter
 
         anthropic_converter = AnthropicConverter()
-        google_converter = GoogleGenAIConverter()
+        google_converter = GoogleGenerateConverter()
 
         provider_request = {
             "model": "claude-sonnet-4-20250514",

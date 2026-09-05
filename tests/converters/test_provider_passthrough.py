@@ -12,7 +12,7 @@ from llm_rosetta.converters.base.helpers.tool_orphan_fix import (
 )
 from llm_rosetta.converters.openai_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.openai_chat.converter import OpenAIChatConverter
-from llm_rosetta.converters.google_genai.converter import GoogleGenAIConverter
+from llm_rosetta.converters.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.types.ir import (
     IRInputItem,
     IRResponse,
@@ -161,7 +161,7 @@ class TestNonStreamPassthroughHelpers:
             OpenAIResponsesConverter(),
             OpenAIChatConverter(),
             AnthropicConverter(),
-            GoogleGenAIConverter(),
+            GoogleGenerateConverter(),
         ]
         for converter in converters:
             local = _item(provider=converter._CONVERTER_TAG, position=0)
@@ -356,7 +356,7 @@ class TestNonStreamPassthroughHelpers:
             (OpenAIResponsesConverter(), "output"),
             (OpenAIChatConverter(), "choices"),
             (AnthropicConverter(), "content"),
-            (GoogleGenAIConverter(), "candidates"),
+            (GoogleGenerateConverter(), "candidates"),
         ]
         for converter, output_key in converters_and_keys:
             item = _item(provider=converter._CONVERTER_TAG, position=0)

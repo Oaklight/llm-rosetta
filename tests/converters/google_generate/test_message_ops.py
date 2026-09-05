@@ -6,21 +6,21 @@ from typing import Any, Union, cast
 
 import pytest
 
-from llm_rosetta.converters.google_genai.content_ops import GoogleGenAIContentOps
-from llm_rosetta.converters.google_genai.message_ops import GoogleGenAIMessageOps
-from llm_rosetta.converters.google_genai.tool_ops import GoogleGenAIToolOps
+from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps
+from llm_rosetta.converters.google_generate.message_ops import GoogleGenerateMessageOps
+from llm_rosetta.converters.google_generate.tool_ops import GoogleGenerateToolOps
 from llm_rosetta.types.ir import Message
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
-class TestGoogleGenAIMessageOps:
-    """Unit tests for GoogleGenAIMessageOps."""
+class TestGoogleGenerateMessageOps:
+    """Unit tests for GoogleGenerateMessageOps."""
 
     def setup_method(self):
         """Set up test fixtures."""
-        content_ops = GoogleGenAIContentOps()
-        tool_ops = GoogleGenAIToolOps()
-        self.message_ops = GoogleGenAIMessageOps(content_ops, tool_ops)
+        content_ops = GoogleGenerateContentOps()
+        tool_ops = GoogleGenerateToolOps()
+        self.message_ops = GoogleGenerateMessageOps(content_ops, tool_ops)
 
     # ==================== IR → Provider ====================
 

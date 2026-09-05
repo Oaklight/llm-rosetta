@@ -260,7 +260,15 @@ _SHIM_REGISTRY: dict[str, ProviderShim] = {}
 
 # Base converter types — used by resolve_base() for pass-through detection
 _BASE_TYPES: frozenset[str] = frozenset(
-    {"openai_chat", "openai_responses", "open_responses", "anthropic", "google"}
+    {
+        "openai_chat",
+        "openai_responses",
+        "open_responses",
+        "anthropic",
+        "google",
+        "google_generate",
+        "google_interactions",
+    }
 )
 
 
