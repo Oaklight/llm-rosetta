@@ -43,12 +43,20 @@ def _format_sse_google(chunk: dict[str, Any]) -> str:
     return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
+def _format_sse_google_interactions(chunk: dict[str, Any]) -> str:
+    """Format a chunk as Google Interactions SSE (``event: type\\ndata: json``)."""
+    event_type = chunk.get("event_type", "unknown")
+    return f"event: {event_type}\ndata: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+
 SSE_FORMATTERS: dict[str, Any] = {
     "openai_chat": _format_sse_openai_chat,
     "openai_responses": _format_sse_openai_responses,
     "open_responses": _format_sse_openai_responses,
     "anthropic": _format_sse_anthropic,
     "google": _format_sse_google,
+    "google_generate": _format_sse_google,
+    "google_interactions": _format_sse_google_interactions,
 }
 
 
@@ -102,8 +110,20 @@ def build_stream_error_events(
     if source_provider == "anthropic":
         return [{"type": "error", "error": {"type": "api_error", "message": message}}]
 
-    if source_provider == "google":
+    if source_provider in ("google", "google_generate"):
         return [{"error": {"code": 500, "message": message, "status": "INTERNAL"}}]
+
+    if source_provider == "google_interactions":
+        return [
+            {
+                "event_type": "interaction.completed",
+                "interaction": {
+                    "id": response_id,
+                    "status": "failed",
+                    "errors": [{"message": message}],
+                },
+            }
+        ]
 
     return []
 

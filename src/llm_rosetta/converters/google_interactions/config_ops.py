@@ -88,6 +88,9 @@ class GoogleInteractionsConfigOps(BaseConfigOps):
             if effort:
                 result["effort"] = effort
                 result["mode"] = "enabled"
+                # Interactions API always expects thought steps in the
+                # response when thinking is enabled
+                result["include_thoughts"] = True
         thinking_summaries = provider_config.get("thinking_summaries")
         if thinking_summaries in ("auto", "none"):
             result["summary"] = cast(IRVisibility, thinking_summaries)

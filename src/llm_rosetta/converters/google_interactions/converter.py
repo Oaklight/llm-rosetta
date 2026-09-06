@@ -347,6 +347,13 @@ class GoogleInteractionsConverter(BaseConverter):
         if assistant_msg:
             steps = self.message_ops.ir_messages_to_p_steps([assistant_msg])
 
+        # Override status when steps contain function_call but finish_reason
+        # was "stop" (Google generateContent returns STOP for tool calls)
+        if status == "completed" and any(
+            s.get("type") == "function_call" for s in steps
+        ):
+            status = "requires_action"
+
         created_ts = ir_response.get("created", int(time.time()))
         created_iso = datetime.fromtimestamp(created_ts, tz=timezone.utc).isoformat()
 
@@ -522,3 +529,171 @@ class GoogleInteractionsConverter(BaseConverter):
             )
         events.append(StreamEndEvent(type="stream_end"))
         return events
+
+    # ── IR → Provider stream dispatch override ──────────────────────
+
+    def stream_response_to_provider(
+        self,
+        event: IRStreamEvent,
+        context: StreamContext | None = None,
+    ) -> dict[str, Any] | list[dict[str, Any]]:
+        ctx = context or StreamContext()
+        result = super().stream_response_to_provider(event, ctx)
+
+        # Synthesize step.start before first delta when upstream skipped
+        # ContentBlockStartEvent (common for OpenAI Chat upstreams)
+        event_type = event.get("type", "")  # type: ignore[union-attr]
+        if event_type in ("text_delta", "reasoning_delta", "tool_call_delta"):
+            if not ctx.metadata.get("_interactions_step_started"):
+                ctx.metadata["_interactions_step_started"] = True
+                step_start = {
+                    "event_type": "step.start",
+                    "index": 0,
+                    "step": {"type": "model_output"},
+                }
+                chunks = [step_start]
+                if isinstance(result, list):
+                    chunks.extend(result)
+                elif result:
+                    chunks.append(result)
+                return chunks
+
+        # Synthesize step.stop before interaction.completed when missing
+        if event_type == "finish" and ctx.metadata.get("_interactions_step_started"):
+            if not ctx.metadata.get("_interactions_step_stopped"):
+                ctx.metadata["_interactions_step_stopped"] = True
+                step_stop = {"event_type": "step.stop", "index": 0}
+                chunks = [step_stop]
+                if isinstance(result, list):
+                    chunks.extend(result)
+                elif result:
+                    chunks.append(result)
+                return chunks
+
+        return result
+
+    # ── IR → Provider stream handlers (for response conversion) ────
+
+    def _handle_ir_stream_start_to_p(
+        self, event: StreamStartEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        if context is not None:
+            context.response_id = event["response_id"]
+            context.model = event["model"]
+            context.mark_started()
+        return {
+            "event_type": "interaction.created",
+            "interaction": {
+                "id": event["response_id"],
+                "model": event["model"],
+                "status": "in_progress",
+            },
+        }
+
+    def _handle_ir_stream_end_to_p(
+        self, event: StreamEndEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        reason = "stop"
+        interaction: dict[str, Any] = {"status": "completed"}
+        if context:
+            reason = context.metadata.get("_interactions_finish_reason", "stop")
+            interaction["id"] = getattr(context, "response_id", "")
+            interaction["model"] = getattr(context, "model", "")
+            stashed = context.metadata.get("_interactions_usage")
+            if stashed:
+                interaction["usage"] = stashed
+        interaction["status"] = _FINISH_REASON_TO_STATUS.get(reason, "completed")
+        return {
+            "event_type": "interaction.completed",
+            "interaction": interaction,
+        }
+
+    def _handle_ir_content_block_start_to_p(
+        self, event: ContentBlockStartEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        block_type = event["block_type"]
+        step_type = {v: k for k, v in _STEP_TYPE_TO_BLOCK_TYPE.items()}.get(
+            block_type, block_type
+        )
+        return {
+            "event_type": "step.start",
+            "index": event["block_index"],
+            "step": {"type": step_type},
+        }
+
+    def _handle_ir_content_block_end_to_p(
+        self, event: ContentBlockEndEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        return {
+            "event_type": "step.stop",
+            "index": event["block_index"],
+        }
+
+    def _handle_ir_text_delta_to_p(
+        self, event: TextDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        return {
+            "event_type": "step.delta",
+            "index": event.get("block_index", 0),
+            "delta": {"type": "text", "text": event["text"]},
+        }
+
+    def _handle_ir_reasoning_delta_to_p(
+        self, event: ReasoningDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        if event.get("signature"):
+            return {
+                "event_type": "step.delta",
+                "index": event.get("block_index", 0),
+                "delta": {"type": "thought_signature", "signature": event["signature"]},
+            }
+        return {
+            "event_type": "step.delta",
+            "index": event.get("block_index", 0),
+            "delta": {"type": "thought_summary", "text": event["reasoning"]},
+        }
+
+    def _handle_ir_tool_call_start_to_p(
+        self, event: ToolCallStartEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        return {
+            "event_type": "step.start",
+            "index": event.get("tool_call_index", 0),
+            "step": {
+                "type": "function_call",
+                "id": event["tool_call_id"],
+                "name": event["tool_name"],
+            },
+        }
+
+    def _handle_ir_tool_call_delta_to_p(
+        self, event: ToolCallDeltaEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        return {
+            "event_type": "step.delta",
+            "index": event.get("block_index", 0),
+            "delta": {
+                "type": "arguments",
+                "call_id": event["tool_call_id"],
+                "arguments": event["arguments_delta"],
+            },
+        }
+
+    def _handle_ir_finish_to_p(
+        self, event: FinishEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        # Stash finish reason; defer interaction.completed to stream_end
+        # so usage (which may arrive after finish) is included
+        reason = event["finish_reason"]["reason"]
+        if context:
+            context.metadata["_interactions_finish_reason"] = reason
+        return {}
+
+    def _handle_ir_usage_to_p(
+        self, event: UsageEvent, context: StreamContext | None
+    ) -> dict[str, Any]:
+        usage = self._build_ir_usage_to_p(event["usage"])
+        # Stash for injection into interaction.completed
+        if context is not None:
+            context.metadata["_interactions_usage"] = usage
+        return {}
