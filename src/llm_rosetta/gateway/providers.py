@@ -61,6 +61,20 @@ _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {
         "url_template": "{base_url}/v1beta/models/{model}:generateContent",
         "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
     },
+    "google_generate": {
+        "default_base_url": "https://generativelanguage.googleapis.com",
+        "default_api_key_env": "GOOGLE_API_KEY",
+        "auth_header_fn": google_auth,
+        "url_template": "{base_url}/v1beta/models/{model}:generateContent",
+        "stream_url_template": "{base_url}/v1beta/models/{model}:streamGenerateContent?alt=sse",
+    },
+    "google_interactions": {
+        "default_base_url": "https://generativelanguage.googleapis.com",
+        "default_api_key_env": "GOOGLE_API_KEY",
+        "auth_header_fn": google_auth,
+        "url_template": "{base_url}/v1beta/interactions",
+        "stream_url_template": "{base_url}/v1beta/interactions?alt=sse",
+    },
 }
 
 
