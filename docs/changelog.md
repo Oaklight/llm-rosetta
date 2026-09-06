@@ -11,6 +11,17 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### 新增
 
 - **Google Interactions API 转换器** (Issue [#581](https://github.com/Oaklight/llm-rosetta/issues/581))：新增 `converters/google_interactions/` 模块，完整支持 Google Interactions API (`/v1beta/interactions`) 的双向格式转换。支持类型化步骤（user_input、model_output、thought、function_call、function_result）、`thinking_level` ↔ IR effort 映射、Interactions SSE 流式生命周期事件（`interaction.created/completed`、`step.start/delta/stop`）以及 MCP server 工具定义。连续的 assistant 角色步骤自动合并为单个 `AssistantMessage`。无需修改 IR 类型系统。
+- **重命名 `google_genai` → `google_generate`** (PR [#641](https://github.com/Oaklight/llm-rosetta/pull/641))：generateContent 转换器的模块、类和 shim base 重命名，避免与同时覆盖两套 API 的 `google-genai` SDK 名称混淆。`GoogleGenAIConverter` 和 `from llm_rosetta.converters.google_genai` 保留为弃用别名。
+- **Google Interactions gateway 路由** (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647))：注册 `POST /v1beta/interactions` 端点。`GoogleInteractionsConverter` 从顶层包导出。
+- **"添加新转换器"检查清单** 写入 CLAUDE.md (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647))：11 项门控清单，覆盖模块、测试、导出、自动检测、shim、gateway 路由、文档、CI smoke test 和测试注册表更新。
+- **跨格式往返测试** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：20 个测试验证 Interactions ↔ OpenAI Chat / Anthropic / google_generate 的请求和响应保真度。
+
+### 修复
+
+- **Google Interactions provider URL 注册表** (PR [#648](https://github.com/Oaklight/llm-rosetta/pull/648))：`google_generate` 和 `google_interactions` 的 URL 模板缺失，导致上游请求 404。
+- **Google Interactions 工具调用状态** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：Google generateContent 对工具调用返回 `STOP`——转换器现在检测 `function_call` 步骤并将状态覆盖为 `requires_action`。
+- **Google Interactions 流式传输** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：在 `SSE_FORMATTERS` 注册表中添加 `google_generate` 和 `google_interactions`；添加 IR→provider 流式处理器；当上游省略 `ContentBlockStartEvent` 时合成 `step.start`/`step.stop` 事件；将 `interaction.completed` 延迟到 `stream_end` 以包含 usage 数据。
+- **Google Interactions 思考透传** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：启用 `thinking_level` 时在 IR 中设置 `include_thoughts=True`，确保上游 Google API 返回思考内容。
 
 ## v0.12.0 — 2026-09-03
 
