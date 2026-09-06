@@ -1,9 +1,9 @@
 # /// zerodep
-# version = "0.6.1"
+# version = "0.7.0"
 # deps = []
 # tier = "medium"
 # category = "validation"
-# note = "Install/update via: https://zerodep.readthedocs.io/en/latest/guide/cli/"
+# note = "Install/update via `zerodep add validate`"
 # ///
 
 """Zero-dependency runtime validator for TypedDict and dataclass types.
@@ -70,9 +70,12 @@ from __future__ import annotations
 import dataclasses
 import functools
 import re
+import types
 import typing
 from collections.abc import Callable
 from typing import Any, Union, get_type_hints
+
+_UNION_ORIGINS = (Union, types.UnionType)
 
 __all__ = [
     # Constraint annotations
@@ -85,6 +88,7 @@ __all__ = [
     "Match",
     "Predicate",
     "FieldValidator",
+    "Doc",
     # Error types
     "ErrorDetail",
     "ValidationError",
@@ -92,6 +96,7 @@ __all__ = [
     "validate",
     "json_schema",
     "model_validator",
+    "create_struct",
 ]
 
 # ── Constraint Annotations ──
@@ -265,8 +270,44 @@ class FieldValidator:
         return self.description
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Doc:
+    """Field description marker for ``Annotated`` types.
+
+    Attaches a human-readable description to a type annotation.  The
+    description is emitted as ``{"description": ...}`` in JSON Schema
+    and has no effect on validation.
+
+    Example::
+
+        Annotated[str, Doc("The user's full name")]
+    """
+
+    description: str
+
+    def check(self, value: Any) -> bool:
+        return True
+
+    def schema_kw(self) -> dict[str, Any]:
+        return {"description": self.description}
+
+    def __str__(self) -> str:
+        return self.description
+
+
 # Constraint base types for isinstance checks
-_CONSTRAINT_TYPES = (Gt, Ge, Lt, Le, MinLen, MaxLen, Match, Predicate, FieldValidator)
+_CONSTRAINT_TYPES = (
+    Gt,
+    Ge,
+    Lt,
+    Le,
+    MinLen,
+    MaxLen,
+    Match,
+    Predicate,
+    FieldValidator,
+    Doc,
+)
 
 
 # ── Model Validator Registry ──
@@ -386,19 +427,32 @@ def _is_dataclass_type(tp: Any) -> bool:
     return isinstance(tp, type) and dataclasses.is_dataclass(tp)
 
 
+def _resolve_required(tp: Any) -> tuple[Any, bool | None]:
+    """Unwrap ``Required``/``NotRequired`` and report the wrapper kind.
+
+    Returns:
+        ``(inner_type, is_required)`` where *is_required* is ``True`` for
+        ``Required``, ``False`` for ``NotRequired``, or ``None`` when the
+        type has no such wrapper.
+
+    Detection uses the origin's ``_name`` attribute, which both
+    ``typing`` (3.11+) and ``typing_extensions`` set to ``"Required"``
+    or ``"NotRequired"``.  This avoids version-gated imports.
+    """
+    origin = typing.get_origin(tp)
+    # _name is a CPython implementation detail, stable across 3.10-3.14+
+    # and explicitly maintained by typing_extensions.
+    name = getattr(origin, "_name", None)
+    if name in ("Required", "NotRequired"):
+        args = typing.get_args(tp)
+        return (args[0] if args else tp), (name == "Required")
+    return tp, None
+
+
 def _strip_required(tp: Any) -> Any:
     """Strip ``Required`` / ``NotRequired`` wrappers, returning the inner type."""
-    import sys
-
-    origin = typing.get_origin(tp)
-    if sys.version_info >= (3, 11):
-        from typing import NotRequired, Required
-    else:
-        from typing_extensions import NotRequired, Required
-    if origin is Required or origin is NotRequired:
-        args = typing.get_args(tp)
-        return args[0] if args else tp
-    return tp
+    inner, _ = _resolve_required(tp)
+    return inner
 
 
 @functools.cache
@@ -419,13 +473,18 @@ def _typeddict_fields(td: type) -> dict[str, tuple[Any, bool]]:
     optional = getattr(td, "__optional_keys__", set())
     result: dict[str, tuple[Any, bool]] = {}
     for name, tp in hints.items():
-        inner = _strip_required(tp)
-        if name in required:
+        inner, explicit = _resolve_required(tp)
+        if explicit is not None:
+            # Annotation-level Required/NotRequired is authoritative.
+            # On Python 3.10, typing.TypedDict ignores these wrappers
+            # when populating __required_keys__ / __optional_keys__,
+            # so the annotation is the only reliable source.
+            result[name] = (inner, explicit)
+        elif name in required:
             result[name] = (inner, True)
         elif name in optional:
             result[name] = (inner, False)
         else:
-            # Default: assume required (total=True is the default)
             result[name] = (inner, True)
     return result
 
@@ -452,6 +511,20 @@ def _dataclass_fields(dc: type) -> dict[str, tuple[Any, bool]]:
     return result
 
 
+def _dataclass_defaults(dc: type) -> dict[str, Any] | None:
+    """Extract static default values from a dataclass type.
+
+    Fields using ``default_factory`` are intentionally excluded — factory
+    return values are not statically known and calling them would risk
+    side effects.
+    """
+    result: dict[str, Any] = {}
+    for f in dataclasses.fields(dc):
+        if f.default is not dataclasses.MISSING:
+            result[f.name] = f.default
+    return result or None
+
+
 def _join_path(base: str, key: str | int) -> str:
     """Join a path segment."""
     if isinstance(key, int):
@@ -465,7 +538,7 @@ def _type_name(tp: Any) -> str:
     if origin is typing.Annotated:
         base = typing.get_args(tp)[0]
         return _type_name(base)
-    if origin is Union:
+    if origin in _UNION_ORIGINS:
         args = typing.get_args(tp)
         return " | ".join(_type_name(a) for a in args)
     if origin is typing.Literal:
@@ -1046,7 +1119,7 @@ def _validate(
         return _validate_annotated(value, tp, path, errors, coerce)
     if origin is typing.Literal:
         return _validate_literal(value, path, errors, args)
-    if origin is Union:
+    if origin in _UNION_ORIGINS:
         return _validate_union(value, tp, path, errors, coerce, args)
     if origin is list:
         return _validate_list(value, tp, path, errors, coerce, args)
@@ -1104,7 +1177,12 @@ def _schema_union(args: tuple[Any, ...]) -> dict[str, Any]:
     if len(non_none) == 1 and none_args:
         schema = _type_to_schema(non_none[0])
         if "type" in schema:
-            schema["type"] = [schema["type"], "null"]
+            current = schema["type"]
+            if isinstance(current, list):
+                if "null" not in current:
+                    schema["type"] = [*current, "null"]
+            else:
+                schema["type"] = [current, "null"]
         else:
             schema = {"oneOf": [schema, {"type": "null"}]}
         return schema
@@ -1112,7 +1190,10 @@ def _schema_union(args: tuple[Any, ...]) -> dict[str, Any]:
     return {"oneOf": [_type_to_schema(a) for a in args]}
 
 
-def _schema_struct(fields: dict[str, tuple[Any, bool]]) -> dict[str, Any]:
+def _schema_struct(
+    fields: dict[str, tuple[Any, bool]],
+    defaults: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Generate JSON Schema for a struct-like type (TypedDict or dataclass)."""
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -1120,6 +1201,11 @@ def _schema_struct(fields: dict[str, tuple[Any, bool]]) -> dict[str, Any]:
         properties[name] = _type_to_schema(field_tp)
         if is_required:
             required.append(name)
+        if defaults and name in defaults:
+            default_val = defaults[name]
+            # Shallow check — list/dict contents are not inspected.
+            if isinstance(default_val, (str, int, float, bool, type(None), list, dict)):
+                properties[name]["default"] = default_val
     schema: dict[str, Any] = {
         "type": "object",
         "properties": properties,
@@ -1184,7 +1270,7 @@ def _type_to_schema(tp: Any) -> dict[str, Any]:
         return _schema_annotated(tp)
     if origin is typing.Literal:
         return {"enum": list(args)}
-    if origin is Union:
+    if origin in _UNION_ORIGINS:
         return _schema_union(args)
     if origin is list:
         return _schema_list(args)
@@ -1195,9 +1281,11 @@ def _type_to_schema(tp: Any) -> dict[str, Any]:
     if origin in (set, frozenset):
         return _schema_set(args)
     if _is_typeddict(tp):
-        return _schema_struct(_typeddict_fields(tp))
+        return _schema_struct(
+            _typeddict_fields(tp), getattr(tp, "__field_defaults__", None)
+        )
     if _is_dataclass_type(tp):
-        return _schema_struct(_dataclass_fields(tp))
+        return _schema_struct(_dataclass_fields(tp), _dataclass_defaults(tp))
     if isinstance(tp, type) and tp in _PY_TO_JSON_TYPE:
         return {"type": _PY_TO_JSON_TYPE[tp]}
     return {}
@@ -1243,3 +1331,52 @@ def json_schema(tp: Any, *, title: str | None = None) -> dict[str, Any]:
     elif isinstance(tp, type) and hasattr(tp, "__name__"):
         schema["title"] = tp.__name__
     return schema
+
+
+def create_struct(name: str, fields: dict[str, tuple[Any, ...]]) -> type:
+    """Dynamically create a TypedDict type from a field specification.
+
+    Each field is specified as ``(type, default)`` where ``...`` (Ellipsis)
+    marks the field as required.  Fields with any other default value are
+    optional (``NotRequired``).
+
+    The returned type works with :func:`validate` and :func:`json_schema`
+    just like a hand-written ``TypedDict``.  Default values are stored in
+    a ``__field_defaults__`` class attribute and emitted by
+    :func:`json_schema`.
+
+    Args:
+        name: The name of the new type.
+        fields: Mapping of field names to ``(type, default)`` tuples.
+
+    Returns:
+        A new TypedDict class.
+
+    Example::
+
+        Params = create_struct("Params", {
+            "query": (str, ...),            # required
+            "limit": (int, 10),             # optional, default 10
+            "tag": (str | None, None),      # optional, default None
+        })
+    """
+    import sys
+
+    if sys.version_info >= (3, 11):
+        from typing import NotRequired, TypedDict
+    else:
+        from typing_extensions import NotRequired, TypedDict
+
+    annotations: dict[str, Any] = {}
+    defaults: dict[str, Any] = {}
+    for field_name, spec in fields.items():
+        field_type, default = spec
+        if default is ...:
+            annotations[field_name] = field_type
+        else:
+            annotations[field_name] = NotRequired[field_type]
+            defaults[field_name] = default
+
+    td = TypedDict(name, annotations)  # type: ignore[operator]  # ty: ignore[invalid-argument-type, mismatched-type-name]
+    td.__field_defaults__ = defaults  # type: ignore[attr-defined]  # ty: ignore[unresolved-attribute]
+    return td

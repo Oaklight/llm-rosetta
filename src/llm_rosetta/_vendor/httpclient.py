@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.4.6"
+# version = "0.4.7"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -728,12 +728,15 @@ class StreamingResponse:
         """Yield response body line by line (decoded)."""
         if self._sync_resp is None:
             raise RuntimeError("iter_lines() on async response")
+        buf = b""
         try:
-            while True:
-                line = self._sync_resp.readline()
-                if not line:
-                    break
-                yield line.decode(self._encoding, errors="replace").rstrip("\r\n")
+            for chunk in self.iter_bytes():
+                buf += chunk
+                while b"\n" in buf:
+                    line, buf = buf.split(b"\n", 1)
+                    yield line.rstrip(b"\r").decode(self._encoding, errors="replace")
+            if buf:
+                yield buf.rstrip(b"\r").decode(self._encoding, errors="replace")
         except (OSError, http.client.HTTPException) as exc:
             raise HttpConnectionError(str(exc)) from exc
 
@@ -835,14 +838,14 @@ class StreamingResponse:
 
     async def aiter_lines(self) -> AsyncIterator[str]:
         """Async yield response body line by line (decoded)."""
-        buf = ""
+        buf = b""
         async for chunk in self.aiter_bytes():
-            buf += chunk.decode(self._encoding, errors="replace")
-            while "\n" in buf:
-                line, buf = buf.split("\n", 1)
-                yield line.rstrip("\r")
+            buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                yield line.rstrip(b"\r").decode(self._encoding, errors="replace")
         if buf:
-            yield buf.rstrip("\r")
+            yield buf.rstrip(b"\r").decode(self._encoding, errors="replace")
 
     async def aread(self) -> bytes:
         """Async consume entire stream into bytes."""
