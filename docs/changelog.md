@@ -11,6 +11,17 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### Added
 
 - **Google Interactions API converter** (Issue [#581](https://github.com/Oaklight/llm-rosetta/issues/581)): new `converters/google_interactions/` module with full bidirectional conversion for Google's Interactions API (`/v1beta/interactions`). Supports typed steps (user_input, model_output, thought, function_call, function_result), `thinking_level` ↔ IR effort mapping, Interactions SSE streaming lifecycle (`interaction.created/completed`, `step.start/delta/stop`), and MCP server tool definitions. Consecutive assistant-role steps are merged into single `AssistantMessage`. No IR type changes required.
+- **Rename `google_genai` → `google_generate`** (PR [#641](https://github.com/Oaklight/llm-rosetta/pull/641)): the generateContent converter module, classes, and shim base are renamed to avoid confusion with the `google-genai` SDK which covers both APIs. `GoogleGenAIConverter` and `from llm_rosetta.converters.google_genai` remain as deprecated aliases.
+- **Google Interactions gateway route** (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647)): `POST /v1beta/interactions` endpoint registered in the gateway. `GoogleInteractionsConverter` exported from top-level package.
+- **"Adding a new converter" checklist** in CLAUDE.md (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647)): 11-item gate checklist covering module, tests, exports, auto-detect, shim, gateway route, docs, CI smoke test, and test registry updates.
+- **Cross-format round-trip tests** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): 20 tests verifying Interactions ↔ OpenAI Chat / Anthropic / google_generate request and response fidelity.
+
+### Fixed
+
+- **Google Interactions provider URL registry** (PR [#648](https://github.com/Oaklight/llm-rosetta/pull/648)): `google_generate` and `google_interactions` URL templates were missing from the gateway provider registry, causing 404s on upstream requests.
+- **Google Interactions tool call status** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): Google generateContent returns `STOP` for tool calls — the converter now detects `function_call` steps and overrides status to `requires_action`.
+- **Google Interactions streaming** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): added `google_generate` and `google_interactions` to `SSE_FORMATTERS` registry; added IR→provider stream handlers; synthesize `step.start`/`step.stop` events when upstream omits `ContentBlockStartEvent`; defer `interaction.completed` to `stream_end` so usage data is included.
+- **Google Interactions thinking passthrough** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): set `include_thoughts=True` in IR when `thinking_level` is enabled, so the upstream Google API returns thought content.
 
 ## v0.12.0 — 2026-09-03
 
