@@ -28,16 +28,20 @@ function renderKeys() {
   const tbody = document.getElementById('keysTable');
   const keys = (S.keysData && S.keysData.keys) || [];
   if (keys.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('keys.noKeys')}</td></tr>`;
     return;
   }
   tbody.innerHTML = keys.map(k => {
     const created = k.created ? new Date(k.created).toLocaleDateString() : '—';
+    const createdFull = k.created ? new Date(k.created).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'shortOffset'}) : '';
+    const lastUsed = k.last_used ? new Date(k.last_used).toLocaleDateString() : '—';
+    const lastUsedFull = k.last_used ? new Date(k.last_used).toLocaleString(undefined, {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',timeZoneName:'shortOffset'}) : '';
     return `<tr>
       <td><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
         <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel('${k.id}','${esc(k.label || '')}')" title="Edit"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></td>
-      <td>${created}</td>
-      <td style="white-space:nowrap"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
+      <td title="${createdFull}">${created}</td>
+      <td title="${lastUsedFull}">${lastUsed}</td>
+      <td style="white-space:nowrap;text-align:right"><button class="btn btn-sm" onclick="rotateKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.rotate')}</button> <button class="btn btn-sm btn-danger" onclick="deleteKey('${k.id}','${esc(k.label || k.id)}', this)">${t('btn.delete')}</button></td>
     </tr>`;
   }).join('');
 }
@@ -110,9 +114,19 @@ function rotateKey(id, label, btn) {
   });
 }
 
+async function backfillKeysLastUsed() {
+  try {
+    const res = await api.post('/admin/api/keys/backfill-last-used');
+    if (res && res.error) { showToast(res.error, 'error'); return; }
+    showToast(t('toast.keysBackfilled').replace('{n}', res.updated || 0));
+    if (res.updated > 0) loadKeys();
+  } catch(e) { showToast('Backfill failed', 'error'); }
+}
+
 Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
+  backfillKeysLastUsed,
 });
 
 export { loadKeys, loadLogKeyLabels, renderKeys };

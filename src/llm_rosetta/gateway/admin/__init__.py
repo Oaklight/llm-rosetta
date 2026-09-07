@@ -198,6 +198,29 @@ def setup_admin(
 
     capture_state = CaptureState()
 
+    # Backfill last_used for API keys from request log history
+    keystore = getattr(app, "keystore", None)
+    if keystore is not None and persistence is not None:
+        backfilled_keys = keystore.backfill_last_used(persistence.db_path)
+        if backfilled_keys:
+            logger.info(
+                "Backfilled last_used for %d API key(s) from request log",
+                backfilled_keys,
+            )
+
+    # Backfill request_log_id for error dumps missing the link
+    if persistence is not None:
+        gateway_config = getattr(app, "gateway_config", None)
+        aliases = gateway_config.model_upstream_names if gateway_config else {}
+        backfilled_dumps = persistence.backfill_error_dump_log_ids(
+            model_aliases=aliases
+        )
+        if backfilled_dumps:
+            logger.info(
+                "Backfilled request_log_id for %d error dump(s)",
+                backfilled_dumps,
+            )
+
     app.metrics = metrics
     app.request_log = request_log
     app.persistence = persistence

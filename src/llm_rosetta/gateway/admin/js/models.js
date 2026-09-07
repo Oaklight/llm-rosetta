@@ -299,9 +299,16 @@ function renderModels() {
     const rowDimmed = provDisabled || !modelEnabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const modelType = _getModelType(info);
+    const _capIcons = {
+      text: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7V4h16v3"/><path d="M12 4v16"/><path d="M8 20h8"/></svg>',
+      vision: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+      tools: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>',
+      reasoning: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>',
+    };
     const capBadges = modelType === 'llm' ? caps.map(c => {
-      const cls = c === 'vision' ? 'badge-cap-vision' : c === 'tools' ? 'badge-cap-tools' : c === 'embedding' ? 'badge-cap-embed' : c === 'reasoning' ? 'badge-cap-reasoning' : 'badge-cap';
-      return `<span class="badge ${cls}">${esc(c)}</span>`;
+      const cls = 'cap-badge-' + c;
+      const icon = _capIcons[c] || '';
+      return `<span class="cap-badge ${cls}">${icon}${esc(c)}</span>`;
     }).join('') : '';
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
@@ -320,7 +327,7 @@ function renderModels() {
         ${upstreamTag || urlTplTag ? `<div style="margin-top:2px">${upstreamTag}${urlTplTag}</div>` : ''}
       </td>
       <td style="text-align:center">${typeBadge}</td>
-      <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
+      <td>${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>

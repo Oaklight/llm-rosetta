@@ -12,6 +12,7 @@ import json
 import logging
 import secrets
 import sqlite3
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -66,8 +67,18 @@ class KeyStore:
             )"""
         )
         self._conn.commit()
+        self._migrate_last_used()
         self._cache: dict[str, tuple[str, KeyContext]] = {}
+        self._last_touch: dict[str, float] = {}
         self._refresh_cache()
+
+    def _migrate_last_used(self) -> None:
+        cols = {
+            r[1] for r in self._conn.execute("PRAGMA table_info(api_keys)").fetchall()
+        }
+        if "last_used" not in cols:
+            self._conn.execute("ALTER TABLE api_keys ADD COLUMN last_used TEXT")
+            self._conn.commit()
 
     def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""
@@ -83,10 +94,52 @@ class KeyStore:
             cache[key_hash] = (row_id, KeyContext(label=label, allowed_shims=shims))
         self._cache = cache
 
-    def validate(self, raw_key: str) -> KeyContext | None:
-        """Validate a raw API key and return its context, or None."""
-        entry = self._cache.get(_hash_key(raw_key))
-        return entry[1] if entry else None
+    def validate(self, raw_key: str) -> tuple[str, KeyContext] | None:
+        """Validate a raw API key and return ``(key_id, context)``, or None."""
+        return self._cache.get(_hash_key(raw_key))
+
+    def touch(self, key_id: str, interval: float = 300.0) -> None:
+        """Record a last-used timestamp, throttled to one write per *interval* seconds."""
+        now = time.monotonic()
+        if now - self._last_touch.get(key_id, 0) < interval:
+            return
+        self._last_touch[key_id] = now
+        from datetime import datetime, timezone
+
+        ts = datetime.now(timezone.utc).isoformat()
+        self._conn.execute(
+            "UPDATE api_keys SET last_used = ? WHERE id = ?", (ts, key_id)
+        )
+        self._conn.commit()
+
+    def backfill_last_used(self, request_log_db_path: str | Path) -> int:
+        """Backfill last_used from request log for keys that have no value yet."""
+        import sqlite3 as _sqlite3
+
+        try:
+            log_conn = _sqlite3.connect(str(request_log_db_path))
+        except Exception:
+            return 0
+        updated = 0
+        for row_id, label, last_used in self._conn.execute(
+            "SELECT id, label, last_used FROM api_keys"
+        ).fetchall():
+            if last_used or not label:
+                continue
+            r = log_conn.execute(
+                "SELECT MAX(timestamp) FROM request_log WHERE api_key_label = ?",
+                (label,),
+            ).fetchone()
+            if r and r[0]:
+                self._conn.execute(
+                    "UPDATE api_keys SET last_used = ? WHERE id = ?",
+                    (r[0], row_id),
+                )
+                updated += 1
+        if updated:
+            self._conn.commit()
+        log_conn.close()
+        return updated
 
     def has_keys(self) -> bool:
         return bool(self._cache)
@@ -121,10 +174,10 @@ class KeyStore:
     def list_keys(self) -> list[dict[str, Any]]:
         """List all keys without secrets."""
         rows = self._conn.execute(
-            "SELECT id, label, allowed_shims, created, rotated FROM api_keys"
+            "SELECT id, label, allowed_shims, created, rotated, last_used FROM api_keys"
         ).fetchall()
         result = []
-        for row_id, label, shims_json, created, rotated in rows:
+        for row_id, label, shims_json, created, rotated, last_used in rows:
             try:
                 shims = json.loads(shims_json)
             except (json.JSONDecodeError, TypeError):
@@ -137,6 +190,8 @@ class KeyStore:
             }
             if rotated:
                 entry["rotated"] = rotated
+            if last_used:
+                entry["last_used"] = last_used
             result.append(entry)
         return result
 
@@ -195,6 +250,39 @@ class KeyStore:
         self._conn.commit()
         self._refresh_cache()
         return new_key
+
+    def import_from_config(self, config_keys: list[dict[str, str]]) -> int:
+        """Import plaintext keys from config into SQLite (idempotent).
+
+        Returns the number of keys newly imported.
+        """
+        imported = 0
+        for entry in config_keys:
+            raw_key = entry.get("key", "")
+            if not raw_key:
+                continue
+            key_hash = _hash_key(raw_key)
+            try:
+                self._conn.execute(
+                    "INSERT OR IGNORE INTO api_keys "
+                    "(id, key_hash, label, allowed_shims, created) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        entry.get("id", _generate_id()),
+                        key_hash,
+                        entry.get("label", ""),
+                        '["*"]',
+                        entry.get("created", ""),
+                    ),
+                )
+                if self._conn.execute("SELECT changes()").fetchone()[0]:
+                    imported += 1
+            except sqlite3.IntegrityError:
+                pass
+        if imported:
+            self._conn.commit()
+            self._refresh_cache()
+        return imported
 
     def close(self) -> None:
         self._conn.close()

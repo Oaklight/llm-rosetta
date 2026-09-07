@@ -51,6 +51,7 @@ from .config import (
     toggle_provider,
 )
 from .keys import (
+    backfill_keys_last_used,
     create_api_key,
     delete_api_key,
     get_api_keys,
@@ -72,6 +73,8 @@ from .observability import (
     get_metrics,
     get_provider_key,
     get_request_key_labels,
+    backfill_dump_log_ids,
+    get_request_by_id,
     get_requests,
     network_diagnostics,
     rebuild_metrics,
@@ -175,7 +178,13 @@ def register_admin_routes(app: Any) -> None:
     )
     # Request log (logs tab)
     app.route("/admin/api/requests", methods=["GET"])(_guard("logs", get_requests))
+    app.route("/admin/api/error-dumps/backfill-log-ids", methods=["POST"])(
+        _guard("logs", backfill_dump_log_ids)
+    )
     app.route("/admin/api/requests/key-labels", methods=["GET"])(get_request_key_labels)
+    app.route("/admin/api/requests/<entry_id>", methods=["GET"])(
+        _guard("logs", get_request_by_id)
+    )
     app.route("/admin/api/requests", methods=["DELETE"])(_guard("logs", clear_requests))
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
@@ -198,6 +207,9 @@ def register_admin_routes(app: Any) -> None:
     # API key management (keys tab)
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))
     app.route("/admin/api/keys", methods=["POST"])(_guard("keys", create_api_key))
+    app.route("/admin/api/keys/backfill-last-used", methods=["POST"])(
+        _guard("keys", backfill_keys_last_used)
+    )
     app.route("/admin/api/keys/<key_id>", methods=["PUT"])(
         _guard("keys", update_api_key)
     )

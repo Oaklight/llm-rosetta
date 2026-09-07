@@ -54,7 +54,7 @@ export const I18N = {
     'profiling.remaining':'{n} remaining',
     'profiling.downloadAll':'Download All', 'profiling.hint':'Results are in-memory only and will be lost on restart. Download important results.',
     'section.capture':'Content Capture',
-    'section.errorDumps':'Error Dumps', 'dump.empty':'No error dumps recorded.', 'confirm.clearDumps':'Clear All Error Dumps', 'confirm.clearDumpsHint':'This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.', 'filter.allPhases':'All Phases', 'filter.allStatus':'All Status', 'filter.allTime':'All Time', 'btn.downloadAll':'Download All', 'btn.downloadSelected':'Download Selected', 'btn.deleteSelected':'Delete Selected', 'btn.clearAll':'Clear All', 'btn.resetFilters':'✕ Reset',
+    'section.errorDumps':'Error Dumps', 'dump.empty':'No error dumps recorded.', 'confirm.clearDumps':'Clear All Error Dumps', 'confirm.clearDumpsHint':'This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.', 'filter.allPhases':'All Phases', 'filter.allStatus':'All Status', 'filter.allTime':'All Time', 'btn.downloadAll':'Download All', 'btn.downloadSelected':'Download Selected', 'btn.deleteSelected':'Delete Selected', 'btn.matchLogs':'Match Logs', 'btn.clearAll':'Clear All', 'btn.resetFilters':'✕ Reset',
     'capture.enable':'Enable', 'capture.disable':'Disable', 'capture.clear':'Clear',
     'capture.requests':'Requests:', 'capture.detail':'Detail', 'capture.mode':'Mode',
     'capture.empty':'No captures. Enable capture and send requests.',
@@ -96,8 +96,8 @@ export const I18N = {
     'provider.countTotal':'{total} providers',
     'empty.searchResults':'No matching results.',
     'section.apiKeys':'API Keys',
-    'btn.generateKey':'+ Generate Key', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
-    'col.label':'Label', 'col.created':'Created',
+    'btn.generateKey':'+ Generate Key', 'btn.refreshLastUsed':'Refresh Last Used', 'hint.refreshLastUsed':'Refresh last-used timestamps from request log', 'btn.generate':'Generate', 'btn.copy':'Copy', 'btn.clone':'Clone',
+    'col.label':'Label', 'col.created':'Created', 'col.lastUsed':'Last Used',
     'col.apiKey':'API Key', 'col.clientIp':'Client IP',
     'modal.generateKey':'Generate API Key',
     'modal.keyCreated':'Key Created',
@@ -106,7 +106,7 @@ export const I18N = {
     'keys.description':'Manage gateway API keys used to authenticate requests to /v1/* endpoints.',
     'keys.copyWarning':'Copy this key now. It will not be shown again in full.',
     'keys.noKeys':'No API keys configured. Endpoints are open without authentication.',
-    'toast.keySaved':'API key created', 'toast.keyRotated':'API key \'{label}\' rotated',
+    'toast.keySaved':'API key created', 'toast.keysBackfilled':'Refreshed last-used for {n} key(s)', 'toast.keyRotated':'API key \'{label}\' rotated',
     'toast.keyDeleted':'API key deleted',
     'toast.keyLabelUpdated':'Label updated',
     'toast.keyCopied':'Key copied to clipboard',
@@ -142,7 +142,7 @@ export const I18N = {
     'login.btn':'Login',
     'login.error':'Invalid password',
     'btn.logout':'Logout',
-    'label.systemTime':'System Time',
+    'label.systemTime':'Server Time',
     'footer.db':'DB', 'footer.ok':'ok', 'footer.err':'err', 'footer.req':'Req',
     'footer.tip.req':'Total requests since server start (lifetime counter, never reset by log clearing)',
     'footer.tip.ok':'Logged success entries / retention cap (status < 400)',
@@ -195,7 +195,7 @@ export const I18N = {
     'profiling.remaining':'\u5269\u4f59 {n} \u4e2a',
     'profiling.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'profiling.hint':'\u7ed3\u679c\u4ec5\u5b58\u4e8e\u5185\u5b58\uff0c\u91cd\u542f\u540e\u4e22\u5931\u3002\u8bf7\u53ca\u65f6\u4e0b\u8f7d\u91cd\u8981\u7ed3\u679c\u3002',
     'section.capture':'\u5185\u5bb9\u6355\u83b7',
-    'section.errorDumps':'\u9519\u8bef\u8bb0\u5f55', 'dump.empty':'\u6682\u65e0\u9519\u8bef\u8bb0\u5f55\u3002', 'confirm.clearDumps':'\u6e05\u7a7a\u6240\u6709\u9519\u8bef\u8bb0\u5f55', 'confirm.clearDumpsHint':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u6240\u6709\u9519\u8bef\u8bb0\u5f55\u3002\u8f93\u5165 <strong style="color:var(--red)">CLEAR</strong> \u786e\u8ba4\u3002', 'filter.allPhases':'\u6240\u6709\u9636\u6bb5', 'filter.allStatus':'\u6240\u6709\u72b6\u6001', 'filter.allTime':'\u6240\u6709\u65f6\u95f4', 'btn.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'btn.downloadSelected':'\u4e0b\u8f7d\u6240\u9009', 'btn.deleteSelected':'\u5220\u9664\u6240\u9009', 'btn.clearAll':'\u6e05\u7a7a\u6240\u6709', 'btn.resetFilters':'✕ \u91cd\u7f6e',
+    'section.errorDumps':'\u9519\u8bef\u8bb0\u5f55', 'dump.empty':'\u6682\u65e0\u9519\u8bef\u8bb0\u5f55\u3002', 'confirm.clearDumps':'\u6e05\u7a7a\u6240\u6709\u9519\u8bef\u8bb0\u5f55', 'confirm.clearDumpsHint':'\u6b64\u64cd\u4f5c\u5c06\u6c38\u4e45\u5220\u9664\u6240\u6709\u9519\u8bef\u8bb0\u5f55\u3002\u8f93\u5165 <strong style="color:var(--red)">CLEAR</strong> \u786e\u8ba4\u3002', 'filter.allPhases':'\u6240\u6709\u9636\u6bb5', 'filter.allStatus':'\u6240\u6709\u72b6\u6001', 'filter.allTime':'\u6240\u6709\u65f6\u95f4', 'btn.downloadAll':'\u5168\u90e8\u4e0b\u8f7d', 'btn.downloadSelected':'\u4e0b\u8f7d\u6240\u9009', 'btn.deleteSelected':'\u5220\u9664\u6240\u9009', 'btn.matchLogs':'\u5339\u914d\u65e5\u5fd7', 'btn.clearAll':'\u6e05\u7a7a\u6240\u6709', 'btn.resetFilters':'✕ \u91cd\u7f6e',
     'capture.enable':'\u542f\u7528', 'capture.disable':'\u505c\u6b62', 'capture.clear':'\u6e05\u7a7a',
     'capture.requests':'\u8bf7\u6c42\u6570\uff1a', 'capture.detail':'\u8be6\u60c5', 'capture.mode':'\u6a21\u5f0f',
     'capture.empty':'\u6682\u65e0\u6355\u83b7\u7ed3\u679c\u3002\u542f\u7528\u540e\u53d1\u9001\u8bf7\u6c42\u5373\u53ef\u91c7\u96c6\u3002',
@@ -236,8 +236,8 @@ export const I18N = {
     'provider.countTotal':'{total} \u4e2a\u670d\u52a1\u65b9',
     'empty.searchResults':'\u65e0\u5339\u914d\u7ed3\u679c\u3002',
     'section.apiKeys':'API \u5bc6\u94a5',
-    'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
-    'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4',
+    'btn.generateKey':'+ \u751f\u6210\u5bc6\u94a5', 'btn.refreshLastUsed':'\u5237\u65b0\u6700\u540e\u4f7f\u7528', 'hint.refreshLastUsed':'\u4ece\u8bf7\u6c42\u65e5\u5fd7\u5237\u65b0\u6700\u540e\u4f7f\u7528\u65f6\u95f4', 'btn.generate':'\u751f\u6210', 'btn.copy':'\u590d\u5236', 'btn.clone':'\u514b\u9686',
+    'col.label':'\u6807\u7b7e', 'col.key':'\u5bc6\u94a5', 'col.created':'\u521b\u5efa\u65f6\u95f4', 'col.lastUsed':'\u6700\u540e\u4f7f\u7528',
     'col.apiKey':'API \u5bc6\u94a5', 'col.clientIp':'\u5ba2\u6237\u7aef IP',
     'modal.generateKey':'\u751f\u6210 API \u5bc6\u94a5',
     'modal.keyCreated':'\u5bc6\u94a5\u5df2\u521b\u5efa',
@@ -246,7 +246,7 @@ export const I18N = {
     'keys.description':'\u7ba1\u7406\u7f51\u5173 API \u5bc6\u94a5\uff0c\u7528\u4e8e\u8ba4\u8bc1 /v1/* \u7aef\u70b9\u7684\u8bf7\u6c42\u3002',
     'keys.copyWarning':'\u8bf7\u7acb\u5373\u590d\u5236\u6b64\u5bc6\u94a5\u3002\u5b8c\u6574\u5bc6\u94a5\u4ec5\u663e\u793a\u4e00\u6b21\u3002',
     'keys.noKeys':'\u672a\u914d\u7f6e API \u5bc6\u94a5\u3002\u7aef\u70b9\u5f00\u653e\u65e0\u9700\u8ba4\u8bc1\u3002',
-    'toast.keySaved':'API \u5bc6\u94a5\u5df2\u521b\u5efa', 'toast.keyRotated':'API \u5bc6\u94a5 \'{label}\' \u5df2\u8f6e\u6362',
+    'toast.keySaved':'API \u5bc6\u94a5\u5df2\u521b\u5efa', 'toast.keysBackfilled':'\u5df2\u5237\u65b0 {n} \u4e2a\u5bc6\u94a5\u7684\u6700\u540e\u4f7f\u7528\u65f6\u95f4', 'toast.keyRotated':'API \u5bc6\u94a5 \'{label}\' \u5df2\u8f6e\u6362',
     'toast.keyDeleted':'API \u5bc6\u94a5\u5df2\u5220\u9664',
     'toast.keyLabelUpdated':'\u6807\u7b7e\u5df2\u66f4\u65b0',
     'toast.keyCopied':'\u5bc6\u94a5\u5df2\u590d\u5236\u5230\u526a\u8d34\u677f',
@@ -281,7 +281,7 @@ export const I18N = {
     'login.subtitle':'Admin \u9762\u677f\u5df2\u542f\u7528\u5bc6\u7801\u4fdd\u62a4',
     'login.btn':'\u767b\u5f55',
     'login.error':'\u5bc6\u7801\u9519\u8bef',
-    'label.systemTime':'\u7cfb\u7edf\u65f6\u95f4',
+    'label.systemTime':'\u670d\u52a1\u5668\u65f6\u95f4',
     'footer.db':'DB', 'footer.ok':'\u6b63\u5e38', 'footer.err':'\u9519\u8bef', 'footer.req':'\u8bf7\u6c42',
     'footer.tip.req':'\u670d\u52a1\u542f\u52a8\u4ee5\u6765\u7684\u603b\u8bf7\u6c42\u6570\uff08\u7d2f\u8ba1\u8ba1\u6570\u5668\uff0c\u6e05\u9664\u65e5\u5fd7\u4e0d\u4f1a\u91cd\u7f6e\uff09',
     'footer.tip.ok':'\u5df2\u8bb0\u5f55\u7684\u6210\u529f\u6761\u76ee / \u4fdd\u7559\u4e0a\u9650\uff08\u72b6\u6001\u7801 < 400\uff09',
@@ -323,6 +323,9 @@ export function applyI18n() {
   });
   document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
     el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    el.title = t(el.dataset.i18nTitle);
   });
   // Re-render dynamic content via window.* to break circular deps
   if (S.configData) { window.renderProviders?.(); window.renderModels?.(); }

@@ -47,7 +47,7 @@
   </div>
   <div class="header-right">
     <span style="font-size:12px;color:var(--text-dim);margin-right:8px"><span style="margin-right:4px" data-i18n="label.systemTime">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></span>
-    <button class="btn btn-sm" onclick="openSettings()" data-i18n-title="modal.settings" title="Settings"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <button class="btn btn-sm" onclick="openSettings()" data-i18n-title="modal.settings" title="Settings" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
   </div>
 </div>
@@ -144,9 +144,9 @@
       <div class="table-scroll"><table>
         <thead><tr>
           <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllModels(this)"></th>
-          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:28%">Model</th>
-          <th style="width:9%;text-align:center" data-i18n="col.type">Type</th>
-          <th style="width:20%;text-align:center" data-i18n="col.capabilities">Capabilities</th>
+          <th class="sortable" onclick="sortModels('name')" id="sortName" data-i18n="col.model" style="width:19%">Model</th>
+          <th style="width:15%;text-align:center" data-i18n="col.type">Type</th>
+          <th style="width:23%" data-i18n="col.capabilities">Capabilities</th>
           <th class="sortable" onclick="sortModels('provider')" id="sortProvider" data-i18n="col.provider" style="width:13%">Provider</th>
           <th style="width:22%;text-align:right" data-i18n="col.actions"></th>
         </tr></thead>
@@ -160,14 +160,15 @@
     <div class="section">
       <div class="section-header">
         <h2 data-i18n="section.apiKeys">API Keys</h2>
-        <button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
+<button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
       </div>
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" style="background:none;border:none;cursor:pointer;color:var(--text-dim);padding:2px;vertical-align:middle;transition:color 0.15s" onmouseenter="this.style.color='var(--accent)'" onmouseleave="this.style.color='var(--text-dim)'"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
       <div class="table-scroll"><table>
         <thead><tr>
-          <th data-i18n="col.label">Label</th>
-          <th data-i18n="col.created">Created</th>
-          <th></th>
+          <th style="width:30%" data-i18n="col.label">Label</th>
+          <th style="width:15%" data-i18n="col.created">Created</th>
+          <th style="width:15%" data-i18n="col.lastUsed">Last Used</th>
+          <th style="text-align:right"></th>
         </tr></thead>
         <tbody id="keysTable"></tbody>
       </table></div>
@@ -270,6 +271,7 @@
         <div style="display:flex;align-items:center;gap:8px">
           <span style="font-size:12px;color:var(--text-dim)" id="dumpCount"></span>
           <button class="btn btn-sm" onclick="downloadAllDumps()" id="dumpDownloadAllBtn" style="display:none" data-i18n="btn.downloadAll">Download All</button>
+          <button class="btn btn-sm" onclick="backfillDumpLogIds()" title="Link unmatched error dumps to their request log entries by timestamp and provider" data-i18n="btn.matchLogs">Match Logs</button>
           <div style="display:inline-block;position:relative">
             <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)" style="padding:3px 8px">⋯</button>
             <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">

@@ -311,7 +311,7 @@ async def _proxy_handler(
                 preflight_token_count=preflight,
             )
         else:
-            pre_entry_id = None
+            pre_entry_id = uuid.uuid4().hex
             response, profile = await handle_non_streaming(
                 route,
                 provider_info,
@@ -320,6 +320,7 @@ async def _proxy_handler(
                 metadata_store=store,
                 extra_headers=extra_headers,
                 persistence=persistence,
+                entry_id=pre_entry_id,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):
@@ -360,7 +361,6 @@ async def _proxy_handler(
         error_detail = str(exc)
         logger.exception("[%s] unhandled error in proxy handler", request_id)
         status_code = 500
-        pre_entry_id = None
         dump_error(
             persistence,
             request_body=body,
@@ -371,6 +371,7 @@ async def _proxy_handler(
             provider_name=route.provider_name,
             status_code=500,
             error_phase="conversion",
+            request_log_id=pre_entry_id,
         )
         resp = error_response_for_source(
             source_provider, 500, f"Internal server error: {exc}"

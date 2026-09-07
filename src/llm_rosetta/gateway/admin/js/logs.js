@@ -46,17 +46,20 @@ function renderLogs(entries, total) {
       const hasError = !!e.error_detail;
       const rowId = e.timestamp + '_' + e.model;
       const isExpanded = S.expandedLogRows.has(rowId);
-      const rowStyle = hasError ? ` style="cursor:pointer" onclick="toggleLogRow('${rowId}',this)"` : '';
       const expandHint = hasError ? ' title="Click to expand error"' : '';
       const clientIp = e.client_ip || '—';
-      let rows = `<tr${rowStyle}${expandHint}>
+      const hlBg = S._highlightLogId === e.id ? 'background:color-mix(in srgb, var(--accent) 20%, transparent);' : '';
+      const rowCursor = hasError ? 'cursor:pointer;' : '';
+      const styleAttr = (hlBg || rowCursor) ? ` style="${hlBg}${rowCursor}"` : '';
+      const rowClick = hasError ? ` onclick="toggleLogRow('${rowId}',this)"` : '';
+      let rows = `<tr data-log-id="${esc(e.id)}"${styleAttr}${rowClick}${expandHint}>
         <td>${time}</td>
         <td><code>${esc(e.model)}</code></td>
         <td>${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}</td>
         <td>${modeBadge}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
-        <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span></td>
+        <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="View error dump" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {
@@ -64,6 +67,18 @@ function renderLogs(entries, total) {
       }
       return rows;
     }).join('');
+  }
+
+  // Auto-highlight and scroll
+  if (S._highlightLogId) {
+    const hlRow = document.querySelector('#logTable tr[data-log-id="' + S._highlightLogId + '"]');
+    if (hlRow) hlRow.scrollIntoView({behavior:'smooth', block:'center'});
+    if (!S._highlightLogIdTimer) {
+      S._highlightLogIdTimer = setTimeout(function() {
+        S._highlightLogId = null;
+        S._highlightLogIdTimer = null;
+      }, 10000);
+    }
   }
 
   // Pagination
@@ -134,8 +149,44 @@ function updateKeyFilterOptions() {
 
 // ===================== Window globals =====================
 
+function jumpToErrorDump(requestLogId) {
+  goToTab('dashboard', function() {
+    function tryFind(attempts) {
+      const entries = S._dumpAllEntries || [];
+      const match = entries.find(e => e.request_log_id === requestLogId);
+      if (match) {
+        const dumpId = match.dump_id || match.id;
+        S._highlightDumpId = dumpId;
+        if (!S._highlightDumpIdTimer) {
+          S._highlightDumpIdTimer = setTimeout(function() {
+            S._highlightDumpId = null;
+            S._highlightDumpIdTimer = null;
+          }, 10000);
+        }
+        const idx = entries.indexOf(match);
+        S._dumpPage = Math.floor(idx / 20);
+        renderDumps();
+        setTimeout(function() {
+          const section = document.getElementById('errorDumpSection');
+          if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
+          setTimeout(function() {
+            const btn = document.querySelector('#dumpTable tr [onclick*="' + dumpId + '"]');
+            if (btn) btn.closest('tr').scrollIntoView({behavior:'smooth', block:'center'});
+          }, 300);
+        }, 200);
+      } else if (attempts < 5) {
+        setTimeout(function() { tryFind(attempts + 1); }, 500);
+      } else {
+        const section = document.getElementById('errorDumpSection');
+        if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
+      }
+    }
+    setTimeout(function() { tryFind(0); }, 600);
+  });
+}
+
 Object.assign(window, {
-  loadLogs, renderLogs, toggleLogRow, changePage,
+  loadLogs, renderLogs, toggleLogRow, changePage, jumpToErrorDump,
   resetLogFilters, updateFilterOptions, updateKeyFilterOptions,
   deleteModel,
 });
