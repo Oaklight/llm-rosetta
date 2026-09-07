@@ -572,13 +572,13 @@ function renderStats(d) {
 }
 
 function renderProviderBreakdown(d) {
-  const tbody = document.getElementById('providerBreakdown');
+  const grid = document.getElementById('providerBreakdownGrid');
   const entries = Object.entries(d.by_target_provider || {}).sort((a,b) => b[1]-a[1]);
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="2" style="color:var(--text-dim)">${t('empty.data')}</td></tr>`;
+    grid.innerHTML = `<div style="color:var(--text-dim);padding:10px">${t('empty.data')}</div>`;
     return;
   }
-  tbody.innerHTML = entries.map(([p,c]) => `<tr><td>${esc(p)}</td><td>${c}</td></tr>`).join('');
+  grid.innerHTML = entries.map(([p,c], i) => `<div class="pb-item"><span class="pb-rank">${i+1}</span><span class="pb-name">${esc(p)}</span><span class="pb-count">${c}</span></div>`).join('');
 }
 
 async function rebuildMetrics() {
