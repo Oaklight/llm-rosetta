@@ -808,11 +808,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 "type": "custom_tool_call_output",
                 "call_id": call_id,
                 "output": output,
+                "status": "completed",
             }
         return {
             "type": "function_call_output",
             "call_id": call_id,
             "output": output,
+            "status": "completed",
         }
 
     @staticmethod
