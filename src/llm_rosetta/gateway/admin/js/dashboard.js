@@ -68,6 +68,7 @@ async function loadProfilingResults() {
       const mode = r.is_stream ? 'stream' : 'sync';
       const dur = typeof r.duration_ms === 'number' ? r.duration_ms.toFixed(0) + ' ms' : '-';
       return `<tr>
+        <td><input type="checkbox" class="row-check" data-index="${i}" onchange="updateProfilingBulk()"></td>
         <td>${esc(ts)}</td>
         <td>${esc(r.model || '-')}</td>
         <td>${esc(r.source || '-')} → ${esc(r.target || '-')}</td>
@@ -180,6 +181,7 @@ async function loadCaptureResults() {
       const mode = r.is_stream ? 'stream' : 'sync';
       const st = r.status_code != null ? r.status_code : '-';
       return `<tr>
+        <td><input type="checkbox" class="row-check" data-index="${i}" onchange="updateCaptureBulk()"></td>
         <td>${esc(ts)}</td>
         <td>${esc(r.model || '-')}</td>
         <td>${esc(r.source_provider || '-')} → ${esc(r.target_provider || '-')}</td>
@@ -355,7 +357,10 @@ async function renderDumps() {
         try { errPreview = JSON.parse(e.response_text).error?.message || JSON.parse(e.response_text).detail || e.response_text; } catch { errPreview = e.response_text; }
         if (errPreview.length > 60) errPreview = errPreview.slice(0, 60) + '…';
       }
+      const did = esc(e.dump_id||e.id||'');
+      const chk = S._selectedDumpIds && S._selectedDumpIds.has(did) ? ' checked' : '';
       return `<tr>
+        <td><input type="checkbox" class="row-check" data-id="${did}" onchange="updateDumpBulk()"${chk}></td>
         <td>${time}</td>
         <td><code>${esc(e.model||'-')}</code></td>
         <td>${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</td>
@@ -731,6 +736,91 @@ function drawLatencyChart(canvasId, series) {
   }
 }
 
+
+// ===================== Bulk Select =====================
+
+if (!S._selectedDumpIds) S._selectedDumpIds = new Set();
+
+function _updateBulk(tbodyId, barId, countId) {
+  const checked = document.querySelectorAll('#' + tbodyId + ' .row-check:checked');
+  document.getElementById(countId).textContent = checked.length;
+  document.getElementById(barId).style.display = checked.length > 0 ? 'flex' : 'none';
+}
+function _selectAll(headerCb, tbodyId, barId, countId) {
+  document.querySelectorAll('#' + tbodyId + ' .row-check').forEach(cb => cb.checked = headerCb.checked);
+  _updateBulk(tbodyId, barId, countId);
+}
+
+function selectAllProfiling(cb) { _selectAll(cb, 'profilingResults', 'profilingBulkBar', 'profilingBulkCount'); }
+function updateProfilingBulk() { _updateBulk('profilingResults', 'profilingBulkBar', 'profilingBulkCount'); }
+async function bulkDownloadProfiling() {
+  const indices = [...document.querySelectorAll('#profilingResults .row-check:checked')].map(cb => parseInt(cb.dataset.index));
+  if (!indices.length) return;
+  for (const i of indices) { await downloadFlamegraph(i, 'profile'); }
+  showToast(`Downloaded ${indices.length} flamegraph(s)`);
+}
+
+function selectAllCapture(cb) { _selectAll(cb, 'captureResults', 'captureBulkBar', 'captureBulkCount'); }
+function updateCaptureBulk() { _updateBulk('captureResults', 'captureBulkBar', 'captureBulkCount'); }
+async function bulkDownloadCapture() {
+  const indices = [...document.querySelectorAll('#captureResults .row-check:checked')].map(cb => parseInt(cb.dataset.index));
+  if (!indices.length) return;
+  const results = [];
+  for (const i of indices) {
+    try { results.push(await api.get('/admin/api/capture/results/' + i)); } catch {}
+  }
+  if (!results.length) return;
+  const blob = new Blob([JSON.stringify(results, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `captures-selected-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Downloaded ${results.length} capture(s)`);
+}
+
+function selectAllDumps(cb) {
+  document.querySelectorAll('#dumpTable .row-check').forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) S._selectedDumpIds.add(c.dataset.id);
+    else S._selectedDumpIds.delete(c.dataset.id);
+  });
+  _updateDumpBulkBar();
+}
+function updateDumpBulk() {
+  document.querySelectorAll('#dumpTable .row-check').forEach(c => {
+    if (c.checked) S._selectedDumpIds.add(c.dataset.id);
+    else S._selectedDumpIds.delete(c.dataset.id);
+  });
+  _updateDumpBulkBar();
+}
+function _updateDumpBulkBar() {
+  document.getElementById('dumpBulkCount').textContent = S._selectedDumpIds.size;
+  document.getElementById('dumpBulkBar').style.display = S._selectedDumpIds.size > 0 ? 'flex' : 'none';
+}
+function bulkDownloadDumps() {
+  if (!S._selectedDumpIds.size) return;
+  const selected = S._dumpAllEntries.filter(e => S._selectedDumpIds.has(e.dump_id || e.id));
+  const blob = new Blob([JSON.stringify(selected, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `error-dumps-selected-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.json`;
+  a.click(); URL.revokeObjectURL(a.href);
+  showToast(`Downloaded ${selected.length} dump(s)`);
+}
+async function bulkDeleteDumps() {
+  if (!S._selectedDumpIds.size) return;
+  if (!confirm(`Delete ${S._selectedDumpIds.size} error dump(s)?`)) return;
+  let ok = 0;
+  for (const id of S._selectedDumpIds) {
+    try { await api.del('/admin/api/error-dumps/' + encodeURIComponent(id)); ok++; } catch {}
+  }
+  S._selectedDumpIds.clear();
+  _updateDumpBulkBar();
+  showToast(`Deleted ${ok} dump(s)`);
+  S._dumpAllEntries = [];
+  renderDumps();
+}
+
 // ===================== Window globals =====================
 
 Object.assign(window, {
@@ -745,7 +835,13 @@ Object.assign(window, {
   onDumpModelFilterChange, closeDumpModelSearch,
   onDumpTimeRangeChange, closeDumpTimeCustom, resetDumpFilters,
   renderPersistence, renderStats, renderProviderBreakdown,
+  selectAllProfiling, updateProfilingBulk, bulkDownloadProfiling,
+  selectAllCapture, updateCaptureBulk, bulkDownloadCapture,
+  selectAllDumps, updateDumpBulk, bulkDownloadDumps, bulkDeleteDumps,
   rebuildMetrics, drawThroughputChart, drawLatencyChart,
 });
 
-export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown, rebuildMetrics };
+export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown,
+  selectAllProfiling, updateProfilingBulk, bulkDownloadProfiling,
+  selectAllCapture, updateCaptureBulk, bulkDownloadCapture,
+  selectAllDumps, updateDumpBulk, bulkDownloadDumps, bulkDeleteDumps, rebuildMetrics };

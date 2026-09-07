@@ -205,8 +205,15 @@
         <button class="btn btn-sm" onclick="downloadAllFlamegraphs()" id="profilingDownloadAll" style="display:none" data-i18n="profiling.downloadAll">Download All</button>
       </div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="profiling.hint">Results are in-memory only and will be lost on restart. Download important results.</p>
+      <div class="bulk-bar" id="profilingBulkBar">
+        <span class="bulk-count" id="profilingBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+        <div class="bulk-actions">
+          <button class="btn btn-sm" onclick="bulkDownloadProfiling()" data-i18n="btn.downloadSelected">Download Selected</button>
+        </div>
+      </div>
       <div class="table-scroll"><table>
         <thead><tr>
+          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllProfiling(this)"></th>
           <th data-i18n="col.time">Time</th>
           <th data-i18n="col.model">Model</th>
           <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
@@ -232,8 +239,15 @@
         <button class="btn btn-sm" onclick="downloadAllCaptures()" id="captureDownloadAll" style="display:none" data-i18n="capture.downloadAll">Download All</button>
       </div>
       <p style="font-size:12px;color:var(--text-dim);margin:0 0 8px" data-i18n="capture.hint">Captures full request/response bodies in memory. Results are ephemeral and lost on restart.</p>
+      <div class="bulk-bar" id="captureBulkBar">
+        <span class="bulk-count" id="captureBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+        <div class="bulk-actions">
+          <button class="btn btn-sm" onclick="bulkDownloadCapture()" data-i18n="btn.downloadSelected">Download Selected</button>
+        </div>
+      </div>
       <div class="table-scroll"><table>
         <thead><tr>
+          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllCapture(this)"></th>
           <th data-i18n="col.time">Time</th>
           <th data-i18n="col.model">Model</th>
           <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
@@ -314,8 +328,16 @@
         </span>
         <button class="btn-reset" id="dumpResetBtn" onclick="resetDumpFilters()" style="display:none" data-i18n="btn.resetFilters">✕ Reset</button>
       </div>
+      <div class="bulk-bar" id="dumpBulkBar">
+        <span class="bulk-count" id="dumpBulkCount">0</span> <span data-i18n="label.selected">selected</span>
+        <div class="bulk-actions">
+          <button class="btn btn-sm" onclick="bulkDownloadDumps()" data-i18n="btn.downloadSelected">Download Selected</button>
+          <button class="btn btn-sm btn-danger" onclick="bulkDeleteDumps()" data-i18n="btn.deleteSelected">Delete Selected</button>
+        </div>
+      </div>
       <div class="table-scroll"><table>
         <thead><tr>
+          <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllDumps(this)"></th>
           <th data-i18n="col.time">Time</th>
           <th data-i18n="col.model">Model</th>
           <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
