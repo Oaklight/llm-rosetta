@@ -359,7 +359,8 @@ async function renderDumps() {
       }
       const did = esc(e.dump_id||e.id||'');
       const chk = S._selectedDumpIds && S._selectedDumpIds.has(did) ? ' checked' : '';
-      return `<tr>
+      const dumpHlStyle = S._highlightDumpId === did ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"' : '';
+      return `<tr${dumpHlStyle}>
         <td><input type="checkbox" class="row-check" data-id="${did}" onchange="updateDumpBulk()"${chk}></td>
         <td>${time}</td>
         <td><code>${esc(e.model||'-')}</code></td>
@@ -369,7 +370,7 @@ async function renderDumps() {
         <td><span style="font-size:11px;color:var(--red);font-family:var(--mono);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
         <td style="white-space:nowrap">
           <button class="btn btn-sm" onclick="viewDump('${esc(e.dump_id||e.id)}')" title="View"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>
+          <button class="btn btn-sm" onclick="downloadDump('${esc(e.dump_id||e.id)}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button>${e.request_log_id ? ` <button class="btn btn-sm" onclick="jumpToRequestLog('${esc(e.request_log_id)}')" title="View in request log"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}
         </td>
       </tr>`;
     }).join('');
@@ -583,6 +584,7 @@ function renderProviderBreakdown(d) {
     grid.innerHTML = `<div style="color:var(--text-dim);padding:10px">${t('empty.data')}</div>`;
     return;
   }
+  grid.style.columnCount = 2;
   grid.innerHTML = entries.map(([p,c], i) => `<div class="pb-item"><span class="pb-rank">${i+1}</span><span class="pb-name">${esc(p)}</span><span class="pb-count">${c}</span></div>`).join('');
 }
 
@@ -737,6 +739,43 @@ function drawLatencyChart(canvasId, series) {
 }
 
 
+// ===================== Cross-linking =====================
+
+async function backfillDumpLogIds() {
+  try {
+    const res = await api.post('/admin/api/error-dumps/backfill-log-ids');
+    if (res && res.error) { showToast(res.error, 'error'); return; }
+    showToast('Matched ' + (res.updated || 0) + ' error dump(s) with request logs');
+    if (res.updated > 0) { S._dumpAllEntries = []; renderDumps(); }
+  } catch(e) { showToast('Backfill failed', 'error'); }
+}
+
+
+
+function jumpToRequestLog(requestLogId) {
+  api.get('/admin/api/requests/' + requestLogId).then(function(entry) {
+    if (!entry || entry.error) { showToast('Request log entry not found', 'error'); return; }
+    S._highlightLogId = requestLogId;
+    if (!S._highlightLogIdTimer) {
+      S._highlightLogIdTimer = setTimeout(function() {
+        S._highlightLogId = null;
+        S._highlightLogIdTimer = null;
+      }, 10000);
+    }
+    const offset = entry._offset || 0;
+    const pageSize = 30;
+    S.logOffset = Math.floor(offset / pageSize) * pageSize;
+    S._keepLogOffset = true;
+    goToTab('logs', function() {
+      ['filterModel','filterProvider','filterStatus','filterApiKey'].forEach(function(id) {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      setTimeout(function() { loadLogs(); }, 300);
+    });
+  }, function() { showToast('Failed to load request log entry', 'error'); });
+}
+
 // ===================== Bulk Select =====================
 
 if (!S._selectedDumpIds) S._selectedDumpIds = new Set();
@@ -835,6 +874,7 @@ Object.assign(window, {
   onDumpModelFilterChange, closeDumpModelSearch,
   onDumpTimeRangeChange, closeDumpTimeCustom, resetDumpFilters,
   renderPersistence, renderStats, renderProviderBreakdown,
+  jumpToRequestLog, backfillDumpLogIds,
   selectAllProfiling, updateProfilingBulk, bulkDownloadProfiling,
   selectAllCapture, updateCaptureBulk, bulkDownloadCapture,
   selectAllDumps, updateDumpBulk, bulkDownloadDumps, bulkDeleteDumps,
@@ -842,6 +882,7 @@ Object.assign(window, {
 });
 
 export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown,
+  jumpToRequestLog, backfillDumpLogIds,
   selectAllProfiling, updateProfilingBulk, bulkDownloadProfiling,
   selectAllCapture, updateCaptureBulk, bulkDownloadCapture,
   selectAllDumps, updateDumpBulk, bulkDownloadDumps, bulkDeleteDumps, rebuildMetrics };

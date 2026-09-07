@@ -343,7 +343,80 @@ class PersistenceManager:
         ).fetchone()
         if row is None:
             return None
-        return self._row_to_dict(row)
+        d = self._row_to_dict(row)
+        offset_row = self._conn.execute(
+            "SELECT COUNT(*) FROM request_log WHERE timestamp > ?",
+            (d["timestamp"],),
+        ).fetchone()
+        d["_offset"] = offset_row[0] if offset_row else 0
+        return d
+
+    def backfill_error_dump_log_ids(
+        self,
+        window_seconds: float = 0.1,
+        model_aliases: dict[str, str] | None = None,
+    ) -> int:
+        """Match error dumps with NULL request_log_id to request_log entries.
+
+        Uses timestamp proximity, source/target provider, status code, and
+        model name to find the best match.  *model_aliases* maps
+        ``request_model -> upstream_model`` (from gateway config) so that
+        dump model names (which use upstream names) can be matched against
+        request log entries (which use request names).
+
+        Returns the number of rows updated.
+        """
+        reverse_aliases: dict[str, list[str]] = {}
+        for req_name, up_name in (model_aliases or {}).items():
+            reverse_aliases.setdefault(up_name, []).append(req_name)
+
+        cur = self._conn.execute(
+            "SELECT id, timestamp, model, status_code, source_provider, target_provider "
+            "FROM error_dumps WHERE request_log_id IS NULL OR request_log_id = ''"
+        )
+        unmatched = cur.fetchall()
+        if not unmatched:
+            return 0
+        updated = 0
+        for dump_id, ts, dump_model, status, source, target in unmatched:
+            if not ts:
+                continue
+            candidate_models = [dump_model] if dump_model else []
+            for alias in reverse_aliases.get(dump_model or "", []):
+                if alias not in candidate_models:
+                    candidate_models.append(alias)
+            row = None
+            for m in candidate_models:
+                row = self._conn.execute(
+                    "SELECT id FROM request_log "
+                    "WHERE source_provider = ? AND target_provider = ? "
+                    "AND status_code = ? AND model = ? "
+                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ? "
+                    "ORDER BY abs(julianday(timestamp) - julianday(?)) "
+                    "LIMIT 1",
+                    (source, target, status, m, ts, window_seconds, ts),
+                ).fetchone()
+                if row:
+                    break
+            if not row and dump_model:
+                row = self._conn.execute(
+                    "SELECT id FROM request_log "
+                    "WHERE source_provider = ? AND target_provider = ? "
+                    "AND status_code = ? "
+                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ? "
+                    "ORDER BY abs(julianday(timestamp) - julianday(?)) "
+                    "LIMIT 1",
+                    (source, target, status, ts, window_seconds, ts),
+                ).fetchone()
+            if row:
+                self._conn.execute(
+                    "UPDATE error_dumps SET request_log_id = ? WHERE id = ?",
+                    (row[0], dump_id),
+                )
+                updated += 1
+        if updated:
+            self._conn.commit()
+        return updated
 
     def get_api_key_labels(self) -> list[str]:
         """Return distinct API key labels seen in request logs."""

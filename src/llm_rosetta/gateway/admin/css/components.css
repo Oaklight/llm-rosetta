@@ -50,11 +50,15 @@ tr:hover td { background: var(--bg-hover); }
 /* Capability badges for provider cards */
 /* Capability badges are secondary metadata — kept small so a provider with
    all three still fits its column without squeezing the base URL. */
-.cap-badge { display:inline-flex;align-items:center;gap:2px;padding:1px 5px;border-radius:10px;font-size:9px;font-weight:600;letter-spacing:.02em;margin-left:4px;vertical-align:middle; }
-.cap-badge svg { width:9px;height:9px;flex-shrink:0; }
+.cap-badge { display:inline-flex;align-items:center;gap:3px;padding:3px 7px;border-radius:10px;font-size:11px;font-weight:600;letter-spacing:.02em;margin:0 2px;vertical-align:middle; }
+.cap-badge svg { width:11px;height:11px;flex-shrink:0; }
 .cap-badge-llm { background:color-mix(in srgb, var(--accent) 15%, transparent);color:var(--accent); }
 .cap-badge-embedding { background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green); }
 .cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
+.cap-badge-text { background:color-mix(in srgb, var(--text-dim) 15%, transparent);color:var(--text-dim); }
+.cap-badge-vision { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
+.cap-badge-tools { background:color-mix(in srgb, var(--blue) 12%, transparent);color:var(--blue); }
+.cap-badge-reasoning { background:color-mix(in srgb, var(--purple) 12%, transparent);color:var(--purple); }
 /* Provider-model cross-navigation */
 .provider-link { color:inherit;cursor:pointer;text-decoration:none; }
 .provider-link:hover { text-decoration:underline;color:var(--accent); }
@@ -333,7 +337,7 @@ canvas { width: 100%; height: 160px; }
 .badge-stream { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 
 /* Capability badges */
-.badge-cap { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); font-size: 10px; padding: 1px 6px; margin-right: 3px; }
+.badge-cap { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); font-size: 10px; padding: 1px 5px; margin-right: 4px; display:inline-flex; align-items:center; gap:2px; }
 .badge-cap-vision { background: color-mix(in srgb, var(--orange) 12%, transparent); color: var(--orange); }
 .badge-cap-tools { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); }
 .badge-cap-embed { background: color-mix(in srgb, var(--green) 12%, transparent); color: var(--green); }
@@ -432,7 +436,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px;font-family:var(--mono); }
 .model-toolbar select { padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:13px; }
 #tab-models table { table-layout:fixed; }
-#tab-keys .table-scroll { max-width:80%;margin:0 auto; }
+
 
 /* Provider breakdown grid */
 .pb-grid { column-count:2;column-gap:32px; }

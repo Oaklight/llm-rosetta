@@ -314,6 +314,7 @@ async def handle_non_streaming(
     extra_headers: dict[str, str] | None = None,
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
+    entry_id: str | None = None,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -356,6 +357,7 @@ async def handle_non_streaming(
             status_code=400,
             error_phase="conversion",
             upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
         )
         return error_response_for_source(route.source_provider, 400, str(exc)), profile
 
@@ -398,6 +400,7 @@ async def handle_non_streaming(
             status_code=502,
             error_phase="upstream",
             upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
         )
         if capture_state is not None:
             capture_state.record(
@@ -441,6 +444,7 @@ async def handle_non_streaming(
             status_code=resp.status_code,
             error_phase="upstream",
             upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
         )
         if capture_state is not None:
             capture_state.record(
@@ -488,6 +492,7 @@ async def handle_non_streaming(
             status_code=502,
             error_phase="response",
             upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
         )
         return error_response_for_source(route.source_provider, 502, str(exc)), profile
 
@@ -836,6 +841,7 @@ async def handle_streaming(
             status_code=400,
             error_phase="conversion",
             upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
         )
         return error_response_for_source(route.source_provider, 400, str(exc)), profile
 

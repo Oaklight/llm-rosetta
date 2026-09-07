@@ -97,6 +97,16 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     return JSONResponse({"ok": True, "id": key_id, "key": new_key})
 
 
+async def backfill_keys_last_used(request: Any, **kwargs: Any) -> Response:
+    """Backfill last_used from request log for keys missing the value."""
+    keystore = _get_keystore(request)
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    updated = keystore.backfill_last_used(persistence.db_path)
+    return JSONResponse({"updated": updated})
+
+
 async def get_internal_token(request: Any) -> Response:
     """Return the ephemeral internal token for admin panel test requests."""
     token = getattr(request.app, "internal_token", None)

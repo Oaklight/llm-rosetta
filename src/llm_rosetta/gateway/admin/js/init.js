@@ -50,7 +50,7 @@ function activateTab(tab) {
   localStorage.setItem('llm-rosetta-tab', id);
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (id === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (id === 'logs' && _tabEnabled('logs')) { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
 }
@@ -73,6 +73,15 @@ if (S.currentTab !== 'providers') {
   const savedTab = document.querySelector(`.tab[data-tab="${S.currentTab}"]`);
   if (savedTab) activateTab(savedTab);
 }
+
+function goToTab(tabId, callback) {
+  const tab = document.querySelector('.tab[data-tab="' + tabId + '"]');
+  if (tab) {
+    activateTab(tab);
+    if (callback) setTimeout(callback, 300);
+  }
+}
+window.goToTab = goToTab;
 
 function stopTimers() {
   if (S.dashboardTimer) { clearInterval(S.dashboardTimer); S.dashboardTimer = null; }
@@ -106,7 +115,7 @@ document.addEventListener('keydown', e => {
   function tick() {
     const now = new Date();
     const time = now.toLocaleTimeString();
-    const tz = now.toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ').pop();
+    const tz = 'GMT' + (now.getTimezoneOffset() > 0 ? '-' : '+') + String(Math.abs(Math.floor(now.getTimezoneOffset()/60))).padStart(1,'0') + (now.getTimezoneOffset()%60 ? ':' + String(Math.abs(now.getTimezoneOffset()%60)).padStart(2,'0') : '');
     el.textContent = time + ' ' + tz;
   }
   tick();
