@@ -19,7 +19,6 @@ from llm_rosetta.auto_detect import ProviderType
 
 from .auth import (
     AuthState,
-    _build_config_fallback,
     api_key_context_var,
     create_auth_hook,
 )
@@ -627,6 +626,41 @@ def _resolve_data_dir_for_app(
     return None
 
 
+def _flush_api_keys_from_config(config_path: str) -> None:
+    """Remove server.api_keys and server.api_key from the config file.
+
+    Called after keys have been migrated to the SQLite keystore so that
+    plaintext keys no longer linger in the config file (and cannot bypass
+    keystore deletion/rotation).
+    """
+    from .config import JsoncConfigIO
+
+    io = JsoncConfigIO()
+    try:
+        raw = io.load(config_path)
+    except Exception:
+        logger.warning("Could not read config to flush api_keys: %s", config_path)
+        return
+
+    server = raw.get("server", {})
+    removed = False
+    if "api_keys" in server:
+        del server["api_keys"]
+        removed = True
+    if "api_key" in server:
+        del server["api_key"]
+        removed = True
+
+    if removed:
+        try:
+            io.save(config_path, raw)
+            logger.info(
+                "Removed plaintext api_keys from config file after SQLite migration"
+            )
+        except Exception:
+            logger.warning("Could not write config to flush api_keys: %s", config_path)
+
+
 def _setup_auth(
     config: GatewayConfig,
     config_path: str | None,
@@ -674,17 +708,12 @@ def _setup_auth(
             logger.info(
                 "Imported %d API key(s) from config into SQLite keystore", imported
             )
-            logger.warning(
-                "API keys found in config file. Consider removing server.api_keys "
-                "after verifying the SQLite keystore (%s) is working correctly.",
-                keys_db_path,
-            )
-
-    config_fallback = _build_config_fallback(config.api_keys)
+        # Remove plaintext keys from config file after migration
+        if config_path:
+            _flush_api_keys_from_config(config_path)
 
     auth_state = AuthState(
         keystore=keystore,
-        config_fallback=config_fallback,
         internal_token=internal_token,
         admin_password=config.admin_password,
         open_on_no_keys=config.open_on_no_keys,
