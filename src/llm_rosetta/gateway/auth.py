@@ -1,7 +1,7 @@
 """Gateway API key authentication — before-request hook.
 
 Validates incoming requests against the gateway's API keys stored in
-SQLite (hash-based) with a config-file fallback for read-only mounts.
+SQLite (hash-based).
 
 Key extraction uses the format native to each API standard:
 
@@ -161,13 +161,11 @@ class AuthState:
     def __init__(
         self,
         keystore: KeyStore | None,
-        config_fallback: dict[str, KeyContext],
         internal_token: str | None,
         admin_password: str | None = None,
         open_on_no_keys: bool = False,
     ) -> None:
         self.keystore = keystore
-        self.config_fallback = config_fallback
         self.internal_token = internal_token
         self.admin_password = admin_password
         self.open_on_no_keys = open_on_no_keys
@@ -176,8 +174,7 @@ class AuthState:
         self._recalculate_admin_token()
 
     def _has_keys(self) -> bool:
-        ks_has = self.keystore.has_keys() if self.keystore else False
-        return ks_has or bool(self.config_fallback)
+        return self.keystore.has_keys() if self.keystore else False
 
     def _recalculate_admin_token(self) -> None:
         """Derive ``admin_token`` from ``admin_password`` + ``internal_token``."""
@@ -213,23 +210,6 @@ class AuthState:
         self.admin_password = new_password
         self._recalculate_admin_token()
         return self.admin_token or ""
-
-
-def _build_config_fallback(
-    api_keys: list[dict[str, str]],
-) -> dict[str, KeyContext]:
-    """Build a hash → KeyContext dict from config-sourced plaintext keys."""
-    fallback: dict[str, KeyContext] = {}
-    for entry in api_keys:
-        raw_key = entry.get("key", "")
-        if not raw_key:
-            continue
-        key_hash = hashlib.sha256(raw_key.encode()).hexdigest()
-        fallback[key_hash] = KeyContext(
-            label=entry.get("label", ""),
-            allowed_shims=frozenset({"*"}),
-        )
-    return fallback
 
 
 def create_auth_hook(auth_state: AuthState) -> Any:
@@ -284,13 +264,9 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if not key:
             return _error_for_path(path, 401, "Invalid or missing API key")
 
-        # Try KeyStore (SQLite) first, then config fallback
         ctx: KeyContext | None = None
         if auth_state.keystore:
             ctx = auth_state.keystore.validate(key)
-        if ctx is None:
-            key_hash = hashlib.sha256(key.encode()).hexdigest()
-            ctx = auth_state.config_fallback.get(key_hash)
         if ctx is None:
             return _error_for_path(path, 401, "Invalid or missing API key")
 

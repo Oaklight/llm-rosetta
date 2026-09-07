@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -11,7 +10,6 @@ import pytest
 
 from llm_rosetta.gateway.auth import (
     AuthState,
-    _build_config_fallback,
     api_key_context_var,
     create_auth_hook,
 )
@@ -68,9 +66,7 @@ class TestNoApiKey:
     """When no api_key is configured, behavior depends on open_on_no_keys."""
 
     def test_open_on_no_keys_allows_all(self):
-        state = AuthState(
-            keystore=None, config_fallback={}, internal_token=None, open_on_no_keys=True
-        )
+        state = AuthState(keystore=None, internal_token=None, open_on_no_keys=True)
         hook = create_auth_hook(state)
 
         for path in [
@@ -85,7 +81,6 @@ class TestNoApiKey:
     def test_closed_on_no_keys_blocks_api(self):
         state = AuthState(
             keystore=None,
-            config_fallback={},
             internal_token=None,
             open_on_no_keys=False,
         )
@@ -98,7 +93,6 @@ class TestNoApiKey:
     def test_closed_on_no_keys_allows_health(self):
         state = AuthState(
             keystore=None,
-            config_fallback={},
             internal_token=None,
             open_on_no_keys=False,
         )
@@ -121,7 +115,7 @@ class TestWithApiKey:
     @pytest.fixture()
     def hook(self, tmp_path):
         ks, _ = _make_keystore_with_key(tmp_path, self.KEY)
-        state = AuthState(keystore=ks, config_fallback={}, internal_token=None)
+        state = AuthState(keystore=ks, internal_token=None)
         yield create_auth_hook(state)
         ks.close()
 
@@ -245,7 +239,7 @@ class TestMultiKey:
     @pytest.fixture()
     def hook(self, tmp_path):
         ks = _make_keystore_with_keys(tmp_path, self.KEYS)
-        state = AuthState(keystore=ks, config_fallback={}, internal_token=None)
+        state = AuthState(keystore=ks, internal_token=None)
         yield create_auth_hook(state)
         ks.close()
 
@@ -314,7 +308,7 @@ class TestInternalToken:
     @pytest.fixture()
     def hook(self, tmp_path):
         ks, _ = _make_keystore_with_key(tmp_path, self.KEY)
-        state = AuthState(keystore=ks, config_fallback={}, internal_token=self.INTERNAL)
+        state = AuthState(keystore=ks, internal_token=self.INTERNAL)
         yield create_auth_hook(state)
         ks.close()
 
@@ -362,7 +356,7 @@ class TestKeyContextTracking:
     @pytest.fixture()
     def hook(self, tmp_path):
         ks = _make_keystore_with_keys(tmp_path, self.KEYS)
-        state = AuthState(keystore=ks, config_fallback={}, internal_token=self.INTERNAL)
+        state = AuthState(keystore=ks, internal_token=self.INTERNAL)
         yield create_auth_hook(state)
         ks.close()
 
@@ -409,64 +403,6 @@ class TestKeyContextTracking:
 # ---------------------------------------------------------------------------
 
 
-class TestConfigFallback:
-    """Keys only in config (not KeyStore) still authenticate via fallback."""
-
-    CONFIG_KEY = "config-only-key"
-
-    @pytest.fixture()
-    def hook(self, tmp_path):
-        ks = KeyStore(tmp_path / "empty.db")
-        fallback = _build_config_fallback(
-            [
-                {"key": self.CONFIG_KEY, "label": "from-config"},
-            ]
-        )
-        state = AuthState(keystore=ks, config_fallback=fallback, internal_token=None)
-        yield create_auth_hook(state)
-        ks.close()
-
-    def test_config_fallback_key_accepted(self, hook: Any):
-        req = _make_request(
-            "/v1/chat/completions",
-            headers={"authorization": f"Bearer {self.CONFIG_KEY}"},
-        )
-        assert _run(hook(req)) is None
-
-    def test_config_fallback_sets_context(self, hook: Any):
-        req = _make_request(
-            "/v1/chat/completions",
-            headers={"authorization": f"Bearer {self.CONFIG_KEY}"},
-        )
-        _, ctx = _run(_run_and_get_context(hook, req))
-        assert ctx is not None
-        assert ctx.label == "from-config"
-
-    def test_invalid_key_rejected_with_fallback(self, hook: Any):
-        req = _make_request(
-            "/v1/chat/completions",
-            headers={"authorization": "Bearer wrong"},
-        )
-        resp = _run(hook(req))
-        assert resp is not None
-        assert resp.status_code == 401
-
-
 # ---------------------------------------------------------------------------
 # Build config fallback helper
 # ---------------------------------------------------------------------------
-
-
-class TestBuildConfigFallback:
-    def test_builds_hash_map(self):
-        keys = [{"key": "secret", "label": "test"}]
-        fb = _build_config_fallback(keys)
-        expected_hash = hashlib.sha256(b"secret").hexdigest()
-        assert expected_hash in fb
-        assert fb[expected_hash].label == "test"
-        assert fb[expected_hash].allowed_shims == frozenset({"*"})
-
-    def test_skips_empty_keys(self):
-        keys = [{"key": "", "label": "empty"}]
-        fb = _build_config_fallback(keys)
-        assert len(fb) == 0
