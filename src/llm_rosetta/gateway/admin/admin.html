@@ -192,10 +192,7 @@
         <h2 style="margin:0" data-i18n="section.breakdown">Per-Provider Breakdown</h2>
         <button class="btn btn-sm" onclick="rebuildMetrics()" data-i18n="metrics.rebuild">Rebuild Counters</button>
       </div>
-      <div class="table-scroll"><table>
-        <thead><tr><th data-i18n="col.provider">Provider</th><th data-i18n="col.requests">Requests</th></tr></thead>
-        <tbody id="providerBreakdown"></tbody>
-      </table></div>
+      <div id="providerBreakdownGrid" class="pb-grid"></div>
     </div>
     <div class="section" id="profilingSection">
       <h2 style="margin-bottom:12px" data-i18n="section.profiling">Profiling</h2>
