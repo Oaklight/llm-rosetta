@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.7.0"
+# version = "0.7.1"
 # deps = []
 # tier = "medium"
 # category = "validation"
@@ -826,6 +826,7 @@ def _validate_struct_fields(
         )
         return value
 
+    value = dict(value)
     err_before = len(errors)
 
     for name, (field_tp, required) in fields.items():
@@ -842,7 +843,9 @@ def _validate_struct_fields(
     for name, val in value.items():
         if name in fields:
             field_tp, _ = fields[name]
-            _validate(val, field_tp, _join_path(path, name), errors, coerce)
+            value[name] = _validate(
+                val, field_tp, _join_path(path, name), errors, coerce
+            )
 
     # Run model validators only if no field-level errors were added
     validators = _MODEL_VALIDATORS.get(tp)
@@ -888,10 +891,11 @@ def _validate_list(
                 )
             )
             return value
+    value = list(value)
     if args:
         item_tp = args[0]
         for i, item in enumerate(value):
-            _validate(item, item_tp, _join_path(path, i), errors, coerce)
+            value[i] = _validate(item, item_tp, _join_path(path, i), errors, coerce)
     return value
 
 
@@ -916,9 +920,14 @@ def _validate_dict(
         return value
     if args and len(args) == 2:
         key_tp, val_tp = args
+        new_value = {}
         for k, v in value.items():
-            _validate(k, key_tp, _join_path(path, f"<key:{k!r}>"), errors, coerce)
-            _validate(v, val_tp, _join_path(path, str(k)), errors, coerce)
+            new_k = _validate(
+                k, key_tp, _join_path(path, f"<key:{k!r}>"), errors, coerce
+            )
+            new_v = _validate(v, val_tp, _join_path(path, str(k)), errors, coerce)
+            new_value[new_k] = new_v
+        value = new_value
     return value
 
 
@@ -948,8 +957,12 @@ def _validate_tuple(
     if args:
         if len(args) == 2 and args[1] is Ellipsis:
             item_tp = args[0]
+            coerced_items = []
             for i, item in enumerate(value):
-                _validate(item, item_tp, _join_path(path, i), errors, coerce)
+                coerced_items.append(
+                    _validate(item, item_tp, _join_path(path, i), errors, coerce)
+                )
+            value = tuple(coerced_items)
         elif len(value) != len(args):
             errors.append(
                 ErrorDetail(
@@ -960,8 +973,12 @@ def _validate_tuple(
                 )
             )
         else:
+            coerced_items = []
             for i, (item, item_tp) in enumerate(zip(value, args)):
-                _validate(item, item_tp, _join_path(path, i), errors, coerce)
+                coerced_items.append(
+                    _validate(item, item_tp, _join_path(path, i), errors, coerce)
+                )
+            value = tuple(coerced_items)
     return value
 
 
@@ -984,12 +1001,15 @@ def _validate_set(
             )
         )
         return value
-    items = value if isinstance(value, (set, frozenset)) else value
+    target_type = frozenset if isinstance(value, frozenset) else set
+    items = list(value)
     if args:
         item_tp = args[0]
-        for i, item in enumerate(items):
+        items = [
             _validate(item, item_tp, _join_path(path, i), errors, coerce)
-    return value
+            for i, item in enumerate(items)
+        ]
+    return target_type(items)
 
 
 def _validate_bool(value: Any, path: str, errors: list[ErrorDetail]) -> Any:
