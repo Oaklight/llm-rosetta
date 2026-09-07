@@ -168,6 +168,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                     "type": "message",
                     "role": role,
                     "content": content_parts,
+                    "status": "completed",
                 }
             )
 
@@ -234,6 +235,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
                 "type": "message",
                 "role": "assistant",
                 "content": content_parts,
+                "status": "completed",
             }
             # Restore phase from provider_metadata
             if provider_metadata:
