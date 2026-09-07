@@ -110,8 +110,11 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         warnings: list[str] = []
 
         metadata = message.get("metadata")
+        provider_metadata = message.get("provider_metadata")
         if role in ("system", "user", "developer"):
-            return self._ir_input_message_to_p(role, content, warnings)
+            return self._ir_input_message_to_p(
+                role, content, warnings, provider_metadata=provider_metadata
+            )
         elif role == "assistant":
             return self._ir_assistant_to_p(
                 content,
@@ -125,7 +128,12 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         return [], warnings
 
     def _ir_input_message_to_p(
-        self, role: str, content: list, warnings: list[str]
+        self,
+        role: str,
+        content: list,
+        warnings: list[str],
+        *,
+        provider_metadata: dict | None = None,
     ) -> tuple[list[dict[str, Any]], list[str]]:
         """Convert IR system/user/developer message to Responses API items.
 
@@ -163,12 +171,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         # Add message item if there are content parts
         if content_parts:
+            status = (provider_metadata or {}).get("responses_status", "completed")
             result_items.append(
                 {
                     "type": "message",
                     "role": role,
                     "content": content_parts,
-                    "status": "completed",
+                    "status": status,
                 }
             )
 
@@ -231,11 +240,12 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
 
         # Add assistant message if there are text content parts
         if content_parts:
+            status = (provider_metadata or {}).get("responses_status", "completed")
             msg_item: dict[str, Any] = {
                 "type": "message",
                 "role": "assistant",
                 "content": content_parts,
-                "status": "completed",
+                "status": status,
             }
             # Restore phase from provider_metadata
             if provider_metadata:
@@ -506,10 +516,13 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         # may need to be appended
         ir_msg: dict = {"role": ir_role, "content": ir_content}
 
-        # Preserve message phase for Responses round-trip
+        # Preserve message phase and status for Responses round-trip
         phase = provider_message.get("phase")
         if phase:
             ir_msg.setdefault("provider_metadata", {})["responses_phase"] = phase
+        status = provider_message.get("status")
+        if status:
+            ir_msg.setdefault("provider_metadata", {})["responses_status"] = status
 
         return ir_msg
 
