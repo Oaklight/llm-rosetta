@@ -37,6 +37,19 @@ def _mask_api_key(value: str) -> str:
     return value[:4] + "***" + value[-4:]
 
 
+def _mask_proxy_url(url: str | None) -> str | None:
+    """Mask userinfo credentials in a proxy URL, leaving the rest intact."""
+    if not url:
+        return url
+    if _ENV_VAR_RE.match(url):
+        return url
+    # Match scheme://user:pass@host...
+    m = re.match(r"^(https?://)([^:]+):([^@]+)@(.+)$", url)
+    if m:
+        return f"{m.group(1)}{m.group(2)}:***@{m.group(4)}"
+    return url
+
+
 def _get_config_path(request: Any) -> str:
     """Return the config file path stored on the app object."""
     path = getattr(request.app, "config_path", None)
