@@ -60,13 +60,13 @@ function openSettings() {
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
   if (cv) {
-    const noAuth = !S.configData?.requires_auth;
+    const noAuth = !S.configData?.has_admin_password;
     cv.checked = S.configData?.credential_visible === true;
     cv.setAttribute('aria-checked', cv.checked);
     cv.disabled = noAuth;
     if (noAuth) cv.closest('.settings-popup-item')?.classList.add('settings-item-disabled');
     else cv.closest('.settings-popup-item')?.classList.remove('settings-item-disabled');
-    _updateCvLabel(cv.checked);
+    updateCvLabel(cv.checked);
   }
   // Sync token
   _refreshTokenDisplay();
@@ -98,7 +98,7 @@ async function saveSettingsField(field, value) {
   } catch { showToast(t('toast.error'), 'error'); }
 }
 
-function _updateCvLabel(on) {
+function updateCvLabel(on) {
   const lbl = document.getElementById('cvLabel');
   if (lbl) lbl.textContent = on ? t('label.enabled') : t('label.disabled');
 }
@@ -435,7 +435,7 @@ export {
 
 // --- Expose to global scope for inline handlers ---
 Object.assign(window, {
-  openSettings, saveSettingsField, saveAutoRefresh, saveLogRetention, _updateCvLabel,
+  openSettings, saveSettingsField, saveAutoRefresh, saveLogRetention, updateCvLabel,
   copyAdminToken, changeAdminPassword, showLoginOverlay, doLogin,
   checkAuthAndInit, _doTokenRotate,
   onRlToggle, saveRateLimitSettings,

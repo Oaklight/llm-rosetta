@@ -167,9 +167,14 @@ async def clear_requests(request: Any) -> Response:
 async def get_provider_key(request: Any, **kwargs: Any) -> Response:
     """Return the raw (unmasked) API key for a single provider."""
     config: GatewayConfig = request.app.gateway_config
-    if not config.credential_visible or not request.app.auth_state.admin_password:
+    if not config.credential_visible:
         return JSONResponse(
             {"error": "Credential visibility is disabled"}, status_code=403
+        )
+    if not request.app.auth_state.admin_password:
+        return JSONResponse(
+            {"error": "Credential reveal requires an admin password"},
+            status_code=403,
         )
     from ._shared import _get_config_path
     from ._shared import _get_config_io

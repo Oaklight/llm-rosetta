@@ -162,7 +162,7 @@ async def get_config(request: Any) -> Response:
             "server": server,
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
-            "requires_auth": bool(request.app.auth_state.admin_password),
+            "has_admin_password": bool(request.app.auth_state.admin_password),
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "known_provider_types": known_provider_types(),
