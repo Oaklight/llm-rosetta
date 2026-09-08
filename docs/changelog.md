@@ -18,6 +18,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Configurable Nuitka flags and optimized binary builds** (PRs [#639](https://github.com/Oaklight/llm-rosetta/pull/639), [#640](https://github.com/Oaklight/llm-rosetta/pull/640)): added `NUITKA_EXTRA_FLAGS` variable for binary size experiments; baked winning flag combination (LTO, stripped docstrings, nofollow exclusions) into defaults; dropped pyinstrument from binary builds.
 - **Cross-format round-trip tests** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): 20 tests verifying Interactions ↔ OpenAI Chat / Anthropic / google_generate request and response fidelity.
 
+- **Expand `tool_ops` convenience API** (PR [#653](https://github.com/Oaklight/llm-rosetta/pull/653)): add `google_interactions` provider support (was the only converter missing) and expose the full `BaseToolOps` lifecycle — `choice_to_provider`/`choice_from_provider`, `call_to_provider`/`call_from_provider`, `result_to_provider`/`result_from_provider`, `config_to_provider`/`config_from_provider`. 70 tests covering all 5 providers.
+
 ### Fixed
 
 - **Google Interactions provider URL registry** (PR [#648](https://github.com/Oaklight/llm-rosetta/pull/648)): `google_generate` and `google_interactions` URL templates were missing from the gateway provider registry, causing 404s on upstream requests.
