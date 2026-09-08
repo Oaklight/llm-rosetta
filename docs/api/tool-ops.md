@@ -9,8 +9,10 @@ title: Tool Ops
     Old names remain as deprecated aliases.
 
 The `tool_ops` module provides a **lightweight convenience API** for converting
-tool definitions between the IR (Intermediate Representation) and provider-native
+tool artifacts between the IR (Intermediate Representation) and provider-native
 formats — without instantiating full converter pipelines.
+
+Covers the full tool lifecycle: **definition**, **choice**, **call**, **result**, and **config**.
 
 All imports are lazy, so no provider-specific dependencies are loaded until
 the first call for that provider.
@@ -56,6 +58,7 @@ top-level shape after conversion:
 | `openai_responses` | `{"type": "function", "name": …, "description": …, "parameters": {…}}` |
 | `anthropic` | `{"name": …, "description": …, "input_schema": {…}}` |
 | `google` | `{"function_declarations": [{"name": …, "description": …, "parameters": {…}}]}` |
+| `google_interactions` | `{"type": "function", "name": …, "description": …, "parameters": {…}}` |
 
 ## Quick example
 
@@ -78,6 +81,7 @@ openai_tool    = tool_ops.to_openai_chat(ir_tool)
 responses_tool = tool_ops.to_openai_responses(ir_tool)
 anthropic_tool = tool_ops.to_anthropic(ir_tool)
 google_tool    = tool_ops.to_google_generate(ir_tool)
+interact_tool  = tool_ops.to_google_interactions(ir_tool)
 
 # Unified dispatch variant
 same_tool = tool_ops.to_provider(ir_tool, provider="anthropic")
@@ -137,6 +141,7 @@ tool_ops.to_google_generate(ir_tool)
 | `openai_responses` | `openai-responses`, `open_responses`, `open-responses` |
 | `anthropic` | — |
 | `google` | `google-genai` |
+| `google_interactions` | `google-interactions` |
 
 ## Batch conversion
 
@@ -195,6 +200,71 @@ and never raise `ValueError` for provider names.
 
 ---
 
+
+## Full lifecycle dispatch
+
+Beyond tool definitions, `tool_ops` covers the full `BaseToolOps` lifecycle
+via unified dispatch functions. These work for all 5 providers.
+
+### Tool choice
+
+```python
+ir_choice = {"mode": "auto"}
+provider_choice = tool_ops.choice_to_provider(ir_choice, provider="anthropic")
+recovered = tool_ops.choice_from_provider(provider_choice, provider="anthropic")
+```
+
+::: llm_rosetta.tool_ops.choice_to_provider
+
+::: llm_rosetta.tool_ops.choice_from_provider
+
+### Tool call
+
+```python
+ir_call = {
+    "type": "tool_call",
+    "tool_call_id": "call_123",
+    "tool_name": "get_weather",
+    "tool_input": {"city": "London"},
+}
+provider_call = tool_ops.call_to_provider(ir_call, provider="openai_chat")
+recovered = tool_ops.call_from_provider(provider_call, provider="openai_chat")
+```
+
+::: llm_rosetta.tool_ops.call_to_provider
+
+::: llm_rosetta.tool_ops.call_from_provider
+
+### Tool result
+
+```python
+ir_result = {
+    "type": "tool_result",
+    "tool_call_id": "call_123",
+    "result": "Sunny, 22°C",
+}
+provider_result = tool_ops.result_to_provider(ir_result, provider="anthropic")
+recovered = tool_ops.result_from_provider(provider_result, provider="anthropic")
+```
+
+::: llm_rosetta.tool_ops.result_to_provider
+
+::: llm_rosetta.tool_ops.result_from_provider
+
+### Tool config
+
+```python
+ir_config = {"tool_choice": "auto"}
+provider_config = tool_ops.config_to_provider(ir_config, provider="openai_chat")
+recovered = tool_ops.config_from_provider(provider_config, provider="openai_chat")
+```
+
+::: llm_rosetta.tool_ops.config_to_provider
+
+::: llm_rosetta.tool_ops.config_from_provider
+
+---
+
 ## Per-provider shortcuts
 
 ### IR → provider
@@ -207,6 +277,8 @@ and never raise `ValueError` for provider names.
 
 ::: llm_rosetta.tool_ops.to_google_generate
 
+::: llm_rosetta.tool_ops.to_google_interactions
+
 ### Provider → IR
 
 ::: llm_rosetta.tool_ops.from_openai_chat
@@ -216,3 +288,5 @@ and never raise `ValueError` for provider names.
 ::: llm_rosetta.tool_ops.from_anthropic
 
 ::: llm_rosetta.tool_ops.from_google_generate
+
+::: llm_rosetta.tool_ops.from_google_interactions
