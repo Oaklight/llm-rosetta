@@ -96,7 +96,8 @@ def _get_tool_ops(provider: str) -> Any:
     raise ValueError(
         f"Unknown provider: {provider!r}. "
         f"Supported: openai_chat, openai_responses, anthropic, google, "
-        f"google_interactions"
+        f"google_interactions "
+        f"(aliases: openai-chat, openai-responses, google-genai, google-interactions)"
     )
 
 

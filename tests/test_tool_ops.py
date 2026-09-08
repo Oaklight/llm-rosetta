@@ -5,7 +5,7 @@ import pytest
 from llm_rosetta import tool_ops
 from llm_rosetta.types.ir.tools import ToolDefinition
 
-# Shared fixture: a minimal IR tool definition
+# Shared fixtures
 IR_TOOL: ToolDefinition = {
     "type": "function",
     "name": "get_weather",
@@ -15,6 +15,19 @@ IR_TOOL: ToolDefinition = {
         "properties": {"city": {"type": "string", "description": "City name"}},
         "required": ["city"],
     },
+}
+
+IR_CALL = {
+    "type": "tool_call",
+    "tool_call_id": "call_123",
+    "tool_name": "get_weather",
+    "tool_input": {"city": "London"},
+}
+
+IR_RESULT = {
+    "type": "tool_result",
+    "tool_call_id": "call_123",
+    "result": "Sunny, 22°C",
 }
 
 ALL_PROVIDERS = [
@@ -58,6 +71,7 @@ class TestToProvider:
     def test_to_google_interactions(self):
         result = tool_ops.to_google_interactions(IR_TOOL)
         assert isinstance(result, dict)
+        assert result["name"] == "get_weather"
 
 
 # ==================== from_* shortcuts ====================
@@ -170,10 +184,7 @@ class TestChoiceDispatch:
         result = tool_ops.choice_to_provider(ir_choice, provider=provider)  # ty: ignore[invalid-argument-type]
         assert result is not None
 
-    @pytest.mark.parametrize(
-        "provider",
-        ["openai_chat", "openai_responses", "anthropic"],
-    )
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
     def test_choice_round_trip(self, provider: str):
         ir_choice = {"mode": "auto"}
         provider_choice = tool_ops.choice_to_provider(ir_choice, provider=provider)  # ty: ignore[invalid-argument-type]
@@ -187,27 +198,14 @@ class TestChoiceDispatch:
 class TestCallDispatch:
     """Test tool call conversion dispatch."""
 
-    IR_CALL = {
-        "type": "tool_call",
-        "tool_call_id": "call_123",
-        "tool_name": "get_weather",
-        "arguments": '{"city": "London"}',
-    }
-
-    @pytest.mark.parametrize(
-        "provider",
-        ["openai_chat", "openai_responses", "anthropic", "google"],
-    )
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
     def test_call_to_provider(self, provider: str):
-        result = tool_ops.call_to_provider(self.IR_CALL, provider=provider)  # ty: ignore[invalid-argument-type]
+        result = tool_ops.call_to_provider(IR_CALL, provider=provider)  # ty: ignore[invalid-argument-type]
         assert result is not None
 
-    @pytest.mark.parametrize(
-        "provider",
-        ["openai_chat", "openai_responses", "anthropic"],
-    )
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
     def test_call_round_trip(self, provider: str):
-        provider_call = tool_ops.call_to_provider(self.IR_CALL, provider=provider)  # ty: ignore[invalid-argument-type]
+        provider_call = tool_ops.call_to_provider(IR_CALL, provider=provider)  # ty: ignore[invalid-argument-type]
         recovered = tool_ops.call_from_provider(provider_call, provider=provider)  # ty: ignore[invalid-argument-type]
         assert recovered["tool_name"] == "get_weather"
 
@@ -218,19 +216,19 @@ class TestCallDispatch:
 class TestResultDispatch:
     """Test tool result conversion dispatch."""
 
-    IR_RESULT = {
-        "type": "tool_result",
-        "tool_call_id": "call_123",
-        "content": "Sunny, 22°C",
-    }
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    def test_result_to_provider(self, provider: str):
+        result = tool_ops.result_to_provider(IR_RESULT, provider=provider)  # ty: ignore[invalid-argument-type]
+        assert result is not None
 
     @pytest.mark.parametrize(
         "provider",
-        ["openai_chat", "openai_responses", "anthropic"],
+        ["openai_chat", "openai_responses", "anthropic", "google_interactions"],
     )
-    def test_result_to_provider(self, provider: str):
-        result = tool_ops.result_to_provider(self.IR_RESULT, provider=provider)  # ty: ignore[invalid-argument-type]
-        assert result is not None
+    def test_result_round_trip(self, provider: str):
+        provider_result = tool_ops.result_to_provider(IR_RESULT, provider=provider)  # ty: ignore[invalid-argument-type]
+        recovered = tool_ops.result_from_provider(provider_result, provider=provider)  # ty: ignore[invalid-argument-type]
+        assert recovered["tool_call_id"] == "call_123"
 
 
 # ==================== Config dispatch ====================
@@ -243,4 +241,10 @@ class TestConfigDispatch:
     def test_config_to_provider(self, provider: str):
         ir_config = {"tool_choice": "auto"}
         result = tool_ops.config_to_provider(ir_config, provider=provider)  # ty: ignore[invalid-argument-type]
+        assert isinstance(result, dict)
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    def test_config_from_provider(self, provider: str):
+        provider_config = {"tool_choice": "auto"}
+        result = tool_ops.config_from_provider(provider_config, provider=provider)  # ty: ignore[invalid-argument-type]
         assert isinstance(result, dict)
