@@ -36,15 +36,13 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
 - **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
-### Changed
-
-- **API key management is now SQLite-only** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): `server.api_keys` and `server.api_key` config-file fields are no longer parsed or used for authentication. All API key management now goes exclusively through the admin panel + SQLite keystore. Existing keys in config files are silently ignored. The `keystore.import_from_config()` migration path has been removed.
-
-### Fixed
-
 - **Security: deleted/rotated API keys could still authenticate** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): the auth hook had a `config_fallback` dict (built from `server.api_keys` at startup) that was never invalidated by admin panel key deletion/rotation. Revoked keys could bypass keystore validation via this stale fallback. Removed the `config_fallback` path entirely — SQLite keystore is now the sole API key authority.
 - **Security: credential_visible default and persistence** (PR [#654](https://github.com/Oaklight/llm-rosetta/pull/654)): default flipped from `true` to `false`, forced off when no admin password is set. Backend 403 guard on the PUT endpoint and GET reveal endpoint. Admin UI toggle disabled when no password is configured. Sensitive fields (admin_password, api_keys) masked in config API responses.
 - **Server Time label** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): renamed "System Time" to "Server Time" for clarity. Timezone display changed from abbreviation (CDT) to GMT±N format throughout.
+
+### Changed
+
+- **API key management is now SQLite-only** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): `server.api_keys` and `server.api_key` config-file fields are no longer parsed or used for authentication. All API key management now goes exclusively through the admin panel + SQLite keystore. Existing keys in config files are silently ignored. The `keystore.import_from_config()` migration path has been removed.
 
 ### Internal
 
