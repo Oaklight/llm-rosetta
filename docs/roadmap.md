@@ -10,7 +10,7 @@ title: 路线图
 
 LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 
-**Chat / Completions**（5 种标准）：
+**Chat / Completions**（6 种标准）：
 
 | 提供方 | 格式 | 流式 | 工具调用 |
 |-------|------|:----:|:------:|
@@ -19,6 +19,7 @@ LLM-Rosetta v0.9.0 支持 3 个 API 族的双向转换：
 | Open Responses | `open_responses` | ✓ | ✓ |
 | Anthropic Messages | `anthropic` | ✓ | ✓ |
 | Google GenAI | `google` | ✓ | ✓ |
+| Google Interactions | `google_interactions` | ✓ | ✓ |
 
 **Embedding**（4 种格式）：OpenAI、Jina、Voyage、Cohere——支持基于 IR 的跨格式转换。
 

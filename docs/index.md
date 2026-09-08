@@ -94,6 +94,7 @@ Provider A ↔ **IR** ↔ Provider B — 任何格式进，任何格式出。
 | Open Responses | 厂商中立标准 | `open_responses` |
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
+| Google | Interactions | `google_interactions` |
 
 各格式的详细对比见 [API 标准](guide/api-standards.md)，完整的提供方支持矩阵见[提供方兼容性](guide/compatibility.md)。
 

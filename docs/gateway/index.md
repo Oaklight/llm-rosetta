@@ -32,6 +32,7 @@ graph LR
 | `POST /v2/rerank` | Rerank（Cohere） | 自动检测 Cohere 格式；与 `/v1/rerank` 共用处理器 |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | 兼容 Google REST API |
 | `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI（流式） | 兼容 Google 流式 API |
+| `POST /v1beta/interactions` | Google Interactions | 兼容 Google Interactions API |
 | `GET /v1/models` | OpenAI / Anthropic | 列出已配置模型，含 `api_standard` 和 `capabilities` |
 | `GET /v1beta/models` | Google GenAI | 列出已配置模型（Google SDK 格式） |
 | `GET /health` | — | 健康检查 |

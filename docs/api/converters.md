@@ -39,6 +39,8 @@ title: Converters
 
 ::: llm_rosetta.converters.google_generate.converter.GoogleGenerateConverter
 
+::: llm_rosetta.converters.google_interactions.converter.GoogleInteractionsConverter
+
 ## Embedding Converters
 
 ::: llm_rosetta.converters.base.embedding_converter.BaseEmbeddingConverter

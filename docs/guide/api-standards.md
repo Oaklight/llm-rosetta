@@ -4,7 +4,7 @@ title: API 标准
 
 # API 标准
 
-LLM-Rosetta 支持 4 家 LLM 提供方的 5 种 API 标准，各自有不同的请求/响应结构、认证方式和流式格式。这里列出它们的关键差异。
+LLM-Rosetta 支持 4 家 LLM 提供方的 6 种 API 标准，各自有不同的请求/响应结构、认证方式和流式格式。这里列出它们的关键差异。
 
 ## 概览
 
@@ -15,6 +15,7 @@ LLM-Rosetta 支持 4 家 LLM 提供方的 5 种 API 标准，各自有不同的�
 | `open_responses` | Open Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
 | `anthropic` | Anthropic Messages | `POST /v1/messages` | `AnthropicConverter` |
 | `google` | Google GenAI | `POST /v1beta/models/{model}:generateContent` | `GoogleConverter` |
+| `google_interactions` | Google Interactions | `POST /v1beta/interactions` | `GoogleInteractionsConverter` |
 
 ## OpenAI Chat Completions (`openai_chat`)
 

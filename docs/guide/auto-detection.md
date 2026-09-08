@@ -12,7 +12,7 @@ LLM-Rosetta 能根据请求的结构自动判断它是哪家提供方的格式�
 from llm_rosetta import detect_provider
 
 provider = detect_provider(request_dict)
-# 返回："openai_chat"、"openai_responses"、"anthropic"、"google" 或 None
+# 返回："openai_chat"、"openai_responses"、"anthropic"、"google"、"google_interactions" 或 None
 ```
 
 ## 获取转换器

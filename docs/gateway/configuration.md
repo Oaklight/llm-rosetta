@@ -23,7 +23,7 @@ title: 配置
 
 提供方名称是用户自定义的字符串（如 `"my-openai"`、`"prod-claude"`）。`type` 字段指定使用哪种 API 标准。
 
-可用类型：`openai_chat`、`openai_responses`、`anthropic`、`google`。
+可用类型：`openai_chat`、`openai_responses`、`anthropic`、`google`、`google_interactions`。
 
 ### 使用 Shim
 
