@@ -29,23 +29,25 @@ class TestKeyStoreCreate:
         key_id, raw_key = keystore.create(
             label="limited", allowed_shims=["openai", "anthropic"]
         )
-        ctx = keystore.validate(raw_key)
-        assert ctx is not None
+        result = keystore.validate(raw_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.allowed_shims == frozenset({"openai", "anthropic"})
 
     def test_default_allowed_shims_is_star(self, keystore):
         _, raw_key = keystore.create(label="default")
-        ctx = keystore.validate(raw_key)
-        assert ctx is not None
+        result = keystore.validate(raw_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.allowed_shims == frozenset({"*"})
 
 
 class TestKeyStoreValidate:
     def test_validate_valid_key(self, keystore):
         _, raw_key = keystore.create(label="valid")
-        ctx = keystore.validate(raw_key)
-        assert ctx is not None
-        assert isinstance(ctx, KeyContext)
+        result = keystore.validate(raw_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.label == "valid"
 
     def test_validate_invalid_key(self, keystore):
@@ -78,15 +80,17 @@ class TestKeyStoreUpdate:
     def test_update_label(self, keystore):
         key_id, raw_key = keystore.create(label="old")
         assert keystore.update(key_id, label="new")
-        ctx = keystore.validate(raw_key)
-        assert ctx is not None
+        result = keystore.validate(raw_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.label == "new"
 
     def test_update_allowed_shims(self, keystore):
         key_id, raw_key = keystore.create(label="x")
         assert keystore.update(key_id, allowed_shims=["google"])
-        ctx = keystore.validate(raw_key)
-        assert ctx is not None
+        result = keystore.validate(raw_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.allowed_shims == frozenset({"google"})
 
     def test_update_nonexistent(self, keystore):
@@ -129,8 +133,9 @@ class TestKeyStoreRotate:
     def test_rotate_new_key_validates(self, keystore):
         key_id, _ = keystore.create(label="rotate")
         new_key = keystore.rotate(key_id)
-        ctx = keystore.validate(new_key)
-        assert ctx is not None
+        result = keystore.validate(new_key)
+        assert result is not None
+        _, ctx = result
         assert ctx.label == "rotate"
 
     def test_rotate_sets_rotated_timestamp(self, keystore):

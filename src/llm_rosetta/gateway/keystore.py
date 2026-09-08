@@ -15,6 +15,7 @@ import sqlite3
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -104,8 +105,6 @@ class KeyStore:
         if now - self._last_touch.get(key_id, 0) < interval:
             return
         self._last_touch[key_id] = now
-        from datetime import datetime, timezone
-
         ts = datetime.now(timezone.utc).isoformat()
         self._conn.execute(
             "UPDATE api_keys SET last_used = ? WHERE id = ?", (ts, key_id)
@@ -121,24 +120,26 @@ class KeyStore:
         except Exception:
             return 0
         updated = 0
-        for row_id, label, last_used in self._conn.execute(
-            "SELECT id, label, last_used FROM api_keys"
-        ).fetchall():
-            if last_used or not label:
-                continue
-            r = log_conn.execute(
-                "SELECT MAX(timestamp) FROM request_log WHERE api_key_label = ?",
-                (label,),
-            ).fetchone()
-            if r and r[0]:
-                self._conn.execute(
-                    "UPDATE api_keys SET last_used = ? WHERE id = ?",
-                    (r[0], row_id),
-                )
-                updated += 1
-        if updated:
-            self._conn.commit()
-        log_conn.close()
+        try:
+            for row_id, label, last_used in self._conn.execute(
+                "SELECT id, label, last_used FROM api_keys"
+            ).fetchall():
+                if last_used or not label:
+                    continue
+                r = log_conn.execute(
+                    "SELECT MAX(timestamp) FROM request_log WHERE api_key_label = ?",
+                    (label,),
+                ).fetchone()
+                if r and r[0]:
+                    self._conn.execute(
+                        "UPDATE api_keys SET last_used = ? WHERE id = ?",
+                        (r[0], row_id),
+                    )
+                    updated += 1
+            if updated:
+                self._conn.commit()
+        finally:
+            log_conn.close()
         return updated
 
     def has_keys(self) -> bool:

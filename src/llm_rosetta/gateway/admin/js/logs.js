@@ -73,12 +73,11 @@ function renderLogs(entries, total) {
   if (S._highlightLogId) {
     const hlRow = document.querySelector('#logTable tr[data-log-id="' + S._highlightLogId + '"]');
     if (hlRow) hlRow.scrollIntoView({behavior:'smooth', block:'center'});
-    if (!S._highlightLogIdTimer) {
-      S._highlightLogIdTimer = setTimeout(function() {
-        S._highlightLogId = null;
-        S._highlightLogIdTimer = null;
-      }, 10000);
-    }
+    if (S._highlightLogIdTimer) clearTimeout(S._highlightLogIdTimer);
+    S._highlightLogIdTimer = setTimeout(function() {
+      S._highlightLogId = null;
+      S._highlightLogIdTimer = null;
+    }, 10000);
   }
 
   // Pagination
@@ -157,12 +156,11 @@ function jumpToErrorDump(requestLogId) {
       if (match) {
         const dumpId = match.dump_id || match.id;
         S._highlightDumpId = dumpId;
-        if (!S._highlightDumpIdTimer) {
-          S._highlightDumpIdTimer = setTimeout(function() {
-            S._highlightDumpId = null;
-            S._highlightDumpIdTimer = null;
-          }, 10000);
-        }
+        if (S._highlightDumpIdTimer) clearTimeout(S._highlightDumpIdTimer);
+        S._highlightDumpIdTimer = setTimeout(function() {
+          S._highlightDumpId = null;
+          S._highlightDumpIdTimer = null;
+        }, 10000);
         const idx = entries.indexOf(match);
         S._dumpPage = Math.floor(idx / 20);
         renderDumps();

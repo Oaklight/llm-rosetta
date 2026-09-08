@@ -3,7 +3,7 @@
  * and canvas charts.
  */
 
-import { S, DUMP_PAGE_SIZE } from './state.js';
+import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from './state.js';
 import { t } from './i18n.js';
 import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytesShort, fmtBytesLong } from './core.js';
 
@@ -756,14 +756,13 @@ function jumpToRequestLog(requestLogId) {
   api.get('/admin/api/requests/' + requestLogId).then(function(entry) {
     if (!entry || entry.error) { showToast('Request log entry not found', 'error'); return; }
     S._highlightLogId = requestLogId;
-    if (!S._highlightLogIdTimer) {
-      S._highlightLogIdTimer = setTimeout(function() {
-        S._highlightLogId = null;
-        S._highlightLogIdTimer = null;
-      }, 10000);
-    }
+    if (S._highlightLogIdTimer) clearTimeout(S._highlightLogIdTimer);
+    S._highlightLogIdTimer = setTimeout(function() {
+      S._highlightLogId = null;
+      S._highlightLogIdTimer = null;
+    }, 10000);
     const offset = entry._offset || 0;
-    const pageSize = 30;
+    const pageSize = LOG_LIMIT;
     S.logOffset = Math.floor(offset / pageSize) * pageSize;
     S._keepLogOffset = true;
     goToTab('logs', function() {
