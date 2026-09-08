@@ -61,12 +61,17 @@ Provider A ↔ **IR** ↔ Provider B — 任何格式进，任何格式出。
 
     起一个本地 HTTP 代理，请求进来时自动做格式转换：
 
-    ```text
-    客户端（Chat Completions）──→ 网关 ──→ Anthropic API
-    客户端（Responses API）   ──→ 网关 ──→ Google API
-    客户端（Open Responses）  ──→ 网关 ──→ 任意提供方
-    客户端（Anthropic 格式）  ──→ 网关 ──→ OpenAI API
-    客户端（Google 格式）     ──→ 网关 ──→ 任意提供方
+    ```mermaid
+    flowchart LR
+        C1[Chat Completions] --> GW((Gateway))
+        C2[Responses API] --> GW
+        C3[Open Responses] --> GW
+        C4[Anthropic format] --> GW
+        C5[Google format] --> GW
+        GW --> P1[Anthropic API]
+        GW --> P2[Google API]
+        GW --> P3[OpenAI API]
+        GW --> P4[Any provider]
     ```
 
     ```bash

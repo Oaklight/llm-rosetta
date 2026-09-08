@@ -339,15 +339,20 @@ result = convert(request_body, source="openai_chat", target="volcengine")
 
 **2. 网关代理管线** —— 围绕转换器应用：
 
-```text
-请求:  客户端请求体 → source.from_provider() → IR → target.to_provider()
-       → [post_ir_transforms] → 上游 API
-
-响应:  上游响应 → [pre_ir_transforms] → target.response_from_provider()
-       → IR → source.response_to_provider() → 客户端
-
-流式:  chunk → [pre_ir_transforms] → target.stream_from_provider()
-       → IR → source.stream_to_provider() → 客户端
+```mermaid
+flowchart LR
+    subgraph Request
+        direction LR
+        R1[Client body] --> R2["source.from_provider()"] --> R3[IR] --> R4["target.to_provider()"] --> R5["post_ir_transforms"] --> R6[Upstream API]
+    end
+    subgraph Response
+        direction LR
+        S1[Upstream] --> S2["pre_ir_transforms"] --> S3["target.response_from_provider()"] --> S4[IR] --> S5["source.response_to_provider()"] --> S6[Client]
+    end
+    subgraph Stream
+        direction LR
+        T1[Chunk] --> T2["pre_ir_transforms"] --> T3["target.stream_from_provider()"] --> T4[IR] --> T5["source.stream_to_provider()"] --> T6[Client]
+    end
 ```
 
 ### 设计原则

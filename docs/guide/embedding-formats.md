@@ -282,11 +282,13 @@ LLM-Rosetta 将五种格式归一化到统一的 IR：
 
 以 IR 为枢纽，任意格式之间可以互相转换：
 
-```
-OpenAI 请求 ──→ IR ──→ Google 请求
-                  ├──→ Cohere 请求
-                  ├──→ Voyage 请求
-                  └──→ Jina 请求
+```mermaid
+flowchart LR
+    A[OpenAI request] --> IR((IR))
+    IR --> B[Google request]
+    IR --> C[Cohere request]
+    IR --> D[Voyage request]
+    IR --> E[Jina request]
 ```
 
 信息损失边界：

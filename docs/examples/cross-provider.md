@@ -8,11 +8,20 @@ title: 跨提供方对话
 
 ## 概念
 
-```text
-轮次 1: 用户 → 提供方 A → IR 响应 → 追加到历史
-轮次 2: 用户 → IR 历史 → 提供方 B 请求 → 提供方 B → IR 响应
-轮次 3: 用户 → IR 历史 → 提供方 A 请求 → 提供方 A → IR 响应
-...
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant H as IR History
+    participant A as Provider A
+    participant B as Provider B
+    U->>A: Turn 1 request
+    A->>H: IR response → append
+    U->>H: Turn 2 (new message)
+    H->>B: IR → Provider B request
+    B->>H: IR response → append
+    U->>H: Turn 3 (new message)
+    H->>A: IR → Provider A request
+    A->>H: IR response → append
 ```
 
 对话历史以 IR 格式维护。每次 API 调用前，完整历史被转换为目标提供方的格式。

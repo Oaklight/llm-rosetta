@@ -214,12 +214,20 @@ LLM-Rosetta 将三种格式归一化到统一的 IR：
 
 以 IR 为枢纽，任意格式之间可以互相转换：
 
-```
-Jina 请求 ──→ IR ──→ Cohere 请求
-                └──→ Voyage 请求
-
-Cohere 响应 ──→ IR ──→ Jina 响应
-                  └──→ Voyage 响应
+```mermaid
+flowchart LR
+    subgraph Request
+        direction LR
+        JR[Jina request] --> IR1((IR))
+        IR1 --> CR[Cohere request]
+        IR1 --> VR[Voyage request]
+    end
+    subgraph Response
+        direction LR
+        CS[Cohere response] --> IR2((IR))
+        IR2 --> JS[Jina response]
+        IR2 --> VS[Voyage response]
+    end
 ```
 
 信息损失边界：

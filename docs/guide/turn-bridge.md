@@ -83,16 +83,11 @@ provider_request = converter.request_to_provider(ir_request, context=ctx2)
 
 Gateway 层提供 `TurnBridge` —— 一个进程级缓存，自动在每次响应后提取桥接状态、在每次请求前注入。网关用户无需编写任何桥接代码。
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ Gateway                                             │
-│                                                     │
-│  ┌───────────┐    ┌────────────┐    ┌───────────┐   │
-│  │ Pipeline 1 │───▶│ TurnBridge │───▶│ Pipeline 2 │  │
-│  │ (response) │    │  (cache)   │    │ (request)  │  │
-│  └───────────┘    └────────────┘    └───────────┘   │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Gateway
+        P1["Pipeline 1<br/>(response)"] --> TB["TurnBridge<br/>(cache)"] --> P2["Pipeline 2<br/>(request)"]
+    end
 ```
 
 `TurnBridge` 替代了之前的 `ProviderMetadataStore`，范围更广：

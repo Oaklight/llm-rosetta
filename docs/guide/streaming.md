@@ -94,10 +94,22 @@ ctx = BaseConverter.create_stream_context()
 
 ### 继承关系
 
-```text
-ConversionContext          # warnings, options, metadata
-  └── StreamContext        # + 会话元数据、工具追踪、生命周期
-        └── OpenAIResponsesStreamContext   # + sequence_number、item 追踪
+```mermaid
+classDiagram
+    ConversionContext <|-- StreamContext
+    StreamContext <|-- OpenAIResponsesStreamContext
+    class ConversionContext {
+        warnings, options, metadata
+    }
+    class StreamContext {
+        + session metadata
+        + tool tracking
+        + lifecycle
+    }
+    class OpenAIResponsesStreamContext {
+        + sequence_number
+        + item tracking
+    }
 ```
 
 由于 `StreamContext` 是 `ConversionContext` 的子类（IS-A 关系），它继承了相同的 `warnings`、`options` 和 `metadata` 字段。可以传入 `metadata_mode="preserve"` 实现无损往返：
