@@ -19,6 +19,7 @@ from ._shared import (
     _handle_provider_rename,
     _mask_api_key,
     _mask_proxy_url,
+    _sanitize_server_section,
     _reload_gateway_config,
 )
 
@@ -156,18 +157,7 @@ async def get_config(request: Any) -> Response:
             model_name, entry, raw_models, providers
         )
 
-    server = dict(raw.get("server", {}))
-    # Strip sensitive fields from the server section
-    server.pop("admin_password", None)
-    if "api_key" in server:
-        server["api_key"] = _mask_api_key(server["api_key"])
-    if "api_keys" in server:
-        server["api_keys"] = [
-            {**entry, "key": _mask_api_key(entry.get("key", ""))}
-            for entry in server["api_keys"]
-        ]
-    if "proxy" in server:
-        server["proxy"] = _mask_proxy_url(server["proxy"])
+    server = _sanitize_server_section(raw.get("server", {}))
 
     config: GatewayConfig = request.app.gateway_config
     return JSONResponse(
@@ -819,7 +809,9 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
             status_code=500,
         )
 
-    return JSONResponse({"ok": True, "server": data.get("server", {})})
+    return JSONResponse(
+        {"ok": True, "server": _sanitize_server_section(data.get("server", {}))}
+    )
 
 
 async def reload_config(request: Any) -> Response:
