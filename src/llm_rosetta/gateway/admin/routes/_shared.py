@@ -50,6 +50,22 @@ def _mask_proxy_url(url: str | None) -> str | None:
     return url
 
 
+def _sanitize_server_section(server: dict[str, Any]) -> dict[str, Any]:
+    """Strip or mask sensitive fields from a server config dict."""
+    safe = dict(server)
+    safe.pop("admin_password", None)
+    if "api_key" in safe:
+        safe["api_key"] = _mask_api_key(safe["api_key"])
+    if "api_keys" in safe:
+        safe["api_keys"] = [
+            {**entry, "key": _mask_api_key(entry.get("key", ""))}
+            for entry in safe["api_keys"]
+        ]
+    if "proxy" in safe:
+        safe["proxy"] = _mask_proxy_url(safe["proxy"])
+    return safe
+
+
 def _get_config_path(request: Any) -> str:
     """Return the config file path stored on the app object."""
     path = getattr(request.app, "config_path", None)
