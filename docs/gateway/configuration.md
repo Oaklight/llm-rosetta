@@ -192,19 +192,13 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 ## 网关 API Key
 
-通过网关级 API Key 保护 AI 请求端点：
+网关 API Key 通过**管理面板**管理——配置文件中不再设置 API Key。
 
-```jsonc
-{
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8765,
-    "api_key": "my-secret-gateway-key"
-  }
-}
-```
+在 `/admin` → **Keys** 标签页中生成、轮换和删除 Key，或通过
+[Admin API](../api/admin.md#api-keys) 操作。所有 Key 存储在 SQLite
+keystore（`keys.db`）中。
 
-配置后，所有 `/v1/*` 端点需要使用对应 API 标准的原生格式进行认证：
+配置了 Key 后，所有 `/v1/*` 端点需要使用对应 API 标准的原生格式进行认证：
 
 | API 标准 | 凭证格式 |
 |---------|---------|
@@ -212,16 +206,10 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 | Anthropic | `x-api-key: <key>` |
 | Google GenAI | `x-goog-api-key: <key>` 或 `?key=<key>` 查询参数 |
 
-API Key 也支持 `${ENV_VAR}` 替换：
-
-```jsonc
-"api_key": "${GATEWAY_API_KEY}"
-```
-
 !!! note "管理面板"
     管理面板（`/admin/*`）**不需要**网关 API Key。可以使用内置的 `admin_password` 选项保护（见下文），也可以通过反向代理实现（如 Caddy 的 `basicauth`、Nginx 的 `auth_basic`）。
 
-未配置 `api_key` 时，所有请求无需认证直接通过（向后兼容）。
+未配置任何 Key 时，行为取决于 `open_on_no_keys`（默认：`false`——所有 `/v1/*` 请求被阻止）。
 
 ## 管理面板安全
 

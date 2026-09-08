@@ -30,7 +30,7 @@ graph LR
 |------|----------|
 | `ContentOps` | 内容块的转换（文本、图片、工具调用等） |
 | `MessageOps` | 整条消息的转换（角色 + 内容） |
-| `ToolOps` | 工具定义和 tool_choice 的转换 |
+| `ToolOps` | 工具定义、选择、调用、结果和配置的转换 |
 | `ConfigOps` | 生成参数的转换（temperature、max_tokens 等） |
 
 它们组合出 6 个主要接口：

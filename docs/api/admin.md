@@ -372,9 +372,7 @@ GET /admin/api/keys
 }
 ```
 
-!!! note "旧版单 Key 兼容"
-    如果配置使用旧版 `server.api_key` 字段而非 `server.api_keys`，
-    该 Key 会作为 `id: "default"` 的合成条目返回。
+
 
 ---
 

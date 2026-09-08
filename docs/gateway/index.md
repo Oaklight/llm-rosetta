@@ -57,13 +57,11 @@ curl http://localhost:8765/v1/chat/completions \
 
 ## 认证
 
-在 `server` 配置里设一个网关 API Key 来保护端点：
+API Key 通过**管理面板**（SQLite keystore）统一管理。
+在 `/admin` 管理界面中生成 Key，然后按各 API 标准的原生方式传入
+（Bearer token、`x-api-key` 头等）。
 
-```jsonc
-"server": { "api_key": "my-secret-key" }
-```
-
-请求时按各 API 标准的原生方式传 Key（Bearer token、`x-api-key` 头等）。详见[配置 — 网关 API Key](configuration.md#网关-api-key)。
+详见[管理面板 — API Keys](admin-panel.md#api-keys)。
 
 ## 工作原理
 
