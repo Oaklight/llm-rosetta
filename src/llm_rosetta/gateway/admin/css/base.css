@@ -247,6 +247,7 @@ a { color: var(--accent); text-decoration: none; }
 .settings-popup-item .toggle-label input[type="checkbox"]:checked { background: var(--accent); }
 .settings-popup-item .toggle-label input[type="checkbox"]:checked::after { transform: translateX(14px); }
 .settings-popup-item .toggle-label input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
+.settings-item-disabled { opacity: 0.5; pointer-events: none; }
 .settings-token-row {
   display: flex; align-items: center; gap: 6px; font-size: 11px;
   font-family: var(--mono); color: var(--text-dim); word-break: break-all;
