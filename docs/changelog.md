@@ -6,7 +6,7 @@ title: Changelog
 
 All notable changes to LLM-Rosetta are documented here. This project follows [Keep a Changelog](https://keepachangelog.com/) conventions.
 
-## [未发布]
+## v0.13.0 — 2026-09-08
 
 ### 新增
 
@@ -36,15 +36,13 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
 
-### 变更
-
-- **API key 管理现仅支持 SQLite** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：配置文件中的 `server.api_keys` 和 `server.api_key` 字段不再被解析或用于鉴权。所有 API key 管理现在完全通过 admin 面板 + SQLite keystore 进行。配置文件中已有的 key 会被静默忽略。`keystore.import_from_config()` 迁移路径已被移除。
-
-### 修复
-
 - **安全：已删除/轮换的 API key 仍可通过鉴权** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：auth hook 中有一个 `config_fallback` 字典（启动时从 `server.api_keys` 构建），在 admin 面板删除/轮换 key 时从未被清除。已撤销的 key 可以绕过 keystore 验证，通过此过期的 fallback 继续鉴权。现已完全移除 `config_fallback` 路径——SQLite keystore 是唯一的 API key 鉴权源。
 - **安全：credential_visible 默认值和持久化** (PR [#654](https://github.com/Oaklight/llm-rosetta/pull/654))：默认值从 `true` 翻转为 `false`，未设置 admin 密码时强制关闭。PUT 端点和 GET 凭据查看端点增加 403 守卫。Admin UI 在无密码时禁用切换按钮。配置 API 响应中敏感字段（admin_password、api_keys）已做脱敏处理。
 - **服务器时间标签** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))："系统时间"改为"服务器时间"以更准确反映含义。时区显示从缩写格式（CDT）改为 GMT±N 格式。
+
+### 变更
+
+- **API key 管理现仅支持 SQLite** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：配置文件中的 `server.api_keys` 和 `server.api_key` 字段不再被解析或用于鉴权。所有 API key 管理现在完全通过 admin 面板 + SQLite keystore 进行。配置文件中已有的 key 会被静默忽略。`keystore.import_from_config()` 迁移路径已被移除。
 
 ### 内部
 
