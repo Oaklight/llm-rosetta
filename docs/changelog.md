@@ -14,6 +14,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Rename `google_genai` → `google_generate`** (PR [#641](https://github.com/Oaklight/llm-rosetta/pull/641)): the generateContent converter module, classes, and shim base are renamed to avoid confusion with the `google-genai` SDK which covers both APIs. `GoogleGenAIConverter` and `from llm_rosetta.converters.google_genai` remain as deprecated aliases.
 - **Google Interactions gateway route** (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647)): `POST /v1beta/interactions` endpoint registered in the gateway. `GoogleInteractionsConverter` exported from top-level package.
 - **"Adding a new converter" checklist** in CLAUDE.md (PR [#647](https://github.com/Oaklight/llm-rosetta/pull/647)): 11-item gate checklist covering module, tests, exports, auto-detect, shim, gateway route, docs, CI smoke test, and test registry updates.
+- **Relocate oversized tool descriptions** (PR [#625](https://github.com/Oaklight/llm-rosetta/pull/625)): when a custom tool description exceeds a configurable threshold, the full text is moved into a late system message to prevent upstream 400 errors. Threshold configurable at model, provider, and shim levels.
+- **Configurable Nuitka flags and optimized binary builds** (PRs [#639](https://github.com/Oaklight/llm-rosetta/pull/639), [#640](https://github.com/Oaklight/llm-rosetta/pull/640)): added `NUITKA_EXTRA_FLAGS` variable for binary size experiments; baked winning flag combination (LTO, stripped docstrings, nofollow exclusions) into defaults; dropped pyinstrument from binary builds.
 - **Cross-format round-trip tests** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): 20 tests verifying Interactions ↔ OpenAI Chat / Anthropic / google_generate request and response fidelity.
 
 ### Fixed
@@ -23,6 +25,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google Interactions streaming** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): added `google_generate` and `google_interactions` to `SSE_FORMATTERS` registry; added IR→provider stream handlers; synthesize `step.start`/`step.stop` events when upstream omits `ContentBlockStartEvent`; defer `interaction.completed` to `stream_end` so usage data is included.
 - **Google Interactions thinking passthrough** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): set `include_thoughts=True` in IR when `thinking_level` is enabled, so the upstream Google API returns thought content.
 
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -61,6 +67,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Admin provider list view** redesigned as compact single-line rows.
 - **Logging import** moved to module level to avoid repeated imports.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Admin provider modal layout** rearranged: Logo + Provider Name row, API Key full width, Base URL + Models Listing Path row (69/31), Proxy URL + Timeout row (69/31). Hint text removed from Models Path and Timeout fields.
@@ -83,6 +93,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Double version prefix in embedding/rerank URLs** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): `ProviderInfo` now auto-detects when `base_url` ends with a version segment (e.g. `/v1`) that would duplicate the `url_template` path start, and strips it. Fixes `base_url: "https://api.openai.com/v1"` + `embedding_path: "/v1/embeddings"` producing `/v1/v1/embeddings`.
 - **Logo icon centering** (commit [f4c89e3](https://github.com/Oaklight/llm-rosetta/commit/f4c89e3)): center stone silhouette in icon SVGs, switch to transparent background with `prefers-color-scheme` media query for automatic dark/light theme adaptation.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Unified endpoint URL construction** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588)): embedding and rerank handlers now use `ProviderInfo.upstream_url()` (template-based) instead of ad hoc f-string concatenation, matching the chat path architecture.
@@ -96,12 +110,20 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google GenAI reasoning config round-trip** (PRs [#582](https://github.com/Oaklight/llm-rosetta/pull/582), [#583](https://github.com/Oaklight/llm-rosetta/pull/583), [#584](https://github.com/Oaklight/llm-rosetta/pull/584)): parse `thinkingConfig` from REST `generationConfig` on inbound, map reasoning effort to `thinkingLevel`, forward `summary`/`include_thoughts` across all converters.
 - **Responses API reasoning summary forwarding** (PR [#581](https://github.com/Oaklight/llm-rosetta/pull/581)): forward `reasoning.summary` in outbound Responses API requests.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Gateway `create_app` composable** (PR [#578](https://github.com/Oaklight/llm-rosetta/pull/578)): refactored `create_app` via `GatewayExtensions` for extensibility.
 - **IR `ReasoningDeltaEvent`** now declares `encrypted_content` and `provider_metadata` fields, consistent with `ToolCallStartEvent`.
 
 ## v0.11.0 — 2026-08-28
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -138,6 +160,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Binary-based Docker images** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): three image variants — `alpine` (musl binary, ~21 MB, default), `glibc` (busybox:glibc, ~25 MB), and `python` (pip-based, ~80 MB). Alpine variant tagged as `:latest` and `:<version>`.
 - **Makefile build targets** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): `build-binary`, `build-binary-musl`, `build-docker-alpine`, `build-docker-glibc`, `build-docker-python` for local and CI builds.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Docker privilege model** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): replaced su-exec/PUID/PGID with Docker-native `USER appuser` + `--user` flag. Use `docker run --user $(id -u):$(id -g)` for custom UID mapping.
@@ -171,6 +197,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Chat converter multimodal content loss** (PR [#524](https://github.com/Oaklight/llm-rosetta/pull/524)): `_do_request_to_provider` was not passing `supports_multimodal_tool_result` to `ir_messages_to_p`, so shim overrides had no effect on the real request path. Additionally, `_convert_tool_result_with_packing` always stripped images from tool messages even when the flag was True — images were packed but never injected back, causing silent content loss.
 - **Test ordering flakiness** (PR [#523](https://github.com/Oaklight/llm-rosetta/pull/523)): `test_shims.py` fixture now saves/restores the global shim registry instead of clearing it, preventing cross-module test failures.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Unified `convert()` and `ConversionPipeline`** (PR [#520](https://github.com/Oaklight/llm-rosetta/pull/520)): both now support dual-shim (source + target) transforms and response conversion. `ConversionPipeline` delegates to `convert()` internally, eliminating code divergence.
@@ -185,6 +215,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Prompt cache preservation** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): wire `hoist_late_system_messages` IR transform to all 15 provider shims. Mid-conversation system/developer messages are rewritten as user-role `[System: ...]` envelopes to keep the prompt cache prefix stable.
 - **Per-provider hoist toggle** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499)): `hoist_system_messages` boolean in gateway config, per-provider override via admin UI checkbox with (i) hint popup.
 - **SQLite API key storage** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496)): migrate API key storage from plaintext config to SQLite with hash-based validation.
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -304,6 +338,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Embedding test menu** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382)): Embedding models now show dedicated test options — Embedding, Batch (array of texts), Matryoshka (user-specified dimensions), and Multimodal (image). Matryoshka uses a custom modal instead of a native `prompt()` dialog.
 - **URL template admin UI** for provider and model cards — configure custom upstream URL templates directly from the admin panel.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Model modal three-tab layout** ([#389](https://github.com/Oaklight/llm-rosetta/pull/389)): Redesigned model edit/add modal with tabbed interface — General (name+provider, segmented LLM/Embedding control, pill-style capability chips), Routing (URL template with expand-link for stream), Transforms (flatten system + reasoning config). Replaces long-scroll single-panel form.
@@ -330,6 +368,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **`custom_head` injection for admin panel** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378)): `setup_admin()` accepts an optional `custom_head` HTML fragment injected before `</head>`. Downstream projects can inject `<style>`/`<script>` tags to customize admin UI without modifying the reference `admin.html`. Cached per value — no per-request overhead.
 - **`branding` dict for admin panel identity** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378)): `setup_admin(..., branding={title, subtitle, version, links, attribution})` customizes the header, login screen, and settings footer. Serialized as `window.__branding` via `custom_head`; consumer script in `admin.html` patches the DOM. Element IDs: `brandTitle`, `brandLoginTitle`, `brandFooterName`, `brandFooterLinks`. Without branding, the default llm-rosetta identity is unchanged.
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - Bump vendored `httpclient` 0.4.4 → 0.4.5 — fixes fd leak where `close()` did not close `_async_writer`, preventing `__del__` from cleaning up leaked async streaming responses.
@@ -346,6 +388,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **Tool schema sanitization for Anthropic and Google** ([#372](https://github.com/Oaklight/llm-rosetta/issues/372)): Anthropic rejects the OpenAPI `nullable` extension in tool parameter schemas (e.g. from Pydantic-generated JSON Schema). New `convert_nullable_to_type_array()` helper recursively converts `"nullable": true` to standard JSON Schema `"type": [T, "null"]`. Anthropic converter now strips `title` fields and converts `nullable` to type arrays; Google GenAI converter strips `title` (keeps `nullable` — Google supports it). Also handles the edge case where `nullable: true` appears alongside `anyOf`/`oneOf` without a `type` field.
 - **`flatten_system` checkbox layout and i18n** in the gateway admin panel.
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -366,6 +412,10 @@ Systematic pass across all four converters to ensure output matches official API
 ### Fixed
 
 - **OpenAI SDK 2.45+ compatibility**: Added `cache_write_tokens` field to `InputTokensDetails` (Responses API) and `PromptTokensDetails` (Chat Completions API) TypedDict replicas to match upstream SDK changes.
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -388,6 +438,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Config file write safety**: `write_config()` now uses file locking for cross-process safety
 - **Vendored httpserver updated to 0.2.1**: Returns proper HTTP error responses instead of silent disconnects on malformed requests
 - **Vendored SSE updated to 0.3.2**: Uses constructor arguments for parser initialization instead of post-init mutation
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -451,6 +505,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Unix domain socket support** ([#315](https://github.com/Oaklight/llm-rosetta/pull/315)): Gateway can listen on a Unix socket instead of TCP via `--socket/-S` CLI flag or `server.socket` config field. Enables secure deployments on shared multi-user hosts where `127.0.0.1` still exposes the service to all local users. Socket file is restricted to owner-only (`0600`) and cleaned up on shutdown
 - **Parallel tool call unwind** ([#303](https://github.com/Oaklight/llm-rosetta/pull/303), [#300](https://github.com/Oaklight/llm-rosetta/issues/300)): `ProviderShim` gains `unwind_parallel_tool_calls` and `unwind_parallel_tool_calls_pattern` fields. When enabled, parallel tool calls (multiple `tool_call` parts in one assistant message) are unwound into sequential call-result pairs before forwarding. Argo OpenAI shim enables this with pattern `^gemini` — Gemini models through Argo get sequential pairs; GPT/o models pass through unchanged
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`converters/base/` reorganized into helpers/ subpackage** ([#311](https://github.com/Oaklight/llm-rosetta/pull/311), [#312](https://github.com/Oaklight/llm-rosetta/pull/312), [#310](https://github.com/Oaklight/llm-rosetta/issues/310)): Utility functions extracted from the flat `converters/base/` directory into `converters/base/helpers/`. Abstract base classes (the Ops pattern contract) stay at the top level; implementation utilities (`cache`, `schema`, `tool_orphan_fix`, `tool_content`, `tool_call_unwind`, `image_limit`, `reasoning`) move to `helpers/`. `tools.py` reduced from 428→185 lines (pure ABC). `reasoning_helpers.py` moved from `converters/` root. `orphan_fix.py` renamed to `tool_orphan_fix.py` for consistent `tool_*` prefix. `helpers/__init__.py` re-exports public functions
@@ -483,6 +541,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Admin panel per-model reasoning override** ([#288](https://github.com/Oaklight/llm-rosetta/pull/288)): The model edit modal now displays the effective reasoning config (`thinking_type`, `budget_tokens_ratio`, `disabled_strategy`) with a source badge (provider / model_override / config) and inline editing. Overrides are persisted to `config.jsonc` and resolved at runtime with priority: config override > shim model_override > shim provider default
 - **`budget_tokens_default_ratio` reasoning capability** ([#287](https://github.com/Oaklight/llm-rosetta/pull/287)): `ReasoningCapability` gains a `budget_tokens_default_ratio` field. When a provider requires `thinking.type=enabled` but the caller omits `budget_tokens`, a default is derived as `min(max(1024, max_tokens × ratio), max_tokens - 1)` instead of falling back to the unsupported `adaptive` type
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`_convert_tools_from_p` no longer abstract** ([#281](https://github.com/Oaklight/llm-rosetta/pull/281)): Default implementation in `BaseConverter` handles all providers (including Google's list/None return). Per-converter overrides removed — 90 lines of duplicated code eliminated
@@ -503,6 +565,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **API key rotate**: New `POST /admin/api/keys/<id>/rotate` endpoint generates a fresh key value while preserving the same id and label. The admin panel shows a "Rotate" button with inline confirmation and a one-time copy modal for the new key. Request logs are unaffected — they associate by label, not key value
 - **Model type selector in Fetch from Provider modal**: Users can now choose between LLM and Embedding when batch-adding models. LLM shows capability checkboxes (text, vision, tools, reasoning); Embedding auto-sets `['embedding']`
 - **Model type selector in Add/Edit Model modal**: Replaces the old embedding checkbox + mutual-exclusion logic with the same Model Type radio pattern
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -534,6 +600,10 @@ Systematic pass across all four converters to ensure output matches official API
     - **OpenRouter**: `_rename_reasoning_field` from_transform renames `message.reasoning` → `message.reasoning_content` (OpenRouter uses non-standard field name)
     - **Volcengine**: `thinking_type: enabled` (rejects `adaptive`; overrides base converter's `auto → adaptive` default)
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`_build_ir_usage` return type tightened to `UsageInfo`** ([#253](https://github.com/Oaklight/llm-rosetta/pull/253)): All four converter overrides now return `UsageInfo` instead of `dict[str, Any]`, and `_build_provider_usage` accepts `Mapping[str, Any]` instead of `dict[str, Any]`. Removes all usage-related `ty: ignore` comments
@@ -564,6 +634,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Admin status bar total requests**: Lifetime request counter shown as the first footer segment with locale-aware thousand separators; per-segment hover tooltips (en/zh) explain each metric
 - **Vendor httpclient URL-encoded form data**: `httpclient` v0.4.2 — when `data` is a dict without files, encode as `application/x-www-form-urlencoded` instead of requiring explicit serialization
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Schema sanitization module split**: JSON Schema sanitization extracted from `converters/base/tools.py` into its own `converters/base/schema.py` module for clearer separation of concerns
@@ -590,6 +664,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Provider filter** — filter now correctly matches entries by provider display name, with three-tier fallback (`target_provider_name` → `target_provider` → API type for legacy NULL rows) to handle backfill gaps and disabled providers
 - **`/health` info leak** — endpoint no longer exposes the full provider and model list to unauthenticated callers; now returns only `{"status": "ok"}`
 - **i18n completeness** — added missing Chinese translations for footer stats, system time label, filter options, and Client IP column header
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -621,6 +699,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **Admin login rate limiting**: 5 failed attempts trigger a 5-minute IP lockout
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Settings UI simplified**: Themes reduced to Light/Dark; theme and language selectors moved from header dropdowns into the settings popup
@@ -644,6 +726,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **httpclient AsyncClient serialization lock**: Update vendored httpclient to v0.4.1, use per-task AsyncClient for test self-calls to avoid deadlock
 - **ty type-check errors**: Resolve compatibility issues with ty 0.0.32+
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Admin routes split into subpackage**: Refactored monolithic `routes.py` into `routes/` with dedicated modules for auth, config, keys, observability, and testing
@@ -661,6 +747,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **Base URL overwrite**: Switching provider type no longer overwrites user-entered base URLs
 - **Request log collapse**: Expanded error detail rows persist across auto-refresh
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -693,6 +783,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Gateway proxy applies shim transforms**: The gateway request/response pipeline now applies `to_transforms` on outbound requests and `from_transforms` on inbound responses and stream chunks
 - **Provider logos in admin panel**: Provider shims can declare a `logo` URL (SVG), displayed in the admin panel provider cards
 - **SOCKS5 proxy support restored**: Updated vendored `httpclient` from zerodep v0.3.1 to v0.4.0, which includes full SOCKS5 proxy support (RFC 1928/1929, with username/password authentication). Both `--proxy socks5://...` CLI flag and `"proxy": "socks5://..."` config entries now work for all upstream requests
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -755,6 +849,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Unified `stream_response_to_provider` dispatch** ([#157](https://github.com/Oaklight/llm-rosetta/issues/157)): Extracted identical dispatch logic (10-entry `_TO_P_DISPATCH` table + dispatch skeleton) from all 4 provider converters into `BaseConverter`. Each converter now only implements a provider-specific `_post_process_to_provider` hook (OpenAI Chat injects envelope fields; OpenAI Responses injects `sequence_number`). Net reduction: ~27 lines
 - **`StreamContext` buffer convenience methods**: Added `buffer_usage()` / `pop_pending_usage()` / `buffer_finish()` / `pop_pending_finish()` to replace manual set-and-clear patterns across all converters
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Pinned dev tooling versions**: `ty>=0.0.31` and `ruff>=0.15.0` now declared in `pyproject.toml` dev dependencies. CI no longer installs them separately — uses versions from `pip install -e ".[all]"`
@@ -778,6 +876,10 @@ Systematic pass across all four converters to ensure output matches official API
     - Model testing with collapsible raw request/response details and image preview for vision tests
     - Embedded test image (base64 data URI) to avoid external network downloads
     - `reasoning_effort: 'low'` for reasoning model tests to limit token budget
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -809,12 +911,20 @@ Systematic pass across all four converters to ensure output matches official API
 - **Provider rename**: Renaming a provider automatically updates all model routing references
 - **API key security**: Masked keys on provider cards, reveal-on-demand with visibility toggle and copy button in edit modal. Masked values are never written back to config
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Provider names decoupled from API standard types**: Provider names are now user-defined strings (e.g. `"my-openai"`, `"OpenRouter_anthropic"`) instead of being constrained to the 4 standard type identifiers. A separate `type` field specifies the API standard (`openai_chat`, `openai_responses`, `anthropic`, `google`)
 - Extracted `write_config()` to `config.py` for shared use by CLI and admin panel
 
 ## v0.4.2 — 2026-04-11
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -839,6 +949,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Vendored `validate.py` updated from zerodep v0.4.1**: Applied pyupgrade fixes — `Callable` imported from `collections.abc` instead of `typing` (UP035), `@functools.cache` replaces `@functools.lru_cache(maxsize=None)` (UP033)
 - Removed unused `sys` import in benchmark script
 - Applied `ruff format` to benchmark scripts
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -890,6 +1004,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **OpenAI Responses `content_filter` finish reason mapped to wrong status** (#90): `content_filter` was incorrectly mapped to `"completed"` status in `response_to_provider` and `stream_response_to_provider`. Now correctly maps to `"incomplete"` status with `incomplete_details.reason = "content_filter"`
 - **Anthropic streaming missing `refusal` reason mapping**: The streaming `reason_map` was missing the `refusal` entry present in the non-streaming path, causing Anthropic refusal stop reasons to be silently dropped during streaming. Fixed as a side effect of the constants extraction (#64) — both paths now share the same `ANTHROPIC_REASON_FROM_PROVIDER` dict
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`ReasoningConfig.effort` expanded to 5-level enum** (#100): Effort levels now include `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`. Provider-specific mappings: Anthropic maps to `thinking.type="adaptive"` with `thinking.effort`; OpenAI Chat/Responses clamp `"minimal"`→`"low"` and `"max"`→`"high"` (with warnings); Google GenAI maps to `thinking_config.thinking_level`
@@ -940,6 +1058,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **StreamContext**: `get_tool_call_args()` and `get_pending_tool_calls()` methods for querying accumulated tool call state during streaming
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`BaseToolOps.p_tool_definition_to_ir` return type**: Now `ToolDefinition | list[ToolDefinition] | None` to support unconvertible tool entries
@@ -973,6 +1095,10 @@ Systematic pass across all four converters to ensure output matches official API
 - **Streaming tool call arguments not accumulated**: OpenAI Chat, Anthropic, and Google GenAI converters registered tool calls in `StreamContext` but never called `append_tool_call_args()` to accumulate argument deltas during streaming. This caused tool call arguments to arrive empty at upstream (e.g., MCP tools returning `'query' is a required property`). Only the OpenAI Responses converter was correct (#81)
 - **OpenAI Chat streaming tool call ID resolution**: Delta-only chunks (carrying `index` but no `id`) produced an empty-string `tool_call_id`. Now resolves the effective ID from `StreamContext._tool_call_order` using the chunk index (#81)
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **`sanitize_schema` extracted to `converters/base/tools.py`**: The schema sanitization utility (previously `_sanitize_schema` private to `openai_chat/tool_ops.py`) is now a public shared function in `converters/base/tools.py`, exported via `converters.base`. All 4 converter `tool_ops.py` files import from the shared location instead of cross-importing from `openai_chat` (#66)
@@ -990,6 +1116,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 - **Gateway request/response body logging**: configurable debug logging with colorized output, body sanitization and truncation — enable via config (`"debug": {"verbose": true, "log_bodies": true}`), env vars (`LLM_ROSETTA_VERBOSE`, `LLM_ROSETTA_LOG_BODIES`), or `--verbose` CLI flag
 - **Google `output_format="rest"` for `request_to_provider()`**: pass `output_format="rest"` to get a REST API–ready request body with `tools`/`tool_config` at top level and generation params wrapped in `generationConfig` — eliminates the need for manual SDK→REST fixups
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -1025,6 +1155,10 @@ Systematic pass across all four converters to ensure output matches official API
 - Makefile `test-integration` target using `proxychains` (if available) for integration tests
 - `init` subcommand to create a template `config.jsonc` at the XDG default location (`~/.config/llm-rosetta-gateway/`)
 - **Model listing endpoints**: `GET /v1/models` (compatible with both OpenAI and Anthropic SDKs) and `GET /v1beta/models` (Google GenAI SDK format) — enables `client.models.list()` across all three SDKs (#54)
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -1063,6 +1197,10 @@ Systematic pass across all four converters to ensure output matches official API
 
 ## 2026-03-15 — Rebrand to LLM-Rosetta
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Project renamed from LLM-Rosetta to LLM-Rosetta** across all code, docs, and configuration
@@ -1084,6 +1222,10 @@ Systematic pass across all four converters to ensure output matches official API
 - `ReasoningDeltaEvent` and `tool_call_index` field on IR stream types
 - Cross-provider streaming examples for all provider pairs (SDK and REST variants)
 - Local file cache and retry logic for image downloads in examples
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -1115,6 +1257,10 @@ Systematic pass across all four converters to ensure output matches official API
 - Unit tests for OpenAI Responses Ops classes and converter
 - Examples README in English and Chinese
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **OpenAI Responses converter** restructured to Bottom-Up Ops Pattern
@@ -1139,6 +1285,10 @@ Systematic pass across all four converters to ensure output matches official API
 - OpenAI Chat E2E tests split into SDK and REST versions
 - **GitHub Actions** CI/CD workflows and Dependabot configuration
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Anthropic converter** redesigned with bottom-up Ops architecture
@@ -1154,6 +1304,10 @@ Systematic pass across all four converters to ensure output matches official API
 - TypedDict replicas of **Anthropic SDK** types
 - TypedDict replicas of **OpenAI Chat** types with backward compatibility and tests
 - Legacy body converter design preserved as historical reference
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -1172,6 +1326,10 @@ Systematic pass across all four converters to ensure output matches official API
 - Comprehensive mock implementations for `BaseConverter` test class
 - File handling functionality in base converter
 - Provider-to-IR mapping documentation
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
@@ -1200,6 +1358,10 @@ Systematic pass across all four converters to ensure output matches official API
 - pytest configuration and `pytest-cov` dependency
 - Competitive analysis document
 
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
+
 ### Changed
 
 - **Package renamed** from `llm-provider-converter` to `llm-rosetta`
@@ -1224,6 +1386,10 @@ Systematic pass across all four converters to ensure output matches official API
 - Multi-turn chat example with tool integration
 - Anthropic handover in multi-turn chat example
 - Google GenAI function calling in multi-turn chat example
+
+- **Profiler deferred for streaming responses** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633)): pyinstrument profiler now runs for the full stream lifecycle instead of stopping when the handler returns the `StreamingResponse`.
+- **Auto-rebuild metrics counters on startup** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643)): detect counter drift after ungraceful shutdown and auto-rebuild from the request log.
+- **OpenAI Responses `status` field on input items** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650)): add `"status": "completed"` to all input item types. Fixes Volcengine (doubao) 400 `MissingParameter` errors.
 
 ### Changed
 
