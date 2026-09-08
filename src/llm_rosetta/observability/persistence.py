@@ -337,7 +337,13 @@ class PersistenceManager:
         return entries, total
 
     def get_log_entry(self, entry_id: str) -> dict[str, Any] | None:
-        """Return a single log entry by id, or ``None``."""
+        """Return a single log entry by id, or ``None``.
+
+        Includes ``_offset`` — the entry's position in the newest-first
+        list — so the admin UI can jump directly to the correct page.
+        Uses an indexed timestamp comparison; acceptable for single-entry
+        lookups (not called in hot paths).
+        """
         row = self._conn.execute(
             "SELECT * FROM request_log WHERE id = ?", (entry_id,)
         ).fetchone()
@@ -399,6 +405,8 @@ class PersistenceManager:
                 if row:
                     break
             if not row and dump_model:
+                # Fallback: match without model constraint. May mis-link if
+                # two different models error with the same status in the window.
                 row = self._conn.execute(
                     "SELECT id FROM request_log "
                     "WHERE source_provider = ? AND target_provider = ? "
