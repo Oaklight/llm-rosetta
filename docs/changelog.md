@@ -19,6 +19,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Cross-format round-trip tests** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): 20 tests verifying Interactions ↔ OpenAI Chat / Anthropic / google_generate request and response fidelity.
 
 - **Expand `tool_ops` convenience API** (PR [#653](https://github.com/Oaklight/llm-rosetta/pull/653)): add `google_interactions` provider support (was the only converter missing) and expose the full `BaseToolOps` lifecycle — `choice_to_provider`/`choice_from_provider`, `call_to_provider`/`call_from_provider`, `result_to_provider`/`result_from_provider`, `config_to_provider`/`config_from_provider`. 70 tests covering all 5 providers.
+- **Dashboard multi-select batch download** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): checkbox selection and bulk action bar for profiling, content capture, and error dump tables. Error dumps support batch download and batch delete with selection persisted across pagination.
+- **Request log ↔ Error dump cross-linking** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): 4xx/5xx request log entries show a jump-to-dump button; error dump rows show a jump-to-log button. Jumps clear filters, navigate to the correct page, and highlight the target row. "Match Logs" button and auto-startup backfill link unlinked dumps via timestamp proximity (±0.1s) with model alias resolution.
+- **API key last-used tracking** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): new `last_used` column in API keys table, auto-migrated on startup. Updated in the auth hook with 5-minute throttle. Backfill from request log on startup and via manual "Refresh Last Used" button.
+- **Capability badge SVG icons** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): model table capability badges now use `cap-badge` class with inline SVG icons (text, vision, tools, reasoning). Model table column widths rebalanced (Model 19%, Type 15% centered, Capabilities 23%).
 
 ### Fixed
 
@@ -39,6 +43,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### Fixed
 
 - **Security: deleted/rotated API keys could still authenticate** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): the auth hook had a `config_fallback` dict (built from `server.api_keys` at startup) that was never invalidated by admin panel key deletion/rotation. Revoked keys could bypass keystore validation via this stale fallback. Removed the `config_fallback` path entirely — SQLite keystore is now the sole API key authority.
+- **Security: credential_visible default and persistence** (PR [#654](https://github.com/Oaklight/llm-rosetta/pull/654)): default flipped from `true` to `false`, forced off when no admin password is set. Backend 403 guard on the PUT endpoint and GET reveal endpoint. Admin UI toggle disabled when no password is configured. Sensitive fields (admin_password, api_keys) masked in config API responses.
+- **Server Time label** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655)): renamed "System Time" to "Server Time" for clarity. Timezone display changed from abbreviation (CDT) to GMT±N format throughout.
 
 ### Internal
 
