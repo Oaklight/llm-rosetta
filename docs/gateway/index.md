@@ -57,13 +57,11 @@ The gateway converts SSE chunks in real time between provider formats.
 
 ## Authentication
 
-Protect AI endpoints with a gateway API key in the `server` config:
+API keys are managed exclusively through the **admin panel** (SQLite keystore).
+Generate keys in the admin UI at `/admin`, then provide them in the format
+native to each API standard (Bearer token, `x-api-key` header, etc.).
 
-```jsonc
-"server": { "api_key": "my-secret-key" }
-```
-
-Requests must provide the key in the format native to each API standard (Bearer token, `x-api-key` header, etc.). See [Configuration — Gateway API Key](configuration.md#gateway-api-key) for details.
+See [Admin Panel — API Keys](admin-panel.md#api-keys) for details.
 
 ## How It Works
 

@@ -190,21 +190,17 @@ Available capabilities: `text`, `vision`, `tools`, `embedding`, `reasoning`. If 
 
 Capabilities are displayed in the [admin panel](admin-panel.md) and can be edited there.
 
-## Gateway API Key
+## Gateway API Keys
 
-Protect AI request endpoints with a gateway-level API key:
+Gateway API keys are managed through the **admin panel** — there is no
+config-file setting for API keys.
 
-```jsonc
-{
-  "server": {
-    "host": "0.0.0.0",
-    "port": 8765,
-    "api_key": "my-secret-gateway-key"
-  }
-}
-```
+Generate, rotate, and delete keys at `/admin` → **Keys** tab, or via the
+[Admin API](../api/admin.md#api-keys). All keys are stored in a SQLite
+keystore (`keys.db`).
 
-When configured, all `/v1/*` endpoints require authentication using the format native to each API standard:
+When keys exist, all `/v1/*` endpoints require authentication using the
+format native to each API standard:
 
 | API Standard | Credential Format |
 |-------------|-------------------|
@@ -212,16 +208,10 @@ When configured, all `/v1/*` endpoints require authentication using the format n
 | Anthropic | `x-api-key: <key>` |
 | Google GenAI | `x-goog-api-key: <key>` or `?key=<key>` query param |
 
-The API key also supports `${ENV_VAR}` substitution:
-
-```jsonc
-"api_key": "${GATEWAY_API_KEY}"
-```
-
 !!! note "Admin panel"
-    The admin panel (`/admin/*`) does **not** require the gateway API key. You can protect it with the built-in `admin_password` option (see below), or use a reverse proxy (e.g. Caddy with `basicauth`, Nginx with `auth_basic`).
+    The admin panel (`/admin/*`) does **not** require a gateway API key. You can protect it with the built-in `admin_password` option (see below), or use a reverse proxy (e.g. Caddy with `basicauth`, Nginx with `auth_basic`).
 
-When no `api_key` is configured, all requests pass through without authentication (backward compatible).
+When no keys are configured, behavior depends on `open_on_no_keys` (default: `false` — all `/v1/*` requests are blocked).
 
 ## Admin Panel Security
 

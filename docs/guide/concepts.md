@@ -30,7 +30,7 @@ Each converter (e.g., `OpenAIChatConverter`) is composed of four specialized ope
 |-----------|---------------|
 | `ContentOps` | Convert content parts (text, images, tool calls, etc.) |
 | `MessageOps` | Convert complete messages (role + content) |
-| `ToolOps` | Convert tool definitions and tool choice settings |
+| `ToolOps` | Convert tool definitions, choices, calls, results, and configs |
 | `ConfigOps` | Convert generation parameters (temperature, max_tokens, etc.) |
 
 These compose into the 6 main converter interfaces:

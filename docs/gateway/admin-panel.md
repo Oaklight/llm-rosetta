@@ -203,7 +203,7 @@ Alternatively, protect the admin panel using a reverse proxy:
 - **Nginx**: Use `auth_basic` directive
 - **Traefik**: Use BasicAuth middleware
 
-The gateway API key (configured via `server.api_key`) only protects AI request endpoints (`/v1/*`). See [Configuration — Gateway API Key](configuration.md#gateway-api-key) for details.
+Gateway API keys (managed via the admin panel) protect AI request endpoints (`/v1/*`). See [Configuration — Gateway API Keys](configuration.md#gateway-api-keys) for details.
 
 ## Internationalization
 

@@ -374,10 +374,7 @@ GET /admin/api/keys
 }
 ```
 
-!!! note "Legacy single key"
-    If the config uses the older `server.api_key` field instead of
-    `server.api_keys`, it is returned as a synthetic entry with
-    `id: "default"`.
+
 
 ---
 
