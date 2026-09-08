@@ -169,7 +169,7 @@ a { color: var(--accent); text-decoration: none; }
   transform: translateY(8px); opacity: 0;
   animation: settingsPanelIn 0.25s ease forwards;
 }
-@keyframes settingsPanelIn { to { transform: translateY(0); opacity: 1; } }
+@keyframes settingsPanelIn { to { transform: none; opacity: 1; } }
 .settings-popup-panel::-webkit-scrollbar { width: 6px; }
 .settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
