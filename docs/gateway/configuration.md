@@ -23,7 +23,7 @@ Each provider entry requires an `api_key`, `base_url`, and optionally a `type` s
 
 Provider names are user-defined strings (e.g. `"my-openai"`, `"prod-claude"`). The `type` field specifies which API standard to use.
 
-Available types: `openai_chat`, `openai_responses`, `anthropic`, `google`.
+Available types: `openai_chat`, `openai_responses`, `anthropic`, `google`, `google_interactions`.
 
 ### Using Shims
 

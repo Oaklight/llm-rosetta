@@ -12,7 +12,7 @@ LLM-Rosetta can automatically detect which provider format a request uses.
 from llm_rosetta import detect_provider
 
 provider = detect_provider(request_dict)
-# Returns: "openai_chat", "openai_responses", "anthropic", "google", or None
+# Returns: "openai_chat", "openai_responses", "anthropic", "google", "google_interactions", or None
 ```
 
 ## Getting a Converter

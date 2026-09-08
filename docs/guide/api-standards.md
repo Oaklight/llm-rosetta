@@ -4,7 +4,7 @@ title: API Standards
 
 # API Standards
 
-LLM-Rosetta supports 5 API standards across 4 LLM providers. Each standard defines its own request/response structure, authentication mechanism, and streaming format. This page describes each standard and highlights the key differences.
+LLM-Rosetta supports 6 API standards across 4 LLM providers. Each standard defines its own request/response structure, authentication mechanism, and streaming format. This page describes each standard and highlights the key differences.
 
 ## Overview
 
@@ -15,6 +15,7 @@ LLM-Rosetta supports 5 API standards across 4 LLM providers. Each standard defin
 | `open_responses` | Open Responses | `POST /v1/responses` | `OpenAIResponsesConverter` |
 | `anthropic` | Anthropic Messages | `POST /v1/messages` | `AnthropicConverter` |
 | `google` | Google GenAI | `POST /v1beta/models/{model}:generateContent` | `GoogleConverter` |
+| `google_interactions` | Google Interactions | `POST /v1beta/interactions` | `GoogleInteractionsConverter` |
 
 ## OpenAI Chat Completions (`openai_chat`)
 

@@ -98,7 +98,7 @@ GET /admin/api/config
   },
   "server": {"proxy": "http://proxy:8080"},
   "credential_visible": false,
-  "known_provider_types": ["openai_chat", "openai_responses", "anthropic", "google"],
+  "known_provider_types": ["openai_chat", "openai_responses", "anthropic", "google", "google_interactions"],
   "registered_shims": [
     {
       "name": "openai",

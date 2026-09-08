@@ -31,7 +31,8 @@ New here? Start with the [Gateway Quick Start](../getting-started/gateway-quicks
 | `POST /v1/rerank` | Rerank (Jina default) | Cross-format conversion via IR (Jina, Cohere, Voyage) |
 | `POST /v2/rerank` | Rerank (Cohere) | Auto-detected Cohere format; same handler as `/v1/rerank` |
 | `POST /v1beta/models/{model}:generateContent` | Google GenAI | Drop-in for Google REST API |
-| `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI (streaming) | Drop-in for Google streaming |
+| `POST /v1beta/models/{model}:streamGenerateContent` | Google GenAI (streaming) |
+| `POST /v1beta/interactions` | Google Interactions | Drop-in for Google streaming |
 | `GET /v1/models` | OpenAI / Anthropic | List configured models with `api_standard` and `capabilities` |
 | `GET /v1beta/models` | Google GenAI | List configured models (Google SDK format) |
 | `GET /health` | — | Health check |

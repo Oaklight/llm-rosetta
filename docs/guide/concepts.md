@@ -18,6 +18,7 @@ graph LR
     B["OpenAI Responses<br/><small>openai_responses</small>"] <--> IR
     C["Anthropic<br/><small>anthropic</small>"] <--> IR
     D["Google GenAI<br/><small>google</small>"] <--> IR
+    E["Google Interactions<br/><small>google_interactions</small>"] <--> IR
 
     style IR fill:#f9a825,stroke:#f57f17,color:#000
 ```

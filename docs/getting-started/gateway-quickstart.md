@@ -44,7 +44,7 @@ Create a `config.jsonc` (JSON with comments):
 }
 ```
 
-Provider names are user-defined strings. The `type` field specifies the API standard (`openai_chat`, `openai_responses`, `anthropic`, `google`).
+Provider names are user-defined strings. The `type` field specifies the API standard (`openai_chat`, `openai_responses`, `anthropic`, `google`, `google_interactions`).
 
 ## 3. Start the gateway
 

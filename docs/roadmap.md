@@ -10,7 +10,7 @@ This page outlines the current feature status and areas where community contribu
 
 LLM-Rosetta v0.9.0 supports bidirectional conversion across 3 API families:
 
-**Chat / Completions** (5 standards):
+**Chat / Completions** (6 standards):
 
 | Provider | Format | Streaming | Tool Calls |
 |----------|--------|:---------:|:----------:|
@@ -19,6 +19,7 @@ LLM-Rosetta v0.9.0 supports bidirectional conversion across 3 API families:
 | Open Responses | `open_responses` | ✓ | ✓ |
 | Anthropic Messages | `anthropic` | ✓ | ✓ |
 | Google GenAI | `google` | ✓ | ✓ |
+| Google Interactions | `google_interactions` | ✓ | ✓ |
 
 **Embedding** (4 formats): OpenAI, Jina, Voyage, Cohere — with IR-based cross-format conversion.
 

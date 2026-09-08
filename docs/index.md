@@ -94,6 +94,7 @@ Provider A ↔ **IR** ↔ Provider B — any format in, any format out.
 | Open Responses | Vendor-neutral standard | `open_responses` |
 | Anthropic | Messages | `anthropic` |
 | Google | GenAI | `google` |
+| Google | Interactions | `google_interactions` |
 
 See [API Standards](guide/api-standards.md) for detailed format comparisons, and [Provider Compatibility](guide/compatibility.md) for the full provider support matrix.
 
