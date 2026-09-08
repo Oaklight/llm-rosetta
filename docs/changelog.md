@@ -23,6 +23,19 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google Interactions 流式传输** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：在 `SSE_FORMATTERS` 注册表中添加 `google_generate` 和 `google_interactions`；添加 IR→provider 流式处理器；当上游省略 `ContentBlockStartEvent` 时合成 `step.start`/`step.stop` 事件；将 `interaction.completed` 延迟到 `stream_end` 以包含 usage 数据。
 - **Google Interactions 思考透传** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：启用 `thinking_level` 时在 IR 中设置 `include_thoughts=True`，确保上游 Google API 返回思考内容。
 
+
+### 变更
+
+- **API key 管理现仅支持 SQLite** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：配置文件中的 `server.api_keys` 和 `server.api_key` 字段不再被解析或用于鉴权。所有 API key 管理现在完全通过 admin 面板 + SQLite keystore 进行。配置文件中已有的 key 会被静默忽略。`keystore.import_from_config()` 迁移路径已被移除。
+
+### 修复
+
+- **安全：已删除/轮换的 API key 仍可通过鉴权** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：auth hook 中有一个 `config_fallback` 字典（启动时从 `server.api_keys` 构建），在 admin 面板删除/轮换 key 时从未被清除。已撤销的 key 可以绕过 keystore 验证，通过此过期的 fallback 继续鉴权。现已完全移除 `config_fallback` 路径——SQLite keystore 是唯一的 API key 鉴权源。
+
+### 内部
+
+- **Vendor zerodep `jsonx` 模块** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：用 vendored 的 `jsonx` 解析器替换 `gateway/config.py` 中手写的 `_strip_jsonc_comments` 正则。新增支持 `#` 注释、尾逗号，以及更好的错误行号定位。
+
 ## v0.12.0 — 2026-09-03
 
 ### 新增
