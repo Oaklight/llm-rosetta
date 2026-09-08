@@ -264,9 +264,7 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if not key:
             return _error_for_path(path, 401, "Invalid or missing API key")
 
-        ctx: KeyContext | None = None
-        if auth_state.keystore:
-            ctx = auth_state.keystore.validate(key)
+        ctx = auth_state.keystore.validate(key) if auth_state.keystore else None
         if ctx is None:
             return _error_for_path(path, 401, "Invalid or missing API key")
 

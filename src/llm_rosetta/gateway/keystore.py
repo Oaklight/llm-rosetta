@@ -196,39 +196,6 @@ class KeyStore:
         self._refresh_cache()
         return new_key
 
-    def import_from_config(self, config_keys: list[dict[str, str]]) -> int:
-        """Import plaintext keys from config into SQLite (idempotent).
-
-        Returns the number of keys newly imported.
-        """
-        imported = 0
-        for entry in config_keys:
-            raw_key = entry.get("key", "")
-            if not raw_key:
-                continue
-            key_hash = _hash_key(raw_key)
-            try:
-                self._conn.execute(
-                    "INSERT OR IGNORE INTO api_keys "
-                    "(id, key_hash, label, allowed_shims, created) "
-                    "VALUES (?, ?, ?, ?, ?)",
-                    (
-                        entry.get("id", _generate_id()),
-                        key_hash,
-                        entry.get("label", ""),
-                        '["*"]',
-                        entry.get("created", ""),
-                    ),
-                )
-                if self._conn.execute("SELECT changes()").fetchone()[0]:
-                    imported += 1
-            except sqlite3.IntegrityError:
-                pass
-        if imported:
-            self._conn.commit()
-            self._refresh_cache()
-        return imported
-
     def close(self) -> None:
         self._conn.close()
 

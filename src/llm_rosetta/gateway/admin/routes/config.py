@@ -151,15 +151,7 @@ async def get_config(request: Any) -> Response:
             model_name, entry, raw_models, providers
         )
 
-    # Mask api_keys in server section for the response
     server = dict(raw.get("server", {}))
-    if "api_key" in server:
-        server["api_key"] = _mask_api_key(server["api_key"])
-    if "api_keys" in server:
-        server["api_keys"] = [
-            {**entry, "key": _mask_api_key(entry.get("key", ""))}
-            for entry in server["api_keys"]
-        ]
 
     config: GatewayConfig = request.app.gateway_config
     return JSONResponse(
