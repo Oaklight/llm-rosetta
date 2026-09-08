@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from typing import Any
 
 from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
@@ -16,6 +18,7 @@ from ._shared import (
     _get_config_path,
     _handle_provider_rename,
     _mask_api_key,
+    _mask_proxy_url,
     _reload_gateway_config,
 )
 
@@ -134,6 +137,8 @@ async def get_config(request: Any) -> Response:
         masked = dict(cfg)
         if "api_key" in masked:
             masked["api_key"] = _mask_api_key(masked["api_key"])
+        if "proxy" in masked:
+            masked["proxy"] = _mask_proxy_url(masked["proxy"])
         # Ensure explicit type — fall back to provider name for legacy configs
         if "type" not in masked:
             masked["type"] = name
@@ -161,11 +166,13 @@ async def get_config(request: Any) -> Response:
             {**entry, "key": _mask_api_key(entry.get("key", ""))}
             for entry in server["api_keys"]
         ]
+    if "proxy" in server:
+        server["proxy"] = _mask_proxy_url(server["proxy"])
 
     config: GatewayConfig = request.app.gateway_config
     return JSONResponse(
         {
-            "config_path": config_path,
+            "config_path": os.path.basename(config_path),
             "providers": masked_providers,
             "models": models_normalized,
             "server": server,
