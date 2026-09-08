@@ -11,6 +11,7 @@ from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from typing import Any, NamedTuple, Protocol, runtime_checkable
 
+from llm_rosetta._vendor import jsonx
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 
@@ -52,21 +53,7 @@ PATHS_TO_TRY = [
 # JSONC loader
 # ---------------------------------------------------------------------------
 
-_JSONC_COMMENT_RE = re.compile(
-    r'("(?:[^"\\]|\\.)*")|//[^\n]*|/\*[\s\S]*?\*/', re.MULTILINE
-)
 _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
-
-
-def _strip_jsonc_comments(text: str) -> str:
-    """Remove // and /* */ comments from JSONC, preserving strings."""
-
-    def _replace(m: re.Match) -> str:
-        if m.group(1) is not None:
-            return m.group(1)  # quoted string — keep it
-        return ""
-
-    return _JSONC_COMMENT_RE.sub(_replace, text)
 
 
 def _substitute_env_vars(text: str) -> str:
@@ -87,9 +74,8 @@ def load_config(path: str) -> dict[str, Any]:
     """Load and parse a JSONC config file with env-var substitution."""
     with open(path) as f:
         raw = f.read()
-    stripped = _strip_jsonc_comments(raw)
-    substituted = _substitute_env_vars(stripped)
-    return json.loads(substituted)
+    substituted = _substitute_env_vars(raw)
+    return jsonx.loads(substituted)
 
 
 def write_config(path: str, data: dict[str, Any]) -> None:
@@ -163,9 +149,7 @@ def load_config_raw(path: str) -> dict[str, Any]:
     Useful for reading config that will be written back (e.g. ``add`` CLI).
     """
     with open(path) as f:
-        raw = f.read()
-    stripped = _strip_jsonc_comments(raw)
-    return json.loads(stripped)
+        return jsonx.load(f)
 
 
 @runtime_checkable
