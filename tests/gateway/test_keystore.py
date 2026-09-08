@@ -144,38 +144,6 @@ class TestKeyStoreRotate:
         assert keystore.rotate("nonexistent") is None
 
 
-class TestKeyStoreImport:
-    def test_import_from_config(self, keystore):
-        config_keys = [
-            {"id": "k1", "key": "secret-1", "label": "first", "created": "2024-01-01"},
-            {"id": "k2", "key": "secret-2", "label": "second", "created": "2024-01-02"},
-        ]
-        imported = keystore.import_from_config(config_keys)
-        assert imported == 2
-        assert keystore.validate("secret-1") is not None
-        assert keystore.validate("secret-2") is not None
-
-    def test_import_idempotent(self, keystore):
-        config_keys = [
-            {"id": "k1", "key": "secret-1", "label": "first", "created": "2024-01-01"},
-        ]
-        assert keystore.import_from_config(config_keys) == 1
-        assert keystore.import_from_config(config_keys) == 0
-
-    def test_import_preserves_label(self, keystore):
-        config_keys = [
-            {"id": "k1", "key": "secret-1", "label": "mylab", "created": "2024-01-01"},
-        ]
-        keystore.import_from_config(config_keys)
-        ctx = keystore.validate("secret-1")
-        assert ctx is not None
-        assert ctx.label == "mylab"
-
-    def test_import_skips_empty_keys(self, keystore):
-        config_keys = [{"id": "k1", "key": "", "label": "empty", "created": ""}]
-        assert keystore.import_from_config(config_keys) == 0
-
-
 class TestKeyStoreHasKeys:
     def test_has_keys_empty(self, keystore):
         assert not keystore.has_keys()

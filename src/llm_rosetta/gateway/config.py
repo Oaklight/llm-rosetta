@@ -563,23 +563,7 @@ class GatewayConfig:
         self.data_dir: str | None = _server.get("data_dir")
 
     def _apply_auth_settings(self, _server: dict[str, Any]) -> None:
-        """Parse API key auth settings from the server section.
-
-        ``server.api_keys`` (list) takes precedence over the legacy
-        ``server.api_key`` (single string).  A lone ``api_key`` is promoted
-        to a synthetic ``api_keys`` entry for backward compatibility.
-        """
-        self.api_keys: list[dict[str, str]] = _server.get("api_keys", [])
-        if not self.api_keys and _server.get("api_key"):
-            self.api_keys = [
-                {
-                    "id": "default",
-                    "key": _server["api_key"],
-                    "label": "default",
-                    "created": "",
-                }
-            ]
-
+        """Parse API key storage settings from the server section."""
         # Custom SQLite DB path for API key storage (default: alongside config)
         self.api_keys_db: str | None = _server.get("api_keys_db")
 
@@ -732,11 +716,6 @@ class GatewayConfig:
                 if upstream:
                     model_upstream_names[name] = upstream
         return models, model_capabilities, model_upstream_names
-
-    @property
-    def api_key(self) -> str | None:
-        """First configured key (for backward-compat middleware init)."""
-        return self.api_keys[0]["key"] if self.api_keys else None
 
     def resolve(
         self,
