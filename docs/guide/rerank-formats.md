@@ -214,12 +214,20 @@ LLM-Rosetta normalizes all three formats into a unified IR:
 
 With the IR as hub, any format can be converted to any other:
 
-```
-Jina request ──→ IR ──→ Cohere request
-                   └──→ Voyage request
-
-Cohere response ──→ IR ──→ Jina response
-                      └──→ Voyage response
+```mermaid
+flowchart LR
+    subgraph Request
+        direction LR
+        JR[Jina request] --> IR1((IR))
+        IR1 --> CR[Cohere request]
+        IR1 --> VR[Voyage request]
+    end
+    subgraph Response
+        direction LR
+        CS[Cohere response] --> IR2((IR))
+        IR2 --> JS[Jina response]
+        IR2 --> VS[Voyage response]
+    end
 ```
 
 Information loss boundaries:

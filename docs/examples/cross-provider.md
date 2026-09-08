@@ -8,11 +8,20 @@ This example demonstrates a multi-turn conversation that alternates between two 
 
 ## Concept
 
-```text
-Turn 1: User → Provider A → IR response → append to history
-Turn 2: User → IR history → Provider B request → Provider B → IR response
-Turn 3: User → IR history → Provider A request → Provider A → IR response
-...
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant H as IR History
+    participant A as Provider A
+    participant B as Provider B
+    U->>A: Turn 1 request
+    A->>H: IR response → append
+    U->>H: Turn 2 (new message)
+    H->>B: IR → Provider B request
+    B->>H: IR response → append
+    U->>H: Turn 3 (new message)
+    H->>A: IR → Provider A request
+    A->>H: IR response → append
 ```
 
 The conversation history is maintained in IR format. Before each API call, the full history is converted to the target provider's format.

@@ -282,11 +282,13 @@ LLM-Rosetta normalizes all five formats into a unified IR:
 
 With the IR as hub, any format can be converted to any other:
 
-```
-OpenAI request ──→ IR ──→ Google request
-                     ├──→ Cohere request
-                     ├──→ Voyage request
-                     └──→ Jina request
+```mermaid
+flowchart LR
+    A[OpenAI request] --> IR((IR))
+    IR --> B[Google request]
+    IR --> C[Cohere request]
+    IR --> D[Voyage request]
+    IR --> E[Jina request]
 ```
 
 Information loss boundaries:

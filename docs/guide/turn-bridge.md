@@ -83,16 +83,11 @@ Only data that (a) has no IR equivalent and (b) is needed on the next turn is in
 
 The gateway layer provides `TurnBridge` — a process-level cache that automatically extracts bridge state after each response and injects it before each request. Gateway users don't write any bridging code.
 
-```text
-┌─────────────────────────────────────────────────────┐
-│ Gateway                                             │
-│                                                     │
-│  ┌───────────┐    ┌────────────┐    ┌───────────┐   │
-│  │ Pipeline 1 │───▶│ TurnBridge │───▶│ Pipeline 2 │  │
-│  │ (response) │    │  (cache)   │    │ (request)  │  │
-│  └───────────┘    └────────────┘    └───────────┘   │
-│                                                     │
-└─────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+    subgraph Gateway
+        P1["Pipeline 1<br/>(response)"] --> TB["TurnBridge<br/>(cache)"] --> P2["Pipeline 2<br/>(request)"]
+    end
 ```
 
 `TurnBridge` replaces the previous `ProviderMetadataStore` with a broader scope:

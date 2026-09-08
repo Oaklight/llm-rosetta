@@ -94,10 +94,22 @@ ctx = BaseConverter.create_stream_context()
 
 ### Inheritance
 
-```text
-ConversionContext          # warnings, options, metadata
-  └── StreamContext        # + session metadata, tool tracking, lifecycle
-        └── OpenAIResponsesStreamContext   # + sequence_number, item tracking
+```mermaid
+classDiagram
+    ConversionContext <|-- StreamContext
+    StreamContext <|-- OpenAIResponsesStreamContext
+    class ConversionContext {
+        warnings, options, metadata
+    }
+    class StreamContext {
+        + session metadata
+        + tool tracking
+        + lifecycle
+    }
+    class OpenAIResponsesStreamContext {
+        + sequence_number
+        + item tracking
+    }
 ```
 
 Since `StreamContext` IS-A `ConversionContext`, it carries the same `warnings`, `options`, and `metadata` fields. You can pass `metadata_mode="preserve"` for lossless round-trip:
