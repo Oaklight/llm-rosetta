@@ -18,6 +18,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **可配置 Nuitka 构建参数与优化** (PR [#639](https://github.com/Oaklight/llm-rosetta/pull/639), [#640](https://github.com/Oaklight/llm-rosetta/pull/640))：新增 `NUITKA_EXTRA_FLAGS` 变量用于二进制体积实验；将最优参数组合（LTO、去除 docstrings、nofollow 排除）设为默认值；从二进制构建中移除 pyinstrument。
 - **跨格式往返测试** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：20 个测试验证 Interactions ↔ OpenAI Chat / Anthropic / google_generate 的请求和响应保真度。
 
+- **扩展 `tool_ops` 便利 API** (PR [#653](https://github.com/Oaklight/llm-rosetta/pull/653))：添加 `google_interactions` 提供方支持（此前是唯一缺失的转换器），并暴露完整的 `BaseToolOps` 生命周期——`choice_to_provider`/`choice_from_provider`、`call_to_provider`/`call_from_provider`、`result_to_provider`/`result_from_provider`、`config_to_provider`/`config_from_provider`。70 个测试覆盖全部 5 个提供方。
+
 ### 修复
 
 - **Google Interactions provider URL 注册表** (PR [#648](https://github.com/Oaklight/llm-rosetta/pull/648))：`google_generate` 和 `google_interactions` 的 URL 模板缺失，导致上游请求 404。
