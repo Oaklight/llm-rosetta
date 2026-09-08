@@ -19,6 +19,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **跨格式往返测试** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：20 个测试验证 Interactions ↔ OpenAI Chat / Anthropic / google_generate 的请求和响应保真度。
 
 - **扩展 `tool_ops` 便利 API** (PR [#653](https://github.com/Oaklight/llm-rosetta/pull/653))：添加 `google_interactions` 提供方支持（此前是唯一缺失的转换器），并暴露完整的 `BaseToolOps` 生命周期——`choice_to_provider`/`choice_from_provider`、`call_to_provider`/`call_from_provider`、`result_to_provider`/`result_from_provider`、`config_to_provider`/`config_from_provider`。70 个测试覆盖全部 5 个提供方。
+- **监控面板多选批量下载** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：性能分析、内容捕获和错误记录表格新增复选框选择和批量操作栏。错误记录支持批量下载和批量删除，选择状态跨分页保持。
+- **请求日志 ↔ 错误记录互相跳转** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：4xx/5xx 请求日志条目显示跳转到错误记录的按钮；错误记录行显示跳转到请求日志的按钮。跳转时清除筛选条件、导航到正确页码并高亮目标行。"匹配日志"按钮和启动时自动回填，通过时间戳近似匹配（±0.1s）和模型别名解析链接未关联的记录。
+- **API 密钥最后使用时间** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：API 密钥表格新增 `last_used` 列，启动时自动迁移。认证 hook 中更新，5 分钟节流。启动时从请求日志回填，支持手动"刷新最后使用"按钮。
+- **能力 badge SVG 图标** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：模型表格能力 badge 改用 `cap-badge` 样式并配有内联 SVG 图标（text、vision、tools、reasoning）。模型表格列宽重新平衡（模型 19%、类型 15% 居中、能力 23%）。
 
 ### 修复
 
@@ -39,6 +43,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### 修复
 
 - **安全：已删除/轮换的 API key 仍可通过鉴权** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：auth hook 中有一个 `config_fallback` 字典（启动时从 `server.api_keys` 构建），在 admin 面板删除/轮换 key 时从未被清除。已撤销的 key 可以绕过 keystore 验证，通过此过期的 fallback 继续鉴权。现已完全移除 `config_fallback` 路径——SQLite keystore 是唯一的 API key 鉴权源。
+- **安全：credential_visible 默认值和持久化** (PR [#654](https://github.com/Oaklight/llm-rosetta/pull/654))：默认值从 `true` 翻转为 `false`，未设置 admin 密码时强制关闭。PUT 端点和 GET 凭据查看端点增加 403 守卫。Admin UI 在无密码时禁用切换按钮。配置 API 响应中敏感字段（admin_password、api_keys）已做脱敏处理。
+- **服务器时间标签** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))："系统时间"改为"服务器时间"以更准确反映含义。时区显示从缩写格式（CDT）改为 GMT±N 格式。
 
 ### 内部
 
