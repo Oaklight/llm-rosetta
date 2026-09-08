@@ -59,7 +59,15 @@ function openSettings() {
   _validateRlQuotas();
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
-  if (cv) { cv.checked = S.configData?.server?.credential_visible !== false; cv.setAttribute('aria-checked', cv.checked); }
+  if (cv) {
+    const noAuth = !S.configData?.requires_auth;
+    cv.checked = S.configData?.credential_visible === true;
+    cv.setAttribute('aria-checked', cv.checked);
+    cv.disabled = noAuth;
+    if (noAuth) cv.closest('.settings-popup-item')?.classList.add('settings-item-disabled');
+    else cv.closest('.settings-popup-item')?.classList.remove('settings-item-disabled');
+    _updateCvLabel(cv.checked);
+  }
   // Sync token
   _refreshTokenDisplay();
   // Sync rotate interval
@@ -81,11 +89,18 @@ async function saveSettingsField(field, value) {
     body.log_bodies = (value === 'debug');
   } else if (field === 'errorDumps') {
     body.error_dumps = value;
+  } else if (field === 'credentialVisible') {
+    body.credential_visible = value;
   }
   try {
     await api.put('/admin/api/config/server', body);
     await window.loadConfig(); showToast(t('toast.saved'));
   } catch { showToast(t('toast.error'), 'error'); }
+}
+
+function _updateCvLabel(on) {
+  const lbl = document.getElementById('cvLabel');
+  if (lbl) lbl.textContent = on ? t('label.enabled') : t('label.disabled');
 }
 
 function saveAutoRefresh(val) {
@@ -420,7 +435,7 @@ export {
 
 // --- Expose to global scope for inline handlers ---
 Object.assign(window, {
-  openSettings, saveSettingsField, saveAutoRefresh, saveLogRetention,
+  openSettings, saveSettingsField, saveAutoRefresh, saveLogRetention, _updateCvLabel,
   copyAdminToken, changeAdminPassword, showLoginOverlay, doLogin,
   checkAuthAndInit, _doTokenRotate,
   onRlToggle, saveRateLimitSettings,

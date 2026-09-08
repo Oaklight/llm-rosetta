@@ -512,7 +512,10 @@ class GatewayConfig:
         self.port: int = _server.get("port", 8765)
         self.proxy: str | None = _server.get("proxy")
         self.socket: str | None = _server.get("socket")
-        self.credential_visible: bool = _server.get("credential_visible", True)
+        self.credential_visible: bool = _server.get("credential_visible", False)
+        # Force off when admin panel has no password protection
+        if not _server.get("admin_password"):
+            self.credential_visible = False
 
         # When no API keys are configured, ``open_on_no_keys`` decides whether
         # the standalone gateway serves /v1/* anonymously (True) or rejects

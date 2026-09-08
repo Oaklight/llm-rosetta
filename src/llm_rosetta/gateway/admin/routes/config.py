@@ -162,6 +162,7 @@ async def get_config(request: Any) -> Response:
             "server": server,
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
+            "requires_auth": bool(request.app.auth_state.admin_password),
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "known_provider_types": known_provider_types(),
@@ -745,7 +746,13 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
 
         # Credential visibility toggle
         if "credential_visible" in body:
-            server["credential_visible"] = bool(body["credential_visible"])
+            want_visible = bool(body["credential_visible"])
+            if want_visible and not request.app.auth_state.admin_password:
+                return JSONResponse(
+                    {"error": "Credential reveal requires an admin password"},
+                    status_code=403,
+                )
+            server["credential_visible"] = want_visible
 
         # Log retention caps (floor prevents accidental wipe)
         if "request_log" in body:
