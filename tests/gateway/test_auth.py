@@ -399,10 +399,70 @@ class TestKeyContextTracking:
 
 
 # ---------------------------------------------------------------------------
-# Config fallback
+# Flush API keys from config
 # ---------------------------------------------------------------------------
 
 
-# ---------------------------------------------------------------------------
-# Build config fallback helper
-# ---------------------------------------------------------------------------
+class TestFlushApiKeysFromConfig:
+    """_flush_api_keys_from_config removes plaintext keys from the config file."""
+
+    def test_removes_api_keys_and_api_key(self, tmp_path):
+        import json
+
+        from llm_rosetta.gateway.app import _flush_api_keys_from_config
+
+        config = {
+            "server": {
+                "host": "0.0.0.0",
+                "port": 8080,
+                "api_keys": [{"id": "k1", "key": "secret", "label": "test"}],
+                "api_key": "legacy-secret",
+            },
+            "providers": {"openai": {"api_key": "sk-xxx"}},
+        }
+        cfg_path = tmp_path / "config.json"
+        cfg_path.write_text(json.dumps(config))
+
+        _flush_api_keys_from_config(str(cfg_path))
+
+        result = json.loads(cfg_path.read_text())
+        assert "api_keys" not in result["server"]
+        assert "api_key" not in result["server"]
+        assert result["server"]["host"] == "0.0.0.0"
+        assert result["providers"]["openai"]["api_key"] == "sk-xxx"
+
+    def test_noop_when_no_keys(self, tmp_path):
+        import json
+
+        from llm_rosetta.gateway.app import _flush_api_keys_from_config
+
+        config = {"server": {"host": "0.0.0.0"}}
+        cfg_path = tmp_path / "config.json"
+        cfg_path.write_text(json.dumps(config))
+
+        _flush_api_keys_from_config(str(cfg_path))
+
+        result = json.loads(cfg_path.read_text())
+        assert "api_keys" not in result.get("server", {})
+        assert "api_key" not in result.get("server", {})
+        assert result["server"]["host"] == "0.0.0.0"
+
+    def test_graceful_on_unreadable(self, tmp_path):
+        from llm_rosetta.gateway.app import _flush_api_keys_from_config
+
+        _flush_api_keys_from_config(str(tmp_path / "nonexistent.json"))
+
+    def test_graceful_when_no_server_section(self, tmp_path):
+        import json
+
+        from llm_rosetta.gateway.app import _flush_api_keys_from_config
+
+        config = {"providers": {}}
+        cfg_path = tmp_path / "config.json"
+        cfg_path.write_text(json.dumps(config))
+
+        _flush_api_keys_from_config(str(cfg_path))
+
+        result = json.loads(cfg_path.read_text())
+        assert "api_keys" not in result.get("server", {})
+        assert "api_key" not in result.get("server", {})
