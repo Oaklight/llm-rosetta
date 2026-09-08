@@ -23,6 +23,19 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google Interactions streaming** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): added `google_generate` and `google_interactions` to `SSE_FORMATTERS` registry; added IR→provider stream handlers; synthesize `step.start`/`step.stop` events when upstream omits `ContentBlockStartEvent`; defer `interaction.completed` to `stream_end` so usage data is included.
 - **Google Interactions thinking passthrough** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649)): set `include_thoughts=True` in IR when `thinking_level` is enabled, so the upstream Google API returns thought content.
 
+
+### Changed
+
+- **API key management is now SQLite-only** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): `server.api_keys` and `server.api_key` config-file fields are no longer parsed or used for authentication. All API key management now goes exclusively through the admin panel + SQLite keystore. Existing keys in config files are silently ignored. The `keystore.import_from_config()` migration path has been removed.
+
+### Fixed
+
+- **Security: deleted/rotated API keys could still authenticate** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): the auth hook had a `config_fallback` dict (built from `server.api_keys` at startup) that was never invalidated by admin panel key deletion/rotation. Revoked keys could bypass keystore validation via this stale fallback. Removed the `config_fallback` path entirely — SQLite keystore is now the sole API key authority.
+
+### Internal
+
+- **Vendor zerodep `jsonx` module** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652)): replaced the hand-rolled `_strip_jsonc_comments` regex in `gateway/config.py` with the vendored `jsonx` parser. Adds support for `#` comments, trailing commas, and better error line-number remapping.
+
 ## v0.12.0 — 2026-09-03
 
 ### Added
