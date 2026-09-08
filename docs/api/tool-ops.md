@@ -8,7 +8,9 @@ title: Tool Ops
     `to_google_genai()` / `from_google_genai()` → **`to_google_generate()`** / **`from_google_generate()`**。
     旧名称仍可作为弃用别名使用。
 
-`tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供方原生格式之间转换工具定义——无需实例化完整的转换器管道。
+`tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供方原生格式之间转换工具相关数据——无需实例化完整的转换器管道。
+
+覆盖完整的工具生命周期：**定义（definition）**、**选择（choice）**、**调用（call）**、**结果（result）** 和 **配置（config）**。
 
 所有导入均为懒加载，只有在首次调用对应提供方的函数时才会加载其依赖。
 
@@ -51,6 +53,7 @@ ir_tool: ToolDefinition = {
 | `openai_responses` | `{"type": "function", "name": …, "description": …, "parameters": {…}}` |
 | `anthropic` | `{"name": …, "description": …, "input_schema": {…}}` |
 | `google` | `{"function_declarations": [{"name": …, "description": …, "parameters": {…}}]}` |
+| `google_interactions` | `{"type": "function", "name": …, "description": …, "parameters": {…}}` |
 
 ## 快速示例
 
@@ -73,6 +76,7 @@ openai_tool    = tool_ops.to_openai_chat(ir_tool)
 responses_tool = tool_ops.to_openai_responses(ir_tool)
 anthropic_tool = tool_ops.to_anthropic(ir_tool)
 google_tool    = tool_ops.to_google_generate(ir_tool)
+interact_tool  = tool_ops.to_google_interactions(ir_tool)
 
 # 统一调度写法
 same_tool = tool_ops.to_provider(ir_tool, provider="anthropic")
@@ -131,6 +135,7 @@ tool_ops.to_google_generate(ir_tool)
 | `openai_responses` | `openai-responses`、`open_responses`、`open-responses` |
 | `anthropic` | — |
 | `google` | `google-genai` |
+| `google_interactions` | `google-interactions` |
 
 ## 批量转换
 
@@ -187,6 +192,71 @@ except ValueError as exc:
 
 ---
 
+
+## 完整生命周期调度
+
+除了工具定义，`tool_ops` 还通过统一调度函数覆盖了完整的 `BaseToolOps` 生命周期。
+这些函数适用于所有 5 个提供方。
+
+### 工具选择（Tool Choice）
+
+```python
+ir_choice = {"mode": "auto"}
+provider_choice = tool_ops.choice_to_provider(ir_choice, provider="anthropic")
+recovered = tool_ops.choice_from_provider(provider_choice, provider="anthropic")
+```
+
+::: llm_rosetta.tool_ops.choice_to_provider
+
+::: llm_rosetta.tool_ops.choice_from_provider
+
+### 工具调用（Tool Call）
+
+```python
+ir_call = {
+    "type": "tool_call",
+    "tool_call_id": "call_123",
+    "tool_name": "get_weather",
+    "tool_input": {"city": "London"},
+}
+provider_call = tool_ops.call_to_provider(ir_call, provider="openai_chat")
+recovered = tool_ops.call_from_provider(provider_call, provider="openai_chat")
+```
+
+::: llm_rosetta.tool_ops.call_to_provider
+
+::: llm_rosetta.tool_ops.call_from_provider
+
+### 工具结果（Tool Result）
+
+```python
+ir_result = {
+    "type": "tool_result",
+    "tool_call_id": "call_123",
+    "result": "Sunny, 22°C",
+}
+provider_result = tool_ops.result_to_provider(ir_result, provider="anthropic")
+recovered = tool_ops.result_from_provider(provider_result, provider="anthropic")
+```
+
+::: llm_rosetta.tool_ops.result_to_provider
+
+::: llm_rosetta.tool_ops.result_from_provider
+
+### 工具配置（Tool Config）
+
+```python
+ir_config = {"tool_choice": "auto"}
+provider_config = tool_ops.config_to_provider(ir_config, provider="openai_chat")
+recovered = tool_ops.config_from_provider(provider_config, provider="openai_chat")
+```
+
+::: llm_rosetta.tool_ops.config_to_provider
+
+::: llm_rosetta.tool_ops.config_from_provider
+
+---
+
 ## 按提供方快捷方法
 
 ### IR 转提供方格式
@@ -199,6 +269,8 @@ except ValueError as exc:
 
 ::: llm_rosetta.tool_ops.to_google_generate
 
+::: llm_rosetta.tool_ops.to_google_interactions
+
 ### 提供方格式转 IR
 
 ::: llm_rosetta.tool_ops.from_openai_chat
@@ -208,3 +280,5 @@ except ValueError as exc:
 ::: llm_rosetta.tool_ops.from_anthropic
 
 ::: llm_rosetta.tool_ops.from_google_generate
+
+::: llm_rosetta.tool_ops.from_google_interactions
