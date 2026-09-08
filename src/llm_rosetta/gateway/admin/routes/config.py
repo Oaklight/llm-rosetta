@@ -152,6 +152,15 @@ async def get_config(request: Any) -> Response:
         )
 
     server = dict(raw.get("server", {}))
+    # Strip sensitive fields from the server section
+    server.pop("admin_password", None)
+    if "api_key" in server:
+        server["api_key"] = _mask_api_key(server["api_key"])
+    if "api_keys" in server:
+        server["api_keys"] = [
+            {**entry, "key": _mask_api_key(entry.get("key", ""))}
+            for entry in server["api_keys"]
+        ]
 
     config: GatewayConfig = request.app.gateway_config
     return JSONResponse(
