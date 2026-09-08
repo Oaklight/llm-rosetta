@@ -166,10 +166,7 @@ a { color: var(--accent); text-decoration: none; }
   border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.15);
   width: 700px; max-width: 95vw; padding: 28px;
   max-height: 85vh; overflow-y: auto;
-  transform: translateY(8px); opacity: 0;
-  animation: settingsPanelIn 0.25s ease forwards;
 }
-@keyframes settingsPanelIn { to { transform: none; opacity: 1; } }
 .settings-popup-panel::-webkit-scrollbar { width: 6px; }
 .settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
 .settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
