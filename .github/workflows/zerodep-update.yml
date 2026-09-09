@@ -1,0 +1,70 @@
+name: zerodep-update
+
+on:
+  schedule:
+    - cron: "17 3 * * 1" # Weekly Monday 3:17 UTC
+  workflow_dispatch:
+
+# NOTE: PRs created by the default GITHUB_TOKEN do not trigger
+# on:pull_request workflows. If you need CI checks on the auto-PR,
+# use a GitHub App token or PAT instead of github.token.
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install zerodep CLI
+        run: pip install 'zerodep>=2026.9.9'
+
+      - name: Check for outdated modules
+        id: check
+        run: |
+          output=$(zerodep outdated --json)
+          echo "$output"
+          count=$(echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for m in d['modules'] if m['status']=='outdated'))")
+          if [ "$count" -gt 0 ]; then
+            echo "has_updates=true" >> "$GITHUB_OUTPUT"
+            modules=$(echo "$output" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          for m in d['modules']:
+              s = m['status']
+              if s == 'outdated':
+                  print(f\"- {m['name']}: {m['local_version']} -> {m['latest_version']}\")
+              elif s != 'up-to-date':
+                  print(f\"- {m['name']}: {s} (manual migration needed)\")
+          ")
+            echo "modules<<EOF" >> "$GITHUB_OUTPUT"
+            echo "$modules" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update outdated modules
+        if: steps.check.outputs.has_updates == 'true'
+        run: zerodep update --all
+
+      - name: Create or update Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: zerodep-update
+          delete-branch: true
+          title: "chore(deps): update vendored zerodep modules"
+          body: |
+            Automated update of vendored zerodep modules.
+
+            ${{ steps.check.outputs.modules }}
+          labels: dependencies,zerodep
+          commit-message: "chore(deps): update vendored zerodep modules"

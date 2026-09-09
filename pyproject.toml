@@ -102,3 +102,6 @@ max-complexity = 15
 paths = ["src", "tests"]
 max-complexity-allowed = 30
 exclude = ["src/llm_rosetta/_vendor"]
+
+[tool.zerodep]
+vendor-dir = "src/llm_rosetta/_vendor"
