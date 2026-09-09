@@ -210,18 +210,26 @@ function fmtBytesShort(n) {
   return (n / (1024 * 1024 * 1024)).toFixed(2) + ' G';
 }
 
+// Compact token formatter (e.g. "1.2K", "3.5M")
+function fmtTokens(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
 // ===================== Window globals =====================
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
   showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration,
-  fmtBytesShort, fmtBytesLong,
+  fmtBytesShort, fmtBytesLong, fmtTokens,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
   setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
-  fmtBytesShort, fmtBytesLong,
+  fmtBytesShort, fmtBytesLong, fmtTokens,
   inlineConfirm, doLogout,
   _startInactivityTracking, _stopInactivityTracking,
 };
