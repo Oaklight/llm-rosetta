@@ -37,6 +37,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
     class _Config:
         models = {"gpt-test": "test-provider"}
         error_dumps_enabled = False
+        provider_key_affinity: dict[str, bool] = {}
 
         def resolve(self, source_provider, model):
             return (

@@ -30,6 +30,7 @@ class KeyContext:
 
     label: str
     allowed_shims: frozenset[str]
+    key_hash: str = ""
 
 
 def _hash_key(raw_key: str) -> str:

@@ -45,6 +45,17 @@ class KeyRing:
         self._idx = (self._idx + 1) % len(self._keys)
         return key
 
+    def select(self, index: int) -> str:
+        """Return the key at *index* (mod key count).
+
+        Unlike :meth:`next`, this does not advance the round-robin
+        counter — it is a pure lookup used by affinity-based key
+        selection.
+        """
+        if not self._keys:
+            raise ValueError("No API keys configured")
+        return self._keys[index % len(self._keys)]
+
     def __len__(self) -> int:
         return len(self._keys)
 
@@ -116,11 +127,14 @@ class ProviderInfo:
         self._stream_url_template = stream_url_template
         self.proxy_url = proxy_url
         self.timeout = timeout
+        self._affinity_key_index: int | None = None
 
     # -- public helpers used by the proxy -----------------------------------
 
     def auth_headers(self) -> dict[str, str]:
-        """Return auth headers using the next rotated key."""
+        """Return auth headers using the next rotated or affinity-selected key."""
+        if self._affinity_key_index is not None:
+            return self._auth_header_fn(self.key_ring.select(self._affinity_key_index))
         return self._auth_header_fn(self.key_ring.next())
 
     def upstream_url(self, model: str, *, stream: bool = False) -> str:
@@ -164,6 +178,22 @@ class ProviderInfo:
 
         clone = copy.copy(self)
         clone.timeout = timeout
+        return clone
+
+    def with_affinity(self, key_index: int | None) -> ProviderInfo:
+        """Return a shallow copy with affinity-based key selection.
+
+        When *key_index* is set, :meth:`auth_headers` uses
+        :meth:`KeyRing.select` instead of round-robin :meth:`KeyRing.next`.
+        The new instance shares the same :class:`KeyRing`.
+        Returns ``self`` unchanged if *key_index* is ``None``.
+        """
+        if key_index is None:
+            return self
+        import copy
+
+        clone = copy.copy(self)
+        clone._affinity_key_index = key_index
         return clone
 
 
