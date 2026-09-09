@@ -17,6 +17,7 @@ When no keys are configured, behavior depends on ``open_on_no_keys``:
 from __future__ import annotations
 
 import contextvars
+import dataclasses
 import hashlib
 import hmac
 from typing import Any
@@ -285,11 +286,7 @@ def create_auth_hook(auth_state: AuthState) -> Any:
             return _error_for_path(path, 401, "Invalid or missing API key")
 
         api_key_context_var.set(
-            KeyContext(
-                label=ctx.label,
-                allowed_shims=ctx.allowed_shims,
-                key_hash=hashlib.sha256(key.encode()).hexdigest(),
-            )
+            dataclasses.replace(ctx, key_hash=hashlib.sha256(key.encode()).hexdigest())
         )
         return None
 

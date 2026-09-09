@@ -38,9 +38,8 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
-from .sanitize import sanitize_upstream_error
-
 from .affinity import compute_affinity_index, extract_prefix_from_ir
+from .sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -305,6 +304,23 @@ def _strip_internal_metadata(obj: dict | list) -> None:
             _strip_internal_metadata(item)
 
 
+def _maybe_apply_affinity(
+    provider_info: ProviderInfo,
+    ir_request: dict,
+    client_key_hash: str,
+    key_affinity: bool,
+) -> ProviderInfo:
+    """Apply key affinity if conditions are met, otherwise return unchanged."""
+    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
+        prefix = extract_prefix_from_ir(ir_request)
+        idx = compute_affinity_index(
+            client_key_hash, prefix, len(provider_info.key_ring)
+        )
+        if idx is not None:
+            return provider_info.with_affinity(idx)
+    return provider_info
+
+
 async def handle_non_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -380,13 +396,9 @@ async def handle_non_streaming(
     _strip_internal_metadata(target_body)
 
     # Key affinity: deterministic key selection for prompt cache locality
-    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
-        _prefix = extract_prefix_from_ir(pipeline.ir_request)
-        _key_idx = compute_affinity_index(
-            client_key_hash, _prefix, len(provider_info.key_ring)
-        )
-        if _key_idx is not None:
-            provider_info = provider_info.with_affinity(_key_idx)
+    provider_info = _maybe_apply_affinity(
+        provider_info, pipeline.ir_request, client_key_hash, key_affinity
+    )
 
     # Phase 3: Forward to upstream via transport
     upstream_url = provider_info.upstream_url(model)
@@ -913,13 +925,9 @@ async def handle_streaming(
     _strip_internal_metadata(target_body)
 
     # Key affinity: deterministic key selection for prompt cache locality
-    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
-        _prefix = extract_prefix_from_ir(pipeline.ir_request)
-        _key_idx = compute_affinity_index(
-            client_key_hash, _prefix, len(provider_info.key_ring)
-        )
-        if _key_idx is not None:
-            provider_info = provider_info.with_affinity(_key_idx)
+    provider_info = _maybe_apply_affinity(
+        provider_info, pipeline.ir_request, client_key_hash, key_affinity
+    )
 
     # Preflight: get exact input_tokens before streaming (opt-in)
     _preflight_input_tokens: int | None = None
