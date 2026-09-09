@@ -25,6 +25,8 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from .keystore import KeyContext, KeyStore
 
+ADMIN_COOKIE_NAME = "rosetta_admin_session"
+
 # Per-request auth context — set by auth hook, read by telemetry.
 api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.ContextVar(
     "api_key_context", default=None
@@ -138,13 +140,18 @@ def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
 
     path = request.path
 
-    # Login and auth-check endpoints are always accessible
-    if path in ("/admin/api/login", "/admin/api/auth-check"):
+    # Login, logout, and auth-check endpoints are always accessible
+    if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/auth-check"):
         return None
 
-    # Check X-Admin-Token header
+    # Check X-Admin-Token header (API clients, backward compat)
     admin_token = request.headers.get("x-admin-token", "")
     if admin_token and hmac.compare_digest(admin_token, auth_state.admin_token or ""):
+        return None
+
+    # Check session cookie (browser sessions)
+    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    if cookie_token and hmac.compare_digest(cookie_token, auth_state.admin_token or ""):
         return None
 
     # Block unauthenticated API calls

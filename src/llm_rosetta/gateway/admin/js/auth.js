@@ -255,7 +255,7 @@ async function doExportDumps() {
   if (end) params.push('end=' + encodeURIComponent(end + 'T23:59:59Z'));
   if (params.length) url += '?' + params.join('&');
   try {
-    const r = await fetch(url, {headers: _adminHeaders()});
+    const r = await fetch(url, {headers: _adminHeaders(), credentials: 'include'});
     if (!r.ok) { showToast(t('toast.error'), 'error'); return; }
     const blob = await r.blob();
     const a = document.createElement('a');
@@ -317,9 +317,7 @@ async function _doTokenRotate() {
   try {
     const data = await api.post('/admin/api/token/rotate');
     // api.post returns parsed JSON directly, not a Response
-    if (data.token) {
-      localStorage.setItem('admin_token', data.token);
-    }
+    // Session cookie updated automatically by server response
     // Refresh internal token display
     const td = await api.get('/admin/api/internal-token');
     S.internalToken = td.token;
@@ -342,7 +340,7 @@ async function changeAdminPassword() {
   if (newPw.length < 4) { errEl.textContent = t('pw.tooShort'); return; }
   try {
     const data = await api.put('/admin/api/config/password', { current_password: current, new_password: newPw });
-    if (data.token) localStorage.setItem('admin_token', data.token);
+    // Session cookie updated automatically by server response
     ['settingsCurrentPw','settingsNewPw','settingsConfirmPw'].forEach(id => {
       const el = document.getElementById(id); if (el) el.value = '';
     });
@@ -353,7 +351,6 @@ async function changeAdminPassword() {
 }
 
 function showLoginOverlay() {
-  localStorage.removeItem('admin_token');
   document.body.classList.add('auth-pending');
   // Stop background polling timers to prevent repeated 401 → showLoginOverlay loops
   if (S.dashboardTimer) { clearInterval(S.dashboardTimer); S.dashboardTimer = null; }
@@ -375,10 +372,10 @@ async function doLogin() {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({password: pw}),
+      credentials: 'include',
     });
     const data = await r.json();
-    if (r.ok && data.token) {
-      localStorage.setItem('admin_token', data.token);
+    if (r.ok) {
       document.getElementById('loginOverlay').style.display = 'none';
       document.body.classList.remove('auth-pending');
       const btn = document.getElementById('logoutBtn');
@@ -398,22 +395,15 @@ async function checkAuthAndInit() {
     const r = await fetch('/admin/api/auth-check');
     const data = await r.json();
     if (data.requires_auth) {
-      // Check if we have a valid stored token
-      const token = localStorage.getItem('admin_token');
-      if (token) {
-        // Verify token by trying to load config
-        const test = await fetch('/admin/api/config', {headers: {'X-Admin-Token': token}});
-        if (test.status === 401) {
-          showLoginOverlay();
-          return;
-        }
-        const btn = document.getElementById('logoutBtn');
-        if (btn) btn.style.display = '';
-        _startInactivityTracking();
-      } else {
+      // Verify existing session cookie by trying to load config
+      const test = await fetch('/admin/api/config', {credentials: 'include'});
+      if (test.status === 401) {
         showLoginOverlay();
         return;
       }
+      const btn = document.getElementById('logoutBtn');
+      if (btn) btn.style.display = '';
+      _startInactivityTracking();
     }
     document.body.classList.remove('auth-pending');
     window.initApp();

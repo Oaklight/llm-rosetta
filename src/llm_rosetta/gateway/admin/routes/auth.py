@@ -8,6 +8,8 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
+from llm_rosetta.gateway.auth import ADMIN_COOKIE_NAME
+
 from ..static import load_admin_html, load_static_file
 
 # Cached HTML — loaded once on first request, per custom_head value.
@@ -155,6 +157,17 @@ def _clear_login_failures(ip: str) -> None:
     _login_failures.pop(ip, None)
 
 
+def _set_session_cookie(resp: Response, token: str) -> None:
+    """Set the admin session cookie on a response."""
+    resp.set_cookie(
+        ADMIN_COOKIE_NAME,
+        token,
+        path="/admin",
+        httponly=True,
+        samesite="Lax",
+    )
+
+
 async def admin_login(request: Any) -> Response:
     """Validate admin password and return a session token."""
     auth_state = request.app.auth_state
@@ -188,7 +201,9 @@ async def admin_login(request: Any) -> Response:
         return JSONResponse(resp, status_code=401)
 
     _clear_login_failures(ip)
-    return JSONResponse({"ok": True, "token": auth_state.admin_token})
+    resp = JSONResponse({"ok": True})
+    _set_session_cookie(resp, auth_state.admin_token)
+    return resp
 
 
 async def admin_check(request: Any) -> Response:
@@ -196,6 +211,13 @@ async def admin_check(request: Any) -> Response:
     auth_state = request.app.auth_state
     requires_auth = bool(auth_state.admin_password)
     return JSONResponse({"requires_auth": requires_auth})
+
+
+async def admin_logout(request: Any) -> Response:
+    """Clear the admin session cookie."""
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
+    return resp
 
 
 async def change_password(request: Any) -> Response:
@@ -267,8 +289,10 @@ async def change_password(request: Any) -> Response:
     # Hot-reload config (syncs auth state via _sync_auth_middleware)
     _reload_gateway_config(request, config_path)
 
-    # Return the new admin token so frontend can swap immediately
-    return JSONResponse({"ok": True, "token": auth_state.admin_token})
+    # Set new session cookie so browser stays authenticated
+    resp = JSONResponse({"ok": True})
+    _set_session_cookie(resp, auth_state.admin_token)
+    return resp
 
 
 async def rotate_token(request: Any) -> Response:
@@ -284,4 +308,6 @@ async def rotate_token(request: Any) -> Response:
     # Also update the app-level internal_token reference
     request.app.internal_token = auth_state.internal_token
 
-    return JSONResponse({"ok": True, "token": new_admin_token})
+    resp = JSONResponse({"ok": True})
+    _set_session_cookie(resp, new_admin_token)
+    return resp

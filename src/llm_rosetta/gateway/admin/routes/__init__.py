@@ -29,6 +29,7 @@ from ._shared import (  # noqa: F401  (re-exported for backward compat)
 )
 from .auth import (
     admin_check,
+    admin_logout,
     admin_login,
     change_password,
     rotate_token,
@@ -136,6 +137,7 @@ def register_admin_routes(app: Any) -> None:
     # Admin auth
     app.route("/admin/api/login", methods=["POST"])(admin_login)
     app.route("/admin/api/auth-check", methods=["GET"])(admin_check)
+    app.route("/admin/api/logout", methods=["POST"])(admin_logout)
     app.route("/admin/api/config/password", methods=["PUT"])(change_password)
     app.route("/admin/api/token/rotate", methods=["POST"])(rotate_token)
     # Config CRUD (providers + models tabs)
