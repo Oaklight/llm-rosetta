@@ -15,6 +15,13 @@ from llm_rosetta._vendor import jsonx
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 
+from .routing_strategy import (
+    DEFAULT_STRATEGY,
+    ModelRoute,
+    ProviderEntry,
+    create_strategy,
+)
+
 from .providers import build_provider_info
 from .transport import ProviderInfo
 
@@ -635,11 +642,12 @@ class GatewayConfig:
                 "config: no routable models — models may reference disabled providers"
             )
             return
-        for model, provider in self.models.items():
-            if provider not in self._raw_providers:
-                raise ValueError(
-                    f"config: model '{model}' references unknown provider '{provider}'"
-                )
+        for model, route in self.models.items():
+            for pname in route.provider_names:
+                if pname not in self._raw_providers:
+                    raise ValueError(
+                        f"config: model '{model}' references unknown provider '{pname}'"
+                    )
 
     @staticmethod
     def _resolve_provider_types(
@@ -676,48 +684,121 @@ class GatewayConfig:
         cls,
         raw_models: dict[str, Any],
         raw_providers: dict[str, dict[str, str]],
-    ) -> tuple[dict[str, ProviderType], dict[str, list[str]], dict[str, str]]:
+    ) -> tuple[dict[str, ModelRoute], dict[str, list[str]], dict[str, str]]:
         """Parse model routing entries from config.
 
-        Supports both string and dict formats:
+        Supports string, single-provider dict, and multi-provider formats:
           - ``"model": "provider"`` (legacy)
           - ``"model": {"provider": "p", "capabilities": [...]}``
-          - ``"model": {"provider": "p", "upstream_model": "actual_name"}``
+          - ``"model": {"providers": ["p1", "p2"]}`` (equal weight)
+          - ``"model": {"providers": [{"name": "p1", "weight": 3}, ...]}``
 
         Models referencing disabled/missing providers are silently skipped.
 
         Returns:
             Tuple of (models, model_capabilities, model_upstream_names).
         """
-        models: dict[str, ProviderType] = {}
+        models: dict[str, ModelRoute] = {}
         model_capabilities: dict[str, list[str]] = {}
         model_upstream_names: dict[str, str] = {}
         for name, value in raw_models.items():
-            if isinstance(value, str):
-                provider_name = value
-            elif isinstance(value, dict):
-                provider_name = value["provider"]
-            else:
-                raise ValueError(f"config: invalid model entry for '{name}'")
-
-            # Skip disabled models
-            if isinstance(value, dict) and value.get("enabled") is False:
+            route = cls._parse_model_route(name, value, raw_providers)
+            if route is None:
                 continue
-
-            if provider_name not in raw_providers:
-                continue
-
-            models[name] = provider_name
-            if isinstance(value, str):
-                model_capabilities[name] = list(cls.DEFAULT_CAPABILITIES)
-            else:
-                model_capabilities[name] = value.get(
-                    "capabilities", list(cls.DEFAULT_CAPABILITIES)
-                )
-                upstream = value.get("upstream_model")
-                if upstream:
-                    model_upstream_names[name] = upstream
+            models[name] = route
+            caps, upstream = cls._extract_model_metadata(value)
+            model_capabilities[name] = caps
+            if upstream:
+                model_upstream_names[name] = upstream
         return models, model_capabilities, model_upstream_names
+
+    @classmethod
+    def _parse_model_route(
+        cls,
+        name: str,
+        value: Any,
+        raw_providers: dict[str, dict[str, str]],
+    ) -> ModelRoute | None:
+        """Resolve a single model config entry to a :class:`ModelRoute`.
+
+        Returns ``None`` if the model should be skipped.
+        """
+        if isinstance(value, str):
+            if value not in raw_providers:
+                return None
+            return ModelRoute([ProviderEntry(value)])
+        if not isinstance(value, dict):
+            raise ValueError(f"config: invalid model entry for '{name}'")
+        if value.get("enabled") is False:
+            return None
+        if "provider" in value and "providers" in value:
+            raise ValueError(
+                f"config: model '{name}' has both 'provider' and "
+                f"'providers' — use one or the other"
+            )
+        if "providers" in value:
+            return cls._parse_multi_provider(name, value, raw_providers)
+        provider_name = value["provider"]
+        if provider_name not in raw_providers:
+            return None
+        return ModelRoute([ProviderEntry(provider_name)])
+
+    @classmethod
+    def _extract_model_metadata(cls, value: Any) -> tuple[list[str], str | None]:
+        """Extract capabilities and upstream_model from a model entry."""
+        if isinstance(value, str):
+            return list(cls.DEFAULT_CAPABILITIES), None
+        caps = value.get("capabilities", list(cls.DEFAULT_CAPABILITIES))
+        return caps, value.get("upstream_model")
+
+    @classmethod
+    def _parse_multi_provider(
+        cls,
+        model_name: str,
+        value: dict[str, Any],
+        raw_providers: dict[str, dict[str, str]],
+    ) -> ModelRoute | None:
+        """Parse a multi-provider model entry.
+
+        Returns ``None`` if no valid providers remain after filtering.
+        """
+        raw_list = value["providers"]
+        if not isinstance(raw_list, list) or not raw_list:
+            raise ValueError(
+                f"config: model '{model_name}' has empty or invalid 'providers' list"
+            )
+
+        entries: list[ProviderEntry] = []
+        for item in raw_list:
+            if isinstance(item, str):
+                pname, weight = item, 1
+            elif isinstance(item, dict):
+                pname = item.get("name", "")
+                weight = int(item.get("weight", 1))
+                if not pname:
+                    raise ValueError(
+                        f"config: model '{model_name}' has a provider entry "
+                        f"without a 'name' field"
+                    )
+            else:
+                raise ValueError(
+                    f"config: model '{model_name}' has invalid provider entry: {item}"
+                )
+            if pname not in raw_providers:
+                logger.warning(
+                    "Model %r: provider %r not found, skipping",
+                    model_name,
+                    pname,
+                )
+                continue
+            entries.append(ProviderEntry(pname, weight))
+
+        if not entries:
+            return None
+
+        strategy_name = value.get("strategy", DEFAULT_STRATEGY)
+        strategy = create_strategy(strategy_name)
+        return ModelRoute(entries, strategy)
 
     def resolve(
         self,
@@ -744,7 +825,7 @@ class GatewayConfig:
         """
         from typing import cast
 
-        provider_name = self.models[model]
+        provider_name = self.models[model].select()
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
         upstream_model = self.model_upstream_names.get(model)

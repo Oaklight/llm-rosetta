@@ -187,6 +187,7 @@ class MetricsCollector:
     total_input_tokens: int = 0
     total_output_tokens: int = 0
     by_model_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
+    by_provider_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
 
     # Gauge
     active_streams: int = 0
@@ -252,6 +253,14 @@ class MetricsCollector:
             mt["input_tokens"] += input_tokens or 0
             mt["output_tokens"] += output_tokens or 0
 
+            if provider_name:
+                pt = self.by_provider_tokens.get(provider_name)
+                if pt is None:
+                    pt = {"input_tokens": 0, "output_tokens": 0}
+                    self.by_provider_tokens[provider_name] = pt
+                pt["input_tokens"] += input_tokens or 0
+                pt["output_tokens"] += output_tokens or 0
+
         self._window.record(duration_ms, is_error=is_error)
 
         # Per-provider stats (use provider_name if available, fall back to target)
@@ -266,6 +275,7 @@ class MetricsCollector:
         model: str,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        provider_name: str | None = None,
     ) -> None:
         """Record token usage separately (for streaming write-back)."""
         if input_tokens is not None:
@@ -279,6 +289,14 @@ class MetricsCollector:
                 self.by_model_tokens[model] = mt
             mt["input_tokens"] += input_tokens or 0
             mt["output_tokens"] += output_tokens or 0
+
+            if provider_name:
+                pt = self.by_provider_tokens.get(provider_name)
+                if pt is None:
+                    pt = {"input_tokens": 0, "output_tokens": 0}
+                    self.by_provider_tokens[provider_name] = pt
+                pt["input_tokens"] += input_tokens or 0
+                pt["output_tokens"] += output_tokens or 0
 
     def provider_health_snapshot(self) -> dict[str, dict]:
         """Return a JSON-serializable per-provider health snapshot."""
@@ -310,6 +328,9 @@ class MetricsCollector:
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
+            "by_provider_tokens": {
+                k: dict(v) for k, v in self.by_provider_tokens.items()
+            },
         }
 
     def load_counters(self, data: dict) -> None:
@@ -327,6 +348,9 @@ class MetricsCollector:
         self.total_output_tokens = data.get("total_output_tokens", 0)
         self.by_model_tokens = {
             k: dict(v) for k, v in data.get("by_model_tokens", {}).items()
+        }
+        self.by_provider_tokens = {
+            k: dict(v) for k, v in data.get("by_provider_tokens", {}).items()
         }
 
     def rebuild_counters(self, rows: Iterable[dict]) -> int:
@@ -364,6 +388,7 @@ class MetricsCollector:
         total_input_tokens = 0
         total_output_tokens = 0
         by_model_tokens: dict[str, dict[str, int]] = {}
+        by_provider_tokens: dict[str, dict[str, int]] = {}
 
         for r in rows:
             total_requests += 1
@@ -400,6 +425,16 @@ class MetricsCollector:
                 mt["input_tokens"] += inp or 0
                 mt["output_tokens"] += outp or 0
 
+                pn = r.get("target_provider_name") or r.get(
+                    "target_provider", "unknown"
+                )
+                pt = by_provider_tokens.get(pn)
+                if pt is None:
+                    pt = {"input_tokens": 0, "output_tokens": 0}
+                    by_provider_tokens[pn] = pt
+                pt["input_tokens"] += inp or 0
+                pt["output_tokens"] += outp or 0
+
         # Atomic swap — active_streams is live state, not rebuilt.
         self.total_requests = total_requests
         self.total_errors = total_errors
@@ -411,6 +446,7 @@ class MetricsCollector:
         self.total_input_tokens = total_input_tokens
         self.total_output_tokens = total_output_tokens
         self.by_model_tokens = by_model_tokens
+        self.by_provider_tokens = by_provider_tokens
 
         return total_requests
 
@@ -437,6 +473,9 @@ class MetricsCollector:
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
+            "by_provider_tokens": {
+                k: dict(v) for k, v in self.by_provider_tokens.items()
+            },
             "series": self._window.get_series(series_seconds),
             "providers": self.provider_health_snapshot(),
         }

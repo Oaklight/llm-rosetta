@@ -103,9 +103,17 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
         return {"provider": value, "capabilities": ["text"]}
     entry: dict[str, Any] = {
-        "provider": value.get("provider", ""),
         "capabilities": value.get("capabilities", ["text"]),
     }
+    if "providers" in value:
+        entry["providers"] = value["providers"]
+        if "strategy" in value:
+            entry["strategy"] = value["strategy"]
+        # For backward compat, set "provider" to the first entry
+        first = value["providers"][0] if value["providers"] else ""
+        entry["provider"] = first if isinstance(first, str) else first.get("name", "")
+    else:
+        entry["provider"] = value.get("provider", "")
     if value.get("type"):
         entry["type"] = value["type"]
     for key in (
@@ -289,10 +297,22 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
 
         # Check if any model still references this provider
         models = data.get("models", {})
+
+        def _model_references_provider(model_cfg: Any, provider_name: str) -> bool:
+            if isinstance(model_cfg, str):
+                return model_cfg == provider_name
+            if isinstance(model_cfg, dict):
+                if "providers" in model_cfg:
+                    for entry in model_cfg["providers"]:
+                        pn = entry if isinstance(entry, str) else entry.get("name", "")
+                        if pn == provider_name:
+                            return True
+                    return False
+                return model_cfg.get("provider", "") == provider_name
+            return False
+
         referencing = [
-            m
-            for m, p in models.items()
-            if (p["provider"] if isinstance(p, dict) else p) == name
+            m for m, p in models.items() if _model_references_provider(p, name)
         ]
 
         from ._shared import _qp

@@ -464,3 +464,164 @@ class TestPassthroughZeroTokens:
         assert usage["prompt_tokens"] == 0
         assert usage["completion_tokens"] == 50
         assert usage["total_tokens"] == 50
+
+
+# ---- Provider-level token tracking (multi-provider support) ----
+
+
+class TestProviderTokenTracking:
+    """by_provider_tokens aggregation in MetricsCollector."""
+
+    def test_record_request_tracks_provider_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            provider_name="openai_a",
+            input_tokens=100,
+            output_tokens=50,
+        )
+        assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
+        assert m.by_provider_tokens["openai_a"]["output_tokens"] == 50
+
+    def test_record_request_without_provider_name(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            input_tokens=100,
+            output_tokens=50,
+        )
+        assert m.by_provider_tokens == {}
+
+    def test_provider_token_accumulation(self):
+        m = MetricsCollector()
+        for _ in range(3):
+            m.record_request(
+                model="gpt-4o",
+                source="openai_chat",
+                target="openai_chat",
+                status_code=200,
+                duration_ms=100,
+                is_stream=False,
+                provider_name="openai_a",
+                input_tokens=100,
+                output_tokens=50,
+            )
+        assert m.by_provider_tokens["openai_a"]["input_tokens"] == 300
+        assert m.by_provider_tokens["openai_a"]["output_tokens"] == 150
+
+    def test_multi_provider_separation(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            provider_name="openai_a",
+            input_tokens=100,
+            output_tokens=50,
+        )
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            provider_name="openai_b",
+            input_tokens=200,
+            output_tokens=100,
+        )
+        assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
+        assert m.by_provider_tokens["openai_b"]["input_tokens"] == 200
+
+    def test_record_usage_with_provider_name(self):
+        m = MetricsCollector()
+        m.record_usage(
+            model="gpt-4o",
+            input_tokens=500,
+            output_tokens=200,
+            provider_name="openai_a",
+        )
+        assert m.by_provider_tokens["openai_a"]["input_tokens"] == 500
+        assert m.by_provider_tokens["openai_a"]["output_tokens"] == 200
+
+    def test_record_usage_without_provider_name(self):
+        m = MetricsCollector()
+        m.record_usage(model="gpt-4o", input_tokens=500, output_tokens=200)
+        assert m.by_provider_tokens == {}
+
+    def test_snapshot_includes_provider_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            provider_name="openai_a",
+            input_tokens=1000,
+            output_tokens=500,
+        )
+        snap = m.snapshot()
+        assert snap["by_provider_tokens"]["openai_a"]["input_tokens"] == 1000
+
+    def test_export_load_preserves_provider_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="gpt-4o",
+            source="openai_chat",
+            target="openai_chat",
+            status_code=200,
+            duration_ms=100,
+            is_stream=False,
+            provider_name="openai_a",
+            input_tokens=1000,
+            output_tokens=500,
+        )
+        exported = m.export_counters()
+        m2 = MetricsCollector()
+        m2.load_counters(exported)
+        assert m2.by_provider_tokens["openai_a"]["input_tokens"] == 1000
+
+    def test_rebuild_counters_with_provider_tokens(self):
+        m = MetricsCollector()
+        rows = [
+            {
+                "model": "gpt-4o",
+                "source_provider": "openai_chat",
+                "target_provider": "openai_chat",
+                "target_provider_name": "openai_a",
+                "is_stream": False,
+                "status_code": 200,
+                "duration_ms": 100,
+                "input_tokens": 100,
+                "output_tokens": 50,
+            },
+            {
+                "model": "gpt-4o",
+                "source_provider": "openai_chat",
+                "target_provider": "openai_chat",
+                "target_provider_name": "openai_b",
+                "is_stream": False,
+                "status_code": 200,
+                "duration_ms": 100,
+                "input_tokens": 200,
+                "output_tokens": 100,
+            },
+        ]
+        m.rebuild_counters(rows)
+        assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
+        assert m.by_provider_tokens["openai_b"]["input_tokens"] == 200

@@ -107,6 +107,7 @@ _STRUCTURED_EXTRA_KEYS: frozenset[str] = frozenset(
         "label",
         "max_content_length",
         "model",
+        "provider_name",
         "request_id",
         "request_type",
         "source_provider",

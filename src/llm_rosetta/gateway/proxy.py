@@ -605,6 +605,7 @@ def _write_back_stream_usage(
     request_log: Any | None,
     metrics: Any | None,
     model: str,
+    provider_name: str | None = None,
 ) -> None:
     """Extract accumulated token usage from the stream processor and persist it."""
     usage = getattr(processor, "get_accumulated_usage", lambda: None)()
@@ -622,7 +623,12 @@ def _write_back_stream_usage(
     except Exception:
         logger.debug("Failed to write usage for %s", entry_id)
     if metrics is not None:
-        metrics.record_usage(model=model, input_tokens=inp, output_tokens=outp)
+        metrics.record_usage(
+            model=model,
+            input_tokens=inp,
+            output_tokens=outp,
+            provider_name=provider_name,
+        )
 
 
 async def _stream_event_generator(
@@ -729,7 +735,14 @@ async def _stream_event_generator(
             except Exception:
                 logger.debug("Failed to write stream profile for %s", entry_id)
 
-            _write_back_stream_usage(processor, entry_id, request_log, metrics, model)
+            _write_back_stream_usage(
+                processor,
+                entry_id,
+                request_log,
+                metrics,
+                model,
+                provider_name=dump_ctx.provider_name if dump_ctx else None,
+            )
 
         # Content capture (streaming): record accumulated upstream chunks
         if capture_record is not None and capture_state is not None:
