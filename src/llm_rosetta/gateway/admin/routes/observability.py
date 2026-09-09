@@ -387,7 +387,7 @@ async def delete_error_dump(request: Any, **kwargs: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    dump_id = kwargs.get("dump_id", "")
+    dump_id = request.path_params["dump_id"]
     if persistence.delete_error_dump(dump_id):
         return JSONResponse({"ok": True})
     return JSONResponse({"error": "Not found"}, status_code=404)
