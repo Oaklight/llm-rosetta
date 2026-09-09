@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.0"
+# version = "0.4.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -48,6 +48,7 @@ import signal
 import sys
 from collections.abc import AsyncIterator, Callable
 from email.utils import formatdate
+from http.cookies import CookieError, SimpleCookie
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
@@ -217,6 +218,7 @@ class Request:
         "app",
         "state",
         "_json",
+        "_cookies",
     )
 
     def __init__(
@@ -240,6 +242,24 @@ class Request:
         self.app = app
         self.state = State()
         self._json: Any = _SENTINEL
+        self._cookies: Any = _SENTINEL
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        """Parse the Cookie request header into a ``{name: value}`` dict."""
+        if self._cookies is _SENTINEL:
+            raw = self.headers.get("cookie", "")
+            if raw:
+                sc = SimpleCookie()
+                try:
+                    sc.load(raw)
+                except CookieError:
+                    self._cookies = {}
+                else:
+                    self._cookies = {k: m.value for k, m in sc.items()}
+            else:
+                self._cookies = {}
+        return self._cookies
 
     def json(self) -> Any:
         """Parse body as JSON (cached)."""
@@ -259,6 +279,87 @@ class Request:
 # ── Response Classes ─────────────────────────────────────────────────────────
 
 
+def _build_set_cookie(
+    name: str,
+    value: str = "",
+    *,
+    max_age: int | None = None,
+    expires: str | None = None,
+    path: str | None = None,
+    domain: str | None = None,
+    secure: bool = False,
+    httponly: bool = False,
+    samesite: str | None = None,
+) -> str:
+    """Build a Set-Cookie header value string."""
+    sc = SimpleCookie()
+    sc[name] = value
+    morsel = sc[name]
+    if max_age is not None:
+        morsel["max-age"] = str(max_age)
+    if expires is not None:
+        morsel["expires"] = expires
+    if path is not None:
+        morsel["path"] = path
+    if domain is not None:
+        morsel["domain"] = domain
+    if secure:
+        morsel["secure"] = True
+    if httponly:
+        morsel["httponly"] = True
+    if samesite is not None:
+        morsel["samesite"] = samesite
+    return morsel.OutputString()
+
+
+def _append_set_cookie(
+    cookie_headers: list[str],
+    name: str,
+    value: str = "",
+    *,
+    max_age: int | None = None,
+    expires: str | None = None,
+    path: str | None = None,
+    domain: str | None = None,
+    secure: bool = False,
+    httponly: bool = False,
+    samesite: str | None = None,
+) -> None:
+    """Append a Set-Cookie header value to the list."""
+    cookie_headers.append(
+        _build_set_cookie(
+            name,
+            value,
+            max_age=max_age,
+            expires=expires,
+            path=path,
+            domain=domain,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+        )
+    )
+
+
+def _append_delete_cookie(
+    cookie_headers: list[str],
+    name: str,
+    *,
+    path: str | None = None,
+    domain: str | None = None,
+) -> None:
+    """Append a Set-Cookie header that expires the named cookie."""
+    _append_set_cookie(
+        cookie_headers,
+        name,
+        value="",
+        max_age=0,
+        expires="Thu, 01 Jan 1970 00:00:00 GMT",
+        path=path,
+        domain=domain,
+    )
+
+
 class Response:
     """HTTP response with a fixed body.
 
@@ -269,7 +370,7 @@ class Response:
         content_type: Shorthand for ``Content-Type`` header.
     """
 
-    __slots__ = ("status_code", "headers", "body")
+    __slots__ = ("status_code", "headers", "body", "_cookie_headers")
 
     def __init__(
         self,
@@ -286,6 +387,67 @@ class Response:
             self.body = body
         if content_type is not None:
             self.headers["Content-Type"] = content_type
+        self._cookie_headers: list[str] = []
+
+    def set_cookie(
+        self,
+        name: str,
+        value: str = "",
+        *,
+        max_age: int | None = None,
+        expires: str | None = None,
+        path: str | None = None,
+        domain: str | None = None,
+        secure: bool = False,
+        httponly: bool = False,
+        samesite: str | None = None,
+    ) -> None:
+        """Append a Set-Cookie header to the response.
+
+        Args:
+            name: Cookie name.
+            value: Cookie value.
+            max_age: Max age in seconds.
+            expires: Expiry date string (HTTP date format).
+            path: Cookie path scope.
+            domain: Cookie domain scope.
+            secure: Restrict to HTTPS.
+            httponly: Restrict to HTTP (no JavaScript access).
+            samesite: SameSite attribute (``"Strict"``, ``"Lax"``, or ``"None"``).
+        """
+        _append_set_cookie(
+            self._cookie_headers,
+            name,
+            value,
+            max_age=max_age,
+            expires=expires,
+            path=path,
+            domain=domain,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+        )
+
+    def delete_cookie(
+        self,
+        name: str,
+        *,
+        path: str | None = None,
+        domain: str | None = None,
+    ) -> None:
+        """Append a Set-Cookie header that expires the named cookie.
+
+        Args:
+            name: Cookie name to delete.
+            path: Must match the path used when the cookie was set.
+            domain: Must match the domain used when the cookie was set.
+        """
+        _append_delete_cookie(
+            self._cookie_headers,
+            name,
+            path=path,
+            domain=domain,
+        )
 
     async def _write(self, writer: asyncio.StreamWriter) -> None:
         """Serialize and write the full HTTP response."""
@@ -299,6 +461,8 @@ class Response:
         buf.extend(f"HTTP/1.1 {self.status_code} {reason}\r\n".encode("latin-1"))
         for k, v in self.headers.items():
             buf.extend(f"{k}: {v}\r\n".encode("latin-1"))
+        for cookie_line in self._cookie_headers:
+            buf.extend(f"Set-Cookie: {cookie_line}\r\n".encode("latin-1"))
         buf.extend(b"\r\n")
         buf.extend(self.body)
         writer.write(bytes(buf))
@@ -347,7 +511,14 @@ class StreamingResponse:
             callables.  Exceptions are logged and suppressed.
     """
 
-    __slots__ = ("_generator", "status_code", "headers", "content_type", "background")
+    __slots__ = (
+        "_generator",
+        "status_code",
+        "headers",
+        "content_type",
+        "background",
+        "_cookie_headers",
+    )
 
     def __init__(
         self,
@@ -362,6 +533,49 @@ class StreamingResponse:
         self.headers: dict[str, str] = headers.copy() if headers else {}
         self.content_type = content_type
         self.background = background
+        self._cookie_headers: list[str] = []
+
+    def set_cookie(
+        self,
+        name: str,
+        value: str = "",
+        *,
+        max_age: int | None = None,
+        expires: str | None = None,
+        path: str | None = None,
+        domain: str | None = None,
+        secure: bool = False,
+        httponly: bool = False,
+        samesite: str | None = None,
+    ) -> None:
+        """Append a Set-Cookie header to the response."""
+        _append_set_cookie(
+            self._cookie_headers,
+            name,
+            value,
+            max_age=max_age,
+            expires=expires,
+            path=path,
+            domain=domain,
+            secure=secure,
+            httponly=httponly,
+            samesite=samesite,
+        )
+
+    def delete_cookie(
+        self,
+        name: str,
+        *,
+        path: str | None = None,
+        domain: str | None = None,
+    ) -> None:
+        """Append a Set-Cookie header that expires the named cookie."""
+        _append_delete_cookie(
+            self._cookie_headers,
+            name,
+            path=path,
+            domain=domain,
+        )
 
     async def _write(self, writer: asyncio.StreamWriter) -> None:
         """Write status line, headers, then stream the body."""
@@ -379,6 +593,8 @@ class StreamingResponse:
         buf.extend(f"HTTP/1.1 {self.status_code} {reason}\r\n".encode("latin-1"))
         for k, v in self.headers.items():
             buf.extend(f"{k}: {v}\r\n".encode("latin-1"))
+        for cookie_line in self._cookie_headers:
+            buf.extend(f"Set-Cookie: {cookie_line}\r\n".encode("latin-1"))
         buf.extend(b"\r\n")
         writer.write(bytes(buf))
         await writer.drain()

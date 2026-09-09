@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.4.7"
+# version = "0.5.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -41,6 +41,7 @@ import asyncio
 import base64
 import hashlib
 import http.client
+import http.cookies
 import json as _json
 import logging
 import os
@@ -329,7 +330,16 @@ class Response:
         url: Final URL after redirects.
     """
 
-    __slots__ = ("status_code", "headers", "content", "url", "_text", "_json")
+    __slots__ = (
+        "status_code",
+        "headers",
+        "content",
+        "url",
+        "_text",
+        "_json",
+        "_raw_set_cookies",
+        "_cookies",
+    )
 
     def __init__(
         self,
@@ -337,6 +347,7 @@ class Response:
         headers: CaseInsensitiveDict,
         content: bytes,
         url: str,
+        raw_set_cookies: list[str] | None = None,
     ) -> None:
         self.status_code = status_code
         self.headers = headers
@@ -344,6 +355,8 @@ class Response:
         self.url = url
         self._text: str | None = None
         self._json: Any = None
+        self._raw_set_cookies: list[str] = raw_set_cookies or []
+        self._cookies: dict[str, str] | None = None
 
     @property
     def text(self) -> str:
@@ -368,6 +381,13 @@ class Response:
         """Raise HTTPError if status is not 2xx."""
         if not self.ok:
             raise HTTPError(self.status_code, self.text, self.url)
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        """Parse Set-Cookie headers into a ``{name: value}`` dict (cached)."""
+        if self._cookies is None:
+            self._cookies = _parse_cookies(self._raw_set_cookies)
+        return self._cookies
 
     def _guess_encoding(self) -> str:
         return _guess_encoding_from_headers(self.headers)
@@ -394,6 +414,35 @@ class Response:
 
     def __repr__(self) -> str:
         return f"<Response [{self.status_code}]>"
+
+
+def _parse_cookies(raw_set_cookies: list[str]) -> dict[str, str]:
+    """Parse raw Set-Cookie header values into a ``{name: value}`` dict."""
+    result: dict[str, str] = {}
+    for raw in raw_set_cookies:
+        sc = http.cookies.SimpleCookie()
+        try:
+            sc.load(raw)
+        except http.cookies.CookieError:
+            continue
+        for name, morsel in sc.items():
+            result[name] = morsel.value
+    return result
+
+
+def _expired_cookie_names(raw_set_cookies: list[str]) -> set[str]:
+    """Return names of cookies with Max-Age=0 (deletion markers)."""
+    names: set[str] = set()
+    for raw in raw_set_cookies:
+        sc = http.cookies.SimpleCookie()
+        try:
+            sc.load(raw)
+        except http.cookies.CookieError:
+            continue
+        for name, morsel in sc.items():
+            if morsel.get("max-age") == "0":
+                names.add(name)
+    return names
 
 
 def _guess_encoding_from_headers(headers: CaseInsensitiveDict) -> str:
@@ -612,6 +661,8 @@ class StreamingResponse:
         "_content_length",
         "_bytes_remaining",
         "_closed",
+        "_raw_set_cookies",
+        "_cookies",
     )
 
     status_code: int
@@ -628,6 +679,8 @@ class StreamingResponse:
     _content_length: int | None
     _bytes_remaining: int | None
     _closed: bool
+    _raw_set_cookies: list[str]
+    _cookies: dict[str, str] | None
 
     def __init__(self) -> None:
         raise TypeError("Use _from_sync() or _from_async()")
@@ -641,6 +694,7 @@ class StreamingResponse:
         resp: http.client.HTTPResponse,
         conn: http.client.HTTPConnection,
         content_encoding: str = "",
+        raw_set_cookies: list[str] | None = None,
     ) -> "StreamingResponse":
         obj = object.__new__(cls)
         obj.status_code = status_code
@@ -659,6 +713,8 @@ class StreamingResponse:
         obj._content_length = None
         obj._bytes_remaining = None
         obj._closed = False
+        obj._raw_set_cookies = raw_set_cookies or []
+        obj._cookies = None
         return obj
 
     @classmethod
@@ -673,6 +729,7 @@ class StreamingResponse:
         content_length: int | None,
         timeout: float,
         content_encoding: str = "",
+        raw_set_cookies: list[str] | None = None,
     ) -> "StreamingResponse":
         obj = object.__new__(cls)
         obj.status_code = status_code
@@ -691,6 +748,8 @@ class StreamingResponse:
         obj._content_length = content_length
         obj._bytes_remaining = content_length
         obj._closed = False
+        obj._raw_set_cookies = raw_set_cookies or []
+        obj._cookies = None
         return obj
 
     @property
@@ -702,6 +761,13 @@ class StreamingResponse:
         """Raise HTTPError if status is not 2xx."""
         if not self.ok:
             raise HTTPError(self.status_code, "", self.url)
+
+    @property
+    def cookies(self) -> dict[str, str]:
+        """Parse Set-Cookie headers into a ``{name: value}`` dict (cached)."""
+        if self._cookies is None:
+            self._cookies = _parse_cookies(self._raw_set_cookies)
+        return self._cookies
 
     # ── Sync iteration ──
 
@@ -1463,6 +1529,7 @@ def _prepare_request(
     files: dict[str, Any] | list[tuple[str, Any]] | None,
     params: dict[str, Any] | None,
     auth: tuple[str, str] | Auth | None,
+    cookies: dict[str, str] | None = None,
 ) -> tuple[str, bytes | None, CaseInsensitiveDict, Auth | None]:
     """Build URL, encode body, assemble headers, and normalize auth.
 
@@ -1471,8 +1538,9 @@ def _prepare_request(
     Header precedence (highest → lowest):
       1. auth headers (digest/basic — must override everything)
       2. user-supplied *headers*
-      3. body-derived defaults (Content-Type, Content-Length)
-      4. library defaults (User-Agent, Accept-Encoding)
+      3. cookies (serialised as ``Cookie`` header if not already set)
+      4. body-derived defaults (Content-Type, Content-Length)
+      5. library defaults (User-Agent, Accept-Encoding)
 
     All keys are normalised to lowercase via :class:`CaseInsensitiveDict`;
     no duplicate header names are ever emitted.
@@ -1494,6 +1562,12 @@ def _prepare_request(
         _headers_set_default(req_headers, "Content-Type", content_type)
     if body is not None:
         _headers_set_default(req_headers, "Content-Length", str(len(body)))
+
+    # Cookies — serialised as a single Cookie header (user header wins)
+    if cookies:
+        sc = http.cookies.SimpleCookie(cookies)
+        cookie_header = sc.output(header="", sep="; ").strip()
+        _headers_set_default(req_headers, "Cookie", cookie_header)
 
     # User headers win over all of the above
     _headers_merge_user(req_headers, headers)
@@ -1746,6 +1820,7 @@ def _build_sync_response(
     resp: http.client.HTTPResponse,
     conn: http.client.HTTPConnection,
     stream: bool,
+    raw_set_cookies: list[str] | None = None,
 ) -> tuple[Response | StreamingResponse, bool]:
     """Build a final sync response (streaming or buffered).
 
@@ -1761,12 +1836,19 @@ def _build_sync_response(
             resp,
             conn,
             content_encoding=content_encoding,
+            raw_set_cookies=raw_set_cookies,
         ), False
 
     resp_body = resp.read()
     if content_encoding:
         resp_body = _decompress_body(resp_body, content_encoding)
-    return Response(status, resp_headers, resp_body, url), True
+    return Response(
+        status,
+        resp_headers,
+        resp_body,
+        url,
+        raw_set_cookies=raw_set_cookies,
+    ), True
 
 
 def _wrap_sync_errors(
@@ -1809,6 +1891,7 @@ def _sync_request(
     stream: bool = False,
     auth: tuple[str, str] | Auth | None = None,
     proxy: str | None = None,
+    cookies: dict[str, str] | None = None,
     _pool: _SyncConnectionPool | None = None,
 ) -> Response | StreamingResponse:
     """Perform a synchronous HTTP request.
@@ -1822,11 +1905,12 @@ def _sync_request(
            d. Connection lifecycle (pool release or close)
     """
     url, body, req_headers, auth_obj = _prepare_request(
-        method, url, headers, data, json, files, params, auth
+        method, url, headers, data, json, files, params, auth, cookies
     )
 
     redirects = 0
     _digest_attempted = False
+    accumulated_set_cookies: list[str] = []
     while True:
         scheme, host, port, path, is_https = _parse_url(url)
         close_conn = True
@@ -1850,7 +1934,11 @@ def _sync_request(
             try:
                 conn.request(method, request_path, body=body, headers=req_headers)
                 resp = conn.getresponse()
-                resp_headers = CaseInsensitiveDict(resp.getheaders())
+                raw_headers = resp.getheaders()
+                accumulated_set_cookies.extend(
+                    v for k, v in raw_headers if k.lower() == "set-cookie"
+                )
+                resp_headers = CaseInsensitiveDict(raw_headers)
                 status = resp.status
 
                 if _is_redirect(status, resp_headers):
@@ -1890,6 +1978,7 @@ def _sync_request(
                     resp,
                     conn,
                     stream,
+                    raw_set_cookies=accumulated_set_cookies,
                 )
                 return result
             finally:
@@ -1917,14 +2006,14 @@ def _sync_request(
 async def _async_read_response_headers(
     reader: asyncio.StreamReader,
     timeout: float,
-) -> tuple[int, CaseInsensitiveDict]:
+) -> tuple[int, CaseInsensitiveDict, list[str]]:
     """Read HTTP status line and headers from an asyncio StreamReader.
 
     Does NOT consume the body -- the reader is left positioned at the
     start of the response body.
 
     Returns:
-        (status_code, headers_dict).
+        (status_code, headers_dict, raw_set_cookies).
     """
     # Status line: "HTTP/1.1 200 OK\r\n"
     status_line = await asyncio.wait_for(reader.readline(), timeout=timeout)
@@ -1936,6 +2025,7 @@ async def _async_read_response_headers(
 
     # Headers until empty line
     headers: CaseInsensitiveDict = CaseInsensitiveDict()
+    raw_set_cookies: list[str] = []
     while True:
         line = await asyncio.wait_for(reader.readline(), timeout=timeout)
         decoded = line.decode("latin-1").rstrip("\r\n")
@@ -1943,9 +2033,13 @@ async def _async_read_response_headers(
             break
         if ":" in decoded:
             k, v = decoded.split(":", 1)
-            headers[k.strip()] = v.strip()
+            k_stripped = k.strip()
+            v_stripped = v.strip()
+            if k_stripped.lower() == "set-cookie":
+                raw_set_cookies.append(v_stripped)
+            headers[k_stripped] = v_stripped
 
-    return status_code, headers
+    return status_code, headers, raw_set_cookies
 
 
 async def _async_read_chunked_body(
@@ -2045,7 +2139,7 @@ async def _async_connect_via_proxy_tunnel(
     connect_headers += "\r\n"
     proxy_writer.write((connect_line + connect_headers).encode("latin-1"))
     await asyncio.wait_for(proxy_writer.drain(), timeout=timeout)
-    tunnel_status, _ = await _async_read_response_headers(proxy_reader, timeout)
+    tunnel_status, _, _ = await _async_read_response_headers(proxy_reader, timeout)
     if tunnel_status != 200:
         proxy_writer.close()
         # Tier 3: best-effort silent -- proxy tunnel teardown
@@ -2268,6 +2362,7 @@ def _build_async_streaming_response(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     timeout: float,
+    raw_set_cookies: list[str] | None = None,
 ) -> StreamingResponse:
     """Build an async StreamingResponse from response metadata."""
     content_encoding = resp_headers.get("content-encoding", "")
@@ -2285,6 +2380,7 @@ def _build_async_streaming_response(
         content_length,
         timeout,
         content_encoding=content_encoding,
+        raw_set_cookies=raw_set_cookies,
     )
 
 
@@ -2306,6 +2402,7 @@ async def _async_request(
     stream: bool = False,
     auth: tuple[str, str] | Auth | None = None,
     proxy: str | None = None,
+    cookies: dict[str, str] | None = None,
     _pool: _AsyncConnectionPool | None = None,
 ) -> Response | StreamingResponse:
     """Perform an asynchronous HTTP request using asyncio streams.
@@ -2319,11 +2416,12 @@ async def _async_request(
            d. Connection lifecycle (pool release or close)
     """
     url, body, req_headers, auth_obj = _prepare_request(
-        method, url, headers, data, json, files, params, auth
+        method, url, headers, data, json, files, params, auth, cookies
     )
 
     redirects = 0
     _digest_attempted = False
+    accumulated_set_cookies: list[str] = []
     while True:
         scheme, host, port, path, is_https = _parse_url(url)
 
@@ -2349,7 +2447,10 @@ async def _async_request(
                 writer.write(body)
             await asyncio.wait_for(writer.drain(), timeout=timeout)
 
-            status, resp_headers = await _async_read_response_headers(reader, timeout)
+            status, resp_headers, iter_set_cookies = await _async_read_response_headers(
+                reader, timeout
+            )
+            accumulated_set_cookies.extend(iter_set_cookies)
 
             if _is_redirect(status, resp_headers):
                 await _async_read_body(reader, resp_headers, timeout)
@@ -2391,13 +2492,20 @@ async def _async_request(
                     reader,
                     writer,
                     timeout,
+                    raw_set_cookies=accumulated_set_cookies,
                 )
 
             content_encoding = resp_headers.get("content-encoding", "")
             resp_body = await _async_read_body(reader, resp_headers, timeout)
             if content_encoding:
                 resp_body = _decompress_body(resp_body, content_encoding)
-            return Response(status, resp_headers, resp_body, url)
+            return Response(
+                status,
+                resp_headers,
+                resp_body,
+                url,
+                raw_set_cookies=accumulated_set_cookies,
+            )
         except asyncio.TimeoutError:
             raise HttpTimeoutError(
                 f"Request to {url} timed out after {timeout}s",
@@ -2644,6 +2752,11 @@ class Client:
     Thread-safe: the underlying connection pool uses its own
     ``threading.Lock`` to protect shared state.
 
+    The cookie jar is a flat ``dict[str, str]`` — cookies are **not**
+    scoped by domain or path.  This is suitable for single-origin use
+    (e.g. an API client talking to one service).  For multi-origin
+    scenarios, manage cookies per-domain yourself.
+
     Usage::
 
         with Client(headers={"Authorization": "Bearer token"}) as c:
@@ -2654,6 +2767,7 @@ class Client:
         self,
         *,
         headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
         verify: bool = True,
@@ -2662,6 +2776,7 @@ class Client:
         pool_size: int = DEFAULT_POOL_SIZE,
     ) -> None:
         self._base_headers = headers or {}
+        self._cookies: dict[str, str] = dict(cookies) if cookies else {}
         self._timeout = timeout
         self._max_redirects = max_redirects
         self._verify = verify
@@ -2676,6 +2791,11 @@ class Client:
         **kwargs: Any,
     ) -> Response | StreamingResponse:
         """Send an HTTP request."""
+        merged_cookies = dict(self._cookies)
+        per_request = kwargs.pop("cookies", None)
+        if per_request:
+            merged_cookies.update(per_request)
+        kwargs["cookies"] = merged_cookies or None
         kwargs.setdefault("timeout", self._timeout)
         kwargs.setdefault("max_redirects", self._max_redirects)
         kwargs.setdefault("verify", self._verify)
@@ -2683,7 +2803,12 @@ class Client:
         kwargs.setdefault("proxy", self._proxy)
         kwargs["_pool"] = self._pool
         kwargs["headers"] = _merge_headers(self._base_headers, kwargs.get("headers"))
-        return _sync_request(method, url, **kwargs)
+        result = _sync_request(method, url, **kwargs)
+        if result._raw_set_cookies:
+            self._cookies.update(result.cookies)
+            for name in _expired_cookie_names(result._raw_set_cookies):
+                self._cookies.pop(name, None)
+        return result
 
     def get(self, url: str, **kwargs: Any) -> Response | StreamingResponse:
         return self.request("GET", url, **kwargs)
@@ -2730,6 +2855,11 @@ class AsyncClient:
     Safe for concurrent use from multiple asyncio tasks.  The underlying
     connection pool uses its own ``asyncio.Lock`` to protect shared state.
 
+    The cookie jar is a flat ``dict[str, str]`` — cookies are **not**
+    scoped by domain or path.  This is suitable for single-origin use
+    (e.g. an API client talking to one service).  For multi-origin
+    scenarios, manage cookies per-domain yourself.
+
     Usage::
 
         async with AsyncClient(headers={"Authorization": "Bearer token"}) as c:
@@ -2740,6 +2870,7 @@ class AsyncClient:
         self,
         *,
         headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
         verify: bool = True,
@@ -2748,6 +2879,7 @@ class AsyncClient:
         pool_size: int = DEFAULT_POOL_SIZE,
     ) -> None:
         self._base_headers = headers or {}
+        self._cookies: dict[str, str] = dict(cookies) if cookies else {}
         self._timeout = timeout
         self._max_redirects = max_redirects
         self._verify = verify
@@ -2762,6 +2894,11 @@ class AsyncClient:
         **kwargs: Any,
     ) -> Response | StreamingResponse:
         """Send an async HTTP request."""
+        merged_cookies = dict(self._cookies)
+        per_request = kwargs.pop("cookies", None)
+        if per_request:
+            merged_cookies.update(per_request)
+        kwargs["cookies"] = merged_cookies or None
         kwargs.setdefault("timeout", self._timeout)
         kwargs.setdefault("max_redirects", self._max_redirects)
         kwargs.setdefault("verify", self._verify)
@@ -2769,7 +2906,12 @@ class AsyncClient:
         kwargs.setdefault("proxy", self._proxy)
         kwargs["_pool"] = self._pool
         kwargs["headers"] = _merge_headers(self._base_headers, kwargs.get("headers"))
-        return await _async_request(method, url, **kwargs)
+        result = await _async_request(method, url, **kwargs)
+        if result._raw_set_cookies:
+            self._cookies.update(result.cookies)
+            for name in _expired_cookie_names(result._raw_set_cookies):
+                self._cookies.pop(name, None)
+        return result
 
     async def get(self, url: str, **kwargs: Any) -> Response | StreamingResponse:
         return await self.request("GET", url, **kwargs)
