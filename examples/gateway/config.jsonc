@@ -75,6 +75,21 @@
     "gemini-2.0-flash": "google",
     "gemini-2.5-pro": "google",
     "gemini-2.5-flash": "google",
+
+    // Multi-provider: same model served by two providers (equal weight)
+    // "gpt-4o-multi": {
+    //   "providers": ["openai_chat", "openai_responses"],
+    //   "capabilities": ["text", "vision"]
+    // },
+
+    // Multi-provider: weighted distribution (3:1 ratio)
+    // "claude-sonnet-weighted": {
+    //   "providers": [
+    //     {"name": "anthropic", "weight": 3},
+    //     {"name": "anthropic_backup", "weight": 1}
+    //   ],
+    //   "strategy": "weighted_round_robin"
+    // },
     // Embedding models
     "text-embedding-3-small": { "provider": "openai_chat", "type": "embedding" },
     "jina-embeddings-v3": { "provider": "jina", "type": "embedding" },

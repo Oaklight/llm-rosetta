@@ -177,7 +177,9 @@ def setup_admin(
 
     # Backfill target_provider_name for legacy log entries
     if persistence is not None:
-        model_to_provider = {model: config.models[model] for model in config.models}
+        model_to_provider = {
+            model: route.provider_names[0] for model, route in config.models.items()
+        }
         backfilled = persistence.backfill_provider_names(model_to_provider)
         if backfilled:
             logger.info(
