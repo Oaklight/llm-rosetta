@@ -487,7 +487,7 @@ async def handle_list_models(request: Any) -> Response:
     data = []
     for name in models:
         model_route = _config.models[name]
-        provider_name = model_route.provider_names[0]
+        provider_name = model_route.providers[0].name
         api_standard = _config.provider_types.get(provider_name, "unknown")
         capabilities = _config.model_capabilities.get(name, ["text"])
         data.append(

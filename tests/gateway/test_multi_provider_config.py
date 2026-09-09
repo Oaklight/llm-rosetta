@@ -221,3 +221,13 @@ class TestMultiProviderResolve:
             results.append(route.provider_name)
         assert results.count("openai_a") == 3
         assert results.count("openai_b") == 1
+
+    def test_zero_weight_raises(self):
+        with pytest.raises(ValueError, match="invalid weight 0"):
+            _make_config({"gpt-4o": {"providers": [{"name": "openai_a", "weight": 0}]}})
+
+    def test_negative_weight_raises(self):
+        with pytest.raises(ValueError, match="invalid weight -1"):
+            _make_config(
+                {"gpt-4o": {"providers": [{"name": "openai_a", "weight": -1}]}}
+            )
