@@ -381,6 +381,18 @@ async def clear_error_dumps(request: Any) -> Response:
     return JSONResponse({"ok": True})
 
 
+async def delete_error_dump(request: Any, **kwargs: Any) -> Response:
+    """Delete a single error dump by ID."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    dump_id = kwargs.get("dump_id", "")
+    if persistence.delete_error_dump(dump_id):
+        return JSONResponse({"ok": True})
+    return JSONResponse({"error": "Not found"}, status_code=404)
+
+
 async def db_cleanup(request: Any) -> Response:
     """Delete records older than max_age_days and vacuum the database."""
     persistence = getattr(request.app, "persistence", None)

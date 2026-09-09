@@ -63,6 +63,7 @@ from .observability import (
     cleanup_error_dumps_by_age,
     cleanup_requests_by_age,
     clear_error_dumps,
+    delete_error_dump,
     clear_requests,
     db_cleanup,
     export_error_dumps,
@@ -198,6 +199,7 @@ def register_admin_routes(app: Any) -> None:
         get_error_dump_body
     )
     app.route("/admin/api/error-dumps", methods=["DELETE"])(clear_error_dumps)
+    app.route("/admin/api/error-dumps/<dump_id>", methods=["DELETE"])(delete_error_dump)
     app.route("/admin/api/db/cleanup", methods=["POST"])(db_cleanup)
     app.route("/admin/api/requests/cleanup", methods=["POST"])(cleanup_requests_by_age)
     app.route("/admin/api/error-dumps/cleanup", methods=["POST"])(

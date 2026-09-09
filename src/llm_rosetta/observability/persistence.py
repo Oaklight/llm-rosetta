@@ -707,6 +707,15 @@ class PersistenceManager:
         row = self._conn.execute("SELECT COUNT(*) FROM error_dumps").fetchone()
         return row[0] if row else 0
 
+    def delete_error_dump(self, dump_id: str) -> bool:
+        """Delete a single error dump by ID and clean up orphaned bodies."""
+        cur = self._conn.execute("DELETE FROM error_dumps WHERE id = ?", (dump_id,))
+        if cur.rowcount == 0:
+            return False
+        self._delete_orphan_bodies()
+        self._conn.commit()
+        return True
+
     def clear_error_dumps(self) -> None:
         """Delete all error dumps and orphaned bodies."""
         self._conn.execute("DELETE FROM error_dumps")
