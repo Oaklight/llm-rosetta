@@ -310,6 +310,10 @@ async def _proxy_handler(
                 else route.preflight_token_count
             )
 
+            _kctx = api_key_context_var.get()
+            _client_key_hash = _kctx.key_hash if _kctx else ""
+            _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
+
             response, profile = await handle_streaming(
                 route,
                 provider_info,
@@ -322,9 +326,15 @@ async def _proxy_handler(
                 metrics=getattr(request.app, "metrics", None),
                 persistence=persistence,
                 preflight_token_count=preflight,
+                client_key_hash=_client_key_hash,
+                key_affinity=_key_affinity,
             )
         else:
             pre_entry_id = uuid.uuid4().hex
+            _kctx = api_key_context_var.get()
+            _client_key_hash = _kctx.key_hash if _kctx else ""
+            _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
+
             response, profile = await handle_non_streaming(
                 route,
                 provider_info,
@@ -334,6 +344,8 @@ async def _proxy_handler(
                 extra_headers=extra_headers,
                 persistence=persistence,
                 entry_id=pre_entry_id,
+                client_key_hash=_client_key_hash,
+                key_affinity=_key_affinity,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):

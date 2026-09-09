@@ -279,6 +279,10 @@ class GatewayConfig:
             self._parse_max_tool_description_length_overrides(self._raw_providers)
         )
 
+        self.provider_key_affinity = self._parse_key_affinity_overrides(
+            self._raw_providers
+        )
+
         self.models, self.model_capabilities, self.model_upstream_names = (
             self._parse_models(raw.get("models", {}), self._raw_providers)
         )
@@ -441,6 +445,17 @@ class GatewayConfig:
         for pname, pcfg in raw_providers.items():
             if isinstance(pcfg, dict) and "preflight_token_count" in pcfg:
                 result[pname] = bool(pcfg["preflight_token_count"])
+        return result
+
+    @staticmethod
+    def _parse_key_affinity_overrides(
+        raw_providers: dict[str, dict[str, str]],
+    ) -> dict[str, bool]:
+        """Extract per-provider key_affinity overrides."""
+        result: dict[str, bool] = {}
+        for pname, pcfg in raw_providers.items():
+            if isinstance(pcfg, dict) and "key_affinity" in pcfg:
+                result[pname] = bool(pcfg["key_affinity"])
         return result
 
     @staticmethod

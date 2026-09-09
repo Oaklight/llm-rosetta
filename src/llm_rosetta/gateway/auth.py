@@ -264,7 +264,11 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         # Check internal token first (admin panel test requests)
         if key and auth_state.internal_token and key == auth_state.internal_token:
             api_key_context_var.set(
-                KeyContext(label="internal", allowed_shims=frozenset({"*"}))
+                KeyContext(
+                    label="internal",
+                    allowed_shims=frozenset({"*"}),
+                    key_hash=hashlib.sha256(key.encode()).hexdigest(),
+                )
             )
             return None
 
@@ -280,7 +284,13 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if ctx is None:
             return _error_for_path(path, 401, "Invalid or missing API key")
 
-        api_key_context_var.set(ctx)
+        api_key_context_var.set(
+            KeyContext(
+                label=ctx.label,
+                allowed_shims=ctx.allowed_shims,
+                key_hash=hashlib.sha256(key.encode()).hexdigest(),
+            )
+        )
         return None
 
     return auth_hook

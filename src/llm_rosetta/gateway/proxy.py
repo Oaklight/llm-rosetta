@@ -40,6 +40,7 @@ from .logging import (
 )
 from .sanitize import sanitize_upstream_error
 
+from .affinity import compute_affinity_index, extract_prefix_from_ir
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,
@@ -315,6 +316,8 @@ async def handle_non_streaming(
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
     entry_id: str | None = None,
+    client_key_hash: str = "",
+    key_affinity: bool = True,
 ) -> tuple[Response, dict[str, Any]]:
     """Non-streaming proxy: convert -> forward -> convert back -> respond.
 
@@ -375,6 +378,15 @@ async def handle_non_streaming(
 
     log_converted_request(target_body)
     _strip_internal_metadata(target_body)
+
+    # Key affinity: deterministic key selection for prompt cache locality
+    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
+        _prefix = extract_prefix_from_ir(pipeline.ir_request)
+        _key_idx = compute_affinity_index(
+            client_key_hash, _prefix, len(provider_info.key_ring)
+        )
+        if _key_idx is not None:
+            provider_info = provider_info.with_affinity(_key_idx)
 
     # Phase 3: Forward to upstream via transport
     upstream_url = provider_info.upstream_url(model)
@@ -831,6 +843,8 @@ async def handle_streaming(
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
     preflight_token_count: bool = False,
+    client_key_hash: str = "",
+    key_affinity: bool = True,
 ) -> tuple[Response | StreamingResponse, dict[str, Any]]:
     """Streaming proxy: convert -> forward -> stream-convert back -> SSE.
 
@@ -897,6 +911,15 @@ async def handle_streaming(
 
     log_converted_request(target_body)
     _strip_internal_metadata(target_body)
+
+    # Key affinity: deterministic key selection for prompt cache locality
+    if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
+        _prefix = extract_prefix_from_ir(pipeline.ir_request)
+        _key_idx = compute_affinity_index(
+            client_key_hash, _prefix, len(provider_info.key_ring)
+        )
+        if _key_idx is not None:
+            provider_info = provider_info.with_affinity(_key_idx)
 
     # Preflight: get exact input_tokens before streaming (opt-in)
     _preflight_input_tokens: int | None = None
