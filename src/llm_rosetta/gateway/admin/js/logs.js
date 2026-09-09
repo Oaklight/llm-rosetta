@@ -33,10 +33,17 @@ function resolveProviderName(apiType) {
   return apiType;
 }
 
+function fmtTokens(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map(e => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
@@ -60,10 +67,11 @@ function renderLogs(entries, total) {
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
         <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="View error dump" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}</td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {
-        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="8"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
+        rows += `<tr${isExpanded ? '' : ' hidden'}><td colspan="9"><pre style="margin:0;padding:8px;background:var(--bg);border-radius:6px;font-size:11px;max-height:200px;overflow:auto;white-space:pre-wrap;word-break:break-all">${esc(e.error_detail)}</pre></td></tr>`;
       }
       return rows;
     }).join('');

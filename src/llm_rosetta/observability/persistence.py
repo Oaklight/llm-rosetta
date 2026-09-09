@@ -171,9 +171,18 @@ class PersistenceManager:
         cursor = self._conn.execute("PRAGMA table_info(request_log)")
         columns = {row[1] for row in cursor.fetchall()}
         added = False
-        for col in ("target_provider_name", "client_ip", "profile"):
+        for col, col_type in (
+            ("target_provider_name", "TEXT"),
+            ("client_ip", "TEXT"),
+            ("profile", "TEXT"),
+            ("input_tokens", "INTEGER"),
+            ("output_tokens", "INTEGER"),
+            ("total_tokens", "INTEGER"),
+        ):
             if col not in columns:
-                self._conn.execute(f"ALTER TABLE request_log ADD COLUMN {col} TEXT")
+                self._conn.execute(
+                    f"ALTER TABLE request_log ADD COLUMN {col} {col_type}"
+                )
                 added = True
         if added:
             self._conn.commit()
@@ -223,6 +232,9 @@ class PersistenceManager:
         "target_provider_name",
         "client_ip",
         "profile",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
     ]
 
     def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -233,8 +245,9 @@ class PersistenceManager:
             "INSERT OR IGNORE INTO request_log "
             "(id, timestamp, model, source_provider, target_provider, "
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
-            "target_provider_name, client_ip, profile) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "target_provider_name, client_ip, profile, "
+            "input_tokens, output_tokens, total_tokens) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -250,6 +263,9 @@ class PersistenceManager:
                     e.get("target_provider_name"),
                     e.get("client_ip"),
                     json.dumps(e["profile"]) if e.get("profile") else None,
+                    e.get("input_tokens"),
+                    e.get("output_tokens"),
+                    e.get("total_tokens"),
                 )
                 for e in entries
             ],
@@ -1024,6 +1040,25 @@ class PersistenceManager:
         )
         self._conn.commit()
 
+    def update_entry_usage(
+        self,
+        entry_id: str,
+        input_tokens: int | None,
+        output_tokens: int | None,
+        total_tokens: int | None,
+    ) -> None:
+        """Write back token usage for an existing log entry.
+
+        Used by the streaming path to record usage extracted from the
+        final stream event.
+        """
+        self._conn.execute(
+            "UPDATE request_log SET input_tokens = ?, output_tokens = ?, "
+            "total_tokens = ? WHERE id = ?",
+            (input_tokens, output_tokens, total_tokens, entry_id),
+        )
+        self._conn.commit()
+
     @classmethod
     def _row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
         d: dict[str, Any] = {}
@@ -1037,7 +1072,18 @@ class PersistenceManager:
                     except (json.JSONDecodeError, TypeError):
                         d[col] = None
                 # omit if None (match old behavior for optional fields)
-            elif col in ("error_detail", "api_key_label", "client_ip") and val is None:
+            elif (
+                col
+                in (
+                    "error_detail",
+                    "api_key_label",
+                    "client_ip",
+                    "input_tokens",
+                    "output_tokens",
+                    "total_tokens",
+                )
+                and val is None
+            ):
                 continue  # omit None optional fields (match old behavior)
             else:
                 d[col] = val

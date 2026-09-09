@@ -566,6 +566,13 @@ function renderPersistence(p, totalReq) {
   `;
 }
 
+function fmtTokens(n) {
+  if (n >= 1e9) return (n/1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+  return String(n);
+}
+
 function renderStats(d) {
   const uptime = formatDuration(d.uptime_seconds);
   const errRate = (d.error_rate * 100).toFixed(1) + '%';
@@ -574,6 +581,7 @@ function renderStats(d) {
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
     <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.totalTokens')}</div><div class="value">${fmtTokens((d.total_input_tokens||0)+(d.total_output_tokens||0))}</div><div class="sub">↑${fmtTokens(d.total_input_tokens||0)} ↓${fmtTokens(d.total_output_tokens||0)}</div></div>
   `;
 }
 

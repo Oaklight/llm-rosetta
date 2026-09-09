@@ -770,6 +770,7 @@ class PassthroughStreamProcessor:
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
         self._ctx = self._PassthroughCtx()
+        self._usage: dict[str, int] | None = None
 
     @property
     def source_context(self) -> Any:
@@ -797,6 +798,49 @@ class PassthroughStreamProcessor:
         {"response.completed", "response.failed", "message_stop"}
     )
 
+    def get_accumulated_usage(self) -> dict[str, int] | None:
+        """Return token usage extracted from passthrough chunks."""
+        return self._usage
+
+    @staticmethod
+    def _extract_usage(chunk: dict[str, Any]) -> dict[str, int] | None:
+        """Extract usage from a raw provider chunk (any format)."""
+        usage = chunk.get("usage")
+        if isinstance(usage, dict):
+            result: dict[str, int] = {}
+            for src, dst in (
+                ("prompt_tokens", "prompt_tokens"),
+                ("input_tokens", "prompt_tokens"),
+                ("completion_tokens", "completion_tokens"),
+                ("output_tokens", "completion_tokens"),
+                ("total_tokens", "total_tokens"),
+            ):
+                v = usage.get(src)
+                if isinstance(v, int) and v > 0:
+                    result[dst] = v
+            if "total_tokens" not in result and "prompt_tokens" in result:
+                result["total_tokens"] = result.get("prompt_tokens", 0) + result.get(
+                    "completion_tokens", 0
+                )
+            return result if result else None
+        # Google format
+        um = chunk.get("usageMetadata") or chunk.get("usage_metadata")
+        if isinstance(um, dict):
+            result = {}
+            for src, dst in (
+                ("promptTokenCount", "prompt_tokens"),
+                ("prompt_token_count", "prompt_tokens"),
+                ("candidatesTokenCount", "completion_tokens"),
+                ("candidates_token_count", "completion_tokens"),
+                ("totalTokenCount", "total_tokens"),
+                ("total_token_count", "total_tokens"),
+            ):
+                v = um.get(src)
+                if isinstance(v, int) and v > 0:
+                    result[dst] = v
+            return result if result else None
+        return None
+
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         if self._pre_ir_transforms:
             chunk = apply_transforms(self._pre_ir_transforms, chunk)
@@ -809,6 +853,9 @@ class PassthroughStreamProcessor:
             choices and choices[0].get("finish_reason") is not None
         ):
             self._ctx.mark_ended()
+        u = self._extract_usage(chunk)
+        if u is not None:
+            self._usage = u
         return [chunk]
 
 
@@ -856,6 +903,7 @@ class StreamProcessor:
         self._custom_tool_names = custom_tool_names
         self._custom_arg_buffers: dict[str, str] = {}
         self._on_ir_event = on_ir_event
+        self._usage: dict[str, int] | None = None
 
     @property
     def source_context(self) -> Any:
@@ -866,6 +914,14 @@ class StreamProcessor:
         a terminal event after an upstream failure.
         """
         return self._to_ctx
+
+    def get_accumulated_usage(self) -> dict[str, int] | None:
+        """Return token usage accumulated during streaming.
+
+        Captured from IR usage events as they flow through the
+        processor.  Returns ``None`` if no usage event was received.
+        """
+        return self._usage
 
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert one upstream chunk to source-format events.
@@ -905,6 +961,11 @@ class StreamProcessor:
         # IR → Source events
         result: list[dict[str, Any]] = []
         for ir_event in ir_events:
+            if ir_event.get("type") == "usage":
+                u = ir_event.get("usage")
+                if u:
+                    self._usage = dict(u)
+
             if self._on_ir_event is not None:
                 self._on_ir_event(ir_event)
 
