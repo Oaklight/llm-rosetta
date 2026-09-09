@@ -41,15 +41,12 @@ function setTheme(name) {
 
 // ===================== API =====================
 function _adminHeaders(extra) {
-  const h = extra ? {...extra} : {};
-  const token = localStorage.getItem('admin_token');
-  if (token) h['X-Admin-Token'] = token;
-  return h;
+  return extra ? {...extra} : {};
 }
 
 const api = {
   async get(url) {
-    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
+    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store', credentials: 'include'});
     if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
     const data = await r.json().catch(() => null);
     if (!r.ok) throw new Error(data?.error || (r.status === 504 ? 'Request timed out — the upstream service may be unreachable' : `HTTP ${r.status}`));
@@ -57,12 +54,12 @@ const api = {
     return data;
   },
   async put(url, body) {
-    const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body)});
+    const r = await fetch(url, {method:'PUT', headers:_adminHeaders({'Content-Type':'application/json'}), body:JSON.stringify(body), credentials: 'include'});
     if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
     return r.json();
   },
   async del(url) {
-    const r = await fetch(url, {method:'DELETE', headers: _adminHeaders()});
+    const r = await fetch(url, {method:'DELETE', headers: _adminHeaders(), credentials: 'include'});
     if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
     return r.json();
   },
@@ -70,6 +67,7 @@ const api = {
     const h = body !== undefined ? _adminHeaders({'Content-Type':'application/json'}) : _adminHeaders();
     const opts = {method:'POST', headers: h};
     if (body !== undefined) opts.body = JSON.stringify(body);
+    opts.credentials = 'include';
     const r = await fetch(url, opts);
     if (r.status === 401) { window.showLoginOverlay?.(); throw new Error('Unauthorized'); }
     return r.json();
@@ -96,7 +94,7 @@ function _stopInactivityTracking() {
 }
 
 function doLogout() {
-  localStorage.removeItem('admin_token');
+  fetch('/admin/api/logout', {method: 'POST', credentials: 'include'}).catch(() => {});
   _stopInactivityTracking();
   const btn = document.getElementById('logoutBtn');
   if (btn) btn.style.display = 'none';

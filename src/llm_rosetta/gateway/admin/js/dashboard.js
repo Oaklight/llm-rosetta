@@ -98,7 +98,7 @@ async function clearProfilingResults() {
 
 async function _fetchFlamegraphHtml(index) {
   const url = '/admin/api/profiling/results/' + index + '?format=html';
-  const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
+  const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store', credentials: 'include'});
   if (!r.ok) throw new Error('HTTP ' + r.status);
   return r.text();
 }
@@ -126,7 +126,7 @@ async function downloadFlamegraph(index, model) {
 async function downloadAllFlamegraphs() {
   try {
     const url = '/admin/api/profiling/results/download';
-    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store'});
+    const r = await fetch(url, {headers: _adminHeaders(), cache: 'no-store', credentials: 'include'});
     if (!r.ok) { showToast('Failed to download', 'error'); return; }
     const blob = await r.blob();
     const a = document.createElement('a');
