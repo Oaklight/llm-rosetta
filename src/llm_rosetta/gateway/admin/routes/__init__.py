@@ -29,8 +29,8 @@ from ._shared import (  # noqa: F401  (re-exported for backward compat)
 )
 from .auth import (
     admin_check,
-    admin_logout,
     admin_login,
+    admin_logout,
     change_password,
     rotate_token,
     serve_admin_html,

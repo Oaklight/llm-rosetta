@@ -157,7 +157,13 @@ def _clear_login_failures(ip: str) -> None:
     _login_failures.pop(ip, None)
 
 
-def _set_session_cookie(resp: Response, token: str) -> None:
+def _is_secure_request(request: Any) -> bool:
+    """Check if the request arrived over HTTPS (direct or via reverse proxy)."""
+    proto = request.headers.get("x-forwarded-proto", "")
+    return proto.lower() == "https"
+
+
+def _set_session_cookie(resp: Response, token: str, *, secure: bool = False) -> None:
     """Set the admin session cookie on a response."""
     resp.set_cookie(
         ADMIN_COOKIE_NAME,
@@ -165,6 +171,7 @@ def _set_session_cookie(resp: Response, token: str) -> None:
         path="/admin",
         httponly=True,
         samesite="Lax",
+        secure=secure,
     )
 
 
@@ -202,7 +209,9 @@ async def admin_login(request: Any) -> Response:
 
     _clear_login_failures(ip)
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, auth_state.admin_token)
+    _set_session_cookie(
+        resp, auth_state.admin_token, secure=_is_secure_request(request)
+    )
     return resp
 
 
@@ -291,7 +300,9 @@ async def change_password(request: Any) -> Response:
 
     # Set new session cookie so browser stays authenticated
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, auth_state.admin_token)
+    _set_session_cookie(
+        resp, auth_state.admin_token, secure=_is_secure_request(request)
+    )
     return resp
 
 
@@ -309,5 +320,5 @@ async def rotate_token(request: Any) -> Response:
     request.app.internal_token = auth_state.internal_token
 
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, new_admin_token)
+    _set_session_cookie(resp, new_admin_token, secure=_is_secure_request(request))
     return resp

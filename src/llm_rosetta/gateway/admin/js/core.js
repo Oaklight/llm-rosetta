@@ -93,8 +93,10 @@ function _stopInactivityTracking() {
   if (_inactivityTimer) { clearTimeout(_inactivityTimer); _inactivityTimer = null; }
 }
 
-function doLogout() {
-  fetch('/admin/api/logout', {method: 'POST', credentials: 'include'}).catch(() => {});
+async function doLogout() {
+  try {
+    await fetch('/admin/api/logout', {method: 'POST', credentials: 'include'});
+  } catch (_) { /* network error — cookie may persist until next login */ }
   _stopInactivityTracking();
   const btn = document.getElementById('logoutBtn');
   if (btn) btn.style.display = 'none';
