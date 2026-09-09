@@ -297,22 +297,20 @@ async def _proxy_handler(
     persistence = _raw_persistence if _config.error_dumps_enabled else None
     deep_profiler = _try_start_profiler(request.app)
 
+    # Shared across streaming / non-streaming paths
+    pre_entry_id = uuid.uuid4().hex
+    _kctx = api_key_context_var.get()
+    _client_key_hash = _kctx.key_hash if _kctx else ""
+    _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
+
     try:
         if is_stream:
-            # For streaming, we pre-generate the entry_id so the stream
-            # generator can write back stream-phase profile after completion.
-            pre_entry_id = uuid.uuid4().hex
-
             preflight_override = get_preflight_tokens_override(request)
             preflight = (
                 preflight_override
                 if preflight_override is not None
                 else route.preflight_token_count
             )
-
-            _kctx = api_key_context_var.get()
-            _client_key_hash = _kctx.key_hash if _kctx else ""
-            _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
 
             response, profile = await handle_streaming(
                 route,
@@ -330,11 +328,6 @@ async def _proxy_handler(
                 key_affinity=_key_affinity,
             )
         else:
-            pre_entry_id = uuid.uuid4().hex
-            _kctx = api_key_context_var.get()
-            _client_key_hash = _kctx.key_hash if _kctx else ""
-            _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
-
             response, profile = await handle_non_streaming(
                 route,
                 provider_info,
