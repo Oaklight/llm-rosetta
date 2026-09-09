@@ -15,14 +15,13 @@ from llm_rosetta._vendor import jsonx
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 
+from .providers import build_provider_info
 from .routing_strategy import (
     DEFAULT_STRATEGY,
     ModelRoute,
     ProviderEntry,
     create_strategy,
 )
-
-from .providers import build_provider_info
 from .transport import ProviderInfo
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -783,6 +782,11 @@ class GatewayConfig:
             else:
                 raise ValueError(
                     f"config: model '{model_name}' has invalid provider entry: {item}"
+                )
+            if weight < 1:
+                raise ValueError(
+                    f"config: model '{model_name}' provider '{pname}' "
+                    f"has invalid weight {weight} (must be >= 1)"
                 )
             if pname not in raw_providers:
                 logger.warning(

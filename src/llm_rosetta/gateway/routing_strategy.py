@@ -39,7 +39,7 @@ class WeightedRoundRobinStrategy:
 
     def __init__(self) -> None:
         self._current_weights: list[int] = []
-        self._initialized_for: int = 0
+        self._initialized_for: list[ProviderEntry] | None = None
 
     def select(self, providers: list[ProviderEntry]) -> str:
         n = len(providers)
@@ -48,9 +48,9 @@ class WeightedRoundRobinStrategy:
         if n == 1:
             return providers[0].name
 
-        if self._initialized_for != id(providers):
+        if self._initialized_for is not providers:
             self._current_weights = [0] * n
-            self._initialized_for = id(providers)
+            self._initialized_for = providers
 
         total = sum(p.weight for p in providers)
         best_idx = 0
