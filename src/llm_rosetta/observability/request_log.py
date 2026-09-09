@@ -36,6 +36,9 @@ class RequestLogEntry:
     target_provider_name: str | None = None
     client_ip: str | None = None
     profile: dict[str, Any] | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
     @classmethod
     def create(
@@ -52,6 +55,9 @@ class RequestLogEntry:
         target_provider_name: str | None = None,
         client_ip: str | None = None,
         profile: dict[str, Any] | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        total_tokens: int | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -68,6 +74,9 @@ class RequestLogEntry:
             target_provider_name=target_provider_name,
             client_ip=client_ip,
             profile=profile,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=total_tokens,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -92,6 +101,12 @@ class RequestLogEntry:
             d["client_ip"] = self.client_ip
         if self.profile is not None:
             d["profile"] = self.profile
+        if self.input_tokens is not None:
+            d["input_tokens"] = self.input_tokens
+        if self.output_tokens is not None:
+            d["output_tokens"] = self.output_tokens
+        if self.total_tokens is not None:
+            d["total_tokens"] = self.total_tokens
         return d
 
 
@@ -234,6 +249,33 @@ class RequestLog:
                 if entry.id == entry_id:
                     merged = dict(entry.profile or {}, **profile_update)
                     self._entries[i] = replace(entry, profile=merged)
+                    break
+
+    def update_usage(
+        self,
+        entry_id: str,
+        input_tokens: int | None,
+        output_tokens: int | None,
+        total_tokens: int | None,
+    ) -> None:
+        """Write back token usage for an existing entry.
+
+        Used by the streaming path to record usage extracted from the
+        final stream chunk.
+        """
+        if self._persistence is not None:
+            self._persistence.update_entry_usage(
+                entry_id, input_tokens, output_tokens, total_tokens
+            )
+        else:
+            for i, entry in enumerate(self._entries):
+                if entry.id == entry_id:
+                    self._entries[i] = replace(
+                        entry,
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        total_tokens=total_tokens,
+                    )
                     break
 
     def clear(self) -> None:

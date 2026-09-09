@@ -333,6 +333,7 @@ a { color: var(--accent); text-decoration: none; }
 .stat-card .value.green { color: var(--green); }
 .stat-card .value.red { color: var(--red); }
 .stat-card .value.blue { color: var(--blue); }
+.stat-card .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* Section */
 .section { margin-bottom: 32px; }

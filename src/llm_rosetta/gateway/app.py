@@ -75,6 +75,13 @@ def _record_telemetry(
     metrics = getattr(request.app, "metrics", None)
     if is_stream and metrics:
         metrics.active_streams -= 1
+    # Extract usage from profile (non-streaming only; streaming writes
+    # back usage separately after the stream completes)
+    _usage = (profile or {}).get("usage") if not is_stream else None
+    _input_tokens = _usage.get("prompt_tokens") if _usage else None
+    _output_tokens = _usage.get("completion_tokens") if _usage else None
+    _total_tokens = _usage.get("total_tokens") if _usage else None
+
     if metrics:
         metrics.record_request(
             model=model,
@@ -85,6 +92,8 @@ def _record_telemetry(
             is_stream=is_stream,
             provider_name=provider_name,
             error_detail=error_detail,
+            input_tokens=_input_tokens,
+            output_tokens=_output_tokens,
         )
 
     request_log = getattr(request.app, "request_log", None)
@@ -107,6 +116,9 @@ def _record_telemetry(
             ),
             client_ip=_extract_client_ip(request),
             profile=profile,
+            input_tokens=_input_tokens,
+            output_tokens=_output_tokens,
+            total_tokens=_total_tokens,
         )
         # For streaming, use the pre-generated ID so the stream
         # generator can write back profile data by this ID.
@@ -307,6 +319,7 @@ async def _proxy_handler(
                 extra_headers=extra_headers,
                 entry_id=pre_entry_id,
                 request_log=request_log,
+                metrics=getattr(request.app, "metrics", None),
                 persistence=persistence,
                 preflight_token_count=preflight,
             )

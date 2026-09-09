@@ -474,10 +474,16 @@ async def handle_non_streaming(
     # Phase 4: Target response → Source response
     assert resp.body is not None
     log_response(resp.body, label="UPSTREAM RESPONSE")
+    ir_usage: dict[str, Any] = {}
+
+    def _capture_ir(ir_response: dict[str, Any]) -> None:
+        store.cache_from_response(ir_response)
+        u = ir_response.get("usage")
+        if u:
+            ir_usage.update(u)
+
     try:
-        source_response = pipeline.convert_response(
-            resp.body, on_ir_ready=store.cache_from_response
-        )
+        source_response = pipeline.convert_response(resp.body, on_ir_ready=_capture_ir)
     except ConversionError as exc:
         profile.update(pipeline.profile)
         dump_error(
@@ -518,6 +524,8 @@ async def handle_non_streaming(
         )
 
     _strip_internal_metadata(source_response)
+    if ir_usage:
+        profile["usage"] = ir_usage
     return JSONResponse(source_response), profile
 
 
@@ -567,6 +575,32 @@ def _terminal_error_sse(
         return []
 
 
+def _write_back_stream_usage(
+    processor: Any,
+    entry_id: str | None,
+    request_log: Any | None,
+    metrics: Any | None,
+    model: str,
+) -> None:
+    """Extract accumulated token usage from the stream processor and persist it."""
+    usage = getattr(processor, "get_accumulated_usage", lambda: None)()
+    if not usage or not entry_id or request_log is None:
+        return
+    inp = usage.get("prompt_tokens")
+    outp = usage.get("completion_tokens")
+    total = usage.get("total_tokens")
+    if inp is None and outp is None:
+        return
+    if total is None and inp is not None:
+        total = (inp or 0) + (outp or 0)
+    try:
+        request_log.update_usage(entry_id, inp, outp, total)
+    except Exception:
+        logger.debug("Failed to write usage for %s", entry_id)
+    if metrics is not None:
+        metrics.record_usage(model=model, input_tokens=inp, output_tokens=outp)
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -576,6 +610,7 @@ async def _stream_event_generator(
     format_sse: Any,
     entry_id: str | None = None,
     request_log: Any | None = None,
+    metrics: Any | None = None,
     capture_record: CapturedRequest | None = None,
     capture_state: CaptureState | None = None,
     dump_ctx: DumpContext | None = None,
@@ -669,6 +704,8 @@ async def _stream_event_generator(
                 request_log.update_profile(entry_id, stream_profile)
             except Exception:
                 logger.debug("Failed to write stream profile for %s", entry_id)
+
+            _write_back_stream_usage(processor, entry_id, request_log, metrics, model)
 
         # Content capture (streaming): record accumulated upstream chunks
         if capture_record is not None and capture_state is not None:
@@ -790,6 +827,7 @@ async def handle_streaming(
     extra_headers: dict[str, str] | None = None,
     entry_id: str | None = None,
     request_log: Any | None = None,
+    metrics: Any | None = None,
     persistence: Any | None = None,
     capture_state: CaptureState | None = None,
     preflight_token_count: bool = False,
@@ -986,6 +1024,7 @@ async def handle_streaming(
                 format_sse=format_sse,
                 entry_id=entry_id,
                 request_log=request_log,
+                metrics=metrics,
                 capture_record=_capture_record,
                 capture_state=capture_state,
                 dump_ctx=DumpContext(
