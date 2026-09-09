@@ -443,3 +443,24 @@ class TestPassthroughStreamProcessorUsage:
         p.process_chunk({"choices": [{"delta": {"content": "hi"}}]})
 
         assert p.get_accumulated_usage() is None
+
+
+class TestPassthroughZeroTokens:
+    def test_zero_prompt_tokens_preserved(self):
+        from llm_rosetta.pipeline import PassthroughStreamProcessor
+
+        p = PassthroughStreamProcessor()
+        p.process_chunk(
+            {
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 50,
+                    "total_tokens": 50,
+                },
+            }
+        )
+        usage = p.get_accumulated_usage()
+        assert usage is not None
+        assert usage["prompt_tokens"] == 0
+        assert usage["completion_tokens"] == 50
+        assert usage["total_tokens"] == 50

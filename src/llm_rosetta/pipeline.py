@@ -816,7 +816,7 @@ class PassthroughStreamProcessor:
                 ("total_tokens", "total_tokens"),
             ):
                 v = usage.get(src)
-                if isinstance(v, int) and v > 0:
+                if isinstance(v, int) and v >= 0:
                     result[dst] = v
             if "total_tokens" not in result and "prompt_tokens" in result:
                 result["total_tokens"] = result.get("prompt_tokens", 0) + result.get(
@@ -836,7 +836,7 @@ class PassthroughStreamProcessor:
                 ("total_token_count", "total_tokens"),
             ):
                 v = um.get(src)
-                if isinstance(v, int) and v > 0:
+                if isinstance(v, int) and v >= 0:
                     result[dst] = v
             return result if result else None
         return None
