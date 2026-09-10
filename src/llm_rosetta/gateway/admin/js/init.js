@@ -5,7 +5,7 @@ import {
   _startInactivityTracking, _stopInactivityTracking,
 } from './core.js';
 import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
-import { loadConfig, renderProviders } from './providers.js';
+import { loadConfig, renderProviders, applyProviderHealth } from './providers.js';
 import { renderModels } from './models.js';
 import './fetch-models.js';
 import { loadKeys, loadLogKeyLabels, renderKeys } from './keys.js';
@@ -29,6 +29,7 @@ function initApp() {
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (S.currentTab === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (location.hash === "#change-password") { openSettings(); history.replaceState(null, "", location.pathname); }
 }
 
@@ -52,6 +53,7 @@ function activateTab(tab) {
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (id === 'logs' && _tabEnabled('logs')) { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
   if (id === 'providers' || id === 'models') { loadConfig(); }
+  if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
 }
 
@@ -86,6 +88,7 @@ window.goToTab = goToTab;
 function stopTimers() {
   if (S.dashboardTimer) { clearInterval(S.dashboardTimer); S.dashboardTimer = null; }
   if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
+  if (S.healthTimer) { clearInterval(S.healthTimer); S.healthTimer = null; }
 }
 
 // Filter change handlers
