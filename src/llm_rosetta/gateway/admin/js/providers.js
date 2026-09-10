@@ -705,6 +705,7 @@ async function loadConfig() {
     cpEl.title = fullPath;
     document.getElementById('globalProxy').value = (S.configData.server && S.configData.server.proxy) || '';
     renderProviders();
+    applyProviderHealth();
     window.renderModels();
     // Detect host IP in background (for proxy placeholder hints)
     if (!window._detectedHostIp) {
@@ -733,7 +734,30 @@ Object.assign(window, {
   _activateSegChild,
 });
 
-export { renderProviders, loadConfig, _activateSegChild, _getProviderCaps };
+// ── Provider health indicators ───────────────────────────────────────
+
+async function applyProviderHealth() {
+  try {
+    const data = await api.get('/admin/api/metrics?seconds=60');
+    const health = data.providers || {};
+    document.querySelectorAll('.provider-card[data-provider]').forEach(card => {
+      card.classList.remove('health-ok', 'health-warn', 'health-critical', 'health-nodata');
+      const name = card.dataset.provider;
+      const stats = health[name];
+      if (!stats || stats.sample_size < 1) {
+        // No data — keep default border
+      } else if (stats.status === 'critical') {
+        card.classList.add('health-critical');
+      } else if (stats.success_rate < 0.9) {
+        card.classList.add('health-warn');
+      } else {
+        card.classList.add('health-ok');
+      }
+    });
+  } catch { /* metrics unavailable */ }
+}
+
+export { renderProviders, loadConfig, _activateSegChild, _getProviderCaps, applyProviderHealth };
 
 // ── Provider Connectivity Test ──────────────────────────────────────
 
