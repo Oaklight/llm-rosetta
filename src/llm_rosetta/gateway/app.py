@@ -536,22 +536,24 @@ async def handle_list_models_google(request: Any) -> Response:
 
 
 async def handle_health(request: Any) -> Response:
-    """Return operational metrics and per-provider health status.
+    """Return aggregate health status without exposing provider details.
 
     Always returns HTTP 200. Use ``status: "degraded"`` in the payload
     to signal provider issues without breaking existing monitors.
     For a 503-on-unhealthy probe use ``/health/ready``.
+
+    Per-provider health details are available via the authenticated
+    admin metrics endpoint (``/admin/api/metrics``).
     """
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
         return JSONResponse({"status": "ok"})
 
-    snap = metrics.snapshot(series_seconds=3600)  # 1-hour window for errors_last_hour
+    snap = metrics.snapshot(series_seconds=3600)
     errors_last_hour = sum(
         pt["errors"] for pt in snap.get("series", []) if pt.get("errors", 0)
     )
 
-    provider_health = metrics.provider_health_snapshot()
     critical = metrics.any_critical_provider()
     overall_status = "degraded" if critical else "ok"
 
@@ -560,7 +562,6 @@ async def handle_health(request: Any) -> Response:
         "uptime_seconds": snap["uptime_seconds"],
         "requests_total": snap["total_requests"],
         "errors_last_hour": errors_last_hour,
-        "providers": provider_health,
     }
     return JSONResponse(payload, status_code=200)
 
@@ -578,9 +579,12 @@ async def handle_health_ready(request: Any) -> Response:
 
     critical = metrics.any_critical_provider()
     if critical:
-        provider_health = metrics.provider_health_snapshot()
+        health = metrics.provider_health_snapshot()
+        critical_count = sum(
+            1 for v in health.values() if v.get("status") == "critical"
+        )
         return JSONResponse(
-            {"status": "not_ready", "providers": provider_health},
+            {"status": "not_ready", "critical_providers": critical_count},
             status_code=503,
         )
     return JSONResponse({"status": "ready"})
