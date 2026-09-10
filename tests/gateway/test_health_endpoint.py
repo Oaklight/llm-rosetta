@@ -237,8 +237,7 @@ class TestHandleHealthFunction:
         assert body["requests_total"] == 5
         assert "uptime_seconds" in body
         assert "errors_last_hour" in body
-        assert "providers" in body
-        assert "myargo" in body["providers"]
+        assert "providers" not in body
 
     def test_health_returns_200_degraded_for_critical_provider(self):
         import json
@@ -301,4 +300,4 @@ class TestHandleHealthFunction:
         body = json.loads(resp.body)
         assert resp.status_code == 503
         assert body["status"] == "not_ready"
-        assert "providers" in body
+        assert body["critical_providers"] >= 1
