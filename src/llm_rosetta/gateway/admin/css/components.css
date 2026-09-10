@@ -57,7 +57,7 @@ tr:hover td { background: var(--bg-hover); }
 .cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
 .cap-badge-text { background:color-mix(in srgb, var(--text-dim) 15%, transparent);color:var(--text-dim); }
 .cap-badge-vision { background:color-mix(in srgb, var(--purple) 12%, transparent);color:var(--purple); }
-.cap-badge-tools { background:color-mix(in srgb, var(--text) 8%, transparent);color:var(--text-dim); }
+.cap-badge-tools { background:color-mix(in srgb, var(--blue) 8%, var(--green) 4%);color:color-mix(in srgb, var(--blue) 50%, var(--green)); }
 .cap-badge-reasoning { background:color-mix(in srgb, var(--red) 8%, transparent);color:var(--red); }
 /* Provider-model cross-navigation */
 .provider-link { color:inherit;cursor:pointer;text-decoration:none; }
@@ -339,7 +339,7 @@ canvas { width: 100%; height: 160px; }
 /* Capability badges */
 .badge-cap { background: color-mix(in srgb, var(--text-dim) 15%, transparent); color: var(--text-dim); font-size: 10px; padding: 1px 5px; margin-right: 4px; display:inline-flex; align-items:center; gap:2px; }
 .badge-cap-vision { background: color-mix(in srgb, var(--purple) 12%, transparent); color: var(--purple); }
-.badge-cap-tools { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text-dim); }
+.badge-cap-tools { background: color-mix(in srgb, var(--blue) 8%, var(--green) 4%); color: color-mix(in srgb, var(--blue) 50%, var(--green)); }
 .badge-cap-embed { background: color-mix(in srgb, var(--blue) 12%, transparent); color: var(--blue); }
 .badge-cap-reasoning { background: color-mix(in srgb, var(--red) 8%, transparent); color: var(--red); }
 
@@ -647,3 +647,6 @@ body { padding-bottom: 26px; }
 .provider-card.health-ok       { border-left: 3px solid var(--green, #22c55e); }
 .provider-card.health-warn     { border-left: 3px solid var(--yellow, #eab308); }
 .provider-card.health-critical { border-left: 3px solid var(--red, #ef4444); }
+
+/* Invert dark provider logos in dark mode for visibility */
+[data-mode="dark"] .pc-logo { filter: invert(1); }
