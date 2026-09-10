@@ -490,19 +490,23 @@ async def handle_list_models(request: Any) -> Response:
         provider_name = model_route.providers[0].name
         api_standard = _config.provider_types.get(provider_name, "unknown")
         capabilities = _config.model_capabilities.get(name, ["text"])
-        data.append(
-            {
-                "id": name,
-                "object": "model",
-                "created": 0,
-                "owned_by": provider_name,
-                "api_standard": api_standard,
-                "capabilities": capabilities,
-                "type": "model",
-                "display_name": name,
-                "created_at": "1970-01-01T00:00:00Z",
-            }
-        )
+        entry: dict[str, Any] = {
+            "id": name,
+            "object": "model",
+            "created": 0,
+            "owned_by": provider_name,
+            "api_standard": api_standard,
+            "capabilities": capabilities,
+            "type": "model",
+            "display_name": name,
+            "created_at": "1970-01-01T00:00:00Z",
+        }
+        if model_route.is_multi:
+            entry["providers"] = [
+                {"name": p.name, "weight": p.weight} for p in model_route.providers
+            ]
+            entry["routing_strategy"] = "weighted_round_robin"
+        data.append(entry)
     return JSONResponse(
         {
             "object": "list",
