@@ -35,6 +35,7 @@ export const S = {
   logOffset: 0,
   dashboardTimer: null,
   logTimer: null,
+  healthTimer: null,
   expandedLogRows: new Set(),
   _dashboardRefreshMs: parseInt(localStorage.getItem('dashboardRefreshMs') || '3000', 10),
   _editingProviderName: null,
