@@ -562,6 +562,7 @@ async def handle_health(request: Any) -> Response:
         "uptime_seconds": snap["uptime_seconds"],
         "requests_total": snap["total_requests"],
         "errors_last_hour": errors_last_hour,
+        "detail_url": "/admin/api/metrics",
     }
     return JSONResponse(payload, status_code=200)
 
