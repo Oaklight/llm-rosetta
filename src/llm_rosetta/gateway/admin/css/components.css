@@ -642,3 +642,8 @@ body { padding-bottom: 26px; }
   color:var(--text);font-family:var(--mono);
 }
 .lp-search-row input:focus { outline:none;border-color:var(--accent); }
+
+/* ── Provider health indicator (left border) ── */
+.provider-card.health-ok       { border-left: 3px solid var(--green, #22c55e); }
+.provider-card.health-warn     { border-left: 3px solid var(--yellow, #eab308); }
+.provider-card.health-critical { border-left: 3px solid var(--red, #ef4444); }
