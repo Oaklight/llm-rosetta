@@ -577,12 +577,9 @@ async def handle_health_ready(request: Any) -> Response:
     if metrics is None:
         return JSONResponse({"status": "ok"})
 
-    critical = metrics.any_critical_provider()
-    if critical:
-        health = metrics.provider_health_snapshot()
-        critical_count = sum(
-            1 for v in health.values() if v.get("status") == "critical"
-        )
+    health = metrics.provider_health_snapshot()
+    critical_count = sum(1 for v in health.values() if v.get("status") == "critical")
+    if critical_count:
         return JSONResponse(
             {"status": "not_ready", "critical_providers": critical_count},
             status_code=503,
