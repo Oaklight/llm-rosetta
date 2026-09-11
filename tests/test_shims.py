@@ -195,6 +195,25 @@ class TestBuiltinShims:
         assert shim is not None
         assert shim.base == "google_generate"
 
+    def test_max_tool_description_length_loaded_from_yaml(self):
+        """The YAML threshold must reach the shim object.
+
+        Regression: the field existed on ProviderShim and was consumed by
+        the route resolver, but the YAML loader never read the key, so the
+        declared value was silently dropped and relocation never fired.
+        """
+        for name in ("openai", "argo--openai_chat"):
+            shim = get_shim(name)
+            assert shim is not None
+            assert shim.max_tool_description_length == 1024, (
+                f"{name} should load max_tool_description_length from YAML"
+            )
+
+    def test_max_tool_description_length_absent_stays_none(self):
+        shim = get_shim("anthropic")
+        assert shim is not None
+        assert shim.max_tool_description_length is None
+
 
 # ---------------------------------------------------------------------------
 # Integration: shim → converter

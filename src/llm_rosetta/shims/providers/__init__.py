@@ -270,6 +270,7 @@ def _load_single_provider(
         model_reasoning=model_reasoning,
         response_id_prefix=cfg.get("response_id_prefix", ""),
         supports_custom_tools=cfg.get("supports_custom_tools", False),
+        max_tool_description_length=cfg.get("max_tool_description_length"),
         multimodal_tool_result=cfg.get("multimodal_tool_result"),
         tool_search_mode=cfg.get("tool_search_mode", "disabled"),
     )
