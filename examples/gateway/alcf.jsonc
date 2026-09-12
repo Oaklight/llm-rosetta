@@ -1,0 +1,60 @@
+{
+  "config_version": 1,
+
+  // ALCF Inference Service — all three clusters.
+  //
+  // First-time setup:
+  //   python3 scripts/alcf-token.py --login
+  //
+  // The gateway auto-refreshes tokens via token_command — no cron or
+  // restarts needed. For static key fallback, replace token_command
+  // with: "api_key": "${ALCF_API_KEY}"
+  "providers": {
+    "alcf-sophia": {
+      "shim": "alcf--sophia",
+      "token_command": ["python3", "scripts/alcf-token.py"],
+      "token_refresh_interval": 3600
+    },
+    "alcf-metis": {
+      "shim": "alcf--metis",
+      "token_command": ["python3", "scripts/alcf-token.py"],
+      "token_refresh_interval": 3600
+    },
+    "alcf-minerva": {
+      "shim": "alcf--minerva",
+      "token_command": ["python3", "scripts/alcf-token.py"],
+      "token_refresh_interval": 3600
+    }
+  },
+
+  "models": {
+    // Sophia — vLLM on NVIDIA A100
+    "meta-llama/Meta-Llama-3.1-8B-Instruct": "alcf-sophia",
+    "meta-llama/Meta-Llama-3.1-70B-Instruct": "alcf-sophia",
+    "meta-llama/Meta-Llama-3.1-405B-Instruct": "alcf-sophia",
+    "meta-llama/Llama-3.3-70B-Instruct": "alcf-sophia",
+    "meta-llama/Llama-4-Scout-17B-16E-Instruct": "alcf-sophia",
+    "meta-llama/Llama-4-Maverick-17B-128E-Instruct": "alcf-sophia",
+    "openai/gpt-oss-20b": "alcf-sophia",
+    "openai/gpt-oss-120b": "alcf-sophia",
+    "google/gemma-3-27b-it": "alcf-sophia",
+    "google/gemma-4-26B-A4B-it": "alcf-sophia",
+    "google/gemma-4-31B-it": "alcf-sophia",
+    "google/gemma-4-E4B-it": "alcf-sophia",
+    "nvidia/nemotron-3-super-120b": "alcf-sophia",
+
+    // Metis — SambaNova SN40L
+    "gpt-oss-120b": "alcf-metis",
+    "Mistral-Large-3-675B-Instruct-2512": "alcf-metis",
+    "gemma-4-31B-it": "alcf-metis",
+
+    // Minerva — NVIDIA B200
+    "nemotron-3-ultra": "alcf-minerva",
+    "inkling-bf16": "alcf-minerva"
+  },
+
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8765
+  }
+}
