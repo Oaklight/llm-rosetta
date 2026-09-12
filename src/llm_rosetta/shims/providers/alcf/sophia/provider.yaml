@@ -1,0 +1,5 @@
+name: alcf--sophia
+base: openai_chat
+default_base_url: https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1
+default_api_key_env: ALCF_API_KEY
+logo: https://www.alcf.anl.gov/themes/flavor_starter_alcf/logo.svg

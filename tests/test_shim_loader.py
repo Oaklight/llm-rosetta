@@ -91,7 +91,7 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 16 built-in shims."""
+        """Verify the real providers/ directory loads all 21 built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
         assert names == {
@@ -113,6 +113,9 @@ class TestLoadProviders:
             "xai",
             "zhipu",
             "google_interactions",
+            "alcf--sophia",
+            "alcf--metis",
+            "alcf--minerva",
         }
 
     def test_all_registered_after_load(self):
@@ -134,6 +137,9 @@ class TestLoadProviders:
             "minimax--anthropic",
             "zhipu",
             "google_interactions",
+            "alcf--sophia",
+            "alcf--metis",
+            "alcf--minerva",
         ):
             shim = get_shim(name)
             assert shim is not None
@@ -280,6 +286,9 @@ class TestLoadProviders:
             "volcengine--openai_responses": "openai_responses",
             "xai": "openai_chat",
             "zhipu": "openai_chat",
+            "alcf--sophia": "openai_chat",
+            "alcf--metis": "openai_chat",
+            "alcf--minerva": "openai_chat",
         }
         for name, base in expected.items():
             shim = get_shim(name)

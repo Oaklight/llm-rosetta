@@ -1,0 +1,20 @@
+"""ALCF Sophia (vLLM on NVIDIA A100) schema transforms.
+
+vLLM may not support ``logprobs`` / ``top_logprobs``.  Strip the
+``developer`` role (not supported by open-source models) and replace
+``content: null`` with an empty string to avoid vLLM crashes.
+"""
+
+from llm_rosetta.shims.transforms import (
+    default_message_field,
+    replace_message_field,
+    strip_fields,
+)
+
+post_ir_transforms = (
+    strip_fields("logprobs", "top_logprobs"),
+    replace_message_field("role", "developer", "system"),
+    default_message_field("content", ""),
+)
+pre_ir_transforms = ()
+ir_transforms = ()
