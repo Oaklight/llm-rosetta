@@ -64,6 +64,7 @@ from .observability import (
     cleanup_error_dumps_by_age,
     cleanup_requests_by_age,
     clear_error_dumps,
+    clear_ops_log,
     clear_requests,
     delete_error_dump,
     db_cleanup,
@@ -73,6 +74,9 @@ from .observability import (
     get_error_dumps,
     get_host_ip,
     get_metrics,
+    get_ops_log,
+    get_ops_log_event_types,
+    get_ops_log_sources,
     get_provider_key,
     get_request_key_labels,
     backfill_dump_log_ids,
@@ -189,6 +193,13 @@ def register_admin_routes(app: Any) -> None:
         _guard("logs", get_request_by_id)
     )
     app.route("/admin/api/requests", methods=["DELETE"])(_guard("logs", clear_requests))
+    # Ops log (logs tab)
+    app.route("/admin/api/ops-log", methods=["GET"])(_guard("logs", get_ops_log))
+    app.route("/admin/api/ops-log", methods=["DELETE"])(_guard("logs", clear_ops_log))
+    app.route("/admin/api/ops-log/event-types", methods=["GET"])(
+        get_ops_log_event_types
+    )
+    app.route("/admin/api/ops-log/sources", methods=["GET"])(get_ops_log_sources)
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)

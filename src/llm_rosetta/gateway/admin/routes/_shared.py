@@ -133,6 +133,32 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
         if "error_max" in rl_cfg:
             persistence.error_max = int(rl_cfg["error_max"])
 
+    # Record config reload event
+    ops_log = getattr(request.app, "ops_log", None)
+    if ops_log is not None:
+        from llm_rosetta.observability.ops_log import (
+            EVENT_CONFIG_RELOAD,
+            OpsLogEntry,
+            SEVERITY_INFO,
+            SOURCE_CONFIG,
+        )
+
+        ops_log.add(
+            OpsLogEntry.create(
+                event_type=EVENT_CONFIG_RELOAD,
+                severity=SEVERITY_INFO,
+                message=(
+                    f"Config reloaded ({len(new_config.providers)} providers, "
+                    f"{len(new_config.models)} models)"
+                ),
+                details={
+                    "provider_count": len(new_config.providers),
+                    "model_count": len(new_config.models),
+                },
+                source=SOURCE_CONFIG,
+            )
+        )
+
     return new_config
 
 
