@@ -9,9 +9,14 @@ from typing import TYPE_CHECKING, Any
 from llm_rosetta.observability import (
     DEFAULT_ERROR_MAX,
     DEFAULT_SUCCESS_MAX,
+    EVENT_ADMIN_SETUP,
     MetricsCollector,
+    OpsLog,
+    OpsLogEntry,
     PersistenceManager,
     RequestLog,
+    SEVERITY_INFO,
+    SOURCE_ADMIN,
 )
 
 if TYPE_CHECKING:
@@ -190,6 +195,9 @@ def setup_admin(
     # Request log delegates to persistence when available
     request_log = RequestLog(persistence=persistence)
 
+    # Ops log: PersistenceManager creates the table, OpsLog wraps it
+    ops_log = OpsLog(persistence=persistence)
+
     # On-demand deep profiling state
     from llm_rosetta.observability import ProfilerState
 
@@ -225,6 +233,7 @@ def setup_admin(
 
     app.metrics = metrics
     app.request_log = request_log
+    app.ops_log = ops_log
     app.persistence = persistence
     app.gateway_config = config
     app.config_path = config_path
@@ -250,3 +259,13 @@ def setup_admin(
         serialized = _json.dumps(merged_branding).replace("</", r"<\/")
         parts.append(f"<script>window.__branding={serialized};</script>")
     app.admin_custom_head = "\n".join(parts)
+
+    # Record admin setup event (after all wiring is complete)
+    ops_log.add(
+        OpsLogEntry.create(
+            event_type=EVENT_ADMIN_SETUP,
+            severity=SEVERITY_INFO,
+            message="Admin panel initialized",
+            source=SOURCE_ADMIN,
+        )
+    )

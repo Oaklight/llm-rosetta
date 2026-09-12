@@ -473,3 +473,68 @@ async def export_error_dumps(request: Any) -> Response:
         content_type="application/gzip",
         headers={"Content-Disposition": "attachment; filename=error-dumps.tar.gz"},
     )
+
+
+# ------------------------------------------------------------------
+# Ops log
+# ------------------------------------------------------------------
+
+
+async def get_ops_log(request: Any) -> Response:
+    """Return paginated, filtered ops log entries."""
+    ops_log = getattr(request.app, "ops_log", None)
+    if ops_log is None:
+        return JSONResponse({"entries": [], "total": 0})
+    limit = int(_qp(request, "limit", "50"))
+    offset = int(_qp(request, "offset", "0"))
+    event_type = _qp(request, "event_type")
+    severity = _qp(request, "severity")
+    source = _qp(request, "source")
+    entries, total = ops_log.get_entries(
+        limit=limit,
+        offset=offset,
+        event_type=event_type,
+        severity=severity,
+        source=source,
+    )
+    return JSONResponse({"entries": entries, "total": total})
+
+
+async def clear_ops_log(request: Any) -> Response:
+    """Clear the ops log, recording the clear action itself."""
+    ops_log = getattr(request.app, "ops_log", None)
+    if ops_log is None:
+        return JSONResponse({"ok": True})
+
+    from llm_rosetta.observability.ops_log import (
+        EVENT_OPS_LOG_CLEARED,
+        OpsLogEntry,
+        SEVERITY_INFO,
+        SOURCE_ADMIN,
+    )
+
+    count = ops_log.clear()
+    ops_log.add(
+        OpsLogEntry.create(
+            event_type=EVENT_OPS_LOG_CLEARED,
+            severity=SEVERITY_INFO,
+            message=f"Ops log cleared ({count} entries removed)",
+            details={"cleared_count": count},
+            source=SOURCE_ADMIN,
+        )
+    )
+    return JSONResponse({"ok": True, "cleared": count})
+
+
+async def get_ops_log_event_types(request: Any) -> Response:
+    """Return the list of known ops log event types."""
+    from llm_rosetta.observability.ops_log import ALL_EVENT_TYPES
+
+    return JSONResponse({"event_types": ALL_EVENT_TYPES})
+
+
+async def get_ops_log_sources(request: Any) -> Response:
+    """Return the list of known ops log source subsystems."""
+    from llm_rosetta.observability.ops_log import ALL_SOURCES
+
+    return JSONResponse({"sources": ALL_SOURCES})

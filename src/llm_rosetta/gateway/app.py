@@ -623,6 +623,26 @@ def _flush_now(app: App) -> None:
         except Exception as exc:
             logger.warning("Shutdown: failed to flush metrics: %s", exc)
 
+    # Record shutdown event (skip pruning to avoid latency before close)
+    ops_log = getattr(app, "ops_log", None)
+    if ops_log is not None:
+        from llm_rosetta.observability.ops_log import (
+            EVENT_SHUTDOWN,
+            OpsLogEntry,
+            SEVERITY_INFO,
+            SOURCE_GATEWAY,
+        )
+
+        ops_log.add(
+            OpsLogEntry.create(
+                event_type=EVENT_SHUTDOWN,
+                severity=SEVERITY_INFO,
+                message="Gateway shutting down",
+                source=SOURCE_GATEWAY,
+            ),
+            _skip_prune=True,
+        )
+
     persistence.close()
 
     keystore = getattr(app, "keystore", None)
@@ -971,6 +991,32 @@ async def run_gateway(
     # Expose bind address so admin test tasks can self-call.
     setattr(app, "_bind_host", host)
     setattr(app, "_bind_port", port)
+    # Record startup event
+    ops_log = getattr(app, "ops_log", None)
+    if ops_log is not None:
+        from llm_rosetta.observability.ops_log import (
+            EVENT_STARTUP,
+            OpsLogEntry,
+            SEVERITY_INFO,
+            SOURCE_GATEWAY,
+        )
+
+        config = getattr(app, "gateway_config", None)
+        ops_log.add(
+            OpsLogEntry.create(
+                event_type=EVENT_STARTUP,
+                severity=SEVERITY_INFO,
+                message=f"Gateway started on {host}:{port}",
+                details={
+                    "host": host,
+                    "port": port,
+                    "provider_count": len(config.providers) if config else 0,
+                    "model_count": len(config.models) if config else 0,
+                },
+                source=SOURCE_GATEWAY,
+            )
+        )
+
     flush_task = asyncio.create_task(_periodic_flush(app))
     try:
         await app._serve(host, port, socket=socket)

@@ -34,6 +34,8 @@ DEFAULT_ERROR_MAX = 10000
 
 DEFAULT_MAX_AGE_DAYS = 90
 
+DEFAULT_OPS_LOG_MAX = 10000
+
 
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
@@ -63,6 +65,7 @@ class PersistenceManager:
         error_max: int | None = None,
         *,
         max_entries: int | None = None,
+        ops_log_max: int | None = None,
     ) -> None:
         if max_entries is not None:
             warnings.warn(
@@ -80,6 +83,10 @@ class PersistenceManager:
         )
         self._error_max = error_max if error_max is not None else DEFAULT_ERROR_MAX
         self._insert_count = 0
+        self._ops_log_max = (
+            ops_log_max if ops_log_max is not None else DEFAULT_OPS_LOG_MAX
+        )
+        self._ops_insert_count = 0
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
@@ -163,6 +170,22 @@ class PersistenceManager:
                 ON error_dumps(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_ed_request_log
                 ON error_dumps(request_log_id);
+
+            CREATE TABLE IF NOT EXISTS ops_log (
+                id          TEXT PRIMARY KEY,
+                timestamp   TEXT NOT NULL,
+                event_type  TEXT NOT NULL,
+                severity    TEXT NOT NULL,
+                message     TEXT NOT NULL,
+                details     TEXT,
+                source      TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ol_timestamp
+                ON ops_log(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_ol_event_type
+                ON ops_log(event_type);
+            CREATE INDEX IF NOT EXISTS idx_ol_severity_ts
+                ON ops_log(severity, timestamp DESC);
         """)
         self._migrate_add_columns()
 
@@ -524,6 +547,135 @@ class PersistenceManager:
         """Delete all request log entries."""
         self._conn.execute("DELETE FROM request_log")
         self._conn.commit()
+
+    # ------------------------------------------------------------------
+    # Ops log
+    # ------------------------------------------------------------------
+
+    _OPS_LOG_COLUMNS = [
+        "id",
+        "timestamp",
+        "event_type",
+        "severity",
+        "message",
+        "details",
+        "source",
+    ]
+
+    def insert_ops_log_entries(
+        self,
+        entries: list[dict[str, Any]],
+        *,
+        _skip_prune: bool = False,
+    ) -> None:
+        """Insert ops log entries, pruning oldest if over capacity."""
+        if not entries:
+            return
+        self._conn.executemany(
+            "INSERT OR IGNORE INTO ops_log "
+            "(id, timestamp, event_type, severity, message, details, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    e["id"],
+                    e["timestamp"],
+                    e["event_type"],
+                    e["severity"],
+                    e["message"],
+                    json.dumps(e["details"]) if e.get("details") else None,
+                    e.get("source"),
+                )
+                for e in entries
+            ],
+        )
+        self._conn.commit()
+        if _skip_prune:
+            return
+        self._ops_insert_count += len(entries)
+        if self._ops_insert_count >= 100:
+            self._prune_ops_log()
+            self._ops_insert_count = 0
+        elif self.count_ops_log_entries() > self._ops_log_max:
+            self._prune_ops_log()
+
+    def query_ops_log_entries(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        event_type: str | None = None,
+        severity: str | None = None,
+        source: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Return filtered ops log entries (newest-first) and total count."""
+        where: list[str] = []
+        params: list[Any] = []
+        if event_type:
+            where.append("event_type = ?")
+            params.append(event_type)
+        if severity:
+            where.append("severity = ?")
+            params.append(severity)
+        if source:
+            where.append("source = ?")
+            params.append(source)
+
+        clause = (" WHERE " + " AND ".join(where)) if where else ""
+
+        row = self._conn.execute(
+            f"SELECT COUNT(*) FROM ops_log{clause}", params
+        ).fetchone()
+        total = row[0] if row else 0
+
+        rows = self._conn.execute(
+            f"SELECT {', '.join(self._OPS_LOG_COLUMNS)} FROM ops_log"
+            f"{clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            [*params, limit, offset],
+        ).fetchall()
+        entries = [self._ops_row_to_dict(r) for r in rows]
+        return entries, total
+
+    def count_ops_log_entries(self) -> int:
+        """Return the total number of ops log entries."""
+        row = self._conn.execute("SELECT COUNT(*) FROM ops_log").fetchone()
+        return row[0] if row else 0
+
+    def clear_ops_log(self) -> None:
+        """Delete all ops log entries."""
+        self._conn.execute("DELETE FROM ops_log")
+        self._conn.commit()
+
+    def _prune_ops_log(self) -> None:
+        """Remove oldest ops log entries beyond the retention limit."""
+        count = self.count_ops_log_entries()
+        if count <= self._ops_log_max:
+            return
+        self._conn.execute(
+            "DELETE FROM ops_log WHERE id NOT IN ("
+            "    SELECT id FROM ops_log "
+            "    ORDER BY timestamp DESC LIMIT ?"
+            ")",
+            (self._ops_log_max,),
+        )
+        self._conn.commit()
+
+    @classmethod
+    def _ops_row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
+        """Convert an ops_log row tuple to a dict, omitting None fields."""
+        d: dict[str, Any] = {}
+        for col, val in zip(cls._OPS_LOG_COLUMNS, row):
+            if col == "details" and val is not None:
+                try:
+                    val = json.loads(val)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            if val is not None:
+                d[col] = val
+        # Always include required fields even if somehow None
+        for key in ("id", "timestamp", "event_type", "severity", "message"):
+            if key not in d:
+                d[key] = ""
+        return d
 
     # ------------------------------------------------------------------
     # Metrics
