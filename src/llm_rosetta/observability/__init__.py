@@ -61,7 +61,8 @@ from .ops_log import (
 from .persistence import (
     DEFAULT_ERROR_MAX,
     DEFAULT_MAX_AGE_DAYS,
-    DEFAULT_OPS_LOG_MAX,
+    DEFAULT_OPS_INFO_MAX,
+    DEFAULT_OPS_WARN_MAX,
     DEFAULT_SUCCESS_MAX,
     PersistenceManager,
 )
@@ -76,7 +77,8 @@ __all__ = [
     "CaptureState",
     "DEFAULT_ERROR_MAX",
     "DEFAULT_MAX_AGE_DAYS",
-    "DEFAULT_OPS_LOG_MAX",
+    "DEFAULT_OPS_INFO_MAX",
+    "DEFAULT_OPS_WARN_MAX",
     "DEFAULT_SUCCESS_MAX",
     "EVENT_ADMIN_SETUP",
     "EVENT_CONFIG_RELOAD",

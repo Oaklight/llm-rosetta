@@ -607,11 +607,20 @@
           <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.opsLogSection">Server Ops Log</label>
         </div>
         <div class="settings-popup-item">
-          <label data-i18n="label.opsLogMax">Max Entries</label>
-          <input type="number" id="settingsOpsLogMax" min="100" step="1000" value="10000">
+          <label data-i18n="label.opsInfoMax">Info Cap</label>
+          <input type="number" id="settingsOpsInfoMax" min="100" step="1000" value="10000">
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.opsWarnMax">Warning/Error Cap</label>
+          <input type="number" id="settingsOpsWarnMax" min="100" step="1000" value="5000">
+        </div>
+        <div class="settings-popup-item">
+          <label data-i18n="label.opsMaxAgeDays">Max Age (days)</label>
+          <input type="number" id="settingsOpsMaxAgeDays" min="1" step="1" value="90">
         </div>
         <div class="settings-popup-item" style="justify-content:flex-end;gap:6px">
           <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
+          <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('ops')" data-i18n="btn.cleanupOps">Cleanup Ops Log</button>
         </div>
       </div>
     </div>

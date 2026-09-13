@@ -743,6 +743,22 @@ def _apply_log_format(debug: dict, raw_value: Any) -> Response | None:
     return None
 
 
+_RL_FIELDS = (("success_max", 50000), ("error_max", 5000), ("max_age_days", 1))
+_OL_FIELDS = (("info_max", 100), ("warn_max", 100), ("max_age_days", 1))
+
+
+def _apply_log_retention(body: dict[str, Any], server: dict[str, Any]) -> None:
+    """Apply request_log and ops_log retention settings from *body*."""
+    for section, fields in (("request_log", _RL_FIELDS), ("ops_log", _OL_FIELDS)):
+        src = body.get(section) or {}
+        if not src:
+            continue
+        cfg = server.setdefault(section, {})
+        for key, floor in fields:
+            if key in src:
+                cfg[key] = max(floor, int(src[key]))
+
+
 async def put_server_settings(request: Any) -> Response:  # noqa: C901
     """Update server settings (e.g. global proxy)."""
     config_path = _get_config_path(request)
@@ -781,19 +797,7 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
             server["credential_visible"] = want_visible
 
         # Log retention caps (floor prevents accidental wipe)
-        if "request_log" in body:
-            rl = body["request_log"]
-            rl_cfg = server.setdefault("request_log", {})
-            if "success_max" in rl:
-                rl_cfg["success_max"] = max(50000, int(rl["success_max"]))
-            if "error_max" in rl:
-                rl_cfg["error_max"] = max(5000, int(rl["error_max"]))
-            if "max_age_days" in rl:
-                rl_cfg["max_age_days"] = max(1, int(rl["max_age_days"]))
-
-        ol_max = (body.get("ops_log") or {}).get("max_entries")
-        if ol_max is not None:
-            server.setdefault("ops_log", {})["max_entries"] = max(100, int(ol_max))
+        _apply_log_retention(body, server)
 
         # Debug / log level
         debug = data.setdefault("debug", {})

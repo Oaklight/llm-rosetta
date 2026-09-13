@@ -92,14 +92,18 @@ def _init_persistence(
 
     success_max, error_max = _resolve_log_caps(config)
     ol_cfg = getattr(config, "ops_log", {}) or {}
-    ops_log_max = ol_cfg.get("max_entries")
-    if ops_log_max is not None:
-        ops_log_max = int(ops_log_max)
+    ops_info_max = ol_cfg.get("info_max")
+    ops_warn_max = ol_cfg.get("warn_max")
+    if ops_info_max is not None:
+        ops_info_max = int(ops_info_max)
+    if ops_warn_max is not None:
+        ops_warn_max = int(ops_warn_max)
     persistence = PersistenceManager(
         resolved_data_dir,
         success_max=success_max,
         error_max=error_max,
-        ops_log_max=ops_log_max,
+        ops_info_max=ops_info_max,
+        ops_warn_max=ops_warn_max,
     )
 
     saved_metrics = persistence.load_metrics()
