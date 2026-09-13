@@ -7,17 +7,17 @@ import { S, OPS_LOG_LIMIT } from './state.js';
 import { t } from './i18n.js';
 import { api, esc } from './core.js';
 
-const EVENT_LABELS = {
-  startup: 'Startup',
-  shutdown: 'Shutdown',
-  config_reload: 'Config Reload',
-  key_create: 'Key Create',
-  key_update: 'Key Update',
-  key_delete: 'Key Delete',
-  key_rotate: 'Key Rotate',
-  health_status_change: 'Health Change',
-  admin_setup: 'Admin Setup',
-  ops_log_cleared: 'Log Cleared',
+const EVENT_KEYS = {
+  startup: 'event.startup',
+  shutdown: 'event.shutdown',
+  config_reload: 'event.configReload',
+  key_create: 'event.keyCreate',
+  key_update: 'event.keyUpdate',
+  key_delete: 'event.keyDelete',
+  key_rotate: 'event.keyRotate',
+  health_status_change: 'event.healthChange',
+  admin_setup: 'event.adminSetup',
+  ops_log_cleared: 'event.logCleared',
 };
 
 const SEVERITY_BADGE = {
@@ -50,7 +50,7 @@ function renderOpsLog(entries, total) {
   } else {
     tbody.innerHTML = entries.map(e => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-      const label = EVENT_LABELS[e.event_type] || e.event_type;
+      const label = EVENT_KEYS[e.event_type] ? t(EVENT_KEYS[e.event_type]) : e.event_type;
       const sevCls = SEVERITY_BADGE[e.severity] || '';
       const hasDetails = !!e.details;
       const rowId = e.id;
@@ -113,7 +113,7 @@ async function populateOpsLogFilters() {
     const etSel = document.getElementById('filterOpsEventType');
     const etVal = etSel.value;
     etSel.innerHTML = `<option value="">${t('filter.allEventTypes')}</option>` +
-      (etData.event_types || []).map(et => `<option value="${esc(et)}">${esc(EVENT_LABELS[et] || et)}</option>`).join('');
+      (etData.event_types || []).map(et => `<option value="${esc(et)}">${esc(EVENT_KEYS[et] ? t(EVENT_KEYS[et]) : et)}</option>`).join('');
     etSel.value = etVal;
 
     const srcSel = document.getElementById('filterOpsSource');
@@ -152,15 +152,15 @@ function switchLogView(view) {
   if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
   if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
 
-  const interval = S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000;
+  const ms = S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000;
   if (view === 'requests') {
     S.logOffset = 0;
     window.loadLogs();
-    S.logTimer = setInterval(window.loadLogs, interval);
+    S.logTimer = setInterval(window.loadLogs, ms);
   } else {
     S.opsLogOffset = 0;
     loadOpsLog();
-    S.opsLogTimer = setInterval(loadOpsLog, interval);
+    S.opsLogTimer = setInterval(loadOpsLog, ms);
   }
 }
 
