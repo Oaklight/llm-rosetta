@@ -334,6 +334,7 @@ canvas { width: 100%; height: 160px; }
 }
 .badge-ok { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
 .badge-error { background: color-mix(in srgb, var(--red) 15%, transparent); color: var(--red); }
+.badge-warning { background: color-mix(in srgb, var(--yellow, #eab308) 15%, transparent); color: var(--yellow, #eab308); }
 .badge-stream { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 
 /* Capability badges */

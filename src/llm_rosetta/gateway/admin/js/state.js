@@ -8,6 +8,7 @@
 // ---- Constants --------------------------------------------------------
 
 export const LOG_LIMIT = 30;
+export const OPS_LOG_LIMIT = 30;
 export const DUMP_PAGE_SIZE = 20;
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const _TEST_TIMEOUT_MS = 120_000;
@@ -58,4 +59,8 @@ export const S = {
   _testPollTimer: null,
   _testElapsedTimer: null,
   _matryoshkaModel: '',
+  opsLogOffset: 0,
+  opsLogTimer: null,
+  expandedOpsLogRows: new Set(),
+  _logView: 'requests',
 };
