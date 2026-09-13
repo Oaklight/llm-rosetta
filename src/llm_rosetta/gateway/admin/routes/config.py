@@ -151,6 +151,21 @@ async def get_config(request: Any) -> Response:
         # Ensure explicit type — fall back to provider name for legacy configs
         if "type" not in masked:
             masked["type"] = name
+        # Inject token_status from the live ProviderInfo if available
+        gateway_config: GatewayConfig | None = getattr(
+            request.app, "gateway_config", None
+        )
+        if gateway_config is not None:
+            pinfo = gateway_config.providers.get(name)
+            if pinfo is not None and pinfo.token_status is not None:
+                masked["token_status"] = pinfo.token_status
+            elif pinfo is not None and pinfo.token_command is not None:
+                masked["token_status"] = {
+                    "enabled": True,
+                    "last_refresh": None,
+                    "consecutive_failures": 0,
+                    "last_error": None,
+                }
         masked_providers[name] = masked
 
     # Normalize models to dict format for consistent admin UI
