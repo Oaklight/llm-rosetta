@@ -8,6 +8,36 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Gateway — Multi-provider routing & infrastructure
+
+- **Multi-provider routing with weighted round-robin** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664)): support configuring multiple upstream providers per model with weighted load distribution. Adds `RoutingStrategy` protocol and nginx-style smooth WRR implementation. Provider-specific error responses auto-map per converter type. Per-provider token usage tracking and affinity support.
+- **API key affinity for prompt cache optimization** (PR [#663](https://github.com/Oaklight/llm-rosetta/pull/663)): deterministic upstream API key selection based on `hash(client_token + message_prefix)` so the same conversation always hits the same upstream key, maximizing provider-side prompt cache hits.
+- **Token usage tracking** (PR [#662](https://github.com/Oaklight/llm-rosetta/pull/662)): extract prompt/completion/total token counts from IR responses and persist per-request in SQLite and in-memory metrics. Works for both streaming and non-streaming requests.
+- **Multi-provider routing info in `/v1/models`**: expose per-model provider list with weight and type information in the models endpoint response.
+- **Provider health indicators in admin UI**: left border color coding (green/red/gray) per provider card, auto-refresh every 30 seconds, single-pass health check optimization.
+- **Remove provider details from unauthenticated health endpoints** (PR [#665](https://github.com/Oaklight/llm-rosetta/pull/665)): `/health` no longer leaks upstream infrastructure info; `/health/ready` 503 reports only a count, not provider names.
+
+### Admin — Observability & ops log
+
+- **Server ops log backend** (PR [#670](https://github.com/Oaklight/llm-rosetta/pull/670)): `OpsLog` facade for tracking server operational events (startup, shutdown, config reload, API key CRUD/rotate). SQLite-backed with count-based retention and REST API.
+- **Server ops log frontend** (PR [#671](https://github.com/Oaklight/llm-rosetta/pull/671)): segmented "Request Log" / "Server Ops Log" toggle in the Logs tab with filters for event type, severity, and source. Includes dual-threshold retention config in Settings (count-based and age-based cleanup), i18n event labels, and auto-refresh gated on active view.
+
+### Admin — Security & UX
+
+- **Migrate session auth to httponly cookie** (PR [#660](https://github.com/Oaklight/llm-rosetta/pull/660)): admin panel auth moved from `localStorage` + `X-Admin-Token` header to `HttpOnly` + `SameSite=Lax` session cookies. `X-Admin-Token` header still accepted as fallback for API clients.
+- **Fix missing DELETE endpoint for error dumps** (PR [#656](https://github.com/Oaklight/llm-rosetta/pull/656)): bulk delete of individual error dump entries was silently failing; added backend route and persistence method.
+- **Dark mode and badge improvements**: invert provider logos in dark mode, use distinct colors for embedding vs LLM badges, distinguish tools badge styling.
+
+### Shims — Bug fixes & testing
+
+- **Fix `max_tool_description_length` not loaded from provider YAML** (PR [#667](https://github.com/Oaklight/llm-rosetta/pull/667)): the YAML loader silently dropped the declared threshold, causing tool description relocation to never fire for shim-level defaults. Contributed by [@caidao22](https://github.com/caidao22).
+- **Guard test for YAML loader field coverage** (PR [#674](https://github.com/Oaklight/llm-rosetta/pull/674)): AST-based CI test that verifies every `ProviderShim` dataclass field is present in the loader constructor call, preventing silent field omissions. Also fixes `hoist_system_messages` not being loaded from YAML.
+
+### Infrastructure
+
+- **Zerodep-update CI workflow** (PR [#657](https://github.com/Oaklight/llm-rosetta/pull/657)): automated workflow for updating vendored zerodep modules.
+- **Update vendored zerodep modules** (PR [#658](https://github.com/Oaklight/llm-rosetta/pull/658)).
+
 ## v0.13.0 — 2026-09-08
 
 ### Added
