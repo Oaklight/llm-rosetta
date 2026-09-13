@@ -18,6 +18,7 @@ import { initLogoPicker } from './logo-picker.js';
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
 function _tabEnabled(id) { return _dt.indexOf(id) === -1; }
+function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
 // ===================== Init =====================
 function initApp() {
@@ -30,8 +31,8 @@ function initApp() {
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (S.currentTab === 'logs' && _tabEnabled('logs')) {
-    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, 5000); }
-    else { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, _logRefreshMs()); }
+    else { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, _logRefreshMs()); }
     populateOpsLogFilters();
   }
   if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
@@ -57,8 +58,8 @@ function activateTab(tab) {
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (id === 'logs' && _tabEnabled('logs')) {
-    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, 5000); }
-    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, _logRefreshMs()); }
+    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, _logRefreshMs()); }
     populateOpsLogFilters();
   }
   if (id === 'providers' || id === 'models') { loadConfig(); }
