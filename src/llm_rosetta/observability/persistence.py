@@ -34,7 +34,8 @@ DEFAULT_ERROR_MAX = 10000
 
 DEFAULT_MAX_AGE_DAYS = 90
 
-DEFAULT_OPS_LOG_MAX = 10000
+DEFAULT_OPS_INFO_MAX = 10000
+DEFAULT_OPS_WARN_MAX = 5000
 
 
 class PersistenceManager:
@@ -65,6 +66,8 @@ class PersistenceManager:
         error_max: int | None = None,
         *,
         max_entries: int | None = None,
+        ops_info_max: int | None = None,
+        ops_warn_max: int | None = None,
         ops_log_max: int | None = None,
     ) -> None:
         if max_entries is not None:
@@ -83,8 +86,16 @@ class PersistenceManager:
         )
         self._error_max = error_max if error_max is not None else DEFAULT_ERROR_MAX
         self._insert_count = 0
-        self._ops_log_max = (
-            ops_log_max if ops_log_max is not None else DEFAULT_OPS_LOG_MAX
+        # Legacy single-cap fallback: ops_log_max sets both if specific caps absent
+        self._ops_info_max = (
+            ops_info_max
+            if ops_info_max is not None
+            else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_INFO_MAX)
+        )
+        self._ops_warn_max = (
+            ops_warn_max
+            if ops_warn_max is not None
+            else (ops_log_max if ops_log_max is not None else DEFAULT_OPS_WARN_MAX)
         )
         self._ops_insert_count = 0
         self._data_dir.mkdir(parents=True, exist_ok=True)
@@ -638,22 +649,64 @@ class PersistenceManager:
         row = self._conn.execute("SELECT COUNT(*) FROM ops_log").fetchone()
         return row[0] if row else 0
 
+    def count_ops_info_entries(self) -> int:
+        """Return ops log entries with severity='info'."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM ops_log WHERE severity = 'info'"
+        ).fetchone()
+        return row[0] if row else 0
+
+    def count_ops_warn_entries(self) -> int:
+        """Return ops log entries with severity in ('warning', 'error')."""
+        row = self._conn.execute(
+            "SELECT COUNT(*) FROM ops_log WHERE severity != 'info'"
+        ).fetchone()
+        return row[0] if row else 0
+
     def clear_ops_log(self) -> None:
         """Delete all ops log entries."""
         self._conn.execute("DELETE FROM ops_log")
         self._conn.commit()
 
+    def cleanup_ops_log_by_age(self, max_age_days: int) -> dict[str, Any]:
+        """Delete ops_log rows older than *max_age_days* and vacuum."""
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+        size_before = self.db_path.stat().st_size
+
+        cur = self._conn.execute("DELETE FROM ops_log WHERE timestamp < ?", (cutoff,))
+        deleted = cur.rowcount
+        self._conn.commit()
+        vacuum_ok = self._vacuum()
+        size_after = self.db_path.stat().st_size
+
+        return {
+            "deleted": deleted,
+            "freed_bytes": max(0, size_before - size_after),
+            "size_before": size_before,
+            "size_after": size_after,
+            "max_age_days": max_age_days,
+            "vacuum": vacuum_ok,
+        }
+
     def _prune_ops_log(self) -> None:
-        """Remove oldest ops log entries beyond the retention limit."""
-        count = self.count_ops_log_entries()
-        if count <= self._ops_log_max:
-            return
+        """Remove oldest ops log entries beyond per-severity retention limits."""
         self._conn.execute(
-            "DELETE FROM ops_log WHERE id NOT IN ("
-            "    SELECT id FROM ops_log "
+            "DELETE FROM ops_log "
+            "WHERE severity = 'info' AND id NOT IN ("
+            "    SELECT id FROM ops_log WHERE severity = 'info' "
             "    ORDER BY timestamp DESC LIMIT ?"
             ")",
-            (self._ops_log_max,),
+            (self._ops_info_max,),
+        )
+        self._conn.execute(
+            "DELETE FROM ops_log "
+            "WHERE severity != 'info' AND id NOT IN ("
+            "    SELECT id FROM ops_log WHERE severity != 'info' "
+            "    ORDER BY timestamp DESC LIMIT ?"
+            ")",
+            (self._ops_warn_max,),
         )
         self._conn.commit()
 

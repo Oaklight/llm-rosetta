@@ -538,3 +538,24 @@ async def get_ops_log_sources(request: Any) -> Response:
     from llm_rosetta.observability.ops_log import ALL_SOURCES
 
     return JSONResponse({"sources": ALL_SOURCES})
+
+
+async def cleanup_ops_log_by_age(request: Any) -> Response:
+    """Delete ops log entries older than max_age_days."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    try:
+        body = request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+
+    max_age_days = body.get("max_age_days", 90)
+    if not isinstance(max_age_days, int) or max_age_days < 1:
+        return JSONResponse(
+            {"error": "max_age_days must be a positive integer"}, status_code=400
+        )
+
+    result = persistence.cleanup_ops_log_by_age(max_age_days)
+    return JSONResponse({"ok": True, **result})

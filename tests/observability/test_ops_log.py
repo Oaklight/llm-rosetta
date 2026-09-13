@@ -319,20 +319,52 @@ class TestOpsLogPersistence:
         # skip_prune means we exceed the cap
         assert len(log) == 6
 
-    def test_retention(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), ops_log_max=50)
+    def test_retention_dual_threshold(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path), ops_info_max=5, ops_warn_max=3)
         log = OpsLog(persistence=pm)
-        # Insert enough to trigger amortized pruning (fires every 100 inserts)
+        # Insert 200 mixed entries — pruning fires at 100 and 200
         for i in range(200):
+            sev = SEVERITY_INFO if i % 2 == 0 else SEVERITY_WARNING
             log.add(
                 OpsLogEntry.create(
                     event_type=EVENT_STARTUP,
-                    severity=SEVERITY_INFO,
+                    severity=sev,
                     message=f"Event {i}",
                 )
             )
-        # After 200 inserts with max=50, pruning fired at 100 and 200
-        assert len(log) <= 50
+        assert pm.count_ops_info_entries() <= 5
+        assert pm.count_ops_warn_entries() <= 3
+
+    def test_cleanup_by_age(self, tmp_path):
+        from datetime import datetime, timedelta, timezone
+
+        pm = PersistenceManager(str(tmp_path))
+        # Insert an entry with an old timestamp
+        old_ts = (datetime.now(timezone.utc) - timedelta(days=100)).isoformat()
+        pm.insert_ops_log_entries(
+            [
+                {
+                    "id": "old1",
+                    "timestamp": old_ts,
+                    "event_type": EVENT_STARTUP,
+                    "severity": SEVERITY_INFO,
+                    "message": "Old event",
+                }
+            ]
+        )
+        pm.insert_ops_log_entries(
+            [
+                OpsLogEntry.create(
+                    event_type=EVENT_STARTUP,
+                    severity=SEVERITY_INFO,
+                    message="Recent event",
+                ).to_dict()
+            ]
+        )
+        assert pm.count_ops_log_entries() == 2
+        result = pm.cleanup_ops_log_by_age(90)
+        assert result["deleted"] == 1
+        assert pm.count_ops_log_entries() == 1
 
     def test_details_none_omitted(self, pm):
         log = OpsLog(persistence=pm)

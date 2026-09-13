@@ -64,6 +64,7 @@ from .observability import (
     cleanup_error_dumps_by_age,
     cleanup_requests_by_age,
     clear_error_dumps,
+    cleanup_ops_log_by_age,
     clear_ops_log,
     clear_requests,
     delete_error_dump,
@@ -201,6 +202,9 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/ops-log/sources", methods=["GET"])(
         _guard("logs", get_ops_log_sources)
+    )
+    app.route("/admin/api/ops-log/cleanup", methods=["POST"])(
+        _guard("logs", cleanup_ops_log_by_age)
     )
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
