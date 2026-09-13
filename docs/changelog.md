@@ -49,7 +49,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **重定位超长工具描述** (PR [#625](https://github.com/Oaklight/llm-rosetta/pull/625))：当自定义工具描述超过可配置阈值时，完整文本会被移至 late system message 以防止上游 400 错误。阈值可在 model、provider 和 shim 三个层级配置。
 - **可配置 Nuitka 构建参数与优化** (PR [#639](https://github.com/Oaklight/llm-rosetta/pull/639), [#640](https://github.com/Oaklight/llm-rosetta/pull/640))：新增 `NUITKA_EXTRA_FLAGS` 变量用于二进制体积实验；将最优参数组合（LTO、去除 docstrings、nofollow 排除）设为默认值；从二进制构建中移除 pyinstrument。
 - **跨格式往返测试** (PR [#649](https://github.com/Oaklight/llm-rosetta/pull/649))：20 个测试验证 Interactions ↔ OpenAI Chat / Anthropic / google_generate 的请求和响应保真度。
-
 - **扩展 `tool_ops` 便利 API** (PR [#653](https://github.com/Oaklight/llm-rosetta/pull/653))：添加 `google_interactions` 提供方支持（此前是唯一缺失的转换器），并暴露完整的 `BaseToolOps` 生命周期——`choice_to_provider`/`choice_from_provider`、`call_to_provider`/`call_from_provider`、`result_to_provider`/`result_from_provider`、`config_to_provider`/`config_from_provider`。70 个测试覆盖全部 5 个提供方。
 - **监控面板多选批量下载** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：性能分析、内容捕获和错误记录表格新增复选框选择和批量操作栏。错误记录支持批量下载和批量删除，选择状态跨分页保持。
 - **请求日志 ↔ 错误记录互相跳转** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))：4xx/5xx 请求日志条目显示跳转到错误记录的按钮；错误记录行显示跳转到请求日志的按钮。跳转时清除筛选条件、导航到正确页码并高亮目标行。"匹配日志"按钮和启动时自动回填，通过时间戳近似匹配（±0.1s）和模型别名解析链接未关联的记录。
@@ -67,7 +66,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
-
 - **安全：已删除/轮换的 API key 仍可通过鉴权** (PR [#652](https://github.com/Oaklight/llm-rosetta/pull/652))：auth hook 中有一个 `config_fallback` 字典（启动时从 `server.api_keys` 构建），在 admin 面板删除/轮换 key 时从未被清除。已撤销的 key 可以绕过 keystore 验证，通过此过期的 fallback 继续鉴权。现已完全移除 `config_fallback` 路径——SQLite keystore 是唯一的 API key 鉴权源。
 - **安全：credential_visible 默认值和持久化** (PR [#654](https://github.com/Oaklight/llm-rosetta/pull/654))：默认值从 `true` 翻转为 `false`，未设置 admin 密码时强制关闭。PUT 端点和 GET 凭据查看端点增加 403 守卫。Admin UI 在无密码时禁用切换按钮。配置 API 响应中敏感字段（admin_password、api_keys）已做脱敏处理。
 - **服务器时间标签** (PR [#655](https://github.com/Oaklight/llm-rosetta/pull/655))："系统时间"改为"服务器时间"以更准确反映含义。时区显示从缩写格式（CDT）改为 GMT±N 格式。
@@ -104,7 +102,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Admin 错误转储按钮**点击无响应的问题。
 - **Admin provider 列表视图**重新设计为紧凑单行布局。
 - **日志导入**移至模块级别以避免重复导入。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -130,7 +127,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Embedding 路由 `upstream_model` 映射** (PR [#586](https://github.com/Oaklight/llm-rosetta/pull/586))：embedding 专用路由现在从 `model_upstream_names` 应用 `upstream_model` 名称映射，与 chat 回退路由行为一致。此前模型别名（如 `argo:text-embedding-3-small` → `v3small`）被忽略，导致上游 404。
 - **Embedding/Rerank URL 双重版本前缀** (PR [#588](https://github.com/Oaklight/llm-rosetta/pull/588))：`ProviderInfo` 现在自动检测 `base_url` 尾部的版本段（如 `/v1`）是否会与 `url_template` 路径开头重复，并自动去除。修复了 `base_url: "https://api.openai.com/v1"` + `embedding_path: "/v1/embeddings"` 产生 `/v1/v1/embeddings` 的问题。
 - **Logo 图标居中** (commit [f4c89e3](https://github.com/Oaklight/llm-rosetta/commit/f4c89e3))：修正 icon SVG 中石碑轮廓的居中，改用透明背景并通过 `prefers-color-scheme` media query 自动适配亮暗主题。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -146,8 +142,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **OpenAI Responses reasoning 加密状态** (PR [#576](https://github.com/Oaklight/llm-rosetta/pull/576))：强制同格式 Responses→Responses 流式转换现在保留 `response.output_item.done` 中的 `encrypted_content` 和源 reasoning item ID。此前 IR round-trip 会丢失两者，导致需要回放完成态 reasoning 的客户端（如 `store: false` / ZDR 流程）无法正常工作。修复 [#575](https://github.com/Oaklight/llm-rosetta/issues/575)。
 - **Google GenAI reasoning 配置 round-trip** (PRs [#582](https://github.com/Oaklight/llm-rosetta/pull/582), [#583](https://github.com/Oaklight/llm-rosetta/pull/583), [#584](https://github.com/Oaklight/llm-rosetta/pull/584))：从 REST `generationConfig` 中解析入站 `thinkingConfig`，将 reasoning effort 映射到 `thinkingLevel`，在所有转换器间转发 `summary`/`include_thoughts`。
-- **Responses API reasoning summary 转发** (PR [#581](https://github.com/Oaklight/llm-rosetta/pull/581))：在出站 Responses API 请求中转发 `reasoning.summary`。
-
+- **Responses API reasoning summary 转发** (PR [#582](https://github.com/Oaklight/llm-rosetta/pull/582))：在出站 Responses API 请求中转发 `reasoning.summary`。
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -176,7 +171,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **错误转储覆盖率** (PRs [#572](https://github.com/Oaklight/llm-rosetta/pull/572), [#573](https://github.com/Oaklight/llm-rosetta/pull/573))：为 4 个之前未覆盖的失败路径添加 `dump_error()` — 请求阶段转换错误（400）、非流式连接错误（502）、响应阶段转换错误（502）和流式中间错误块。提取 `DumpContext` 数据类简化参数传递。
 - **Emoji 空状态图标** 替换为 SVG 线条图标（柱状图、相机、文件夹），匹配极简设计语言。
 - **Rosetta Stone SVG favicon** — 将 emoji favicon（🔀）替换为项目的罗塞塔石碑轮廓，同时作为 `<link rel="icon">` 和服务端 `/favicon.ico` 提供。
-
 - **Admin UI 配置路径简化** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — 仅显示文件名，完整路径在 tooltip 中。系统时钟现在显示时区缩写。
 - **Admin UI Toast 居中** (PR [#565](https://github.com/Oaklight/llm-rosetta/pull/565)) — Toast 通知现在水平居中，不再固定在右下角。
 - **OpenAI Responses reasoning 输入生命周期** (PR [#569](https://github.com/Oaklight/llm-rosetta/pull/569))：修复 output-only 字段（`status: "completed"`、合成 `rs_` ID）泄漏到 Responses 请求输入项的问题。来自 Chat/Anthropic/Google 的无来源证明的 reasoning 现在被省略而非分配虚假身份。有真实 Responses 来源的 reasoning 保留原始 ID 和 summary，但移除 output-only 的 status。修复 [#568](https://github.com/Oaklight/llm-rosetta/issues/568)。
@@ -197,7 +191,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Nuitka 独立二进制文件** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): 6 个平台的预编译单文件可执行程序 — linux-x86_64 (glibc + musl)、linux-arm64 (glibc + musl)、macOS arm64、Windows x86_64。无需 Python 运行时。包含 pyinstrument 性能分析支持。
 - **基于二进制的 Docker 镜像** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): 三种镜像变体 — `alpine`（musl 二进制，~21 MB，默认）、`glibc`（busybox:glibc，~25 MB）、`python`（pip 安装，~80 MB）。Alpine 变体同时标记为 `:latest` 和 `:<version>`。
 - **Makefile 构建目标** (PR [#555](https://github.com/Oaklight/llm-rosetta/pull/555)): `build-binary`、`build-binary-musl`、`build-docker-alpine`、`build-docker-glibc`、`build-docker-python`，用于本地和 CI 构建。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -234,7 +227,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google GenAI 多模态工具结果处理** (PR [#525](https://github.com/Oaklight/llm-rosetta/pull/525))：工具结果中的结构化内容块（`list[ContentPart]`）现在原样保留，不再通过 `json.dumps`/`str()` 扁平化。dict 内容使用 `json.dumps`（而非 `str()` 产生无效的 Python repr）。`_is_content_block_list` 守卫区分类型化内容块和普通数据列表。
 - **Chat 转换器多模态内容丢失** (PR [#524](https://github.com/Oaklight/llm-rosetta/pull/524))：`_do_request_to_provider` 未将 `supports_multimodal_tool_result` 传递给 `ir_messages_to_p`，导致 shim 覆盖在实际请求路径中无效。此外，`_convert_tool_result_with_packing` 在标志为 True 时仍然从工具消息中剥离图片——图片被打包但未重新注入，导致内容静默丢失。
 - **测试顺序不稳定** (PR [#523](https://github.com/Oaklight/llm-rosetta/pull/523))：`test_shims.py` fixture 现在保存/恢复全局 shim 注册表而非清空，防止跨模块测试失败。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -253,7 +245,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Prompt cache 保持** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：将 `hoist_late_system_messages` IR 变换接入全部 15 个 provider shim。对话中间的 system/developer 消息被改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。
 - **Per-provider hoist 开关** (PR [#499](https://github.com/Oaklight/llm-rosetta/pull/499))：gateway 配置中的 `hoist_system_messages` 布尔值，可通过 admin UI 复选框按 provider 覆盖，带 (i) 提示弹窗。
 - **SQLite API 密钥存储** (PR [#496](https://github.com/Oaklight/llm-rosetta/pull/496))：将 API 密钥存储从明文配置迁移至 SQLite，使用哈希验证。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -348,7 +339,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **可配置超时** (PR [#463](https://github.com/Oaklight/llm-rosetta/pull/463))：`server.upstream_timeout` 和 `server.read_timeout` 配置项（均默认 300 秒）。
 - **根路径重定向** (PR [#461](https://github.com/Oaklight/llm-rosetta/pull/461))：`server.root_redirect` 配置项，将 `GET /` 重定向到管理面板。
 - **匿名访问选项** — `server.open_on_no_keys` 在未配置 API key 时允许匿名访问。
-- **原子化配置写入** — 跨平台文件锁，保证并发配置读-改-写安全。
 - **管理面板 modal 优化** — CSS 修复、展平提示 tooltip、i18n 对齐。
 
 
@@ -375,7 +365,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **模型启用/禁用开关** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：管理面板中为每个模型添加了 ON/OFF 药丸开关。禁用的模型不参与路由（`_parse_models` 跳过 `enabled: false`）。后端路由：`toggle_model`、`bulk_update_models`（批量启用/禁用/删除）。
 - **Embedding 测试菜单** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：Embedding 模型现在显示专属测试选项——Embedding、批量（文本数组）、套娃 Matryoshka（用户指定维度）、多模态（图片）。Matryoshka 使用自定义 modal 替代原生 `prompt()` 弹窗。
 - **URL 模板管理面板 UI**：可在 provider 和 model 卡片中直接配置自定义上游 URL 模板。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -383,7 +372,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### 变更
 
 - **模型 modal 三 tab 布局** ([#389](https://github.com/Oaklight/llm-rosetta/pull/389))：重新设计模型编辑/添加弹窗为三 tab 布局——基本（名称+Provider 并排、分段 LLM/Embedding 控件、药丸样式能力标签）、路由（URL 模板 + 流式展开链接）、转换（展平系统消息 + 推理配置）。替换了原来的长滚动单面板表单。
-
 - **模型表格 UI 重构** ([#382](https://github.com/Oaklight/llm-rosetta/pull/382))：新增 checkbox 列支持多选，顶部显示批量操作栏（启用/禁用/删除）。Clone 和 Delete 收入 ⋯ 下拉菜单。Test 按钮在 LLM 和 embedding 模型间统一宽度。
 - **原子化配置写入** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：`write_config` 改用 `tempfile.mkstemp` + `fsync` + `os.replace` 实现崩溃安全的跨平台原子写入。移除所有平台特定锁代码（`fcntl`/`msvcrt`）。读者永远不会看到写了一半的文件。
 - **跨进程配置串行化** ([#387](https://github.com/Oaklight/llm-rosetta/pull/387))：新增 `config_lock(path)` 上下文管理器，使用 `.lock` sidecar 文件配合 `fcntl.flock`（Unix）/ `msvcrt.locking`（Windows）实现跨进程互斥。保护多个 gateway 实例共享同一配置文件的场景。14 个 admin route handler 全部包裹以串行化 read-modify-write 周期。
@@ -405,7 +393,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **管理面板 `custom_head` 注入** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378))：`setup_admin()` 接受可选的 `custom_head` HTML 片段，注入到 `</head>` 之前。下游项目可注入 `<style>`/`<script>` 标签来定制管理面板 UI，无需修改参考 `admin.html`。按值缓存，无每次请求开销。
 - **管理面板 `branding` 品牌配置** ([#378](https://github.com/Oaklight/llm-rosetta/pull/378))：`setup_admin(..., branding={title, subtitle, version, links, attribution})` 可定制页头、登录页面和设置页脚。通过 `custom_head` 序列化为 `window.__branding`；`admin.html` 中的消费脚本负责修改 DOM。新增元素 ID：`brandTitle`、`brandLoginTitle`、`brandFooterName`、`brandFooterLinks`。未提供 branding 时，默认 llm-rosetta 标识不变。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -426,7 +413,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Anthropic 和 Google 的工具 Schema 清理** ([#372](https://github.com/Oaklight/llm-rosetta/issues/372))：Anthropic 拒绝工具参数 schema 中的 OpenAPI `nullable` 扩展（例如 Pydantic 生成的 JSON Schema）。新增 `convert_nullable_to_type_array()` helper，递归地将 `"nullable": true` 转换为标准 JSON Schema `"type": [T, "null"]`。Anthropic converter 现在会剥离 `title` 字段并转换 `nullable` 为 type 数组；Google GenAI converter 剥离 `title`（保留 `nullable`——Google 支持该字段）。同时处理了 `nullable: true` 与 `anyOf`/`oneOf` 共存但无 `type` 字段的边界情况。
 - **`flatten_system` 复选框布局和国际化** 修复（网关管理面板）。
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -472,7 +458,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **配置文件写入安全**：`write_config()` 现使用文件锁确保跨进程安全
 - **Vendored httpserver 更新至 0.2.1**：对格式错误的请求返回正确的 HTTP 错误响应，而非静默断开连接
 - **Vendored SSE 更新至 0.3.2**：解析器初始化使用构造函数参数，而非初始化后修改
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -538,7 +523,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **视觉能力运行时检查** ([#314](https://github.com/Oaklight/llm-rosetta/pull/314), [#313](https://github.com/Oaklight/llm-rosetta/issues/313))：没有 `vision` 能力的模型会自动将所有图片替换为 `[image not available]`，而非直接转发给上游导致不明错误（如 DeepSeek 的 "unknown variant `image_url`"）。Gateway 日志会记录 warning 包含图片数量和模型名
 - **Unix 域套接字支持** ([#315](https://github.com/Oaklight/llm-rosetta/pull/315))：Gateway 可通过 `--socket/-S` CLI 参数或 `server.socket` 配置字段监听 Unix 套接字而非 TCP。适用于共享多用户主机上的安全部署（`127.0.0.1` 仍会暴露给所有本地用户）。套接字文件权限限制为仅所有者可访问（`0600`），关闭时自动清理
 - **并行工具调用展开** ([#303](https://github.com/Oaklight/llm-rosetta/pull/303), [#300](https://github.com/Oaklight/llm-rosetta/issues/300))：`ProviderShim` 新增 `unwind_parallel_tool_calls` 和 `unwind_parallel_tool_calls_pattern` 字段。启用后，并行工具调用（一条 assistant 消息包含多个 `tool_call`）会在转发前展开为顺序调用-结果对。Argo OpenAI shim 以 `^gemini` pattern 启用 — Gemini 模型获得顺序对；GPT/o 模型不受影响
-
 - **流式响应 profiler 延迟停止** (PR [#633](https://github.com/Oaklight/llm-rosetta/pull/633))：pyinstrument profiler 现在在整个流式生命周期内运行，而不是在 handler 返回 `StreamingResponse` 时提前停止。
 - **启动时自动重建指标计数器** (PR [#643](https://github.com/Oaklight/llm-rosetta/pull/643))：检测非正常关机后的计数器偏差，从请求日志自动重建。
 - **OpenAI Responses 输入项 `status` 字段** (PR [#650](https://github.com/Oaklight/llm-rosetta/pull/650))：为所有输入项类型添加 `"status": "completed"`。修复火山引擎（豆包模型）400 `MissingParameter` 错误。
@@ -546,7 +530,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ### 变更
 
 - **`converters/base/` 重组为 helpers/ 子包** ([#311](https://github.com/Oaklight/llm-rosetta/pull/311), [#312](https://github.com/Oaklight/llm-rosetta/pull/312), [#310](https://github.com/Oaklight/llm-rosetta/issues/310))：工具函数从 `converters/base/` 平铺目录提取到 `converters/base/helpers/`。抽象基类（Ops 模式契约）保留在顶层；实现工具（`cache`、`schema`、`tool_orphan_fix`、`tool_content`、`tool_call_unwind`、`image_limit`、`reasoning`）移至 `helpers/`。`tools.py` 从 428 行精简到 185 行（纯 ABC）。`reasoning_helpers.py` 从 `converters/` 根目录移入。`orphan_fix.py` 重命名为 `tool_orphan_fix.py` 保持 `tool_*` 前缀一致。`helpers/__init__.py` 重新导出公共函数
-
 - **移除 Argo `_normalize_thinking` 废弃代码** ([#304](https://github.com/Oaklight/llm-rosetta/pull/304), [#192](https://github.com/Oaklight/llm-rosetta/issues/192))：从 Argo Anthropic shim 中移除了已废弃的 `_normalize_thinking` 函数、`_BUDGET_RATIO` 和 `_ADAPTIVE_THINKING_MODELS`——这些已被 `provider.yaml` 中声明式的 `reasoning.model_overrides` 取代，但代码和 19 个测试仍然保留着
 - **实验性扩展类型标记** ([#302](https://github.com/Oaklight/llm-rosetta/pull/302), [#71](https://github.com/Oaklight/llm-rosetta/issues/71))：`SystemEvent`、`BatchMarker`、`SessionControl`、`ToolChainNode` 从 `types.ir.extensions` 移至 `types.ir.extensions_experimental`。旧导入路径仍可用但会触发 `DeprecationWarning`。这些类型从默认 `types.ir` 命名空间移除，可通过 `from llm_rosetta.types.ir import experimental` 访问
 - **Admin 面板 i18n**：中文翻译从"服务商"更新为"服务方"（对混合商业和自建服务方更中性）
@@ -620,7 +603,6 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
     - **Google GenAI**: `p_reasoning_to_ir` now captures `thoughtSignature` into `provider_metadata` instead of discarding it; `message_ops` delegates to `content_ops.p_reasoning_to_ir()` instead of constructing a bare `ReasoningPart` inline
     - **Anthropic**: `ir_text_to_p` / `p_text_to_ir` now round-trip `_provider_metadata` on text blocks, matching the treatment already applied to reasoning and tool blocks
     - **OpenAI Chat**: `_build_choice_to_provider` now collects `ReasoningPart` content and emits it as `reasoning_content` on the response message, instead of silently dropping reasoning parts
-
 - **Provider-specific reasoning field normalization** ([#264](https://github.com/Oaklight/llm-rosetta/pull/264)): Shim transforms and config for MiniMax, OpenRouter, and Volcengine reasoning fields:
     - **MiniMax**: `thinking_type: adaptive` (rejects `enabled`); `_inject_reasoning_split` to_transform auto-sets `reasoning_split: true` when thinking is requested; `_parse_think_tags` from_transform extracts `<think>` tags from content as fallback
     - **OpenRouter**: `_rename_reasoning_field` from_transform renames `message.reasoning` → `message.reasoning_content` (OpenRouter uses non-standard field name)
@@ -940,7 +922,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Added
 
-- **Metadata preservation for lossless A→IR→A round-trip** (#60, PR #119): New `MetadataMode` (`"strip"` / `"preserve"`) option in `ConversionContext` that captures provider-specific fields during `from_provider` and re-injects them during `to_provider`, enabling lossless round-trip conversion. Helper methods on `ConversionContext`: `store_request_echo()`, `store_response_extras()`, `store_output_items_meta()`, `get_echo_fields()`, `get_output_items_meta()`. Per-provider coverage:
+- **Metadata preservation for lossless A→IR→A round-trip** (Issue [#60](https://github.com/Oaklight/llm-rosetta/issues/60), PR [#119](https://github.com/Oaklight/llm-rosetta/pull/119)): New `MetadataMode` (`"strip"` / `"preserve"`) option in `ConversionContext` that captures provider-specific fields during `from_provider` and re-injects them during `to_provider`, enabling lossless round-trip conversion. Helper methods on `ConversionContext`: `store_request_echo()`, `store_response_extras()`, `store_output_items_meta()`, `get_echo_fields()`, `get_output_items_meta()`. Per-provider coverage:
     - **OpenAI Responses**: captures/restores 28+ echo fields (temperature, tools, reasoning, truncation, etc.), per-output-item metadata (id, status, annotations, logprobs), `RESPONSES_REQUIRED_DEFAULTS` dict for spec-required fields with sensible defaults, `sequence_number` on all SSE events
     - **Anthropic**: preserves `stop_sequence`, `container`, citations, and OpenRouter extension usage fields
     - **OpenAI Chat**: now re-emits `refusal` and `annotations` fields in `response_to_provider` (previously dropped)
@@ -955,63 +937,63 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Fixed
 
-- **`service_tier: None` and `system_fingerprint: None` causing validation errors** (PR #118): OpenAI upstream returns these fields as `null`, but the existence check (`if "key" in dict`) passed and assigned `None` to IR's `NotRequired[str]` field. Changed to value-not-None check in both OpenAI Chat and OpenAI Responses converters. Discovered via [Oaklight/argo-proxy#99](https://github.com/Oaklight/argo-proxy/issues/99)
-- **Base `StreamContext` missing provider-specific attributes in Responses streaming** (PR #118): When a gateway passes a base `StreamContext` to `OpenAIResponsesConverter.stream_response_to_provider()`, the method accesses `accumulated_text`, `output_item_emitted`, etc. that only exist on `OpenAIResponsesStreamContext`. Added auto-upgrade via `from_base()` classmethod with metadata caching to preserve state across calls
+- **`service_tier: None` and `system_fingerprint: None` causing validation errors** (PR [#118](https://github.com/Oaklight/llm-rosetta/pull/118)): OpenAI upstream returns these fields as `null`, but the existence check (`if "key" in dict`) passed and assigned `None` to IR's `NotRequired[str]` field. Changed to value-not-None check in both OpenAI Chat and OpenAI Responses converters. Discovered via [Oaklight/argo-proxy#99](https://github.com/Oaklight/argo-proxy/issues/99)
+- **Base `StreamContext` missing provider-specific attributes in Responses streaming** (PR [#118](https://github.com/Oaklight/llm-rosetta/pull/118)): When a gateway passes a base `StreamContext` to `OpenAIResponsesConverter.stream_response_to_provider()`, the method accesses `accumulated_text`, `output_item_emitted`, etc. that only exist on `OpenAIResponsesStreamContext`. Added auto-upgrade via `from_base()` classmethod with metadata caching to preserve state across calls
 
 ## v0.3.0 — 2026-04-07
 
 ### Added
 
-- **Multimodal tool result support across all 4 converters** (#92, PR #109): Tools can now return multimodal content (text + images + files) as `ToolResultPart.result`. Three providers (Anthropic, OpenAI Responses, Google GenAI) support this natively; content blocks are converted through each provider's `content_ops` layer. See provider support matrix below
-- **Lossless multimodal tool result roundtrip for OpenAI Chat** (#92, PR #108): OpenAI Chat Completions only accepts `content: string` for tool messages. Implements a dual encoding strategy — tool message keeps `json.dumps(result)` as data fallback, plus a synthetic user message carries visual content (`image_url` parts) wrapped in `<tool-content call-id="...">` XML tags. Unpacking recovers multimodal structure from the synthetic message (preferred) or falls back to JSON parsing if the synthetic message was trimmed by agent frameworks
-- **`extract_all_text()` helper function** (PR #109): Extracts text from both `TextPart` and `ReasoningPart` content — useful for thinking models (e.g. gemini-2.5-flash) that may place answers in reasoning parts rather than text parts
-- **`generate_chart` example tool** (PR #109): New multimodal tool in `examples/tools.py` returning `[TextPart, ImagePart]` with inline base64 PNG, plus `multimodal_tools_spec` combining all 3 example tools
-- **Multimodal integration tests across all 4 provider SDKs** (PR #109): Two new test scenarios per provider — (A) tool returning multimodal content (text + image), (B) image input combined with tool calls. All 30 tests pass against official APIs: OpenAI Chat 9/9, OpenAI Responses 6/6, Anthropic 8/8, Google GenAI 7/7
-- **Runtime IR validation via vendored zero-dependency validator** (#91): `validate_ir_request()`, `validate_ir_response()`, and `validate_ir_messages()` utilities validate IR structures against their TypedDict definitions at runtime. All 4 converters now validate output in `request_from_provider()` and `response_from_provider()`. Replaces manual `BaseMessageOps.validate_messages`. Includes Python <3.11 compatibility for `typing_extensions.TypedDict`
+- **Multimodal tool result support across all 4 converters** (Issue [#92](https://github.com/Oaklight/llm-rosetta/issues/92), PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Tools can now return multimodal content (text + images + files) as `ToolResultPart.result`. Three providers (Anthropic, OpenAI Responses, Google GenAI) support this natively; content blocks are converted through each provider's `content_ops` layer. See provider support matrix below
+- **Lossless multimodal tool result roundtrip for OpenAI Chat** (Issue [#92](https://github.com/Oaklight/llm-rosetta/issues/92), PR [#108](https://github.com/Oaklight/llm-rosetta/pull/108)): OpenAI Chat Completions only accepts `content: string` for tool messages. Implements a dual encoding strategy — tool message keeps `json.dumps(result)` as data fallback, plus a synthetic user message carries visual content (`image_url` parts) wrapped in `<tool-content call-id="...">` XML tags. Unpacking recovers multimodal structure from the synthetic message (preferred) or falls back to JSON parsing if the synthetic message was trimmed by agent frameworks
+- **`extract_all_text()` helper function** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Extracts text from both `TextPart` and `ReasoningPart` content — useful for thinking models (e.g. gemini-2.5-flash) that may place answers in reasoning parts rather than text parts
+- **`generate_chart` example tool** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): New multimodal tool in `examples/tools.py` returning `[TextPart, ImagePart]` with inline base64 PNG, plus `multimodal_tools_spec` combining all 3 example tools
+- **Multimodal integration tests across all 4 provider SDKs** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Two new test scenarios per provider — (A) tool returning multimodal content (text + image), (B) image input combined with tool calls. All 30 tests pass against official APIs: OpenAI Chat 9/9, OpenAI Responses 6/6, Anthropic 8/8, Google GenAI 7/7
+- **Runtime IR validation via vendored zero-dependency validator** (Issue [#91](https://github.com/Oaklight/llm-rosetta/issues/91)): `validate_ir_request()`, `validate_ir_response()`, and `validate_ir_messages()` utilities validate IR structures against their TypedDict definitions at runtime. All 4 converters now validate output in `request_from_provider()` and `response_from_provider()`. Replaces manual `BaseMessageOps.validate_messages`. Includes Python <3.11 compatibility for `typing_extensions.TypedDict`
 - **Constants validation tests**: 39 new tests across 4 `test_constants.py` files verifying that all reason mapping values are valid IR finish reasons, mapping coverage is complete, event type constants are well-formed, and ID generation produces correct formats
 - **Finish reason mapping test coverage**: 38 tests validating reason mapping correctness as a safety net for the constants refactoring
-- **`ConversionContext` base class for conversion pipelines** (#106, PR #111): New `ConversionContext` dataclass with `warnings: list[str]`, `options: dict[str, Any]`, and `metadata: dict[str, Any]` — a structured context container for non-streaming conversions. New `BaseConverter.create_conversion_context(**options)` factory method mirrors the existing `create_stream_context()`. All 6 non-streaming `BaseConverter` methods now accept an optional `context: ConversionContext` keyword parameter; converter implementations sync warnings to `context.warnings`. Gateway proxy creates a shared context per request and passes it through the full source→IR→target→response pipeline
+- **`ConversionContext` base class for conversion pipelines** (Issue [#106](https://github.com/Oaklight/llm-rosetta/issues/106), PR [#111](https://github.com/Oaklight/llm-rosetta/pull/111)): New `ConversionContext` dataclass with `warnings: list[str]`, `options: dict[str, Any]`, and `metadata: dict[str, Any]` — a structured context container for non-streaming conversions. New `BaseConverter.create_conversion_context(**options)` factory method mirrors the existing `create_stream_context()`. All 6 non-streaming `BaseConverter` methods now accept an optional `context: ConversionContext` keyword parameter; converter implementations sync warnings to `context.warnings`. Gateway proxy creates a shared context per request and passes it through the full source→IR→target→response pipeline
 
 ### Fixed
 
-- **Contextual error messages for tool conversion failures** (#85, PR #110): When `p_tool_definition_to_ir()` fails on a malformed or unsupported tool definition, the `ValueError` now includes `type=` and `name=` context so users can identify which tool caused the issue. Applied to all 4 converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI) with unit tests
-- **OpenAI Responses `tool_choice` format** (PR #109): Was using Chat Completions format (`{"type": "function", "function": {"name": "..."}}`); now uses Responses format (`{"type": "function", "name": "..."}`)
-- **OpenAI Responses tool call ID round-trip** (PR #109): Responses API uses `fc_` prefix IDs while IR uses `call_` prefix. The Responses `id` is now preserved in `provider_metadata` separately from `call_id`, enabling lossless round-trip conversion
-- **OpenAI Responses reasoning item round-trip** (PR #109): Reasoning models (e.g. gpt-5-nano) emit reasoning items with `id` (rs_ prefix), structured `summary` arrays, and `encrypted_content`. These are now preserved through `provider_metadata` for lossless round-trip — fixes 400 errors when reasoning items were sent back without their original `id`
-- **IR validation accepts `None` for optional response fields** (PR #109): `logprobs` and `system_fingerprint` in `IRResponse` now accept `None` values (previously only accepted missing keys)
-- **OpenAI Responses `content_filter` finish reason mapped to wrong status** (#90): `content_filter` was incorrectly mapped to `"completed"` status in `response_to_provider` and `stream_response_to_provider`. Now correctly maps to `"incomplete"` status with `incomplete_details.reason = "content_filter"`
-- **Anthropic streaming missing `refusal` reason mapping**: The streaming `reason_map` was missing the `refusal` entry present in the non-streaming path, causing Anthropic refusal stop reasons to be silently dropped during streaming. Fixed as a side effect of the constants extraction (#64) — both paths now share the same `ANTHROPIC_REASON_FROM_PROVIDER` dict
+- **Contextual error messages for tool conversion failures** (Issue [#85](https://github.com/Oaklight/llm-rosetta/issues/85), PR [#110](https://github.com/Oaklight/llm-rosetta/pull/110)): When `p_tool_definition_to_ir()` fails on a malformed or unsupported tool definition, the `ValueError` now includes `type=` and `name=` context so users can identify which tool caused the issue. Applied to all 4 converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI) with unit tests
+- **OpenAI Responses `tool_choice` format** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Was using Chat Completions format (`{"type": "function", "function": {"name": "..."}}`); now uses Responses format (`{"type": "function", "name": "..."}`)
+- **OpenAI Responses tool call ID round-trip** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Responses API uses `fc_` prefix IDs while IR uses `call_` prefix. The Responses `id` is now preserved in `provider_metadata` separately from `call_id`, enabling lossless round-trip conversion
+- **OpenAI Responses reasoning item round-trip** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): Reasoning models (e.g. gpt-5-nano) emit reasoning items with `id` (rs_ prefix), structured `summary` arrays, and `encrypted_content`. These are now preserved through `provider_metadata` for lossless round-trip — fixes 400 errors when reasoning items were sent back without their original `id`
+- **IR validation accepts `None` for optional response fields** (PR [#109](https://github.com/Oaklight/llm-rosetta/pull/109)): `logprobs` and `system_fingerprint` in `IRResponse` now accept `None` values (previously only accepted missing keys)
+- **OpenAI Responses `content_filter` finish reason mapped to wrong status** (Issue [#90](https://github.com/Oaklight/llm-rosetta/issues/90)): `content_filter` was incorrectly mapped to `"completed"` status in `response_to_provider` and `stream_response_to_provider`. Now correctly maps to `"incomplete"` status with `incomplete_details.reason = "content_filter"`
+- **Anthropic streaming missing `refusal` reason mapping**: The streaming `reason_map` was missing the `refusal` entry present in the non-streaming path, causing Anthropic refusal stop reasons to be silently dropped during streaming. Fixed as a side effect of the constants extraction (Issue [#64](https://github.com/Oaklight/llm-rosetta/issues/64)) — both paths now share the same `ANTHROPIC_REASON_FROM_PROVIDER` dict
 
 ### Changed
 
-- **`ReasoningConfig.effort` expanded to 5-level enum** (#100): Effort levels now include `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`. Provider-specific mappings: Anthropic maps to `thinking.type="adaptive"` with `thinking.effort`; OpenAI Chat/Responses clamp `"minimal"`→`"low"` and `"max"`→`"high"` (with warnings); Google GenAI maps to `thinking_config.thinking_level`
-- **`ReasoningConfig.type` replaced with `ReasoningConfig.enabled`** (#70): The `type: Literal["enabled", "disabled"]` field is replaced with `enabled: bool` to avoid shadowing the Python built-in `type` and provide a more natural API
-- **Merged duplicate IR concepts** (#69): Removed `candidate_count` from `GenerationConfig` — use `n` instead (Google GenAI converter maps `n` ↔ `candidate_count` internally). Unified `system_instruction` type from `str | list[dict]` to `str`
-- **Normalized `ImagePart`, `FilePart`, `AudioPart` to canonical forms** (#68): Each part now has exactly two canonical forms — URL reference + structured inline data (e.g. `image_data`) — plus a unified `provider_ref: dict[str, Any]` for provider-specific references. Removed redundant top-level `data`/`media_type` fields and replaced `file_id`/`audio_id` with `provider_ref`
-- **IR type fields changed from `Iterable` to `list`; function parameters to `Sequence`** (#67): TypedDict fields now use `list` for indexable, serialization-friendly semantics; function parameters use `Sequence` (covariant, read-only). Also fixes a latent generator-consumption bug in `strip_orphaned_tool_config`
-- **`StreamContext` now inherits from `ConversionContext`** (#106, PR #111): `StreamContext` is a subclass of `ConversionContext` (IS-A relationship), unifying the context model for streaming and non-streaming paths. File renamed: `base/stream_context.py` → `base/context.py`
-- **`StreamContext` converted to dataclass with provider subclass** (#65): `StreamContext` is now a `@dataclass` with typed fields (eliminates defensive `getattr`/`hasattr` patterns). OpenAI Responses-specific state extracted into `OpenAIResponsesStreamContext` subclass. New `BaseConverter.create_stream_context()` factory method
+- **`ReasoningConfig.effort` expanded to 5-level enum** (Issue [#100](https://github.com/Oaklight/llm-rosetta/issues/100)): Effort levels now include `"minimal"`, `"low"`, `"medium"`, `"high"`, `"max"`. Provider-specific mappings: Anthropic maps to `thinking.type="adaptive"` with `thinking.effort`; OpenAI Chat/Responses clamp `"minimal"`→`"low"` and `"max"`→`"high"` (with warnings); Google GenAI maps to `thinking_config.thinking_level`
+- **`ReasoningConfig.type` replaced with `ReasoningConfig.enabled`** (Issue [#70](https://github.com/Oaklight/llm-rosetta/issues/70)): The `type: Literal["enabled", "disabled"]` field is replaced with `enabled: bool` to avoid shadowing the Python built-in `type` and provide a more natural API
+- **Merged duplicate IR concepts** (Issue [#69](https://github.com/Oaklight/llm-rosetta/issues/69)): Removed `candidate_count` from `GenerationConfig` — use `n` instead (Google GenAI converter maps `n` ↔ `candidate_count` internally). Unified `system_instruction` type from `str | list[dict]` to `str`
+- **Normalized `ImagePart`, `FilePart`, `AudioPart` to canonical forms** (Issue [#68](https://github.com/Oaklight/llm-rosetta/issues/68)): Each part now has exactly two canonical forms — URL reference + structured inline data (e.g. `image_data`) — plus a unified `provider_ref: dict[str, Any]` for provider-specific references. Removed redundant top-level `data`/`media_type` fields and replaced `file_id`/`audio_id` with `provider_ref`
+- **IR type fields changed from `Iterable` to `list`; function parameters to `Sequence`** (Issue [#67](https://github.com/Oaklight/llm-rosetta/issues/67)): TypedDict fields now use `list` for indexable, serialization-friendly semantics; function parameters use `Sequence` (covariant, read-only). Also fixes a latent generator-consumption bug in `strip_orphaned_tool_config`
+- **`StreamContext` now inherits from `ConversionContext`** (Issue [#106](https://github.com/Oaklight/llm-rosetta/issues/106), PR [#111](https://github.com/Oaklight/llm-rosetta/pull/111)): `StreamContext` is a subclass of `ConversionContext` (IS-A relationship), unifying the context model for streaming and non-streaming paths. File renamed: `base/stream_context.py` → `base/context.py`
+- **`StreamContext` converted to dataclass with provider subclass** (Issue [#65](https://github.com/Oaklight/llm-rosetta/issues/65)): `StreamContext` is now a `@dataclass` with typed fields (eliminates defensive `getattr`/`hasattr` patterns). OpenAI Responses-specific state extracted into `OpenAIResponsesStreamContext` subclass. New `BaseConverter.create_stream_context()` factory method
 
 ### Refactored
 
-- **Warnings single-source convergence** (#113, PR #115): All 4 converter `request_to_provider` methods now use `ConversionContext` as the single accumulation point for warnings. Eliminates the dual-write pattern where warnings were written to both a local list and `context.warnings`. The returned warnings list IS the same object as `context.warnings` — no duplication possible
-- **`ProviderMetadataStore` replaces global metadata cache** (#112, PR #117): The module-level `_provider_metadata_cache` dict in `proxy.py` is replaced with `ProviderMetadataStore` — a class with TTL-based expiration (30 min), max-size eviction (10k entries), and explicit lifecycle management. The store is created per-app in `create_app()` and passed via `app.state`, eliminating implicit global mutation. `close_clients()` renamed to `close_resources()` to also clear the store on shutdown
-- **Shrink public API export surface** (#114, PR #116): Reduced `__all__` exports across converter packages to only the primary converter class, removing internal implementation details (`*MessageOps`, `*ContentOps`, `*ConfigOps`, `*ToolOps`, `*Constants`) from the public API. Internal modules remain importable for advanced use but are no longer promoted as public surface
-- **Extracted stream event handlers from monolithic methods** (#63): Replaced 8 monolithic `if`/`elif` stream methods (~1,781 lines) across all 4 converters with individual handler methods dispatched via class-level handler tables. Public API unchanged
-- **Extracted shared utility functions in OpenAI Responses converter** (#66): `resolve_call_id()` and `build_message_preamble_events()` extracted from `converter.py` into `utils.py` with dedicated unit tests
-- **Extracted per-provider constants for reason mappings and magic values** (#64): Inline reason mapping dicts, SSE event type string literals, status-to-reason conditional logic, and ID generation patterns across all 4 converters are now centralized in per-provider `_constants.py` modules. Includes `AnthropicEventType` and `ResponsesEventType` classes, `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` dicts, and `generate_tool_call_id()` / `generate_message_id()` helpers
+- **Warnings single-source convergence** (Issue [#113](https://github.com/Oaklight/llm-rosetta/issues/113), PR [#115](https://github.com/Oaklight/llm-rosetta/pull/115)): All 4 converter `request_to_provider` methods now use `ConversionContext` as the single accumulation point for warnings. Eliminates the dual-write pattern where warnings were written to both a local list and `context.warnings`. The returned warnings list IS the same object as `context.warnings` — no duplication possible
+- **`ProviderMetadataStore` replaces global metadata cache** (Issue [#112](https://github.com/Oaklight/llm-rosetta/issues/112), PR [#117](https://github.com/Oaklight/llm-rosetta/pull/117)): The module-level `_provider_metadata_cache` dict in `proxy.py` is replaced with `ProviderMetadataStore` — a class with TTL-based expiration (30 min), max-size eviction (10k entries), and explicit lifecycle management. The store is created per-app in `create_app()` and passed via `app.state`, eliminating implicit global mutation. `close_clients()` renamed to `close_resources()` to also clear the store on shutdown
+- **Shrink public API export surface** (Issue [#114](https://github.com/Oaklight/llm-rosetta/issues/114), PR [#116](https://github.com/Oaklight/llm-rosetta/pull/116)): Reduced `__all__` exports across converter packages to only the primary converter class, removing internal implementation details (`*MessageOps`, `*ContentOps`, `*ConfigOps`, `*ToolOps`, `*Constants`) from the public API. Internal modules remain importable for advanced use but are no longer promoted as public surface
+- **Extracted stream event handlers from monolithic methods** (Issue [#63](https://github.com/Oaklight/llm-rosetta/issues/63)): Replaced 8 monolithic `if`/`elif` stream methods (~1,781 lines) across all 4 converters with individual handler methods dispatched via class-level handler tables. Public API unchanged
+- **Extracted shared utility functions in OpenAI Responses converter** (Issue [#66](https://github.com/Oaklight/llm-rosetta/issues/66)): `resolve_call_id()` and `build_message_preamble_events()` extracted from `converter.py` into `utils.py` with dedicated unit tests
+- **Extracted per-provider constants for reason mappings and magic values** (Issue [#64](https://github.com/Oaklight/llm-rosetta/issues/64)): Inline reason mapping dicts, SSE event type string literals, status-to-reason conditional logic, and ID generation patterns across all 4 converters are now centralized in per-provider `_constants.py` modules. Includes `AnthropicEventType` and `ResponsesEventType` classes, `REASON_FROM_PROVIDER` / `REASON_TO_PROVIDER` dicts, and `generate_tool_call_id()` / `generate_message_id()` helpers
 
 ## v0.2.6 — 2026-03-29
 
 ### Fixed
 
 - **Chat Completions tool message ordering after Responses API conversion** *([@caidao22](https://github.com/caidao22))*: Codex CLI interleaves `function_call_output` with other items (e.g. user warnings) in Responses API format — valid there since items match by `call_id`. But after IR → Chat Completions conversion, the interleaved messages break the OpenAI Chat API constraint that `role: "tool"` messages must immediately follow their `assistant` `tool_calls`, causing upstream 400 errors. Added `_reorder_tool_messages()` post-processing in `OpenAIChatMessageOps.ir_messages_to_p()` that groups tool responses back to their corresponding assistant messages
-- **Orphaned `tool_choice`/`tool_config` stripped when no tools defined** *([@caidao22](https://github.com/caidao22))*: Codex context compaction can drop all tool definitions while keeping `tool_choice` (e.g. `"auto"`), causing upstream APIs to reject with *"tool_choice is set but no tools are provided"*. Added `strip_orphaned_tool_config()` in all four converters — part of the same Codex compaction fix family as `fix_orphaned_tool_calls_ir` (orphaned tool_call/result pairing) and `_reorder_tool_messages` (tool message ordering). Also extended `fix_orphaned_tool_calls_ir` to Google GenAI converter for completeness (#87)
+- **Orphaned `tool_choice`/`tool_config` stripped when no tools defined** *([@caidao22](https://github.com/caidao22))*: Codex context compaction can drop all tool definitions while keeping `tool_choice` (e.g. `"auto"`), causing upstream APIs to reject with *"tool_choice is set but no tools are provided"*. Added `strip_orphaned_tool_config()` in all four converters — part of the same Codex compaction fix family as `fix_orphaned_tool_calls_ir` (orphaned tool_call/result pairing) and `_reorder_tool_messages` (tool message ordering). Also extended `fix_orphaned_tool_calls_ir` to Google GenAI converter for completeness (Issue [#87](https://github.com/Oaklight/llm-rosetta/issues/87))
 - **Stream event ordering**: `UsageEvent` is now emitted before `FinishEvent` in all four provider converters (OpenAI Chat, OpenAI Responses, Anthropic, Google GenAI). Previously `FinishEvent` was processed first, causing `response.completed` to carry `output_tokens=0` — downstream consumers (e.g. Codex token tracking) saw stale usage data. For cross-chunk scenarios (OpenAI Chat sends `finish_reason` and `usage` in separate chunks), `FinishEvent` now defers `response.completed` to `StreamEndEvent` which merges any pending usage
 - **Parallel tool calls merged into one in Anthropic/Google → Chat streaming**: Anthropic and Google GenAI `stream_response_from_provider` emitted `ToolCallStartEvent` and `ToolCallDeltaEvent` without `tool_call_index`. When routing to Chat Completions, all parallel tool calls defaulted to index 0, causing the client SDK to merge them into a single call. Anthropic now derives `tool_call_index` from `context._tool_call_order` position; Google computes it from registration order in context (#88, #89)
 - **Missing `id` field on Responses `function_call` output**: Non-streaming `response_to_provider` was missing the `id` field on `function_call` output items. Streaming used a synthetic `fc_` prefix that could leak into IR via `p_tool_call_to_ir` fallback path. Unified both paths to use `call_id` directly as `id` (no prefix)
-- **Responses streaming `item_id` and empty `tool_call_id` resolution** *([@caidao22](https://github.com/caidao22))*: Added `item_id` tracking to `StreamContext` (`tool_call_item_id_map`, bidirectional mapping). Responses `stream_response_to_provider` now emits `item.id` on `output_item.added` and `item_id` (not `call_id`) on `function_call_arguments.delta/done` events. Defense-in-depth: resolves empty `tool_call_id` by `tool_call_index` via context (#86)
-- **Non-function tool names mangled with type prefix** *([@caidao22](https://github.com/caidao22))*: Non-function IR tool definitions (e.g. `type="custom"`, `name="apply_patch"`) were converted with a type prefix (`custom_apply_patch`), breaking tool_call matching since the client expects the original name. Both OpenAI Chat and Responses converters now use `ir_tool["name"]` directly (#84)
+- **Responses streaming `item_id` and empty `tool_call_id` resolution** *([@caidao22](https://github.com/caidao22))*: Added `item_id` tracking to `StreamContext` (`tool_call_item_id_map`, bidirectional mapping). Responses `stream_response_to_provider` now emits `item.id` on `output_item.added` and `item_id` (not `call_id`) on `function_call_arguments.delta/done` events. Defense-in-depth: resolves empty `tool_call_id` by `tool_call_index` via context (Issue [#86](https://github.com/Oaklight/llm-rosetta/issues/86))
+- **Non-function tool names mangled with type prefix** *([@caidao22](https://github.com/caidao22))*: Non-function IR tool definitions (e.g. `type="custom"`, `name="apply_patch"`) were converted with a type prefix (`custom_apply_patch`), breaking tool_call matching since the client expects the original name. Both OpenAI Chat and Responses converters now use `ir_tool["name"]` directly (Issue [#84](https://github.com/Oaklight/llm-rosetta/issues/84))
 
 ## v0.2.5 — 2026-03-23
 
@@ -1020,7 +1002,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Anthropic `input_schema` missing `type` for parameterless tools**: MCP tools with no parameters produce `input_schema: {}`, but Anthropic requires `"type"` to be present. Now defaults to `{"type": "object"}` when the schema dict lacks a `type` field — fixes `tools.0.custom.input_schema.type: Field required` errors when routing Google GenAI or OpenAI Responses tool calls to Anthropic upstream
 - **Google GenAI camelCase field handling across the full converter stack**: Gemini CLI and the Google REST API use camelCase (`inlineData`, `fileData`, `mimeType`, `fileUri`, `functionCall`, `functionResponse`, `finishReason`, `usageMetadata`, `responseMimeType`, `responseSchema`, `thinkingConfig`, `maxOutputTokens`, `stopSequences`, etc.), but the converter only accepted snake_case. All P→IR methods in content_ops, config_ops, tool_ops, message_ops, and converter now accept both conventions; all IR→P methods now output camelCase for REST API compatibility
 - **Image/audio/file data lost during Google→IR conversion**: `p_part_to_ir` checked for `inline_data` (snake_case) but Gemini CLI sends `inlineData` (camelCase) — binary content was silently dropped with a `不支持的Part类型` warning. Fixed by normalizing camelCase keys at the dispatch entry point
-- **Cross-format image conversion failure (Google → OpenAI/Anthropic)**: Google's `p_image_to_ir` produces `ImagePart` with top-level `data` + `media_type` fields, but OpenAI Chat, Anthropic, and OpenAI Responses `ir_image_to_p` only checked `image_url` and nested `image_data` — threw `ValueError`. All three target converters now handle top-level fields as a fallback path (#68)
+- **Cross-format image conversion failure (Google → OpenAI/Anthropic)**: Google's `p_image_to_ir` produces `ImagePart` with top-level `data` + `media_type` fields, but OpenAI Chat, Anthropic, and OpenAI Responses `ir_image_to_p` only checked `image_url` and nested `image_data` — threw `ValueError`. All three target converters now handle top-level fields as a fallback path (Issue [#68](https://github.com/Oaklight/llm-rosetta/issues/68))
 - **Google GenAI tool_call_id reconciliation**: Google `functionCall` has no ID field, so UUIDs are generated during P→IR. But Gemini CLI assigns its own IDs to `functionResponse` (format: `name_timestamp_index`), creating a mismatch. New `_reconcile_tool_call_ids` method matches tool results to tool calls by function name, fixing orphaned tool_call errors
 - **tool_call_id exceeds OpenAI 40-character limit**: Generated IDs used `call_{name}_{8hex}` format — MCP tool names like `mcp_toolregistry-hub-server_datetime-now` produced 54-char IDs. Shortened to `call_{24hex}` (fixed 29 chars)
 - **Google→IR role mapping for tool results**: `functionResponse` parts produced `role: "user"` IR messages, so `fix_orphaned_tool_calls_ir` (which checks `role: "tool"`) couldn't detect them. Now separates `functionResponse` into `role: "tool"` messages with explicit `"tool": "user"` in `_IR_TO_GOOGLE_ROLE`
@@ -1048,8 +1030,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Fixed
 
-- **Anthropic→IR role normalization for `tool_result` messages**: Anthropic places `tool_result` blocks in `role: "user"` messages, but IR uses `role: "tool"` (like OpenAI). The Anthropic converter now normalizes pure `tool_result` user messages to `role: "tool"`, and splits mixed `tool_result` + text messages into separate `role: "tool"` and `role: "user"` IR messages. This fixes `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls in cross-format conversions (e.g. Anthropic → OpenAI Chat) (#84)
-- **OpenAI Responses→IR role normalization for `function_call_output` items**: `function_call_output` and `mcp_call_output` items were grouped into `role: "user"` IR messages, but IR uses `role: "tool"` for tool results. The Responses converter now groups these items into `role: "tool"` messages, fixing `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls when converting Responses → other formats (e.g. Responses → OpenAI Chat) (#84)
+- **Anthropic→IR role normalization for `tool_result` messages**: Anthropic places `tool_result` blocks in `role: "user"` messages, but IR uses `role: "tool"` (like OpenAI). The Anthropic converter now normalizes pure `tool_result` user messages to `role: "tool"`, and splits mixed `tool_result` + text messages into separate `role: "tool"` and `role: "user"` IR messages. This fixes `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls in cross-format conversions (e.g. Anthropic → OpenAI Chat) (Issue [#84](https://github.com/Oaklight/llm-rosetta/issues/84))
+- **OpenAI Responses→IR role normalization for `function_call_output` items**: `function_call_output` and `mcp_call_output` items were grouped into `role: "user"` IR messages, but IR uses `role: "tool"` for tool results. The Responses converter now groups these items into `role: "tool"` messages, fixing `fix_orphaned_tool_calls_ir()` failing to detect answered tool calls when converting Responses → other formats (e.g. Responses → OpenAI Chat) (Issue [#84](https://github.com/Oaklight/llm-rosetta/issues/84))
 
 ### Added (Documentation)
 
@@ -1059,22 +1041,22 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Fixed
 
-- **Tool schema sanitization applied to all converters**: `_sanitize_schema()` was previously only called in the OpenAI Chat converter. Google GenAI, OpenAI Responses, and Anthropic converters now also sanitize tool parameter schemas before sending to upstream, preventing rejections from strict endpoints like Vertex AI (#80)
-- **Non-standard `ref` and `$schema` keywords stripped**: OpenCode's built-in tools use a bare `ref` field (without `$` prefix) and `$schema` at the top level, both rejected by Vertex AI. Added to the unsupported keywords blocklist (#80)
-- **`$ref`/`$defs` resolved by inlining**: JSON Schema `$ref` references are now resolved by inlining the referenced definition from `$defs`/`definitions`, and both keys are removed from the output. Supports nested and chained references (#80)
-- **Streaming tool call arguments not accumulated**: OpenAI Chat, Anthropic, and Google GenAI converters registered tool calls in `StreamContext` but never called `append_tool_call_args()` to accumulate argument deltas during streaming. This caused tool call arguments to arrive empty at upstream (e.g., MCP tools returning `'query' is a required property`). Only the OpenAI Responses converter was correct (#81)
-- **OpenAI Chat streaming tool call ID resolution**: Delta-only chunks (carrying `index` but no `id`) produced an empty-string `tool_call_id`. Now resolves the effective ID from `StreamContext._tool_call_order` using the chunk index (#81)
+- **Tool schema sanitization applied to all converters**: `_sanitize_schema()` was previously only called in the OpenAI Chat converter. Google GenAI, OpenAI Responses, and Anthropic converters now also sanitize tool parameter schemas before sending to upstream, preventing rejections from strict endpoints like Vertex AI (Issue [#80](https://github.com/Oaklight/llm-rosetta/issues/80))
+- **Non-standard `ref` and `$schema` keywords stripped**: OpenCode's built-in tools use a bare `ref` field (without `$` prefix) and `$schema` at the top level, both rejected by Vertex AI. Added to the unsupported keywords blocklist (Issue [#80](https://github.com/Oaklight/llm-rosetta/issues/80))
+- **`$ref`/`$defs` resolved by inlining**: JSON Schema `$ref` references are now resolved by inlining the referenced definition from `$defs`/`definitions`, and both keys are removed from the output. Supports nested and chained references (Issue [#80](https://github.com/Oaklight/llm-rosetta/issues/80))
+- **Streaming tool call arguments not accumulated**: OpenAI Chat, Anthropic, and Google GenAI converters registered tool calls in `StreamContext` but never called `append_tool_call_args()` to accumulate argument deltas during streaming. This caused tool call arguments to arrive empty at upstream (e.g., MCP tools returning `'query' is a required property`). Only the OpenAI Responses converter was correct (Issue [#81](https://github.com/Oaklight/llm-rosetta/issues/81))
+- **OpenAI Chat streaming tool call ID resolution**: Delta-only chunks (carrying `index` but no `id`) produced an empty-string `tool_call_id`. Now resolves the effective ID from `StreamContext._tool_call_order` using the chunk index (Issue [#81](https://github.com/Oaklight/llm-rosetta/issues/81))
 
 ### Changed
 
-- **`sanitize_schema` extracted to `converters/base/tools.py`**: The schema sanitization utility (previously `_sanitize_schema` private to `openai_chat/tool_ops.py`) is now a public shared function in `converters/base/tools.py`, exported via `converters.base`. All 4 converter `tool_ops.py` files import from the shared location instead of cross-importing from `openai_chat` (#66)
+- **`sanitize_schema` extracted to `converters/base/tools.py`**: The schema sanitization utility (previously `_sanitize_schema` private to `openai_chat/tool_ops.py`) is now a public shared function in `converters/base/tools.py`, exported via `converters.base`. All 4 converter `tool_ops.py` files import from the shared location instead of cross-importing from `openai_chat` (Issue [#66](https://github.com/Oaklight/llm-rosetta/issues/66))
 
 ## v0.2.2 — 2026-03-22
 
 ### Fixed
 
-- **Missing `content_block_stop` in Anthropic SSE output**: When converting OpenAI Chat streaming responses to Anthropic SSE format, `content_block_stop` events were not emitted before `message_delta`, causing Claude Code to silently discard response content. The Anthropic converter now emits `content_block_stop` for any open content block when processing a `FinishEvent` (#77)
-- **Upstream preflight chunk misinterpreted as stream end**: Argo API sends a preflight chunk with `choices: []` and empty `id`/`model` before actual content. The OpenAI Chat converter now only treats empty-choices chunks as stream-end after the stream has actually started (`context.is_started` guard) (#77)
+- **Missing `content_block_stop` in Anthropic SSE output**: When converting OpenAI Chat streaming responses to Anthropic SSE format, `content_block_stop` events were not emitted before `message_delta`, causing Claude Code to silently discard response content. The Anthropic converter now emits `content_block_stop` for any open content block when processing a `FinishEvent` (Issue [#77](https://github.com/Oaklight/llm-rosetta/issues/77))
+- **Upstream preflight chunk misinterpreted as stream end**: Argo API sends a preflight chunk with `choices: []` and empty `id`/`model` before actual content. The OpenAI Chat converter now only treats empty-choices chunks as stream-end after the stream has actually started (`context.is_started` guard) (Issue [#77](https://github.com/Oaklight/llm-rosetta/issues/77))
 
 ## v0.2.1 — 2026-03-20
 
@@ -1090,13 +1072,13 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Fixed
 
-- OpenAI Responses streaming: added missing `id`/`object`/`model` fields to `response.completed`, `output_index`/`content_index` to text delta events, and proper lifecycle events (`output_item.added`, `content_part.added`, `content_part.done`, `output_item.done`) (#56)
-- OpenAI Chat streaming: `tool_calls` entries now always include the required `index` field, defaulting to `0` when not explicitly provided by the upstream IR event (#57)
-- OpenAI Chat streaming: usage-only chunk now includes `"choices": []` to satisfy clients that validate every `chat.completion.chunk` must contain a `choices` array (#55)
-- `stream_options` (Chat Completions-only field) no longer leaks into OpenAI Responses API requests — the Responses converter's `ir_stream_config_to_p()` was incorrectly emitting `stream_options`, causing upstream rejection when Chat-format clients (Kilo, OpenCode) were proxied to the Responses API (#58)
-- Google GenAI converter now handles tools and tool_config in REST-format requests (top-level fields) in addition to SDK format (`config.tools`) — previously only SDK format was recognized, silently stripping tool definitions from gateway-proxied requests (#59)
-- Google camelCase `functionDeclarations` not parsed: `p_tool_definition_to_ir()` now handles both `functionDeclarations` (camelCase/REST) and `function_declarations` (snake_case/SDK), and extracts all declarations instead of only the first. Also added camelCase support for `functionCallingConfig`/`allowedFunctionNames` and `toolConfig` in request parsing — fixes Gemini CLI tool calling through the gateway (#61)
-- Google streaming tool calls split into two chunks: `stream_response_to_provider()` now defers `tool_call_start` and emits the complete `function_call` (name + args) in a single chunk on `tool_call_delta`, matching the Google API's native format (#62)
+- OpenAI Responses streaming: added missing `id`/`object`/`model` fields to `response.completed`, `output_index`/`content_index` to text delta events, and proper lifecycle events (`output_item.added`, `content_part.added`, `content_part.done`, `output_item.done`) (Issue [#56](https://github.com/Oaklight/llm-rosetta/issues/56))
+- OpenAI Chat streaming: `tool_calls` entries now always include the required `index` field, defaulting to `0` when not explicitly provided by the upstream IR event (Issue [#57](https://github.com/Oaklight/llm-rosetta/issues/57))
+- OpenAI Chat streaming: usage-only chunk now includes `"choices": []` to satisfy clients that validate every `chat.completion.chunk` must contain a `choices` array (Issue [#55](https://github.com/Oaklight/llm-rosetta/issues/55))
+- `stream_options` (Chat Completions-only field) no longer leaks into OpenAI Responses API requests — the Responses converter's `ir_stream_config_to_p()` was incorrectly emitting `stream_options`, causing upstream rejection when Chat-format clients (Kilo, OpenCode) were proxied to the Responses API (Issue [#58](https://github.com/Oaklight/llm-rosetta/issues/58))
+- Google GenAI converter now handles tools and tool_config in REST-format requests (top-level fields) in addition to SDK format (`config.tools`) — previously only SDK format was recognized, silently stripping tool definitions from gateway-proxied requests (Issue [#59](https://github.com/Oaklight/llm-rosetta/issues/59))
+- Google camelCase `functionDeclarations` not parsed: `p_tool_definition_to_ir()` now handles both `functionDeclarations` (camelCase/REST) and `function_declarations` (snake_case/SDK), and extracts all declarations instead of only the first. Also added camelCase support for `functionCallingConfig`/`allowedFunctionNames` and `toolConfig` in request parsing — fixes Gemini CLI tool calling through the gateway (Issue [#61](https://github.com/Oaklight/llm-rosetta/issues/61))
+- Google streaming tool calls split into two chunks: `stream_response_to_provider()` now defers `tool_call_start` and emits the complete `function_call` (name + args) in a single chunk on `tool_call_delta`, matching the Google API's native format (Issue [#62](https://github.com/Oaklight/llm-rosetta/issues/62))
 
 ## v0.2.0 — 2026-03-18
 
@@ -1116,7 +1098,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Proxy support**: global `server.proxy` and per-provider `proxy` config for HTTP/SOCKS proxies; CLI `--proxy` flag overrides config
 - Makefile `test-integration` target using `proxychains` (if available) for integration tests
 - `init` subcommand to create a template `config.jsonc` at the XDG default location (`~/.config/llm-rosetta-gateway/`)
-- **Model listing endpoints**: `GET /v1/models` (compatible with both OpenAI and Anthropic SDKs) and `GET /v1beta/models` (Google GenAI SDK format) — enables `client.models.list()` across all three SDKs (#54)
+- **Model listing endpoints**: `GET /v1/models` (compatible with both OpenAI and Anthropic SDKs) and `GET /v1beta/models` (Google GenAI SDK format) — enables `client.models.list()` across all three SDKs (Issue [#54](https://github.com/Oaklight/llm-rosetta/issues/54))
 
 ### Changed
 
@@ -1133,7 +1115,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - Gateway provider `base_url` validation — fail early with clear error on config typos like `https:example.com` (missing `//`)
 - Added `socksio` to gateway dependencies for SOCKS proxy support (`httpx[socks]`)
 - Added missing `__init__.py` for `types` package
-- Updated `git clone` URL from `llm-rosetta` to `llm-rosetta` in documentation
+- Updated `git clone` URL from `llmir` to `llm-rosetta` in documentation
 - Resolved all `ty` type checker diagnostics in `src/` (31 → 0):
     - Fixed `is_part_type()` TypeGuard narrowing — replaced with specific type guard functions (`is_text_part`, etc.)
     - Added missing TypedDict fields: `provider_metadata` on `TextPart`/`ReasoningPart`, `file_id` on `ImagePart`/`FilePart`
@@ -1148,7 +1130,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
     - Fixed `FinishReason` from bare string to TypedDict form `{"reason": "stop"}`
     - Fixed `IRResponse.object` literal from `"chat.completion"` to `"response"`
 - Resolved all `ruff` lint violations in `src/` and `tests/` (UP035 deprecated imports, F401 unused imports)
-- Google `thought_signature` preservation through gateway round-trips — newer Google models require `thoughtSignature` echoed back in function call parts; the gateway now caches `provider_metadata` (including `thought_signature`) keyed by `tool_call_id` and re-injects it on subsequent requests for both streaming and non-streaming modes (#51)
+- Google `thought_signature` preservation through gateway round-trips — newer Google models require `thoughtSignature` echoed back in function call parts; the gateway now caches `provider_metadata` (including `thought_signature`) keyed by `tool_call_id` and re-injects it on subsequent requests for both streaming and non-streaming modes (Issue [#51](https://github.com/Oaklight/llm-rosetta/issues/51))
 - OpenAI Responses converter now handles all 3 `input` formats: bare string (`"input": "hello"`), shorthand list (`[{"role": "user", "content": "hi"}]`), and structured list — previously only the structured format was supported, causing the OpenAI Python SDK's shorthand items to be silently dropped and producing empty IR messages when cross-converting to Anthropic or Google providers
 
 ---
@@ -1157,8 +1139,8 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ### Changed
 
-- **Project renamed from LLM-Rosetta to LLM-Rosetta** across all code, docs, and configuration
-- Package renamed from `llm-rosetta` to `llm_rosetta`; `pyproject.toml` updated accordingly
+- **Project renamed from LLMIR to LLM-Rosetta** across all code, docs, and configuration
+- Python import package name set to `llm_rosetta` (underscore); `pyproject.toml` updated accordingly
 - Documentation fully rewritten with Zensical for both English (`docs_en`) and Chinese (`docs_zh`)
 - README (EN/ZH) updated with new branding, badges, and `pyproject.toml` metadata
 
