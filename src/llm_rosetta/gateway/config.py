@@ -568,6 +568,7 @@ class GatewayConfig:
 
         # Request-log retention knobs (consumed by setup_admin).
         self.request_log: dict[str, Any] = _server.get("request_log", {}) or {}
+        self.ops_log: dict[str, Any] = _server.get("ops_log", {}) or {}
         self.data_dir: str | None = _server.get("data_dir")
 
     def _apply_auth_settings(self, _server: dict[str, Any]) -> None:
