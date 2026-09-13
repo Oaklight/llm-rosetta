@@ -1,8 +1,8 @@
 """Ops log for the gateway admin panel.
 
-This module re-exports from :mod:`llm_rosetta.observability.ops_log`
-for backward compatibility.  New code should import directly from
-``llm_rosetta.observability``.
+Convenience re-exports from :mod:`llm_rosetta.observability.ops_log`
+so admin-package consumers can use short imports.  The canonical
+module is ``llm_rosetta.observability``.
 """
 
 from __future__ import annotations

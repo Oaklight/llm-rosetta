@@ -595,8 +595,6 @@ class PersistenceManager:
         if self._ops_insert_count >= 100:
             self._prune_ops_log()
             self._ops_insert_count = 0
-        elif self.count_ops_log_entries() > self._ops_log_max:
-            self._prune_ops_log()
 
     def query_ops_log_entries(
         self,

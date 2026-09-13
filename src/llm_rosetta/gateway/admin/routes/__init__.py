@@ -197,9 +197,11 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/ops-log", methods=["GET"])(_guard("logs", get_ops_log))
     app.route("/admin/api/ops-log", methods=["DELETE"])(_guard("logs", clear_ops_log))
     app.route("/admin/api/ops-log/event-types", methods=["GET"])(
-        get_ops_log_event_types
+        _guard("logs", get_ops_log_event_types)
     )
-    app.route("/admin/api/ops-log/sources", methods=["GET"])(get_ops_log_sources)
+    app.route("/admin/api/ops-log/sources", methods=["GET"])(
+        _guard("logs", get_ops_log_sources)
+    )
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
