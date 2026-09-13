@@ -120,6 +120,10 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
+    # Capture label before deletion (gone afterward)
+    entry = next((k for k in keystore.list_keys() if k["id"] == key_id), None)
+    label = entry.get("label") if entry else None
+
     if not keystore.delete(key_id):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
@@ -128,8 +132,8 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     _log_key_event(
         request,
         EVENT_KEY_DELETE,
-        f"API key deleted: {key_id}",
-        {"key_id": key_id},
+        f"API key deleted: {label or key_id}",
+        {"key_id": key_id, "label": label},
     )
     return JSONResponse({"ok": True, "deleted": key_id})
 
@@ -138,6 +142,10 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     """Rotate an API key: generate a new value, keep the same id and label."""
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
+
+    # Capture label before rotation for audit trail
+    entry = next((k for k in keystore.list_keys() if k["id"] == key_id), None)
+    label = entry.get("label") if entry else None
 
     new_key = keystore.rotate(key_id)
     if new_key is None:
@@ -148,8 +156,8 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     _log_key_event(
         request,
         EVENT_KEY_ROTATE,
-        f"API key rotated: {key_id}",
-        {"key_id": key_id},
+        f"API key rotated: {label or key_id}",
+        {"key_id": key_id, "label": label},
     )
     return JSONResponse({"ok": True, "id": key_id, "key": new_key})
 

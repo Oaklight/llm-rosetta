@@ -320,10 +320,10 @@ class TestOpsLogPersistence:
         assert len(log) == 6
 
     def test_retention(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), ops_log_max=5)
+        pm = PersistenceManager(str(tmp_path), ops_log_max=50)
         log = OpsLog(persistence=pm)
-        # Insert enough to trigger amortized pruning
-        for i in range(110):
+        # Insert enough to trigger amortized pruning (fires every 100 inserts)
+        for i in range(200):
             log.add(
                 OpsLogEntry.create(
                     event_type=EVENT_STARTUP,
@@ -331,7 +331,8 @@ class TestOpsLogPersistence:
                     message=f"Event {i}",
                 )
             )
-        assert len(log) <= 5
+        # After 200 inserts with max=50, pruning fired at 100 and 200
+        assert len(log) <= 50
 
     def test_details_none_omitted(self, pm):
         log = OpsLog(persistence=pm)

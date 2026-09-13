@@ -1006,7 +1006,7 @@ async def run_gateway(
             OpsLogEntry.create(
                 event_type=EVENT_STARTUP,
                 severity=SEVERITY_INFO,
-                message=f"Gateway started on {host}:{port}",
+                message=f"Gateway starting on {host}:{port}",
                 details={
                     "host": host,
                     "port": port,

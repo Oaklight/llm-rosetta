@@ -485,7 +485,7 @@ async def get_ops_log(request: Any) -> Response:
     ops_log = getattr(request.app, "ops_log", None)
     if ops_log is None:
         return JSONResponse({"entries": [], "total": 0})
-    limit = int(_qp(request, "limit", "50"))
+    limit = min(int(_qp(request, "limit", "50")), 500)
     offset = int(_qp(request, "offset", "0"))
     event_type = _qp(request, "event_type")
     severity = _qp(request, "severity")

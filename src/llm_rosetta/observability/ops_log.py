@@ -12,14 +12,14 @@ All ``details`` dicts must contain only non-sensitive metadata.
 Never store raw API keys, tokens, or secrets.
 
 - ``startup``: ``{"host", "port", "provider_count", "model_count"}``
-- ``shutdown``: ``{}`` (no details needed)
-- ``config_reload``: ``{"provider_count", "model_count", "changed_sections"}``
+- ``shutdown``: (no details)
+- ``config_reload``: ``{"provider_count", "model_count"}``
 - ``key_create``: ``{"key_id", "label"}``
-- ``key_update``: ``{"key_id", "label", "changed_fields"}``
+- ``key_update``: ``{"key_id", "changed_fields"}``
 - ``key_delete``: ``{"key_id", "label"}``
 - ``key_rotate``: ``{"key_id", "label"}``
 - ``health_status_change``: ``{"provider", "old_status", "new_status"}``
-- ``admin_setup``: ``{}``
+- ``admin_setup``: (no details)
 - ``ops_log_cleared``: ``{"cleared_count"}``
 """
 
