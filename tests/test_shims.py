@@ -548,6 +548,8 @@ class TestShimLoaderFieldCoverage:
     # Fields derived from cfg["reasoning"] via _parse_reasoning_cap().
     _PARSED_FIELDS = {"reasoning", "model_reasoning"}
 
+    # If you add a derived/computed field to ProviderShim, add it here
+    # to suppress the guard (it won't have a cfg.get() in the loader).
     _SPECIAL_FIELDS = _TRANSFORM_FIELDS | _PARSED_FIELDS
 
     def test_all_dataclass_fields_present_in_loader(self):
@@ -591,4 +593,16 @@ class TestShimLoaderFieldCoverage:
             f"ProviderShim field(s) {missing} not loaded in "
             f"_load_single_provider(). Add cfg.get(...) for each, "
             f"or add to _SPECIAL_FIELDS if handled elsewhere."
+        )
+
+    def test_special_fields_still_exist_in_dataclass(self):
+        """Prevent _SPECIAL_FIELDS from drifting — every entry must
+        still be a real ProviderShim field."""
+        import dataclasses
+
+        dc_fields = {f.name for f in dataclasses.fields(ProviderShim)}
+        stale = self._SPECIAL_FIELDS - dc_fields
+        assert not stale, (
+            f"_SPECIAL_FIELDS lists {stale} which no longer exist "
+            f"in ProviderShim — remove them."
         )
