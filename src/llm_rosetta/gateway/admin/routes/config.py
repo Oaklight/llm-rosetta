@@ -791,6 +791,10 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
             if "max_age_days" in rl:
                 rl_cfg["max_age_days"] = max(1, int(rl["max_age_days"]))
 
+        ol_max = (body.get("ops_log") or {}).get("max_entries")
+        if ol_max is not None:
+            server.setdefault("ops_log", {})["max_entries"] = max(100, int(ol_max))
+
         # Debug / log level
         debug = data.setdefault("debug", {})
         if "verbose" in body:

@@ -42,6 +42,8 @@ function openSettings() {
     if (em) em.value = S.configData.server.request_log.error_max || 10000;
     if (mad) mad.value = S.configData.server.request_log.max_age_days || 90;
   }
+  const olm = document.getElementById('settingsOpsLogMax');
+  if (olm) olm.value = (S.configData?.server?.ops_log?.max_entries) || 10000;
   // Sync rate limiting
   const rl = S.configData?.server?.rate_limit || {};
   const rlEn = document.getElementById('rlEnabled');
@@ -119,10 +121,14 @@ async function saveLogRetention() {
   const sm = parseInt(document.getElementById('settingsSuccessMax')?.value || '50000', 10);
   const em = parseInt(document.getElementById('settingsErrorMax')?.value || '10000', 10);
   const mad = parseInt(document.getElementById('settingsMaxAgeDays')?.value || '90', 10);
+  const olm = parseInt(document.getElementById('settingsOpsLogMax')?.value || '10000', 10);
   if (sm < 50000 || em < 5000) { showToast(t('toast.retentionMin'), 'error'); return; }
-  if (mad < 1) { showToast(t('toast.error'), 'error'); return; }
+  if (mad < 1 || olm < 100) { showToast(t('toast.error'), 'error'); return; }
   try {
-    await api.put('/admin/api/config/server', { request_log: { success_max: sm, error_max: em, max_age_days: mad } });
+    await api.put('/admin/api/config/server', {
+      request_log: { success_max: sm, error_max: em, max_age_days: mad },
+      ops_log: { max_entries: olm },
+    });
     await window.loadConfig(); showToast(t('toast.saved'));
   } catch { showToast(t('toast.error'), 'error'); }
 }
