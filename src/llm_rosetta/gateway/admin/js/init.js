@@ -11,6 +11,7 @@ import './fetch-models.js';
 import { loadKeys, loadLogKeyLabels, renderKeys } from './keys.js';
 import { loadMetrics, loadDumps, renderPersistence } from './dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from './logs.js';
+import { loadOpsLog, switchLogView, populateOpsLogFilters } from './ops-log.js';
 import './test.js';
 import { initLogoPicker } from './logo-picker.js';
 
@@ -28,7 +29,11 @@ function initApp() {
   }).catch(() => {});
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (S.currentTab === 'logs' && _tabEnabled('logs')) { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (S.currentTab === 'logs' && _tabEnabled('logs')) {
+    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, 5000); }
+    else { S.logOffset = 0; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+    populateOpsLogFilters();
+  }
   if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (location.hash === "#change-password") { openSettings(); history.replaceState(null, "", location.pathname); }
 }
@@ -51,7 +56,11 @@ function activateTab(tab) {
   localStorage.setItem('llm-rosetta-tab', id);
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
-  if (id === 'logs' && _tabEnabled('logs')) { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+  if (id === 'logs' && _tabEnabled('logs')) {
+    if (S._logView === 'ops') { loadOpsLog(); S.opsLogTimer = setInterval(loadOpsLog, 5000); }
+    else { if (!S._keepLogOffset) S.logOffset = 0; S._keepLogOffset = false; loadLogs(); S.logTimer = setInterval(loadLogs, 5000); }
+    populateOpsLogFilters();
+  }
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
@@ -88,6 +97,7 @@ window.goToTab = goToTab;
 function stopTimers() {
   if (S.dashboardTimer) { clearInterval(S.dashboardTimer); S.dashboardTimer = null; }
   if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
+  if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
   if (S.healthTimer) { clearInterval(S.healthTimer); S.healthTimer = null; }
 }
 
@@ -96,6 +106,9 @@ document.getElementById('filterModel').addEventListener('change', () => { S.logO
 document.getElementById('filterProvider').addEventListener('change', () => { S.logOffset = 0; S.expandedLogRows.clear(); loadLogs(); });
 document.getElementById('filterStatus').addEventListener('change', () => { S.logOffset = 0; S.expandedLogRows.clear(); loadLogs(); });
 document.getElementById('filterApiKey').addEventListener('change', () => { S.logOffset = 0; S.expandedLogRows.clear(); loadLogs(); });
+document.getElementById('filterOpsEventType').addEventListener('change', () => { S.opsLogOffset = 0; S.expandedOpsLogRows.clear(); loadOpsLog(); });
+document.getElementById('filterOpsSeverity').addEventListener('change', () => { S.opsLogOffset = 0; S.expandedOpsLogRows.clear(); loadOpsLog(); });
+document.getElementById('filterOpsSource').addEventListener('change', () => { S.opsLogOffset = 0; S.expandedOpsLogRows.clear(); loadOpsLog(); });
 
 // Close modal on overlay click
 document.querySelectorAll('.modal-overlay').forEach(m => {
