@@ -8,6 +8,36 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 网关 — 多 Provider 路由与基础设施
+
+- **多 Provider 路由与加权轮询** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664))：支持为每个模型配置多个上游 Provider 并按权重分配负载。新增 `RoutingStrategy` 协议和 nginx 风格的平滑 WRR 实现。Provider 特定的错误响应自动按转换器类型映射。支持按 Provider 统计 token 用量和亲和性路由。
+- **API Key 亲和性优化 prompt cache 命中** (PR [#663](https://github.com/Oaklight/llm-rosetta/pull/663))：基于 `hash(client_token + message_prefix)` 确定性选择上游 API key，使同一会话始终命中同一上游 key，最大化 Provider 端 prompt cache 命中率。
+- **Token 用量追踪** (PR [#662](https://github.com/Oaklight/llm-rosetta/pull/662))：从 IR response 中提取 prompt/completion/total token 计数，按请求持久化到 SQLite 和内存指标。流式和非流式请求均支持。
+- **`/v1/models` 中展示多 Provider 路由信息**：在 models 端点响应中暴露每个模型的 Provider 列表、权重和类型信息。
+- **Admin UI 中的 Provider 健康指示器**：Provider 卡片左边框颜色编码（绿/红/灰），每 30 秒自动刷新，单次遍历健康检查优化。
+- **未认证 health 端点不再暴露 Provider 详情** (PR [#665](https://github.com/Oaklight/llm-rosetta/pull/665))：`/health` 不再泄露上游基础设施信息；`/health/ready` 503 响应仅报告数量，不暴露 Provider 名称。
+
+### Admin — 可观测性与运维日志
+
+- **Server 运维日志后端** (PR [#670](https://github.com/Oaklight/llm-rosetta/pull/670))：`OpsLog` facade 用于追踪服务器运维事件（启动、关闭、配置重载、API key 增删改查/轮换）。SQLite 存储，基于数量的保留策略，提供 REST API。
+- **Server 运维日志前端** (PR [#671](https://github.com/Oaklight/llm-rosetta/pull/671))：Logs 标签页中新增"Request Log"/"Server Ops Log"分段切换控件，支持按事件类型、严重性和来源过滤。包含双阈值保留配置（基于数量和基于时间的清理）、i18n 事件标签、以及按当前视图智能切换自动刷新。
+
+### Admin — 安全性与用户体验
+
+- **Session 认证迁移到 httponly cookie** (PR [#660](https://github.com/Oaklight/llm-rosetta/pull/660))：Admin 面板认证从 `localStorage` + `X-Admin-Token` header 迁移到 `HttpOnly` + `SameSite=Lax` session cookie。`X-Admin-Token` header 仍作为 API 客户端的回退方式。
+- **修复 error dump 单条删除端点缺失** (PR [#656](https://github.com/Oaklight/llm-rosetta/pull/656))：批量删除单条 error dump 条目时静默失败；新增后端路由和持久化方法。
+- **暗色模式与徽章改进**：暗色模式下反转 Provider logo，embedding 和 LLM 徽章使用不同颜色区分，工具徽章样式优化。
+
+### Shims — Bug 修复与测试
+
+- **修复 `max_tool_description_length` 未从 provider YAML 加载** (PR [#667](https://github.com/Oaklight/llm-rosetta/pull/667))：YAML loader 静默丢弃了声明的阈值，导致 shim 级别默认值的 tool description relocation 从未生效。由 [@caidao22](https://github.com/caidao22) 贡献。
+- **YAML loader 字段覆盖度 guard test** (PR [#674](https://github.com/Oaklight/llm-rosetta/pull/674))：基于 AST 的 CI 测试，验证每个 `ProviderShim` dataclass 字段都出现在 loader 构造调用中，防止静默遗漏。同时修复了 `hoist_system_messages` 未从 YAML 加载的问题。
+
+### 基础设施
+
+- **Zerodep 自动更新 CI workflow** (PR [#657](https://github.com/Oaklight/llm-rosetta/pull/657))：自动化更新 vendored zerodep 模块的 workflow。
+- **更新 vendored zerodep 模块** (PR [#658](https://github.com/Oaklight/llm-rosetta/pull/658))。
+
 ## v0.13.0 — 2026-09-08
 
 ### 新增
