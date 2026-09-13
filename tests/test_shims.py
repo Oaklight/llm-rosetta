@@ -526,3 +526,69 @@ class TestMultimodalToolResultCapability:
         # No synthetic user message injected
         user_msgs = [m for m in result["messages"] if m.get("role") == "user"]
         assert len(user_msgs) == 1
+
+
+# ---------------------------------------------------------------------------
+# Guard: every ProviderShim dataclass field must be covered by the YAML loader
+# ---------------------------------------------------------------------------
+
+
+class TestShimLoaderFieldCoverage:
+    """Ensure _load_single_provider passes every ProviderShim field.
+
+    The YAML loader constructs ProviderShim with explicit kwargs.  If a
+    new field is added to the dataclass but not to the loader, the YAML
+    value is silently dropped and the field falls back to its default.
+    This test catches that class of bug at CI time.
+    """
+
+    # Fields populated by _load_transforms(), not from YAML keys.
+    _TRANSFORM_FIELDS = {"pre_ir_transforms", "post_ir_transforms", "ir_transforms"}
+
+    # Fields derived from cfg["reasoning"] via _parse_reasoning_cap().
+    _PARSED_FIELDS = {"reasoning", "model_reasoning"}
+
+    _SPECIAL_FIELDS = _TRANSFORM_FIELDS | _PARSED_FIELDS
+
+    def test_all_dataclass_fields_present_in_loader(self):
+        import ast
+        import dataclasses
+        import inspect
+
+        from llm_rosetta.shims.providers import _load_single_provider
+
+        dc_fields = {f.name for f in dataclasses.fields(ProviderShim)}
+
+        source = inspect.getsource(_load_single_provider)
+        # dedent so ast.parse doesn't choke on indented function body
+        import textwrap
+
+        source = textwrap.dedent(source)
+        tree = ast.parse(source)
+
+        loader_kwargs: set[str] = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_provider_shim_call = (
+                isinstance(func, ast.Name) and func.id == "ProviderShim"
+            ) or (isinstance(func, ast.Attribute) and func.attr == "ProviderShim")
+            if not is_provider_shim_call:
+                continue
+            for kw in node.keywords:
+                if kw.arg is not None:
+                    loader_kwargs.add(kw.arg)
+
+        assert loader_kwargs, (
+            "_load_single_provider no longer contains a ProviderShim(...) call — "
+            "update this test if the loader was restructured"
+        )
+
+        expected = dc_fields - self._SPECIAL_FIELDS
+        missing = expected - loader_kwargs
+        assert not missing, (
+            f"ProviderShim field(s) {missing} not loaded in "
+            f"_load_single_provider(). Add cfg.get(...) for each, "
+            f"or add to _SPECIAL_FIELDS if handled elsewhere."
+        )
