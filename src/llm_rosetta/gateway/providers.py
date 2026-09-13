@@ -100,9 +100,50 @@ def known_provider_types() -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _resolve_token_command(
+    provider_type: str, cfg: dict[str, Any]
+) -> tuple[str, list[str] | None, int]:
+    """Resolve token_command config into (api_key, token_command, interval).
+
+    Returns the initial API key (either from static config or by running the
+    command), the command list (or None), and the refresh interval.
+    Raises ValueError on invalid config, RuntimeError if the command fails.
+    """
+    from .transport.token_refresh import run_token_command_sync
+
+    token_command = cfg.get("token_command")
+    token_refresh_interval = int(cfg.get("token_refresh_interval", 3600))
+
+    if token_command is None:
+        return cfg["api_key"], None, token_refresh_interval
+
+    if isinstance(token_command, str):
+        raise ValueError(
+            f"Provider '{provider_type}': token_command must be an array, "
+            f'not a string (e.g., ["python3", "scripts/alcf-token.py"])'
+        )
+    if not isinstance(token_command, list) or not token_command:
+        raise ValueError(
+            f"Provider '{provider_type}': token_command must be a non-empty array"
+        )
+    if token_refresh_interval < 60:
+        raise ValueError(
+            f"Provider '{provider_type}': token_refresh_interval must be "
+            f">= 60, got {token_refresh_interval}"
+        )
+    if "api_key" in cfg:
+        raise ValueError(
+            f"Provider '{provider_type}': token_command and api_key are "
+            f"mutually exclusive"
+        )
+    api_key = run_token_command_sync(token_command)
+    logger.info("Seeded API key for '%s' via token_command", provider_type)
+    return api_key, token_command, token_refresh_interval
+
+
 def build_provider_info(
     provider_type: str,
-    cfg: dict[str, str],
+    cfg: dict[str, Any],
     *,
     global_proxy: str | None = None,
 ) -> ProviderInfo:
@@ -177,13 +218,20 @@ def build_provider_info(
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None
 
+    # -- token_command: dynamic key refresh ------------------------------------
+    api_key, token_command, token_refresh_interval = _resolve_token_command(
+        provider_type, cfg
+    )
+
     return ProviderInfo(
         name=provider_type,
-        api_key=cfg["api_key"],
+        api_key=api_key,
         base_url=cfg["base_url"],
         auth_header_fn=auth_fn,
         url_template=url_tpl,
         stream_url_template=stream_tpl,
         proxy_url=proxy_url,
         timeout=float(cfg["timeout"]) if "timeout" in cfg else None,
+        token_command=token_command,
+        token_refresh_interval=token_refresh_interval,
     )

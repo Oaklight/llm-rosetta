@@ -37,6 +37,28 @@ class KeyRing:
         self._keys = [k.strip() for k in keys_csv.split(",") if k.strip()]
         self._idx = 0
 
+    def refresh(self, keys_csv: str) -> int | None:
+        """Replace all keys atomically via reference swap.
+
+        No lock needed: both ``next()`` and ``refresh()`` run on the
+        same asyncio event-loop thread.  CPython's GIL guarantees that
+        the list reference assignment (``self._keys = new``) is atomic
+        for concurrent readers.  A ``threading.Lock`` would be wrong
+        here — ``next()`` is synchronous (called from ``auth_headers``)
+        and cannot ``await`` an ``asyncio.Lock``, while a threading lock
+        risks blocking the event loop.
+
+        Returns the previous key count if it changed (so the caller can
+        warn about affinity disruption), or ``None`` if unchanged.
+        """
+        new = [k.strip() for k in keys_csv.split(",") if k.strip()]
+        if not new:
+            return None
+        old_count = len(self._keys)
+        self._keys = new
+        self._idx = self._idx % len(new)
+        return old_count if old_count != len(new) else None
+
     def next(self) -> str:
         """Return the next API key."""
         if not self._keys:
@@ -113,6 +135,8 @@ class ProviderInfo:
         stream_url_template: str | None = None,
         proxy_url: str | None = None,
         timeout: float | None = None,
+        token_command: list[str] | None = None,
+        token_refresh_interval: int = 3600,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -128,6 +152,9 @@ class ProviderInfo:
         self.proxy_url = proxy_url
         self.timeout = timeout
         self._affinity_key_index: int | None = None
+        self.token_command = token_command
+        self.token_refresh_interval = token_refresh_interval
+        self.token_status: dict | None = None
 
     # -- public helpers used by the proxy -----------------------------------
 

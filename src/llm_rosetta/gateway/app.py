@@ -1018,10 +1018,23 @@ async def run_gateway(
         )
 
     flush_task = asyncio.create_task(_periodic_flush(app))
+
+    from .transport.token_refresh import start_token_refreshers
+
+    config = getattr(app, "gateway_config", None)
+    refresh_tasks = await start_token_refreshers(config.providers) if config else []
+
     try:
         await app._serve(host, port, socket=socket)
     finally:
+        for task in refresh_tasks:
+            task.cancel()
         flush_task.cancel()
+        for task in refresh_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
         try:
             await flush_task
         except asyncio.CancelledError:
