@@ -95,15 +95,12 @@ async def start_token_refreshers(
 
 
 async def _refresh_loop(pinfo: ProviderInfo) -> None:
+    if pinfo.token_command is None:
+        return
     consecutive_failures = 0
-    refreshing = False
     while True:
         await asyncio.sleep(pinfo.token_refresh_interval)
-        if refreshing:
-            continue
-        refreshing = True
         try:
-            assert pinfo.token_command is not None
             token = await run_token_command(pinfo.token_command)
             old_count = pinfo.key_ring.refresh(token)
             if old_count is not None:
@@ -137,9 +134,9 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
                 consecutive_failures,
                 exc,
             )
-            if pinfo.token_status is None:
-                pinfo.token_status = {"enabled": True}
-            pinfo.token_status["consecutive_failures"] = consecutive_failures
-            pinfo.token_status["last_error"] = str(exc)
-        finally:
-            refreshing = False
+            pinfo.token_status = {
+                "enabled": True,
+                "last_refresh": (pinfo.token_status or {}).get("last_refresh"),
+                "consecutive_failures": consecutive_failures,
+                "last_error": str(exc),
+            }
