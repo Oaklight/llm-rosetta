@@ -7,7 +7,10 @@
   //   python3 scripts/alcf-token.py --login
   //
   // The gateway auto-refreshes tokens via token_command — no cron or
-  // restarts needed. For static key fallback, replace token_command
+  // restarts needed. The three providers share the default token file, so
+  // the commands may refresh concurrently near expiry; atomic writes keep
+  // the file valid, but an external shared refresh process can avoid
+  // redundant Globus calls. For static key fallback, replace token_command
   // with: "api_key": "${ALCF_API_KEY}"
   "providers": {
     "alcf-sophia": {

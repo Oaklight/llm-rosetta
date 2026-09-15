@@ -301,7 +301,10 @@ def _ensure_fresh(path: str, *, force: bool = False) -> str | None:
             )
             return entry.get("access_token")
         entry["access_token"] = result["access_token"]
-        entry["refresh_token"] = result["refresh_token"]
+        # OAuth servers may rotate the refresh token, but they may also omit
+        # it when the existing refresh token remains valid.
+        if "refresh_token" in result:
+            entry["refresh_token"] = result["refresh_token"]
         entry["expires_at_seconds"] = int(time.time()) + result["expires_in"]
         try:
             _write_tokens(path, data)
@@ -415,6 +418,22 @@ def _show_status(path: str) -> None:
         _log(f"{label}: expired {-int(remaining)}s ago (identity={identity})")
 
 
+def _show_status_dir(tokens_dir: str) -> None:
+    if not os.path.isdir(tokens_dir):
+        _log(f"Not a directory: {tokens_dir}")
+        sys.exit(1)
+    files = sorted(
+        f
+        for f in os.listdir(tokens_dir)
+        if f.endswith(".json") and not f.startswith(".")
+    )
+    if not files:
+        _log(f"No .json token files found in {tokens_dir}")
+        sys.exit(1)
+    for fname in files:
+        _show_status(os.path.join(tokens_dir, fname))
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -475,9 +494,7 @@ def main() -> None:
     # --- status ---
     if args.status:
         if args.tokens_dir:
-            for fname in sorted(os.listdir(args.tokens_dir)):
-                if fname.endswith(".json") and not fname.startswith("."):
-                    _show_status(os.path.join(args.tokens_dir, fname))
+            _show_status_dir(args.tokens_dir)
         else:
             if not os.path.isfile(token_file):
                 _log(f"Token file not found: {token_file}")
