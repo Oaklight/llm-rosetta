@@ -128,7 +128,8 @@ nav:
       - 提供方:
           - 提供方兼容性: guide/compatibility.md
           - 提供方 Shim: guide/shims.md
-          - 提供方参考: guide/providers/index.md
+          - 提供方参考:
+              - guide/providers/index.md
               - OpenAI: guide/providers/openai.md
               - Anthropic: guide/providers/anthropic.md
               - Google: guide/providers/google.md
