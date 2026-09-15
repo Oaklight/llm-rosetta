@@ -38,9 +38,16 @@ COMMAND_TIMEOUT = 30
 # Reactive refresh coordination
 # ---------------------------------------------------------------------------
 
+# Single-process state: the gateway runs one event loop, so module-level
+# dicts are shared across all request handlers and the background loop.
 _reactive_locks: dict[str, asyncio.Lock] = {}
 _reactive_timestamps: dict[str, float] = {}  # time.monotonic()
 _REACTIVE_DEBOUNCE = 5.0  # seconds
+
+# If a refresh (reactive or scheduled) happened within this fraction of
+# token_refresh_interval, the scheduled loop skips its next cycle to
+# avoid redundant subprocess invocations.
+_SCHEDULED_SKIP_FRACTION = 0.5
 
 
 def _get_lock(name: str) -> asyncio.Lock:
@@ -83,6 +90,13 @@ async def force_refresh(pinfo: ProviderInfo) -> bool:
             logger.warning(
                 "Reactive token refresh for '%s' failed: %s", pinfo.name, exc
             )
+            prev = pinfo.token_status or {}
+            pinfo.token_status = {
+                "enabled": True,
+                "last_refresh": prev.get("last_refresh"),
+                "consecutive_failures": prev.get("consecutive_failures", 0) + 1,
+                "last_error": str(exc),
+            }
             return False
 
 
@@ -177,9 +191,10 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
     while True:
         await asyncio.sleep(pinfo.token_refresh_interval)
 
-        # Skip if a reactive refresh happened recently
+        # Skip if a refresh (reactive or scheduled) happened recently
         last = _reactive_timestamps.get(pinfo.name, 0.0)
-        if last and (time.monotonic() - last) < pinfo.token_refresh_interval * 0.5:
+        skip_threshold = pinfo.token_refresh_interval * _SCHEDULED_SKIP_FRACTION
+        if last and (time.monotonic() - last) < skip_threshold:
             logger.debug(
                 "Skipping scheduled refresh for '%s' — reactive refresh was recent",
                 pinfo.name,

@@ -38,7 +38,7 @@ def classify_auth_error(status_code: int, error_body: str) -> AuthErrorKind:
     return AuthErrorKind.NORMAL_401
 
 
-def rewrite_session_policy_error(error_body: str) -> str:
+def rewrite_session_policy_error() -> str:
     """Produce a user-friendly error for ALCF session-policy 401s."""
     return (
         "ALCF session expired (30-day Globus re-authentication policy). "
