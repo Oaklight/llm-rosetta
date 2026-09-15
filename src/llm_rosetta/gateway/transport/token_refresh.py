@@ -7,6 +7,14 @@ every ``token_refresh_interval`` seconds in a background asyncio task.
 The command's stdout is captured as the new API key (comma-separated for
 multi-key round-robin).  On failure the old key is kept; after 5
 consecutive failures the log level escalates from WARNING to ERROR.
+
+Reactive refresh
+~~~~~~~~~~~~~~~~
+
+When the proxy receives a 401 from upstream, it can call
+:func:`force_refresh` to trigger an immediate out-of-cycle refresh.
+A per-provider lock prevents concurrent refreshes, and a debounce
+window prevents redundant refreshes from bursts of 401s.
 """
 
 from __future__ import annotations
@@ -14,6 +22,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
@@ -24,6 +33,68 @@ logger = logging.getLogger(__name__)
 
 FAILURE_ESCALATION_THRESHOLD = 5
 COMMAND_TIMEOUT = 30
+
+# ---------------------------------------------------------------------------
+# Reactive refresh coordination
+# ---------------------------------------------------------------------------
+
+_reactive_locks: dict[str, asyncio.Lock] = {}
+_reactive_timestamps: dict[str, float] = {}  # time.monotonic()
+_REACTIVE_DEBOUNCE = 5.0  # seconds
+
+
+def _get_lock(name: str) -> asyncio.Lock:
+    """Get or create a per-provider asyncio.Lock (lazy, event-loop-safe)."""
+    if name not in _reactive_locks:
+        _reactive_locks[name] = asyncio.Lock()
+    return _reactive_locks[name]
+
+
+async def force_refresh(pinfo: ProviderInfo) -> bool:
+    """Reactively refresh the token for *pinfo* via its ``token_command``.
+
+    Called by the proxy on upstream 401.  Returns ``True`` if a fresh
+    token was obtained (or a very recent refresh already covered it),
+    ``False`` if no ``token_command`` is configured or the refresh failed.
+    """
+    if pinfo.token_command is None:
+        return False
+
+    lock = _get_lock(pinfo.name)
+    async with lock:
+        now = time.monotonic()
+        last = _reactive_timestamps.get(pinfo.name, 0.0)
+        if (now - last) < _REACTIVE_DEBOUNCE:
+            return True
+
+        try:
+            token = await run_token_command(pinfo.token_command)
+            pinfo.key_ring.refresh(token)
+            _reactive_timestamps[pinfo.name] = time.monotonic()
+            pinfo.token_status = {
+                "enabled": True,
+                "last_refresh": datetime.now(timezone.utc).isoformat(),
+                "consecutive_failures": 0,
+                "last_error": None,
+            }
+            logger.info("Reactive token refresh for '%s' succeeded", pinfo.name)
+            return True
+        except Exception as exc:
+            logger.warning(
+                "Reactive token refresh for '%s' failed: %s", pinfo.name, exc
+            )
+            return False
+
+
+def reset_reactive_state() -> None:
+    """Clear all reactive-refresh state (for testing)."""
+    _reactive_locks.clear()
+    _reactive_timestamps.clear()
+
+
+# ---------------------------------------------------------------------------
+# Token command runners
+# ---------------------------------------------------------------------------
 
 
 def run_token_command_sync(argv: list[str], *, timeout: float = COMMAND_TIMEOUT) -> str:
@@ -75,6 +146,11 @@ async def run_token_command(
     return token
 
 
+# ---------------------------------------------------------------------------
+# Background refresh loop
+# ---------------------------------------------------------------------------
+
+
 async def start_token_refreshers(
     providers: dict[str, ProviderInfo],
 ) -> list[asyncio.Task]:
@@ -100,6 +176,16 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
     consecutive_failures = 0
     while True:
         await asyncio.sleep(pinfo.token_refresh_interval)
+
+        # Skip if a reactive refresh happened recently
+        last = _reactive_timestamps.get(pinfo.name, 0.0)
+        if last and (time.monotonic() - last) < pinfo.token_refresh_interval * 0.5:
+            logger.debug(
+                "Skipping scheduled refresh for '%s' — reactive refresh was recent",
+                pinfo.name,
+            )
+            continue
+
         try:
             token = await run_token_command(pinfo.token_command)
             old_count = pinfo.key_ring.refresh(token)
@@ -112,10 +198,11 @@ async def _refresh_loop(pinfo: ProviderInfo) -> None:
                     len(pinfo.key_ring),
                 )
             consecutive_failures = 0
-            now = datetime.now(timezone.utc).isoformat()
+            now_iso = datetime.now(timezone.utc).isoformat()
+            _reactive_timestamps[pinfo.name] = time.monotonic()
             pinfo.token_status = {
                 "enabled": True,
-                "last_refresh": now,
+                "last_refresh": now_iso,
                 "consecutive_failures": 0,
                 "last_error": None,
             }
