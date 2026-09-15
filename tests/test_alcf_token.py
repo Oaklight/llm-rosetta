@@ -77,6 +77,26 @@ def test_ensure_fresh_preserves_refresh_token_when_omitted(
     assert entry["access_token"] == "new-access"
 
 
+def test_ensure_fresh_updates_refresh_token_when_rotated(
+    alcf_token, tmp_path, monkeypatch
+):
+    path = tmp_path / "tokens.json"
+    alcf_token._write_tokens(str(path), _token_data(alcf_token))
+    monkeypatch.setattr(
+        alcf_token,
+        "_refresh_token",
+        lambda entry: {
+            "access_token": "new-access",
+            "refresh_token": "rotated-refresh",
+            "expires_in": 3600,
+        },
+    )
+
+    assert alcf_token._ensure_fresh(str(path), force=True) == "new-access"
+    entry = alcf_token._get_gateway_entry(alcf_token._read_tokens(str(path)))
+    assert entry["refresh_token"] == "rotated-refresh"
+
+
 def test_ensure_fresh_returns_existing_token_on_refresh_failure(
     alcf_token, tmp_path, monkeypatch
 ):
@@ -84,13 +104,11 @@ def test_ensure_fresh_returns_existing_token_on_refresh_failure(
     alcf_token._write_tokens(
         str(path), _token_data(alcf_token, access_token="fallback")
     )
-    monkeypatch.setattr(
-        alcf_token,
-        "_refresh_token",
-        lambda entry: (_ for _ in ()).throw(
-            alcf_token.urllib.error.URLError("offline")
-        ),
-    )
+
+    def _raise_offline(entry):
+        raise alcf_token.urllib.error.URLError("offline")
+
+    monkeypatch.setattr(alcf_token, "_refresh_token", _raise_offline)
 
     assert alcf_token._ensure_fresh(str(path), force=True) == "fallback"
 
@@ -110,6 +128,23 @@ def test_status_tokens_dir_requires_json_file(
         alcf_token.main()
 
     assert exc_info.value.code == 1
+
+
+def test_show_status_dir_iterates_token_files(alcf_token, tmp_path, capsys):
+    alcf_token._write_tokens(
+        str(tmp_path / "alice.json"),
+        _token_data(alcf_token, access_token="a", expires=9999999999),
+    )
+    alcf_token._write_tokens(
+        str(tmp_path / "bob.json"),
+        _token_data(alcf_token, access_token="b", expires=9999999999),
+    )
+
+    alcf_token._show_status_dir(str(tmp_path))
+
+    captured = capsys.readouterr().err
+    assert "alice.json" in captured
+    assert "bob.json" in captured
 
 
 def test_collect_tokens_dir_returns_tokens(alcf_token, tmp_path):

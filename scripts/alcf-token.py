@@ -303,7 +303,7 @@ def _ensure_fresh(path: str, *, force: bool = False) -> str | None:
         entry["access_token"] = result["access_token"]
         # OAuth servers may rotate the refresh token, but they may also omit
         # it when the existing refresh token remains valid.
-        if "refresh_token" in result:
+        if result.get("refresh_token"):
             entry["refresh_token"] = result["refresh_token"]
         entry["expires_at_seconds"] = int(time.time()) + result["expires_in"]
         try:
