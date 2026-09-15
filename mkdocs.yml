@@ -128,6 +128,20 @@ nav:
       - 提供方:
           - 提供方兼容性: guide/compatibility.md
           - 提供方 Shim: guide/shims.md
+          - 提供方参考: guide/providers/index.md
+              - OpenAI: guide/providers/openai.md
+              - Anthropic: guide/providers/anthropic.md
+              - Google: guide/providers/google.md
+              - DeepSeek: guide/providers/deepseek.md
+              - Moonshot: guide/providers/moonshot.md
+              - Qwen: guide/providers/qwen.md
+              - xAI: guide/providers/xai.md
+              - Zhipu: guide/providers/zhipu.md
+              - Volcengine: guide/providers/volcengine.md
+              - OpenRouter: guide/providers/openrouter.md
+              - MiniMax: guide/providers/minimax.md
+              - Argo: guide/providers/argo.md
+              - ALCF: guide/providers/alcf.md
           - 推理 / 思考参数: guide/reasoning.md
           - 提供方推理行为: guide/provider-reasoning.md
       - 示例:
