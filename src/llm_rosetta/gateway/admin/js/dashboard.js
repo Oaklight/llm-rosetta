@@ -524,6 +524,12 @@ function onDumpStatusFilterChange() {
   renderDumps();
 }
 
+function onDumpStatusSearchInput() {
+  const el = document.getElementById('dumpStatusSearch');
+  el.value = el.value.replace(/\D/g, '');
+  renderDumps();
+}
+
 function closeDumpStatusSearch() {
   document.getElementById('dumpStatusSearch').value = '';
   document.getElementById('dumpStatusFilter').value = '';
@@ -892,7 +898,7 @@ Object.assign(window, {
   changeDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
   onClearDumpsInput, confirmClearDumps,
   onDumpModelFilterChange, closeDumpModelSearch,
-  onDumpStatusFilterChange, closeDumpStatusSearch,
+  onDumpStatusFilterChange, onDumpStatusSearchInput, closeDumpStatusSearch,
   onDumpTimeRangeChange, closeDumpTimeCustom, resetDumpFilters,
   renderPersistence, renderStats, renderProviderBreakdown,
   jumpToRequestLog, backfillDumpLogIds,

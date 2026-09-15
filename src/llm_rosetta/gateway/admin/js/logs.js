@@ -116,6 +116,8 @@ async function _doDeleteModel(name) {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
+let _logStatusTimer = 0;
+
 function onLogStatusFilterChange() {
   const val = document.getElementById('filterStatus').value;
   if (val === 'custom') {
@@ -127,7 +129,15 @@ function onLogStatusFilterChange() {
   loadLogs();
 }
 
+function onLogStatusSearchInput() {
+  const el = document.getElementById('logStatusSearch');
+  el.value = el.value.replace(/\D/g, '');
+  clearTimeout(_logStatusTimer);
+  _logStatusTimer = setTimeout(() => { S.logOffset = 0; loadLogs(); }, 250);
+}
+
 function closeLogStatusSearch() {
+  clearTimeout(_logStatusTimer);
   document.getElementById('logStatusSearch').value = '';
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterStatus').style.display = '';
@@ -209,8 +219,8 @@ function jumpToErrorDump(requestLogId) {
 Object.assign(window, {
   loadLogs, renderLogs, toggleLogRow, changePage, jumpToErrorDump,
   resetLogFilters, updateFilterOptions, updateKeyFilterOptions,
-  onLogStatusFilterChange, closeLogStatusSearch,
+  onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch,
   deleteModel,
 });
 
-export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions, onLogStatusFilterChange, closeLogStatusSearch };
+export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions, onLogStatusFilterChange, onLogStatusSearchInput, closeLogStatusSearch };
