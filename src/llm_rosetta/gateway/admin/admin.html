@@ -289,7 +289,7 @@
           <option value="response">response</option>
           <option value="stream">stream</option>
         </select>
-        <span id="dumpStatusFilterWrap" style="display:inline-flex;width:120px">
+        <span id="dumpStatusFilterWrap" style="display:inline-flex;width:140px">
           <select id="dumpStatusFilter" onchange="onDumpStatusFilterChange()" style="width:100%">
             <option value="" data-i18n="filter.allStatus">All Status</option>
             <option value="4xx">4xx</option>
@@ -297,7 +297,7 @@
             <option value="custom" data-i18n="filter.custom">Custom...</option>
           </select>
           <span id="dumpStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
-            <input type="text" id="dumpStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="renderDumps()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
+            <input type="text" id="dumpStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onDumpStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
             <button class="btn btn-sm" onclick="closeDumpStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
           </span>
         </span>
@@ -407,12 +407,13 @@
         <span id="filterStatusWrap" style="display:inline-flex;width:140px">
           <select id="filterStatus" onchange="onLogStatusFilterChange()" style="width:100%">
             <option value="" data-i18n="filter.allStatus">All Status</option>
+            <option value="ok" data-i18n="filter.ok">OK (2xx/3xx)</option>
             <option value="4xx">4xx</option>
             <option value="5xx">5xx</option>
             <option value="custom" data-i18n="filter.custom">Custom...</option>
           </select>
           <span id="logStatusSearchWrap" style="display:none;align-items:center;gap:2px;width:100%">
-            <input type="text" id="logStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="loadLogs()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
+            <input type="text" id="logStatusSearch" data-i18n-placeholder="filter.statusPlaceholder" placeholder="e.g. 429" oninput="onLogStatusSearchInput()" style="flex:1;min-width:0" inputmode="numeric" pattern="[0-9]*" maxlength="3">
             <button class="btn btn-sm" onclick="closeLogStatusSearch()" style="padding:6px 8px;font-size:13px;line-height:1;flex-shrink:0">✕</button>
           </span>
         </span>
