@@ -464,3 +464,34 @@ def hoist_late_system_messages() -> IRTransform:
         return hoist_late_system_messages_ir(body, request_id=context.request_id)
 
     return _NamedIRTransform(_hoist, "hoist_late_system_messages()")
+
+
+def default_tool_description(default: str = "") -> Transform:
+    """Return a transform that fills missing/null tool ``description`` fields.
+
+    vLLM (< 0.28) rejects tool definitions with ``description: null``
+    via pydantic validation.  This transform ensures every tool's
+    ``function.description`` has a string value.
+
+    Idempotent — no-op when descriptions are already present or there
+    are no tools.
+
+    Example::
+
+        default_tool_description()       # fill with ""
+        default_tool_description("n/a")  # fill with "n/a"
+    """
+
+    def _default(body: dict[str, Any]) -> dict[str, Any]:
+        tools = body.get("tools")
+        if not tools or not isinstance(tools, list):
+            return body
+        for tool in tools:
+            if not isinstance(tool, dict):
+                continue
+            func = tool.get("function")
+            if isinstance(func, dict) and func.get("description") is None:
+                func["description"] = default
+        return body
+
+    return _NamedTransform(_default, f"default_tool_description({default!r})")

@@ -764,3 +764,90 @@ class TestFlattenSystemContent:
             repr(flatten_system_content(pattern=r"^gemini"))
             == "flatten_system_content(pattern='^gemini')"
         )
+
+
+class TestDefaultToolDescription:
+    """Tests for the default_tool_description transform."""
+
+    def test_fills_null_description(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {
+            "tools": [
+                {"type": "function", "function": {"name": "fn1", "description": None}},
+            ],
+            "messages": [],
+        }
+        result = default_tool_description()(body)
+        assert result["tools"][0]["function"]["description"] == ""
+
+    def test_fills_missing_description(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {
+            "tools": [
+                {"type": "function", "function": {"name": "fn1"}},
+            ],
+            "messages": [],
+        }
+        result = default_tool_description()(body)
+        assert result["tools"][0]["function"]["description"] == ""
+
+    def test_preserves_existing_description(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {"name": "fn1", "description": "Get weather"},
+                },
+            ],
+            "messages": [],
+        }
+        result = default_tool_description()(body)
+        assert result["tools"][0]["function"]["description"] == "Get weather"
+
+    def test_no_tools_is_noop(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {"messages": [{"role": "user", "content": "hi"}]}
+        result = default_tool_description()(body)
+        assert "tools" not in result
+
+    def test_custom_default(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {
+            "tools": [
+                {"type": "function", "function": {"name": "fn1", "description": None}},
+            ],
+        }
+        result = default_tool_description("n/a")(body)
+        assert result["tools"][0]["function"]["description"] == "n/a"
+
+    def test_multiple_tools(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        body = {
+            "tools": [
+                {"type": "function", "function": {"name": "fn1", "description": None}},
+                {
+                    "type": "function",
+                    "function": {"name": "fn2", "description": "exists"},
+                },
+                {"type": "function", "function": {"name": "fn3"}},
+            ],
+        }
+        result = default_tool_description()(body)
+        assert result["tools"][0]["function"]["description"] == ""
+        assert result["tools"][1]["function"]["description"] == "exists"
+        assert result["tools"][2]["function"]["description"] == ""
+
+    def test_repr(self):
+        from llm_rosetta.shims.transforms import default_tool_description
+
+        assert repr(default_tool_description()) == "default_tool_description('')"
+        assert (
+            repr(default_tool_description("n/a")) == "default_tool_description('n/a')"
+        )
