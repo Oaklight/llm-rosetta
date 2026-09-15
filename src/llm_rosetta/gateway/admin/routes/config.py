@@ -19,6 +19,7 @@ from ._shared import (
     _handle_provider_rename,
     _mask_api_key,
     _mask_proxy_url,
+    _resolve_models_path,
     _sanitize_server_section,
     _reload_gateway_config,
 )
@@ -959,12 +960,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     # Build the models listing URL.  Explicit ``models_path`` in the
     # provider config takes precedence (e.g. ``/v1/models`` for Jina).
     raw_cfg = getattr(config, "_raw_providers", {}).get(provider_name, {})
-    explicit_path = raw_cfg.get("models_path")
-    if not explicit_path:
-        _sn = config.provider_shim_names.get(provider_name)
-        shim = get_shim(_sn) if _sn else None
-        if shim:
-            explicit_path = shim.models_path
+    explicit_path = _resolve_models_path(raw_cfg, config, provider_name)
     if explicit_path:
         if explicit_path.startswith(("https://", "http://")):
             models_url = explicit_path

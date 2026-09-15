@@ -248,6 +248,22 @@ def _build_provider_entry(
     return entry
 
 
+def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | None:
+    """Return explicit models_path from provider config or shim, if any."""
+    path = provider_cfg.get("models_path")
+    if path:
+        return path
+    from llm_rosetta.shims import get_shim
+
+    shim_name = (
+        config.provider_shim_names.get(name)
+        if hasattr(config, "provider_shim_names")
+        else None
+    )
+    shim = get_shim(shim_name) if shim_name else None
+    return shim.models_path if shim else None
+
+
 def _handle_provider_rename(
     data: dict[str, Any], rename_from: str, name: str
 ) -> Response | None:
