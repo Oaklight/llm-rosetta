@@ -98,6 +98,53 @@ API 密钥支持 `${ENV_VAR}` 语法 — 启动时从环境变量读取：
 "my-openai": { "type": "openai_chat", "api_key": "${OPENAI_API_KEY}", "base_url": "https://api.openai.com/v1" }
 ```
 
+### 动态令牌刷新（`token_command`）
+
+对于使用短期令牌的提供方（如 ALCF 推理服务的 Globus OAuth），网关可以运行外部命令来获取并定期刷新 API 密钥：
+
+```jsonc
+"my-alcf": {
+  "provider": "alcf--sophia",
+  "token_command": ["python3", "/scripts/alcf-token.py"],
+  "token_refresh_interval": 3600
+}
+```
+
+| 字段 | 类型 | 默认值 | 描述 |
+|------|------|--------|------|
+| `token_command` | `list[str]` | — | 命令参数列表；stdout 作为 API 密钥 |
+| `token_refresh_interval` | `int` | `3600` | 定时刷新间隔秒数（最小 60） |
+
+设置 `token_command` 后：
+
+1. 命令在**启动时**运行以获取初始 API 密钥
+2. 后台任务每隔 `token_refresh_interval` 秒重新运行
+3. 收到上游 **401 响应**时，网关立即触发非周期性刷新（带防抖避免风暴）
+4. 命令的 stdout 作为新密钥 — 支持逗号分隔的多密钥轮转
+
+!!! note "`token_command` 和 `api_key` 互斥"
+    如果同时指定两者，网关拒绝启动。只能使用其中之一。
+
+#### Docker 中使用 ALCF 的示例
+
+ALCF 提供方使用由 `scripts/alcf-token.py` 管理的 Globus OAuth 令牌。在 Docker 中运行时，需要将令牌文件和脚本挂载到容器中：
+
+```yaml
+# docker-compose.yaml
+volumes:
+  - ./config:/config
+  - ~/.globus:/home/appuser/.globus              # Globus 令牌文件（需读写权限以刷新）
+  - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # 令牌刷新脚本
+```
+
+操作步骤：
+
+1. **在宿主机上登录**（仅需一次）：`python3 scripts/alcf-token.py --login`
+2. 使用上述 volume 挂载**启动容器**
+3. 通过管理面板或 `config.jsonc` **添加提供方**，设置 `token_command: ["python3", "/scripts/alcf-token.py"]`
+
+容器内的 `appuser`（uid 1000）需要对 `~/.globus` 目录有读写权限，以便就地更新刷新令牌。
+
 ### 逐提供方代理
 
 可为单个提供方指定代理：

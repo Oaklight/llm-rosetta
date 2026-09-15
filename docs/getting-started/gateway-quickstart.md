@@ -18,6 +18,8 @@ pip install "llm-rosetta[gateway]"
 docker pull oaklight/llm-rosetta-gateway:latest
 ```
 
+参见 [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) 获取开箱即用的 Compose 文件，包含 volume 挂载、环境变量和 ALCF 令牌直通配置。
+
 也可以从 [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) 下载独立二进制文件 — 无需 Python。
 
 ## 2. 创建配置文件
