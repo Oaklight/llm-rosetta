@@ -5,6 +5,7 @@ ARG REGISTRY_MIRROR
 FROM ${REGISTRY_MIRROR:-docker.io}/python:${PYTHON_VERSION}-alpine AS base
 
 ARG PYPI_MIRROR
+# Dev builds only (e.g. TestPyPI) — do not set for production images
 ARG EXTRA_INDEX_URL
 ARG LOCAL_WHEEL
 ARG PACKAGE_VERSION
@@ -20,6 +21,8 @@ RUN addgroup -g 1000 appgroup && \
 RUN mkdir -p /tmp/dist/
 COPY dist/ /tmp/dist/
 
+# NB: $MIRROR_IDX / $EXTRA_IDX are intentionally unquoted — empty vars must
+# word-split to nothing so pip sees no extra flags.
 RUN EXTRA_IDX=""; \
     if [ -n "$EXTRA_INDEX_URL" ]; then \
         EXTRA_IDX="--extra-index-url $EXTRA_INDEX_URL"; \

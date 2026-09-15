@@ -21,12 +21,14 @@ jobs:
           python-version: "3.12"
 
       - name: Verify version matches package
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           PKG_VER=$(python -c "import re; m=re.search(r'__version__\s*=\s*\"(.+?)\"', open('src/llm_rosetta/__init__.py').read()); print(m.group(1))")
           echo "Package version: $PKG_VER"
-          echo "Requested version: ${{ inputs.version }}"
-          [ "$PKG_VER" = "${{ inputs.version }}" ] || \
-            (echo "::error::Version mismatch: __init__.py has $PKG_VER but release requested ${{ inputs.version }}"; exit 1)
+          echo "Requested version: $INPUT_VERSION"
+          [ "$PKG_VER" = "$INPUT_VERSION" ] || \
+            (echo "::error::Version mismatch: __init__.py has $PKG_VER but release requested $INPUT_VERSION"; exit 1)
 
       - name: Build wheel + sdist
         run: |
@@ -55,11 +57,13 @@ jobs:
 
       - name: Extract version
         id: meta
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION="${{ inputs.version }}"
-          VERSION="${VERSION#v}"
+          VERSION="${INPUT_VERSION#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
+      # Satisfies COPY dist/ in Dockerfile when no local wheel is used
       - name: Ensure dist/ exists
         run: mkdir -p dist
 
