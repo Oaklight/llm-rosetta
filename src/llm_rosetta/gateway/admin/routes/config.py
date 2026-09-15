@@ -142,6 +142,7 @@ async def get_config(request: Any) -> Response:
     # Mask API keys and ensure each provider has a "type" field
     providers = raw.get("providers", {})
     masked_providers: dict[str, Any] = {}
+    gateway_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
     for name, cfg in providers.items():
         masked = dict(cfg)
         if "api_key" in masked:
@@ -152,9 +153,6 @@ async def get_config(request: Any) -> Response:
         if "type" not in masked:
             masked["type"] = name
         # Inject token_status from the live ProviderInfo if available
-        gateway_config: GatewayConfig | None = getattr(
-            request.app, "gateway_config", None
-        )
         if gateway_config is not None:
             pinfo = gateway_config.providers.get(name)
             if pinfo is not None and pinfo.token_status is not None:
