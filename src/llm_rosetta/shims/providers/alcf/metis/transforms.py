@@ -6,6 +6,7 @@ and ``parallel_tool_calls`` to avoid 400 errors.  Downgrade the
 ``developer`` role and fill ``content: null`` for safety.
 """
 
+from ..model_utils import make_alcf_model_list_transform
 from llm_rosetta.shims.transforms import (
     default_message_field,
     replace_message_field,
@@ -19,3 +20,5 @@ post_ir_transforms = (
 )
 pre_ir_transforms = ()
 ir_transforms = ()
+
+model_list_transform = make_alcf_model_list_transform("api")
