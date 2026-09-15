@@ -128,7 +128,8 @@ nav:
       - Providers:
           - Provider Compatibility: guide/compatibility.md
           - Provider Shims: guide/shims.md
-          - Provider Reference: guide/providers/index.md
+          - Provider Reference:
+              - guide/providers/index.md
               - OpenAI: guide/providers/openai.md
               - Anthropic: guide/providers/anthropic.md
               - Google: guide/providers/google.md
