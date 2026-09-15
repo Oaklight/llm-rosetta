@@ -19,7 +19,7 @@ title: 提供方参考
 | [Volcengine](volcengine.md) | `volcengine` | `openai_chat` | 字段转换 |
 | [OpenRouter](openrouter.md) | `openrouter` | `openai_chat` | 多模型路由 |
 | [MiniMax](minimax.md) | `minimax` | `openai_chat` | OpenAI 兼容 |
-| [Argo](argo.md) | `argo-*` | `openai_chat` | UIUC 研究代理 |
+| [Argo](argo.md) | `argo-*` | `openai_chat` | 阿贡内部网关 |
 | [ALCF](alcf.md) | `alcf--*` | `openai_chat` | Globus OAuth, token_command |
 
 关于 shim 的通用概念和自定义 shim 注册，请参阅[提供方 Shims](../shims.md)。
