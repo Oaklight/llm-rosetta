@@ -231,7 +231,7 @@ def _do_login(path: str) -> None:
 
 def _store_token_entry(entries: dict, token_response: dict) -> None:
     rs = token_response.get("resource_server", "auth.globus.org")
-    entries[rs] = {
+    entry: dict = {
         "resource_server": rs,
         "scope": token_response.get("scope", ""),
         "access_token": token_response["access_token"],
@@ -240,6 +240,9 @@ def _store_token_entry(entries: dict, token_response: dict) -> None:
         + token_response.get("expires_in", 172800),
         "token_type": token_response.get("token_type", "Bearer"),
     }
+    if "identity_id" in token_response:
+        entry["identity_id"] = token_response["identity_id"]
+    entries[rs] = entry
 
 
 # ---------------------------------------------------------------------------
@@ -293,7 +296,9 @@ def _ensure_fresh(path: str, *, force: bool = False) -> str | None:
         try:
             result = _refresh_token(entry)
         except (urllib.error.HTTPError, urllib.error.URLError) as e:
-            _log(f"{label}: refresh failed ({e}), using existing token")
+            _log(
+                f"{label}: refresh failed ({e}), using existing token ({int(remaining)}s remaining)"
+            )
             return entry.get("access_token")
         entry["access_token"] = result["access_token"]
         entry["refresh_token"] = result["refresh_token"]
