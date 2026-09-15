@@ -17,6 +17,16 @@ services:
       - "8765:8765" # Gateway API + admin panel
     volumes:
       - ./config:/config # Mount your config directory (contains config.jsonc)
+      # --- ALCF token passthrough (uncomment to enable) ---
+      # The gateway needs the Globus token file for ALCF providers, and the
+      # refresh script so token_command can auto-renew tokens inside the
+      # container.  Login on the host first:
+      #   python3 scripts/alcf-token.py --login
+      # Then add the ALCF provider via the admin panel with:
+      #   token_command: ["python3", "/scripts/alcf-token.py"]
+      #
+      # - ~/.globus:/home/appuser/.globus            # Globus token file (rw for refresh)
+      # - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # Token refresh script
     environment:
       - PUID=${PUID:-1000} # Match your host user's UID
       - PGID=${PGID:-1000} # Match your host user's GID

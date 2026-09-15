@@ -51,6 +51,28 @@ Minerva (NVIDIA B200)        API           /resource_server/minerva/api/v1
 ===========================  ============  ========================================
 
 All clusters share the same Globus Bearer token.
+
+Docker
+------
+When running the gateway in Docker, login on the **host** first, then
+mount the token file and this script into the container::
+
+    # 1. Login on the host (one-time):
+    python3 scripts/alcf-token.py --login
+
+    # 2. Add volume mounts to docker-compose.yaml:
+    #   - ~/.globus:/home/appuser/.globus            # token file (rw)
+    #   - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro
+
+    # 3. Add the ALCF provider via admin panel or config.jsonc:
+    #   "token_command": ["python3", "/scripts/alcf-token.py"]
+
+The container's ``appuser`` (uid 1000) needs read-write access to the
+mounted ``~/.globus`` directory so the refresh token can be updated
+in-place.  If your host uid differs, set ``PUID``/``PGID`` in the
+compose file or ``chown 1000:1000`` the ``.globus`` directory.
+
+See ``docker/docker-compose.yaml`` for the full example.
 """
 
 from __future__ import annotations
