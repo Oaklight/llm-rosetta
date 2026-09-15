@@ -46,13 +46,13 @@ class TestClassifyAuthError:
 
 class TestRewriteSessionPolicyError:
     def test_mentions_alcf_token_login(self):
-        msg = rewrite_session_policy_error("some error body")
+        msg = rewrite_session_policy_error()
         assert "alcf-token.py --login" in msg
 
     def test_mentions_globus_logout(self):
-        msg = rewrite_session_policy_error("some error body")
+        msg = rewrite_session_policy_error()
         assert "globus.org" in msg
 
     def test_mentions_30_day(self):
-        msg = rewrite_session_policy_error("some error body")
+        msg = rewrite_session_policy_error()
         assert "30-day" in msg

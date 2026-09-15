@@ -179,26 +179,27 @@ def _connection_error_response(
 
 async def _handle_401(
     provider_info: ProviderInfo,
+    status_code: int,
     error_text: str,
     source_provider: ProviderType,
 ) -> tuple[bool, Response | None]:
-    """Classify a 401 and decide whether to retry or return an error.
+    """Classify an upstream error and decide whether to retry.
 
     Returns ``(should_retry, error_response)``:
     - ``(True, None)`` — token refreshed successfully, caller should retry.
     - ``(False, Response)`` — session-policy error, return this to client.
-    - ``(False, None)`` — refresh failed or not applicable, pass through.
+    - ``(False, None)`` — not a 401, no token_command, or refresh failed.
     """
-    if not provider_info.token_command:
+    if status_code != 401 or not provider_info.token_command:
         return False, None
-    kind = classify_auth_error(401, error_text)
+    kind = classify_auth_error(status_code, error_text)
     if kind == AuthErrorKind.SESSION_POLICY_401:
         logger.warning(
             "ALCF session policy 401 for '%s' — user must re-login",
             provider_info.name,
         )
         return False, error_response_for_source(
-            source_provider, 401, rewrite_session_policy_error(error_text)
+            source_provider, 401, rewrite_session_policy_error()
         )
     if await force_refresh(provider_info):
         logger.info(
@@ -586,23 +587,18 @@ async def handle_non_streaming(
         if not resp.is_error:
             break
 
-        # 401 reactive retry: classify and possibly retry once
-        retry, err = (
-            await _handle_401(
-                provider_info,
-                resp.error_text,
-                route.source_provider,
-            )
-            if resp.status_code == 401 and _attempt == 0
-            else (False, None)
+        # Reactive 401 retry — _handle_401 is a no-op for non-401 errors
+        # and for providers without token_command.
+        retry, err = await _handle_401(
+            provider_info,
+            resp.status_code,
+            resp.error_text,
+            route.source_provider,
         )
         if err is not None:
             return err, profile
-        if retry:
-            continue
-
-        # Non-retryable error — fall through to logging/passthrough
-        break
+        if not retry:
+            break
 
     assert resp is not None
     if resp.is_error:
@@ -1134,27 +1130,24 @@ async def handle_streaming(
         stream_error_code = stream.status_code
         await stream.close()
 
-        # 401 reactive retry: classify and possibly retry once
-        retry, err = (
-            await _handle_401(
-                provider_info,
-                stream_error_text,
-                route.source_provider,
-            )
-            if stream_error_code == 401 and _attempt == 0
-            else (False, None)
+        retry, err = await _handle_401(
+            provider_info,
+            stream_error_code,
+            stream_error_text,
+            route.source_provider,
         )
         if err is not None:
             return err, profile
-        if retry:
-            continue
-
-        # Non-retryable error — fall through to logging/passthrough
-        break
+        if not retry:
+            break
 
     # Application-level error — upstream returned a valid HTTP response with
     # a 4xx/5xx status.  Pass the original body through as-is so the client
     # SDK can parse the real error (e.g. "context_length_exceeded").
+    # Note: streaming errors only provide the error as a decoded string
+    # (via stream.read_error()), not separate raw bytes + parsed dict like
+    # the non-streaming path.  We pass the string for both raw_content and
+    # error_text; sanitize_upstream_error() accepts str | bytes.
     if stream_error_text is not None:
         return (
             _upstream_error_passthrough(
