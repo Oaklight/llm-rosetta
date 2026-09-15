@@ -1,0 +1,102 @@
+name: Test Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to test-release (e.g. 0.14.0.dev1)"
+        required: true
+        type: string
+
+jobs:
+  build-publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify version matches package
+        run: |
+          PKG_VER=$(python -c "import re; m=re.search(r'__version__\s*=\s*\"(.+?)\"', open('src/llm_rosetta/__init__.py').read()); print(m.group(1))")
+          echo "Package version: $PKG_VER"
+          echo "Requested version: ${{ inputs.version }}"
+          [ "$PKG_VER" = "${{ inputs.version }}" ] || \
+            (echo "::error::Version mismatch: __init__.py has $PKG_VER but release requested ${{ inputs.version }}"; exit 1)
+
+      - name: Build wheel + sdist
+        run: |
+          pip install --upgrade pip build
+          python -m build
+
+      - name: Publish to Test PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+          retention-days: 7
+
+  docker:
+    needs: build-publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Extract version
+        id: meta
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure dist/ exists
+        run: mkdir -p dist
+
+      - name: Wait for Test PyPI availability
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          echo "Waiting for llm-rosetta==$VERSION on Test PyPI..."
+          for i in $(seq 1 30); do
+            CODE=$(curl -fsS -o /dev/null -w "%{http_code}" \
+              "https://test.pypi.org/pypi/llm-rosetta/$VERSION/json" || true)
+            if [ "$CODE" = "200" ]; then
+              echo "Found on Test PyPI (attempt $i)"
+              exit 0
+            fi
+            echo "  Attempt $i/30: waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Not found on Test PyPI after 10 minutes"
+          exit 1
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push dev image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+            EXTRA_INDEX_URL=https://test.pypi.org/simple/
+          tags: |
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-dev
+            oaklight/llm-rosetta-gateway:dev
+          cache-from: type=gha,scope=dev-python
+          cache-to: type=gha,mode=max,scope=dev-python
