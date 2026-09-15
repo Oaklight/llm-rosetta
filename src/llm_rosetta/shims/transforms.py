@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import re
 import json
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -507,7 +508,6 @@ _HARMONY_RE = re.compile(
 
 def _parse_harmony_token(text: str) -> tuple[str, list[dict] | None]:
     """Extract a tool call from a raw harmony text token, if present."""
-    import uuid
 
     m = _HARMONY_RE.search(text or "")
     if not m:
