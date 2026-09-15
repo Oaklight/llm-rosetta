@@ -1,13 +1,12 @@
 """API key affinity — deterministic key selection for prompt cache locality.
 
-Instead of round-robin, selects an upstream key based on
-``hash(client_token + message_prefix) % num_keys`` so the same
-conversation from the same client always hits the same upstream key.
+Instead of round-robin, builds a stable identity string from
+``client_token + message_prefix`` so the same conversation from the
+same client always hits the same upstream key via rendezvous hashing.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 from typing import Any
 
@@ -41,21 +40,20 @@ def extract_prefix_from_ir(
     return "\n".join(parts) if parts else ""
 
 
-def compute_affinity_index(
+def compute_affinity_identity(
     client_key_hash: str,
     message_prefix: str,
-    num_keys: int,
-) -> int | None:
-    """Compute a deterministic key index from client identity + message prefix.
+) -> str | None:
+    """Build a stable identity string from client hash and message prefix.
 
-    Returns ``None`` when affinity cannot be determined (missing inputs
-    or single key), signalling the caller to fall back to round-robin.
+    Returns ``None`` when affinity cannot be determined (missing
+    inputs), signalling the caller to fall back to round-robin.
+    The identity is passed to :meth:`KeyRing.select` which uses
+    rendezvous hashing to pick the highest-scoring key.
     """
-    if num_keys <= 1 or not client_key_hash or not message_prefix:
+    if not client_key_hash or not message_prefix:
         return None
-    combined = f"{client_key_hash}\n{message_prefix}"
-    h = hashlib.sha256(combined.encode()).digest()
-    return int.from_bytes(h[:4], "big") % num_keys
+    return f"{client_key_hash}\n{message_prefix}"
 
 
 def _stable_str(value: Any) -> str:

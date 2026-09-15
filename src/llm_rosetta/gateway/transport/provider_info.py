@@ -14,6 +14,7 @@ Higher-level factory logic (shim resolution, config parsing) stays in
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable
 
@@ -67,16 +68,29 @@ class KeyRing:
         self._idx = (self._idx + 1) % len(self._keys)
         return key
 
-    def select(self, index: int) -> str:
-        """Return the key at *index* (mod key count).
+    def select(self, identity: str) -> str:
+        """Return the key with the highest rendezvous hash score.
+
+        Uses rendezvous hashing (highest random weight) so that
+        adding or removing a key only disrupts ~1/n of existing
+        mappings, preserving prompt-cache locality across key
+        refreshes.
 
         Unlike :meth:`next`, this does not advance the round-robin
-        counter — it is a pure lookup used by affinity-based key
-        selection.
+        counter.
         """
         if not self._keys:
             raise ValueError("No API keys configured")
-        return self._keys[index % len(self._keys)]
+        if len(self._keys) == 1:
+            return self._keys[0]
+        best_key = self._keys[0]
+        best_score = hashlib.sha256(f"{identity}\0{self._keys[0]}".encode()).digest()
+        for key in self._keys[1:]:
+            score = hashlib.sha256(f"{identity}\0{key}".encode()).digest()
+            if score > best_score:
+                best_score = score
+                best_key = key
+        return best_key
 
     def __len__(self) -> int:
         return len(self._keys)
@@ -151,7 +165,7 @@ class ProviderInfo:
         self._stream_url_template = stream_url_template
         self.proxy_url = proxy_url
         self.timeout = timeout
-        self._affinity_key_index: int | None = None
+        self._affinity_identity: str | None = None
         self.token_command = token_command
         self.token_refresh_interval = token_refresh_interval
         self.token_status: dict | None = None
@@ -160,8 +174,8 @@ class ProviderInfo:
 
     def auth_headers(self) -> dict[str, str]:
         """Return auth headers using the next rotated or affinity-selected key."""
-        if self._affinity_key_index is not None:
-            return self._auth_header_fn(self.key_ring.select(self._affinity_key_index))
+        if self._affinity_identity is not None:
+            return self._auth_header_fn(self.key_ring.select(self._affinity_identity))
         return self._auth_header_fn(self.key_ring.next())
 
     def upstream_url(self, model: str, *, stream: bool = False) -> str:
@@ -207,20 +221,21 @@ class ProviderInfo:
         clone.timeout = timeout
         return clone
 
-    def with_affinity(self, key_index: int | None) -> ProviderInfo:
+    def with_affinity(self, identity: str | None) -> ProviderInfo:
         """Return a shallow copy with affinity-based key selection.
 
-        When *key_index* is set, :meth:`auth_headers` uses
-        :meth:`KeyRing.select` instead of round-robin :meth:`KeyRing.next`.
+        When *identity* is set, :meth:`auth_headers` uses
+        :meth:`KeyRing.select` (rendezvous hashing) instead of
+        round-robin :meth:`KeyRing.next`.
         The new instance shares the same :class:`KeyRing`.
-        Returns ``self`` unchanged if *key_index* is ``None``.
+        Returns ``self`` unchanged if *identity* is ``None`` or empty.
         """
-        if key_index is None:
+        if not identity:
             return self
         import copy
 
         clone = copy.copy(self)
-        clone._affinity_key_index = key_index
+        clone._affinity_identity = identity
         return clone
 
 

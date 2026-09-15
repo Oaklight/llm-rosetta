@@ -38,7 +38,7 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
-from .affinity import compute_affinity_index, extract_prefix_from_ir
+from .affinity import compute_affinity_identity, extract_prefix_from_ir
 from .sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
@@ -313,11 +313,9 @@ def _maybe_apply_affinity(
     """Apply key affinity if conditions are met, otherwise return unchanged."""
     if key_affinity and client_key_hash and len(provider_info.key_ring) > 1:
         prefix = extract_prefix_from_ir(ir_request)
-        idx = compute_affinity_index(
-            client_key_hash, prefix, len(provider_info.key_ring)
-        )
-        if idx is not None:
-            return provider_info.with_affinity(idx)
+        identity = compute_affinity_identity(client_key_hash, prefix)
+        if identity is not None:
+            return provider_info.with_affinity(identity)
     return provider_info
 
 
