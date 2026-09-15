@@ -12,6 +12,7 @@ or the planned gateway response-transform pipeline for a fix.
 
 from ..model_utils import make_alcf_model_list_transform
 from llm_rosetta.shims.transforms import (
+    default_tool_description,
     default_message_field,
     replace_message_field,
     strip_fields,
@@ -21,6 +22,7 @@ post_ir_transforms = (
     strip_fields("logprobs", "top_logprobs"),
     replace_message_field("role", "developer", "system"),
     default_message_field("content", ""),
+    default_tool_description(),
 )
 pre_ir_transforms = ()
 ir_transforms = ()
