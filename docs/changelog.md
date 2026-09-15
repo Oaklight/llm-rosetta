@@ -28,6 +28,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **修复 error dump 单条删除端点缺失** (PR [#656](https://github.com/Oaklight/llm-rosetta/pull/656))：批量删除单条 error dump 条目时静默失败；新增后端路由和持久化方法。
 - **暗色模式与徽章改进**：暗色模式下反转 Provider logo，embedding 和 LLM 徽章使用不同颜色区分，工具徽章样式优化。
 
+### 网关 — ALCF Token 管理
+
+- **401 响应式 Token 刷新与重试** (PR [#680](https://github.com/Oaklight/llm-rosetta/pull/680))：当上游 Provider 返回 401 时，网关现在会立即通过 `token_command` 刷新 Token 并重试请求一次，而不是等待长达 1 小时的下次定期刷新周期。通过 per-provider 异步锁和 5 秒去抖防止并发 401 导致的刷新风暴。
+- **ALCF 30 天 Globus session policy 检测** (PR [#680](https://github.com/Oaklight/llm-rosetta/pull/680))：检测 ALCF 30 天强制重新认证的 401 响应（body 包含 "internal policies" / "high-assurance"），返回明确的错误提示引导用户重新认证，而非使用相同 Token 进行无意义的重试。
+- **加固 ALCF Token 刷新处理** (PR [#681](https://github.com/Oaklight/llm-rosetta/pull/681))：当 OAuth 服务器在刷新响应中省略 refresh_token 时保留现有 refresh_token（遵循 RFC 6749 §6），防御空值/null refresh_token，提取 `_show_status_dir` 辅助函数并增加目录验证。由 [@rajeeja](https://github.com/rajeeja) 贡献。
+
 ### Shims — Bug 修复与测试
 
 - **修复 `max_tool_description_length` 未从 provider YAML 加载** (PR [#667](https://github.com/Oaklight/llm-rosetta/pull/667))：YAML loader 静默丢弃了声明的阈值，导致 shim 级别默认值的 tool description relocation 从未生效。由 [@caidao22](https://github.com/caidao22) 贡献。
