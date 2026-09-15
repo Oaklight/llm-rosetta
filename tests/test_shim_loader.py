@@ -91,7 +91,7 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 21 built-in shims."""
+        """Verify the real providers/ directory loads all 20 built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
         assert names == {
