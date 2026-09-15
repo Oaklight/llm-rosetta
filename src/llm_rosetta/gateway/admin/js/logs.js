@@ -136,21 +136,20 @@ function onLogStatusSearchInput() {
   _logStatusTimer = setTimeout(() => { S.logOffset = 0; loadLogs(); }, 250);
 }
 
-function closeLogStatusSearch() {
+function closeLogStatusSearch(silent) {
   clearTimeout(_logStatusTimer);
   document.getElementById('logStatusSearch').value = '';
   document.getElementById('filterStatus').value = '';
   document.getElementById('filterStatus').style.display = '';
   document.getElementById('logStatusSearchWrap').style.display = 'none';
-  S.logOffset = 0;
-  loadLogs();
+  if (!silent) { S.logOffset = 0; loadLogs(); }
 }
 
 function resetLogFilters() {
   document.getElementById('filterModel').value = '';
   document.getElementById('filterProvider').value = '';
   document.getElementById('filterApiKey').value = '';
-  closeLogStatusSearch();
+  closeLogStatusSearch(true);
   S.logOffset = 0;
   S.expandedLogRows.clear();
   loadLogs();

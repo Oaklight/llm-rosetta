@@ -506,12 +506,12 @@ function onDumpModelFilterChange() {
   renderDumps();
 }
 
-function closeDumpModelSearch() {
+function closeDumpModelSearch(silent) {
   document.getElementById('dumpModelSearch').value = '';
   document.getElementById('dumpModelFilter').value = '';
   document.getElementById('dumpModelFilter').style.display = '';
   document.getElementById('dumpModelSearchWrap').style.display = 'none';
-  renderDumps();
+  if (!silent) renderDumps();
 }
 
 function onDumpStatusFilterChange() {
@@ -530,12 +530,12 @@ function onDumpStatusSearchInput() {
   renderDumps();
 }
 
-function closeDumpStatusSearch() {
+function closeDumpStatusSearch(silent) {
   document.getElementById('dumpStatusSearch').value = '';
   document.getElementById('dumpStatusFilter').value = '';
   document.getElementById('dumpStatusFilter').style.display = '';
   document.getElementById('dumpStatusSearchWrap').style.display = 'none';
-  renderDumps();
+  if (!silent) renderDumps();
 }
 
 function onDumpTimeRangeChange() {
@@ -547,21 +547,22 @@ function onDumpTimeRangeChange() {
   renderDumps();
 }
 
-function closeDumpTimeCustom() {
+function closeDumpTimeCustom(silent) {
   document.getElementById('dumpDateFrom').value = '';
   document.getElementById('dumpDateTo').value = '';
   document.getElementById('dumpTimeRange').value = '';
   document.getElementById('dumpTimeRange').style.display = '';
   document.getElementById('dumpCustomDateRange').style.display = 'none';
-  renderDumps();
+  if (!silent) renderDumps();
 }
 
 function resetDumpFilters() {
   document.getElementById('dumpPhaseFilter').value = '';
   document.getElementById('dumpProviderFilter').value = '';
-  closeDumpStatusSearch();
-  closeDumpModelSearch();
-  closeDumpTimeCustom();
+  closeDumpStatusSearch(true);
+  closeDumpModelSearch(true);
+  closeDumpTimeCustom(true);
+  renderDumps();
 }
 
 // ===================== Charts / Canvas =====================
