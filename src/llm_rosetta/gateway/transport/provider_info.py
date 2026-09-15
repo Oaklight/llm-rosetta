@@ -87,7 +87,7 @@ class KeyRing:
         best_score = hashlib.sha256(f"{identity}\0{self._keys[0]}".encode()).digest()
         for key in self._keys[1:]:
             score = hashlib.sha256(f"{identity}\0{key}".encode()).digest()
-            if score > best_score:
+            if score > best_score:  # bytes comparison is lexicographic
                 best_score = score
                 best_key = key
         return best_key
