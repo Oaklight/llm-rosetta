@@ -12,6 +12,7 @@ or the planned gateway response-transform pipeline for a fix.
 
 from ..model_utils import make_alcf_model_list_transform
 from llm_rosetta.shims.transforms import (
+    rewrite_harmony_tool_calls,
     default_tool_description,
     default_message_field,
     replace_message_field,
@@ -28,3 +29,5 @@ pre_ir_transforms = ()
 ir_transforms = ()
 
 model_list_transform = make_alcf_model_list_transform("api")
+
+response_body_transforms = (rewrite_harmony_tool_calls(),)

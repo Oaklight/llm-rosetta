@@ -300,9 +300,13 @@ class ConversionPipeline:
         if resolved_target is not None:
             self._target_pre_ir_transforms = resolved_target.pre_ir_transforms
             self._target_post_ir_transforms = resolved_target.post_ir_transforms
+            self._target_response_body_transforms = (
+                resolved_target.response_body_transforms
+            )
         else:
             self._target_pre_ir_transforms = _EMPTY_TRANSFORMS
             self._target_post_ir_transforms = _EMPTY_TRANSFORMS
+            self._target_response_body_transforms = _EMPTY_TRANSFORMS
 
         # Resolve response_id_prefix for each converter from its shim.
         resolved_target_for_prefix = resolved_target or resolve_shim(target_provider)
@@ -612,6 +616,10 @@ class ConversionPipeline:
         if self._passthrough:
             t0 = time.perf_counter()
             result = upstream_response
+            if self._target_response_body_transforms:
+                result = apply_transforms(
+                    self._target_response_body_transforms, dict(result)
+                )
             if self._target_pre_ir_transforms:
                 result = apply_transforms(self._target_pre_ir_transforms, dict(result))
             if self._source_post_ir_transforms:
@@ -628,8 +636,12 @@ class ConversionPipeline:
 
         t_total = time.perf_counter()
 
-        # Phase 4a: Body-level target shim pre_ir_transforms
+        # Phase 4a: Response body transforms (e.g. harmony tool-call rewrite)
         response = upstream_response
+        if self._target_response_body_transforms:
+            response = apply_transforms(self._target_response_body_transforms, response)
+
+        # Phase 4b: Body-level target shim pre_ir_transforms
         if self._target_pre_ir_transforms:
             response = apply_transforms(self._target_pre_ir_transforms, response)
 
@@ -714,6 +726,7 @@ class ConversionPipeline:
         # Same-format short-circuit: return a passthrough processor
         if self._passthrough:
             return PassthroughStreamProcessor(
+                response_body_transforms=self._target_response_body_transforms,
                 pre_ir_transforms=self._target_pre_ir_transforms,
                 post_ir_transforms=self._source_post_ir_transforms,
             )
@@ -741,6 +754,7 @@ class ConversionPipeline:
             source_converter=self._source_converter,
             from_ctx=from_ctx,
             to_ctx=to_ctx,
+            response_body_transforms=self._target_response_body_transforms,
             pre_ir_transforms=self._target_pre_ir_transforms,
             post_ir_transforms=self._source_post_ir_transforms,
             custom_tool_names=custom_names,
@@ -764,9 +778,11 @@ class PassthroughStreamProcessor:
     def __init__(
         self,
         *,
+        response_body_transforms: tuple[Transform, ...] = (),
         pre_ir_transforms: tuple[Transform, ...] = (),
         post_ir_transforms: tuple[Transform, ...] = (),
     ) -> None:
+        self._response_body_transforms = response_body_transforms
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
         self._ctx = self._PassthroughCtx()
@@ -889,6 +905,7 @@ class StreamProcessor:
         source_converter: Any,
         from_ctx: Any,
         to_ctx: Any,
+        response_body_transforms: tuple[Transform, ...] = (),
         pre_ir_transforms: tuple[Transform, ...] = (),
         post_ir_transforms: tuple[Transform, ...] = (),
         custom_tool_names: frozenset[str] = frozenset(),
@@ -898,6 +915,7 @@ class StreamProcessor:
         self._source_converter = source_converter
         self._from_ctx = from_ctx
         self._to_ctx = to_ctx
+        self._response_body_transforms = response_body_transforms
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
         self._custom_tool_names = custom_tool_names
@@ -933,6 +951,9 @@ class StreamProcessor:
             List of source-format event dicts.  May be empty (some
             upstream chunks produce no source events), one, or multiple.
         """
+        # Apply response body transforms (e.g. harmony tool-call rewrite)
+        if self._response_body_transforms:
+            chunk = apply_transforms(self._response_body_transforms, chunk)
         # Apply shim pre_ir_transforms
         if self._pre_ir_transforms:
             chunk = apply_transforms(self._pre_ir_transforms, chunk)
