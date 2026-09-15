@@ -19,7 +19,7 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Volcengine](volcengine.md) | `volcengine` | `openai_chat` | Field transforms |
 | [OpenRouter](openrouter.md) | `openrouter` | `openai_chat` | Multi-model router |
 | [MiniMax](minimax.md) | `minimax` | `openai_chat` | OpenAI-compatible |
-| [Argo](argo.md) | `argo-*` | `openai_chat` | UIUC research proxy |
+| [Argo](argo.md) | `argo-*` | `openai_chat` | Argonne internal gateway |
 | [ALCF](alcf.md) | `alcf--*` | `openai_chat` | Globus OAuth, token_command |
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).
