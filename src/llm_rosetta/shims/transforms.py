@@ -19,6 +19,7 @@ Design principles:
 from __future__ import annotations
 
 import re
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -495,3 +496,81 @@ def default_tool_description(default: str = "") -> Transform:
         return body
 
     return _NamedTransform(_default, f"default_tool_description({default!r})")
+
+
+_HARMONY_RE = re.compile(
+    r"<\|content_invoke_tool_json\|>\s*(\{.*?\})\s*"
+    r"(?:<\|end_message\|>|<\|call\|>|$)",
+    re.DOTALL,
+)
+
+
+def _parse_harmony_token(text: str) -> tuple[str, list[dict] | None]:
+    """Extract a tool call from a raw harmony text token, if present."""
+    import uuid
+
+    m = _HARMONY_RE.search(text or "")
+    if not m:
+        return text, None
+    try:
+        obj = json.loads(m.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return text, None
+    name = obj.get("name")
+    raw_args = obj.get("args", obj.get("arguments", {}))
+    if not name:
+        return text, None
+    if not isinstance(raw_args, str):
+        raw_args = json.dumps(raw_args)
+    tc = [
+        {
+            "id": "call_" + uuid.uuid4().hex[:20],
+            "type": "function",
+            "function": {"name": name, "arguments": raw_args},
+        }
+    ]
+    clean = _HARMONY_RE.sub("", text).strip()
+    return clean, tc
+
+
+def rewrite_harmony_tool_calls() -> Transform:
+    """Return a transform that rewrites raw harmony tool-call tokens into
+    proper ``tool_calls`` fields.
+
+    Some vLLM-served models (e.g. inkling-bf16) intermittently emit tool
+    calls as a raw text token in ``message.content`` (or ``delta.content``
+    for streaming) instead of a structured ``tool_calls`` field::
+
+        <|content_invoke_tool_json|>{"name":"fn","args":{...}}<|end_message|>
+
+    This transform detects that pattern and rewrites it into the standard
+    OpenAI ``tool_calls`` structure.  Handles both non-streaming
+    (``message``) and streaming (``delta``) response shapes.
+
+    No-op when ``tool_calls`` is already present or no harmony token is
+    found.
+    """
+
+    def _rewrite(body: dict[str, Any]) -> dict[str, Any]:
+        choices = body.get("choices")
+        if not choices or not isinstance(choices, list):
+            return body
+        for choice in choices:
+            if not isinstance(choice, dict):
+                continue
+            msg = choice.get("message") or choice.get("delta")
+            if not isinstance(msg, dict):
+                continue
+            if msg.get("tool_calls"):
+                continue
+            content = msg.get("content")
+            if not content or not isinstance(content, str):
+                continue
+            clean, tc = _parse_harmony_token(content)
+            if tc:
+                msg["content"] = clean or None
+                msg["tool_calls"] = tc
+                choice["finish_reason"] = "tool_calls"
+        return body
+
+    return _NamedTransform(_rewrite, "rewrite_harmony_tool_calls()")

@@ -166,6 +166,7 @@ class ProviderShim:
     pre_ir_transforms: tuple[Transform, ...] = ()
     post_ir_transforms: tuple[Transform, ...] = ()
     ir_transforms: tuple[IRTransform, ...] = ()
+    response_body_transforms: tuple[Transform, ...] = ()
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
@@ -217,6 +218,7 @@ class ProviderShim:
             "pre_ir_transforms": (),
             "post_ir_transforms": (),
             "ir_transforms": (),
+            "response_body_transforms": (),
             "reasoning": None,
             "model_reasoning": None,
             "response_id_prefix": "",

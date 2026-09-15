@@ -154,8 +154,8 @@ def _parse_reasoning_cap(
 
 def _load_transforms(
     provider_dir: Path, *, group: str | None = None, _builtin: bool = True
-) -> tuple[tuple, tuple, tuple, Any]:
-    """Import transforms.py if present, return (pre, post, ir, module).
+) -> tuple[tuple, tuple, tuple, tuple, Any]:
+    """Import transforms.py if present, return (pre, post, ir, response_body, module).
 
     Accepts both new names (``pre_ir_transforms``, ``post_ir_transforms``)
     and legacy names (``from_transforms``, ``to_transforms``) from the
@@ -174,7 +174,7 @@ def _load_transforms(
     """
     tf_path = provider_dir / "transforms.py"
     if not tf_path.exists():
-        return (), (), (), None
+        return (), (), (), (), None
     prefix = "llm_rosetta.shims.providers" if _builtin else "_llm_rosetta_plugin_shims"
     if group is not None:
         module_name = f"{prefix}.{group}.{provider_dir.name}.transforms"
@@ -183,7 +183,7 @@ def _load_transforms(
     spec = importlib.util.spec_from_file_location(module_name, tf_path)
     if spec is None or spec.loader is None:
         logger.warning("Could not load %s", tf_path)
-        return (), (), (), None
+        return (), (), (), (), None
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     # New names take precedence; fall back to legacy names.
@@ -208,6 +208,7 @@ def _load_transforms(
         pre,
         post,
         getattr(mod, "ir_transforms", ()),
+        getattr(mod, "response_body_transforms", ()),
         mod,
     )
 
@@ -232,7 +233,7 @@ def _load_single_provider(
         logger.warning("Skipping %s: missing 'name' or 'base'", yaml_path)
         return None
 
-    pre_t, post_t, ir_t, transforms_mod = _load_transforms(
+    pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin
     )
 
@@ -266,6 +267,7 @@ def _load_single_provider(
         pre_ir_transforms=pre_t,
         post_ir_transforms=post_t,
         ir_transforms=ir_t,
+        response_body_transforms=resp_t,
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
         response_id_prefix=cfg.get("response_id_prefix", ""),

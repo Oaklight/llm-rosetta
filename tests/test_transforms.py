@@ -851,3 +851,156 @@ class TestDefaultToolDescription:
         assert (
             repr(default_tool_description("n/a")) == "default_tool_description('n/a')"
         )
+
+
+class TestRewriteHarmonyToolCalls:
+    """Tests for the rewrite_harmony_tool_calls response transform."""
+
+    def test_rewrites_nonstreaming_content(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": '<|content_invoke_tool_json|>{"name":"get_weather","args":{"city":"Chicago"}}<|end_message|>',
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        msg = result["choices"][0]["message"]
+        assert msg["content"] is None
+        assert len(msg["tool_calls"]) == 1
+        assert msg["tool_calls"][0]["function"]["name"] == "get_weather"
+        assert '"city"' in msg["tool_calls"][0]["function"]["arguments"]
+        assert msg["tool_calls"][0]["type"] == "function"
+        assert msg["tool_calls"][0]["id"].startswith("call_")
+        assert result["choices"][0]["finish_reason"] == "tool_calls"
+
+    def test_rewrites_streaming_delta(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        chunk = {
+            "choices": [
+                {
+                    "delta": {
+                        "content": '<|content_invoke_tool_json|>{"name":"write","args":{"path":"/tmp/f"}}<|end_message|>',
+                    },
+                    "finish_reason": None,
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(chunk)
+        delta = result["choices"][0]["delta"]
+        assert delta["content"] is None
+        assert len(delta["tool_calls"]) == 1
+        assert delta["tool_calls"][0]["function"]["name"] == "write"
+        assert result["choices"][0]["finish_reason"] == "tool_calls"
+
+    def test_noop_when_tool_calls_present(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call_existing",
+                                "type": "function",
+                                "function": {"name": "fn", "arguments": "{}"},
+                            }
+                        ],
+                    },
+                    "finish_reason": "tool_calls",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        assert result["choices"][0]["message"]["tool_calls"][0]["id"] == "call_existing"
+
+    def test_noop_without_harmony_token(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "Hello, how can I help?",
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        assert result["choices"][0]["message"]["content"] == "Hello, how can I help?"
+        assert "tool_calls" not in result["choices"][0]["message"]
+
+    def test_noop_empty_body(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        assert rewrite_harmony_tool_calls()({}) == {}
+        assert rewrite_harmony_tool_calls()({"choices": []}) == {"choices": []}
+
+    def test_malformed_json_in_harmony_token(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": "<|content_invoke_tool_json|>{bad json}<|end_message|>",
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        assert "tool_calls" not in result["choices"][0]["message"]
+
+    def test_call_delimiter_variant(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": '<|content_invoke_tool_json|>{"name":"fn","args":{}}<|call|>',
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        assert len(result["choices"][0]["message"]["tool_calls"]) == 1
+
+    def test_arguments_key_variant(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        body = {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": '<|content_invoke_tool_json|>{"name":"fn","arguments":{"x":1}}<|end_message|>',
+                    },
+                    "finish_reason": "stop",
+                }
+            ]
+        }
+        result = rewrite_harmony_tool_calls()(body)
+        tc = result["choices"][0]["message"]["tool_calls"][0]
+        assert '"x"' in tc["function"]["arguments"]
+
+    def test_repr(self):
+        from llm_rosetta.shims.transforms import rewrite_harmony_tool_calls
+
+        assert repr(rewrite_harmony_tool_calls()) == "rewrite_harmony_tool_calls()"

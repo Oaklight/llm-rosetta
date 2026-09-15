@@ -29,6 +29,7 @@ from .transforms import (
     apply_transforms,
     default_message_field,
     default_tool_description,
+    rewrite_harmony_tool_calls,
     rename_field,
     replace_message_field,
     set_defaults,
@@ -60,6 +61,7 @@ __all__ = [
     "replace_message_field",
     "default_message_field",
     "default_tool_description",
+    "rewrite_harmony_tool_calls",
     "strip_fields_for_model",
     # IR transforms
     "IRTransform",
