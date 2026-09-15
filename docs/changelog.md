@@ -28,6 +28,12 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Fix missing DELETE endpoint for error dumps** (PR [#656](https://github.com/Oaklight/llm-rosetta/pull/656)): bulk delete of individual error dump entries was silently failing; added backend route and persistence method.
 - **Dark mode and badge improvements**: invert provider logos in dark mode, use distinct colors for embedding vs LLM badges, distinguish tools badge styling.
 
+### Gateway — ALCF token management
+
+- **Reactive 401 token refresh with retry** (PR [#680](https://github.com/Oaklight/llm-rosetta/pull/680)): when an upstream provider returns 401, the gateway now reactively refreshes the token via `token_command` and retries the request once, instead of waiting up to 1 hour for the next scheduled refresh cycle. Per-provider async locking and a 5-second debounce prevent thundering-herd refreshes from concurrent 401 bursts.
+- **ALCF 30-day Globus session-policy detection** (PR [#680](https://github.com/Oaklight/llm-rosetta/pull/680)): detects ALCF's 30-day forced re-authentication 401 (body containing "internal policies" / "high-assurance") and returns a clear error message directing the user to re-authenticate, instead of pointlessly retrying with the same token.
+- **Harden ALCF token refresh handling** (PR [#681](https://github.com/Oaklight/llm-rosetta/pull/681)): preserve the existing refresh token when the OAuth server omits it from the refresh response (per RFC 6749 §6), guard against empty/null refresh token values, and extract `_show_status_dir` helper with proper directory validation. Contributed by [@rajeeja](https://github.com/rajeeja).
+
 ### Shims — Bug fixes & testing
 
 - **Fix `max_tool_description_length` not loaded from provider YAML** (PR [#667](https://github.com/Oaklight/llm-rosetta/pull/667)): the YAML loader silently dropped the declared threshold, causing tool description relocation to never fire for shim-level defaults. Contributed by [@caidao22](https://github.com/caidao22).
