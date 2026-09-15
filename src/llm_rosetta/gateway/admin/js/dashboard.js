@@ -273,7 +273,9 @@ async function loadDumps() {
 
 async function renderDumps() {
   const phase = document.getElementById('dumpPhaseFilter').value;
-  const status = document.getElementById('dumpStatusFilter').value;
+  const statusDrop = document.getElementById('dumpStatusFilter').value;
+  const statusSearch = document.getElementById('dumpStatusSearch').value.trim();
+  const status = (statusDrop === 'custom' || (!statusDrop && statusSearch)) ? statusSearch : statusDrop;
   const provider = document.getElementById('dumpProviderFilter').value;
   const modelDrop = document.getElementById('dumpModelFilter').value;
   const search = document.getElementById('dumpModelSearch').value.toLowerCase();
@@ -512,6 +514,24 @@ function closeDumpModelSearch() {
   renderDumps();
 }
 
+function onDumpStatusFilterChange() {
+  const val = document.getElementById('dumpStatusFilter').value;
+  if (val === 'custom') {
+    document.getElementById('dumpStatusFilter').style.display = 'none';
+    document.getElementById('dumpStatusSearchWrap').style.display = 'inline-flex';
+    document.getElementById('dumpStatusSearch').focus();
+  }
+  renderDumps();
+}
+
+function closeDumpStatusSearch() {
+  document.getElementById('dumpStatusSearch').value = '';
+  document.getElementById('dumpStatusFilter').value = '';
+  document.getElementById('dumpStatusFilter').style.display = '';
+  document.getElementById('dumpStatusSearchWrap').style.display = 'none';
+  renderDumps();
+}
+
 function onDumpTimeRangeChange() {
   const val = document.getElementById('dumpTimeRange').value;
   if (val === 'custom') {
@@ -532,8 +552,8 @@ function closeDumpTimeCustom() {
 
 function resetDumpFilters() {
   document.getElementById('dumpPhaseFilter').value = '';
-  document.getElementById('dumpStatusFilter').value = '';
   document.getElementById('dumpProviderFilter').value = '';
+  closeDumpStatusSearch();
   closeDumpModelSearch();
   closeDumpTimeCustom();
 }
@@ -872,6 +892,7 @@ Object.assign(window, {
   changeDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
   onClearDumpsInput, confirmClearDumps,
   onDumpModelFilterChange, closeDumpModelSearch,
+  onDumpStatusFilterChange, closeDumpStatusSearch,
   onDumpTimeRangeChange, closeDumpTimeCustom, resetDumpFilters,
   renderPersistence, renderStats, renderProviderBreakdown,
   jumpToRequestLog, backfillDumpLogIds,
