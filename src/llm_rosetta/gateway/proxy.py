@@ -45,6 +45,12 @@ from .transport import (
     UpstreamConnectionError,
     UpstreamTransport,
 )
+from .transport.auth_errors import (
+    AuthErrorKind,
+    classify_auth_error,
+    rewrite_session_policy_error,
+)
+from .transport.token_refresh import force_refresh
 from .transport.sse_format import (
     SSE_FORMATTERS,
     build_stream_error_events,
@@ -54,6 +60,153 @@ from .transport.sse_format import (
 )
 
 logger = get_logger()
+
+
+# ---------------------------------------------------------------------------
+# Reactive 401 retry helper
+# ---------------------------------------------------------------------------
+
+
+def _upstream_error_passthrough(
+    resp_status: int,
+    resp_error_text: str,
+    resp_raw_content: str | bytes,
+    resp_body: Any,
+    *,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    persistence: Any | None,
+    entry_id: str | None,
+    extra_headers: dict[str, str] | None,
+    capture_state: CaptureState | None,
+    error_phase: str = "upstream",
+    is_streaming: bool = False,
+) -> Response:
+    """Log, dump, capture, and return a sanitized upstream error response."""
+    log_upstream_error(
+        resp_status,
+        resp_error_text,
+        endpoint=str(route.target_provider),
+        is_streaming=is_streaming,
+    )
+    dump_error(
+        persistence,
+        request_body=body,
+        response_text=resp_error_text,
+        converted_body=target_body,
+        model=body.get("model", ""),
+        source_provider=route.source_provider,
+        target_provider=route.target_provider,
+        provider_name=route.provider_name,
+        status_code=resp_status,
+        error_phase=error_phase,
+        upstream_url=str(provider_info.base_url),
+        request_log_id=entry_id,
+    )
+    if capture_state is not None:
+        capture_state.record(
+            CapturedRequest(
+                original_request=body,
+                converted_body=target_body,
+                upstream_response=resp_body,
+                request_id=(
+                    extra_headers.get("x-request-id", "") if extra_headers else ""
+                ),
+                model=body.get("model", ""),
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                is_stream=False,
+                status_code=resp_status,
+            )
+        )
+    return Response(
+        body=sanitize_upstream_error(resp_raw_content),
+        status_code=resp_status,
+        content_type="application/json",
+    )
+
+
+def _connection_error_response(
+    exc: UpstreamConnectionError,
+    *,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    persistence: Any | None,
+    entry_id: str | None,
+    extra_headers: dict[str, str] | None,
+    capture_state: CaptureState | None,
+    error_phase: str = "upstream",
+) -> Response:
+    """Build a 502 response for a connection-level upstream failure."""
+    dump_error(
+        persistence,
+        request_body=body,
+        response_text=str(exc),
+        converted_body=target_body,
+        model=body.get("model", ""),
+        source_provider=route.source_provider,
+        target_provider=route.target_provider,
+        provider_name=route.provider_name,
+        status_code=502,
+        error_phase=error_phase,
+        upstream_url=str(provider_info.base_url),
+        request_log_id=entry_id,
+    )
+    if capture_state is not None:
+        capture_state.record(
+            CapturedRequest(
+                original_request=body,
+                converted_body=target_body,
+                request_id=(
+                    extra_headers.get("x-request-id", "") if extra_headers else ""
+                ),
+                model=body.get("model", ""),
+                source_provider=route.source_provider,
+                target_provider=route.target_provider,
+                is_stream=False,
+                status_code=502,
+                upstream_response={"error": str(exc)},
+            )
+        )
+    return error_response_for_source(
+        route.source_provider, 502, f"Upstream request failed: {exc}"
+    )
+
+
+async def _handle_401(
+    provider_info: ProviderInfo,
+    error_text: str,
+    source_provider: ProviderType,
+) -> tuple[bool, Response | None]:
+    """Classify a 401 and decide whether to retry or return an error.
+
+    Returns ``(should_retry, error_response)``:
+    - ``(True, None)`` — token refreshed successfully, caller should retry.
+    - ``(False, Response)`` — session-policy error, return this to client.
+    - ``(False, None)`` — refresh failed or not applicable, pass through.
+    """
+    if not provider_info.token_command:
+        return False, None
+    kind = classify_auth_error(401, error_text)
+    if kind == AuthErrorKind.SESSION_POLICY_401:
+        logger.warning(
+            "ALCF session policy 401 for '%s' — user must re-login",
+            provider_info.name,
+        )
+        return False, error_response_for_source(
+            source_provider, 401, rewrite_session_policy_error(error_text)
+        )
+    if await force_refresh(provider_info):
+        logger.info(
+            "Retrying request after reactive token refresh for '%s'",
+            provider_info.name,
+        )
+        return True, None
+    return False, None
 
 
 @dataclass
@@ -399,96 +552,74 @@ async def handle_non_streaming(
     )
 
     # Phase 3: Forward to upstream via transport
+    # Wrapped in a retry loop: on 401 from a token_command provider,
+    # reactively refresh the token and retry once.
     upstream_url = provider_info.upstream_url(model)
-    t_upstream = time.perf_counter()
-    try:
-        resp = await transport.send(
-            provider_info,
-            upstream_url,
-            target_body,
-            extra_headers=extra_headers,
-        )
-    except UpstreamConnectionError as exc:
+    resp = None
+    for _attempt in range(2):
+        t_upstream = time.perf_counter()
+        try:
+            resp = await transport.send(
+                provider_info,
+                upstream_url,
+                target_body,
+                extra_headers=extra_headers,
+            )
+        except UpstreamConnectionError as exc:
+            profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
+            return (
+                _connection_error_response(
+                    exc,
+                    body=body,
+                    target_body=target_body,
+                    route=route,
+                    provider_info=provider_info,
+                    persistence=persistence,
+                    entry_id=entry_id,
+                    extra_headers=extra_headers,
+                    capture_state=capture_state,
+                ),
+                profile,
+            )
         profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
-        dump_error(
-            persistence,
-            request_body=body,
-            response_text=str(exc),
-            converted_body=target_body,
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=502,
-            error_phase="upstream",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        if capture_state is not None:
-            capture_state.record(
-                CapturedRequest(
-                    original_request=body,
-                    converted_body=target_body,
-                    request_id=(
-                        extra_headers.get("x-request-id", "") if extra_headers else ""
-                    ),
-                    model=model,
-                    source_provider=route.source_provider,
-                    target_provider=route.target_provider,
-                    is_stream=False,
-                    status_code=502,
-                    upstream_response={"error": str(exc)},
-                )
-            )
-        return (
-            error_response_for_source(
-                route.source_provider, 502, f"Upstream request failed: {exc}"
-            ),
-            profile,
-        )
-    profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
 
-    if resp.is_error:
-        log_upstream_error(
-            resp.status_code,
-            resp.error_text,
-            endpoint=str(route.target_provider),
-        )
-        dump_error(
-            persistence,
-            request_body=body,
-            response_text=resp.error_text,
-            converted_body=target_body,
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=resp.status_code,
-            error_phase="upstream",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        if capture_state is not None:
-            capture_state.record(
-                CapturedRequest(
-                    original_request=body,
-                    converted_body=target_body,
-                    upstream_response=resp.body,
-                    request_id=(
-                        extra_headers.get("x-request-id", "") if extra_headers else ""
-                    ),
-                    model=model,
-                    source_provider=route.source_provider,
-                    target_provider=route.target_provider,
-                    is_stream=False,
-                    status_code=resp.status_code,
-                )
+        if not resp.is_error:
+            break
+
+        # 401 reactive retry: classify and possibly retry once
+        retry, err = (
+            await _handle_401(
+                provider_info,
+                resp.error_text,
+                route.source_provider,
             )
+            if resp.status_code == 401 and _attempt == 0
+            else (False, None)
+        )
+        if err is not None:
+            return err, profile
+        if retry:
+            continue
+
+        # Non-retryable error — fall through to logging/passthrough
+        break
+
+    assert resp is not None
+    if resp.is_error:
         return (
-            Response(
-                body=sanitize_upstream_error(resp.raw_content),
-                status_code=resp.status_code,
-                content_type="application/json",
+            _upstream_error_passthrough(
+                resp.status_code,
+                resp.error_text,
+                resp.raw_content,
+                resp.body,
+                body=body,
+                target_body=target_body,
+                route=route,
+                provider_info=provider_info,
+                persistence=persistence,
+                entry_id=entry_id,
+                extra_headers=extra_headers,
+                capture_state=capture_state,
             ),
             profile,
         )
@@ -954,80 +1085,98 @@ async def handle_streaming(
 
     # Phase 3: Open upstream connection and check for immediate errors
     # *before* committing to a 200 StreamingResponse.
+    # Wrapped in a retry loop: on 401 from a token_command provider,
+    # reactively refresh the token and retry once.
     upstream_url = provider_info.upstream_url(model, stream=True)
     target_body = _inject_stream_flags(route.target_provider, target_body, stream=True)
-    t_connect = time.perf_counter()
-    try:
-        stream = await transport.send_streaming(
-            provider_info,
-            upstream_url,
-            target_body,
-            extra_headers=extra_headers,
-        )
-    except UpstreamConnectionError as exc:
+    stream = None
+    stream_error_text: str | None = None
+    stream_error_code: int = 0
+    for _attempt in range(2):
+        t_connect = time.perf_counter()
+        try:
+            stream = await transport.send_streaming(
+                provider_info,
+                upstream_url,
+                target_body,
+                extra_headers=extra_headers,
+            )
+        except UpstreamConnectionError as exc:
+            profile["stream_connect_ms"] = round(
+                (time.perf_counter() - t_connect) * 1000, 2
+            )
+            return (
+                _connection_error_response(
+                    exc,
+                    body=body,
+                    target_body=target_body,
+                    route=route,
+                    provider_info=provider_info,
+                    persistence=persistence,
+                    entry_id=entry_id,
+                    extra_headers=extra_headers,
+                    capture_state=capture_state,
+                    error_phase="stream_header",
+                ),
+                profile,
+            )
+
         profile["stream_connect_ms"] = round(
             (time.perf_counter() - t_connect) * 1000, 2
         )
-        # Connection-level failure — no upstream HTTP response exists, so
-        # the gateway synthesizes an error message and returns 502.
-        error_msg = str(exc)
-        dump_error(
-            persistence,
-            request_body=body,
-            response_text=error_msg,
-            converted_body=target_body,
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=502,
-            error_phase="stream_header",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
-        return (
-            error_response_for_source(
-                route.source_provider, 502, f"Upstream request failed: {exc}"
-            ),
-            profile,
-        )
 
-    profile["stream_connect_ms"] = round((time.perf_counter() - t_connect) * 1000, 2)
+        if not stream.is_error:
+            stream_error_text = None
+            break
+
+        # Read and close the error stream before deciding on retry
+        stream_error_text = await stream.read_error()
+        stream_error_code = stream.status_code
+        await stream.close()
+
+        # 401 reactive retry: classify and possibly retry once
+        retry, err = (
+            await _handle_401(
+                provider_info,
+                stream_error_text,
+                route.source_provider,
+            )
+            if stream_error_code == 401 and _attempt == 0
+            else (False, None)
+        )
+        if err is not None:
+            return err, profile
+        if retry:
+            continue
+
+        # Non-retryable error — fall through to logging/passthrough
+        break
 
     # Application-level error — upstream returned a valid HTTP response with
     # a 4xx/5xx status.  Pass the original body through as-is so the client
     # SDK can parse the real error (e.g. "context_length_exceeded").
-    if stream.is_error:
-        error_text = await stream.read_error()
-        await stream.close()
-        log_upstream_error(
-            stream.status_code,
-            error_text,
-            endpoint=str(route.target_provider),
-            is_streaming=True,
-        )
-        dump_error(
-            persistence,
-            request_body=body,
-            response_text=error_text,
-            converted_body=target_body,
-            model=model,
-            source_provider=route.source_provider,
-            target_provider=route.target_provider,
-            provider_name=route.provider_name,
-            status_code=stream.status_code,
-            error_phase="stream_header",
-            upstream_url=str(provider_info.base_url),
-            request_log_id=entry_id,
-        )
+    if stream_error_text is not None:
         return (
-            Response(
-                body=sanitize_upstream_error(error_text),
-                status_code=stream.status_code,
-                content_type="application/json",
+            _upstream_error_passthrough(
+                stream_error_code,
+                stream_error_text,
+                stream_error_text,
+                None,
+                body=body,
+                target_body=target_body,
+                route=route,
+                provider_info=provider_info,
+                persistence=persistence,
+                entry_id=entry_id,
+                extra_headers=extra_headers,
+                capture_state=capture_state,
+                error_phase="stream_header",
+                is_streaming=True,
             ),
             profile,
         )
+
+    assert stream is not None
 
     # Phase 4: No error — create stream processor and return SSE response
     processor = pipeline.create_stream_processor(
