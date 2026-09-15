@@ -110,6 +110,21 @@ class RequestLogEntry:
         return d
 
 
+def _match_status(status_code: int, status_filter: str) -> bool:
+    """Check whether *status_code* passes the given status filter."""
+    if status_filter == "ok":
+        return status_code < 400
+    if status_filter == "error":
+        return status_code >= 400
+    if status_filter == "4xx":
+        return 400 <= status_code < 500
+    if status_filter == "5xx":
+        return 500 <= status_code < 600
+    if status_filter.isdigit():
+        return status_code == int(status_filter)
+    return True
+
+
 class RequestLog:
     """Proxy request log with optional SQLite persistence.
 
@@ -184,10 +199,8 @@ class RequestLog:
                     and e.target_provider == provider_type
                 )
             ]
-        if status == "ok":
-            filtered = [e for e in filtered if e.status_code < 400]
-        elif status == "error":
-            filtered = [e for e in filtered if e.status_code >= 400]
+        if status:
+            filtered = [e for e in filtered if _match_status(e.status_code, status)]
         if api_key_label:
             filtered = [e for e in filtered if e.api_key_label == api_key_label]
         total = len(filtered)

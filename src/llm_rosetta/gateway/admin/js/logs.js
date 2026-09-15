@@ -12,7 +12,9 @@ import { api, esc, formatDuration, inlineConfirm, showToast } from './core.js';
 async function loadLogs() {
   const model = document.getElementById('filterModel').value;
   const provider = document.getElementById('filterProvider').value;
-  const status = document.getElementById('filterStatus').value;
+  const statusDrop = document.getElementById('filterStatus').value;
+  const statusSearch = document.getElementById('logStatusSearch').value.trim();
+  const status = (statusDrop === 'custom' || (!statusDrop && statusSearch)) ? statusSearch : statusDrop;
   const apiKey = document.getElementById('filterApiKey').value;
   let url = `/admin/api/requests?limit=${LOG_LIMIT}&offset=${S.logOffset}`;
   if (model) url += `&model=${encodeURIComponent(model)}`;
@@ -114,11 +116,31 @@ async function _doDeleteModel(name) {
   else { showToast(res.error || 'Failed', 'error'); }
 }
 
+function onLogStatusFilterChange() {
+  const val = document.getElementById('filterStatus').value;
+  if (val === 'custom') {
+    document.getElementById('filterStatus').style.display = 'none';
+    document.getElementById('logStatusSearchWrap').style.display = 'inline-flex';
+    document.getElementById('logStatusSearch').focus();
+  }
+  S.logOffset = 0;
+  loadLogs();
+}
+
+function closeLogStatusSearch() {
+  document.getElementById('logStatusSearch').value = '';
+  document.getElementById('filterStatus').value = '';
+  document.getElementById('filterStatus').style.display = '';
+  document.getElementById('logStatusSearchWrap').style.display = 'none';
+  S.logOffset = 0;
+  loadLogs();
+}
+
 function resetLogFilters() {
   document.getElementById('filterModel').value = '';
   document.getElementById('filterProvider').value = '';
-  document.getElementById('filterStatus').value = '';
   document.getElementById('filterApiKey').value = '';
+  closeLogStatusSearch();
   S.logOffset = 0;
   S.expandedLogRows.clear();
   loadLogs();
@@ -187,7 +209,8 @@ function jumpToErrorDump(requestLogId) {
 Object.assign(window, {
   loadLogs, renderLogs, toggleLogRow, changePage, jumpToErrorDump,
   resetLogFilters, updateFilterOptions, updateKeyFilterOptions,
+  onLogStatusFilterChange, closeLogStatusSearch,
   deleteModel,
 });
 
-export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions };
+export { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions, onLogStatusFilterChange, closeLogStatusSearch };

@@ -364,6 +364,13 @@ class PersistenceManager:
             where_clauses.append("status_code < 400")
         elif status == "error":
             where_clauses.append("status_code >= 400")
+        elif status == "4xx":
+            where_clauses.append("status_code >= 400 AND status_code < 500")
+        elif status == "5xx":
+            where_clauses.append("status_code >= 500 AND status_code < 600")
+        elif status and status.isdigit():
+            where_clauses.append("status_code = ?")
+            params.append(int(status))
         if api_key_label:
             where_clauses.append("api_key_label = ?")
             params.append(api_key_label)
