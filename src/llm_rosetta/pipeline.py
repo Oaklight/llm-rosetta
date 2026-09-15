@@ -858,6 +858,8 @@ class PassthroughStreamProcessor:
         return None
 
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
+        if self._response_body_transforms:
+            chunk = apply_transforms(self._response_body_transforms, chunk)
         if self._pre_ir_transforms:
             chunk = apply_transforms(self._pre_ir_transforms, chunk)
         if self._post_ir_transforms:
