@@ -18,6 +18,8 @@ Or use Docker (Alpine binary, ~21 MB):
 docker pull oaklight/llm-rosetta-gateway:latest
 ```
 
+See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) for a ready-to-use Compose file with volume mounts, environment variables, and ALCF token passthrough.
+
 Or download a standalone binary from [GitHub Releases](https://github.com/Oaklight/llm-rosetta/releases) — no Python needed.
 
 ## 2. Create a config file

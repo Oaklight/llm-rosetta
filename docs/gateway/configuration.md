@@ -98,6 +98,53 @@ API keys support `${ENV_VAR}` syntax — values are read from environment variab
 "my-openai": { "type": "openai_chat", "api_key": "${OPENAI_API_KEY}", "base_url": "https://api.openai.com/v1" }
 ```
 
+### Dynamic Token Refresh (`token_command`)
+
+For providers that use short-lived tokens (e.g. ALCF Inference Service with Globus OAuth), the gateway can run an external command to obtain and periodically refresh the API key:
+
+```jsonc
+"my-alcf": {
+  "provider": "alcf--sophia",
+  "token_command": ["python3", "/scripts/alcf-token.py"],
+  "token_refresh_interval": 3600
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `token_command` | `list[str]` | — | Command argv; stdout is captured as the API key |
+| `token_refresh_interval` | `int` | `3600` | Seconds between scheduled refreshes (minimum 60) |
+
+When `token_command` is set:
+
+1. The command runs **at startup** to seed the initial API key
+2. A background task re-runs it every `token_refresh_interval` seconds
+3. On upstream **401 responses**, the gateway triggers an immediate out-of-cycle refresh (debounced to avoid storms)
+4. The command's stdout is used as the new key — comma-separated output is supported for multi-key round-robin
+
+!!! note "`token_command` and `api_key` are mutually exclusive"
+    If both are specified, the gateway refuses to start. Use one or the other.
+
+#### ALCF example with Docker
+
+ALCF providers use Globus OAuth tokens managed by `scripts/alcf-token.py`. When running in Docker, mount the token file and script into the container:
+
+```yaml
+# docker-compose.yaml
+volumes:
+  - ./config:/config
+  - ~/.globus:/home/appuser/.globus              # Globus token file (rw for refresh)
+  - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # Refresh script
+```
+
+Setup:
+
+1. **Login on the host** (one-time): `python3 scripts/alcf-token.py --login`
+2. **Start the container** with the volume mounts above
+3. **Add the provider** via the admin panel or `config.jsonc` with `token_command: ["python3", "/scripts/alcf-token.py"]`
+
+The container's `appuser` (uid 1000) needs read-write access to `~/.globus` so the refresh token can be updated in place.
+
 ### Per-Provider Proxy
 
 Individual providers can use a specific proxy:
