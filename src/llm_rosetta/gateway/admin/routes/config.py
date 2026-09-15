@@ -902,9 +902,16 @@ def _extract_model_ids(
 ) -> tuple[list[str], dict[str, str]]:
     """Extract model IDs from an upstream ``/models`` response body.
 
-    Returns ``(model_ids, upstream_map)``.  When a shim provides a
-    ``model_list_transform`` hook, it is used to derive human-readable
-    slugs and the mapping back to internal upstream IDs.
+    Returns ``(model_ids, upstream_map)``.  Handles three response shapes:
+
+    * OpenAI-style ``{data: [{id: ...}, ...]}``
+    * Google-style ``{models: [{name: ...}, ...]}``
+    * Bare JSON array ``[{id: ...}, ...]`` (e.g. ALCF) — requires a
+      ``model_list_transform``; without one the array is silently ignored.
+
+    When a shim provides a ``model_list_transform`` hook, it is used to
+    derive human-readable slugs and the mapping back to internal upstream
+    IDs.
     """
     from llm_rosetta.shims.providers import get_model_list_transform
 
@@ -922,6 +929,11 @@ def _extract_model_ids(
             )
         model_ids, upstream_map = mlt(raw_entries)
     elif isinstance(body, list):
+        logger.debug(
+            "Upstream returned bare array but no model_list_transform is registered "
+            "for shim %r — cannot extract model IDs",
+            shim_name,
+        )
         return [], {}
     elif ptype == "google":
         for m in body.get("models", []):

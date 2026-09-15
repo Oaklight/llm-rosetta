@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, overload
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ...config import ConfigIO, GatewayConfig
+
+logger = logging.getLogger("llm-rosetta-gateway")
 
 _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
 
@@ -251,17 +254,23 @@ def _build_provider_entry(
 def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | None:
     """Return explicit models_path from provider config or shim, if any."""
     path = provider_cfg.get("models_path")
-    if path:
-        return path
-    from llm_rosetta.shims import get_shim
+    if not path:
+        from llm_rosetta.shims import get_shim
 
-    shim_name = (
-        config.provider_shim_names.get(name)
-        if hasattr(config, "provider_shim_names")
-        else None
-    )
-    shim = get_shim(shim_name) if shim_name else None
-    return shim.models_path if shim else None
+        shim_name = (
+            config.provider_shim_names.get(name)
+            if hasattr(config, "provider_shim_names")
+            else None
+        )
+        shim = get_shim(shim_name) if shim_name else None
+        path = shim.models_path if shim else None
+    if path and path.startswith("http://"):
+        logger.warning(
+            "models_path for %s uses plain HTTP — auth headers will be sent "
+            "over an unencrypted connection",
+            name,
+        )
+    return path
 
 
 def _handle_provider_rename(

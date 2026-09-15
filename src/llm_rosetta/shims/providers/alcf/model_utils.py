@@ -35,6 +35,7 @@ def make_alcf_model_list_transform(
             model_id = m.get("id", "")
             if model_id:
                 ids.append(model_id)
+        # No upstream ID remapping — ALCF model IDs are used as-is
         return ids, {}
 
     return model_list_transform
