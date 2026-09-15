@@ -7,6 +7,8 @@ from typing import Any
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.gateway.transport.provider_info import _VERSION_SUFFIXES
 
+from ._shared import _resolve_models_path
+
 
 async def test_provider_connectivity(request: Any, name: str) -> Response:
     """Probe a provider's base_url and endpoint paths for reachability.
@@ -136,22 +138,6 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             }
 
     return JSONResponse(results)
-
-
-def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | None:
-    """Return explicit models_path from provider config or shim, if any."""
-    path = provider_cfg.get("models_path")
-    if path:
-        return path
-    from llm_rosetta.shims import get_shim
-
-    shim_name = (
-        config.provider_shim_names.get(name)
-        if hasattr(config, "provider_shim_names")
-        else None
-    )
-    shim = get_shim(shim_name) if shim_name else None
-    return shim.models_path if shim else None
 
 
 def _check_double_prefix(
