@@ -894,7 +894,7 @@ def _format_connection_error(exc: Exception, url: str) -> str:
 
 
 def _extract_model_ids(
-    body: dict[str, Any],
+    body: dict[str, Any] | list[dict[str, Any]],
     ptype: str,
     shim_name: str | None,
     id_field: str | None,
@@ -913,10 +913,15 @@ def _extract_model_ids(
     model_ids: list[str] = []
 
     if mlt is not None:
-        raw_entries: list[dict[str, Any]] = (
-            body.get("data", []) if "data" in body else body.get("models", [])
-        )
+        if isinstance(body, list):
+            raw_entries: list[dict[str, Any]] = body
+        else:
+            raw_entries = (
+                body.get("data", []) if "data" in body else body.get("models", [])
+            )
         model_ids, upstream_map = mlt(raw_entries)
+    elif isinstance(body, list):
+        return [], {}
     elif ptype == "google":
         for m in body.get("models", []):
             name = m.get("name", "")
@@ -955,8 +960,16 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     # provider config takes precedence (e.g. ``/v1/models`` for Jina).
     raw_cfg = getattr(config, "_raw_providers", {}).get(provider_name, {})
     explicit_path = raw_cfg.get("models_path")
+    if not explicit_path:
+        _sn = config.provider_shim_names.get(provider_name)
+        shim = get_shim(_sn) if _sn else None
+        if shim:
+            explicit_path = shim.models_path
     if explicit_path:
-        models_url = f"{pinfo.base_url}{explicit_path}"
+        if explicit_path.startswith(("https://", "http://")):
+            models_url = explicit_path
+        else:
+            models_url = f"{pinfo.base_url}{explicit_path}"
     elif ptype == "google":
         models_url = f"{pinfo.base_url}/v1beta/models"
     elif ptype == "anthropic":

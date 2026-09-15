@@ -68,9 +68,12 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         if hasattr(config, "provider_types")
         else "unknown"
     )
-    explicit_path = provider_cfg.get("models_path")
+    explicit_path = _resolve_models_path(provider_cfg, config, name)
     if explicit_path:
-        models_url = f"{base_url}{explicit_path}"
+        if explicit_path.startswith(("https://", "http://")):
+            models_url = explicit_path
+        else:
+            models_url = f"{base_url}{explicit_path}"
     elif ptype == "google":
         models_url = f"{base_url}/v1beta/models"
     elif ptype == "anthropic":
@@ -133,6 +136,22 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             }
 
     return JSONResponse(results)
+
+
+def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | None:
+    """Return explicit models_path from provider config or shim, if any."""
+    path = provider_cfg.get("models_path")
+    if path:
+        return path
+    from llm_rosetta.shims import get_shim
+
+    shim_name = (
+        config.provider_shim_names.get(name)
+        if hasattr(config, "provider_shim_names")
+        else None
+    )
+    shim = get_shim(shim_name) if shim_name else None
+    return shim.models_path if shim else None
 
 
 def _check_double_prefix(

@@ -272,6 +272,7 @@ def _load_single_provider(
         supports_custom_tools=cfg.get("supports_custom_tools", False),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
         max_tool_description_length=cfg.get("max_tool_description_length"),
+        models_path=cfg.get("models_path"),
         multimodal_tool_result=cfg.get("multimodal_tool_result"),
         tool_search_mode=cfg.get("tool_search_mode", "disabled"),
     )

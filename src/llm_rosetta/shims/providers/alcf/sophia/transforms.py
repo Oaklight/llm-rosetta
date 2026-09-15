@@ -5,6 +5,7 @@ vLLM may not support ``logprobs`` / ``top_logprobs``.  Strip the
 ``content: null`` with an empty string to avoid vLLM crashes.
 """
 
+from ..model_utils import make_alcf_model_list_transform
 from llm_rosetta.shims.transforms import (
     default_message_field,
     replace_message_field,
@@ -18,3 +19,5 @@ post_ir_transforms = (
 )
 pre_ir_transforms = ()
 ir_transforms = ()
+
+model_list_transform = make_alcf_model_list_transform("vllm")
