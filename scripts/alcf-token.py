@@ -55,14 +55,21 @@ All clusters share the same Globus Bearer token.
 Docker
 ------
 When running the gateway in Docker, login on the **host** first, then
-mount the token file and this script into the container::
+mount the token file and this script into the container.
+
+Standalone download (no git clone needed)::
+
+    curl -fsSL -o alcf-token.py \
+      https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py
+
+Steps::
 
     # 1. Login on the host (one-time):
-    python3 scripts/alcf-token.py --login
+    python3 alcf-token.py --login
 
     # 2. Add volume mounts to docker-compose.yaml:
     #   - ~/.globus:/home/appuser/.globus            # token file (rw)
-    #   - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro
+    #   - ./alcf-token.py:/scripts/alcf-token.py:ro
 
     # 3. Add the ALCF provider via admin panel or config.jsonc:
     #   "token_command": ["python3", "/scripts/alcf-token.py"]
