@@ -4,3 +4,6 @@ default_base_url: https://inference-api.alcf.anl.gov/resource_server/sophia/vllm
 default_api_key_env: ALCF_API_KEY
 models_path: https://inference-api.alcf.anl.gov/resource_server/sophia/models
 logo: https://www.alcf.anl.gov/themes/flavor_starter_alcf/logo.svg
+reasoning:
+  effort_field: reasoning_effort
+supports_custom_tools: true

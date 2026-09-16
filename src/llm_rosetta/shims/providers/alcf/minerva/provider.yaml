@@ -4,3 +4,4 @@ default_base_url: https://inference-api.alcf.anl.gov/resource_server/minerva/api
 default_api_key_env: ALCF_API_KEY
 models_path: https://inference-api.alcf.anl.gov/resource_server/minerva/models
 logo: https://www.alcf.anl.gov/themes/flavor_starter_alcf/logo.svg
+supports_custom_tools: true

@@ -15,6 +15,7 @@ from llm_rosetta.shims.transforms import (
     rewrite_harmony_tool_calls,
     default_tool_description,
     default_message_field,
+    hoist_late_system_messages,
     replace_message_field,
     strip_fields,
 )
@@ -26,7 +27,7 @@ post_ir_transforms = (
     default_tool_description(),
 )
 pre_ir_transforms = ()
-ir_transforms = ()
+ir_transforms = (hoist_late_system_messages(),)
 
 model_list_transform = make_alcf_model_list_transform("api")
 
