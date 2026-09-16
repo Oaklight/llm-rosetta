@@ -151,4 +151,4 @@ services:
 ## 备注
 
 - 每个集群运行不同的硬件，可能托管不同的模型。使用 shim 配置中的 `models_path` 查询每个集群上的可用模型。
-- ALCF 端点不支持推理/思考功能。
+- Sophia 集群上标注 **R** 的模型支持推理功能（如 `openai/gpt-oss-120b`、`google/gemma-4-31B-it`），详见 [ALCF 模型列表](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models)。网关通过 shim 将 IR 推理 effort 映射到 `reasoning_effort` 字段。
