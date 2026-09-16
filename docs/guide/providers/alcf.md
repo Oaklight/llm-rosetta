@@ -10,6 +10,26 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
 | `alcf--minerva` | `openai_chat` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
 | `alcf--sophia` | `openai_chat` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
 
+## 推理支持
+
+Sophia 集群上在 [ALCF 模型列表](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models)中标注 **R** 的模型支持推理（如 `openai/gpt-oss-120b`、`openai/gpt-oss-20b`、`google/gemma-4-31B-it`、`google/gemma-4-E4B-it`）。
+
+| 字段 | 值 |
+|:---|:---|
+| Effort 字段 | `reasoning_effort` |
+| Effort 范围 | 完整 IR 阶梯（`minimal` → `max`） |
+
+Metis 和 Minerva 目前没有支持推理的模型。
+
+## 能力标志
+
+| 标志 | `alcf--sophia` | `alcf--minerva` | `alcf--metis` |
+|:---|:---:|:---:|:---:|
+| 自定义工具 | ✅ | ✅ | — |
+
+!!! note "Metis 工具调用"
+    SambaNova 存在[已知的工具调用清理问题](https://docs.alcf.anl.gov/services/inference-endpoints/#metis-tool-calling)，可能导致不完整的函数调用。因此 Metis 不声明工具支持。
+
 ## 转换规则
 
 三个集群共享一组通用的转换规则：
@@ -19,9 +39,14 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
 | Post-IR | `strip_fields("logprobs", "top_logprobs")` | 移除不支持的请求字段 |
 | Post-IR | `downgrade developer → system` | 将 developer 角色转换为 system 角色 |
 | Post-IR | `default null content → ""` | 防止空内容错误 |
+| Post-IR | `default_tool_description()` | 填充空的工具描述以避免上游错误 |
+| IR | `hoist_late_system_messages()` | 将靠后的系统消息移至对话开头以提升缓存稳定性 |
 
 !!! note "Metis 额外转换"
     Metis 集群额外剥离请求中的 `parallel_tool_calls`，因为 SambaNova 后端不支持并行工具调用。
+
+!!! note "Minerva 响应转换"
+    Minerva 在响应上应用 `rewrite_harmony_tool_calls()`，修复 `inkling-bf16` 偶尔将工具调用作为纯文本而非结构化 `tool_calls` 字段输出的问题。
 
 三个集群均导出 `model_list_transform`，用于标准化模型列表的响应格式。
 
@@ -151,4 +176,3 @@ services:
 ## 备注
 
 - 每个集群运行不同的硬件，可能托管不同的模型。使用 shim 配置中的 `models_path` 查询每个集群上的可用模型。
-- Sophia 集群上标注 **R** 的模型支持推理功能（如 `openai/gpt-oss-120b`、`google/gemma-4-31B-it`），详见 [ALCF 模型列表](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models)。网关通过 shim 将 IR 推理 effort 映射到 `reasoning_effort` 字段。
