@@ -10,6 +10,26 @@ ALCF (Argonne Leadership Computing Facility) Inference Service is supported thro
 | `alcf--minerva` | `openai_chat` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
 | `alcf--sophia` | `openai_chat` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
 
+## Reasoning Support
+
+Sophia models marked with **R** in the [ALCF model list](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) support reasoning (e.g. `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `google/gemma-4-31B-it`, `google/gemma-4-E4B-it`).
+
+| Field | Value |
+|:---|:---|
+| Effort field | `reasoning_effort` |
+| Effort range | Full IR ladder (`minimal` → `max`) |
+
+Metis and Minerva do not currently have reasoning-capable models.
+
+## Capability Flags
+
+| Flag | `alcf--sophia` | `alcf--minerva` | `alcf--metis` |
+|:---|:---:|:---:|:---:|
+| Custom tools | ✅ | ✅ | — |
+
+!!! note "Metis tool calling"
+    SambaNova has [known tool-call sanitization issues](https://docs.alcf.anl.gov/services/inference-endpoints/#metis-tool-calling) that can cause incomplete function calls. Tool support is intentionally not declared for Metis.
+
 ## Transforms
 
 All three clusters share a common set of transforms:
@@ -19,9 +39,14 @@ All three clusters share a common set of transforms:
 | Post-IR | `strip_fields("logprobs", "top_logprobs")` | Removes unsupported request fields |
 | Post-IR | `downgrade developer → system` | Converts developer role to system role |
 | Post-IR | `default null content → ""` | Prevents null content errors |
+| Post-IR | `default_tool_description()` | Fills empty tool descriptions to avoid upstream errors |
+| IR | `hoist_late_system_messages()` | Moves late system messages to conversation start for cache stability |
 
-!!! note "Metis Additional Transform"
+!!! note "Metis additional transform"
     The Metis cluster additionally strips `parallel_tool_calls` from requests, as the SambaNova backend does not support parallel tool calling.
+
+!!! note "Minerva response transforms"
+    Minerva applies `rewrite_harmony_tool_calls()` on responses to fix intermittent cases where `inkling-bf16` emits tool calls as plain text instead of structured `tool_calls` fields.
 
 All three clusters also export a `model_list_transform` that normalizes the model listing response.
 
@@ -151,4 +176,3 @@ See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/
 ## Notes
 
 - Each cluster runs different hardware and may host different models. Use the `models_path` in the shim configuration to query available models on each cluster.
-- Reasoning is supported on Sophia models marked with **R** in the [ALCF model list](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) (e.g. `openai/gpt-oss-120b`, `google/gemma-4-31B-it`). The gateway maps IR reasoning effort to the `reasoning_effort` field via the shim.
