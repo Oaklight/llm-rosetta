@@ -662,7 +662,11 @@ async function toggleProvider(name) {
 
 function editProvider(name) {
   const cfg = S.configData.providers[name] || {};
-  openProviderModal(name, cfg.base_url, cfg.api_key, cfg.proxy, cfg.type);
+  const shims = S.configData.registered_shims || [];
+  const shim = shims.find(s => s.name === (cfg.type || name)) || {};
+  const baseUrl = cfg.base_url || shim.default_base_url || '';
+  const apiKey = cfg.api_key || (cfg.token_command ? 'token_command' : '') || '';
+  openProviderModal(name, baseUrl, apiKey, cfg.proxy, cfg.type);
 }
 
 function copyProviderEntry(name) {
