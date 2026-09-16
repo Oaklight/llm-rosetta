@@ -151,4 +151,4 @@ See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/
 ## Notes
 
 - Each cluster runs different hardware and may host different models. Use the `models_path` in the shim configuration to query available models on each cluster.
-- No reasoning/thinking support is available on ALCF endpoints.
+- Reasoning is supported on Sophia models marked with **R** in the [ALCF model list](https://docs.alcf.anl.gov/services/inference-endpoints/#available-models) (e.g. `openai/gpt-oss-120b`, `google/gemma-4-31B-it`). The gateway maps IR reasoning effort to the `reasoning_effort` field via the shim.
