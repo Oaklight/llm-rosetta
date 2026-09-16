@@ -56,12 +56,19 @@ ALCF uses Globus OAuth for authentication. Access tokens are short-lived (~48 ho
 
 The repository includes `scripts/alcf-token.py`, a zero-dependency (stdlib only) helper that handles the full login and refresh lifecycle.
 
+**Standalone download** — if you don't have the full repository (e.g. Docker-only deployments):
+
+```bash
+curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py
+chmod +x alcf-token.py
+```
+
 ### Initial login
 
 Run on any machine with a browser (or copy the URL to a machine that has one):
 
 ```bash
-python3 scripts/alcf-token.py --login
+python3 alcf-token.py --login
 ```
 
 This opens a Globus authorization URL, prompts you to paste the authorization code, and saves the token to `~/.globus/app/<client_id>/inference_app/tokens.json`.
@@ -157,14 +164,15 @@ services:
     volumes:
       - ./config:/config
       - ~/.globus:/home/appuser/.globus              # Globus token file (rw for refresh)
-      - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # Refresh script
+      - ./alcf-token.py:/scripts/alcf-token.py:ro    # Refresh script (standalone download)
 ```
 
 Setup steps:
 
-1. **Login on the host** (one-time): `python3 scripts/alcf-token.py --login`
-2. **Start the container** with the volume mounts above
-3. **Add the provider** via admin panel or `config.jsonc` with:
+1. **Download the script**: `curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py`
+2. **Login on the host** (one-time): `python3 alcf-token.py --login`
+3. **Start the container** with the volume mounts above
+4. **Add the provider** via admin panel or `config.jsonc` with:
     ```jsonc
     "token_command": ["python3", "/scripts/alcf-token.py"]
     ```
