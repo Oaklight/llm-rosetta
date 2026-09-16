@@ -56,12 +56,19 @@ ALCF 使用 Globus OAuth 进行认证。访问令牌的有效期较短（约 48 
 
 项目包含 `scripts/alcf-token.py`，一个零依赖（仅标准库）的辅助脚本，处理完整的登录和刷新生命周期。
 
+**独立下载** — 如果没有完整仓库（如纯 Docker 部署）：
+
+```bash
+curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py
+chmod +x alcf-token.py
+```
+
 ### 初始登录
 
 在有浏览器的机器上运行（或将 URL 复制到有浏览器的机器上）：
 
 ```bash
-python3 scripts/alcf-token.py --login
+python3 alcf-token.py --login
 ```
 
 这会打开一个 Globus 授权 URL，提示你粘贴授权码，并将令牌保存到 `~/.globus/app/<client_id>/inference_app/tokens.json`。
@@ -157,14 +164,15 @@ services:
     volumes:
       - ./config:/config
       - ~/.globus:/home/appuser/.globus              # Globus 令牌文件（需读写权限以刷新）
-      - ./scripts/alcf-token.py:/scripts/alcf-token.py:ro  # 刷新脚本
+      - ./alcf-token.py:/scripts/alcf-token.py:ro    # 刷新脚本（独立下载）
 ```
 
 操作步骤：
 
-1. **在宿主机上登录**（仅需一次）：`python3 scripts/alcf-token.py --login`
-2. 使用上述 volume 挂载**启动容器**
-3. 通过管理面板或 `config.jsonc` **添加提供方**：
+1. **下载脚本**：`curl -fsSL -o alcf-token.py https://raw.githubusercontent.com/Oaklight/llm-rosetta/master/scripts/alcf-token.py`
+2. **在宿主机上登录**（仅需一次）：`python3 alcf-token.py --login`
+3. 使用上述 volume 挂载**启动容器**
+4. 通过管理面板或 `config.jsonc` **添加提供方**：
     ```jsonc
     "token_command": ["python3", "/scripts/alcf-token.py"]
     ```
