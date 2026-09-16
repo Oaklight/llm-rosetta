@@ -343,3 +343,6 @@ a { color: var(--accent); text-decoration: none; }
 }
 .section-header h2 { font-size: 16px; font-weight: 600; }
 
+
+/* Utility */
+.text-muted { color: var(--text-muted); font-style: italic; }

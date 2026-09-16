@@ -466,9 +466,9 @@ function renderProviders() {
     countEl.textContent = '';
   }
 
-  const shimLogo = Object.fromEntries(
-    (S.configData.registered_shims || []).map(s => [s.name, s.logo])
-  );
+  const registeredShims = S.configData.registered_shims || [];
+  const shimLogo = Object.fromEntries(registeredShims.map(s => [s.name, s.logo]));
+  const shimDefaults = Object.fromEntries(registeredShims.map(s => [s.name, s]));
 
   if (entries.length === 0) {
     grid.innerHTML = `<p style="color:var(--text-dim)">${t('empty.searchResults')}</p>`;
@@ -484,9 +484,20 @@ function renderProviders() {
     const logoHtml = logo
       ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
       : '<span class="pc-logo pc-logo-empty"></span>';
+    const shim = shimDefaults[typeName] || {};
     const baseUrl = cfg.base_url || '';
+    const shimBaseUrl = !baseUrl && shim.default_base_url ? shim.default_base_url : '';
+    let apiKeyDisplay = cfg.api_key || '';
+    let apiKeyMuted = false;
+    if (!apiKeyDisplay && cfg.token_command) {
+      apiKeyDisplay = 'token_command';
+      apiKeyMuted = true;
+    } else if (!apiKeyDisplay && shim.default_api_key_env) {
+      apiKeyDisplay = '${' + shim.default_api_key_env + '}';
+      apiKeyMuted = true;
+    }
     const apiKeyField = S._credentialVisible
-      ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(cfg.api_key || '')}"><code>${esc(cfg.api_key || '')}</code></div>`
+      ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(apiKeyDisplay)}"><code class="${apiKeyMuted ? 'text-muted' : ''}">${esc(apiKeyDisplay)}</code></div>`
       : '';
     const modelCount = _countModelsForProvider(name);
     const modelLink = modelCount > 0
@@ -504,7 +515,9 @@ function renderProviders() {
       <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name))}</div>
       <div class="pc-meta">
         <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>
-        <div class="pc-field" data-label="${t('card.baseUrl')}" title="${esc(baseUrl)}"><code>${esc(baseUrl)}</code></div>
+        <div class="pc-field" data-label="${t('card.baseUrl')}" title="${esc(baseUrl || shimBaseUrl)}">${shimBaseUrl && !baseUrl
+          ? `<code class="text-muted">${esc(shimBaseUrl)}</code>`
+          : `<code>${esc(baseUrl)}</code>`}</div>
         ${apiKeyField}
       </div>
       <div class="pc-actions">

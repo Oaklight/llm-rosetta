@@ -10,6 +10,16 @@ from llm_rosetta.gateway.transport.provider_info import _VERSION_SUFFIXES
 from ._shared import _resolve_models_path
 
 
+def _resolve_base_url(provider_cfg: dict, config: Any, name: str) -> str:
+    """Return the base_url from raw config, falling back to shim defaults."""
+    url = provider_cfg.get("base_url", "").rstrip("/")
+    if not url:
+        pinfo = config.providers.get(name) if hasattr(config, "providers") else None
+        if pinfo and pinfo.base_url:
+            url = pinfo.base_url.rstrip("/")
+    return url
+
+
 async def test_provider_connectivity(request: Any, name: str) -> Response:
     """Probe a provider's base_url and endpoint paths for reachability.
 
@@ -29,7 +39,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     if provider_cfg is None:
         return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
 
-    base_url = provider_cfg.get("base_url", "").rstrip("/")
+    base_url = _resolve_base_url(provider_cfg, config, name)
     if not base_url:
         return JSONResponse(
             {"error": "Provider has no base_url configured"}, status_code=400
