@@ -736,8 +736,8 @@ def _write_back_stream_usage(
     usage = getattr(processor, "get_accumulated_usage", lambda: None)()
     if not usage or not entry_id or request_log is None:
         return
-    inp = usage.get("prompt_tokens")
-    outp = usage.get("completion_tokens")
+    inp = usage.get("input_tokens") or usage.get("prompt_tokens")
+    outp = usage.get("output_tokens") or usage.get("completion_tokens")
     total = usage.get("total_tokens")
     if inp is None and outp is None:
         return
