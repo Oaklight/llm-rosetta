@@ -231,3 +231,104 @@ class TestMultiProviderResolve:
             _make_config(
                 {"gpt-4o": {"providers": [{"name": "openai_a", "weight": -1}]}}
             )
+
+
+class TestPerProviderUpstreamModel:
+    """Per-provider upstream_model in ProviderEntry."""
+
+    def test_upstream_model_parsed_from_dict_entry(self):
+        config = _make_config(
+            {
+                "gpt-4o": {
+                    "providers": [
+                        {"name": "openai_a", "weight": 1, "upstream_model": "gpt-4o-a"},
+                        {"name": "openai_b", "weight": 1, "upstream_model": "gpt-4o-b"},
+                    ],
+                }
+            }
+        )
+        route = config.models["gpt-4o"]
+        assert route.providers[0].upstream_model == "gpt-4o-a"
+        assert route.providers[1].upstream_model == "gpt-4o-b"
+
+    def test_upstream_model_none_for_string_entry(self):
+        config = _make_config({"gpt-4o": {"providers": ["openai_a", "openai_b"]}})
+        route = config.models["gpt-4o"]
+        assert route.providers[0].upstream_model is None
+        assert route.providers[1].upstream_model is None
+
+    def test_upstream_model_none_when_not_specified(self):
+        config = _make_config(
+            {"gpt-4o": {"providers": [{"name": "openai_a", "weight": 2}]}}
+        )
+        assert config.models["gpt-4o"].providers[0].upstream_model is None
+
+    def test_resolve_uses_per_provider_upstream(self):
+        config = _make_config(
+            {
+                "gpt-4o": {
+                    "providers": [
+                        {
+                            "name": "openai_a",
+                            "weight": 1,
+                            "upstream_model": "gpt-4o-variant-a",
+                        },
+                    ],
+                }
+            }
+        )
+        route, _ = config.resolve("openai_chat", "gpt-4o")
+        assert route.upstream_model == "gpt-4o-variant-a"
+
+    def test_resolve_per_provider_overrides_model_level(self):
+        config = _make_config(
+            {
+                "gpt-4o": {
+                    "providers": [
+                        {
+                            "name": "openai_a",
+                            "weight": 1,
+                            "upstream_model": "per-provider-name",
+                        },
+                    ],
+                    "upstream_model": "model-level-name",
+                }
+            }
+        )
+        route, _ = config.resolve("openai_chat", "gpt-4o")
+        assert route.upstream_model == "per-provider-name"
+
+    def test_resolve_falls_back_to_model_level(self):
+        config = _make_config(
+            {
+                "gpt-4o": {
+                    "providers": [{"name": "openai_a", "weight": 1}],
+                    "upstream_model": "model-level-name",
+                }
+            }
+        )
+        route, _ = config.resolve("openai_chat", "gpt-4o")
+        assert route.upstream_model == "model-level-name"
+
+    def test_select_entry_returns_provider_entry(self):
+        config = _make_config(
+            {
+                "gpt-4o": {
+                    "providers": [
+                        {
+                            "name": "openai_a",
+                            "weight": 1,
+                            "upstream_model": "upstream-a",
+                        },
+                        {"name": "openai_b", "weight": 1},
+                    ],
+                }
+            }
+        )
+        route = config.models["gpt-4o"]
+        entry = route.select_entry()
+        assert entry.name in ("openai_a", "openai_b")
+        if entry.name == "openai_a":
+            assert entry.upstream_model == "upstream-a"
+        else:
+            assert entry.upstream_model is None

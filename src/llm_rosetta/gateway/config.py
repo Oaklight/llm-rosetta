@@ -796,7 +796,8 @@ class GatewayConfig:
                     pname,
                 )
                 continue
-            entries.append(ProviderEntry(pname, weight))
+            upstream = item.get("upstream_model") if isinstance(item, dict) else None
+            entries.append(ProviderEntry(pname, weight, upstream_model=upstream))
 
         if not entries:
             return None
@@ -830,10 +831,11 @@ class GatewayConfig:
         """
         from typing import cast
 
-        provider_name = self.models[model].select()
+        entry = self.models[model].select_entry()
+        provider_name = entry.name
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
-        upstream_model = self.model_upstream_names.get(model)
+        upstream_model = entry.upstream_model or self.model_upstream_names.get(model)
         caps = self.model_capabilities.get(model, list(self.DEFAULT_CAPABILITIES))
         reasoning = self.model_reasoning_overrides.get(model)
         flatten_system = self.model_flatten_system.get(model, False)

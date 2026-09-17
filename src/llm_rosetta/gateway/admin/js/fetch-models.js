@@ -91,6 +91,13 @@ async function doFetchModels() {
   }
 }
 
+function _getExistingProviders(entry) {
+  if (!entry) return [];
+  if (entry.providers) return entry.providers.map(p => typeof p === 'string' ? p : p.name);
+  if (entry.provider) return [entry.provider];
+  return [];
+}
+
 function renderFetchedModels() {
   const list = document.getElementById('fetchModelsList');
   const query = (document.getElementById('fetchModelSearch').value || '').trim().toLowerCase();
@@ -104,12 +111,29 @@ function renderFetchedModels() {
 
   list.innerHTML = models.map(m => {
     const displayName = prefix ? prefix + m : m;
-    const exists = displayName in existingModels;
+    const entry = existingModels[displayName];
+    const existingProviders = _getExistingProviders(entry);
+    const providerAlreadyPresent = existingProviders.includes(S._fetchProvider);
+    const canAddProvider = entry && !providerAlreadyPresent;
+    const exists = entry && providerAlreadyPresent;
     const upstreamId = S._fetchUpstreamMap ? S._fetchUpstreamMap[m] : '';
     const upstreamHint = upstreamId ? ` <span style="font-size:11px;color:var(--text-dim)">→ ${esc(upstreamId)}</span>` : '';
-    return `<label${exists ? ' style="opacity:0.6"' : ''}>
-      <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${exists ? ' checked data-exists="true"' : ''}>
-      <span>${esc(m)}</span>${upstreamHint}${exists ? ' <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>' : ''}
+
+    let attrs = '';
+    let tag = '';
+    let style = '';
+    if (exists) {
+      attrs = ' checked data-exists="true"';
+      tag = ` <span class="exists-tag" style="font-size:11px;color:var(--text-dim)">(exists)</span>`;
+      style = ' style="opacity:0.6"';
+    } else if (canAddProvider) {
+      attrs = ' data-can-add="true"';
+      tag = ` <span class="add-provider-tag" style="font-size:11px;color:var(--blue)">${esc(t('fetch.addProvider'))}</span>`;
+    }
+
+    return `<label${style}>
+      <input type="checkbox" value="${esc(m)}" onchange="updateFetchCount()"${attrs}>
+      <span>${esc(m)}</span>${upstreamHint}${tag}
     </label>`;
   }).join('');
 
@@ -122,17 +146,19 @@ function filterFetchedModels() {
 
 function toggleAllFetched(checked) {
   const boxes = document.querySelectorAll('#fetchModelsList input[type="checkbox"]');
-  boxes.forEach(cb => cb.checked = checked);
+  boxes.forEach(cb => {
+    if (!cb.dataset.exists) cb.checked = checked;
+  });
   updateFetchCount();
 }
 
 function updateFetchCount() {
   const all = document.querySelectorAll('#fetchModelsList input[type="checkbox"]');
   const checked = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked');
-  // Check if there are any changes: unchecked exists or checked non-exists
   const uncheckedExists = document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-exists="true"]:not(:checked)');
-  const checkedNew = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"])');
-  const hasChanges = uncheckedExists.length > 0 || checkedNew.length > 0;
+  const checkedNew = document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"]):not([data-can-add="true"])');
+  const checkedCanAdd = document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-can-add="true"]:checked');
+  const hasChanges = uncheckedExists.length > 0 || checkedNew.length > 0 || checkedCanAdd.length > 0;
   document.getElementById('fetchCount').textContent = t('fetch.count', {checked: checked.length, total: all.length});
   const btn = document.getElementById('fetchAddBtn');
   btn.disabled = !hasChanges;
@@ -146,43 +172,46 @@ async function bulkAddFetchedModels() {
   btn.textContent = '...';
 
   try {
-    // Models to add: checked and not already existing
-    const toAdd = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"])')].map(cb => cb.value);
-    // Models to remove: unchecked but marked as existing
+    const toAdd = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"]:checked:not([data-exists="true"]):not([data-can-add="true"])')].map(cb => cb.value);
+    const toAppend = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-can-add="true"]:checked')].map(cb => cb.value);
     const toRemove = [...document.querySelectorAll('#fetchModelsList input[type="checkbox"][data-exists="true"]:not(:checked)')].map(cb => {
       return prefix ? prefix + cb.value : cb.value;
     });
 
     let addedCount = 0;
+    let appendedCount = 0;
     let removedCount = 0;
 
-    // Add new models
-    if (toAdd.length > 0) {
+    if (toAdd.length > 0 || toAppend.length > 0) {
       const modelType = _getFetchModelType();
-      const res = await api.post('/admin/api/config/models', {
+      const body = {
         provider: S._fetchProvider,
         models: toAdd,
         prefix: prefix,
         type: modelType,
         capabilities: _getFetchCapabilities(),
         upstream_map: S._fetchUpstreamMap,
-      });
+      };
+      if (toAppend.length > 0) {
+        body.models_append = toAppend;
+      }
+      const res = await api.post('/admin/api/config/models', body);
       if (res.ok) {
         addedCount = (res.added || []).length;
+        appendedCount = (res.appended || []).length;
       } else {
         showToast(res.error || 'Failed to add models', 'error');
       }
     }
 
-    // Remove deselected existing models
     for (const name of toRemove) {
       const res = await api.del(`/admin/api/config/models/${encodeURIComponent(name)}`);
       if (res.ok) removedCount++;
     }
 
-    // Show result
     const msgs = [];
     if (addedCount > 0) msgs.push(t('toast.modelsAdded', {count: addedCount}));
+    if (appendedCount > 0) msgs.push(t('toast.providersAppended', {count: appendedCount}));
     if (removedCount > 0) msgs.push(t('toast.modelsRemoved', {count: removedCount}));
     if (msgs.length > 0) {
       showToast(msgs.join(', '));

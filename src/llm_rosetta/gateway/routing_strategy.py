@@ -17,6 +17,7 @@ class ProviderEntry:
 
     name: str
     weight: int = 1
+    upstream_model: str | None = None
 
 
 class RoutingStrategy(Protocol):
@@ -102,6 +103,14 @@ class ModelRoute:
     def select(self) -> str:
         """Pick the next provider according to the strategy."""
         return self.strategy.select(self.providers)
+
+    def select_entry(self) -> ProviderEntry:
+        """Pick the next provider and return the full entry."""
+        name = self.strategy.select(self.providers)
+        for p in self.providers:
+            if p.name == name:
+                return p
+        return self.providers[0]  # unreachable, but safe fallback
 
     @property
     def provider_names(self) -> list[str]:
