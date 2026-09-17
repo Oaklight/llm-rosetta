@@ -216,6 +216,19 @@ class TestMergeProviderIntoModel:
         _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
         assert len(models["gpt-4o"]["providers"]) == 1
 
+    def test_merge_skips_duplicate_string_entry(self):
+        models = {"gpt-4o": "provider_a"}
+        new_p = {"name": "provider_a", "weight": 1, "upstream_model": "x"}
+        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert models["gpt-4o"] == "provider_a"
+
+    def test_merge_skips_duplicate_single_provider_dict(self):
+        models = {"gpt-4o": {"provider": "provider_a", "capabilities": ["text"]}}
+        new_p = {"name": "provider_a", "weight": 1}
+        _merge_provider_into_model(models, "gpt-4o", new_p, ["text"])
+        assert "providers" not in models["gpt-4o"]
+        assert models["gpt-4o"]["provider"] == "provider_a"
+
     def test_merge_non_dict_is_noop(self):
         models = {"gpt-4o": 42}  # type: ignore[dict-item]
         new_p = {"name": "provider_b", "weight": 1}
