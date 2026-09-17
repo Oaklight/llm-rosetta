@@ -1104,6 +1104,7 @@ def _append_provider_to_model(
     new_p = _make_provider_entry(provider, model_id, prefix, upstream_map)
 
     if isinstance(existing, str):
+        # String entries don't store capabilities; use the caller's value.
         old_entry: dict[str, Any] = {"name": existing, "weight": 1}
         models_section[display_name] = {
             "providers": [old_entry, new_p],
@@ -1151,7 +1152,12 @@ async def bulk_add_models(request: Any) -> Response:
 
     if not provider or (not models_to_add and not models_to_append):
         return JSONResponse(
-            {"error": "'provider' and 'models' are required"}, status_code=400
+            {
+                "error": (
+                    "'provider' and at least one of 'models'/'models_append' required"
+                )
+            },
+            status_code=400,
         )
 
     with config_lock(config_path):
