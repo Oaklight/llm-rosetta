@@ -578,6 +578,52 @@ def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
     return entry
 
 
+def _get_existing_provider_label(existing: Any) -> str:
+    """Return a human-readable provider label for an existing model entry."""
+    if isinstance(existing, str):
+        return existing
+    if isinstance(existing, dict) and "providers" in existing:
+        names = [
+            p if isinstance(p, str) else p.get("name", "")
+            for p in existing["providers"]
+        ]
+        return ", ".join(filter(None, names))
+    return existing.get("provider", "") if isinstance(existing, dict) else ""
+
+
+def _handle_rename_merge(
+    models: dict[str, Any],
+    name: str,
+    rename_from: str,
+    body: dict[str, Any],
+    provider: str,
+) -> JSONResponse | None:
+    """Handle the merge branch of a rename collision.
+
+    Returns a 409 JSONResponse if merge was not requested, or ``None``
+    after performing the merge (caller should save and reload).
+    """
+    existing = models[name]
+    existing_provider = _get_existing_provider_label(existing)
+    if not body.get("merge"):
+        return JSONResponse(
+            {
+                "error": f"Model '{name}' already exists",
+                "merge_possible": True,
+                "existing_provider": existing_provider,
+            },
+            status_code=409,
+        )
+    raw_upstream = body.get("upstream_model")
+    upstream = raw_upstream if raw_upstream is not None else rename_from
+    new_p: dict[str, Any] = {"name": provider, "weight": 1}
+    if upstream:
+        new_p["upstream_model"] = upstream
+    _merge_provider_into_model(models, name, new_p, body.get("capabilities", ["text"]))
+    del models[rename_from]
+    return None
+
+
 async def put_model(request: Any, **kwargs: Any) -> Response:
     """Add or update a model routing entry."""
     config_path = _get_config_path(request)
@@ -619,32 +665,12 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                     status_code=404,
                 )
             if name in models:
-                existing = models[name]
-                existing_provider = (
-                    existing
-                    if isinstance(existing, str)
-                    else existing.get("provider", "")
+                merge_err = _handle_rename_merge(
+                    models, name, rename_from, body, provider
                 )
-                if not body.get("merge"):
-                    return JSONResponse(
-                        {
-                            "error": f"Model '{name}' already exists",
-                            "merge_possible": True,
-                            "existing_provider": existing_provider,
-                        },
-                        status_code=409,
-                    )
-                upstream = body.get("upstream_model") or rename_from
-                new_p: dict[str, Any] = {"name": provider, "weight": 1}
-                if upstream:
-                    new_p["upstream_model"] = upstream
-                _merge_provider_into_model(
-                    models,
-                    name,
-                    new_p,
-                    body.get("capabilities", ["text"]),
-                )
-                del models[rename_from]
+                if merge_err is not None:
+                    return merge_err
+                # Merge succeeded — save, reload, return
                 try:
                     _get_config_io(request).save(config_path, data)
                 except Exception as exc:
