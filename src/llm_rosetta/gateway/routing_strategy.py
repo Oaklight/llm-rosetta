@@ -100,17 +100,16 @@ class ModelRoute:
     providers: list[ProviderEntry]
     strategy: RoutingStrategy = field(default_factory=WeightedRoundRobinStrategy)
 
+    def __post_init__(self) -> None:
+        self._entry_by_name = {p.name: p for p in self.providers}
+
     def select(self) -> str:
         """Pick the next provider according to the strategy."""
         return self.strategy.select(self.providers)
 
     def select_entry(self) -> ProviderEntry:
         """Pick the next provider and return the full entry."""
-        name = self.strategy.select(self.providers)
-        for p in self.providers:
-            if p.name == name:
-                return p
-        return self.providers[0]  # unreachable, but safe fallback
+        return self._entry_by_name[self.strategy.select(self.providers)]
 
     @property
     def provider_names(self) -> list[str]:
