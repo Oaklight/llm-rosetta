@@ -81,12 +81,10 @@ def _record_telemetry(
     # back usage separately after the stream completes)
     _usage = (profile or {}).get("usage") if not is_stream else None
     _input_tokens = (
-        (_usage.get("input_tokens") or _usage.get("prompt_tokens")) if _usage else None
+        _usage.get("input_tokens", _usage.get("prompt_tokens")) if _usage else None
     )
     _output_tokens = (
-        (_usage.get("output_tokens") or _usage.get("completion_tokens"))
-        if _usage
-        else None
+        _usage.get("output_tokens", _usage.get("completion_tokens")) if _usage else None
     )
     _total_tokens = _usage.get("total_tokens") if _usage else None
 
