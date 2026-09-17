@@ -1174,6 +1174,8 @@ def _merge_provider_into_model(
     provider_name = new_provider_entry["name"]
 
     if isinstance(existing, str):
+        if existing == provider_name:
+            return
         old_entry: dict[str, Any] = {"name": existing, "weight": 1}
         models_section[display_name] = {
             "providers": [old_entry, new_provider_entry],
@@ -1192,6 +1194,8 @@ def _merge_provider_into_model(
         return
 
     if "provider" in existing:
+        if existing["provider"] == provider_name:
+            return
         old_provider = existing.pop("provider")
         old_upstream = existing.pop("upstream_model", None)
         old_p: dict[str, Any] = {"name": old_provider, "weight": 1}
