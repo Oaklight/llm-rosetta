@@ -39,7 +39,7 @@ from .shims import (
     unregister_shim,
 )
 
-__version__ = "0.14.0.dev2"
+__version__ = "0.14.0.dev3"
 
 __all__ = [
     # Converters
