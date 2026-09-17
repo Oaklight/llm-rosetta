@@ -819,7 +819,45 @@ class PassthroughStreamProcessor:
         return self._usage
 
     @staticmethod
-    def _extract_usage(chunk: dict[str, Any]) -> dict[str, int] | None:
+    def _extract_int(d: dict[str, Any], key: str) -> int | None:
+        v = d.get(key)
+        return v if isinstance(v, int) and v >= 0 else None
+
+    @classmethod
+    def _extract_nested_int(
+        cls, parent: dict[str, Any], parent_key: str, child_key: str
+    ) -> int | None:
+        sub = parent.get(parent_key)
+        return cls._extract_int(sub, child_key) if isinstance(sub, dict) else None
+
+    @classmethod
+    def _extract_extended_usage(
+        cls, usage: dict[str, Any], result: dict[str, int]
+    ) -> None:
+        """Extract cache/reasoning tokens from provider-specific nested fields."""
+        # OpenAI nested details
+        v = cls._extract_nested_int(usage, "prompt_tokens_details", "cached_tokens")
+        if v is not None:
+            result["cache_read_tokens"] = v
+        v = cls._extract_nested_int(
+            usage, "completion_tokens_details", "reasoning_tokens"
+        )
+        if v is not None:
+            result["reasoning_tokens"] = v
+        # Anthropic top-level fields
+        v = cls._extract_int(usage, "cache_read_input_tokens")
+        if v is not None:
+            result["cache_read_tokens"] = v
+        v = cls._extract_int(usage, "cache_creation_input_tokens")
+        if v is not None:
+            result["cache_creation_tokens"] = v
+        # Anthropic nested thinking tokens
+        v = cls._extract_nested_int(usage, "output_tokens_details", "thinking_tokens")
+        if v is not None:
+            result["reasoning_tokens"] = v
+
+    @classmethod
+    def _extract_usage(cls, chunk: dict[str, Any]) -> dict[str, int] | None:
         """Extract usage from a raw provider chunk (any format)."""
         usage = chunk.get("usage")
         if isinstance(usage, dict):
@@ -838,6 +876,7 @@ class PassthroughStreamProcessor:
                 result["total_tokens"] = result.get("prompt_tokens", 0) + result.get(
                     "completion_tokens", 0
                 )
+            cls._extract_extended_usage(usage, result)
             return result if result else None
         # Google format
         um = chunk.get("usageMetadata") or chunk.get("usage_metadata")
@@ -850,6 +889,10 @@ class PassthroughStreamProcessor:
                 ("candidates_token_count", "completion_tokens"),
                 ("totalTokenCount", "total_tokens"),
                 ("total_token_count", "total_tokens"),
+                ("cachedContentTokenCount", "cache_read_tokens"),
+                ("cached_content_token_count", "cache_read_tokens"),
+                ("thoughtsTokenCount", "reasoning_tokens"),
+                ("thoughts_token_count", "reasoning_tokens"),
             ):
                 v = um.get(src)
                 if isinstance(v, int) and v >= 0:

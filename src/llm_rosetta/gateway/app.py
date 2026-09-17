@@ -83,6 +83,9 @@ def _record_telemetry(
     _input_tokens = _usage.get("prompt_tokens") if _usage else None
     _output_tokens = _usage.get("completion_tokens") if _usage else None
     _total_tokens = _usage.get("total_tokens") if _usage else None
+    _cache_read_tokens = _usage.get("cache_read_tokens") if _usage else None
+    _cache_creation_tokens = _usage.get("cache_creation_tokens") if _usage else None
+    _reasoning_tokens = _usage.get("reasoning_tokens") if _usage else None
 
     if metrics:
         metrics.record_request(
@@ -96,6 +99,9 @@ def _record_telemetry(
             error_detail=error_detail,
             input_tokens=_input_tokens,
             output_tokens=_output_tokens,
+            cache_read_tokens=_cache_read_tokens,
+            cache_creation_tokens=_cache_creation_tokens,
+            reasoning_tokens=_reasoning_tokens,
         )
 
     request_log = getattr(request.app, "request_log", None)
@@ -121,6 +127,9 @@ def _record_telemetry(
             input_tokens=_input_tokens,
             output_tokens=_output_tokens,
             total_tokens=_total_tokens,
+            cache_read_tokens=_cache_read_tokens,
+            cache_creation_tokens=_cache_creation_tokens,
+            reasoning_tokens=_reasoning_tokens,
         )
         # For streaming, use the pre-generated ID so the stream
         # generator can write back profile data by this ID.

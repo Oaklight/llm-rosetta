@@ -39,6 +39,9 @@ class RequestLogEntry:
     input_tokens: int | None = None
     output_tokens: int | None = None
     total_tokens: int | None = None
+    cache_read_tokens: int | None = None
+    cache_creation_tokens: int | None = None
+    reasoning_tokens: int | None = None
 
     @classmethod
     def create(
@@ -58,6 +61,9 @@ class RequestLogEntry:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         total_tokens: int | None = None,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -77,6 +83,9 @@ class RequestLogEntry:
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             total_tokens=total_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -107,6 +116,12 @@ class RequestLogEntry:
             d["output_tokens"] = self.output_tokens
         if self.total_tokens is not None:
             d["total_tokens"] = self.total_tokens
+        if self.cache_read_tokens is not None:
+            d["cache_read_tokens"] = self.cache_read_tokens
+        if self.cache_creation_tokens is not None:
+            d["cache_creation_tokens"] = self.cache_creation_tokens
+        if self.reasoning_tokens is not None:
+            d["reasoning_tokens"] = self.reasoning_tokens
         return d
 
 
@@ -270,6 +285,9 @@ class RequestLog:
         input_tokens: int | None,
         output_tokens: int | None,
         total_tokens: int | None,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
     ) -> None:
         """Write back token usage for an existing entry.
 
@@ -278,7 +296,13 @@ class RequestLog:
         """
         if self._persistence is not None:
             self._persistence.update_entry_usage(
-                entry_id, input_tokens, output_tokens, total_tokens
+                entry_id,
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                cache_read_tokens=cache_read_tokens,
+                cache_creation_tokens=cache_creation_tokens,
+                reasoning_tokens=reasoning_tokens,
             )
         else:
             for i, entry in enumerate(self._entries):
@@ -288,6 +312,9 @@ class RequestLog:
                         input_tokens=input_tokens,
                         output_tokens=output_tokens,
                         total_tokens=total_tokens,
+                        cache_read_tokens=cache_read_tokens,
+                        cache_creation_tokens=cache_creation_tokens,
+                        reasoning_tokens=reasoning_tokens,
                     )
                     break
 

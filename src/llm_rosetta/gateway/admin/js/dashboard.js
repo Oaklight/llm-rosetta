@@ -601,7 +601,7 @@ function renderStats(d) {
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
     <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
-    <div class="stat-card"><div class="label">${t('stat.totalTokens')}</div><div class="value">${fmtTokens((d.total_input_tokens||0)+(d.total_output_tokens||0))}</div><div class="sub">↑${fmtTokens(d.total_input_tokens||0)} ↓${fmtTokens(d.total_output_tokens||0)}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.totalTokens')}</div><div class="value">${fmtTokens((d.total_input_tokens||0)+(d.total_output_tokens||0))}</div><div class="sub">↑${fmtTokens(d.total_input_tokens||0)} ↓${fmtTokens(d.total_output_tokens||0)}${(d.total_cache_read_tokens||0)>0?` · ${t('stat.cacheRead')} ${fmtTokens(d.total_cache_read_tokens)}`:''}${(d.total_cache_creation_tokens||0)>0?` · ${t('stat.cacheWrite')} ${fmtTokens(d.total_cache_creation_tokens)}`:''}${(d.total_reasoning_tokens||0)>0?` · ${t('stat.reasoning')} ${fmtTokens(d.total_reasoning_tokens)}`:''}</div></div>
   `;
 }
 
