@@ -845,7 +845,10 @@ class GatewayConfig:
         # checked regardless of the routing strategy.
         if not self.providers[provider_name].ready:
             for alt_entry in model_route.providers:
-                if alt_entry.name != provider_name and self.providers[alt_entry.name].ready:
+                if (
+                    alt_entry.name != provider_name
+                    and self.providers[alt_entry.name].ready
+                ):
                     entry = alt_entry
                     provider_name = alt_entry.name
                     break

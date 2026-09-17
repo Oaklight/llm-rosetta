@@ -107,6 +107,31 @@ class TestProviderInfoReady:
 
 
 # ---------------------------------------------------------------------------
+# KeyRing.contains_only
+# ---------------------------------------------------------------------------
+
+
+class TestKeyRingContainsOnly:
+    def test_single_match(self):
+        from llm_rosetta.gateway.transport.provider_info import KeyRing
+
+        kr = KeyRing(TOKEN_PENDING_SENTINEL)
+        assert kr.contains_only(TOKEN_PENDING_SENTINEL) is True
+
+    def test_single_no_match(self):
+        from llm_rosetta.gateway.transport.provider_info import KeyRing
+
+        kr = KeyRing("real-key")
+        assert kr.contains_only(TOKEN_PENDING_SENTINEL) is False
+
+    def test_multiple_keys(self):
+        from llm_rosetta.gateway.transport.provider_info import KeyRing
+
+        kr = KeyRing(f"{TOKEN_PENDING_SENTINEL},other")
+        assert kr.contains_only(TOKEN_PENDING_SENTINEL) is False
+
+
+# ---------------------------------------------------------------------------
 # ProviderNotReady exception
 # ---------------------------------------------------------------------------
 
@@ -216,6 +241,8 @@ class TestTokenSeeding:
                     return_value=[],
                 ),
             ):
+                # Skip retry delay for test speed
+                ds._RETRY_DELAY = 0
                 await ds._seed_tokens()
 
         asyncio.run(_run())
@@ -256,6 +283,7 @@ class TestTokenSeeding:
                     return_value=[],
                 ),
             ):
+                ds._RETRY_DELAY = 0
                 await ds._seed_tokens()
 
         asyncio.run(_run())
@@ -351,6 +379,50 @@ class TestMergeRebuild:
 
         assert m.active_streams == 3  # untouched
 
+    def test_merge_new_model_during_rebuild(self):
+        """Model appears in live traffic but not in baseline."""
+        m = MetricsCollector()
+        m.total_requests = 0
+        m.by_model = {}
+        pre = m.export_counters()
+
+        # New model appears during rebuild
+        m.total_requests = 3
+        m.by_model = {"new-model": 3}
+
+        baseline = {
+            "total_requests": 100,
+            "total_errors": 0,
+            "total_streams": 0,
+            "by_model": {"gpt-4o": 100},
+            "by_source_provider": {},
+            "by_target_provider": {},
+            "by_status_code": {},
+            "total_input_tokens": 0,
+            "total_output_tokens": 0,
+            "by_model_tokens": {},
+            "by_provider_tokens": {},
+        }
+
+        m.merge_rebuild(baseline, pre)
+        assert m.total_requests == 103
+        assert m.by_model["gpt-4o"] == 100
+        assert m.by_model["new-model"] == 3
+
+    def test_merge_int_clamps_negative_delta(self):
+        """Negative delta (shouldn't happen) is clamped to 0."""
+        m = MetricsCollector()
+        m.total_requests = 10
+        pre = m.export_counters()
+
+        # Somehow current < pre (shouldn't happen, but defensive)
+        m.total_requests = 5
+
+        baseline = {"total_requests": 100}
+        m.merge_rebuild(baseline, pre)
+        # max(0, 5 - 10) = 0, so result = 100 + 0
+        assert m.total_requests == 100
+
 
 # ---------------------------------------------------------------------------
 # Token command binary validation
@@ -435,6 +507,22 @@ class TestDeferredCounterRebuild:
         assert "counter_rebuild" not in ds._pending_tasks
         persistence.save_metrics.assert_called_once()
 
+    def test_rebuild_failure_clears_pending(self):
+        """Exception in executor still clears pending_tasks."""
+        persistence = MagicMock()
+        persistence.iter_log_rows_for_rebuild.side_effect = RuntimeError("DB error")
+
+        config = _FakeConfig({})
+        app = _FakeApp()
+        app.metrics = MetricsCollector()
+        app.persistence = persistence
+
+        ds = DeferredStartup(config, app)
+        ds._pending_tasks.add("counter_rebuild")
+        asyncio.run(ds._rebuild_counters())
+
+        assert "counter_rebuild" not in ds._pending_tasks
+
 
 # ---------------------------------------------------------------------------
 # DeferredStartup — backfills
@@ -473,6 +561,151 @@ class TestDeferredBackfills:
         persistence.backfill_error_dump_log_ids.assert_called_once()
         assert "backfills" not in ds._pending_tasks
 
+    def test_backfills_failure_clears_pending(self):
+        """Exception in backfills still clears pending_tasks."""
+        persistence = MagicMock()
+        persistence.backfill_provider_names.side_effect = RuntimeError("DB error")
+
+        config = _FakeConfig({})
+        config.models = {}
+        config.model_upstream_names = {}
+
+        app = _FakeApp()
+        app.persistence = persistence
+
+        ds = DeferredStartup(config, app)
+        ds._pending_tasks.add("backfills")
+        asyncio.run(ds._run_backfills())
+
+        assert "backfills" not in ds._pending_tasks
+
+
+# ---------------------------------------------------------------------------
+# Routing: resolve() skips unready providers
+# ---------------------------------------------------------------------------
+
+
+class TestResolveSkipsUnready:
+    """Test the routing fallback logic in GatewayConfig.resolve()."""
+
+    def _build_config(self, providers: dict[str, ProviderInfo]):
+        """Build a minimal GatewayConfig with routing for 'test-model'."""
+        from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
+
+        # Use the first provider name as the single-provider model route
+        first_name = next(iter(providers))
+        config_dict = {
+            "providers": {
+                name: {"api_key": "x", "base_url": pinfo.base_url}
+                for name, pinfo in providers.items()
+            },
+            "models": {"test-model": first_name},
+            "server": {},
+        }
+        with patch(
+            "llm_rosetta.gateway.providers._resolve_token_command",
+            return_value=("sk-x", None, 3600),
+        ):
+            from llm_rosetta.gateway.config import GatewayConfig
+
+            cfg = GatewayConfig(config_dict)
+
+        # Override with our ProviderInfo objects and a multi-provider route
+        cfg.providers = providers
+        entries = [ProviderEntry(name=n) for n in providers]
+        cfg.models = {"test-model": ModelRoute(providers=entries)}
+        cfg.provider_types = {n: "openai_chat" for n in providers}
+        return cfg
+
+    def test_first_ready_provider_selected(self):
+        """When first provider is unready, second is selected."""
+        providers = {
+            "unready": _make_pending_pinfo("unready"),
+            "ready": _make_pinfo("ready"),
+        }
+        cfg = self._build_config(providers)
+        route, pinfo = cfg.resolve("openai_chat", "test-model")
+        assert route.provider_name == "ready"
+        assert pinfo.ready is True
+
+    def test_all_unready_raises_pending(self):
+        """All providers unready → ProviderNotReady with failed=False."""
+        providers = {
+            "a": _make_pending_pinfo("a"),
+            "b": _make_pending_pinfo("b"),
+        }
+        cfg = self._build_config(providers)
+        with pytest.raises(ProviderNotReady) as exc_info:
+            cfg.resolve("openai_chat", "test-model")
+        assert exc_info.value.failed is False
+
+    def test_all_failed_raises_failed(self):
+        """All providers failed → ProviderNotReady with failed=True."""
+        providers = {
+            "a": _make_pending_pinfo("a"),
+            "b": _make_pending_pinfo("b"),
+        }
+        cfg = self._build_config(providers)
+
+        ds = DeferredStartup(_FakeConfig(providers), _FakeApp())
+        ds._provider_states["a"] = ProviderInitState.FAILED
+        ds._provider_states["b"] = ProviderInitState.FAILED
+        setattr(cfg, "_deferred_startup", ds)
+
+        with pytest.raises(ProviderNotReady) as exc_info:
+            cfg.resolve("openai_chat", "test-model")
+        assert exc_info.value.failed is True
+
+    def test_single_ready_provider_no_fallback_needed(self):
+        """Single ready provider works without fallback."""
+        providers = {"only": _make_pinfo("only")}
+        cfg = self._build_config(providers)
+        route, pinfo = cfg.resolve("openai_chat", "test-model")
+        assert route.provider_name == "only"
+
+
+# ---------------------------------------------------------------------------
+# _resolve_or_error
+# ---------------------------------------------------------------------------
+
+
+class TestResolveOrError:
+    def test_returns_503_for_pending(self):
+        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta.gateway.app import _resolve_or_error
+
+        with patch("llm_rosetta.gateway.app._config") as mock_config:
+            mock_config.resolve.side_effect = ProviderNotReady("model-x")
+            result = _resolve_or_error("openai_chat", "model-x", "req-1")
+
+        assert isinstance(result, Response)
+        assert result.status_code == 503
+        assert result.headers.get("Retry-After") == "5"
+
+    def test_returns_502_for_failed(self):
+        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta.gateway.app import _resolve_or_error
+
+        with patch("llm_rosetta.gateway.app._config") as mock_config:
+            mock_config.resolve.side_effect = ProviderNotReady("model-x", failed=True)
+            result = _resolve_or_error("openai_chat", "model-x", "req-1")
+
+        assert isinstance(result, Response)
+        assert result.status_code == 502
+        assert "Retry-After" not in result.headers
+
+    def test_returns_404_for_unknown_model(self):
+        from llm_rosetta._vendor.httpserver import Response
+        from llm_rosetta.gateway.app import _resolve_or_error
+
+        with patch("llm_rosetta.gateway.app._config") as mock_config:
+            mock_config.resolve.side_effect = KeyError("no-model")
+            mock_config.models.keys.return_value = ["gpt-4o"]
+            result = _resolve_or_error("openai_chat", "no-model", "req-1")
+
+        assert isinstance(result, Response)
+        assert result.status_code == 404
+
 
 # ---------------------------------------------------------------------------
 # DeferredStartup — lifecycle
@@ -506,6 +739,7 @@ class TestDeferredStartupLifecycle:
                     return_value=[],
                 ),
             ):
+                ds._RETRY_DELAY = 0
                 await ds.start()
                 assert len(ds._tasks) >= 2
 

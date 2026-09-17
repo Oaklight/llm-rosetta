@@ -63,6 +63,8 @@ class DeferredStartup:
     app as ``app.deferred_startup``.
     """
 
+    _RETRY_DELAY = 30  # seconds before retrying a failed token_command
+
     def __init__(self, config: Any, app: Any) -> None:
         self._config = config
         self._app = app
@@ -172,7 +174,12 @@ class DeferredStartup:
             logger.error("Failed to seed API key for '%s': %s", name, exc)
 
     async def _seed_tokens(self) -> None:
-        """Seed all token_command providers in parallel, then start refresh loops."""
+        """Seed all token_command providers in parallel, then start refresh loops.
+
+        Failed providers get a single delayed retry before being marked
+        permanently FAILED — this handles transient failures (network
+        blips, slow auth services) without blocking startup.
+        """
         from .transport.token_refresh import start_token_refreshers
 
         pending = [
@@ -184,8 +191,27 @@ class DeferredStartup:
         # Parallel initial fetch
         await asyncio.gather(
             *(self._seed_one_provider(name) for name in pending),
-            return_exceptions=True,
         )
+
+        # Retry failed providers once after a delay
+        failed = [
+            name
+            for name in pending
+            if self._provider_states.get(name) == ProviderInitState.FAILED
+        ]
+        if failed:
+            logger.info(
+                "Retrying %d failed provider(s) in %ds: %s",
+                len(failed),
+                self._RETRY_DELAY,
+                ", ".join(failed),
+            )
+            await asyncio.sleep(self._RETRY_DELAY)
+            for name in failed:
+                self._provider_states[name] = ProviderInitState.PENDING
+            await asyncio.gather(
+                *(self._seed_one_provider(name) for name in failed),
+            )
 
         # Start background refresh loops only for providers that succeeded
         ready_providers = {
@@ -230,31 +256,39 @@ class DeferredStartup:
             self._pending_tasks.discard("counter_rebuild")
             return
 
-        # Snapshot current state *before* the rebuild starts (on event loop)
-        pre_snapshot = metrics.export_counters()
+        try:
+            # Snapshot current state *before* the rebuild starts (on event loop)
+            pre_snapshot = metrics.export_counters()
 
-        loop = asyncio.get_running_loop()
+            loop = asyncio.get_running_loop()
 
-        def _sync_rebuild() -> dict:
-            tmp = MetricsCollector()
-            count = tmp.rebuild_counters(persistence.iter_log_rows_for_rebuild())
-            logger.info("Background counter rebuild processed %d rows", count)
-            return tmp.export_counters()
+            def _sync_rebuild() -> dict:
+                tmp = MetricsCollector()
+                count = tmp.rebuild_counters(persistence.iter_log_rows_for_rebuild())
+                logger.info("Background counter rebuild processed %d rows", count)
+                return tmp.export_counters()
 
-        logger.info("Starting background counter rebuild")
-        baseline = await loop.run_in_executor(None, _sync_rebuild)
+            logger.info("Starting background counter rebuild")
+            baseline = await loop.run_in_executor(None, _sync_rebuild)
 
-        # Merge back on the event-loop thread
-        metrics.merge_rebuild(baseline, pre_snapshot)
-        persistence.save_metrics(metrics.export_counters())
-
-        self._pending_tasks.discard("counter_rebuild")
-        logger.info("Counter rebuild complete, metrics merged")
+            # Merge back on the event-loop thread
+            metrics.merge_rebuild(baseline, pre_snapshot)
+            persistence.save_metrics(metrics.export_counters())
+            logger.info("Counter rebuild complete, metrics merged")
+        except Exception:
+            logger.exception("Background counter rebuild failed")
+        finally:
+            self._pending_tasks.discard("counter_rebuild")
 
     # -- Backfills (thread executor) ----------------------------------------
 
     async def _run_backfills(self) -> None:
-        """Run all database backfills sequentially in a background thread."""
+        """Run all database backfills sequentially in a background thread.
+
+        The persistence layer uses SQLite in WAL mode, which allows
+        concurrent reads from the event-loop thread while the executor
+        thread performs backfill writes.
+        """
         persistence = getattr(self._app, "persistence", None)
         if persistence is None:
             self._pending_tasks.discard("backfills")
@@ -290,7 +324,10 @@ class DeferredStartup:
             logger.info("Deferred backfills complete: %s", results)
             return results
 
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, _sync_backfills)
-
-        self._pending_tasks.discard("backfills")
+        try:
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, _sync_backfills)
+        except Exception:
+            logger.exception("Deferred backfills failed")
+        finally:
+            self._pending_tasks.discard("backfills")

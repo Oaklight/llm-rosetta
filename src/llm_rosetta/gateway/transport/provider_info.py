@@ -98,6 +98,10 @@ class KeyRing:
                 best_key = key
         return best_key
 
+    def contains_only(self, value: str) -> bool:
+        """True when the ring holds exactly one key equal to *value*."""
+        return len(self._keys) == 1 and self._keys[0] == value
+
     def __len__(self) -> int:
         return len(self._keys)
 
@@ -186,8 +190,7 @@ class ProviderInfo:
         token-command sentinel, meaning the initial token fetch has not
         yet completed.
         """
-        kr = self.key_ring
-        return len(kr) != 1 or kr._keys[0] != TOKEN_PENDING_SENTINEL
+        return not self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
 
     # -- public helpers used by the proxy -----------------------------------
 
