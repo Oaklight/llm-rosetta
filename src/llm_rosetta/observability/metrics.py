@@ -450,6 +450,93 @@ class MetricsCollector:
 
         return total_requests
 
+    def merge_rebuild(self, baseline: dict, pre_snapshot: dict) -> None:
+        """Atomically merge a background-rebuilt baseline with live traffic.
+
+        *baseline* is the result of :meth:`export_counters` from a
+        temporary :class:`MetricsCollector` that processed the full
+        request log in a background thread.
+
+        *pre_snapshot* is the result of :meth:`export_counters` captured
+        on the event-loop thread **before** the background rebuild
+        started.  The delta ``current - pre_snapshot`` represents
+        requests that arrived during the rebuild window.
+
+        The final value for each counter is ``baseline + delta``, applied
+        via a single-assignment swap so concurrent readers never see
+        partial state.
+
+        Must be called from the event-loop thread (not from an executor).
+        """
+
+        def _merge_int(base_key: str) -> int:
+            return baseline.get(base_key, 0) + (
+                getattr(self, base_key) - pre_snapshot.get(base_key, 0)
+            )
+
+        def _merge_dict(base_key: str) -> dict:
+            b = dict(baseline.get(base_key, {}))
+            pre = pre_snapshot.get(base_key, {})
+            cur = getattr(self, base_key)
+            for k, v in cur.items():
+                delta = v - pre.get(k, 0)
+                if delta > 0:
+                    b[k] = b.get(k, 0) + delta
+            return b
+
+        def _merge_token_dict(base_key: str) -> dict[str, dict[str, int]]:
+            b: dict[str, dict[str, int]] = {
+                k: dict(v) for k, v in baseline.get(base_key, {}).items()
+            }
+            pre = pre_snapshot.get(base_key, {})
+            cur = getattr(self, base_key)
+            for k, cur_toks in cur.items():
+                pre_toks = pre.get(k, {})
+                if k not in b:
+                    b[k] = {"input_tokens": 0, "output_tokens": 0}
+                for tok_key in ("input_tokens", "output_tokens"):
+                    delta = cur_toks.get(tok_key, 0) - pre_toks.get(tok_key, 0)
+                    if delta > 0:
+                        b[k][tok_key] = b[k].get(tok_key, 0) + delta
+            return b
+
+        # Build all values before swapping
+        total_requests = _merge_int("total_requests")
+        total_errors = _merge_int("total_errors")
+        total_streams = _merge_int("total_streams")
+        by_model = _merge_dict("by_model")
+        by_source = _merge_dict("by_source_provider")
+        by_target = _merge_dict("by_target_provider")
+        total_input = _merge_int("total_input_tokens")
+        total_output = _merge_int("total_output_tokens")
+        by_model_tokens = _merge_token_dict("by_model_tokens")
+        by_provider_tokens = _merge_token_dict("by_provider_tokens")
+
+        # by_status_code uses int keys, same merge pattern
+        b_status: dict[int, int] = {
+            int(k): v for k, v in baseline.get("by_status_code", {}).items()
+        }
+        pre_status = {
+            int(k): v for k, v in pre_snapshot.get("by_status_code", {}).items()
+        }
+        for k, v in self.by_status_code.items():
+            delta = v - pre_status.get(k, 0)
+            if delta > 0:
+                b_status[k] = b_status.get(k, 0) + delta
+
+        # Atomic swap
+        self.total_requests = total_requests
+        self.total_errors = total_errors
+        self.total_streams = total_streams
+        self.by_model = by_model
+        self.by_source_provider = by_source
+        self.by_target_provider = by_target
+        self.by_status_code = b_status
+        self.total_input_tokens = total_input
+        self.total_output_tokens = total_output
+        self.by_model_tokens = by_model_tokens
+        self.by_provider_tokens = by_provider_tokens
+
     def snapshot(self, series_seconds: int = 60) -> dict:
         """Return a JSON-serializable metrics snapshot."""
         uptime = time.monotonic() - self._start_time

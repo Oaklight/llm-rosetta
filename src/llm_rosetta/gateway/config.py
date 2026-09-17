@@ -828,11 +828,36 @@ class GatewayConfig:
 
         Raises:
             KeyError: If the model is not in the routing table.
+            ProviderNotReady: If all providers for the model are still
+                initializing or have failed.
         """
         from typing import cast
 
-        entry = self.models[model].select_entry()
+        from .deferred_startup import ProviderInitState, ProviderNotReady
+
+        model_route = self.models[model]
+        entry = model_route.select_entry()
         provider_name = entry.name
+
+        # Skip providers whose initial token fetch has not completed.
+        # Iterate the provider list directly (not via select()) to avoid
+        # perturbing the WRR counter and to guarantee all candidates are
+        # checked regardless of the routing strategy.
+        if not self.providers[provider_name].ready:
+            for alt_entry in model_route.providers:
+                if alt_entry.name != provider_name and self.providers[alt_entry.name].ready:
+                    entry = alt_entry
+                    provider_name = alt_entry.name
+                    break
+            else:
+                deferred = getattr(self, "_deferred_startup", None)
+                all_failed = deferred is not None and all(
+                    deferred.provider_state(p.name) == ProviderInitState.FAILED
+                    for p in model_route.providers
+                    if not self.providers[p.name].ready
+                )
+                raise ProviderNotReady(model, failed=all_failed)
+
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
         upstream_model = entry.upstream_model or self.model_upstream_names.get(model)

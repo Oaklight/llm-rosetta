@@ -73,7 +73,7 @@ def _init_persistence(
     config_path: str | None,
     data_dir: str | None,
     metrics: MetricsCollector,
-) -> PersistenceManager | None:
+) -> tuple[PersistenceManager, bool] | None:
     """Resolve data_dir, create PersistenceManager, and restore counters."""
     resolved_data_dir: str | None = data_dir
     if not resolved_data_dir:
@@ -114,20 +114,23 @@ def _init_persistence(
             metrics.total_requests,
         )
 
-    # Auto-rebuild if counters lag behind the log (ungraceful shutdown).
-    # Only rebuild when counters < log — the reverse (counters > log) is
+    # Detect counter drift (ungraceful shutdown) but defer the rebuild to
+    # a background task so the server starts accepting connections immediately.
+    # Only flag when counters < log — the reverse (counters > log) is
     # expected when log retention caps purge old entries.
     log_entries = persistence.count_log_entries()
     if metrics.total_requests < log_entries:
         logger.warning(
-            "Counter drift detected (counters=%d, log=%d), rebuilding from request log",
+            "Counter drift detected (counters=%d, log=%d) — "
+            "rebuild will run in the background after startup",
             metrics.total_requests,
             log_entries,
         )
-        metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
-        persistence.save_metrics(metrics.export_counters())
+        _counter_rebuild_needed = True
+    else:
+        _counter_rebuild_needed = False
 
-    return persistence
+    return persistence, _counter_rebuild_needed
 
 
 def setup_admin(
@@ -189,19 +192,15 @@ def setup_admin(
         config_io = JsoncConfigIO()
     metrics = MetricsCollector()
 
-    persistence = _init_persistence(config, config_path, data_dir, metrics)
+    result = _init_persistence(config, config_path, data_dir, metrics)
+    if result is not None:
+        persistence, counter_rebuild_needed = result
+    else:
+        persistence, counter_rebuild_needed = None, False
 
-    # Backfill target_provider_name for legacy log entries
-    if persistence is not None:
-        model_to_provider = {
-            model: route.provider_names[0] for model, route in config.models.items()
-        }
-        backfilled = persistence.backfill_provider_names(model_to_provider)
-        if backfilled:
-            logger.info(
-                "Backfilled target_provider_name for %d log entries",
-                backfilled,
-            )
+    # Backfills are deferred to DeferredStartup (run in background after
+    # the event loop starts).  Store the flag for the rebuild task.
+    app._counter_rebuild_needed = counter_rebuild_needed  # type: ignore[attr-defined]
 
     # Request log delegates to persistence when available
     request_log = RequestLog(persistence=persistence)
@@ -219,28 +218,8 @@ def setup_admin(
 
     capture_state = CaptureState()
 
-    # Backfill last_used for API keys from request log history
-    keystore = getattr(app, "keystore", None)
-    if keystore is not None and persistence is not None:
-        backfilled_keys = keystore.backfill_last_used(persistence.db_path)
-        if backfilled_keys:
-            logger.info(
-                "Backfilled last_used for %d API key(s) from request log",
-                backfilled_keys,
-            )
-
-    # Backfill request_log_id for error dumps missing the link
-    if persistence is not None:
-        gateway_config = getattr(app, "gateway_config", None)
-        aliases = gateway_config.model_upstream_names if gateway_config else {}
-        backfilled_dumps = persistence.backfill_error_dump_log_ids(
-            model_aliases=aliases
-        )
-        if backfilled_dumps:
-            logger.info(
-                "Backfilled request_log_id for %d error dump(s)",
-                backfilled_dumps,
-            )
+    # Backfills (last_used, error_dump_log_ids) are deferred to
+    # DeferredStartup — they run in a background thread after startup.
 
     app.metrics = metrics
     app.request_log = request_log

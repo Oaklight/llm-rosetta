@@ -19,6 +19,7 @@ from ._base import (
 )
 from .http import HttpTransport
 from .provider_info import (
+    TOKEN_PENDING_SENTINEL,
     AuthHeaderFn,
     KeyRing,
     ProviderInfo,
@@ -38,6 +39,7 @@ __all__ = [
     # HTTP implementation
     "HttpTransport",
     # Provider config
+    "TOKEN_PENDING_SENTINEL",
     "AuthHeaderFn",
     "KeyRing",
     "ProviderInfo",
