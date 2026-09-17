@@ -430,17 +430,18 @@ class TestMergeRebuild:
 
 
 class TestTokenCommandValidation:
-    def test_missing_binary_raises(self):
+    def test_missing_binary_warns_but_succeeds(self):
         from llm_rosetta.gateway.providers import _resolve_token_command
 
-        with pytest.raises(ValueError, match="not found on PATH"):
-            _resolve_token_command(
-                "test-provider",
-                {
-                    "token_command": ["/nonexistent/binary-xyz", "--arg"],
-                    "base_url": "https://example.com",
-                },
-            )
+        api_key, cmd, _ = _resolve_token_command(
+            "test-provider",
+            {
+                "token_command": ["/nonexistent/binary-xyz", "--arg"],
+                "base_url": "https://example.com",
+            },
+        )
+        assert api_key == TOKEN_PENDING_SENTINEL
+        assert cmd == ["/nonexistent/binary-xyz", "--arg"]
 
     def test_valid_binary_returns_sentinel(self):
         from llm_rosetta.gateway.providers import _resolve_token_command

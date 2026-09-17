@@ -337,15 +337,16 @@ class TestBuildProviderInfoTokenCommand:
         with pytest.raises(ValueError, match=">= 60"):
             build_provider_info("openai_chat", cfg)
 
-    def test_missing_binary_raises(self):
+    def test_missing_binary_warns_but_builds(self):
         from llm_rosetta.gateway.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
             "token_command": ["/nonexistent/binary-xyz"],
         }
-        with pytest.raises(ValueError, match="not found on PATH"):
-            build_provider_info("openai_chat", cfg)
+        pinfo = build_provider_info("openai_chat", cfg)
+        assert pinfo.ready is False
+        assert pinfo.token_command == ["/nonexistent/binary-xyz"]
 
     def test_without_token_command_unchanged(self):
         from llm_rosetta.gateway.providers import build_provider_info

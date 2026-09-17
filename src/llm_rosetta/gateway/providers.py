@@ -145,9 +145,12 @@ def _resolve_token_command(
             f"mutually exclusive"
         )
     if shutil.which(token_command[0]) is None:
-        raise ValueError(
-            f"Provider '{provider_type}': token_command executable "
-            f"'{token_command[0]}' not found on PATH"
+        logger.warning(
+            "Provider '%s': token_command executable '%s' not found on "
+            "PATH — the command may still work if the binary is available "
+            "at runtime (e.g. via volume mount)",
+            provider_type,
+            token_command[0],
         )
     logger.info(
         "Provider '%s' uses token_command — token will be fetched "
