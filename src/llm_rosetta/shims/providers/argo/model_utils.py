@@ -39,7 +39,7 @@ def model_list_transform(
             continue
         internal_id = m.get("internal_id")
         if internal_id:
-            slug = re.sub(r"[^a-z0-9]+", "-", raw_id.lower()).strip("-")
+            slug = re.sub(r"[^a-z0-9.]+", "-", raw_id.lower()).strip("-")
             if not slug:
                 continue
             display = f"argo:{slug}"

@@ -67,11 +67,11 @@ class TestModelListTransform:
         assert ids == ["argo:claude-opus-5"]
 
     def test_special_characters(self):
-        """Parentheses, dots, slashes, and other special chars are collapsed."""
+        """Parentheses, slashes, and other special chars are collapsed; dots preserved."""
         raw = [{"id": "Model (v2.1/beta)", "internal_id": "modelv21beta"}]
         ids, upstream = model_list_transform(raw)
-        assert ids == ["argo:model-v2-1-beta"]
-        assert upstream == {"argo:model-v2-1-beta": "modelv21beta"}
+        assert ids == ["argo:model-v2.1-beta"]
+        assert upstream == {"argo:model-v2.1-beta": "modelv21beta"}
 
     def test_leading_trailing_whitespace(self):
         """Leading/trailing whitespace does not produce leading/trailing hyphens."""
