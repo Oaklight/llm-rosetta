@@ -270,15 +270,17 @@ class TestRefreshLoop:
 
 
 class TestBuildProviderInfoTokenCommand:
-    def test_seeds_key_from_command(self):
+    def test_deferred_token_returns_sentinel(self):
         from llm_rosetta.gateway.providers import build_provider_info
+        from llm_rosetta.gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
             "token_command": ["echo", "seeded-key"],
         }
         pinfo = build_provider_info("openai_chat", cfg)
-        assert pinfo.auth_headers() == {"Authorization": "Bearer seeded-key"}
+        assert pinfo.ready is False
+        assert pinfo.key_ring.next() == TOKEN_PENDING_SENTINEL
         assert pinfo.token_command == ["echo", "seeded-key"]
         assert pinfo.token_refresh_interval == 3600
 
@@ -335,14 +337,14 @@ class TestBuildProviderInfoTokenCommand:
         with pytest.raises(ValueError, match=">= 60"):
             build_provider_info("openai_chat", cfg)
 
-    def test_startup_failure_raises(self):
+    def test_missing_binary_raises(self):
         from llm_rosetta.gateway.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
-            "token_command": ["false"],
+            "token_command": ["/nonexistent/binary-xyz"],
         }
-        with pytest.raises(RuntimeError, match="exited with"):
+        with pytest.raises(ValueError, match="not found on PATH"):
             build_provider_info("openai_chat", cfg)
 
     def test_without_token_command_unchanged(self):

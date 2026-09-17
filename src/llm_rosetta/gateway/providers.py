@@ -107,9 +107,17 @@ def _resolve_token_command(
 
     Returns the initial API key (either from static config or by running the
     command), the command list (or None), and the refresh interval.
-    Raises ValueError on invalid config, RuntimeError if the command fails.
+
+    When ``token_command`` is set, the actual subprocess call is **not**
+    performed here — a sentinel placeholder is returned instead, and the
+    real token is fetched asynchronously after the event loop starts (via
+    :class:`~gateway.deferred_startup.DeferredStartup`).
+
+    Raises ValueError on invalid config (bad types, missing binary, etc.).
     """
-    from .transport.token_refresh import run_token_command_sync
+    import shutil
+
+    from .transport.provider_info import TOKEN_PENDING_SENTINEL
 
     token_command = cfg.get("token_command")
     token_refresh_interval = int(cfg.get("token_refresh_interval", 3600))
@@ -136,9 +144,17 @@ def _resolve_token_command(
             f"Provider '{provider_type}': token_command and api_key are "
             f"mutually exclusive"
         )
-    api_key = run_token_command_sync(token_command)
-    logger.info("Seeded API key for '%s' via token_command", provider_type)
-    return api_key, token_command, token_refresh_interval
+    if shutil.which(token_command[0]) is None:
+        raise ValueError(
+            f"Provider '{provider_type}': token_command executable "
+            f"'{token_command[0]}' not found on PATH"
+        )
+    logger.info(
+        "Provider '%s' uses token_command — token will be fetched "
+        "asynchronously after startup",
+        provider_type,
+    )
+    return TOKEN_PENDING_SENTINEL, token_command, token_refresh_interval
 
 
 def build_provider_info(

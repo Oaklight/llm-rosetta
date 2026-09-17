@@ -21,6 +21,12 @@ from collections.abc import Callable
 # Type alias for auth-header builder callables
 AuthHeaderFn = Callable[[str], dict[str, str]]
 
+# Sentinel API key used when token_command will be resolved asynchronously
+# after the event loop starts.  Deliberately not a plausible key format so
+# upstream providers reject it immediately if it leaks past the readiness
+# guard.
+TOKEN_PENDING_SENTINEL = "__token_pending__"
+
 
 # ---------------------------------------------------------------------------
 # API key rotation (round-robin)
@@ -169,6 +175,19 @@ class ProviderInfo:
         self.token_command = token_command
         self.token_refresh_interval = token_refresh_interval
         self.token_status: dict | None = None
+
+    # -- readiness ----------------------------------------------------------
+
+    @property
+    def ready(self) -> bool:
+        """Whether this provider can accept traffic.
+
+        Returns ``False`` when the key ring contains only the deferred
+        token-command sentinel, meaning the initial token fetch has not
+        yet completed.
+        """
+        kr = self.key_ring
+        return len(kr) != 1 or kr._keys[0] != TOKEN_PENDING_SENTINEL
 
     # -- public helpers used by the proxy -----------------------------------
 

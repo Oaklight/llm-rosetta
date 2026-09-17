@@ -22,8 +22,9 @@ from .auth import (
     api_key_context_var,
     create_auth_hook,
 )
-from .config import GatewayConfig
+from .config import GatewayConfig, ResolvedRoute
 from .keystore import KeyStore
+from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
 from .rerank import handle_rerank as _handle_rerank
 from .headers import (
@@ -43,6 +44,7 @@ from .proxy import (
     handle_non_streaming,
     handle_streaming,
 )
+from .deferred_startup import ProviderNotReady
 
 logger = get_logger()
 
@@ -209,6 +211,33 @@ def _try_stop_profiler(
 _config: GatewayConfig | None = None
 
 
+def _resolve_or_error(
+    source_provider: ProviderType,
+    model: str,
+    request_id: str,
+) -> tuple[ResolvedRoute, ProviderInfo] | Response:
+    """Resolve model to route+provider, returning a Response on failure."""
+    assert _config is not None
+    try:
+        return _config.resolve(source_provider, model)
+    except ProviderNotReady as exc:
+        status = 502 if exc.failed else 503
+        resp = error_response_for_source(source_provider, status, str(exc))
+        resp.headers["x-request-id"] = request_id
+        if not exc.failed:
+            resp.headers["Retry-After"] = "5"
+        return resp
+    except KeyError:
+        configured = ", ".join(sorted(_config.models.keys()))
+        resp = error_response_for_source(
+            source_provider,
+            404,
+            f"Unknown model: '{model}'. Configured models: {configured}",
+        )
+        resp.headers["x-request-id"] = request_id
+        return resp
+
+
 async def _proxy_handler(
     request: Any,
     source_provider: ProviderType,
@@ -242,17 +271,10 @@ async def _proxy_handler(
         body["model"] = model_override
 
     # Resolve target provider via unified routing
-    try:
-        route, provider_info = _config.resolve(source_provider, model)
-    except KeyError:
-        configured = ", ".join(sorted(_config.models.keys()))
-        resp = error_response_for_source(
-            source_provider,
-            404,
-            f"Unknown model: '{model}'. Configured models: {configured}",
-        )
-        resp.headers["x-request-id"] = request_id
-        return resp
+    result = _resolve_or_error(source_provider, model, request_id)
+    if isinstance(result, Response):
+        return result
+    route, provider_info = result
 
     # Model alias: replace the model name in the request body with the
     # actual upstream identifier so the converter and upstream provider
@@ -557,8 +579,10 @@ async def handle_health(request: Any) -> Response:
     critical = metrics.any_critical_provider()
     overall_status = "degraded" if critical else "ok"
 
+    deferred = getattr(request.app, "deferred_startup", None)
     payload = {
         "status": overall_status,
+        "ready": deferred.is_fully_ready() if deferred else True,
         "uptime_seconds": snap["uptime_seconds"],
         "requests_total": snap["total_requests"],
         "errors_last_hour": errors_last_hour,
@@ -573,10 +597,22 @@ async def handle_health_live(request: Any) -> Response:
 
 
 async def handle_health_ready(request: Any) -> Response:
-    """Kubernetes readiness probe — 200 if all providers are operational, 503 if not."""
+    """Kubernetes readiness probe — 200 if fully operational, 503 if not.
+
+    Returns 503 when deferred startup tasks are still running (token
+    seeding, counter rebuild, backfills) or when provider health has
+    degraded critically.
+    """
+    deferred = getattr(request.app, "deferred_startup", None)
+    if deferred is not None and not deferred.is_fully_ready():
+        return JSONResponse(
+            {"status": "not_ready", **deferred.status()},
+            status_code=503,
+        )
+
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
-        return JSONResponse({"status": "ok"})
+        return JSONResponse({"status": "ready"})
 
     health = metrics.provider_health_snapshot()
     critical_count = sum(1 for v in health.values() if v.get("status") == "critical")
@@ -1019,18 +1055,39 @@ async def run_gateway(
 
     flush_task = asyncio.create_task(_periodic_flush(app))
 
-    from .transport.token_refresh import start_token_refreshers
+    # Deferred startup: token seeding, counter rebuild, backfills
+    from .deferred_startup import DeferredStartup
 
     config = getattr(app, "gateway_config", None)
-    refresh_tasks = await start_token_refreshers(config.providers) if config else []
+    deferred = DeferredStartup(config, app) if config else None
+    if deferred is not None:
+        setattr(app, "deferred_startup", deferred)
+        # Expose on config so resolve() can check provider states
+        setattr(config, "_deferred_startup", deferred)
+        await deferred.start()
+
+    # Start background refresh loops for providers WITHOUT token_command
+    # (those with token_command are handled by DeferredStartup.seed_tokens)
+    from .transport.token_refresh import start_token_refreshers
+
+    static_providers = {
+        name: pinfo
+        for name, pinfo in (config.providers.items() if config else {})
+        if pinfo.token_command is None
+    }
+    refresh_tasks = await start_token_refreshers(static_providers)
 
     try:
         await app._serve(host, port, socket=socket)
     finally:
-        for task in refresh_tasks:
+        if deferred is not None:
+            await deferred.shutdown()
+        # Cancel token refresh tasks (both static and deferred-startup ones)
+        all_refresh = refresh_tasks + getattr(app, "_token_refresh_tasks", [])
+        for task in all_refresh:
             task.cancel()
         flush_task.cancel()
-        for task in refresh_tasks:
+        for task in all_refresh:
             try:
                 await task
             except asyncio.CancelledError:
