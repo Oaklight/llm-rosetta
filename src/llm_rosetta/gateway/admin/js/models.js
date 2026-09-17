@@ -417,8 +417,19 @@ async function saveModel() {
     body.rename_from = originalName;
   }
   const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, body);
-  if (res.ok) { showToast(t('toast.modelSaved',{name})); closeModal('modelModal'); window.loadConfig(); }
-  else { showToast(res.error || 'Failed', 'error'); }
+  if (res.ok) {
+    const msg = res.merged ? t('toast.modelMerged', {name, provider: res.provider}) : t('toast.modelSaved', {name});
+    showToast(msg);
+    closeModal('modelModal');
+    window.loadConfig();
+  } else if (res.merge_possible && res.existing_provider) {
+    if (confirm(t('confirm.mergeModel', {name, provider: res.existing_provider}))) {
+      body.merge = true;
+      const res2 = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, body);
+      if (res2.ok) { showToast(t('toast.modelMerged', {name, provider: body.provider})); closeModal('modelModal'); window.loadConfig(); }
+      else { showToast(res2.error || 'Failed', 'error'); }
+    }
+  } else { showToast(res.error || 'Failed', 'error'); }
 }
 
 async function _doDeleteModel(name) {

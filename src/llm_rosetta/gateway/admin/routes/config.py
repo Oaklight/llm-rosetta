@@ -609,7 +609,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                 status_code=400,
             )
 
-        # Handle rename: remove old entry
+        # Handle rename: remove old entry, or merge into existing model
         rename_from = body.get("rename_from")
         if rename_from and rename_from != name:
             models = data.get("models", {})
@@ -619,9 +619,59 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                     status_code=404,
                 )
             if name in models:
+                existing = models[name]
+                existing_provider = (
+                    existing
+                    if isinstance(existing, str)
+                    else existing.get("provider", "")
+                )
+                if not body.get("merge"):
+                    return JSONResponse(
+                        {
+                            "error": f"Model '{name}' already exists",
+                            "merge_possible": True,
+                            "existing_provider": existing_provider,
+                        },
+                        status_code=409,
+                    )
+                upstream = body.get("upstream_model") or rename_from
+                new_p: dict[str, Any] = {"name": provider, "weight": 1}
+                if upstream:
+                    new_p["upstream_model"] = upstream
+                _merge_provider_into_model(
+                    models,
+                    name,
+                    new_p,
+                    body.get("capabilities", ["text"]),
+                )
+                del models[rename_from]
+                try:
+                    _get_config_io(request).save(config_path, data)
+                except Exception as exc:
+                    return JSONResponse(
+                        {"error": f"Failed to write config: {exc}"},
+                        status_code=500,
+                    )
+                try:
+                    new_config = _reload_gateway_config(request, config_path)
+                except Exception as exc:
+                    return JSONResponse(
+                        {
+                            "error": f"Config saved but reload failed: {exc}",
+                            "saved": True,
+                            "reloaded": False,
+                        },
+                        status_code=500,
+                    )
                 return JSONResponse(
-                    {"error": f"Model '{name}' already exists"},
-                    status_code=409,
+                    {
+                        "ok": True,
+                        "model": name,
+                        "merged": True,
+                        "provider": provider,
+                        "capabilities": body.get("capabilities", ["text"]),
+                        "models": dict(new_config.models),
+                    }
                 )
             del models[rename_from]
 
@@ -1085,6 +1135,44 @@ def _make_provider_entry(
     elif prefix:
         entry["upstream_model"] = model_id
     return entry
+
+
+def _merge_provider_into_model(
+    models_section: dict[str, Any],
+    display_name: str,
+    new_provider_entry: dict[str, Any],
+    capabilities: list[str],
+) -> None:
+    """Merge a provider entry into an existing model, converting to multi-provider."""
+    existing = models_section[display_name]
+    provider_name = new_provider_entry["name"]
+
+    if isinstance(existing, str):
+        old_entry: dict[str, Any] = {"name": existing, "weight": 1}
+        models_section[display_name] = {
+            "providers": [old_entry, new_provider_entry],
+            "capabilities": capabilities,
+        }
+        return
+
+    if not isinstance(existing, dict):
+        return
+
+    if "providers" in existing:
+        plist = existing["providers"]
+        names = [(p if isinstance(p, str) else p.get("name", "")) for p in plist]
+        if provider_name not in names:
+            plist.append(new_provider_entry)
+        return
+
+    if "provider" in existing:
+        old_provider = existing.pop("provider")
+        old_upstream = existing.pop("upstream_model", None)
+        old_p: dict[str, Any] = {"name": old_provider, "weight": 1}
+        if old_upstream:
+            old_p["upstream_model"] = old_upstream
+        existing["providers"] = [old_p, new_provider_entry]
+        return
 
 
 def _append_provider_to_model(
