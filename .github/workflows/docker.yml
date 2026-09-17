@@ -84,6 +84,7 @@ jobs:
             PACKAGE_VERSION=${{ steps.meta.outputs.version }}
           tags: |
             oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-python
+            oaklight/llm-rosetta-gateway:latest-python
           cache-from: type=gha,scope=python
           cache-to: type=gha,mode=max,scope=python
 
@@ -204,6 +205,7 @@ jobs:
             docker buildx imagetools create \
               -t "$IMAGE:${VERSION}" \
               -t "$IMAGE:latest" \
+              -t "$IMAGE:latest-binary" \
               "$IMAGE:${VERSION}-${VARIANT}-amd64" \
               "$IMAGE:${VERSION}-${VARIANT}-arm64"
           fi

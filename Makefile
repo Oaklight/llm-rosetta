@@ -225,7 +225,8 @@ build-docker-alpine:
 		--build-arg BINARY=$$BINARY \
 		-t $(DOCKER_IMAGE):$(V)-alpine \
 		-t $(DOCKER_IMAGE):$(V) \
-		-t $(DOCKER_IMAGE):latest .
+		-t $(DOCKER_IMAGE):latest \
+		-t $(DOCKER_IMAGE):latest-binary .
 	@echo "Alpine Docker image built successfully."
 
 # Build glibc Docker image with native binary
@@ -270,7 +271,7 @@ build-docker-python:
 		echo "Using PyPI mirror: $(PYPI_MIRROR)"; \
 		BUILD_ARGS="$$BUILD_ARGS --build-arg PYPI_MIRROR=$(PYPI_MIRROR)"; \
 	fi; \
-	cd docker && docker build -f Dockerfile $$BUILD_ARGS -t $(DOCKER_IMAGE):$(V)-python ..
+	cd docker && docker build -f Dockerfile $$BUILD_ARGS -t $(DOCKER_IMAGE):$(V)-python -t $(DOCKER_IMAGE):latest-python ..
 	@echo "Python Docker image built successfully."
 
 # Legacy alias
@@ -278,7 +279,7 @@ build-docker: build-docker-python
 
 push-docker:
 	@echo "Pushing Docker images..."
-	@for tag in $(V)-alpine $(V) latest $(V)-glibc $(V)-python; do \
+	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python; do \
 		if docker image inspect $(DOCKER_IMAGE):$$tag >/dev/null 2>&1; then \
 			echo "  Pushing $(DOCKER_IMAGE):$$tag"; \
 			docker push $(DOCKER_IMAGE):$$tag; \
@@ -288,7 +289,7 @@ push-docker:
 
 clean-docker:
 	@echo "Cleaning Docker images..."
-	@for tag in $(V)-alpine $(V) latest $(V)-glibc $(V)-python; do \
+	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python; do \
 		docker rmi $(DOCKER_IMAGE):$$tag 2>/dev/null || true; \
 	done
 
