@@ -23,7 +23,8 @@ COPY dist/ /tmp/dist/
 
 # NB: $MIRROR_IDX / $EXTRA_IDX are intentionally unquoted — empty vars must
 # word-split to nothing so pip sees no extra flags.
-RUN EXTRA_IDX=""; \
+RUN set -e; \
+    EXTRA_IDX=""; \
     if [ -n "$EXTRA_INDEX_URL" ]; then \
         EXTRA_IDX="--extra-index-url $EXTRA_INDEX_URL"; \
     fi; \
@@ -40,8 +41,8 @@ RUN EXTRA_IDX=""; \
     else \
         echo "Installing latest llm-rosetta from PyPI"; \
         pip install $MIRROR_IDX $EXTRA_IDX --no-cache-dir "llm-rosetta[gateway,profiling]"; \
-    fi && \
-    pip uninstall -y pip setuptools 2>/dev/null || true && \
+    fi; \
+    pip uninstall -y pip setuptools 2>/dev/null || true; \
     rm -rf /tmp/dist/
 
 RUN mkdir -p /config && chown appuser:appgroup /config
