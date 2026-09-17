@@ -53,18 +53,17 @@ jobs:
       - name: Wait for PyPI availability
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          echo "Waiting for llm-rosetta==$VERSION on PyPI..."
+          echo "Waiting for llm-rosetta==$VERSION on PyPI (pip-installable)..."
           for i in $(seq 1 30); do
-            CODE=$(curl -fsS -o /dev/null -w "%{http_code}" \
-              "https://pypi.org/pypi/llm-rosetta/$VERSION/json" || true)
-            if [ "$CODE" = "200" ]; then
-              echo "Found on PyPI (attempt $i)"
+            if pip install --dry-run --no-deps \
+                "llm-rosetta==$VERSION" 2>/dev/null; then
+              echo "Installable on PyPI (attempt $i)"
               exit 0
             fi
             echo "  Attempt $i/30: waiting 20s..."
             sleep 20
           done
-          echo "::error::Not found on PyPI after 10 minutes"
+          echo "::error::Not pip-installable from PyPI after 10 minutes"
           exit 1
 
       - uses: docker/login-action@v3
