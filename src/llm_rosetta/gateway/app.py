@@ -612,7 +612,7 @@ async def handle_health_ready(request: Any) -> Response:
 
     metrics = getattr(request.app, "metrics", None)
     if metrics is None:
-        return JSONResponse({"status": "ready"})
+        return JSONResponse({"status": "ok"})
 
     health = metrics.provider_health_snapshot()
     critical_count = sum(1 for v in health.values() if v.get("status") == "critical")

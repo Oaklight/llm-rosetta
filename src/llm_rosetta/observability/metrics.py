@@ -470,9 +470,8 @@ class MetricsCollector:
         """
 
         def _merge_int(base_key: str) -> int:
-            return baseline.get(base_key, 0) + (
-                getattr(self, base_key) - pre_snapshot.get(base_key, 0)
-            )
+            delta = getattr(self, base_key) - pre_snapshot.get(base_key, 0)
+            return baseline.get(base_key, 0) + max(0, delta)
 
         def _merge_dict(base_key: str) -> dict:
             b = dict(baseline.get(base_key, {}))
