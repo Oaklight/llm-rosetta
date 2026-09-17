@@ -549,7 +549,7 @@ async def bulk_update_models(request: Any) -> Response:
             "ok": True,
             "action": action,
             "affected": affected,
-            "models": dict(new_config.models),
+            "models": list(new_config.models),
         }
     )
 
@@ -696,7 +696,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                         "merged": True,
                         "provider": provider,
                         "capabilities": body.get("capabilities", ["text"]),
-                        "models": dict(new_config.models),
+                        "models": list(new_config.models),
                     }
                 )
             del models[rename_from]
@@ -728,7 +728,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
             "model": name,
             "provider": provider,
             "capabilities": body.get("capabilities", ["text"]),
-            "models": dict(new_config.models),
+            "models": list(new_config.models),
         }
     )
 
@@ -776,7 +776,7 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
         {
             "ok": True,
             "deleted": name,
-            "models": dict(new_config.models),
+            "models": list(new_config.models),
         }
     )
 
@@ -945,7 +945,7 @@ async def reload_config(request: Any) -> Response:
         {
             "ok": True,
             "providers": list(new_config.providers.keys()),
-            "models": dict(new_config.models),
+            "models": list(new_config.models),
         }
     )
 
@@ -1349,6 +1349,6 @@ async def bulk_add_models(request: Any) -> Response:
             "added": added,
             "appended": appended,
             "skipped": skipped,
-            "models": dict(new_config.models),
+            "models": list(new_config.models),
         }
     )
