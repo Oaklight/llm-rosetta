@@ -186,6 +186,9 @@ class MetricsCollector:
     # Token usage
     total_input_tokens: int = 0
     total_output_tokens: int = 0
+    total_cache_read_tokens: int = 0
+    total_cache_creation_tokens: int = 0
+    total_reasoning_tokens: int = 0
     by_model_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
     by_provider_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
 
@@ -208,6 +211,59 @@ class MetricsCollector:
             self._provider_stats[provider_name] = stats
         return stats
 
+    # Token field keys tracked in by_model_tokens / by_provider_tokens dicts
+    _TOKEN_KEYS: tuple[str, ...] = (
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+        "reasoning_tokens",
+    )
+
+    def _accumulate_tokens(
+        self,
+        model: str,
+        provider_name: str | None,
+        *,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
+    ) -> None:
+        """Add token counts to totals and per-model/per-provider breakdowns."""
+        vals = {
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "cache_read_tokens": cache_read_tokens,
+            "cache_creation_tokens": cache_creation_tokens,
+            "reasoning_tokens": reasoning_tokens,
+        }
+        any_set = False
+        for key, val in vals.items():
+            if val is not None:
+                attr = f"total_{key}"
+                setattr(self, attr, getattr(self, attr) + val)
+                any_set = True
+
+        if not any_set:
+            return
+
+        mt = self.by_model_tokens.get(model)
+        if mt is None:
+            mt = {k: 0 for k in self._TOKEN_KEYS}
+            self.by_model_tokens[model] = mt
+        for key, val in vals.items():
+            mt[key] = mt.get(key, 0) + (val or 0)
+
+        if provider_name:
+            pt = self.by_provider_tokens.get(provider_name)
+            if pt is None:
+                pt = {k: 0 for k in self._TOKEN_KEYS}
+                self.by_provider_tokens[provider_name] = pt
+            for key, val in vals.items():
+                pt[key] = pt.get(key, 0) + (val or 0)
+
     def record_request(
         self,
         *,
@@ -221,6 +277,9 @@ class MetricsCollector:
         error_detail: str | None = None,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
     ) -> None:
         """Record a completed proxy request."""
         self.total_requests += 1
@@ -240,26 +299,15 @@ class MetricsCollector:
         )
         self.by_status_code[status_code] = self.by_status_code.get(status_code, 0) + 1
 
-        # Token usage
-        if input_tokens is not None:
-            self.total_input_tokens += input_tokens
-        if output_tokens is not None:
-            self.total_output_tokens += output_tokens
-        if input_tokens is not None or output_tokens is not None:
-            mt = self.by_model_tokens.get(model)
-            if mt is None:
-                mt = {"input_tokens": 0, "output_tokens": 0}
-                self.by_model_tokens[model] = mt
-            mt["input_tokens"] += input_tokens or 0
-            mt["output_tokens"] += output_tokens or 0
-
-            if provider_name:
-                pt = self.by_provider_tokens.get(provider_name)
-                if pt is None:
-                    pt = {"input_tokens": 0, "output_tokens": 0}
-                    self.by_provider_tokens[provider_name] = pt
-                pt["input_tokens"] += input_tokens or 0
-                pt["output_tokens"] += output_tokens or 0
+        self._accumulate_tokens(
+            model,
+            provider_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
+        )
 
         self._window.record(duration_ms, is_error=is_error)
 
@@ -275,28 +323,21 @@ class MetricsCollector:
         model: str,
         input_tokens: int | None = None,
         output_tokens: int | None = None,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
         provider_name: str | None = None,
     ) -> None:
         """Record token usage separately (for streaming write-back)."""
-        if input_tokens is not None:
-            self.total_input_tokens += input_tokens
-        if output_tokens is not None:
-            self.total_output_tokens += output_tokens
-        if input_tokens is not None or output_tokens is not None:
-            mt = self.by_model_tokens.get(model)
-            if mt is None:
-                mt = {"input_tokens": 0, "output_tokens": 0}
-                self.by_model_tokens[model] = mt
-            mt["input_tokens"] += input_tokens or 0
-            mt["output_tokens"] += output_tokens or 0
-
-            if provider_name:
-                pt = self.by_provider_tokens.get(provider_name)
-                if pt is None:
-                    pt = {"input_tokens": 0, "output_tokens": 0}
-                    self.by_provider_tokens[provider_name] = pt
-                pt["input_tokens"] += input_tokens or 0
-                pt["output_tokens"] += output_tokens or 0
+        self._accumulate_tokens(
+            model,
+            provider_name,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
+            reasoning_tokens=reasoning_tokens,
+        )
 
     def provider_health_snapshot(self) -> dict[str, dict]:
         """Return a JSON-serializable per-provider health snapshot."""
@@ -327,6 +368,9 @@ class MetricsCollector:
             "by_status_code": {str(k): v for k, v in self.by_status_code.items()},
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
+            "total_cache_read_tokens": self.total_cache_read_tokens,
+            "total_cache_creation_tokens": self.total_cache_creation_tokens,
+            "total_reasoning_tokens": self.total_reasoning_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
             "by_provider_tokens": {
                 k: dict(v) for k, v in self.by_provider_tokens.items()
@@ -346,6 +390,9 @@ class MetricsCollector:
         }
         self.total_input_tokens = data.get("total_input_tokens", 0)
         self.total_output_tokens = data.get("total_output_tokens", 0)
+        self.total_cache_read_tokens = data.get("total_cache_read_tokens", 0)
+        self.total_cache_creation_tokens = data.get("total_cache_creation_tokens", 0)
+        self.total_reasoning_tokens = data.get("total_reasoning_tokens", 0)
         self.by_model_tokens = {
             k: dict(v) for k, v in data.get("by_model_tokens", {}).items()
         }
@@ -385,10 +432,7 @@ class MetricsCollector:
         by_source: dict[str, int] = {}
         by_target: dict[str, int] = {}
         by_status: dict[int, int] = {}
-        total_input_tokens = 0
-        total_output_tokens = 0
-        by_model_tokens: dict[str, dict[str, int]] = {}
-        by_provider_tokens: dict[str, dict[str, int]] = {}
+        tmp = MetricsCollector()
 
         for r in rows:
             total_requests += 1
@@ -411,29 +455,12 @@ class MetricsCollector:
 
             by_status[sc] = by_status.get(sc, 0) + 1
 
-            inp = r.get("input_tokens")
-            outp = r.get("output_tokens")
-            if inp is not None:
-                total_input_tokens += inp
-            if outp is not None:
-                total_output_tokens += outp
-            if inp is not None or outp is not None:
-                mt = by_model_tokens.get(model)
-                if mt is None:
-                    mt = {"input_tokens": 0, "output_tokens": 0}
-                    by_model_tokens[model] = mt
-                mt["input_tokens"] += inp or 0
-                mt["output_tokens"] += outp or 0
-
-                pn = r.get("target_provider_name") or r.get(
-                    "target_provider", "unknown"
-                )
-                pt = by_provider_tokens.get(pn)
-                if pt is None:
-                    pt = {"input_tokens": 0, "output_tokens": 0}
-                    by_provider_tokens[pn] = pt
-                pt["input_tokens"] += inp or 0
-                pt["output_tokens"] += outp or 0
+            pn = r.get("target_provider_name") or r.get("target_provider", "unknown")
+            tmp._accumulate_tokens(
+                model,
+                pn,
+                **{tk: r.get(tk) for tk in self._TOKEN_KEYS},
+            )
 
         # Atomic swap — active_streams is live state, not rebuilt.
         self.total_requests = total_requests
@@ -443,10 +470,13 @@ class MetricsCollector:
         self.by_source_provider = by_source
         self.by_target_provider = by_target
         self.by_status_code = by_status
-        self.total_input_tokens = total_input_tokens
-        self.total_output_tokens = total_output_tokens
-        self.by_model_tokens = by_model_tokens
-        self.by_provider_tokens = by_provider_tokens
+        self.total_input_tokens = tmp.total_input_tokens
+        self.total_output_tokens = tmp.total_output_tokens
+        self.total_cache_read_tokens = tmp.total_cache_read_tokens
+        self.total_cache_creation_tokens = tmp.total_cache_creation_tokens
+        self.total_reasoning_tokens = tmp.total_reasoning_tokens
+        self.by_model_tokens = tmp.by_model_tokens
+        self.by_provider_tokens = tmp.by_provider_tokens
 
         return total_requests
 
@@ -492,8 +522,8 @@ class MetricsCollector:
             for k, cur_toks in cur.items():
                 pre_toks = pre.get(k, {})
                 if k not in b:
-                    b[k] = {"input_tokens": 0, "output_tokens": 0}
-                for tok_key in ("input_tokens", "output_tokens"):
+                    b[k] = {tk: 0 for tk in self._TOKEN_KEYS}
+                for tok_key in self._TOKEN_KEYS:
                     delta = cur_toks.get(tok_key, 0) - pre_toks.get(tok_key, 0)
                     if delta > 0:
                         b[k][tok_key] = b[k].get(tok_key, 0) + delta
@@ -508,6 +538,9 @@ class MetricsCollector:
         by_target = _merge_dict("by_target_provider")
         total_input = _merge_int("total_input_tokens")
         total_output = _merge_int("total_output_tokens")
+        total_cache_read = _merge_int("total_cache_read_tokens")
+        total_cache_creation = _merge_int("total_cache_creation_tokens")
+        total_reasoning = _merge_int("total_reasoning_tokens")
         by_model_tokens = _merge_token_dict("by_model_tokens")
         by_provider_tokens = _merge_token_dict("by_provider_tokens")
 
@@ -533,6 +566,9 @@ class MetricsCollector:
         self.by_status_code = b_status
         self.total_input_tokens = total_input
         self.total_output_tokens = total_output
+        self.total_cache_read_tokens = total_cache_read
+        self.total_cache_creation_tokens = total_cache_creation
+        self.total_reasoning_tokens = total_reasoning
         self.by_model_tokens = by_model_tokens
         self.by_provider_tokens = by_provider_tokens
 
@@ -558,6 +594,9 @@ class MetricsCollector:
             "by_status_code": {str(k): v for k, v in self.by_status_code.items()},
             "total_input_tokens": self.total_input_tokens,
             "total_output_tokens": self.total_output_tokens,
+            "total_cache_read_tokens": self.total_cache_read_tokens,
+            "total_cache_creation_tokens": self.total_cache_creation_tokens,
+            "total_reasoning_tokens": self.total_reasoning_tokens,
             "by_model_tokens": {k: dict(v) for k, v in self.by_model_tokens.items()},
             "by_provider_tokens": {
                 k: dict(v) for k, v in self.by_provider_tokens.items()

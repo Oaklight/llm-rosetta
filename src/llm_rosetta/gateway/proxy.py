@@ -739,12 +739,23 @@ def _write_back_stream_usage(
     inp = usage.get("prompt_tokens")
     outp = usage.get("completion_tokens")
     total = usage.get("total_tokens")
+    cache_read = usage.get("cache_read_tokens")
+    cache_creation = usage.get("cache_creation_tokens")
+    reasoning = usage.get("reasoning_tokens")
     if inp is None and outp is None:
         return
     if total is None and inp is not None:
         total = (inp or 0) + (outp or 0)
     try:
-        request_log.update_usage(entry_id, inp, outp, total)
+        request_log.update_usage(
+            entry_id,
+            inp,
+            outp,
+            total,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
+            reasoning_tokens=reasoning,
+        )
     except Exception:
         logger.debug("Failed to write usage for %s", entry_id)
     if metrics is not None:
@@ -752,6 +763,9 @@ def _write_back_stream_usage(
             model=model,
             input_tokens=inp,
             output_tokens=outp,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
+            reasoning_tokens=reasoning,
             provider_name=provider_name,
         )
 

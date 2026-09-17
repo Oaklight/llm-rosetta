@@ -212,6 +212,9 @@ class PersistenceManager:
             ("input_tokens", "INTEGER"),
             ("output_tokens", "INTEGER"),
             ("total_tokens", "INTEGER"),
+            ("cache_read_tokens", "INTEGER"),
+            ("cache_creation_tokens", "INTEGER"),
+            ("reasoning_tokens", "INTEGER"),
         ):
             if col not in columns:
                 self._conn.execute(
@@ -269,6 +272,9 @@ class PersistenceManager:
         "input_tokens",
         "output_tokens",
         "total_tokens",
+        "cache_read_tokens",
+        "cache_creation_tokens",
+        "reasoning_tokens",
     ]
 
     def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -280,8 +286,9 @@ class PersistenceManager:
             "(id, timestamp, model, source_provider, target_provider, "
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
             "target_provider_name, client_ip, profile, "
-            "input_tokens, output_tokens, total_tokens) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "input_tokens, output_tokens, total_tokens, "
+            "cache_read_tokens, cache_creation_tokens, reasoning_tokens) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -300,6 +307,9 @@ class PersistenceManager:
                     e.get("input_tokens"),
                     e.get("output_tokens"),
                     e.get("total_tokens"),
+                    e.get("cache_read_tokens"),
+                    e.get("cache_creation_tokens"),
+                    e.get("reasoning_tokens"),
                 )
                 for e in entries
             ],
@@ -504,7 +514,9 @@ class PersistenceManager:
         """
         cursor = self._conn.execute(
             "SELECT model, source_provider, target_provider, "
-            "target_provider_name, is_stream, status_code "
+            "target_provider_name, is_stream, status_code, "
+            "input_tokens, output_tokens, total_tokens, "
+            "cache_read_tokens, cache_creation_tokens, reasoning_tokens "
             "FROM request_log"
         )
         while True:
@@ -519,6 +531,12 @@ class PersistenceManager:
                     "target_provider_name": r[3],
                     "is_stream": bool(r[4]),
                     "status_code": r[5],
+                    "input_tokens": r[6],
+                    "output_tokens": r[7],
+                    "total_tokens": r[8],
+                    "cache_read_tokens": r[9],
+                    "cache_creation_tokens": r[10],
+                    "reasoning_tokens": r[11],
                 }
 
     def count_log_entries(self) -> int:
@@ -1256,6 +1274,10 @@ class PersistenceManager:
         input_tokens: int | None,
         output_tokens: int | None,
         total_tokens: int | None,
+        *,
+        cache_read_tokens: int | None = None,
+        cache_creation_tokens: int | None = None,
+        reasoning_tokens: int | None = None,
     ) -> None:
         """Write back token usage for an existing log entry.
 
@@ -1264,8 +1286,17 @@ class PersistenceManager:
         """
         self._conn.execute(
             "UPDATE request_log SET input_tokens = ?, output_tokens = ?, "
-            "total_tokens = ? WHERE id = ?",
-            (input_tokens, output_tokens, total_tokens, entry_id),
+            "total_tokens = ?, cache_read_tokens = ?, "
+            "cache_creation_tokens = ?, reasoning_tokens = ? WHERE id = ?",
+            (
+                input_tokens,
+                output_tokens,
+                total_tokens,
+                cache_read_tokens,
+                cache_creation_tokens,
+                reasoning_tokens,
+                entry_id,
+            ),
         )
         self._conn.commit()
 
@@ -1291,6 +1322,9 @@ class PersistenceManager:
                     "input_tokens",
                     "output_tokens",
                     "total_tokens",
+                    "cache_read_tokens",
+                    "cache_creation_tokens",
+                    "reasoning_tokens",
                 )
                 and val is None
             ):

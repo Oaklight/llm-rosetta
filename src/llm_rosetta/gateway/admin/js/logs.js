@@ -62,7 +62,7 @@ function renderLogs(entries, total) {
         <td style="font-size:12px;color:var(--text-dim)">${esc(keyLabel)}</td>
         <td style="font-size:12px;color:var(--text-dim)">${esc(clientIp)}</td>
         <td><span class="badge ${statusCls}">${e.status_code}${hasError ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump('${esc(e.id)}')" title="View error dump" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
-        <td style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}</td>
+        <td style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span style="color:var(--text-dim);font-size:10px">⚡${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span style="color:var(--text-dim);font-size:10px">🧠${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td>${e.duration_ms.toFixed(0)} ms</td>
       </tr>`;
       if (hasError) {

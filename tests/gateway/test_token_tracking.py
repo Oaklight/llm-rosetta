@@ -625,3 +625,389 @@ class TestProviderTokenTracking:
         m.rebuild_counters(rows)
         assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
         assert m.by_provider_tokens["openai_b"]["input_tokens"] == 200
+
+
+class TestExtendedTokenFields:
+    """Tests for cache_read_tokens, cache_creation_tokens, reasoning_tokens."""
+
+    def test_entry_create_with_extended_tokens(self):
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=200.0,
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        assert entry.cache_read_tokens == 300
+        assert entry.cache_creation_tokens == 100
+        assert entry.reasoning_tokens == 200
+
+    def test_entry_create_without_extended_tokens(self):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="openai_chat",
+            is_stream=False,
+            status_code=200,
+            duration_ms=100.0,
+        )
+        assert entry.cache_read_tokens is None
+        assert entry.cache_creation_tokens is None
+        assert entry.reasoning_tokens is None
+
+    def test_to_dict_includes_extended_tokens(self):
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=200.0,
+            cache_read_tokens=300,
+            reasoning_tokens=200,
+        )
+        d = entry.to_dict()
+        assert d["cache_read_tokens"] == 300
+        assert d["reasoning_tokens"] == 200
+        assert "cache_creation_tokens" not in d
+
+    def test_to_dict_omits_none_extended_tokens(self):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="openai_chat",
+            is_stream=False,
+            status_code=200,
+            duration_ms=100.0,
+        )
+        d = entry.to_dict()
+        assert "cache_read_tokens" not in d
+        assert "cache_creation_tokens" not in d
+        assert "reasoning_tokens" not in d
+
+    def test_update_usage_with_extended_tokens(self):
+        log = RequestLog(max_entries=10)
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=True,
+            status_code=200,
+            duration_ms=500.0,
+        )
+        log.add(entry)
+        log.update_usage(
+            entry.id,
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        entries, _ = log.get_entries()
+        updated = next(e for e in entries if e["id"] == entry.id)
+        assert updated["cache_read_tokens"] == 300
+        assert updated["cache_creation_tokens"] == 100
+        assert updated["reasoning_tokens"] == 200
+
+
+class TestMetricsExtendedTokens:
+    def test_record_request_with_extended_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="claude-sonnet-4-6",
+            source="openai_chat",
+            target="anthropic",
+            status_code=200,
+            duration_ms=200.0,
+            is_stream=False,
+            provider_name="Anthropic",
+            input_tokens=1000,
+            output_tokens=500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        assert m.total_cache_read_tokens == 300
+        assert m.total_cache_creation_tokens == 100
+        assert m.total_reasoning_tokens == 200
+        mt = m.by_model_tokens["claude-sonnet-4-6"]
+        assert mt["cache_read_tokens"] == 300
+        assert mt["reasoning_tokens"] == 200
+        pt = m.by_provider_tokens["Anthropic"]
+        assert pt["cache_read_tokens"] == 300
+
+    def test_record_usage_with_extended_tokens(self):
+        m = MetricsCollector()
+        m.record_usage(
+            model="claude-sonnet-4-6",
+            input_tokens=1000,
+            output_tokens=500,
+            cache_read_tokens=300,
+            reasoning_tokens=200,
+            provider_name="Anthropic",
+        )
+        assert m.total_cache_read_tokens == 300
+        assert m.total_reasoning_tokens == 200
+
+    def test_snapshot_includes_extended_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="claude-sonnet-4-6",
+            source="openai_chat",
+            target="anthropic",
+            status_code=200,
+            duration_ms=200.0,
+            is_stream=False,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        snap = m.snapshot()
+        assert snap["total_cache_read_tokens"] == 300
+        assert snap["total_cache_creation_tokens"] == 100
+        assert snap["total_reasoning_tokens"] == 200
+
+    def test_export_load_preserves_extended_tokens(self):
+        m = MetricsCollector()
+        m.record_request(
+            model="claude-sonnet-4-6",
+            source="openai_chat",
+            target="anthropic",
+            status_code=200,
+            duration_ms=200.0,
+            is_stream=False,
+            cache_read_tokens=300,
+            reasoning_tokens=200,
+        )
+        exported = m.export_counters()
+        m2 = MetricsCollector()
+        m2.load_counters(exported)
+        assert m2.total_cache_read_tokens == 300
+        assert m2.total_reasoning_tokens == 200
+
+    def test_rebuild_counters_with_extended_tokens(self):
+        m = MetricsCollector()
+        rows = [
+            {
+                "model": "claude-sonnet-4-6",
+                "source_provider": "openai_chat",
+                "target_provider": "anthropic",
+                "target_provider_name": "Anthropic",
+                "is_stream": False,
+                "status_code": 200,
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_tokens": 300,
+                "cache_creation_tokens": 100,
+                "reasoning_tokens": 200,
+            },
+            {
+                "model": "claude-sonnet-4-6",
+                "source_provider": "openai_chat",
+                "target_provider": "anthropic",
+                "target_provider_name": "Anthropic",
+                "is_stream": True,
+                "status_code": 200,
+                "input_tokens": 500,
+                "output_tokens": 250,
+                "cache_read_tokens": 150,
+                "reasoning_tokens": 100,
+            },
+        ]
+        m.rebuild_counters(rows)
+        assert m.total_cache_read_tokens == 450
+        assert m.total_cache_creation_tokens == 100
+        assert m.total_reasoning_tokens == 300
+        mt = m.by_model_tokens["claude-sonnet-4-6"]
+        assert mt["cache_read_tokens"] == 450
+        assert mt["reasoning_tokens"] == 300
+
+
+class TestPersistenceExtendedTokenColumns:
+    @pytest.fixture
+    def pm(self, tmp_path):
+        from llm_rosetta.observability.persistence import PersistenceManager
+
+        return PersistenceManager(str(tmp_path / "test.db"))
+
+    def test_insert_and_query_with_extended_tokens(self, pm):
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=200.0,
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        pm.insert_log_entries([entry.to_dict()])
+        rows, _ = pm.query_log_entries(limit=1)
+        assert rows[0]["cache_read_tokens"] == 300
+        assert rows[0]["cache_creation_tokens"] == 100
+        assert rows[0]["reasoning_tokens"] == 200
+
+    def test_update_entry_usage_with_extended_tokens(self, pm):
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=True,
+            status_code=200,
+            duration_ms=500.0,
+        )
+        pm.insert_log_entries([entry.to_dict()])
+        pm.update_entry_usage(
+            entry.id,
+            1000,
+            500,
+            1500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        rows, _ = pm.query_log_entries(limit=1)
+        assert rows[0]["cache_read_tokens"] == 300
+        assert rows[0]["cache_creation_tokens"] == 100
+        assert rows[0]["reasoning_tokens"] == 200
+
+    def test_iter_log_rows_includes_all_token_fields(self, pm):
+        entry = RequestLogEntry.create(
+            model="claude-sonnet-4-6",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=200.0,
+            input_tokens=1000,
+            output_tokens=500,
+            total_tokens=1500,
+            cache_read_tokens=300,
+            cache_creation_tokens=100,
+            reasoning_tokens=200,
+        )
+        pm.insert_log_entries([entry.to_dict()])
+        rows = list(pm.iter_log_rows_for_rebuild())
+        assert len(rows) == 1
+        r = rows[0]
+        assert r["input_tokens"] == 1000
+        assert r["output_tokens"] == 500
+        assert r["cache_read_tokens"] == 300
+        assert r["cache_creation_tokens"] == 100
+        assert r["reasoning_tokens"] == 200
+
+    def test_migration_adds_extended_token_columns(self, tmp_path):
+        import sqlite3
+
+        db_path = tmp_path / "gateway.db"
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript("""
+            CREATE TABLE request_log (
+                id TEXT PRIMARY KEY,
+                timestamp TEXT NOT NULL,
+                model TEXT NOT NULL,
+                source_provider TEXT NOT NULL,
+                target_provider TEXT NOT NULL,
+                is_stream INTEGER NOT NULL,
+                status_code INTEGER NOT NULL,
+                duration_ms REAL NOT NULL,
+                error_detail TEXT,
+                api_key_label TEXT,
+                target_provider_name TEXT,
+                client_ip TEXT,
+                profile TEXT,
+                input_tokens INTEGER,
+                output_tokens INTEGER,
+                total_tokens INTEGER
+            );
+            CREATE TABLE metrics (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+        """)
+        conn.close()
+
+        from llm_rosetta.observability.persistence import PersistenceManager
+
+        pm = PersistenceManager(data_dir=tmp_path)
+        cursor = pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "cache_read_tokens" in columns
+        assert "cache_creation_tokens" in columns
+        assert "reasoning_tokens" in columns
+
+
+class TestPassthroughExtendedUsageExtraction:
+    def test_extract_openai_cache_and_reasoning(self):
+        from llm_rosetta.pipeline import PassthroughStreamProcessor
+
+        chunk = {
+            "usage": {
+                "prompt_tokens": 1000,
+                "completion_tokens": 500,
+                "total_tokens": 1500,
+                "prompt_tokens_details": {"cached_tokens": 300},
+                "completion_tokens_details": {"reasoning_tokens": 200},
+            }
+        }
+        result = PassthroughStreamProcessor._extract_usage(chunk)
+        assert result is not None
+        assert result["cache_read_tokens"] == 300
+        assert result["reasoning_tokens"] == 200
+
+    def test_extract_anthropic_cache_tokens(self):
+        from llm_rosetta.pipeline import PassthroughStreamProcessor
+
+        chunk = {
+            "usage": {
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "cache_read_input_tokens": 300,
+                "cache_creation_input_tokens": 100,
+            }
+        }
+        result = PassthroughStreamProcessor._extract_usage(chunk)
+        assert result is not None
+        assert result["cache_read_tokens"] == 300
+        assert result["cache_creation_tokens"] == 100
+
+    def test_extract_anthropic_thinking_tokens(self):
+        from llm_rosetta.pipeline import PassthroughStreamProcessor
+
+        chunk = {
+            "usage": {
+                "input_tokens": 1000,
+                "output_tokens": 500,
+                "output_tokens_details": {"thinking_tokens": 200},
+            }
+        }
+        result = PassthroughStreamProcessor._extract_usage(chunk)
+        assert result is not None
+        assert result["reasoning_tokens"] == 200
+
+    def test_extract_google_cache_and_reasoning(self):
+        from llm_rosetta.pipeline import PassthroughStreamProcessor
+
+        chunk = {
+            "usageMetadata": {
+                "promptTokenCount": 1000,
+                "candidatesTokenCount": 500,
+                "totalTokenCount": 1500,
+                "cachedContentTokenCount": 300,
+                "thoughtsTokenCount": 200,
+            }
+        }
+        result = PassthroughStreamProcessor._extract_usage(chunk)
+        assert result is not None
+        assert result["cache_read_tokens"] == 300
+        assert result["reasoning_tokens"] == 200
