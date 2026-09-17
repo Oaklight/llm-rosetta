@@ -252,17 +252,12 @@ def create_auth_hook(auth_state: AuthState) -> Any:
         if path.startswith("/admin"):
             return check_admin_auth(request, auth_state)
 
-        if not auth_state._has_keys():
-            if auth_state.open_on_no_keys:
-                return None
-            return _error_for_path(
-                path, 403, "No API keys configured. Generate one in the admin panel."
-            )
-
         # API paths: extract key using format-appropriate strategy
         key = _extract_key(request)
 
-        # Check internal token first (admin panel test requests)
+        # Check internal token first (admin panel test requests) —
+        # must run before the "no keys" gate so admin tests work on
+        # fresh instances that haven't configured client API keys yet.
         if key and auth_state.internal_token and key == auth_state.internal_token:
             api_key_context_var.set(
                 KeyContext(
@@ -272,6 +267,13 @@ def create_auth_hook(auth_state: AuthState) -> Any:
                 )
             )
             return None
+
+        if not auth_state._has_keys():
+            if auth_state.open_on_no_keys:
+                return None
+            return _error_for_path(
+                path, 403, "No API keys configured. Generate one in the admin panel."
+            )
 
         if not key:
             return _error_for_path(path, 401, "Invalid or missing API key")
