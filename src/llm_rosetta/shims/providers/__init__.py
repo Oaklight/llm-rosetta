@@ -60,7 +60,12 @@ from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
-from ..provider_shim import ProviderShim, ReasoningCapability, register_shim
+from ..provider_shim import (
+    ProviderShim,
+    ReasoningCapability,
+    SoftErrorPattern,
+    register_shim,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,6 +262,22 @@ def _load_single_provider(
                 overrides, base=reasoning_cap
             )
 
+    # Parse soft-error patterns for 200-but-error detection.
+    raw_patterns = cfg.get("soft_error_patterns", [])
+    _soft_list: list[SoftErrorPattern] = []
+    for p in raw_patterns:
+        if not isinstance(p, dict):
+            logger.warning("Skipping non-dict soft_error_pattern in %s", yaml_path)
+            continue
+        _soft_list.append(
+            SoftErrorPattern(
+                pattern=p["pattern"],
+                status_code=p["status_code"],
+                message=p["message"],
+            )
+        )
+    soft_errors = tuple(_soft_list)
+
     shim = ProviderShim(
         name=cfg["name"],
         base=cfg["base"],
@@ -277,6 +298,7 @@ def _load_single_provider(
         models_path=cfg.get("models_path"),
         multimodal_tool_result=cfg.get("multimodal_tool_result"),
         tool_search_mode=cfg.get("tool_search_mode", "disabled"),
+        soft_error_patterns=soft_errors,
     )
     register_shim(shim)
 

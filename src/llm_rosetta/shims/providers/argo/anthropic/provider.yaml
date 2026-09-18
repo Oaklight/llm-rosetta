@@ -35,3 +35,10 @@ reasoning:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claudeopus48:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+
+soft_error_patterns:
+  - pattern: "AUTHENTICATION NOTICE FROM ARGO"
+    status_code: 403
+    message: >-
+      ARGO authentication error: the upstream ARGO gateway rejected the
+      request. Verify your username and API key configuration.
