@@ -14,3 +14,9 @@ reasoning:
   effort_field: reasoning_effort
   # effort_range not set = full IR ladder (minimal–max)
 
+soft_error_patterns:
+  - pattern: "AUTHENTICATION NOTICE FROM ARGO"
+    status_code: 403
+    message: >-
+      ARGO authentication error: the upstream ARGO gateway rejected the
+      request. Verify your username and API key configuration.

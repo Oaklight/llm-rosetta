@@ -26,6 +26,7 @@ from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResp
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
@@ -212,6 +213,129 @@ async def _handle_401(
         )
         return True, None
     return False, None
+
+
+def _check_soft_errors(
+    patterns: tuple[SoftErrorPattern, ...],
+    body: Any,
+) -> SoftErrorPattern | None:
+    """Check a response body against soft-error patterns.
+
+    Returns the first matching pattern, or ``None``.
+    """
+    if not patterns:
+        return None
+    text = json.dumps(body) if not isinstance(body, str) else body
+    for p in patterns:
+        if p.compiled.search(text):
+            return p
+    return None
+
+
+def _soft_error_response(
+    route: ResolvedRoute,
+    resp_body: Any,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    *,
+    provider_info: Any,
+    persistence: Any | None,
+    entry_id: str | None,
+    extra_headers: dict[str, str] | None = None,
+    capture_state: Any | None = None,
+) -> Response | None:
+    """Return an error response if *resp_body* matches a soft-error pattern."""
+    matched = _check_soft_errors(route.soft_error_patterns, resp_body)
+    if matched is None:
+        return None
+    logger.warning("Soft-error detected in upstream 200 response: %s", matched.pattern)
+    return _upstream_error_passthrough(
+        matched.status_code,
+        matched.message,
+        json.dumps(resp_body).encode() if resp_body else b"",
+        resp_body,
+        body=body,
+        target_body=target_body,
+        route=route,
+        provider_info=provider_info,
+        persistence=persistence,
+        entry_id=entry_id,
+        extra_headers=extra_headers,
+        capture_state=capture_state,
+        error_phase="soft_error",
+    )
+
+
+def _handle_stream_soft_error(
+    matched: SoftErrorPattern,
+    chunk: dict[str, Any],
+    model: str,
+    dump_ctx: DumpContext | None,
+    entry_id: str | None,
+) -> str:
+    """Log and dump a soft-error detected in a stream chunk. Returns the error message."""
+    logger.warning("Soft-error detected in stream chunk: %s", matched.pattern)
+    _dc = dump_ctx or DumpContext()
+    dump_error(
+        _dc.persistence,
+        request_body=_dc.request_body,
+        response_text=json.dumps(chunk)[:2000],
+        converted_body=_dc.converted_body,
+        model=model,
+        source_provider=_dc.source_provider,
+        target_provider=_dc.target_provider,
+        provider_name=_dc.provider_name,
+        status_code=matched.status_code,
+        error_phase="soft_error",
+        upstream_url=_dc.upstream_url,
+        request_log_id=entry_id,
+    )
+    return matched.message
+
+
+def _detect_stream_chunk_error(
+    chunk: dict[str, Any],
+    *,
+    soft_error_patterns: tuple[SoftErrorPattern, ...],
+    stream_status: int,
+    model: str,
+    dump_ctx: DumpContext | None,
+    entry_id: str | None,
+) -> str | None:
+    """Check a stream chunk for soft-errors and upstream error events.
+
+    Returns the error message string if an error is detected, ``None`` otherwise.
+    """
+    soft_match = _check_soft_errors(soft_error_patterns, chunk)
+    if soft_match:
+        return _handle_stream_soft_error(soft_match, chunk, model, dump_ctx, entry_id)
+
+    if is_upstream_error_chunk(chunk):
+        error_msg = extract_upstream_error_message(chunk)
+        log_upstream_error(
+            stream_status,
+            json.dumps(chunk)[:2000],
+            endpoint=model,
+            is_streaming=True,
+        )
+        _dc = dump_ctx or DumpContext()
+        dump_error(
+            _dc.persistence,
+            request_body=_dc.request_body,
+            response_text=json.dumps(chunk)[:2000],
+            converted_body=_dc.converted_body,
+            model=model,
+            source_provider=_dc.source_provider,
+            target_provider=_dc.target_provider,
+            provider_name=_dc.provider_name,
+            status_code=stream_status,
+            error_phase="stream_chunk",
+            upstream_url=_dc.upstream_url,
+            request_log_id=entry_id,
+        )
+        return error_msg
+
+    return None
 
 
 @dataclass
@@ -585,24 +709,39 @@ async def handle_non_streaming(
             break
 
     assert resp is not None
-    if resp.is_error:
-        return (
-            _upstream_error_passthrough(
-                resp.status_code,
-                resp.error_text,
-                resp.raw_content,
-                resp.body,
-                body=body,
-                target_body=target_body,
-                route=route,
-                provider_info=provider_info,
-                persistence=persistence,
-                entry_id=entry_id,
-                extra_headers=extra_headers,
-                capture_state=capture_state,
-            ),
-            profile,
+
+    # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
+    # with an error embedded in the body, e.g. Argo auth warnings).
+    _err = (
+        _upstream_error_passthrough(
+            resp.status_code,
+            resp.error_text,
+            resp.raw_content,
+            resp.body,
+            body=body,
+            target_body=target_body,
+            route=route,
+            provider_info=provider_info,
+            persistence=persistence,
+            entry_id=entry_id,
+            extra_headers=extra_headers,
+            capture_state=capture_state,
         )
+        if resp.is_error
+        else _soft_error_response(
+            route,
+            resp.body,
+            body,
+            target_body,
+            provider_info=provider_info,
+            persistence=persistence,
+            entry_id=entry_id,
+            extra_headers=extra_headers,
+            capture_state=capture_state,
+        )
+    )
+    if _err is not None:
+        return _err, profile
 
     # Phase 4: Target response → Source response
     assert resp.body is not None
@@ -776,6 +915,7 @@ async def _stream_event_generator(
     dump_ctx: DumpContext | None = None,
     pipeline: Any | None = None,
     warnings_before: int = 0,
+    soft_error_patterns: tuple[SoftErrorPattern, ...] = (),
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
 
@@ -803,29 +943,15 @@ async def _stream_event_generator(
                 if upstream_chunks is not None:
                     upstream_chunks.append(chunk)
 
-                if is_upstream_error_chunk(chunk):
-                    stream_error = extract_upstream_error_message(chunk)
-                    log_upstream_error(
-                        getattr(stream, "status_code", 200),
-                        json.dumps(chunk)[:2000],
-                        endpoint=model,
-                        is_streaming=True,
-                    )
-                    _dc = dump_ctx or DumpContext()
-                    dump_error(
-                        _dc.persistence,
-                        request_body=_dc.request_body,
-                        response_text=json.dumps(chunk)[:2000],
-                        converted_body=_dc.converted_body,
-                        model=model,
-                        source_provider=_dc.source_provider,
-                        target_provider=_dc.target_provider,
-                        provider_name=_dc.provider_name,
-                        status_code=getattr(stream, "status_code", 0),
-                        error_phase="stream_chunk",
-                        upstream_url=_dc.upstream_url,
-                        request_log_id=entry_id,
-                    )
+                stream_error = _detect_stream_chunk_error(
+                    chunk,
+                    soft_error_patterns=soft_error_patterns,
+                    stream_status=getattr(stream, "status_code", 200),
+                    model=model,
+                    dump_ctx=dump_ctx,
+                    entry_id=entry_id,
+                )
+                if stream_error is not None:
                     for event in build_stream_error_events(
                         source_provider, stream_error
                     ):
@@ -1234,6 +1360,7 @@ async def handle_streaming(
                 ),
                 pipeline=pipeline,
                 warnings_before=len(pipeline.warnings),
+                soft_error_patterns=route.soft_error_patterns,
             ),
             content_type="text/event-stream",
         ),

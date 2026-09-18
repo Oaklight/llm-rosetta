@@ -64,6 +64,7 @@ from ..provider_shim import (
     ConnectionConfig,
     ProviderShim,
     ReasoningCapability,
+    SoftErrorPattern,
     ToolsConfig,
     register_shim,
 )
@@ -297,6 +298,22 @@ def _load_single_provider(
             multimodal_result=cfg.get("multimodal_tool_result"),
         )
 
+    # Parse soft-error patterns for 200-but-error detection.
+    raw_patterns = cfg.get("soft_error_patterns", [])
+    _soft_list: list[SoftErrorPattern] = []
+    for p in raw_patterns:
+        if not isinstance(p, dict):
+            logger.warning("Skipping non-dict soft_error_pattern in %s", yaml_path)
+            continue
+        sep = SoftErrorPattern(
+            pattern=p["pattern"],
+            status_code=p["status_code"],
+            message=p["message"],
+        )
+        sep.compiled  # eagerly validate regex at load time
+        _soft_list.append(sep)
+    soft_errors = tuple(_soft_list)
+
     shim = ProviderShim(
         name=cfg["name"],
         base=cfg["base"],
@@ -311,6 +328,7 @@ def _load_single_provider(
         model_reasoning=model_reasoning,
         response_id_prefix=cfg.get("response_id_prefix", ""),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
+        soft_error_patterns=soft_errors,
     )
     register_shim(shim)
 
