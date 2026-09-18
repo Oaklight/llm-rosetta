@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 
 @dataclass(slots=True, frozen=True)
@@ -57,7 +58,7 @@ class ResolvedRoute:
     hoist_system_messages: bool = True
     preflight_token_count: bool = False
     max_tool_description_length: int | None = None
-    soft_error_patterns: tuple = ()
+    soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
 
 
 class Router(Protocol):
