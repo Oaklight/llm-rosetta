@@ -264,15 +264,19 @@ def _load_single_provider(
 
     # Parse soft-error patterns for 200-but-error detection.
     raw_patterns = cfg.get("soft_error_patterns", [])
-    soft_errors = tuple(
-        SoftErrorPattern(
-            pattern=p["pattern"],
-            status_code=p["status_code"],
-            message=p["message"],
+    _soft_list: list[SoftErrorPattern] = []
+    for p in raw_patterns:
+        if not isinstance(p, dict):
+            logger.warning("Skipping non-dict soft_error_pattern in %s", yaml_path)
+            continue
+        _soft_list.append(
+            SoftErrorPattern(
+                pattern=p["pattern"],
+                status_code=p["status_code"],
+                message=p["message"],
+            )
         )
-        for p in raw_patterns
-        if isinstance(p, dict)
-    )
+    soft_errors = tuple(_soft_list)
 
     shim = ProviderShim(
         name=cfg["name"],

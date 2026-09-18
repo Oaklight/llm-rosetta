@@ -186,7 +186,7 @@ async def _collect_stream(
 
 class TestStreamSoftError:
     def test_soft_error_in_stream_breaks(self):
-        events = asyncio.get_event_loop().run_until_complete(
+        events = asyncio.run(
             _collect_stream(
                 [ARGO_STREAM_CHUNK, NORMAL_STREAM_CHUNK],
                 soft_error_patterns=PATTERNS,
@@ -197,7 +197,7 @@ class TestStreamSoftError:
         assert "Hello! How can I help?" not in texts
 
     def test_normal_stream_passes_through(self):
-        events = asyncio.get_event_loop().run_until_complete(
+        events = asyncio.run(
             _collect_stream(
                 [NORMAL_STREAM_CHUNK, DONE_CHUNK],
                 soft_error_patterns=PATTERNS,
@@ -208,7 +208,7 @@ class TestStreamSoftError:
         assert "ARGO authentication error" not in texts
 
     def test_no_patterns_passes_through(self):
-        events = asyncio.get_event_loop().run_until_complete(
+        events = asyncio.run(
             _collect_stream(
                 [ARGO_STREAM_CHUNK],
                 soft_error_patterns=(),

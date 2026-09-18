@@ -129,7 +129,7 @@ class SoftErrorPattern:
     status_code: int
     message: str
 
-    @functools.cached_property
+    @functools.cached_property  # works on frozen dataclasses (writes to __dict__ directly)
     def compiled(self) -> re.Pattern[str]:
         return re.compile(self.pattern, re.IGNORECASE)
 
