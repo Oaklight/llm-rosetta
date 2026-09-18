@@ -900,6 +900,7 @@ class GatewayConfig:
             hoist_system_messages=hoist_system,
             preflight_token_count=preflight,
             max_tool_description_length=max_tool_desc,
+            soft_error_patterns=_shim.soft_error_patterns if _shim else (),
         )
 
         pinfo = self.providers[provider_name]

@@ -12,7 +12,9 @@ functions (``get_shim``, ``list_shims``) read from it.
 
 from __future__ import annotations
 
+import functools
 import logging
+import re
 import warnings
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -104,6 +106,35 @@ class ReasoningCapability:
 
 
 # ---------------------------------------------------------------------------
+# Soft-error detection
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SoftErrorPattern:
+    """A pattern that detects upstream 200-but-error responses.
+
+    When a provider returns HTTP 200 with an error embedded in the body
+    (e.g. an auth warning instead of real LLM output), the gateway uses
+    these patterns to detect and convert them to proper HTTP errors.
+
+    Attributes:
+        pattern: Regex source string matched against the serialized
+            response body (case-insensitive).
+        status_code: HTTP status code to return to the client.
+        message: Error message included in the client-facing response.
+    """
+
+    pattern: str
+    status_code: int
+    message: str
+
+    @functools.cached_property
+    def compiled(self) -> re.Pattern[str]:
+        return re.compile(self.pattern, re.IGNORECASE)
+
+
+# ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
@@ -176,6 +207,7 @@ class ProviderShim:
     models_path: str | None = None
     multimodal_tool_result: bool | None = None
     tool_search_mode: ToolSearchMode = "disabled"
+    soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
@@ -228,6 +260,7 @@ class ProviderShim:
             "models_path": None,
             "multimodal_tool_result": None,
             "tool_search_mode": "disabled",
+            "soft_error_patterns": (),
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

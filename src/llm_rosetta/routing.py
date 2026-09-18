@@ -57,6 +57,7 @@ class ResolvedRoute:
     hoist_system_messages: bool = True
     preflight_token_count: bool = False
     max_tool_description_length: int | None = None
+    soft_error_patterns: tuple = ()
 
 
 class Router(Protocol):
