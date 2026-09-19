@@ -210,3 +210,22 @@ class TestEdgeCases:
 
     def test_converter_tag(self, converter):
         assert converter._CONVERTER_TAG == "llm_chat_decision"
+
+    def test_empty_content_raises(self, converter):
+        ctx = ConversionContext()
+        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
+        empty_response = {"choices": [{"message": {"content": ""}}]}
+        with pytest.raises(ValueError, match="no message content"):
+            converter.response_from_provider(empty_response, context=ctx)
+
+    def test_malformed_json_raises(self, converter):
+        ctx = ConversionContext()
+        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
+        bad_response = {"choices": [{"message": {"content": "not json{"}}]}
+        with pytest.raises(ValueError, match="Failed to parse"):
+            converter.response_from_provider(bad_response, context=ctx)
+
+    def test_missing_context_questions_raises(self, converter):
+        ctx = ConversionContext()
+        with pytest.raises(ValueError, match="_decision_questions"):
+            converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)

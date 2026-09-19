@@ -91,10 +91,24 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
         *,
         context: ConversionContext,
     ) -> IRDecisionResponse:
-        questions = context.options.get("_decision_questions", {})
+        questions = context.options.get("_decision_questions")
+        if questions is None:
+            raise ValueError(
+                "No _decision_questions in context — was request_to_provider "
+                "called with the same ConversionContext?"
+            )
 
         content = self._extract_content(provider_response)
-        raw = json.loads(content) if isinstance(content, str) else content
+        if not content:
+            raise ValueError(
+                "LLM response contained no message content to parse as decision JSON"
+            )
+        try:
+            raw = json.loads(content) if isinstance(content, str) else content
+        except json.JSONDecodeError as e:
+            raise ValueError(
+                f"Failed to parse LLM decision response as JSON: {e}"
+            ) from e
         answers = parse_decision_answers(raw, questions)
 
         result: IRDecisionResponse = {

@@ -1,5 +1,7 @@
 """Tests for decision schema generation and answer parsing."""
 
+from typing import Any
+
 import pytest
 
 from llm_rosetta.converters.decision.schema_ops import (
@@ -239,3 +241,33 @@ class TestComputeConfidence:
 
     def test_empty(self):
         assert compute_confidence({}) == 1.0
+
+
+class TestProbabilityNormalization:
+    def test_choice_normalizes(self):
+        questions = {
+            "q": ChoiceQuestion(
+                type="choice", instructions="test", criteria={"a": "A", "b": "B"}
+            )
+        }
+        raw = {"answers": {"q": {"a": 0.6, "b": 0.7}}}
+        answers = parse_decision_answers(raw, questions)
+        a: Any = answers["q"]
+        probs = a["probabilities"]
+        assert abs(sum(probs.values()) - 1.0) < 1e-9
+
+    def test_score_normalizes_expectation(self):
+        questions = {
+            "q": ScoreQuestion(
+                type="score", instructions="test", criteria=["Low", "High"]
+            )
+        }
+        raw = {"answers": {"q": {"0": 0.4, "1": 0.6}}}
+        answers = parse_decision_answers(raw, questions)
+        a1: Any = answers["q"]
+        assert a1["score"] == pytest.approx(0.6)
+
+        raw_unnorm = {"answers": {"q": {"0": 0.8, "1": 1.2}}}
+        answers2 = parse_decision_answers(raw_unnorm, questions)
+        a2: Any = answers2["q"]
+        assert a2["score"] == pytest.approx(0.6)

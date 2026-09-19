@@ -29,7 +29,7 @@ You are a structured decision model. Evaluate the provided state against \
 each question and return calibrated probability estimates.
 
 For each question:
-- noul: return a single number in [0, 1] representing P(true).
+- noul (binary probability): return a single number in [0, 1] representing P(true).
 - choice: return an object mapping each option to its probability. \
 Values must be non-negative and sum to 1.
 - score: return an object mapping each level index ("0", "1", ...) to its \
@@ -185,6 +185,14 @@ def compute_confidence(probabilities: dict[str, float]) -> float:
 # ==================== Internal helpers ====================
 
 
+def _normalize_probs(probs: dict[str, float]) -> dict[str, float]:
+    """Rescale probabilities to sum to 1.0."""
+    total = sum(probs.values())
+    if total <= 0 or abs(total - 1.0) < 1e-9:
+        return probs
+    return {k: v / total for k, v in probs.items()}
+
+
 def _serialize_value(value: Any) -> str:
     if value is None:
         return ""
@@ -206,7 +214,7 @@ def _parse_single_answer(
         return NoulAnswer(type="noul", noul=noul_val)
 
     if qtype == "choice":
-        probs = {str(k): float(v) for k, v in raw_answer.items()}
+        probs = _normalize_probs({str(k): float(v) for k, v in raw_answer.items()})
         choice_key = max(probs, key=lambda k: probs[k])
         return ChoiceAnswer(
             type="choice",
@@ -216,7 +224,7 @@ def _parse_single_answer(
         )
 
     if qtype == "score":
-        probs = {str(k): float(v) for k, v in raw_answer.items()}
+        probs = _normalize_probs({str(k): float(v) for k, v in raw_answer.items()})
         criteria_list: list[str] = cast(Any, question).get("criteria", [])
         legend = {str(i): desc for i, desc in enumerate(criteria_list)}
         score_val = sum(int(k) * v for k, v in probs.items())
