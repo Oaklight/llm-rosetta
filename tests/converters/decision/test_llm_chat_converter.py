@@ -16,7 +16,7 @@ from llm_rosetta.types.ir.decision import (
 
 
 @pytest.fixture
-def converter():
+def converter():  # openai_chat default
     return LLMChatDecisionConverter()
 
 
@@ -31,8 +31,18 @@ def prompted_converter():
 
 
 @pytest.fixture
-def google_converter():
-    return LLMChatDecisionConverter(output_format="google")
+def google_generate_converter():
+    return LLMChatDecisionConverter(output_format="google_generate")
+
+
+@pytest.fixture
+def google_interactions_converter():
+    return LLMChatDecisionConverter(output_format="google_interactions")
+
+
+@pytest.fixture
+def openai_responses_converter():
+    return LLMChatDecisionConverter(output_format="openai_responses")
 
 
 @pytest.fixture
@@ -144,6 +154,22 @@ MOCK_GOOGLE_RESPONSE = {
     "modelVersion": "gemini-2.0-flash",
 }
 
+MOCK_OPENAI_RESPONSES_RESPONSE = {
+    "id": "resp_123",
+    "model": "gpt-4o-mini",
+    "status": "completed",
+    "output_text": json.dumps(
+        {
+            "answers": {
+                "is_urgent": 0.92,
+                "department": {"billing": 0.15, "technical": 0.85},
+                "frustration": {"0": 0.05, "1": 0.3, "2": 0.65},
+            }
+        }
+    ),
+    "usage": {"input_tokens": 200, "output_tokens": 50},
+}
+
 MOCK_ANTHROPIC_RESPONSE = {
     "model": "claude-haiku-4-5",
     "content": [
@@ -248,26 +274,96 @@ class TestAnthropicFormat:
 # ============================================================================
 
 
-class TestGoogleFormat:
-    def test_has_response_schema(self, google_converter: LLMChatDecisionConverter):
-        wire, _ = google_converter.request_to_provider(IR_REQUEST)
+class TestGoogleGenerateFormat:
+    def test_has_response_schema(
+        self, google_generate_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = google_generate_converter.request_to_provider(IR_REQUEST)
         assert wire["response_mime_type"] == "application/json"
         assert "response_schema" in wire
         assert wire["response_schema"]["required"] == ["answers"]
 
     def test_no_response_format_or_output_config(
-        self, google_converter: LLMChatDecisionConverter
+        self, google_generate_converter: LLMChatDecisionConverter
     ):
-        wire, _ = google_converter.request_to_provider(IR_REQUEST)
+        wire, _ = google_generate_converter.request_to_provider(IR_REQUEST)
         assert "response_format" not in wire
         assert "output_config" not in wire
 
-    def test_parses_google_response(self, google_converter: LLMChatDecisionConverter):
+    def test_parses_google_response(
+        self, google_generate_converter: LLMChatDecisionConverter
+    ):
         ctx = ConversionContext()
-        google_converter.request_to_provider(IR_REQUEST, context=ctx)
-        ir = google_converter.response_from_provider(MOCK_GOOGLE_RESPONSE, context=ctx)
+        google_generate_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = google_generate_converter.response_from_provider(
+            MOCK_GOOGLE_RESPONSE, context=ctx
+        )
         assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
+
+
+# ============================================================================
+# OpenAI Responses format
+# ============================================================================
+
+
+class TestOpenAIResponsesFormat:
+    def test_has_text_format(
+        self, openai_responses_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = openai_responses_converter.request_to_provider(IR_REQUEST)
+        text = wire["text"]
+        assert text["format"]["type"] == "json_schema"
+        assert text["format"]["strict"] is True
+
+    def test_no_response_format(
+        self, openai_responses_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = openai_responses_converter.request_to_provider(IR_REQUEST)
+        assert "response_format" not in wire
+
+    def test_parses_responses_output_text(
+        self, openai_responses_converter: LLMChatDecisionConverter
+    ):
+        ctx = ConversionContext()
+        openai_responses_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = openai_responses_converter.response_from_provider(
+            MOCK_OPENAI_RESPONSES_RESPONSE, context=ctx
+        )
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
+
+
+# ============================================================================
+# Google Interactions format
+# ============================================================================
+
+
+class TestGoogleInteractionsFormat:
+    def test_has_response_format_with_mime(
+        self, google_interactions_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = google_interactions_converter.request_to_provider(IR_REQUEST)
+        rf = wire["response_format"]
+        assert rf["type"] == "text"
+        assert rf["mime_type"] == "application/json"
+        assert "response_schema" in rf
+
+    def test_no_response_mime_type_top_level(
+        self, google_interactions_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = google_interactions_converter.request_to_provider(IR_REQUEST)
+        assert "response_mime_type" not in wire
+
+    def test_parses_google_response(
+        self, google_interactions_converter: LLMChatDecisionConverter
+    ):
+        ctx = ConversionContext()
+        google_interactions_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = google_interactions_converter.response_from_provider(
+            MOCK_GOOGLE_RESPONSE, context=ctx
+        )
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
 
 
 # ============================================================================
