@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [未发布]
 
+### 新增 — Decision 范式
+
+- **Decision 模型范式** (PR [#705](https://github.com/Oaklight/llm-rosetta/pull/705))：与 chat、embedding、rerank 并列的新模型类别，用于概率化结构决策。Decision 模型对 state 执行类型化 questions，返回校准的概率分布——不涉及文本生成。三种 IR 原语：`noul`（P(true) ∈ [0,1]）、`choice`（类别分布）、`score`（有序分布）。包含 `BaseDecisionConverter` 抽象基类、`TypeSafeDecisionConverter`（TypeSafe System One / Jev API）、provider shim、自动检测和网关路由（`/v1/decision`、`/v1/systemone`）。
+
 ### 网关 — 多 Provider 路由与基础设施
 
 - **多 Provider 路由与加权轮询** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664))：支持为每个模型配置多个上游 Provider 并按权重分配负载。新增 `RoutingStrategy` 协议和 nginx 风格的平滑 WRR 实现。Provider 特定的错误响应自动按转换器类型映射。支持按 Provider 统计 token 用量和亲和性路由。

@@ -120,6 +120,7 @@ nav:
               - 文本生成: guide/api-standards.md
               - Rerank: guide/rerank-formats.md
               - Embedding: guide/embedding-formats.md
+              - Decision: guide/decision-formats.md
       - 转换器:
           - 使用转换器: guide/converters.md
           - 流式处理: guide/streaming.md
