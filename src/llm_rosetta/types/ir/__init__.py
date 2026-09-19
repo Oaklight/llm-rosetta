@@ -126,6 +126,24 @@ from .rerank import (
     RerankUsageInfo,
 )
 
+# Decision 类型 Decision types
+from .decision import (
+    NoulAnswer,
+    NoulCriteria,
+    NoulQuestion,
+    ChoiceAnswer,
+    ChoiceQuestion,
+    DecisionAnswer,
+    DecisionQuestion,
+    DecisionQuestionType,
+    DecisionState,
+    DecisionUsageInfo,
+    IRDecisionRequest,
+    IRDecisionResponse,
+    ScoreAnswer,
+    ScoreQuestion,
+)
+
 # 请求类型 Request types
 from .request import IRInputItem, IRRequest
 
@@ -281,6 +299,21 @@ __all__ = [
     "RerankResultItem",
     "IRRerankRequest",
     "IRRerankResponse",
+    # ========== Eval 类型 Eval types ==========
+    "DecisionQuestionType",
+    "NoulCriteria",
+    "NoulQuestion",
+    "ChoiceQuestion",
+    "ScoreQuestion",
+    "DecisionQuestion",
+    "NoulAnswer",
+    "ChoiceAnswer",
+    "ScoreAnswer",
+    "DecisionAnswer",
+    "DecisionUsageInfo",
+    "DecisionState",
+    "IRDecisionRequest",
+    "IRDecisionResponse",
     # ========== 向后兼容类型 Backward compatibility types ==========
     "IRInput",
     "IRInputSimple",

@@ -150,7 +150,7 @@ class TestBuiltinShims:
         load_providers()
 
     def test_official_providers_registered(self):
-        for name in ("openai", "openai_responses", "anthropic", "google"):
+        for name in ("openai", "openai_responses", "anthropic", "google", "typesafe"):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
@@ -194,6 +194,11 @@ class TestBuiltinShims:
         shim = get_shim("google")
         assert shim is not None
         assert shim.base == "google_generate"
+
+    def test_typesafe_base_type(self):
+        shim = get_shim("typesafe")
+        assert shim is not None
+        assert shim.base == "decision"
 
     def test_max_tool_description_length_loaded_from_yaml(self):
         """The YAML threshold must reach the shim object.

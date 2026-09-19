@@ -897,3 +897,77 @@ class TestDetectGoogleInteractions:
         )
 
         assert isinstance(converter, GoogleInteractionsConverter)
+
+
+class TestDetectDecision:
+    def test_detect_noul_question(self):
+        body = {
+            "state": "Customer message",
+            "model": "jev-latest",
+            "questions": {
+                "is_urgent": {"type": "noul", "instructions": "Is this urgent?"},
+            },
+        }
+        assert detect_provider(body) == "decision"
+
+    def test_detect_choice_question(self):
+        body = {
+            "state": "Customer message",
+            "model": "jev-latest",
+            "questions": {
+                "dept": {
+                    "type": "choice",
+                    "instructions": "Which team?",
+                    "criteria": {"billing": "Payments", "tech": "Bugs"},
+                },
+            },
+        }
+        assert detect_provider(body) == "decision"
+
+    def test_detect_score_question(self):
+        body = {
+            "state": "Customer message",
+            "model": "jev-latest",
+            "questions": {
+                "frustration": {
+                    "type": "score",
+                    "instructions": "How frustrated?",
+                    "criteria": ["Calm", "Frustrated", "Very angry"],
+                },
+            },
+        }
+        assert detect_provider(body) == "decision"
+
+    def test_detect_multi_question(self):
+        body = {
+            "state": {"message": "test", "context": [1, 2]},
+            "model": "jev-latest",
+            "questions": {
+                "q1": {"type": "noul", "instructions": "yes?"},
+                "q2": {
+                    "type": "choice",
+                    "instructions": "which?",
+                    "criteria": {"a": None, "b": None},
+                },
+            },
+        }
+        assert detect_provider(body) == "decision"
+
+    def test_not_eval_without_state(self):
+        body = {
+            "model": "jev-latest",
+            "questions": {"q": {"type": "noul", "instructions": "test"}},
+        }
+        assert detect_provider(body) != "decision"
+
+    def test_not_eval_without_questions(self):
+        body = {"state": "test", "model": "jev-latest"}
+        assert detect_provider(body) != "decision"
+
+    def test_not_eval_empty_questions(self):
+        body = {"state": "test", "model": "m", "questions": {}}
+        assert detect_provider(body) != "decision"
+
+    def test_not_confused_with_openai_chat(self):
+        body = {"messages": [{"role": "user", "content": "Hello"}]}
+        assert detect_provider(body) == "openai_chat"

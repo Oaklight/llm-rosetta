@@ -15,6 +15,7 @@ ProviderType = Literal[
     "google",
     "google_generate",
     "google_interactions",
+    "decision",
 ]
 
 
@@ -40,6 +41,21 @@ _ANTHROPIC_CONTENT_TYPES = frozenset(
 _INTERACTIONS_STEP_TYPES = frozenset(
     {"user_input", "model_output", "thought", "function_call", "function_result"}
 )
+
+
+# Wire-format type names (not IR names — IR uses "bernoulli" instead of "noul")
+_EVAL_QUESTION_TYPES = frozenset({"noul", "choice", "score"})
+
+
+def _is_decision_format(body: dict[str, Any]) -> bool:
+    """Check if body matches eval (System One) format: state + questions."""
+    if "state" not in body or "questions" not in body:
+        return False
+    questions = body["questions"]
+    if not isinstance(questions, dict) or not questions:
+        return False
+    first_q = next(iter(questions.values()))
+    return isinstance(first_q, dict) and first_q.get("type") in _EVAL_QUESTION_TYPES
 
 
 def _is_google_interactions_format(body: dict[str, Any]) -> bool:
@@ -138,6 +154,9 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
     """
     if not isinstance(body, dict):
         return None
+
+    if _is_decision_format(body):
+        return "decision"
 
     if _is_google_format(body):
         return "google"
