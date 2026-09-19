@@ -31,6 +31,11 @@ def prompted_converter():
 
 
 @pytest.fixture
+def google_converter():
+    return LLMChatDecisionConverter(output_format="google")
+
+
+@pytest.fixture
 def discrete_converter():
     return LLMChatDecisionConverter(answer_mode="discrete")
 
@@ -100,6 +105,43 @@ MOCK_DISCRETE_RESPONSE = {
             },
         }
     ],
+}
+
+MOCK_GOOGLE_RESPONSE = {
+    "candidates": [
+        {
+            "content": {
+                "parts": [
+                    {
+                        "text": json.dumps(
+                            {
+                                "answers": {
+                                    "is_urgent": 0.92,
+                                    "department": {
+                                        "billing": 0.15,
+                                        "technical": 0.85,
+                                    },
+                                    "frustration": {
+                                        "0": 0.05,
+                                        "1": 0.3,
+                                        "2": 0.65,
+                                    },
+                                }
+                            }
+                        )
+                    }
+                ],
+                "role": "model",
+            },
+            "finishReason": "STOP",
+        }
+    ],
+    "usageMetadata": {
+        "promptTokenCount": 200,
+        "candidatesTokenCount": 50,
+        "totalTokenCount": 250,
+    },
+    "modelVersion": "gemini-2.0-flash",
 }
 
 MOCK_ANTHROPIC_RESPONSE = {
@@ -199,6 +241,33 @@ class TestAnthropicFormat:
         assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
         assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
         assert ir["usage"]["input_tokens"] == 200
+
+
+# ============================================================================
+# Google format
+# ============================================================================
+
+
+class TestGoogleFormat:
+    def test_has_response_schema(self, google_converter: LLMChatDecisionConverter):
+        wire, _ = google_converter.request_to_provider(IR_REQUEST)
+        assert wire["response_mime_type"] == "application/json"
+        assert "response_schema" in wire
+        assert wire["response_schema"]["required"] == ["answers"]
+
+    def test_no_response_format_or_output_config(
+        self, google_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = google_converter.request_to_provider(IR_REQUEST)
+        assert "response_format" not in wire
+        assert "output_config" not in wire
+
+    def test_parses_google_response(self, google_converter: LLMChatDecisionConverter):
+        ctx = ConversionContext()
+        google_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = google_converter.response_from_provider(MOCK_GOOGLE_RESPONSE, context=ctx)
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
 
 
 # ============================================================================
