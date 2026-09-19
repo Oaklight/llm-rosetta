@@ -120,6 +120,7 @@ nav:
               - Text Generation: guide/api-standards.md
               - Rerank: guide/rerank-formats.md
               - Embedding: guide/embedding-formats.md
+              - Decision: guide/decision-formats.md
       - Converters:
           - Using Converters: guide/converters.md
           - Streaming: guide/streaming.md

@@ -8,6 +8,10 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 ## [Unreleased]
 
+### Added — Decision paradigm
+
+- **Decision model paradigm** (PR [#705](https://github.com/Oaklight/llm-rosetta/pull/705)): new model category alongside chat, embedding, and rerank for probabilistic structured decisions. Decision models evaluate state against typed questions and return calibrated probability distributions — no text generation. Three IR primitives: `noul` (P(true) ∈ [0,1]), `choice` (categorical distribution), `score` (ordinal distribution). Includes `BaseDecisionConverter` ABC, `TypeSafeDecisionConverter` for the TypeSafe System One (Jev) API, provider shim, auto-detection, and gateway routes (`/v1/decision`, `/v1/systemone`).
+
 ### Gateway — Multi-provider routing & infrastructure
 
 - **Multi-provider routing with weighted round-robin** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664)): support configuring multiple upstream providers per model with weighted load distribution. Adds `RoutingStrategy` protocol and nginx-style smooth WRR implementation. Provider-specific error responses auto-map per converter type. Per-provider token usage tracking and affinity support.
