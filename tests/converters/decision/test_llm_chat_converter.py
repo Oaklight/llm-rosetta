@@ -1,11 +1,12 @@
 """Tests for the LLM Chat decision converter."""
 
 import json
+from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.decision.llm_chat import LLMChatDecisionConverter
 from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.converters.decision.llm_chat import LLMChatDecisionConverter
 from llm_rosetta.types.ir.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
@@ -17,6 +18,21 @@ from llm_rosetta.types.ir.decision import (
 @pytest.fixture
 def converter():
     return LLMChatDecisionConverter()
+
+
+@pytest.fixture
+def anthropic_converter():
+    return LLMChatDecisionConverter(output_format="anthropic")
+
+
+@pytest.fixture
+def prompted_converter():
+    return LLMChatDecisionConverter(output_format="prompted")
+
+
+@pytest.fixture
+def discrete_converter():
+    return LLMChatDecisionConverter(answer_mode="discrete")
 
 
 IR_REQUEST: IRDecisionRequest = {
@@ -64,30 +80,73 @@ MOCK_CHAT_RESPONSE = {
             "finish_reason": "stop",
         }
     ],
-    "usage": {
-        "prompt_tokens": 200,
-        "completion_tokens": 50,
-        "total_tokens": 250,
-    },
+    "usage": {"prompt_tokens": 200, "completion_tokens": 50, "total_tokens": 250},
+}
+
+MOCK_DISCRETE_RESPONSE = {
+    "model": "gpt-4o-mini",
+    "choices": [
+        {
+            "message": {
+                "content": json.dumps(
+                    {
+                        "answers": {
+                            "is_urgent": True,
+                            "department": "technical",
+                            "frustration": 2,
+                        }
+                    }
+                ),
+            },
+        }
+    ],
+}
+
+MOCK_ANTHROPIC_RESPONSE = {
+    "model": "claude-haiku-4-5",
+    "content": [
+        {
+            "type": "text",
+            "text": json.dumps(
+                {
+                    "answers": {
+                        "is_urgent": 0.92,
+                        "department": {"billing": 0.15, "technical": 0.85},
+                        "frustration": {"0": 0.05, "1": 0.3, "2": 0.65},
+                    }
+                }
+            ),
+        }
+    ],
+    "usage": {"input_tokens": 200, "output_tokens": 50},
 }
 
 
-class TestRequestToProvider:
-    def test_produces_chat_format(self, converter):
+# ============================================================================
+# OpenAI format (default)
+# ============================================================================
+
+
+class TestOpenAIFormat:
+    def test_produces_chat_format(self, converter: LLMChatDecisionConverter):
         wire, warnings = converter.request_to_provider(IR_REQUEST)
         assert wire["model"] == "gpt-4o-mini"
         assert len(wire["messages"]) == 2
         assert wire["messages"][0]["role"] == "system"
         assert wire["messages"][1]["role"] == "user"
 
-    def test_has_response_format(self, converter):
+    def test_has_response_format(self, converter: LLMChatDecisionConverter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
         rf = wire["response_format"]
         assert rf["type"] == "json_schema"
         assert rf["json_schema"]["name"] == "decision"
         assert rf["json_schema"]["strict"] is True
 
-    def test_schema_has_all_questions(self, converter):
+    def test_no_output_config(self, converter: LLMChatDecisionConverter):
+        wire, _ = converter.request_to_provider(IR_REQUEST)
+        assert "output_config" not in wire
+
+    def test_schema_has_all_questions(self, converter: LLMChatDecisionConverter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
         schema = wire["response_format"]["json_schema"]["schema"]
         answer_props = schema["properties"]["answers"]["properties"]
@@ -95,137 +154,273 @@ class TestRequestToProvider:
         assert "department" in answer_props
         assert "frustration" in answer_props
 
-    def test_user_message_contains_state(self, converter):
-        wire, _ = converter.request_to_provider(IR_REQUEST)
-        assert "payouts" in wire["messages"][1]["content"]
+    def test_parses_response(self, converter: LLMChatDecisionConverter):
+        ctx = ConversionContext()
+        converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
 
-    def test_system_prompt_contains_question_ids(self, converter):
+    def test_no_warnings(self, converter: LLMChatDecisionConverter):
+        _, warnings = converter.request_to_provider(IR_REQUEST)
+        assert warnings == []
+
+
+# ============================================================================
+# Anthropic format
+# ============================================================================
+
+
+class TestAnthropicFormat:
+    def test_has_output_config(self, anthropic_converter: LLMChatDecisionConverter):
+        wire, _ = anthropic_converter.request_to_provider(IR_REQUEST)
+        oc = wire["output_config"]
+        assert oc["format"]["type"] == "json_schema"
+        assert "schema" in oc["format"]
+
+    def test_no_response_format(self, anthropic_converter: LLMChatDecisionConverter):
+        wire, _ = anthropic_converter.request_to_provider(IR_REQUEST)
+        assert "response_format" not in wire
+
+    def test_system_separate_from_messages(
+        self, anthropic_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = anthropic_converter.request_to_provider(IR_REQUEST)
+        assert wire["messages"][0]["role"] == "system"
+
+    def test_parses_anthropic_response(
+        self, anthropic_converter: LLMChatDecisionConverter
+    ):
+        ctx = ConversionContext()
+        anthropic_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = anthropic_converter.response_from_provider(
+            MOCK_ANTHROPIC_RESPONSE, context=ctx
+        )
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.92
+        assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
+        assert ir["usage"]["input_tokens"] == 200
+
+
+# ============================================================================
+# Prompted fallback
+# ============================================================================
+
+
+class TestPromptedFallback:
+    def test_no_response_format_or_output_config(
+        self, prompted_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = prompted_converter.request_to_provider(IR_REQUEST)
+        assert "response_format" not in wire
+        assert "output_config" not in wire
+
+    def test_schema_embedded_in_prompt(
+        self, prompted_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = prompted_converter.request_to_provider(IR_REQUEST)
+        system = wire["messages"][0]["content"]
+        assert "Return one JSON object that matches this schema exactly" in system
+        assert '"answers"' in system
+
+    def test_parses_fenced_response(self, prompted_converter: LLMChatDecisionConverter):
+        fenced_content = '```json\n{"answers": {"is_urgent": 0.8}}\n```'
+        response = {"choices": [{"message": {"content": fenced_content}}]}
+        req: IRDecisionRequest = {
+            "model": "m",
+            "state": "test",
+            "questions": {"is_urgent": NoulQuestion(type="noul", instructions="test")},
+        }
+        ctx = ConversionContext()
+        prompted_converter.request_to_provider(req, context=ctx)
+        ir = prompted_converter.response_from_provider(response, context=ctx)
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 0.8
+
+
+# ============================================================================
+# Discrete mode
+# ============================================================================
+
+
+class TestDiscreteMode:
+    def test_schema_uses_boolean_for_noul(
+        self, discrete_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
+        schema = wire["response_format"]["json_schema"]["schema"]
+        noul_prop = schema["properties"]["answers"]["properties"]["is_urgent"]
+        assert noul_prop["type"] == "boolean"
+
+    def test_schema_uses_enum_for_choice(
+        self, discrete_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
+        schema = wire["response_format"]["json_schema"]["schema"]
+        choice_prop = schema["properties"]["answers"]["properties"]["department"]
+        assert choice_prop["type"] == "string"
+        assert set(choice_prop["enum"]) == {"billing", "technical"}
+
+    def test_schema_uses_integer_for_score(
+        self, discrete_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
+        schema = wire["response_format"]["json_schema"]["schema"]
+        score_prop = schema["properties"]["answers"]["properties"]["frustration"]
+        assert score_prop["type"] == "integer"
+
+    def test_parses_discrete_response(
+        self, discrete_converter: LLMChatDecisionConverter
+    ):
+        ctx = ConversionContext()
+        discrete_converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = discrete_converter.response_from_provider(
+            MOCK_DISCRETE_RESPONSE, context=ctx
+        )
+        assert cast(Any, ir["answers"]["is_urgent"])["noul"] == 1.0
+        assert cast(Any, ir["answers"]["department"])["choice"] == "technical"
+        assert cast(Any, ir["answers"]["department"])["confidence"] == 1.0
+        a: Any = ir["answers"]["frustration"]
+        assert a["score"] == 2.0
+
+
+# ============================================================================
+# State injection protection
+# ============================================================================
+
+
+class TestStateInjection:
+    def test_escapes_angle_brackets(self, converter: LLMChatDecisionConverter):
+        req: IRDecisionRequest = {
+            "model": "m",
+            "state": "<script>alert('xss')</script>",
+            "questions": {"q": NoulQuestion(type="noul", instructions="test")},
+        }
+        wire, _ = converter.request_to_provider(req)
+        user = wire["messages"][1]["content"]
+        assert "<script>" not in user
+        assert "\\u003c" in user
+        assert "<document>" in user
+        assert "</document>" in user
+
+    def test_wraps_in_document_tags(self, converter: LLMChatDecisionConverter):
+        wire, _ = converter.request_to_provider(IR_REQUEST)
+        user = wire["messages"][1]["content"]
+        assert user.startswith("<document>")
+        assert user.endswith("</document>")
+
+
+# ============================================================================
+# Corrective retry
+# ============================================================================
+
+
+class TestRetrySupport:
+    def test_build_retry_messages(self, converter: LLMChatDecisionConverter):
+        msgs = converter.build_retry_messages("bad json{", "JSONDecodeError")
+        assert len(msgs) == 2
+        assert msgs[0]["role"] == "assistant"
+        assert msgs[0]["content"] == "bad json{"
+        assert msgs[1]["role"] == "user"
+        assert "did not match" in msgs[1]["content"]
+        assert "JSONDecodeError" in msgs[1]["content"]
+
+    def test_max_retries_stored_in_context(self):
+        conv = LLMChatDecisionConverter(max_retries=3)
+        ctx = ConversionContext()
+        conv.request_to_provider(IR_REQUEST, context=ctx)
+        assert ctx.options["_decision_max_retries"] == 3
+
+
+# ============================================================================
+# System prompt
+# ============================================================================
+
+
+class TestSystemPrompt:
+    def test_probability_prompt_mentions_calibration(
+        self, converter: LLMChatDecisionConverter
+    ):
+        wire, _ = converter.request_to_provider(IR_REQUEST)
+        system = wire["messages"][0]["content"]
+        assert "genuine uncertainty" in system
+        assert "sum to 1" in system
+
+    def test_discrete_prompt_differs(
+        self, discrete_converter: LLMChatDecisionConverter
+    ):
+        wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
+        system = wire["messages"][0]["content"]
+        assert "exactly one allowed value" in system
+
+    def test_contains_question_ids(self, converter: LLMChatDecisionConverter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
         system = wire["messages"][0]["content"]
         assert "is_urgent" in system
         assert "department" in system
         assert "frustration" in system
 
-    def test_no_warnings(self, converter):
-        _, warnings = converter.request_to_provider(IR_REQUEST)
-        assert warnings == []
-
-
-class TestResponseFromProvider:
-    def test_parses_noul_answer(self, converter):
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        a = ir["answers"]["is_urgent"]
-        assert a["type"] == "noul"
-        assert a["noul"] == 0.92
-
-    def test_parses_choice_answer(self, converter):
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        a = ir["answers"]["department"]
-        assert a["type"] == "choice"
-        assert a["choice"] == "technical"
-        assert a["probabilities"]["technical"] == 0.85
-        assert 0 < a["confidence"] <= 1
-
-    def test_parses_score_answer(self, converter):
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        a = ir["answers"]["frustration"]
-        assert a["type"] == "score"
-        assert a["score"] == pytest.approx(0 * 0.05 + 1 * 0.3 + 2 * 0.65)
-        assert a["legend"] == {"0": "Calm", "1": "Frustrated", "2": "Very angry"}
-
-    def test_object_field(self, converter):
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        assert ir["object"] == "decision"
-
-    def test_usage_mapping(self, converter):
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        assert ir["usage"]["input_tokens"] == 200
-        assert ir["usage"]["output_tokens"] == 50
-
-
-class TestRoundTrip:
-    def test_request_then_response(self, converter):
-        """IR request → chat request → (mock) chat response → IR response."""
+    def test_untrusted_data_warning(self, converter: LLMChatDecisionConverter):
         wire, _ = converter.request_to_provider(IR_REQUEST)
-        assert wire["response_format"]["type"] == "json_schema"
-
-        ctx = ConversionContext()
-        ctx.options["_decision_questions"] = IR_REQUEST["questions"]
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-
-        assert ir["answers"]["is_urgent"]["type"] == "noul"
-        assert ir["answers"]["department"]["type"] == "choice"
-        assert ir["answers"]["frustration"]["type"] == "score"
-
-    def test_context_carries_questions(self, converter):
-        """request_to_provider stores questions in context for response parsing."""
-        ctx = ConversionContext()
-        converter.request_to_provider(IR_REQUEST, context=ctx)
-        assert "_decision_questions" in ctx.options
-        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
-        assert len(ir["answers"]) == 3
+        system = wire["messages"][0]["content"]
+        assert "untrusted data" in system
 
 
-class TestEdgeCases:
-    def test_structured_state(self, converter):
-        req: IRDecisionRequest = {
-            "model": "gpt-4o",
-            "state": {"message": "test", "data": [1, 2, 3]},
-            "questions": {"q": NoulQuestion(type="noul", instructions="test")},
-        }
-        wire, _ = converter.request_to_provider(req)
-        user_content = wire["messages"][1]["content"]
-        parsed = json.loads(user_content)
-        assert parsed == {"message": "test", "data": [1, 2, 3]}
+# ============================================================================
+# Error handling
+# ============================================================================
 
-    def test_single_question(self, converter):
-        req: IRDecisionRequest = {
-            "model": "m",
-            "state": "s",
-            "questions": {"q": NoulQuestion(type="noul", instructions="yes?")},
-        }
-        wire, _ = converter.request_to_provider(req)
-        schema = wire["response_format"]["json_schema"]["schema"]
-        assert list(schema["properties"]["answers"]["properties"].keys()) == ["q"]
 
-    def test_request_from_provider_raises(self, converter):
-        with pytest.raises(NotImplementedError):
-            converter.request_from_provider({"messages": []})
-
-    def test_response_to_provider_raises(self, converter):
-        with pytest.raises(NotImplementedError):
-            converter.response_to_provider(
-                {"object": "decision", "model": "m", "answers": {}}
-            )
-
-    def test_converter_tag(self, converter):
-        assert converter._CONVERTER_TAG == "llm_chat_decision"
-
-    def test_empty_content_raises(self, converter):
+class TestErrorHandling:
+    def test_empty_content_raises(self, converter: LLMChatDecisionConverter):
         ctx = ConversionContext()
         ctx.options["_decision_questions"] = IR_REQUEST["questions"]
         empty_response = {"choices": [{"message": {"content": ""}}]}
         with pytest.raises(ValueError, match="no message content"):
             converter.response_from_provider(empty_response, context=ctx)
 
-    def test_malformed_json_raises(self, converter):
+    def test_malformed_json_raises(self, converter: LLMChatDecisionConverter):
         ctx = ConversionContext()
         ctx.options["_decision_questions"] = IR_REQUEST["questions"]
         bad_response = {"choices": [{"message": {"content": "not json{"}}]}
         with pytest.raises(ValueError, match="Failed to parse"):
             converter.response_from_provider(bad_response, context=ctx)
 
-    def test_missing_context_questions_raises(self, converter):
+    def test_missing_context_questions_raises(
+        self, converter: LLMChatDecisionConverter
+    ):
         ctx = ConversionContext()
         with pytest.raises(ValueError, match="_decision_questions"):
             converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
+
+    def test_request_from_provider_raises(self, converter: LLMChatDecisionConverter):
+        with pytest.raises(NotImplementedError):
+            converter.request_from_provider({"messages": []})
+
+    def test_response_to_provider_raises(self, converter: LLMChatDecisionConverter):
+        with pytest.raises(NotImplementedError):
+            converter.response_to_provider(
+                {"object": "decision", "model": "m", "answers": {}}
+            )
+
+    def test_converter_tag(self, converter: LLMChatDecisionConverter):
+        assert converter._CONVERTER_TAG == "llm_chat_decision"
+
+
+# ============================================================================
+# Round trip
+# ============================================================================
+
+
+class TestRoundTrip:
+    def test_context_carries_questions(self, converter: LLMChatDecisionConverter):
+        ctx = ConversionContext()
+        converter.request_to_provider(IR_REQUEST, context=ctx)
+        assert "_decision_questions" in ctx.options
+        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
+        assert len(ir["answers"]) == 3
+
+    def test_usage_mapping(self, converter: LLMChatDecisionConverter):
+        ctx = ConversionContext()
+        converter.request_to_provider(IR_REQUEST, context=ctx)
+        ir = converter.response_from_provider(MOCK_CHAT_RESPONSE, context=ctx)
+        assert ir["usage"]["input_tokens"] == 200
+        assert ir["usage"]["output_tokens"] == 50
