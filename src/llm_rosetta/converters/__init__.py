@@ -25,7 +25,7 @@ from .google_generate import (
 from .google_interactions import GoogleInteractionsConverter
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
-from .decision import TypeSafeDecisionConverter
+from .decision import LLMChatDecisionConverter, TypeSafeDecisionConverter
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
 
 __all__ = [
@@ -48,4 +48,5 @@ __all__ = [
     "CohereRerankConverter",
     "VoyageRerankConverter",
     "TypeSafeDecisionConverter",
+    "LLMChatDecisionConverter",
 ]
