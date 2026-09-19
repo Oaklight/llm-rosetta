@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.4.0"
+# version = "0.5.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -45,6 +45,7 @@ import mimetypes
 import os
 import re
 import signal
+import ssl
 import sys
 from collections.abc import AsyncIterator, Callable
 from email.utils import formatdate
@@ -578,7 +579,14 @@ class StreamingResponse:
         )
 
     async def _write(self, writer: asyncio.StreamWriter) -> None:
-        """Write status line, headers, then stream the body."""
+        """Write status line, headers, then stream the body.
+
+        Raises ``BrokenPipeError``, ``ConnectionResetError``, or
+        ``ConnectionAbortedError`` on client disconnect.  The caller
+        (``_handle_connection``) is responsible for handling these.
+        Generator cleanup and the background callback still run via
+        the ``finally`` block before the exception propagates.
+        """
         reason = _STATUS_REASONS.get(self.status_code, "Unknown")
         is_sse = self.content_type.startswith("text/event-stream")
 
@@ -610,7 +618,7 @@ class StreamingResponse:
             writer.write(b"0\r\n\r\n")
             await writer.drain()
         except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-            logger.debug("Client disconnected during streaming")
+            raise
         finally:
             aclose = getattr(self._generator, "aclose", None)
             if aclose is not None:
@@ -875,6 +883,12 @@ def _resolve_static_file(
 class App:
     """Async HTTP server application.
 
+    Request lifecycle::
+
+        before_request → route handler → after_request
+          → on_response_started → write → on_response_completed
+                                    ↘ on_client_disconnect
+
     Args:
         max_body_size: Maximum request body size in bytes.
         read_timeout: Timeout for reading a single request (seconds).
@@ -902,6 +916,9 @@ class App:
         self._after_request_handlers: list[Callable[..., Any]] = []
         self._startup_handlers: list[Callable[[], Any]] = []
         self._shutdown_handlers: list[Callable[[], Any]] = []
+        self._on_response_started_handlers: list[Callable[..., Any]] = []
+        self._on_response_completed_handlers: list[Callable[..., Any]] = []
+        self._on_client_disconnect_handlers: list[Callable[..., Any]] = []
         self._error_handlers: dict[int | type, Callable[..., Any]] = {}
         self._server: asyncio.Server | None = None
         self._shutdown_event: asyncio.Event | None = None
@@ -1059,6 +1076,82 @@ class App:
         """
         self._shutdown_handlers.append(handler)
         return handler
+
+    # ── Request Lifecycle Signals ────────────────────────────────────────
+
+    def on_response_started(self, handler: Callable[..., Any]) -> Callable[..., Any]:
+        """Register a response-started signal.
+
+        Fired just before the response is written to the client.  Useful
+        for TTFB (time-to-first-byte) metrics.
+
+        The handler receives ``(request, response)`` and its return value
+        is ignored.  Both sync and async callables are supported.
+        Exceptions are logged and suppressed.  Handlers run sequentially;
+        keep them fast to avoid delaying the response write.
+
+        Example::
+
+            @app.on_response_started
+            async def ttfb(request, response):
+                request.state.response_start = time.monotonic()
+        """
+        self._on_response_started_handlers.append(handler)
+        return handler
+
+    def on_response_completed(self, handler: Callable[..., Any]) -> Callable[..., Any]:
+        """Register a response-completed signal.
+
+        Fired after the entire response body has been successfully sent
+        to the client.  Useful for total transfer time and post-response
+        logging.
+
+        The handler receives ``(request, response)`` and its return value
+        is ignored.  Both sync and async callables are supported.
+        Exceptions are logged and suppressed.  Handlers run sequentially.
+
+        Not fired when the client disconnects mid-response (see
+        :meth:`on_client_disconnect` for that case).
+
+        Example::
+
+            @app.on_response_completed
+            async def log_transfer(request, response):
+                elapsed = time.monotonic() - request.state.response_start
+                logger.info("Sent %d in %.3fs", response.status_code, elapsed)
+        """
+        self._on_response_completed_handlers.append(handler)
+        return handler
+
+    def on_client_disconnect(self, handler: Callable[..., Any]) -> Callable[..., Any]:
+        """Register a client-disconnect signal.
+
+        Fired when the client closes the connection during response
+        delivery (broken pipe, connection reset).  Does not fire for
+        disconnects during request dispatch (e.g. slow handler).
+        Useful for cleanup, metrics, and cancelling expensive work.
+
+        The handler receives ``(request)`` and its return value is ignored.
+        Both sync and async callables are supported.  Exceptions are logged
+        and suppressed.
+
+        Example::
+
+            @app.on_client_disconnect
+            async def on_disconnect(request):
+                logger.info("Client %s disconnected", request.client_addr)
+        """
+        self._on_client_disconnect_handlers.append(handler)
+        return handler
+
+    async def _fire_signal(
+        self, name: str, handlers: list[Callable[..., Any]], *args: Any
+    ) -> None:
+        for hook in handlers:
+            try:
+                await _invoke(hook, *args)
+            except Exception:
+                logger.warning("%s hook failed", name, exc_info=True)
 
     # ── Request Dispatch ─────────────────────────────────────────────────
 
@@ -1264,10 +1357,35 @@ class App:
         logger.debug("%s %s from %s", method, path, client_addr)
 
         try:
-            response = await self._dispatch(request)
-            await response._write(writer)
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
-            logger.debug("Connection reset by %s during response", client_addr)
+            try:
+                response = await self._dispatch(request)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                logger.debug("Connection reset by %s during dispatch", client_addr)
+                return
+
+            await self._fire_signal(
+                "on_response_started",
+                self._on_response_started_handlers,
+                request,
+                response,
+            )
+
+            try:
+                await response._write(writer)
+            except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+                await self._fire_signal(
+                    "on_client_disconnect",
+                    self._on_client_disconnect_handlers,
+                    request,
+                )
+                logger.debug("Connection reset by %s during response", client_addr)
+            else:
+                await self._fire_signal(
+                    "on_response_completed",
+                    self._on_response_completed_handlers,
+                    request,
+                    response,
+                )
         except Exception:
             logger.exception("Error writing response to %s", client_addr)
         finally:
@@ -1322,6 +1440,10 @@ class App:
         port: int = DEFAULT_PORT,
         *,
         socket: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
+        backlog: int | None = None,
+        reuse_address: bool | None = None,
+        reuse_port: bool | None = None,
     ) -> None:
         """Start the server (blocking).
 
@@ -1333,13 +1455,44 @@ class App:
                 on a Unix socket instead of TCP. The socket file permissions
                 are restricted to owner-only (``0o600``) after creation.
                 Only available on Unix-like systems.
+            ssl_context: An :class:`ssl.SSLContext` for TLS termination.
+                When provided, the server accepts HTTPS connections.
+                The caller is responsible for configuring the context
+                (loading certs, setting verify mode, etc.).
+            backlog: Maximum number of queued connections passed to
+                :func:`asyncio.start_server`. ``None`` leaves the OS
+                default (typically 128).
+            reuse_address: Sets ``SO_REUSEADDR``. ``None`` lets asyncio
+                decide (``True`` on non-Windows).
+            reuse_port: Sets ``SO_REUSEPORT`` for multi-process load
+                balancing. ``None`` lets asyncio decide (``False``).
         """
         try:
-            asyncio.run(self._serve(host, port, socket=socket))
+            asyncio.run(
+                self._serve(
+                    host,
+                    port,
+                    socket=socket,
+                    ssl_context=ssl_context,
+                    backlog=backlog,
+                    reuse_address=reuse_address,
+                    reuse_port=reuse_port,
+                )
+            )
         except KeyboardInterrupt:
             pass
 
-    async def _serve(self, host: str, port: int, *, socket: str | None = None) -> None:
+    async def _serve(
+        self,
+        host: str,
+        port: int,
+        *,
+        socket: str | None = None,
+        ssl_context: ssl.SSLContext | None = None,
+        backlog: int | None = None,
+        reuse_address: bool | None = None,
+        reuse_port: bool | None = None,
+    ) -> None:
         """Internal async server loop."""
         self._shutdown_event = asyncio.Event()
         self._loop = asyncio.get_running_loop()
@@ -1350,19 +1503,31 @@ class App:
             await self._run_startup_hooks()
 
             if socket:
-                server = await self._start_unix_socket(socket)
+                server = await self._start_unix_socket(
+                    socket, ssl_context=ssl_context, backlog=backlog
+                )
             else:
+                kwargs: dict[str, Any] = {}
+                if backlog is not None:
+                    kwargs["backlog"] = backlog
+                if reuse_address is not None:
+                    kwargs["reuse_address"] = reuse_address
+                if reuse_port is not None:
+                    kwargs["reuse_port"] = reuse_port
                 server = await asyncio.start_server(
                     self._handle_connection,
                     host,
                     port,
+                    ssl=ssl_context,
+                    **kwargs,
                 )
                 addrs = (
                     server.sockets[0].getsockname() if server.sockets else (host, port)
                 )
                 self.host = addrs[0]
                 self.port = addrs[1]
-                logger.info("Serving on %s:%d", self.host, self.port)
+                scheme = "https" if ssl_context else "http"
+                logger.info("Serving on %s://%s:%d", scheme, self.host, self.port)
 
             self._server = server
 
@@ -1380,7 +1545,13 @@ class App:
             # Run shutdown hooks after server stops accepting connections
             await self._run_shutdown_hooks()
 
-    async def _start_unix_socket(self, socket_path: str) -> asyncio.Server:
+    async def _start_unix_socket(
+        self,
+        socket_path: str,
+        *,
+        ssl_context: ssl.SSLContext | None = None,
+        backlog: int | None = None,
+    ) -> asyncio.Server:
         """Start listening on a Unix domain socket.
 
         Handles stale socket cleanup, permission hardening (``0o600``),
@@ -1388,6 +1559,10 @@ class App:
 
         Args:
             socket_path: Path for the Unix domain socket file.
+            ssl_context: Optional :class:`ssl.SSLContext` for TLS over
+                the Unix socket.
+            backlog: Maximum number of queued connections. ``None``
+                leaves the OS default.
 
         Returns:
             The ``asyncio.Server`` instance.
@@ -1420,9 +1595,14 @@ class App:
             logger.error("Socket parent directory does not exist: %s", parent)
             sys.exit(1)
 
+        kwargs: dict[str, Any] = {}
+        if backlog is not None:
+            kwargs["backlog"] = backlog
         server = await asyncio.start_unix_server(
             self._handle_connection,
             path=path,
+            ssl=ssl_context,
+            **kwargs,
         )
 
         # Restrict permissions to owner-only
@@ -1430,7 +1610,8 @@ class App:
             os.chmod(path, 0o600)
 
         self._socket_path = path
-        logger.info("Serving on unix:%s (mode 0600)", path)
+        scheme = "https+unix" if ssl_context else "unix"
+        logger.info("Serving on %s:%s (mode 0600)", scheme, path)
         return server
 
     def _cleanup_socket(self) -> None:

@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.1.0"
+# version = "0.2.0"
 # deps = []
 # tier = "subsystem"
 # category = "network"
@@ -47,7 +47,7 @@ import re
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
 from functools import wraps
 from typing import Any, Protocol, runtime_checkable
 
@@ -59,6 +59,7 @@ __all__: list[str] = [
     "SlidingWindowLimiter",
     "GCRALimiter",
     "ThreadSafeLimiter",
+    "CompositeLimiter",
     "RateLimitExceeded",
     "ratelimit",
     "create_limiter",
@@ -239,6 +240,9 @@ class TokenBucketLimiter(_AsyncMixin, _EvictionMixin):
         self._buckets: dict[str, _Bucket] = {}
         self._call_count = 0
 
+    def __repr__(self) -> str:
+        return f"TokenBucketLimiter(rate={self.rate}, capacity={self.capacity})"
+
     def acquire(self, key: str, tokens: int = 1) -> RateLimitResult:
         now = self._clock()
         self._maybe_evict(now)
@@ -359,6 +363,12 @@ class FixedWindowLimiter(_AsyncMixin, _EvictionMixin):
         self._windows: dict[str, _FixedWindow] = {}
         self._call_count = 0
 
+    def __repr__(self) -> str:
+        return (
+            f"FixedWindowLimiter(limit={self.limit},"
+            f" window_seconds={self.window_seconds})"
+        )
+
     def acquire(self, key: str, tokens: int = 1) -> RateLimitResult:
         now = self._clock()
         self._maybe_evict(now)
@@ -470,6 +480,12 @@ class SlidingWindowLimiter(_AsyncMixin, _EvictionMixin):
         self._clock = clock or time.monotonic
         self._states: dict[str, _SlidingState] = {}
         self._call_count = 0
+
+    def __repr__(self) -> str:
+        return (
+            f"SlidingWindowLimiter(limit={self.limit},"
+            f" window_seconds={self.window_seconds})"
+        )
 
     def acquire(self, key: str, tokens: int = 1) -> RateLimitResult:
         now = self._clock()
@@ -613,6 +629,9 @@ class GCRALimiter(_AsyncMixin, _EvictionMixin):
         self._clock = clock or time.monotonic
         self._tats: dict[str, float] = {}
         self._call_count = 0
+
+    def __repr__(self) -> str:
+        return f"GCRALimiter(rate={self.rate}, burst={self.burst})"
 
     def acquire(self, key: str, tokens: int = 1) -> RateLimitResult:
         now = self._clock()
@@ -954,6 +973,11 @@ class ThreadSafeLimiter:
 
             object.__setattr__(limiter, "_evict_stale", _safe_evict)
 
+    @property
+    def limiter(self) -> RateLimiter:
+        """The wrapped rate limiter."""
+        return self._limiter
+
     def _get_lock(self, key: str) -> threading.Lock:
         lock = self._locks.get(key)
         if lock is not None:
@@ -991,3 +1015,103 @@ def _get_state_keys(limiter: Any) -> set[str]:
         if d is not None:
             return set(d.keys())
     return set()
+
+
+# ---------------------------------------------------------------------------
+# Composite limiter
+# ---------------------------------------------------------------------------
+
+
+class CompositeLimiter(_AsyncMixin):
+    """Enforces multiple rate limiters, returning the strictest result.
+
+    Useful for multi-window rate limiting — for example, enforcing both
+    RPM (requests per minute) and RPD (requests per day) simultaneously.
+    All sub-limiters are checked on every call; if any denies, the
+    composite result is denied with the longest ``retry_after``.
+
+    Note:
+        A peek-then-acquire strategy is used: all sub-limiters are
+        peeked first, and tokens are only consumed when all would
+        allow.  Under concurrent access without external locking
+        there is a small TOCTOU window between peek and acquire;
+        wrap with :class:`ThreadSafeLimiter` to eliminate it.
+
+    Thread safety:
+        Wrap the composite itself for atomic multi-limiter checks::
+
+            ThreadSafeLimiter(CompositeLimiter([a, b]))
+
+        Composing individually-wrapped sub-limiters protects each
+        sub-limiter but does **not** make the composite acquire
+        sequence atomic — two threads can interleave across
+        sub-limiters.
+
+    Args:
+        limiters: One or more :class:`RateLimiter` instances to enforce.
+    """
+
+    def __init__(self, limiters: Sequence[RateLimiter]) -> None:
+        if not limiters:
+            raise ValueError("CompositeLimiter requires at least one limiter")
+        self._limiters: tuple[RateLimiter, ...] = tuple(limiters)
+
+    @property
+    def limiters(self) -> tuple[RateLimiter, ...]:
+        """The sub-limiters enforced by this composite."""
+        return self._limiters
+
+    def __len__(self) -> int:
+        return len(self._limiters)
+
+    def __iter__(self) -> Iterator[RateLimiter]:
+        return iter(self._limiters)
+
+    def __repr__(self) -> str:
+        return f"CompositeLimiter({list(self._limiters)!r})"
+
+    def detail(self, key: str) -> tuple[RateLimitResult, ...]:
+        """Peek each sub-limiter independently, returning per-limiter results.
+
+        Useful for observability — callers can identify which specific
+        sub-limiter(s) are denying or near exhaustion.
+        """
+        return tuple(lim.peek(key) for lim in self._limiters)
+
+    def acquire(self, key: str, tokens: int = 1) -> RateLimitResult:
+        peeks = [lim.peek(key) for lim in self._limiters]
+        if any(not p.allowed for p in peeks):
+            # At least one would deny — acquire only the deniers (to get
+            # accurate retry_after; denied acquire does not consume tokens)
+            # and leave the allowing sub-limiters untouched.
+            results = [
+                lim.acquire(key, tokens) if not p.allowed else p
+                for lim, p in zip(self._limiters, peeks)
+            ]
+            return self._merge(results)
+        results = [lim.acquire(key, tokens) for lim in self._limiters]
+        return self._merge(results)
+
+    def peek(self, key: str) -> RateLimitResult:
+        results = [lim.peek(key) for lim in self._limiters]
+        return self._merge(results)
+
+    @staticmethod
+    def _merge(results: list[RateLimitResult]) -> RateLimitResult:
+        denied = [r for r in results if not r.allowed]
+        if denied:
+            strictest = max(denied, key=lambda r: r.retry_after or 0.0)
+            return RateLimitResult(
+                allowed=False,
+                limit=min(r.limit for r in results),
+                remaining=min(r.remaining for r in results),
+                reset_at=strictest.reset_at,
+                retry_after=strictest.retry_after,
+            )
+        return RateLimitResult(
+            allowed=True,
+            limit=min(r.limit for r in results),
+            remaining=min(r.remaining for r in results),
+            reset_at=max(r.reset_at for r in results),
+            retry_after=None,
+        )
