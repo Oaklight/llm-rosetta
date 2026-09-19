@@ -43,6 +43,7 @@ jobs:
               python -c "from llm_rosetta import get_converter_for_provider; print('core import OK')"
               python -c "from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps; print('google generate converter OK')"
               python -c "from llm_rosetta import GoogleInteractionsConverter; print('google interactions converter OK')"
+              python -c "from llm_rosetta.converters.decision import TypeSafeDecisionConverter; print('decision converter OK')"
           - name: gateway
             extras: "[gateway]"
             check: |

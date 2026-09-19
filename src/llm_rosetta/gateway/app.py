@@ -26,6 +26,7 @@ from .config import GatewayConfig, ResolvedRoute
 from .keystore import KeyStore
 from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
+from .decision import handle_decision as _handle_decision
 from .rerank import handle_rerank as _handle_rerank
 from .headers import (
     build_upstream_extra_headers,
@@ -466,6 +467,11 @@ async def handle_openai_chat(request: Any) -> Response | StreamingResponse:
 async def handle_embeddings(request: Any) -> Response:
     assert _config is not None
     return await _handle_embeddings(request, _config)
+
+
+async def handle_decision(request: Any) -> Response:
+    assert _config is not None
+    return await _handle_decision(request, _config)
 
 
 async def handle_rerank(request: Any) -> Response:
@@ -939,6 +945,8 @@ def create_app(
         app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
         app.route("/v1/rerank", methods=["POST"])(handle_rerank)
         app.route("/v2/rerank", methods=["POST"])(handle_rerank)
+        app.route("/v1/decision", methods=["POST"])(handle_decision)
+        app.route("/v1/systemone", methods=["POST"])(handle_decision)
         app.route("/v1/messages", methods=["POST"])(handle_anthropic)
         app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
         app.route("/v1/models", methods=["GET"])(handle_list_models)

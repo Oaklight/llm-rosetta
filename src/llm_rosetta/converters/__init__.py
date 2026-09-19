@@ -6,7 +6,12 @@ Provides converter implementations between various providers
 """
 
 from .anthropic import AnthropicConverter
-from .base import BaseConverter, BaseEmbeddingConverter, BaseRerankConverter
+from .base import (
+    BaseConverter,
+    BaseEmbeddingConverter,
+    BaseDecisionConverter,
+    BaseRerankConverter,
+)
 from .embedding import (
     CohereEmbeddingConverter,
     JinaEmbeddingConverter,
@@ -20,12 +25,14 @@ from .google_generate import (
 from .google_interactions import GoogleInteractionsConverter
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
+from .decision import TypeSafeDecisionConverter
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
 
 __all__ = [
     "BaseConverter",
     "BaseRerankConverter",
     "BaseEmbeddingConverter",
+    "BaseDecisionConverter",
     "OpenAIEmbeddingConverter",
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",
@@ -40,4 +47,5 @@ __all__ = [
     "JinaRerankConverter",
     "CohereRerankConverter",
     "VoyageRerankConverter",
+    "TypeSafeDecisionConverter",
 ]

@@ -1,0 +1,4 @@
+name: typesafe
+base: decision
+default_base_url: https://api.typesafe.ai
+default_api_key_env: TYPESAFE_API_KEY

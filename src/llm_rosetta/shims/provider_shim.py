@@ -272,6 +272,7 @@ _BASE_TYPES: frozenset[str] = frozenset(
         "google",
         "google_generate",
         "google_interactions",
+        "decision",
     }
 )
 

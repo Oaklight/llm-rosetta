@@ -23,6 +23,7 @@ from .content import BaseContentOps  # noqa: F401
 from .context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
 from .embedding_converter import BaseEmbeddingConverter
+from .decision_converter import BaseDecisionConverter
 from .rerank_converter import BaseRerankConverter
 from .messages import BaseMessageOps  # noqa: F401
 from .helpers.tool_content import convert_content_blocks_to_ir  # noqa: F401
@@ -35,6 +36,7 @@ __all__ = [
     "BaseConverter",
     "BaseRerankConverter",
     "BaseEmbeddingConverter",
+    "BaseDecisionConverter",
     # 转换上下文 Conversion context
     "ConversionContext",
     "MetadataMode",

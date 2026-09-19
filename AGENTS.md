@@ -24,7 +24,7 @@ Zero required dependencies at its core; provider SDKs are optional extras.
 Provider A ──→ IR ──→ Provider B
 ```
 
-Five converters, one per API standard:
+Five chat converters, one per API standard:
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
@@ -34,9 +34,22 @@ Five converters, one per API standard:
 | `google_generate` | Google generateContent API | `converters/google_generate/` |
 | `google_interactions` | Google Interactions API | `converters/google_interactions/` |
 
-Each converter implements bidirectional conversion (request/response) and
+Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
 handled by the **shim layer**.
+
+### Decision converters
+
+Decision is a separate model paradigm (like embedding and rerank) for
+probabilistic structured decisions — state + typed questions → answers
+with calibrated probabilities.
+
+| Converter | API Standard | Module |
+|-----------|-------------|--------|
+| `typesafe_decision` | TypeSafe System One (Jev) | `converters/decision/` |
+
+IR question types: `noul` (P(true) ∈ [0,1], from ber-**noul**-li),
+`choice` (categorical distribution), `score` (ordinal distribution).
 
 ### Shim layer
 
@@ -67,6 +80,8 @@ supported format and forwards them to any configured upstream provider.
 ### IR type system
 
 Typed dataclasses for the intermediate representation live in `types/ir/`.
+Four paradigms have their own IR types: chat (`request.py`, `response.py`),
+embedding (`embedding.py`), rerank (`rerank.py`), and decision (`decision.py`).
 Provider-specific types (for documentation, not runtime) in
 `types/anthropic/`, `types/google/`.
 
@@ -83,7 +98,8 @@ src/llm_rosetta/
 │   ├── openai_responses/
 │   ├── anthropic/
 │   ├── google_generate/
-│   └── google_interactions/
+│   ├── google_interactions/
+│   └── eval/                # Decision paradigm (TypeSafe System One)
 ├── shims/                   # Provider/model identity cards + transforms
 │   ├── provider_shim.py
 │   ├── transforms.py
