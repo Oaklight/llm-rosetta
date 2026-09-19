@@ -34,7 +34,7 @@ from .schema_ops import (
     serialize_state,
 )
 
-OutputFormat = Literal["openai", "anthropic", "prompted"]
+OutputFormat = Literal["openai", "anthropic", "google", "prompted"]
 
 
 class LLMChatDecisionConverter(BaseDecisionConverter):
@@ -44,6 +44,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
         output_format: How to constrain the LLM's output.
             - "openai": use response_format with json_schema (default)
             - "anthropic": use output_config.format with json_schema
+            - "google": use response_mime_type + response_schema
             - "prompted": embed schema in system prompt (no native
               structured output; works with any chat model)
         answer_mode: "probabilities" (default) or "discrete".
@@ -106,6 +107,9 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
             result["output_config"] = {
                 "format": {"type": "json_schema", "schema": schema}
             }
+        elif self.output_format == "google":
+            result["response_mime_type"] = "application/json"
+            result["response_schema"] = schema
         # prompted: no response_format — schema is in the system prompt
 
         return result
@@ -218,11 +222,19 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
     @staticmethod
     def _extract_content(response: dict[str, Any]) -> str:
         """Extract message content from a chat completion response."""
-        # OpenAI style
+        # OpenAI style: choices[].message.content
         choices = response.get("choices", [])
         if choices:
             message = choices[0].get("message", {})
             return message.get("content", "")
+        # Google style: candidates[].content.parts[].text
+        candidates = response.get("candidates", [])
+        if candidates:
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            texts = [p.get("text", "") for p in parts if isinstance(p, dict)]
+            if texts:
+                return "".join(texts)
         # Anthropic style: content blocks
         content_blocks = response.get("content", [])
         if isinstance(content_blocks, list) and content_blocks:
