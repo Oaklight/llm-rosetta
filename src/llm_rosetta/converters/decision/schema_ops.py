@@ -240,7 +240,12 @@ def _build_question_schema(
     if qtype == "noul":
         if answer_mode == "discrete":
             return {"type": "boolean", "description": desc}
-        return {"type": "number", "description": f"P(true) in [0,1]. {desc}"}
+        return {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": f"P(true) in [0,1]. {desc}",
+        }
     if qtype == "choice":
         criteria_dict: dict[str, Any] = cast(Any, q).get("criteria", {})
         if answer_mode == "discrete":
@@ -283,7 +288,7 @@ def _build_question_schema(
 def _normalize_probs(probs: dict[str, float]) -> dict[str, float]:
     """Rescale probabilities to sum to 1.0."""
     total = sum(probs.values())
-    if total <= 0 or abs(total - 1.0) < 1e-9:
+    if total <= 0 or abs(total - 1.0) < 1e-6:
         return probs
     return {k: v / total for k, v in probs.items()}
 
@@ -324,9 +329,12 @@ def _parse_choice(
     if answer_mode == "discrete":
         label = str(raw_answer)
         criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})
+        if criteria_dict and label not in criteria_dict:
+            label = next(iter(criteria_dict))
         probs = {k: (1.0 if k == label else 0.0) for k in criteria_dict}
+        conf = 1.0 if str(raw_answer) in criteria_dict else 0.0
         return ChoiceAnswer(
-            type="choice", choice=label, probabilities=probs, confidence=1.0
+            type="choice", choice=label, probabilities=probs, confidence=conf
         )
     probs = _normalize_probs({str(k): float(v) for k, v in raw_answer.items()})
     return ChoiceAnswer(
