@@ -126,12 +126,12 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
             }
         elif self.output_format == "google_generate":
             result["response_mime_type"] = "application/json"
-            result["response_schema"] = schema
+            result["response_schema"] = _strip_additional_properties(schema)
         elif self.output_format == "google_interactions":
             result["response_format"] = {
                 "type": "text",
                 "mime_type": "application/json",
-                "response_schema": schema,
+                "response_schema": _strip_additional_properties(schema),
             }
         # prompted: no format constraint — schema is in the system prompt
 
@@ -209,7 +209,19 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
         """Build messages for a corrective retry attempt.
 
         Returns assistant + user messages to append to the conversation
-        for another attempt.
+        for another attempt.  Caller-side usage::
+
+            wire, _ = converter.request_to_provider(req, context=ctx)
+            for attempt in range(converter.max_retries + 1):
+                resp = send(wire)
+                try:
+                    ir = converter.response_from_provider(resp, context=ctx)
+                    break
+                except ValueError as e:
+                    content = extract_content(resp)
+                    wire["messages"].extend(
+                        converter.build_retry_messages(content, str(e))
+                    )
         """
         return [
             {"role": "assistant", "content": failed_content},
@@ -252,6 +264,19 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
             or _extract_anthropic(response)
             or ""
         )
+
+
+def _strip_additional_properties(schema: Any) -> Any:
+    """Strip additionalProperties from schema (Google API rejects it)."""
+    if isinstance(schema, dict):
+        return {
+            k: _strip_additional_properties(v)
+            for k, v in schema.items()
+            if k != "additionalProperties"
+        }
+    if isinstance(schema, list):
+        return [_strip_additional_properties(v) for v in schema]
+    return schema
 
 
 def _extract_openai_chat(response: dict[str, Any]) -> str:
