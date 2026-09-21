@@ -46,7 +46,7 @@ def _make_embedding_response(embeddings: list[list[float]]) -> dict[str, Any]:
     }
 
 
-class TestCosineSimliarity:
+class TestCosineSimilarity:
     def test_identical(self):
         assert _cosine_similarity([1, 0, 0], [1, 0, 0]) == pytest.approx(1.0)
 
@@ -138,3 +138,9 @@ class TestResponseFromProvider:
 
     def test_converter_tag(self, converter: EmbeddingDecisionConverter):
         assert converter._CONVERTER_TAG == "embedding_decision"
+
+
+class TestDimensionMismatch:
+    def test_mismatched_dimensions_raises(self):
+        with pytest.raises(ValueError, match="dimension mismatch"):
+            _cosine_similarity([1, 0], [1, 0, 0])

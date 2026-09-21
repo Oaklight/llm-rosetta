@@ -136,3 +136,21 @@ class TestScoresToAnswer:
         )
         answer = scores_to_answer([0.0, 0.0, 0.0], q)
         assert cast(Any, answer)["score"] == pytest.approx(1.0, abs=0.01)
+
+
+class TestTemperature:
+    def test_low_temperature_sharpens(self):
+        scores = [0.82, 0.85, 0.83]
+        probs_default = softmax(scores)
+        probs_sharp = softmax(scores, temperature=0.1)
+        assert max(probs_sharp) > max(probs_default)
+
+    def test_high_temperature_flattens(self):
+        scores = [1.0, 2.0, 3.0]
+        probs_default = softmax(scores)
+        probs_flat = softmax(scores, temperature=5.0)
+        assert max(probs_flat) < max(probs_default)
+
+    def test_temperature_one_is_default(self):
+        scores = [1.0, 2.0, 3.0]
+        assert softmax(scores) == softmax(scores, temperature=1.0)
