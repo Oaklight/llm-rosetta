@@ -26,12 +26,20 @@ from llm_rosetta.types.ir.decision import (
     IRDecisionResponse,
 )
 
-from .score_ops import build_context, get_option_texts, scores_to_answer
+from .score_ops import (
+    build_context,
+    build_ir_usage_to_p,
+    build_p_usage_to_ir,
+    get_option_texts,
+    scores_to_answer,
+)
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
     """Compute cosine similarity between two vectors."""
-    dot = sum(x * y for x, y in zip(a, b))
+    if len(a) != len(b):
+        raise ValueError(f"Embedding dimension mismatch: {len(a)} vs {len(b)}")
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
     if norm_a == 0 or norm_b == 0:
@@ -45,26 +53,27 @@ class EmbeddingDecisionConverter(BaseDecisionConverter):
     Converts decision requests into embedding queries, then maps
     cosine similarity scores → softmax → typed answers.
 
-    The converter produces a batch of texts to embed via
-    ``request_to_provider`` and parses embedding vectors via
-    ``response_from_provider``.  The wire format follows the OpenAI
-    embedding convention::
+    The converter produces a single batched embedding request via
+    ``request_to_provider``.  The ``input`` list is laid out as::
 
-        # Request:
-        {"input": ["context1", "opt1a", "opt1b", "context2", ...], "model": "..."}
+        [ctx1, opt1a, opt1b, ctx2, opt2a, opt2b, opt2c, ...]
 
-        # Response:
-        {"data": [{"index": 0, "embedding": [...]}, ...]}
+    The layout (which indices belong to which question) is stored
+    in ``context.options["_embedding_layout"]`` for response parsing.
 
-    The first text for each question is the context, followed by
-    its option texts.  The converter reconstructs which embeddings
-    belong to which question via the index layout stored in context.
+    Args:
+        model: Default embedding model name.
+        temperature: Softmax temperature for score sharpening.
+            Cosine similarities are typically in a narrow range,
+            so lower temperatures (e.g. 0.1) produce more peaked
+            distributions.
     """
 
     _CONVERTER_TAG = "embedding_decision"
 
-    def __init__(self, *, model: str = "") -> None:
+    def __init__(self, *, model: str = "", temperature: float = 1.0) -> None:
         self._model = model
+        self._temperature = temperature
 
     # ==================== Request conversion ====================
 
@@ -121,7 +130,7 @@ class EmbeddingDecisionConverter(BaseDecisionConverter):
         layout = context.options.get("_embedding_layout", [])
 
         data = provider_response.get("data", [])
-        embeddings = [None] * len(data)
+        embeddings: list[list[float] | None] = [None] * len(data)
         for item in data:
             idx = item.get("index", 0)
             if idx < len(embeddings):
@@ -138,7 +147,7 @@ class EmbeddingDecisionConverter(BaseDecisionConverter):
                 pos += n_options
                 continue
             scores: list[float] = []
-            for j in range(n_options):
+            for _j in range(n_options):
                 opt_emb = embeddings[pos] if pos < len(embeddings) else None
                 pos += 1
                 if opt_emb is not None:
@@ -146,7 +155,7 @@ class EmbeddingDecisionConverter(BaseDecisionConverter):
                 else:
                     scores.append(0.0)
             q = questions[qid]
-            answers[qid] = scores_to_answer(scores, q)
+            answers[qid] = scores_to_answer(scores, q, temperature=self._temperature)
 
         result: IRDecisionResponse = {
             "object": "decision",
@@ -173,16 +182,8 @@ class EmbeddingDecisionConverter(BaseDecisionConverter):
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> DecisionUsageInfo:
-        usage: DecisionUsageInfo = {}
-        if "total_tokens" in p_usage:
-            usage["input_tokens"] = p_usage["total_tokens"]
-        elif "prompt_tokens" in p_usage:
-            usage["input_tokens"] = p_usage["prompt_tokens"]
-        return usage
+        return build_p_usage_to_ir(p_usage)
 
     @staticmethod
     def _build_ir_usage_to_p(ir_usage: DecisionUsageInfo) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        if "input_tokens" in ir_usage:
-            result["total_tokens"] = ir_usage["input_tokens"]
-        return result
+        return build_ir_usage_to_p(ir_usage)

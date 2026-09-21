@@ -12,6 +12,11 @@ Requires a rerank endpoint that returns per-document relevance_score.
 Compatible with Jina, Cohere, Voyage, and any rerank API returning
 scored results.
 
+The converter produces one rerank query per question.  Standard rerank
+APIs accept a single query per request, so the caller/gateway is
+expected to fan out the ``queries`` list into individual API calls and
+collect the results in order.
+
 Reference: oaklight/jev-explore model/src/reranker_scorer.py
 """
 
@@ -27,31 +32,28 @@ from llm_rosetta.types.ir.decision import (
     IRDecisionResponse,
 )
 
-from .score_ops import build_context, get_option_texts, scores_to_answer
+from .score_ops import (
+    build_context,
+    build_ir_usage_to_p,
+    build_p_usage_to_ir,
+    get_option_texts,
+    scores_to_answer,
+)
 
 
 class RerankerDecisionConverter(BaseDecisionConverter):
     """Decision converter backed by rerank API relevance scores.
 
-    Converts decision requests into rerank queries (one per question),
-    then maps relevance scores → softmax → typed answers.
-
-    The converter produces a batch of rerank requests via
-    ``request_to_provider`` and parses a batch of rerank responses
-    via ``response_from_provider``.  The wire format follows the
-    Jina/Cohere rerank convention::
-
-        # Request (one per question, batched in a list):
-        {"query": "state + instructions", "documents": ["opt1", "opt2", ...], "model": "..."}
-
-        # Response (list of rerank results, one per question):
-        [{"results": [{"index": 0, "relevance_score": 0.85}, ...]}, ...]
+    Args:
+        model: Default rerank model name.
+        temperature: Softmax temperature for score sharpening.
     """
 
     _CONVERTER_TAG = "reranker_decision"
 
-    def __init__(self, *, model: str = "") -> None:
+    def __init__(self, *, model: str = "", temperature: float = 1.0) -> None:
         self._model = model
+        self._temperature = temperature
 
     # ==================== Request conversion ====================
 
@@ -66,7 +68,7 @@ class RerankerDecisionConverter(BaseDecisionConverter):
         model = ir_request.get("model", self._model) or self._model
 
         queries: list[dict[str, Any]] = []
-        for qid, q in questions.items():
+        for _qid, q in questions.items():
             query_text = build_context(ir_request["state"], q["instructions"])
             documents = get_option_texts(q)
             queries.append(
@@ -74,7 +76,6 @@ class RerankerDecisionConverter(BaseDecisionConverter):
                     "query": query_text,
                     "documents": documents,
                     "model": model,
-                    "_question_id": qid,
                 }
             )
 
@@ -119,7 +120,7 @@ class RerankerDecisionConverter(BaseDecisionConverter):
                 idx = doc.get("index", 0)
                 if idx < n_options:
                     scores[idx] = doc.get("relevance_score", 0.0)
-            answers[qid] = scores_to_answer(scores, q)
+            answers[qid] = scores_to_answer(scores, q, temperature=self._temperature)
 
         result_resp: IRDecisionResponse = {
             "object": "decision",
@@ -146,16 +147,8 @@ class RerankerDecisionConverter(BaseDecisionConverter):
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> DecisionUsageInfo:
-        usage: DecisionUsageInfo = {}
-        if "total_tokens" in p_usage:
-            usage["input_tokens"] = p_usage["total_tokens"]
-        elif "prompt_tokens" in p_usage:
-            usage["input_tokens"] = p_usage["prompt_tokens"]
-        return usage
+        return build_p_usage_to_ir(p_usage)
 
     @staticmethod
     def _build_ir_usage_to_p(ir_usage: DecisionUsageInfo) -> dict[str, Any]:
-        result: dict[str, Any] = {}
-        if "input_tokens" in ir_usage:
-            result["total_tokens"] = ir_usage["input_tokens"]
-        return result
+        return build_ir_usage_to_p(ir_usage)

@@ -12,6 +12,7 @@ Reference: oaklight/jev-explore model/src/reranker_scorer.py
 
 from __future__ import annotations
 
+import json
 import math
 from typing import Any, cast
 
@@ -21,15 +22,25 @@ from llm_rosetta.types.ir.decision import (
     DecisionAnswer,
     DecisionQuestion,
     DecisionState,
+    DecisionUsageInfo,
     NoulAnswer,
     ScoreAnswer,
 )
 
 
-def softmax(scores: list[float]) -> list[float]:
-    """Numerically stable softmax over a list of scores."""
+def softmax(scores: list[float], *, temperature: float = 1.0) -> list[float]:
+    """Numerically stable softmax over a list of scores.
+
+    Args:
+        scores: Raw scores (relevance scores, cosine similarities, etc.)
+        temperature: Controls distribution sharpness.  Lower values
+            produce more peaked distributions.  Useful when raw scores
+            are in a narrow range (e.g. cosine similarities).
+    """
     if not scores:
         return []
+    if temperature != 1.0 and temperature > 0:
+        scores = [s / temperature for s in scores]
     max_s = max(scores)
     exps = [math.exp(s - max_s) for s in scores]
     total = sum(exps)
@@ -38,17 +49,15 @@ def softmax(scores: list[float]) -> list[float]:
 
 def build_context(state: DecisionState, instructions: Any) -> str:
     """Build a context string from state and question instructions."""
-    if isinstance(state, str):
-        state_str = state
-    else:
-        import json
-
-        state_str = json.dumps(state, ensure_ascii=False)
-    if isinstance(instructions, str):
-        return f"{state_str} {instructions}"
-    import json
-
-    return f"{state_str} {json.dumps(instructions, ensure_ascii=False)}"
+    state_str = (
+        state if isinstance(state, str) else json.dumps(state, ensure_ascii=False)
+    )
+    instr_str = (
+        instructions
+        if isinstance(instructions, str)
+        else json.dumps(instructions, ensure_ascii=False)
+    )
+    return f"{state_str} {instr_str}"
 
 
 def get_option_texts(question: DecisionQuestion) -> list[str]:
@@ -77,13 +86,22 @@ def get_option_texts(question: DecisionQuestion) -> list[str]:
 def scores_to_answer(
     scores: list[float],
     question: DecisionQuestion,
+    *,
+    temperature: float = 1.0,
 ) -> DecisionAnswer:
     """Convert raw per-option scores into a typed decision answer.
 
     Applies softmax to the raw scores, then maps probabilities to the
     appropriate answer type (noul/choice/score).
+
+    Args:
+        scores: Raw per-option scores.
+        question: The question being answered.
+        temperature: Softmax temperature.  Lower values produce more
+            peaked distributions (useful for narrow-range scores like
+            cosine similarities).
     """
-    probs = softmax(scores)
+    probs = softmax(scores, temperature=temperature)
     qtype = question["type"]
 
     if qtype == "noul":
@@ -93,7 +111,7 @@ def scores_to_answer(
     if qtype == "choice":
         criteria_dict: dict[str, Any] = cast(Any, question).get("criteria", {})
         keys = list(criteria_dict.keys())
-        prob_dict = {k: p for k, p in zip(keys, probs)}
+        prob_dict = {k: p for k, p in zip(keys, probs, strict=True)}
         choice = max(prob_dict, key=lambda k: prob_dict[k])
         return ChoiceAnswer(
             type="choice",
@@ -116,3 +134,26 @@ def scores_to_answer(
         )
 
     raise ValueError(f"Unknown question type: {qtype}")
+
+
+# ============================================================================
+# Shared usage helpers (reranker + embedding converters)
+# ============================================================================
+
+
+def build_p_usage_to_ir(p_usage: dict[str, Any]) -> DecisionUsageInfo:
+    """Convert provider usage to IR usage (reranker/embedding style)."""
+    usage: DecisionUsageInfo = {}
+    if "total_tokens" in p_usage:
+        usage["input_tokens"] = p_usage["total_tokens"]
+    elif "prompt_tokens" in p_usage:
+        usage["input_tokens"] = p_usage["prompt_tokens"]
+    return usage
+
+
+def build_ir_usage_to_p(ir_usage: DecisionUsageInfo) -> dict[str, Any]:
+    """Convert IR usage to provider usage (reranker/embedding style)."""
+    result: dict[str, Any] = {}
+    if "input_tokens" in ir_usage:
+        result["total_tokens"] = ir_usage["input_tokens"]
+    return result
