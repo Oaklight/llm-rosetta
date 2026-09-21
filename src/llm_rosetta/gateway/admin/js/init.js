@@ -199,7 +199,7 @@ document.addEventListener('keydown', e => {
 
 // Global click handler for model more-menus — close on outside click
 document.addEventListener('click', function(e) {
-  if (!e.target.closest('.more-menu') && !e.target.closest('[onclick*="toggleMoreMenu"]')) {
+  if (!e.target.closest('.more-menu') && !e.target.closest('.more-menu-toggle')) {
     document.querySelectorAll('.more-menu').forEach(m => m.style.display = 'none');
   }
 });
