@@ -75,11 +75,24 @@ async def get_metrics(request: Any) -> Response:
     return JSONResponse(snap)
 
 
+def _rebuild_counters_after_mutation(request: Any) -> None:
+    """Rebuild in-memory counters from request_log after admin-initiated deletion."""
+    metrics = getattr(request.app, "metrics", None)
+    persistence = getattr(request.app, "persistence", None)
+    if metrics is None or persistence is None:
+        return
+    metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
+    persistence.save_metrics(metrics.export_counters())
+
+
 async def rebuild_metrics(request: Any) -> Response:
     """Rebuild metrics counters from request log entries.
 
     Useful after fixing a counter bug or when persisted counters
     have drifted from the actual request log data.
+
+    Returns both the pre-rebuild and post-rebuild counter snapshots
+    so the admin UI can display what changed (sanity check).
     """
     persistence = getattr(request.app, "persistence", None)
     if persistence is None:
@@ -89,16 +102,19 @@ async def rebuild_metrics(request: Any) -> Response:
         )
 
     metrics = request.app.metrics
+    before = metrics.export_counters()
     count = metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
+    after = metrics.export_counters()
 
     # Persist the rebuilt counters immediately
-    persistence.save_metrics(metrics.export_counters())
+    persistence.save_metrics(after)
 
     return JSONResponse(
         {
             "ok": True,
             "rebuilt_from": count,
-            "counters": metrics.export_counters(),
+            "before": before,
+            "counters": after,
         }
     )
 
@@ -182,6 +198,7 @@ async def clear_requests(request: Any) -> Response:
     """Clear the request log."""
     log = request.app.request_log
     log.clear()
+    _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True})
 
 
@@ -411,6 +428,7 @@ async def db_cleanup(request: Any) -> Response:
         )
 
     result = persistence.cleanup_by_age(max_age_days)
+    _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True, **result})
 
 
@@ -432,6 +450,7 @@ async def cleanup_requests_by_age(request: Any) -> Response:
         )
 
     result = persistence.cleanup_logs_by_age(max_age_days)
+    _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True, **result})
 
 

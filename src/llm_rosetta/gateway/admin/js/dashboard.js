@@ -494,6 +494,7 @@ async function confirmClearDumps() {
   S._dumpPage = 0;
   S._dumpAllEntries = [];
   renderDumps();
+  loadMetrics();
 }
 
 function onDumpModelFilterChange() {
@@ -620,7 +621,19 @@ async function rebuildMetrics() {
   try {
     const res = await api.post('/admin/api/metrics/rebuild');
     if (res && res.error) { showToast(res.error, 'error'); return; }
-    showToast(t('toast.metricsRebuilt').replace('{n}', res.rebuilt_from || 0));
+    const n = res.rebuilt_from || 0;
+    const before = res.before || {};
+    const after = res.counters || {};
+    const diffs = [];
+    const check = (label, b, a) => { if (b !== a) diffs.push(`${label}: ${b} → ${a}`); };
+    check('total_requests', before.total_requests || 0, after.total_requests || 0);
+    check('total_errors', before.total_errors || 0, after.total_errors || 0);
+    check('total_streams', before.total_streams || 0, after.total_streams || 0);
+    if (diffs.length === 0) {
+      showToast(t('toast.metricsRebuilt').replace('{n}', n) + ' — counters consistent ✓');
+    } else {
+      showToast(t('toast.metricsRebuilt').replace('{n}', n) + ' — fixed: ' + diffs.join(', '));
+    }
     loadMetrics();
   } catch (e) { showToast('Rebuild failed', 'error'); }
 }
@@ -811,6 +824,10 @@ function _updateBulk(tbodyId, barId, countId) {
   const checked = document.querySelectorAll('#' + tbodyId + ' .row-check:checked');
   document.getElementById(countId).textContent = checked.length;
   document.getElementById(barId).style.display = checked.length > 0 ? 'flex' : 'none';
+  if (checked.length === 0) {
+    const headerCb = document.getElementById(tbodyId)?.closest('table')?.querySelector('thead .row-check');
+    if (headerCb) headerCb.checked = false;
+  }
 }
 function _selectAll(headerCb, tbodyId, barId, countId) {
   document.querySelectorAll('#' + tbodyId + ' .row-check').forEach(cb => cb.checked = headerCb.checked);
@@ -862,6 +879,8 @@ function updateDumpBulk() {
 function _updateDumpBulkBar() {
   document.getElementById('dumpBulkCount').textContent = S._selectedDumpIds.size;
   document.getElementById('dumpBulkBar').style.display = S._selectedDumpIds.size > 0 ? 'flex' : 'none';
+  const headerCb = document.querySelector('#dumpTable')?.closest('table')?.querySelector('thead .row-check');
+  if (headerCb && S._selectedDumpIds.size === 0) headerCb.checked = false;
 }
 function bulkDownloadDumps() {
   if (!S._selectedDumpIds.size) return;
@@ -885,6 +904,7 @@ async function bulkDeleteDumps() {
   showToast(`Deleted ${ok} dump(s)`);
   S._dumpAllEntries = [];
   renderDumps();
+  loadMetrics();
 }
 
 // ===================== Window globals =====================

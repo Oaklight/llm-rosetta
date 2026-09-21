@@ -119,7 +119,14 @@ def _init_persistence(
     # Only flag when counters < log — the reverse (counters > log) is
     # expected when log retention caps purge old entries.
     log_entries = persistence.count_log_entries()
-    if metrics.total_requests < log_entries:
+    _counter_rebuild_needed = False
+    if persistence.check_and_clear_rebuild_flag():
+        logger.info(
+            "Rebuild flag detected (external cleanup) — "
+            "rebuild will run in the background after startup"
+        )
+        _counter_rebuild_needed = True
+    elif metrics.total_requests < log_entries:
         logger.warning(
             "Counter drift detected (counters=%d, log=%d) — "
             "rebuild will run in the background after startup",
@@ -127,8 +134,6 @@ def _init_persistence(
             log_entries,
         )
         _counter_rebuild_needed = True
-    else:
-        _counter_rebuild_needed = False
 
     return persistence, _counter_rebuild_needed
 
