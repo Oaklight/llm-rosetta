@@ -89,6 +89,41 @@
         }
       }
     },
+    "default_base_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Deprecated: use connection.base_url instead."
+    },
+    "default_api_key_env": {
+      "type": "string",
+      "description": "Deprecated: use connection.api_key_env instead."
+    },
+    "models_path": {
+      "type": "string",
+      "description": "Deprecated: use connection.models_path instead."
+    },
+    "model_id_field": {
+      "type": "string",
+      "description": "Deprecated: use connection.model_id_field instead."
+    },
+    "supports_custom_tools": {
+      "type": "boolean",
+      "description": "Deprecated: use tools.custom_tools instead."
+    },
+    "max_tool_description_length": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Deprecated: use tools.max_description_length instead."
+    },
+    "tool_search_mode": {
+      "type": "string",
+      "enum": ["disabled", "native", "bridge"],
+      "description": "Deprecated: use tools.search_mode instead."
+    },
+    "multimodal_tool_result": {
+      "type": "boolean",
+      "description": "Deprecated: use tools.multimodal_result instead."
+    },
     "reasoning": {
       "type": "object",
       "description": "Reasoning / thinking capability configuration.",
