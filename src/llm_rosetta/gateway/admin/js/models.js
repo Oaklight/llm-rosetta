@@ -354,7 +354,7 @@ function renderModels() {
           </div>
         </div>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
-        <button class="btn btn-sm" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
+        <button class="btn btn-sm more-menu-toggle" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" role="menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:110px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.12);z-index:10;overflow:hidden">
           <div role="menuitem" style="padding:7px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg)'" onmouseleave="this.style.background=''" aria-label="${t('btn.clone')} ${esc(name)}" onclick="this.closest('.more-menu').style.display='none';cloneModel('${esc(name)}')">${t('btn.clone')}</div>
           <div role="separator" style="border-top:1px solid var(--border);margin:2px 0"></div>
@@ -493,8 +493,9 @@ async function bulkModels(action) {
   const res = await api.post('/admin/api/config/models/bulk', {action, models: names});
   if (res.ok) {
     showToast(t('toast.bulkDone', {action, count: res.affected.length}));
-    window.loadConfig();
+    document.querySelectorAll('#modelTable .row-check:checked').forEach(cb => cb.checked = false);
     updateModelBulk();
+    window.loadConfig();
   } else { showToast(res.error || 'Failed', 'error'); }
 }
 
