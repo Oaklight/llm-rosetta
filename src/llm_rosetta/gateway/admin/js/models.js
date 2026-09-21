@@ -494,6 +494,7 @@ async function bulkModels(action) {
   if (res.ok) {
     showToast(t('toast.bulkDone', {action, count: res.affected.length}));
     window.loadConfig();
+    updateModelBulk();
   } else { showToast(res.error || 'Failed', 'error'); }
 }
 
