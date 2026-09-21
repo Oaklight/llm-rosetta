@@ -69,6 +69,123 @@ class TestProviderShim:
 
 
 # ---------------------------------------------------------------------------
+# Grouped config objects
+# ---------------------------------------------------------------------------
+
+
+class TestGroupedConfig:
+    """Test ConnectionConfig / ToolsConfig grouped fields."""
+
+    def test_grouped_construction(self):
+        from llm_rosetta.shims.provider_shim import ConnectionConfig, ToolsConfig
+
+        s = ProviderShim(
+            name="test",
+            base="openai_chat",
+            connection=ConnectionConfig(
+                base_url="https://example.com",
+                api_key_env="TEST_KEY",
+                models_path="/v1/models",
+                model_id_field="internal_id",
+            ),
+            tools=ToolsConfig(
+                custom_tools=True,
+                max_description_length=512,
+                search_mode="native",
+                multimodal_result=True,
+            ),
+        )
+        assert s.connection.base_url == "https://example.com"
+        assert s.connection.api_key_env == "TEST_KEY"
+        assert s.connection.models_path == "/v1/models"
+        assert s.connection.model_id_field == "internal_id"
+        assert s.tools.custom_tools is True
+        assert s.tools.max_description_length == 512
+        assert s.tools.search_mode == "native"
+        assert s.tools.multimodal_result is True
+
+    def test_legacy_flat_kwargs_build_grouped(self):
+        s = ProviderShim(
+            name="test",
+            base="openai_chat",
+            default_base_url="https://example.com",
+            default_api_key_env="TEST_KEY",
+            models_path="/v1/models",
+            supports_custom_tools=True,
+            max_tool_description_length=1024,
+        )
+        assert s.connection.base_url == "https://example.com"
+        assert s.connection.api_key_env == "TEST_KEY"
+        assert s.connection.models_path == "/v1/models"
+        assert s.tools.custom_tools is True
+        assert s.tools.max_description_length == 1024
+
+    def test_property_aliases(self):
+        from llm_rosetta.shims.provider_shim import ConnectionConfig, ToolsConfig
+
+        s = ProviderShim(
+            name="test",
+            base="openai_chat",
+            connection=ConnectionConfig(base_url="https://a.com", api_key_env="K"),
+            tools=ToolsConfig(custom_tools=True, max_description_length=256),
+        )
+        assert s.default_base_url == "https://a.com"
+        assert s.default_api_key_env == "K"
+        assert s.supports_custom_tools is True
+        assert s.max_tool_description_length == 256
+        assert s.tool_search_mode == "disabled"
+        assert s.multimodal_tool_result is None
+        assert s.models_path is None
+        assert s.model_id_field is None
+
+    def test_grouped_wins_over_flat(self):
+        import warnings
+
+        from llm_rosetta.shims.provider_shim import ConnectionConfig
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            s = ProviderShim(
+                name="test",
+                base="openai_chat",
+                connection=ConnectionConfig(base_url="https://grouped.com"),
+                default_base_url="https://flat.com",
+            )
+        assert s.connection.base_url == "https://grouped.com"
+        assert any("ignored" in str(x.message) for x in w)
+
+    def test_defaults_when_no_fields(self):
+        s = ProviderShim(name="test", base="openai_chat")
+        assert s.connection.base_url is None
+        assert s.connection.api_key_env is None
+        assert s.tools.custom_tools is False
+        assert s.tools.max_description_length is None
+        assert s.tools.search_mode == "disabled"
+        assert s.tools.multimodal_result is None
+
+    def test_builtin_shims_use_grouped(self):
+        from llm_rosetta.shims.providers import load_providers as _load_providers
+
+        _load_providers()
+
+        openai = get_shim("openai")
+        assert openai is not None
+        assert openai.connection.base_url == "https://api.openai.com/v1"
+        assert openai.connection.api_key_env == "OPENAI_API_KEY"
+        assert openai.tools.custom_tools is True
+        assert openai.tools.max_description_length == 1024
+
+        ds = get_shim("deepseek")
+        assert ds is not None
+        assert ds.connection.base_url == "https://api.deepseek.com"
+        assert ds.tools.custom_tools is False
+
+        argo = get_shim("argo--anthropic")
+        assert argo is not None
+        assert argo.connection.model_id_field == "internal_id"
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -548,9 +665,13 @@ class TestShimLoaderFieldCoverage:
     # Fields derived from cfg["reasoning"] via _parse_reasoning_cap().
     _PARSED_FIELDS = {"reasoning", "model_reasoning"}
 
+    # Fields constructed as grouped config objects (ConnectionConfig,
+    # ToolsConfig) — passed as kwargs but built from YAML sub-blocks.
+    _GROUPED_FIELDS = {"connection", "tools"}
+
     # If you add a derived/computed field to ProviderShim, add it here
     # to suppress the guard (it won't have a cfg.get() in the loader).
-    _SPECIAL_FIELDS = _TRANSFORM_FIELDS | _PARSED_FIELDS
+    _SPECIAL_FIELDS = _TRANSFORM_FIELDS | _PARSED_FIELDS | _GROUPED_FIELDS
 
     def test_all_dataclass_fields_present_in_loader(self):
         import ast

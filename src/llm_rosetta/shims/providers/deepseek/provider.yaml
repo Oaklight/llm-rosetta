@@ -1,8 +1,10 @@
 name: deepseek
 base: openai_chat
-default_base_url: https://api.deepseek.com
-default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
+
+connection:
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
 reasoning:
   thinking_modes:
     # No "auto" — DeepSeek R1 requires explicit enable/disable.

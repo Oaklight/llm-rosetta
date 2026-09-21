@@ -26,7 +26,9 @@ from .converters import (
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 from .shims import (
+    ConnectionConfig,
     ProviderShim,
+    ToolsConfig,
     Transform,
     apply_transforms,
     get_shim,
@@ -66,6 +68,8 @@ __all__ = [
     "ConversionPipeline",
     "ConversionError",
     # Provider shim layer
+    "ConnectionConfig",
+    "ToolsConfig",
     "ProviderShim",
     "register_shim",
     "unregister_shim",

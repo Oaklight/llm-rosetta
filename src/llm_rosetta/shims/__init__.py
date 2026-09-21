@@ -12,8 +12,10 @@ Public API:
 """
 
 from .provider_shim import (
+    ConnectionConfig,
     ProviderShim,
     ReasoningCapability,
+    ToolsConfig,
     get_shim,
     list_shims,
     register_shim,
@@ -44,6 +46,8 @@ from .providers import load_providers_from_dir
 _load_providers()
 
 __all__ = [
+    "ConnectionConfig",
+    "ToolsConfig",
     "ProviderShim",
     "ReasoningCapability",
     "register_shim",

@@ -1,9 +1,11 @@
 name: argo--anthropic
 base: anthropic
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
-default_base_url: https://apps.inside.anl.gov/argoapi
-default_api_key_env: ARGO_API_KEY
-model_id_field: internal_id
+
+connection:
+  base_url: https://apps.inside.anl.gov/argoapi
+  api_key_env: ARGO_API_KEY
+  model_id_field: internal_id
 reasoning:
   thinking_modes:
     auto: adaptive

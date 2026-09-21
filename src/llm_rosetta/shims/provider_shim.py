@@ -104,6 +104,46 @@ class ReasoningCapability:
 
 
 # ---------------------------------------------------------------------------
+# Grouped config objects
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ConnectionConfig:
+    """How to reach the upstream provider."""
+
+    base_url: str | None = None
+    api_key_env: str | None = None
+    models_path: str | None = None
+    model_id_field: str | None = None
+
+
+@dataclass(frozen=True)
+class ToolsConfig:
+    """Tool handling behavior for this provider."""
+
+    custom_tools: bool = False
+    max_description_length: int | None = None
+    search_mode: ToolSearchMode = "disabled"
+    multimodal_result: bool | None = None
+
+
+# Legacy flat kwarg names → (grouped field, sub-field)
+_LEGACY_CONNECTION_FIELDS: dict[str, str] = {
+    "default_base_url": "base_url",
+    "default_api_key_env": "api_key_env",
+    "models_path": "models_path",
+    "model_id_field": "model_id_field",
+}
+_LEGACY_TOOLS_FIELDS: dict[str, str] = {
+    "supports_custom_tools": "custom_tools",
+    "max_tool_description_length": "max_description_length",
+    "tool_search_mode": "search_mode",
+    "multimodal_tool_result": "multimodal_result",
+}
+
+
+# ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
@@ -117,15 +157,11 @@ class ProviderShim:
         base: API standard this provider follows.  Must be one of the
             converter type strings (``"openai_chat"``, ``"anthropic"``,
             ``"google"``, ``"openai_responses"``).
-        default_base_url: Default upstream base URL.  Used by the gateway
-            when the provider config does not specify ``base_url``.
-        default_api_key_env: Default environment variable name for the
-            API key (e.g. ``"DEEPSEEK_API_KEY"``).
         logo: URL to the provider's logo image (SVG preferred).
-        model_id_field: JSON field name to use as model identifier when
-            fetching the upstream model list.  Defaults to ``"id"``
-            when ``None``.  Useful for providers like Argo that place
-            the actual model identifier in a non-standard field.
+        connection: Upstream connection config (URL, API key env,
+            models endpoint, model ID field).
+        tools: Tool handling config (custom tools, description length,
+            search mode, multimodal tool results).
         pre_ir_transforms: Body-level transforms applied BEFORE IR
             conversion (normalise provider dialect → standard).
             Aliased as ``from_transforms`` for backward compatibility.
@@ -141,28 +177,15 @@ class ProviderShim:
             (e.g. ``"resp_"`` for OpenAI Responses, ``"chatcmpl-"`` for
             OpenAI Chat).  Default ``""`` means passthrough (no
             prefix stripping or adding).
-        supports_custom_tools: Whether the provider's API natively
-            accepts custom tool definitions (``{type: "custom"}``).
-            Default ``False`` — only OpenAI's official API supports
-            this.  When ``False``, custom tools are downgraded to
-            function wrappers.
-        multimodal_tool_result: Whether the provider supports multimodal
-            content (images, files) in tool results natively.  ``None``
-            (default) defers to the converter's class-level flag.
-            ``True`` forces native multimodal pass-through; ``False``
-            forces dual-encoding (text fallback + synthetic user message).
-        tool_search_mode: How tool_search is handled.  ``"disabled"`` (default)
-            drops tool_search items.  ``"native"`` passes through the provider's
-            native protocol.  ``"bridge"`` emulates via BM25 search over request
-            tool schemas.
+        hoist_system_messages: Whether to hoist late system messages
+            for prompt cache prefix stability.  Default ``True``.
     """
 
     name: str
     base: str
-    default_base_url: str | None = None
-    default_api_key_env: str | None = None
     logo: str | None = None
-    model_id_field: str | None = None
+    connection: ConnectionConfig = ConnectionConfig()
+    tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
     post_ir_transforms: tuple[Transform, ...] = ()
     ir_transforms: tuple[IRTransform, ...] = ()
@@ -170,21 +193,18 @@ class ProviderShim:
     reasoning: ReasoningCapability | None = None
     model_reasoning: dict[str, ReasoningCapability] | None = None
     response_id_prefix: str = ""
-    supports_custom_tools: bool = False
     hoist_system_messages: bool = True
-    max_tool_description_length: int | None = None
-    models_path: str | None = None
-    multimodal_tool_result: bool | None = None
-    tool_search_mode: ToolSearchMode = "disabled"
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
         """Accept both new and legacy kwarg names.
 
         Legacy ``from_transforms`` maps to ``pre_ir_transforms``;
         ``to_transforms`` maps to ``post_ir_transforms``.
+        Legacy flat connection/tool kwargs are merged into their
+        respective grouped config objects.
         New names take precedence if both are provided.
         """
-        # Map legacy names → new names (new names take precedence)
+        # ── Transform renames ────────────────────────────────────────
         if "from_transforms" in kwargs:
             warnings.warn(
                 "ProviderShim(from_transforms=...) is deprecated, "
@@ -208,13 +228,47 @@ class ProviderShim:
             else:
                 kwargs.pop("to_transforms")
 
-        # Apply defaults for fields not in kwargs.
-        # Keep in sync with dataclass field defaults above.
-        _FIELD_DEFAULTS = {
-            "default_base_url": None,
-            "default_api_key_env": None,
+        # ── Legacy flat connection kwargs → ConnectionConfig ─────────
+        conn_legacy = {
+            new: kwargs.pop(old)
+            for old, new in _LEGACY_CONNECTION_FIELDS.items()
+            if old in kwargs
+        }
+        if conn_legacy:
+            if "connection" not in kwargs:
+                kwargs["connection"] = ConnectionConfig(**conn_legacy)
+            else:
+                warnings.warn(
+                    "ProviderShim: flat connection kwargs "
+                    f"({', '.join(conn_legacy)}) ignored because "
+                    "'connection' was also provided",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+        # ── Legacy flat tool kwargs → ToolsConfig ────────────────────
+        tools_legacy = {
+            new: kwargs.pop(old)
+            for old, new in _LEGACY_TOOLS_FIELDS.items()
+            if old in kwargs
+        }
+        if tools_legacy:
+            if "tools" not in kwargs:
+                kwargs["tools"] = ToolsConfig(**tools_legacy)
+            else:
+                warnings.warn(
+                    "ProviderShim: flat tool kwargs "
+                    f"({', '.join(tools_legacy)}) ignored because "
+                    "'tools' was also provided",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+
+        # ── Apply defaults ───────────────────────────────────────────
+        _FIELD_DEFAULTS: dict[str, Any] = {
             "logo": None,
-            "model_id_field": None,
+            "connection": ConnectionConfig(),
+            "tools": ToolsConfig(),
             "pre_ir_transforms": (),
             "post_ir_transforms": (),
             "ir_transforms": (),
@@ -222,12 +276,7 @@ class ProviderShim:
             "reasoning": None,
             "model_reasoning": None,
             "response_id_prefix": "",
-            "supports_custom_tools": False,
             "hoist_system_messages": True,
-            "max_tool_description_length": None,
-            "models_path": None,
-            "multimodal_tool_result": None,
-            "tool_search_mode": "disabled",
         }
         _VALID_FIELDS = {"name", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():
@@ -244,7 +293,8 @@ class ProviderShim:
         for k, v in kwargs.items():
             object.__setattr__(self, k, v)
 
-    # Backward-compatible aliases (read-only)
+    # ── Backward-compatible aliases (read-only) ─────────────────────
+
     @property
     def from_transforms(self) -> tuple[Transform, ...]:
         """Alias for ``pre_ir_transforms`` (deprecated)."""
@@ -254,6 +304,48 @@ class ProviderShim:
     def to_transforms(self) -> tuple[Transform, ...]:
         """Alias for ``post_ir_transforms`` (deprecated)."""
         return self.post_ir_transforms
+
+    # Legacy flat connection accessors
+    @property
+    def default_base_url(self) -> str | None:
+        """Alias for ``connection.base_url`` (deprecated)."""
+        return self.connection.base_url
+
+    @property
+    def default_api_key_env(self) -> str | None:
+        """Alias for ``connection.api_key_env`` (deprecated)."""
+        return self.connection.api_key_env
+
+    @property
+    def models_path(self) -> str | None:
+        """Alias for ``connection.models_path`` (deprecated)."""
+        return self.connection.models_path
+
+    @property
+    def model_id_field(self) -> str | None:
+        """Alias for ``connection.model_id_field`` (deprecated)."""
+        return self.connection.model_id_field
+
+    # Legacy flat tool accessors
+    @property
+    def supports_custom_tools(self) -> bool:
+        """Alias for ``tools.custom_tools`` (deprecated)."""
+        return self.tools.custom_tools
+
+    @property
+    def max_tool_description_length(self) -> int | None:
+        """Alias for ``tools.max_description_length`` (deprecated)."""
+        return self.tools.max_description_length
+
+    @property
+    def tool_search_mode(self) -> ToolSearchMode:
+        """Alias for ``tools.search_mode`` (deprecated)."""
+        return self.tools.search_mode
+
+    @property
+    def multimodal_tool_result(self) -> bool | None:
+        """Alias for ``tools.multimodal_result`` (deprecated)."""
+        return self.tools.multimodal_result
 
 
 # ---------------------------------------------------------------------------

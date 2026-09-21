@@ -60,7 +60,13 @@ from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
-from ..provider_shim import ProviderShim, ReasoningCapability, register_shim
+from ..provider_shim import (
+    ConnectionConfig,
+    ProviderShim,
+    ReasoningCapability,
+    ToolsConfig,
+    register_shim,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -257,13 +263,46 @@ def _load_single_provider(
                 overrides, base=reasoning_cap
             )
 
+    # Parse connection config (grouped or flat fallback).
+    conn_raw = cfg.get("connection")
+    if isinstance(conn_raw, dict):
+        connection = ConnectionConfig(
+            base_url=conn_raw.get("base_url"),
+            api_key_env=conn_raw.get("api_key_env"),
+            models_path=conn_raw.get("models_path"),
+            model_id_field=conn_raw.get("model_id_field"),
+        )
+    else:
+        connection = ConnectionConfig(
+            base_url=cfg.get("default_base_url"),
+            api_key_env=cfg.get("default_api_key_env"),
+            models_path=cfg.get("models_path"),
+            model_id_field=cfg.get("model_id_field"),
+        )
+
+    # Parse tools config (grouped or flat fallback).
+    tools_raw = cfg.get("tools")
+    if isinstance(tools_raw, dict):
+        tools = ToolsConfig(
+            custom_tools=tools_raw.get("custom_tools", False),
+            max_description_length=tools_raw.get("max_description_length"),
+            search_mode=tools_raw.get("search_mode", "disabled"),
+            multimodal_result=tools_raw.get("multimodal_result"),
+        )
+    else:
+        tools = ToolsConfig(
+            custom_tools=cfg.get("supports_custom_tools", False),
+            max_description_length=cfg.get("max_tool_description_length"),
+            search_mode=cfg.get("tool_search_mode", "disabled"),
+            multimodal_result=cfg.get("multimodal_tool_result"),
+        )
+
     shim = ProviderShim(
         name=cfg["name"],
         base=cfg["base"],
-        default_base_url=cfg.get("default_base_url"),
-        default_api_key_env=cfg.get("default_api_key_env"),
         logo=cfg.get("logo"),
-        model_id_field=cfg.get("model_id_field"),
+        connection=connection,
+        tools=tools,
         pre_ir_transforms=pre_t,
         post_ir_transforms=post_t,
         ir_transforms=ir_t,
@@ -271,12 +310,7 @@ def _load_single_provider(
         reasoning=reasoning_cap,
         model_reasoning=model_reasoning,
         response_id_prefix=cfg.get("response_id_prefix", ""),
-        supports_custom_tools=cfg.get("supports_custom_tools", False),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
-        max_tool_description_length=cfg.get("max_tool_description_length"),
-        models_path=cfg.get("models_path"),
-        multimodal_tool_result=cfg.get("multimodal_tool_result"),
-        tool_search_mode=cfg.get("tool_search_mode", "disabled"),
     )
     register_shim(shim)
 

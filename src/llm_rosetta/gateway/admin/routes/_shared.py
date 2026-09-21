@@ -263,7 +263,7 @@ def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | No
             else None
         )
         shim = get_shim(shim_name) if shim_name else None
-        path = shim.models_path if shim else None
+        path = shim.connection.models_path if shim else None
     if path and path.startswith("http://"):
         logger.warning(
             "models_path for %s uses plain HTTP — auth headers will be sent "

@@ -316,7 +316,7 @@ class ConversionPipeline:
             else ""
         )
         self._multimodal_tool_result = (
-            resolved_target_for_prefix.multimodal_tool_result
+            resolved_target_for_prefix.tools.multimodal_result
             if resolved_target_for_prefix
             else None
         )
