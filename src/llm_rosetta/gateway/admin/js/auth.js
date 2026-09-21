@@ -257,7 +257,7 @@ async function onCleanupConfirmClick() {
     }
   } catch { showToast(t('toast.error'), 'error'); }
   window.loadMetrics?.();
-  if (window.S) window.S._dumpAllEntries = [];
+  if (target === 'errors' || target === 'all') window.invalidateDumpCache?.();
 }
 
 // --- Error Dump Export ---
