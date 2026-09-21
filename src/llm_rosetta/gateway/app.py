@@ -650,6 +650,11 @@ async def _periodic_flush(app: App) -> None:
         metrics = getattr(app, "metrics", None)
         if metrics is not None:
             try:
+                if persistence.check_and_clear_rebuild_flag():
+                    logger.info(
+                        "Rebuild flag detected (external cleanup), rebuilding counters"
+                    )
+                    metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
                 persistence.save_metrics(metrics.export_counters())
             except Exception as exc:
                 logger.warning("Failed to flush metrics: %s", exc)

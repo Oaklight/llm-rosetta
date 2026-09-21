@@ -778,6 +778,25 @@ class PersistenceManager:
             logger.warning("Failed to load metrics: %s", exc)
             return None
 
+    def set_rebuild_flag(self) -> None:
+        """Signal that counters need rebuilding (used by CLI cleanup)."""
+        self._conn.execute(
+            "INSERT OR REPLACE INTO metrics (key, value) VALUES (?, ?)",
+            ("rebuild_needed", "1"),
+        )
+        self._conn.commit()
+
+    def check_and_clear_rebuild_flag(self) -> bool:
+        """Check if a rebuild was requested; clear the flag if set."""
+        row = self._conn.execute(
+            "SELECT value FROM metrics WHERE key = ?", ("rebuild_needed",)
+        ).fetchone()
+        if row and row[0] == "1":
+            self._conn.execute("DELETE FROM metrics WHERE key = ?", ("rebuild_needed",))
+            self._conn.commit()
+            return True
+        return False
+
     # ------------------------------------------------------------------
     # Error dumps
     # ------------------------------------------------------------------

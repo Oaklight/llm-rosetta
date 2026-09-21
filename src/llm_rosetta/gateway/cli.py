@@ -280,6 +280,8 @@ def _cmd_db_cleanup(args: argparse.Namespace) -> None:
 
     pm = PersistenceManager(data_dir)
     result = pm.cleanup_by_age(args.max_age_days)
+    if result["request_log_deleted"] > 0:
+        pm.set_rebuild_flag()
     pm.close()
 
     total = (
@@ -319,6 +321,8 @@ def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
 
     pm = PersistenceManager(data_dir)
     result = pm.cleanup_logs_by_age(args.max_age_days)
+    if result["deleted"] > 0:
+        pm.set_rebuild_flag()
     pm.close()
 
     if result["deleted"] == 0:

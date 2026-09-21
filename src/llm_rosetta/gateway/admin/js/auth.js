@@ -256,6 +256,8 @@ async function onCleanupConfirmClick() {
       else showToast(t('toast.cleanupDone', {rl: d.request_log_deleted, ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
     }
   } catch { showToast(t('toast.error'), 'error'); }
+  window.loadMetrics?.();
+  if (window.S) window.S._dumpAllEntries = [];
 }
 
 // --- Error Dump Export ---
