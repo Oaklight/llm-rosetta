@@ -1,12 +1,16 @@
 name: argo--openai_chat
 base: openai_chat
 logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
-default_base_url: https://apps.inside.anl.gov/argoapi/v1
-default_api_key_env: ARGO_API_KEY
-model_id_field: internal_id
+
+connection:
+  base_url: https://apps.inside.anl.gov/argoapi/v1
+  api_key_env: ARGO_API_KEY
+  model_id_field: internal_id
+
+tools:
+  custom_tools: true
+  max_description_length: 1024
 reasoning:
   effort_field: reasoning_effort
   # effort_range not set = full IR ladder (minimal–max)
 
-supports_custom_tools: true
-max_tool_description_length: 1024

@@ -199,11 +199,11 @@ async def get_config(request: Any) -> Response:
                     "name": s.name,
                     "base": s.base,
                     "logo": s.logo,
-                    "default_base_url": s.default_base_url,
-                    "default_api_key_env": s.default_api_key_env,
-                    "supports_custom_tools": s.supports_custom_tools,
+                    "default_base_url": s.connection.base_url,
+                    "default_api_key_env": s.connection.api_key_env,
+                    "supports_custom_tools": s.tools.custom_tools,
                     "hoist_system_messages": s.hoist_system_messages,
-                    "max_tool_description_length": s.max_tool_description_length,
+                    "max_tool_description_length": s.tools.max_description_length,
                 }
                 for s in list_shims()
             ],
@@ -1097,7 +1097,11 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     # Resolve model_id_field from shim (e.g. Argo uses "internal_id")
     shim_name = config.provider_shim_names.get(provider_name)
     shim = get_shim(shim_name) if shim_name else None
-    id_field = shim.model_id_field if shim and shim.model_id_field else None
+    id_field = (
+        shim.connection.model_id_field
+        if shim and shim.connection.model_id_field
+        else None
+    )
 
     model_ids, upstream_map = _extract_model_ids(body, ptype, shim_name, id_field)
 

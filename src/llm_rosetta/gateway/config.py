@@ -871,7 +871,7 @@ class GatewayConfig:
 
         _shim = resolve_shim(shim_name) if shim_name else None
         custom_tools = self.provider_supports_custom_tools.get(
-            provider_name, _shim.supports_custom_tools if _shim else False
+            provider_name, _shim.tools.custom_tools if _shim else False
         )
         hoist_system = self.provider_hoist_system_messages.get(
             provider_name, _shim.hoist_system_messages if _shim else True
@@ -880,7 +880,7 @@ class GatewayConfig:
 
         _mtdl_model = self.model_max_tool_description_length.get(model)
         _mtdl_prov = self.provider_max_tool_description_length.get(provider_name)
-        _mtdl_shim = _shim.max_tool_description_length if _shim else None
+        _mtdl_shim = _shim.tools.max_description_length if _shim else None
         max_tool_desc = (
             _mtdl_model
             if _mtdl_model is not None

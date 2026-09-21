@@ -192,10 +192,10 @@ def build_provider_info(
     if shim is not None:
         base_type = shim.base
         # Apply shim defaults where config is missing
-        if "base_url" not in cfg and shim.default_base_url:
-            cfg = {**cfg, "base_url": shim.default_base_url}
-        if "api_key" not in cfg and shim.default_api_key_env:
-            env_val = os.environ.get(shim.default_api_key_env, "")
+        if "base_url" not in cfg and shim.connection.base_url:
+            cfg = {**cfg, "base_url": shim.connection.base_url}
+        if "api_key" not in cfg and shim.connection.api_key_env:
+            env_val = os.environ.get(shim.connection.api_key_env, "")
             if env_val:
                 cfg = {**cfg, "api_key": env_val}
     else:

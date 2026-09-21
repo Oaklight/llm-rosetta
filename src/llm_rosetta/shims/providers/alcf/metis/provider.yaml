@@ -1,6 +1,8 @@
 name: alcf--metis
 base: openai_chat
-default_base_url: https://inference-api.alcf.anl.gov/resource_server/metis/api/v1
-default_api_key_env: ALCF_API_KEY
-models_path: https://inference-api.alcf.anl.gov/resource_server/metis/models
 logo: https://docs.alcf.anl.gov/images/favicon.svg
+
+connection:
+  base_url: https://inference-api.alcf.anl.gov/resource_server/metis/api/v1
+  api_key_env: ALCF_API_KEY
+  models_path: https://inference-api.alcf.anl.gov/resource_server/metis/models

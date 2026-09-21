@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://llm-rosetta.readthedocs.io/schemas/provider.schema.json",
+  "title": "LLM-Rosetta Provider Shim",
+  "description": "Schema for provider.yaml shim configuration files.",
+  "type": "object",
+  "required": ["name", "base"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Canonical provider identifier (e.g. 'deepseek', 'argo--anthropic')."
+    },
+    "base": {
+      "type": "string",
+      "description": "API standard this provider follows.",
+      "enum": [
+        "openai_chat",
+        "openai_responses",
+        "anthropic",
+        "google_generate",
+        "google_interactions",
+        "eval"
+      ]
+    },
+    "logo": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL to the provider's logo image (SVG preferred)."
+    },
+    "response_id_prefix": {
+      "type": "string",
+      "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
+      "default": ""
+    },
+    "hoist_system_messages": {
+      "type": "boolean",
+      "description": "Whether to hoist late system messages for prompt cache prefix stability.",
+      "default": true
+    },
+    "connection": {
+      "type": "object",
+      "description": "Upstream connection configuration.",
+      "additionalProperties": false,
+      "properties": {
+        "base_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Default upstream base URL."
+        },
+        "api_key_env": {
+          "type": "string",
+          "description": "Environment variable name for the API key (e.g. 'OPENAI_API_KEY')."
+        },
+        "models_path": {
+          "type": "string",
+          "description": "Path or full URL for the upstream model list endpoint. Relative paths are appended to base_url."
+        },
+        "model_id_field": {
+          "type": "string",
+          "description": "JSON field name to use as model identifier when fetching the upstream model list. Defaults to 'id'."
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "description": "Tool handling behavior.",
+      "additionalProperties": false,
+      "properties": {
+        "custom_tools": {
+          "type": "boolean",
+          "description": "Whether the provider natively accepts custom tool definitions ({type: 'custom'}). When false, custom tools are downgraded to function wrappers.",
+          "default": false
+        },
+        "max_description_length": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum length for tool description strings. Longer descriptions are truncated."
+        },
+        "search_mode": {
+          "type": "string",
+          "enum": ["disabled", "native", "bridge"],
+          "description": "'disabled' drops tool_search items. 'native' passes through. 'bridge' emulates via BM25 search.",
+          "default": "disabled"
+        },
+        "multimodal_result": {
+          "type": "boolean",
+          "description": "Whether the provider supports multimodal content in tool results natively. null defers to the converter default."
+        }
+      }
+    },
+    "reasoning": {
+      "type": "object",
+      "description": "Reasoning / thinking capability configuration.",
+      "properties": {
+        "thinking_modes": {
+          "type": "object",
+          "description": "Maps IR mode (auto/enabled/disabled) to provider thinking type value.",
+          "additionalProperties": { "type": "string" }
+        },
+        "thinking_default": {
+          "type": "string",
+          "enum": ["auto", "enabled", "disabled"],
+          "description": "Default IR mode when the request has no explicit mode."
+        },
+        "effort_field": {
+          "type": "string",
+          "description": "Provider-side field path for the effort value (e.g. 'reasoning_effort', 'output_config.effort'). 'none' means provider does not accept effort.",
+          "default": "reasoning_effort"
+        },
+        "effort_range": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "Supported IR effort range [floor, ceiling]. Values: minimal, low, medium, high, xhigh, max."
+        },
+        "budget_ratio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Derive budget_tokens as max(1024, int(max_tokens * ratio))."
+        },
+        "visibility_modes": {
+          "type": "object",
+          "description": "Maps IR summary value to provider visibility value.",
+          "additionalProperties": { "type": "string" }
+        },
+        "unsigned_blocks": {
+          "type": "string",
+          "enum": ["as_is", "preserve"],
+          "description": "How to handle unsigned reasoning blocks in responses.",
+          "default": "as_is"
+        },
+        "model_overrides": {
+          "type": "object",
+          "description": "Per-model reasoning overrides keyed by upstream model ID. Each entry inherits from the provider-level reasoning config.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "thinking_modes": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "effort_field": { "type": "string" },
+              "effort_range": {
+                "type": "array",
+                "items": { "type": "string" },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "budget_ratio": { "type": "number" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

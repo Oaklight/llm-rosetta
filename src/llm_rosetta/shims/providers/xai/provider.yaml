@@ -1,8 +1,10 @@
 name: xai
 base: openai_chat
-default_base_url: https://api.x.ai/v1
-default_api_key_env: XAI_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/xai.svg
+
+connection:
+  base_url: https://api.x.ai/v1
+  api_key_env: XAI_API_KEY
 reasoning:
   effort_field: reasoning_effort
   effort_range: [minimal, xhigh]
