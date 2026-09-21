@@ -101,7 +101,7 @@ jobs:
             EXTRA_INDEX_URL=https://test.pypi.org/simple/
           tags: |
             oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-dev
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-dev-python
             oaklight/llm-rosetta-gateway:dev
-            oaklight/llm-rosetta-gateway:dev-python
           cache-from: type=gha,scope=dev-python
           cache-to: type=gha,mode=max,scope=dev-python
