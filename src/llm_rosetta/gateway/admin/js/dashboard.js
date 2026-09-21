@@ -266,8 +266,12 @@ async function downloadAllCaptures() {
 
 // ===================== Error Dumps =====================
 
-async function loadDumps() {
+function invalidateDumpCache() {
   S._dumpAllEntries = [];
+}
+
+async function loadDumps() {
+  invalidateDumpCache();
   renderDumps();
 }
 
@@ -492,7 +496,7 @@ async function confirmClearDumps() {
   await api.del('/admin/api/error-dumps');
   showToast('Cleared all error dumps');
   S._dumpPage = 0;
-  S._dumpAllEntries = [];
+  invalidateDumpCache();
   renderDumps();
   loadMetrics();
 }
@@ -626,9 +630,10 @@ async function rebuildMetrics() {
     const after = res.counters || {};
     const diffs = [];
     const check = (label, b, a) => { if (b !== a) diffs.push(`${label}: ${b} → ${a}`); };
-    check('total_requests', before.total_requests || 0, after.total_requests || 0);
-    check('total_errors', before.total_errors || 0, after.total_errors || 0);
-    check('total_streams', before.total_streams || 0, after.total_streams || 0);
+    const fields = ['total_requests', 'total_errors', 'total_streams',
+      'total_input_tokens', 'total_output_tokens', 'total_cache_read_tokens',
+      'total_cache_creation_tokens', 'total_reasoning_tokens'];
+    for (const f of fields) check(f, before[f] || 0, after[f] || 0);
     if (diffs.length === 0) {
       showToast(t('toast.metricsRebuilt').replace('{n}', n) + ' — counters consistent ✓');
     } else {
@@ -787,7 +792,7 @@ async function backfillDumpLogIds() {
     const res = await api.post('/admin/api/error-dumps/backfill-log-ids');
     if (res && res.error) { showToast(res.error, 'error'); return; }
     showToast('Matched ' + (res.updated || 0) + ' error dump(s) with request logs');
-    if (res.updated > 0) { S._dumpAllEntries = []; renderDumps(); }
+    if (res.updated > 0) { invalidateDumpCache(); renderDumps(); }
   } catch(e) { showToast('Backfill failed', 'error'); }
 }
 
@@ -902,7 +907,7 @@ async function bulkDeleteDumps() {
   S._selectedDumpIds.clear();
   _updateDumpBulkBar();
   showToast(`Deleted ${ok} dump(s)`);
-  S._dumpAllEntries = [];
+  invalidateDumpCache();
   renderDumps();
   loadMetrics();
 }
@@ -915,7 +920,7 @@ Object.assign(window, {
   downloadFlamegraph, downloadAllFlamegraphs,
   loadCaptureStatus, loadCaptureResults, toggleCapture,
   clearCaptureResults, viewCapture, downloadCapture, downloadAllCaptures,
-  loadDumps, renderDumps, viewDump, downloadDump, downloadAllDumps,
+  loadDumps, renderDumps, invalidateDumpCache, viewDump, downloadDump, downloadAllDumps,
   changeDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
   onClearDumpsInput, confirmClearDumps,
   onDumpModelFilterChange, closeDumpModelSearch,
@@ -929,7 +934,7 @@ Object.assign(window, {
   rebuildMetrics, drawThroughputChart, drawLatencyChart,
 });
 
-export { loadMetrics, loadDumps, renderPersistence, renderStats, renderProviderBreakdown,
+export { loadMetrics, loadDumps, invalidateDumpCache, renderPersistence, renderStats, renderProviderBreakdown,
   jumpToRequestLog, backfillDumpLogIds,
   selectAllProfiling, updateProfilingBulk, bulkDownloadProfiling,
   selectAllCapture, updateCaptureBulk, bulkDownloadCapture,

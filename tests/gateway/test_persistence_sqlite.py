@@ -379,6 +379,82 @@ class TestPersistenceManagerMetrics:
         pm.close()
 
 
+class TestRebuildFlag:
+    def test_flag_not_set_by_default(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        assert pm.check_and_clear_rebuild_flag() is False
+        pm.close()
+
+    def test_set_then_check_clears(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.set_rebuild_flag()
+        assert pm.check_and_clear_rebuild_flag() is True
+        assert pm.check_and_clear_rebuild_flag() is False
+        pm.close()
+
+    def test_flag_persists_across_connections(self, tmp_path):
+        pm1 = PersistenceManager(str(tmp_path))
+        pm1.set_rebuild_flag()
+        pm1.close()
+
+        pm2 = PersistenceManager(str(tmp_path))
+        assert pm2.check_and_clear_rebuild_flag() is True
+        pm2.close()
+
+    def test_flag_does_not_interfere_with_metrics(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path))
+        pm.save_metrics({"total_requests": 42})
+        pm.set_rebuild_flag()
+
+        assert pm.load_metrics() == {"total_requests": 42}
+        assert pm.check_and_clear_rebuild_flag() is True
+        assert pm.load_metrics() == {"total_requests": 42}
+        pm.close()
+
+    def test_cleanup_sets_flag_and_rebuild_fixes_counters(self, tmp_path):
+        from llm_rosetta.gateway.admin.metrics import MetricsCollector
+
+        pm = PersistenceManager(str(tmp_path))
+        rl = RequestLog(persistence=pm)
+
+        for i in range(5):
+            rl.add(
+                RequestLogEntry.create(
+                    model="m",
+                    source_provider="openai_chat",
+                    target_provider="openai_chat",
+                    is_stream=False,
+                    status_code=200,
+                    duration_ms=10.0,
+                )
+            )
+        for i in range(3):
+            rl.add(
+                RequestLogEntry.create(
+                    model="m",
+                    source_provider="openai_chat",
+                    target_provider="openai_chat",
+                    is_stream=False,
+                    status_code=503,
+                    duration_ms=10.0,
+                )
+            )
+
+        mc = MetricsCollector()
+        mc.rebuild_counters(pm.iter_log_rows_for_rebuild())
+        assert mc.total_requests == 8
+        assert mc.total_errors == 3
+
+        pm.cleanup_logs_by_age(0)
+        pm.set_rebuild_flag()
+
+        assert pm.check_and_clear_rebuild_flag() is True
+        mc.rebuild_counters(pm.iter_log_rows_for_rebuild())
+        assert mc.total_requests == 0
+        assert mc.total_errors == 0
+        pm.close()
+
+
 # -- Legacy migration tests --
 
 

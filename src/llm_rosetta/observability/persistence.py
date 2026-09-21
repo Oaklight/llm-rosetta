@@ -787,12 +787,12 @@ class PersistenceManager:
         self._conn.commit()
 
     def check_and_clear_rebuild_flag(self) -> bool:
-        """Check if a rebuild was requested; clear the flag if set."""
+        """Check if a rebuild was requested; atomically clear the flag if set."""
         row = self._conn.execute(
-            "SELECT value FROM metrics WHERE key = ?", ("rebuild_needed",)
+            "DELETE FROM metrics WHERE key = ? AND value = ? RETURNING value",
+            ("rebuild_needed", "1"),
         ).fetchone()
-        if row and row[0] == "1":
-            self._conn.execute("DELETE FROM metrics WHERE key = ?", ("rebuild_needed",))
+        if row is not None:
             self._conn.commit()
             return True
         return False
