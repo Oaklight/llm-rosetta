@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import re
+from contextlib import contextmanager
 from typing import Any, overload
+from collections.abc import Generator
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from ...config import ConfigIO, GatewayConfig
+from ...config import ConfigIO, GatewayConfig, config_lock
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -29,6 +31,107 @@ def _qp(request: Any, key: str, default: str | None = None) -> str | None:
     if vals:
         return vals[0]
     return default
+
+
+def parse_json_body(request: Any) -> tuple[dict[str, Any], Response | None]:
+    """Parse the JSON body from a request.
+
+    Returns:
+        A ``(body, None)`` tuple on success, or ``(None, error_response)``
+        on failure (invalid JSON).
+    """
+    try:
+        body = request.json()
+    except Exception:
+        return {}, JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    return body, None
+
+
+class ConfigMutationContext:
+    """Holds state for a :func:`config_mutate` session.
+
+    Attributes:
+        data: The raw config dict loaded from disk.  Mutate in place.
+        error: Set by the context manager if load/save/reload fails.
+            Callers should check this after the ``with`` block.
+        new_config: The reloaded :class:`GatewayConfig` after a
+            successful commit.  ``None`` until commit + reload completes.
+    """
+
+    __slots__ = ("data", "error", "new_config", "_committed")
+
+    def __init__(self) -> None:
+        self.data: dict[str, Any] = {}
+        self.error: Response | None = None
+        self.new_config: GatewayConfig | None = None
+        self._committed: bool = False
+
+    def commit(self) -> None:
+        """Mark the mutation for save + reload on context exit."""
+        self._committed = True
+
+
+@contextmanager
+def config_mutate(
+    request: Any,
+) -> Generator[ConfigMutationContext, None, None]:
+    """Context manager for the lock → load → mutate → save → reload cycle.
+
+    Usage::
+
+        with config_mutate(request) as ctx:
+            if ctx.error:
+                return ctx.error
+            # ... validate and mutate ctx.data ...
+            if bad:
+                return JSONResponse(...)  # exits without saving
+            ctx.commit()
+        if ctx.error:
+            return ctx.error
+        # ctx.new_config is now available
+
+    The save and reload only happen when :meth:`ConfigMutationContext.commit`
+    has been called **and** no exception was raised.  Early returns from the
+    handler (e.g. validation errors) skip the save automatically.
+    """
+    ctx = ConfigMutationContext()
+    config_path = _get_config_path(request)
+
+    with config_lock(config_path):
+        try:
+            ctx.data = _get_config_io(request).load_raw(config_path)
+        except Exception as exc:
+            ctx.error = JSONResponse(
+                {"error": f"Failed to read config: {exc}"}, status_code=500
+            )
+            yield ctx
+            return
+
+        yield ctx
+
+        if not ctx._committed:
+            return
+
+        try:
+            _get_config_io(request).save(config_path, ctx.data)
+        except Exception as exc:
+            ctx.error = JSONResponse(
+                {"error": f"Failed to write config: {exc}"}, status_code=500
+            )
+            return
+
+    # Reload happens outside the lock
+    try:
+        ctx.new_config = _reload_gateway_config(request, config_path)
+    except Exception as exc:
+        ctx.error = JSONResponse(
+            {
+                "error": f"Config saved but reload failed: {exc}",
+                "saved": True,
+                "reloaded": False,
+            },
+            status_code=500,
+        )
 
 
 def _mask_api_key(value: str) -> str:

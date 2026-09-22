@@ -8,7 +8,7 @@ from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
-from ._shared import _qp
+from ._shared import _qp, parse_json_body
 
 
 def _detect_host_ip() -> dict[str, Any]:
@@ -416,10 +416,9 @@ async def db_cleanup(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     max_age_days = body.get("max_age_days", 90)
     if not isinstance(max_age_days, int) or max_age_days < 1:
@@ -438,10 +437,9 @@ async def cleanup_requests_by_age(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     max_age_days = body.get("max_age_days", 90)
     if not isinstance(max_age_days, int) or max_age_days < 1:
@@ -460,10 +458,9 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     max_age_days = body.get("max_age_days", 90)
     if not isinstance(max_age_days, int) or max_age_days < 1:
@@ -565,10 +562,9 @@ async def cleanup_ops_log_by_age(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     max_age_days = body.get("max_age_days", 90)
     if not isinstance(max_age_days, int) or max_age_days < 1:

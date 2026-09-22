@@ -120,12 +120,13 @@ async def start_test(request: Any) -> Response:
     POST /admin/api/test
     Body: {endpoint: "/v1/...", payload: {...}}
     """
+    from ._shared import parse_json_body
+
     _cleanup_stale_tasks()
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     endpoint = body.get("endpoint")
     payload = body.get("payload")
