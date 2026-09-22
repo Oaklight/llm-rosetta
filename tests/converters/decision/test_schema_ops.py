@@ -32,9 +32,9 @@ class TestBuildDecisionSchema:
         schema = build_decision_schema(questions)
         prop = schema["properties"]["answers"]["properties"]["q"]
         assert prop["type"] == "number"
-        assert prop["type"] == "number"
         assert prop["minimum"] == 0
         assert prop["maximum"] == 1
+        assert "Is this urgent?" in prop["description"]
 
     def test_choice_question(self):
         questions = {
@@ -66,7 +66,7 @@ class TestBuildDecisionSchema:
         assert "0" in prop["properties"]
         assert "1" in prop["properties"]
         assert "2" in prop["properties"]
-        assert "0" in prop["properties"]
+        assert "2" in prop["properties"]
         assert prop["additionalProperties"] is False
 
     def test_multi_question(self):

@@ -29,17 +29,6 @@ from llm_rosetta.types.ir.decision import (
     ScoreAnswer,
 )
 
-
-class _EnumConstraint:
-    """Annotated constraint that emits ``{"enum": [...]}`` in JSON Schema."""
-
-    def __init__(self, values: list[str]) -> None:
-        self.values = values
-
-    def schema_kw(self) -> dict[str, Any]:
-        return {"enum": self.values}
-
-
 AnswerMode = Literal["probabilities", "discrete"]
 
 # ============================================================================
@@ -154,11 +143,13 @@ def build_decision_schema(
     schema.pop("title", None)
     schema = _add_additional_properties_false(schema)
 
-    if enum_patches:
-        answer_props = schema["properties"]["answers"]["properties"]
-        for qid, values in enum_patches.items():
-            if qid in answer_props:
-                answer_props[qid]["enum"] = values
+    answer_props = schema["properties"]["answers"]["properties"]
+    for qid, q in questions.items():
+        if qid not in answer_props:
+            continue
+        if qid in enum_patches:
+            answer_props[qid]["enum"] = enum_patches[qid]
+        answer_props[qid]["description"] = _serialize_value(q["instructions"])
     return schema
 
 
