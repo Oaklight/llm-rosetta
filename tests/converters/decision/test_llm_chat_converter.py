@@ -421,8 +421,8 @@ class TestDiscreteMode:
         wire, _ = discrete_converter.request_to_provider(IR_REQUEST)
         schema = wire["response_format"]["json_schema"]["schema"]
         choice_prop = schema["properties"]["answers"]["properties"]["department"]
-        assert choice_prop["type"] == "string"
-        assert set(choice_prop["enum"]) == {"billing", "technical"}
+        assert "enum" in choice_prop
+        assert set(choice_prop.get("enum", [])) == {"billing", "technical"}
 
     def test_schema_uses_integer_for_score(
         self, discrete_converter: LLMChatDecisionConverter

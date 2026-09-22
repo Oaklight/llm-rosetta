@@ -17,8 +17,9 @@ from __future__ import annotations
 import json
 import math
 from collections.abc import Mapping
-from typing import Any, Literal, cast
+from typing import Annotated, Any, Literal, cast
 
+from llm_rosetta._vendor.validate import Ge, Le, create_struct, json_schema
 from llm_rosetta.types.ir.decision import (
     ChoiceAnswer,
     DecisionAnswer,
@@ -27,6 +28,17 @@ from llm_rosetta.types.ir.decision import (
     NoulAnswer,
     ScoreAnswer,
 )
+
+
+class _EnumConstraint:
+    """Annotated constraint that emits ``{"enum": [...]}`` in JSON Schema."""
+
+    def __init__(self, values: list[str]) -> None:
+        self.values = values
+
+    def schema_kw(self) -> dict[str, Any]:
+        return {"enum": self.values}
+
 
 AnswerMode = Literal["probabilities", "discrete"]
 
@@ -121,24 +133,33 @@ def build_decision_schema(
     *,
     answer_mode: AnswerMode = "probabilities",
 ) -> dict[str, Any]:
-    """Build a JSON schema for structured output from typed questions."""
-    answer_properties: dict[str, Any] = {}
-    for qid, q in questions.items():
-        answer_properties[qid] = _build_question_schema(q, answer_mode)
+    """Build a JSON schema for structured output from typed questions.
 
-    return {
-        "type": "object",
-        "properties": {
-            "answers": {
-                "type": "object",
-                "properties": answer_properties,
-                "required": list(questions.keys()),
-                "additionalProperties": False,
-            }
-        },
-        "required": ["answers"],
-        "additionalProperties": False,
-    }
+    Uses ``create_struct`` + ``json_schema`` from the vendored
+    ``validate`` module to dynamically build TypedDict types and
+    generate JSON Schema from them, then adds ``additionalProperties:
+    False`` for strict-mode compatibility.
+    """
+    answer_fields: dict[str, tuple[Any, ...]] = {}
+    enum_patches: dict[str, list[str]] = {}
+    for qid, q in questions.items():
+        field_type, enum_values = _question_field_type(q, answer_mode)
+        answer_fields[qid] = (field_type, ...)
+        if enum_values is not None:
+            enum_patches[qid] = enum_values
+
+    answers_struct = create_struct("Answers", answer_fields)
+    outer_struct = create_struct("Decision", {"answers": (answers_struct, ...)})
+    schema = json_schema(outer_struct)
+    schema.pop("title", None)
+    schema = _add_additional_properties_false(schema)
+
+    if enum_patches:
+        answer_props = schema["properties"]["answers"]["properties"]
+        for qid, values in enum_patches.items():
+            if qid in answer_props:
+                answer_props[qid]["enum"] = values
+    return schema
 
 
 # ============================================================================
@@ -231,58 +252,52 @@ def compute_confidence(probabilities: dict[str, float]) -> float:
 # ============================================================================
 
 
-def _build_question_schema(
+def _question_field_type(
     q: DecisionQuestion, answer_mode: AnswerMode
-) -> dict[str, Any]:
-    """Build a JSON schema property for a single question."""
+) -> tuple[Any, list[str] | None]:
+    """Return a Python type annotation and optional enum values.
+
+    Returns:
+        ``(type, enum_values)`` — the type is passed to ``create_struct``,
+        and enum_values (if not None) are patched into the generated
+        schema as ``{"enum": [...]}`` on the corresponding property.
+    """
     qtype = q["type"]
-    desc = _serialize_value(q["instructions"])
     if qtype == "noul":
         if answer_mode == "discrete":
-            return {"type": "boolean", "description": desc}
-        return {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": f"P(true) in [0,1]. {desc}",
-        }
+            return bool, None
+        return Annotated[float, Ge(0), Le(1)], None
     if qtype == "choice":
         criteria_dict: dict[str, Any] = cast(Any, q).get("criteria", {})
         if answer_mode == "discrete":
-            return {
-                "type": "string",
-                "enum": list(criteria_dict.keys()),
-                "description": desc,
-            }
-        props: dict[str, Any] = {}
-        for label, rubric in criteria_dict.items():
-            prop: dict[str, Any] = {"type": "number"}
-            if rubric:
-                prop["description"] = rubric
-            props[label] = prop
-        return {
-            "type": "object",
-            "properties": props,
-            "required": list(criteria_dict.keys()),
-            "additionalProperties": False,
-            "description": desc,
-        }
+            return str, list(criteria_dict.keys())
+        return create_struct(
+            "ChoiceProbs",
+            {label: (float, ...) for label in criteria_dict},
+        ), None
     if qtype == "score":
         criteria_list: list[str] = cast(Any, q).get("criteria", [])
         if answer_mode == "discrete":
-            levels = ", ".join(f"{i}={d}" for i, d in enumerate(criteria_list))
-            return {"type": "integer", "description": f"{desc}. Levels: {levels}"}
-        props = {}
-        for i, level_desc in enumerate(criteria_list):
-            props[str(i)] = {"type": "number", "description": level_desc}
-        return {
-            "type": "object",
-            "properties": props,
-            "required": [str(i) for i in range(len(criteria_list))],
-            "additionalProperties": False,
-            "description": desc,
-        }
-    return {"type": "string", "description": desc}
+            return int, None
+        return create_struct(
+            "ScoreProbs",
+            {str(i): (float, ...) for i in range(len(criteria_list))},
+        ), None
+    return str, None
+
+
+def _add_additional_properties_false(schema: Any) -> Any:
+    """Recursively add additionalProperties: false to all object schemas."""
+    if isinstance(schema, dict):
+        result = {}
+        for k, v in schema.items():
+            result[k] = _add_additional_properties_false(v)
+        if result.get("type") == "object" and "properties" in result:
+            result["additionalProperties"] = False
+        return result
+    if isinstance(schema, list):
+        return [_add_additional_properties_false(v) for v in schema]
+    return schema
 
 
 def _normalize_probs(probs: dict[str, float]) -> dict[str, float]:
