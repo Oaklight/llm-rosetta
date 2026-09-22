@@ -23,6 +23,7 @@ from .auth import (
     create_auth_hook,
 )
 from .config import GatewayConfig, ResolvedRoute
+from .error_format import is_admin_path as _is_admin_path
 from .keystore import KeyStore
 from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
@@ -846,11 +847,6 @@ class GatewayExtensions:
     """When *True*, :func:`setup_admin` is **not** called.
     The downstream project is responsible for calling it later
     (e.g. after async initialisation)."""
-
-
-def _is_admin_path(path: str) -> bool:
-    """Check whether *path* is an admin panel path."""
-    return path.startswith("/admin/") or path == "/admin"
 
 
 def _install_cors(app: App, admin_cors_origins: list[str]) -> None:

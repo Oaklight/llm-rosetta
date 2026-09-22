@@ -30,6 +30,7 @@ from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
 
+from .error_format import detect_api_format_from_provider, format_error_response
 from .logging import (
     get_logger,
     log_converted_request,
@@ -232,39 +233,8 @@ def error_response_for_source(
     source_provider: ProviderType, status_code: int, message: str
 ) -> Response:
     """Return an error response formatted for the source provider's envelope."""
-    if source_provider == "openai_chat":
-        body = {
-            "error": {
-                "message": message,
-                "type": "invalid_request_error",
-                "code": None,
-            }
-        }
-    elif source_provider in ("openai_responses", "open_responses"):
-        body = {
-            "error": {
-                "message": message,
-                "type": "invalid_request_error",
-                "code": None,
-            }
-        }
-    elif source_provider == "anthropic":
-        body = {
-            "type": "error",
-            "error": {"type": "invalid_request_error", "message": message},
-        }
-    elif source_provider in ("google", "google_generate", "google_interactions"):
-        body = {
-            "error": {
-                "code": status_code,
-                "message": message,
-                "status": "INVALID_ARGUMENT",
-            }
-        }
-    else:
-        body = {"error": {"message": message}}
-
-    return JSONResponse(body, status_code=status_code)
+    api_format = detect_api_format_from_provider(source_provider)
+    return format_error_response(api_format, status_code, message)
 
 
 # ---------------------------------------------------------------------------
