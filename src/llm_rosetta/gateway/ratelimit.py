@@ -29,7 +29,10 @@ import math
 import re
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta._vendor.httpserver import JSONResponse, Response
+from llm_rosetta._vendor.httpserver import Response
+
+from .error_format import detect_api_format, format_error_response, is_admin_path
+
 from llm_rosetta._vendor.ratelimit import (
     FixedWindowLimiter,
     GCRALimiter,
@@ -70,13 +73,6 @@ __all__ = [
 _rate_limit_result_var: contextvars.ContextVar[RateLimitResult | None] = (
     contextvars.ContextVar("_rate_limit_result", default=None)
 )
-
-# Route prefix → API format (mirrors auth.py's _ROUTE_EXTRACTORS)
-_ROUTE_FORMATS: list[tuple[str, str]] = [
-    ("/v1beta/models", "google"),
-    ("/v1/messages", "anthropic"),
-    ("/v1/", "openai"),
-]
 
 _GOOGLE_MODEL_RE = re.compile(r"/v1beta/models/([^/:]+)")
 
@@ -163,10 +159,7 @@ class RateLimitState:
 
 
 def _detect_format(path: str) -> str:
-    for prefix, fmt in _ROUTE_FORMATS:
-        if path.startswith(prefix):
-            return fmt
-    return "openai"
+    return detect_api_format(path)
 
 
 def _rate_limit_response(
@@ -175,42 +168,22 @@ def _rate_limit_response(
     """Build a format-aware 429 response with standard rate-limit headers."""
     retry_secs = math.ceil(max(result.retry_after or 0, 1))
     message = f"Rate limit exceeded ({dimension}). Please retry after {retry_secs}s."
-    fmt = _detect_format(path)
 
-    if fmt == "anthropic":
-        body = {
-            "type": "error",
-            "error": {"type": "rate_limit_error", "message": message},
-        }
-    elif fmt == "google":
-        body = {
-            "error": {
-                "code": 429,
-                "message": message,
-                "status": "RESOURCE_EXHAUSTED",
-            }
-        }
-    else:
-        body = {
-            "error": {
-                "message": message,
-                "type": "rate_limit_error",
-                "code": "rate_limit_exceeded",
-            }
-        }
-
-    resp = JSONResponse(body, status_code=429)
-    resp.headers["Retry-After"] = str(retry_secs)
-    resp.headers["X-RateLimit-Limit"] = str(int(result.limit))
-    resp.headers["X-RateLimit-Remaining"] = str(max(0, int(result.remaining)))
-    resp.headers["X-RateLimit-Reset"] = str(int(math.ceil(result.reset_at)))
-
-    if not (path.startswith("/admin/") or path == "/admin"):
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        resp.headers["Access-Control-Allow-Methods"] = "*"
-        resp.headers["Access-Control-Allow-Headers"] = "*"
-
-    return resp
+    return format_error_response(
+        detect_api_format(path),
+        429,
+        message,
+        error_type="rate_limit_error",
+        error_code="rate_limit_exceeded",
+        google_status="RESOURCE_EXHAUSTED",
+        extra_headers={
+            "Retry-After": str(retry_secs),
+            "X-RateLimit-Limit": str(int(result.limit)),
+            "X-RateLimit-Remaining": str(max(0, int(result.remaining))),
+            "X-RateLimit-Reset": str(int(math.ceil(result.reset_at))),
+        },
+        cors=not is_admin_path(path),
+    )
 
 
 # ---------------------------------------------------------------------------

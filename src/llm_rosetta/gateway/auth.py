@@ -24,6 +24,11 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
+from .error_format import (
+    detect_api_format,
+    format_error_response,
+    is_admin_path as _is_admin_path,
+)
 from .keystore import KeyContext, KeyStore
 
 ADMIN_COOKIE_NAME = "rosetta_admin_session"
@@ -74,59 +79,32 @@ def _extract_key(request: Any) -> str | None:
         return bearer_key
 
 
-def _is_admin_path(path: str) -> bool:
-    return path.startswith("/admin/") or path == "/admin"
-
-
 def _error_for_path(path: str, status: int, message: str) -> Response:
     """Return an error response in the format matching the API standard.
 
     Non-admin responses include CORS headers because before_request
     short-circuits bypass after_request where they would normally be set.
     """
-    for prefix, strategy in _ROUTE_EXTRACTORS:
-        if path.startswith(prefix):
-            break
+    api_format = detect_api_format(path)
+
+    # Auth errors use format-specific error types that match each
+    # provider SDK's expectations.
+    if api_format == "anthropic":
+        error_type = "authentication_error"
     else:
-        strategy = "openai"
+        error_type = "invalid_request_error"
 
-    if strategy == "anthropic":
-        resp = JSONResponse(
-            {
-                "type": "error",
-                "error": {"type": "authentication_error", "message": message},
-            },
-            status_code=status,
-        )
-    elif strategy == "google":
-        resp = JSONResponse(
-            {
-                "error": {
-                    "code": status,
-                    "message": message,
-                    "status": "UNAUTHENTICATED",
-                }
-            },
-            status_code=status,
-        )
-    else:
-        resp = JSONResponse(
-            {
-                "error": {
-                    "message": message,
-                    "type": "invalid_request_error",
-                    "code": "invalid_api_key",
-                }
-            },
-            status_code=status,
-        )
-
-    if not _is_admin_path(path):
-        resp.headers["Access-Control-Allow-Origin"] = "*"
-        resp.headers["Access-Control-Allow-Methods"] = "*"
-        resp.headers["Access-Control-Allow-Headers"] = "*"
-
-    return resp
+    return format_error_response(
+        api_format,
+        status,
+        message,
+        error_type=error_type,
+        error_code="invalid_api_key" if api_format == "openai" else None,
+        google_status="UNAUTHENTICATED"
+        if api_format == "google"
+        else "INVALID_ARGUMENT",
+        cors=not _is_admin_path(path),
+    )
 
 
 def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
