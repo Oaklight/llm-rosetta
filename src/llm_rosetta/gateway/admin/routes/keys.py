@@ -84,13 +84,14 @@ async def create_api_key(request: Any) -> Response:
 
 async def update_api_key(request: Any, **kwargs: Any) -> Response:
     """Update an API key's label and/or allowed_shims."""
+    from ._shared import parse_json_body
+
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
-    try:
-        body = request.json()
-    except Exception:
-        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    body, err = parse_json_body(request)
+    if err:
+        return err
 
     label = body.get("label")
     allowed_shims = body.get("allowed_shims")
