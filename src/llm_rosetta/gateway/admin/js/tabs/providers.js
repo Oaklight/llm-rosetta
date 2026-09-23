@@ -476,12 +476,15 @@ function _getProviderCaps(cfg, provName) {
   return caps;
 }
 
-function _capBadgesHtml(caps) {
+function _capBadgesHtml(caps, {compact = false} = {}) {
   const typeMap = {};
   for (const d of S.configData?.model_types || []) typeMap[d.name] = d.badge_class;
   return caps.map(c => {
     const cls = typeMap[c] || `cap-badge-${c}`;
-    return `<span class="cap-badge ${cls}">${_CAP_ICONS[c] || ''}${esc(c.toUpperCase())}</span>`;
+    const icon = _CAP_ICONS[c] || '';
+    return compact && icon
+      ? `<span class="cap-badge ${cls}" title="${esc(c.toUpperCase())}">${icon}</span>`
+      : `<span class="cap-badge ${cls}">${icon}${esc(c.toUpperCase())}</span>`;
   }).join('');
 }
 
@@ -617,7 +620,7 @@ function renderProviders() {
           <span class="slider"></span>
         </label>
       </div>
-      <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name))}</div>
+      <div class="pc-badges">${_capBadgesHtml(_getProviderCaps(cfg, name), {compact: true})}</div>
       <div class="pc-meta">
         <div class="pc-field" data-label="${t('card.type')}" title="${esc(typeName)}"><code>${esc(typeName)}</code></div>
         <div class="pc-field" data-label="${t('card.baseUrl')}" title="${esc(baseUrl || shimBaseUrl)}">${shimBaseUrl && !baseUrl

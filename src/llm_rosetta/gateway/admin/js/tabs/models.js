@@ -364,6 +364,8 @@ function renderModels() {
   // Update sort header indicators
   document.getElementById('sortName').className = 'sortable' + (S._modelSortKey === 'name' ? ` ${S._modelSortDir}` : '');
   document.getElementById('sortProvider').className = 'sortable' + (S._modelSortKey === 'provider' ? ` ${S._modelSortDir}` : '');
+  const sortEnabledEl = document.getElementById('sortEnabled');
+  if (sortEnabledEl) sortEnabledEl.className = 'sortable' + (S._modelSortKey === 'enabled' ? ` ${S._modelSortDir}` : '');
 
   if (totalCount === 0) {
     tbody.innerHTML = `<tr><td colspan="4" style="color:var(--text-dim)">${t('empty.models')}</td></tr>`;
@@ -395,6 +397,12 @@ function renderModels() {
   const resetBtn = document.getElementById('modelResetBtn');
   if (resetBtn) resetBtn.classList.toggle('visible', !!hasFilters);
 
+  // Determine which providers are disabled
+  const providers = S.configData.providers || {};
+  const disabledProviders = new Set(
+    Object.entries(providers).filter(([,cfg]) => cfg.enabled === false).map(([n]) => n)
+  );
+
   // Sort
   const dir = S._modelSortDir === 'asc' ? 1 : -1;
   entries.sort((a, b) => {
@@ -412,15 +420,12 @@ function renderModels() {
     return;
   }
 
-  // Determine which providers are disabled
-  const providers = S.configData.providers || {};
-  const disabledProviders = new Set(
-    Object.entries(providers).filter(([,cfg]) => cfg.enabled === false).map(([n]) => n)
-  );
+
 
   tbody.innerHTML = entries.map(({name, prov, info}) => {
     const provDisabled = disabledProviders.has(prov);
     const modelEnabled = typeof info === 'object' ? info.enabled !== false : true;
+    const effectiveEnabled = modelEnabled && !provDisabled;
     const rowDimmed = provDisabled || !modelEnabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const modelType = _getModelType(info);
@@ -448,7 +453,7 @@ function renderModels() {
       <td>${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
-        <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${provDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
