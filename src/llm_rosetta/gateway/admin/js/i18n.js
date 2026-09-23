@@ -322,8 +322,36 @@ export const I18N = {
 
 // ---- Helpers ----------------------------------------------------------
 
+/**
+ * Convention-based capitalize: "decision" → "Decision".
+ * Inserts a space before each uppercase run (camelCase → Title Case).
+ */
+function _capitalize(name) {
+  if (!name) return name;
+  // Insert space before uppercase letters for camelCase splitting
+  const spaced = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
 export function t(key, params) {
-  let s = (I18N[S.currentLang] && I18N[S.currentLang][key]) || I18N.en[key] || key;
+  let s = (I18N[S.currentLang] && I18N[S.currentLang][key]) || I18N.en[key];
+  // Convention-based fallback for unknown keys
+  if (s == null) {
+    if (key.startsWith('label.')) {
+      const name = key.slice(6);
+      if (name.endsWith('Endpoint')) {
+        s = _capitalize(name.replace(/Endpoint$/, '')) + ' Endpoint';
+      } else if (name.endsWith('Path')) {
+        s = _capitalize(name.replace(/Path$/, '')) + ' Path';
+      } else {
+        s = _capitalize(name);
+      }
+    } else if (key.startsWith('test.')) {
+      s = _capitalize(key.slice(5));
+    } else {
+      s = key;
+    }
+  }
   if (params) {
     for (const [k, v] of Object.entries(params)) s = s.replace(`{${k}}`, v);
   }
