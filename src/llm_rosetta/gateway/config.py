@@ -663,7 +663,10 @@ class GatewayConfig:
         per-provider overrides under each provider's ``circuit_breaker``
         sub-object.  The circuit breaker is disabled by default.
         """
-        from .circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry
+        from .middleware.circuit_breaker import (
+            CircuitBreakerConfig,
+            CircuitBreakerRegistry,
+        )
 
         cb = _server.get("circuit_breaker", {}) or {}
         default_cfg = CircuitBreakerConfig(

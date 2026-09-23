@@ -17,14 +17,21 @@ Usage::
 Module map::
 
     Core proxy          app, proxy, config, providers, routing_strategy
-    Middleware           auth, ratelimit, request_context, error_format,
-                         circuit_breaker, headers, sanitize, affinity
-    Model types          model_types (registry), embeddings, rerank, decision
-                         embedding_pipeline, rerank_pipeline
+    Middleware           middleware/ subpackage:
+                           auth, ratelimit, request_context, error_format,
+                           circuit_breaker, headers, sanitize, affinity
+    Pipelines            pipelines/ subpackage:
+                           embeddings, embedding_pipeline, rerank,
+                           rerank_pipeline, decision
+    Model types          model_types (registry)
     Observability        (in llm_rosetta.observability, re-exported by admin/)
     Infrastructure       keystore, logging, migrations, deferred_startup
     Admin UI             admin/ (routes, static assets, JS/CSS)
+    Transport            transport/ subpackage
     CLI / bootstrap      cli, banner, __main__
+
+    Backward-compat shims at old paths (gateway/*.py) re-export from
+    middleware/ and pipelines/ so downstream code keeps working.
 
     Middleware hook order (registered in create_app):
     request_context → auth → ratelimit → [extension hooks] → handler
