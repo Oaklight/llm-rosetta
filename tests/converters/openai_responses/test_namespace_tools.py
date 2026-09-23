@@ -2,6 +2,9 @@
 
 from typing import Any
 
+import pytest
+
+from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.openai_responses.converter import (
     OpenAIResponsesConverter,
 )
@@ -250,6 +253,11 @@ class TestNamespaceDispatch:
 class TestDedupIrToolNames:
     """Tests for the converter-level name dedup method."""
 
+    @pytest.fixture
+    def warnings(self) -> list[str]:
+        """Sink for unresolvable-collision warnings; asserted empty by default."""
+        return []
+
     @staticmethod
     def _ir_tool(name: str, ns: str = "") -> dict[str, Any]:
         meta: dict[str, Any] = {}
@@ -263,34 +271,36 @@ class TestDedupIrToolNames:
             "metadata": meta,
         }
 
-    def test_no_collision_unchanged(self):
+    def test_no_collision_unchanged(self, warnings):
         tools = [self._ir_tool("a"), self._ir_tool("b", "ns")]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         assert [t["name"] for t in result] == ["a", "b"]
 
-    def test_namespaced_vs_toplevel_collision(self):
+    def test_namespaced_vs_toplevel_collision(self, warnings):
         tools = [
             self._ir_tool("exec"),  # top-level, no namespace
             self._ir_tool("exec", "functions"),  # from namespace
         ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         assert result[0]["name"] == "exec"
         assert result[1]["name"] == "functions_exec"
+        assert warnings == []
 
-    def test_cross_namespace_collision(self):
+    def test_cross_namespace_collision(self, warnings):
         tools = [
             self._ir_tool("exec", "ns_a"),
             self._ir_tool("exec", "ns_b"),
         ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         names = {t["name"] for t in result}
         assert "ns_a_exec" in names
         assert "ns_b_exec" in names
+        assert warnings == []
 
-    def test_no_mutation_of_originals(self):
+    def test_no_mutation_of_originals(self, warnings):
         original = self._ir_tool("exec", "ns")
         tools = [self._ir_tool("exec"), original]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         # Original dict should be unchanged
         assert original["name"] == "exec"
         # Result entry is a copy
@@ -347,30 +357,49 @@ class TestDedupIrToolNames:
 
         assert "name" not in upstream["tools"][0], upstream["tools"][0]
 
-    def test_long_qualified_name_truncated(self):
+    def test_long_qualified_name_truncated(self, warnings):
         long_ns = "a" * 60
         tools = [
             self._ir_tool("tool"),
             self._ir_tool("tool", long_ns),
         ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         assert len(result[1]["name"]) <= 64
         assert result[0]["name"] != result[1]["name"]
+        # Truncating the namespace still produced a distinct name — no warning
+        assert warnings == []
 
-    def test_very_long_name_skips_qualify(self):
+    def test_very_long_name_skips_qualify(self, warnings):
         long_name = "x" * 64
         tools = [
             self._ir_tool(long_name),
             self._ir_tool(long_name, "ns"),
         ]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         # Name too long to qualify — namespaced tool keeps original name
         assert result[1]["name"] == long_name
+        assert len(warnings) == 1
+        assert "too long to qualify" in warnings[0]
+        assert long_name in warnings[0]
 
-    def test_single_tool_no_dedup(self):
+    def test_qualified_name_collides_warns(self, warnings):
+        """The qualified spelling can itself be taken by a top-level tool."""
+        tools = [
+            self._ir_tool("exec"),
+            self._ir_tool("exec", "ns"),
+            self._ir_tool("ns_exec"),  # squats on the qualified spelling
+        ]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+        assert [t["name"] for t in result] == ["exec", "exec", "ns_exec"]
+        assert len(warnings) == 1
+        assert "still collides" in warnings[0]
+        assert "ns_exec" in warnings[0]
+
+    def test_single_tool_no_dedup(self, warnings):
         tools = [self._ir_tool("only_one", "ns")]
-        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools)
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
         assert result[0]["name"] == "only_one"
+        assert warnings == []
 
 
 # ===========================================================================
@@ -419,6 +448,36 @@ class TestNamespaceRequestConversion:
         assert "exec" in tool_names
         assert "wait" in tool_names
         assert len(ir["tools"]) == 3
+
+    def test_unresolvable_collision_surfaces_in_context_warnings(self):
+        """An unqualifiable collision must reach the caller, not just the log.
+
+        The tool is left under its bare name, sharing it with another tool,
+        so one of the two is unreachable.  The client cannot see that from
+        the request it sent — the warning is its only signal.
+        """
+        long_name = "x" * 64
+        context = ConversionContext()
+        request = {
+            "model": "gpt-5",
+            "tools": [
+                _func_tool(long_name, "Top-level"),
+                _ns_tool("functions", children=[_func_tool(long_name, "Namespaced")]),
+            ],
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                },
+            ],
+        }
+        ir = self.converter.request_from_provider(request, context=context)
+
+        assert [t["name"] for t in ir["tools"]] == [long_name, long_name]
+        assert any("too long to qualify" in w for w in context.warnings), (
+            f"expected an unqualifiable-collision warning; got {context.warnings}"
+        )
 
     def test_namespace_collision_with_toplevel(self):
         request = {
