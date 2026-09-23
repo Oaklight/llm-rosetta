@@ -9,13 +9,10 @@ Otherwise falls back to passthrough via the chat provider routing
 
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass, field
-from typing import Any, cast
+from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
-
-from llm_rosetta.auto_detect import ProviderType
 
 from .config import GatewayConfig
 from .embedding_pipeline import EmbeddingConversionPipeline
@@ -187,10 +184,6 @@ async def handle_embeddings(
     transport: UpstreamTransport = request.app.transport
     extra_headers = build_upstream_extra_headers(request, request_id)
 
-    t0 = time.monotonic()
-    status_code = 500
-    error_detail: str | None = None
-
     try:
         resp = await transport.send(
             resolved.provider_info,
@@ -198,10 +191,8 @@ async def handle_embeddings(
             body,
             extra_headers=extra_headers,
         )
-        status_code = resp.status_code
 
         if resp.is_error:
-            error_detail = resp.error_text
             return with_request_id(
                 Response(
                     body=resp.raw_content,
@@ -237,8 +228,6 @@ async def handle_embeddings(
             )
         )
     except UpstreamTimeoutError as exc:
-        error_detail = str(exc)
-        status_code = 504
         return with_request_id(
             JSONResponse(
                 {
@@ -251,8 +240,6 @@ async def handle_embeddings(
             )
         )
     except UpstreamConnectionError as exc:
-        error_detail = str(exc)
-        status_code = 502
         return with_request_id(
             JSONResponse(
                 {
@@ -263,21 +250,4 @@ async def handle_embeddings(
                 },
                 status_code=502,
             )
-        )
-    except Exception as exc:
-        error_detail = str(exc)
-        raise
-    finally:
-        from .app import _record_telemetry
-
-        _record_telemetry(
-            request,
-            model=model,
-            source_provider=cast(ProviderType, resolved.source_format),
-            target_provider=cast(ProviderType, resolved.target_format),
-            provider_name=resolved.provider_name,
-            is_stream=False,
-            status_code=status_code,
-            duration_ms=(time.monotonic() - t0) * 1000,
-            error_detail=error_detail,
         )
