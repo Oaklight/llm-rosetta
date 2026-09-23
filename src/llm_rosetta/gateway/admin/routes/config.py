@@ -154,6 +154,23 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
     return entry
 
 
+def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
+    """Merge embedding/rerank/decision models into the main models dict."""
+    for model_type in ("embedding", "rerank", "decision"):
+        for model_name, provider_name in raw.get(f"{model_type}_models", {}).items():
+            if model_name not in models:
+                prov = (
+                    provider_name
+                    if isinstance(provider_name, str)
+                    else provider_name.get("provider", "")
+                )
+                models[model_name] = {
+                    "provider": prov,
+                    "type": model_type,
+                    "capabilities": [model_type],
+                }
+
+
 async def get_config(request: Any) -> Response:
     """Return the current (raw) gateway configuration."""
     config_path = _get_config_path(request)
@@ -195,6 +212,10 @@ async def get_config(request: Any) -> Response:
     models_normalized = {
         name: _normalize_model_entry(value) for name, value in raw_models.items()
     }
+
+    # Merge typed models (embedding, rerank, decision) so the admin UI
+    # shows all model types in one unified list.
+    _merge_typed_models(raw, models_normalized)
 
     # Resolve effective reasoning config per model
     for model_name, entry in models_normalized.items():
