@@ -84,11 +84,16 @@ function buildTestPayload(model, type, extraParam) {
 
 function toggleTestMenu(btn) {
   // Close any other open menus first
-  document.querySelectorAll('.test-menu.open').forEach(m => m.classList.remove('open'));
+  document.querySelectorAll('.test-menu.open').forEach(m => { m.classList.remove('open'); m.style.top = ''; m.style.right = ''; });
   const menu = btn.parentElement.querySelector('.test-menu');
-  menu.classList.toggle('open');
+  const isOpen = menu.classList.toggle('open');
+  if (isOpen) {
+    const rect = btn.getBoundingClientRect();
+    menu.style.top = (rect.bottom + 4) + 'px';
+    menu.style.right = (window.innerWidth - rect.right) + 'px';
+  }
   // Close on outside click
-  const close = (e) => { if (!menu.contains(e.target) && e.target !== btn) { menu.classList.remove('open'); document.removeEventListener('click', close); }};
+  const close = (e) => { if (!menu.contains(e.target) && e.target !== btn) { menu.classList.remove('open'); menu.style.top = ''; menu.style.right = ''; document.removeEventListener('click', close); }};
   setTimeout(() => document.addEventListener('click', close), 0);
 }
 
