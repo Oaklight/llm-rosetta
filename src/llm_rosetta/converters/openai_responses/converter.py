@@ -9,7 +9,6 @@ Note: Responses API uses a flat list of items (input/output) instead of
 nested messages. The converter handles this structural difference.
 """
 
-import logging
 import time
 from collections import defaultdict
 from collections.abc import Mapping
@@ -89,27 +88,39 @@ def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
-logger = logging.getLogger(__name__)
-
 _MAX_TOOL_NAME_LEN = 64
 
 
-def _qualify_tool_name(namespace: str, name: str, used_names: set[str]) -> str | None:
-    """Build a qualified ``{namespace}_{name}`` that fits in 64 chars."""
+def _qualify_tool_name(
+    namespace: str, name: str, used_names: set[str], warnings: list[str]
+) -> str | None:
+    """Build a qualified ``{namespace}_{name}`` that fits in 64 chars.
+
+    Returns ``None`` if no distinct name fits, in which case the caller
+    leaves the tool under its bare name — where it shares that name with
+    another tool and one of the two effectively shadows the other.  That
+    is a silent misroute from the client's side, so the failures go to
+    ``warnings`` rather than the log: callers embedding the pipeline read
+    them off :attr:`ConversionPipeline.warnings`.  The gateway currently
+    only logs that list, so an HTTP client still sees nothing.
+    """
     qualified = f"{namespace}_{name}"
     if len(qualified) > _MAX_TOOL_NAME_LEN:
         max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
         if max_ns > 0:
             qualified = f"{namespace[:max_ns]}_{name}"
         else:
-            logger.warning(
-                "Tool name %r too long to qualify with namespace %r",
-                name,
-                namespace,
+            warnings.append(
+                f"Tool name {name!r} is too long to qualify with namespace "
+                f"{namespace!r} within {_MAX_TOOL_NAME_LEN} characters; "
+                "it stays ambiguous with the other tool of that name"
             )
             return None
     if qualified in used_names:
-        logger.warning("Qualified name %r still collides; keeping %r", qualified, name)
+        warnings.append(
+            f"Qualified name {qualified!r} for namespace {namespace!r} still "
+            f"collides; {name!r} stays ambiguous with the other tool of that name"
+        )
         return None
     return qualified
 
@@ -301,7 +312,7 @@ class OpenAIResponsesConverter(BaseConverter):
             if active_tools:
                 ir_tools = self._get_cached_p_tools_to_ir(active_tools)
                 if ir_tools:
-                    ir_tools = self._dedup_ir_tool_names(ir_tools)
+                    ir_tools = self._dedup_ir_tool_names(ir_tools, context.warnings)
                     ir_request["tools"] = ir_tools
 
         # 4-5. Tool choice + tool config
@@ -549,13 +560,15 @@ class OpenAIResponsesConverter(BaseConverter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _dedup_ir_tool_names(ir_tools: list[Any]) -> list[Any]:
+    def _dedup_ir_tool_names(ir_tools: list[Any], warnings: list[str]) -> list[Any]:
         """Rename namespaced IR tools whose names collide.
 
         Tools originating from a namespace container may share names with
         top-level tools or with tools from a different namespace.  This
         method qualifies colliding names as ``{namespace}_{name}`` while
         leaving non-namespaced (top-level) tools unchanged.
+
+        Collisions that cannot be resolved are appended to ``warnings``.
 
         Returns a new list; renamed entries are shallow-copied to avoid
         mutating cached references.
@@ -574,7 +587,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 ns = (ir_tools[i].get("metadata") or {}).get("namespace")
                 if not ns:
                     continue
-                qualified = _qualify_tool_name(ns, name, used_names)
+                qualified = _qualify_tool_name(ns, name, used_names, warnings)
                 if qualified is None:
                     continue
                 copy = dict(ir_tools[i])
