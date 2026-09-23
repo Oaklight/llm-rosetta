@@ -72,8 +72,7 @@ tr:hover td { background: var(--bg-hover); }
 .endpoint-section { margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:var(--radius);display:none; }
 .endpoint-section.visible { display:block; }
 #provLlmSection.visible { border-left-color:var(--accent);background:color-mix(in srgb, var(--accent) 2%, transparent); }
-#provEmbeddingSection.visible { border-left-color:var(--green);background:color-mix(in srgb, var(--green) 2%, transparent); }
-#provRerankSection.visible { border-left-color:var(--orange);background:color-mix(in srgb, var(--orange) 2%, transparent); }
+/* Non-LLM endpoint section colors are injected dynamically by _injectTypeStyles() */
 .endpoint-section .section-label { font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
 .endpoint-section .section-label .dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
 .dot-llm { background:var(--purple); }

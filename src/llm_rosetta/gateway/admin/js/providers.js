@@ -6,10 +6,15 @@
  * diagnostics, and config loading.
  */
 
-import { S, _CAP_ICONS } from './state.js';
+import { S, _CAP_ICONS, populateCapIcons } from './state.js';
 import { t } from './i18n.js';
 import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from './core.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from './logo-picker.js';
+
+// ── Helpers ─────────────────────────────────────────────────────────
+
+/** Capitalize the first letter of a string. */
+function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ── Module-local state ──────────────────────────────────────────────
 
@@ -127,36 +132,28 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
   setLogoPickerValue((provCfg && provCfg.logo) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = `e.g. http://${window._detectedHostIp}:7890`;
-  // Populate embedding/rerank capability checkboxes
+  // Generate capability checkboxes from model_types metadata
   const provCaps = provCfg ? _getProviderCaps(provCfg, name) : ['llm'];
-  document.getElementById('provCapLlm').checked = provCaps.includes('llm');
-  document.getElementById('provCapEmbedding').checked = provCaps.includes('embedding');
-  document.getElementById('provCapRerank').checked = provCaps.includes('rerank');
-  const dcChk = document.getElementById('provCapDecision');
-  if (dcChk) dcChk.checked = provCaps.includes('decision');
-  // Populate format dropdowns
-  const embFmts = S.configData?.embedding_formats || ['openai','cohere','jina','voyage'];
-  const rrFmts = S.configData?.rerank_formats || ['jina','cohere','voyage'];
-  const dcFmts = S.configData?.decision_formats || ['typesafe'];
-  const embFmtSel = document.getElementById('provEmbeddingFormat');
-  embFmtSel.innerHTML = embFmts.map(f => `<option value="${f}">${f}</option>`).join('');
-  const rrFmtSel = document.getElementById('provRerankFormat');
-  rrFmtSel.innerHTML = rrFmts.map(f => `<option value="${f}">${f}</option>`).join('');
-  const dcFmtSel = document.getElementById('provDecisionFormat');
-  if (dcFmtSel) dcFmtSel.innerHTML = dcFmts.map(f => `<option value="${f}">${f}</option>`).join('');
-  if (provCfg) {
-    if (provCfg.embedding_format) embFmtSel.value = provCfg.embedding_format;
-    document.getElementById('provEmbeddingPath').value = provCfg.embedding_path || '/v1/embeddings';
-    if (provCfg.rerank_format) rrFmtSel.value = provCfg.rerank_format;
-    document.getElementById('provRerankPath').value = provCfg.rerank_path || '/v1/rerank';
-    if (provCfg.decision_format && dcFmtSel) dcFmtSel.value = provCfg.decision_format;
-    const dcPath = document.getElementById('provDecisionPath');
-    if (dcPath) dcPath.value = provCfg.decision_path || '/v1/systemone';
-  } else {
-    document.getElementById('provEmbeddingPath').value = '';
-    document.getElementById('provRerankPath').value = '';
-    const dcPath = document.getElementById('provDecisionPath');
-    if (dcPath) dcPath.value = '';
+  _buildProvCapCheckboxes();
+  for (const desc of S.configData?.model_types || []) {
+    const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
+    if (chk) chk.checked = provCaps.includes(desc.name);
+  }
+  // Generate non-LLM endpoint sections and populate format dropdowns
+  _buildProvEndpointSections();
+  for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
+    const fmtSel = document.getElementById(`provFmt_${desc.name}`);
+    if (fmtSel) {
+      fmtSel.innerHTML = (desc.formats || []).map(f => `<option value="${f}">${f}</option>`).join('');
+    }
+    if (provCfg) {
+      if (provCfg[desc.config_format_key] && fmtSel) fmtSel.value = provCfg[desc.config_format_key];
+      const pathEl = document.getElementById(`provPath_${desc.name}`);
+      if (pathEl) pathEl.value = provCfg[desc.config_path_key] || desc.default_path;
+    } else {
+      const pathEl = document.getElementById(`provPath_${desc.name}`);
+      if (pathEl) pathEl.value = '';
+    }
   }
   toggleProvCapSection();
   openModal('providerModal');
@@ -172,25 +169,112 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
 }
 
 function toggleProvCapSection() {
-  const llm = document.getElementById('provCapLlm').checked;
-  const embed = document.getElementById('provCapEmbedding').checked;
-  const rerank = document.getElementById('provCapRerank').checked;
-  const decision = document.getElementById('provCapDecision')?.checked || false;
-  document.getElementById('provLlmSection').classList.toggle('visible', llm);
-  document.getElementById('provEmbeddingSection').classList.toggle('visible', embed);
-  document.getElementById('provRerankSection').classList.toggle('visible', rerank);
-  const decSec = document.getElementById('provDecisionSection');
-  if (decSec) decSec.classList.toggle('visible', decision);
-  // Populate format dropdowns if shown
-  if (embed) _populateFormatDropdown('provEmbeddingFormat', S.configData?.embedding_formats || ['openai','cohere','jina','voyage']);
-  if (rerank) _populateFormatDropdown('provRerankFormat', S.configData?.rerank_formats || ['jina','cohere','voyage']);
-  if (decision) _populateFormatDropdown('provDecisionFormat', S.configData?.decision_formats || ['typesafe']);
+  for (const desc of S.configData?.model_types || []) {
+    const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
+    if (desc.is_llm) {
+      document.getElementById('provLlmSection').classList.toggle('visible', chk?.checked || false);
+    } else {
+      const sec = document.getElementById(`provEndpoint_${desc.name}`);
+      if (sec) sec.classList.toggle('visible', chk?.checked || false);
+    }
+  }
 }
 
-function _populateFormatDropdown(selectId, formats) {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  sel.innerHTML = formats.map(f => `<option value="${f}">${f}</option>`).join('');
+// ── Data-driven UI builders ─────────────────────────────────────────
+
+/**
+ * Build capability checkboxes inside #provCapChecks from model_types metadata.
+ * Called each time the provider modal opens.
+ */
+function _buildProvCapCheckboxes() {
+  const container = document.getElementById('provCapChecks');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const desc of S.configData?.model_types || []) {
+    const label = document.createElement('label');
+    label.id = `provCap${_capitalize(desc.name)}Wrap`;
+    label.style = 'flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius);transition:all 0.2s';
+    const labelText = t('label.' + desc.name) || desc.name.toUpperCase();
+    label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()"> <span>${esc(labelText)}</span>`;
+    container.appendChild(label);
+  }
+}
+
+/**
+ * Build non-LLM endpoint sections inside #provNonLlmSections from model_types metadata.
+ * Called each time the provider modal opens.
+ */
+function _buildProvEndpointSections() {
+  const container = document.getElementById('provNonLlmSections');
+  if (!container) return;
+  container.innerHTML = '';
+  for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
+    const section = document.createElement('div');
+    section.className = 'endpoint-section';
+    section.id = `provEndpoint_${desc.name}`;
+    const endpointLabel = t('label.' + desc.name + 'Endpoint') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Endpoint');
+    const pathLabel = t('label.' + desc.name + 'Path') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Path');
+    const formatLabel = t('label.format') || 'Format';
+    const dotColor = desc.color || 'var(--border)';
+    section.innerHTML = `
+      <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span></div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>${esc(formatLabel)}</label>
+          <select id="provFmt_${desc.name}"></select>
+        </div>
+        <div class="form-group">
+          <label>${esc(pathLabel)}</label>
+          <input type="text" id="provPath_${desc.name}" placeholder="${esc(desc.default_path || '')}">
+        </div>
+      </div>`;
+    container.appendChild(section);
+  }
+}
+
+/**
+ * Build provider filter seg-control options from model_types metadata.
+ * Appends type options after the static "All" option.
+ * Called once after config loads.
+ */
+function _buildProviderSegControls() {
+  const seg = document.getElementById('providerSeg');
+  if (!seg) return;
+  // Remove all children except the static "All" option (first div child)
+  const allDiv = seg.querySelector(':scope > div:first-child');
+  while (seg.lastChild && seg.lastChild !== allDiv) seg.removeChild(seg.lastChild);
+  for (const desc of S.configData?.model_types || []) {
+    const div = document.createElement('div');
+    div.setAttribute('role', 'radio');
+    div.setAttribute('aria-checked', S._providerFilter === desc.name ? 'true' : 'false');
+    div.setAttribute('tabindex', S._providerFilter === desc.name ? '0' : '-1');
+    if (S._providerFilter === desc.name) div.className = 'active';
+    div.setAttribute('onclick', `switchProviderFilter(this,'${desc.name}')`);
+    const labelKey = 'label.' + desc.name;
+    div.innerHTML = `<span data-i18n="${labelKey}">${t(labelKey) || desc.name.toUpperCase()}</span>`;
+    seg.appendChild(div);
+  }
+}
+
+/**
+ * Inject a dynamic <style> tag for badge and dot color rules from metadata.
+ * Falls back gracefully to existing CSS rules in components.css.
+ */
+function _injectTypeStyles(modelTypes) {
+  let css = '';
+  for (const desc of modelTypes) {
+    if (desc.color) {
+      css += `.cap-badge-${desc.name} { background:color-mix(in srgb, ${desc.color} 12%, transparent);color:${desc.color}; }\n`;
+      css += `.dot-${desc.name} { background:${desc.color}; }\n`;
+      // Visible endpoint section gets a colored left border and tinted background
+      if (!desc.is_llm) {
+        css += `#provEndpoint_${desc.name}.visible { border-left-color:${desc.color};background:color-mix(in srgb, ${desc.color} 2%, transparent); }\n`;
+      }
+    }
+  }
+  let el = document.getElementById('dynamic-type-styles');
+  if (!el) { el = document.createElement('style'); el.id = 'dynamic-type-styles'; document.head.appendChild(el); }
+  el.textContent = css;
 }
 
 // ── Multi-key management ────────────────────────────────────────────
@@ -368,8 +452,15 @@ function _updateViewToggle() {
 
 function _getProviderCaps(cfg, provName) {
   const caps = [];
-  // LLM if the provider has LLM models, or has url_template, or has no embedding/rerank fields at all
-  const hasEmbedOrRerank = cfg.embedding_format || cfg.rerank_format || cfg.decision_format;
+  // Check non-LLM capabilities via metadata-driven format keys
+  let hasNonLlmCap = false;
+  for (const desc of S.configData?.model_types || []) {
+    if (!desc.is_llm && cfg[desc.config_format_key]) {
+      caps.push(desc.name);
+      hasNonLlmCap = true;
+    }
+  }
+  // LLM if the provider has LLM models, or has url_template, or has no non-LLM fields at all
   const hasLlmModels = provName && S.configData && S.configData.models && Object.values(S.configData.models).some(m => {
     const p = typeof m === 'string' ? m : m.provider;
     const t = typeof m === 'object' ? (m.type || 'llm') : 'llm';
@@ -380,17 +471,16 @@ function _getProviderCaps(cfg, provName) {
   // voyage or jina carry a `type` that isn't in it.
   const llmShims = (S.configData && S.configData.registered_shims) || [];
   const typeIsLlmShim = !!cfg.type && llmShims.some(s => s.name === cfg.type);
-  if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
-  if (cfg.embedding_format) caps.push('embedding');
-  if (cfg.rerank_format) caps.push('rerank');
-  if (cfg.decision_format) caps.push('decision');
+  if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasNonLlmCap) caps.unshift('llm');
   if (caps.length === 0) caps.push('llm');
   return caps;
 }
 
 function _capBadgesHtml(caps) {
+  const typeMap = {};
+  for (const d of S.configData?.model_types || []) typeMap[d.name] = d.badge_class;
   return caps.map(c => {
-    const cls = c === 'llm' ? 'cap-badge-llm' : c === 'embedding' ? 'cap-badge-embedding' : c === 'decision' ? 'cap-badge-decision' : 'cap-badge-rerank';
+    const cls = typeMap[c] || `cap-badge-${c}`;
     return `<span class="cap-badge ${cls}">${_CAP_ICONS[c] || ''}${esc(c.toUpperCase())}</span>`;
   }).join('');
 }
@@ -567,27 +657,16 @@ async function saveProvider() {
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
   body.hoist_system_messages = document.getElementById('provHoistSystem').checked;
   body.preflight_token_count = document.getElementById('provPreflightTokens').checked;
-  // Embedding/rerank endpoint config
-  if (document.getElementById('provCapEmbedding').checked) {
-    body.embedding_format = document.getElementById('provEmbeddingFormat').value;
-    body.embedding_path = document.getElementById('provEmbeddingPath').value.trim() || '/v1/embeddings';
-  } else {
-    body.embedding_format = '';
-    body.embedding_path = '';
-  }
-  if (document.getElementById('provCapRerank').checked) {
-    body.rerank_format = document.getElementById('provRerankFormat').value;
-    body.rerank_path = document.getElementById('provRerankPath').value.trim() || '/v1/rerank';
-  } else {
-    body.rerank_format = '';
-    body.rerank_path = '';
-  }
-  if (document.getElementById('provCapDecision')?.checked) {
-    body.decision_format = document.getElementById('provDecisionFormat')?.value || 'typesafe';
-    body.decision_path = document.getElementById('provDecisionPath')?.value?.trim() || '/v1/systemone';
-  } else {
-    body.decision_format = '';
-    body.decision_path = '';
+  // Non-LLM endpoint config (data-driven from model_types metadata)
+  for (const desc of S.configData?.model_types?.filter(d => !d.is_llm) || []) {
+    const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
+    if (chk?.checked) {
+      body[desc.config_format_key] = document.getElementById(`provFmt_${desc.name}`)?.value || desc.formats[0];
+      body[desc.config_path_key] = document.getElementById(`provPath_${desc.name}`)?.value?.trim() || desc.default_path;
+    } else {
+      body[desc.config_format_key] = '';
+      body[desc.config_path_key] = '';
+    }
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
@@ -738,6 +817,12 @@ async function loadConfig() {
   try {
     S.configData = await api.get('/admin/api/config');
     S._credentialVisible = S.configData.credential_visible !== false;
+    // Populate data-driven UI from model_types metadata
+    if (S.configData.model_types) {
+      populateCapIcons(S.configData.model_types);
+      _injectTypeStyles(S.configData.model_types);
+      _buildProviderSegControls();
+    }
     const cpEl = document.getElementById('configPath');
     const fullPath = S.configData.config_path || '';
     cpEl.textContent = fullPath.split('/').pop() || fullPath;
