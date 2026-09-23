@@ -7,7 +7,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from llm_rosetta._vendor.httpserver import (
     App,
@@ -679,6 +679,13 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
     its routes.  Descriptors with ``pipeline=None`` are skipped with a
     warning — this is expected only for the ``llm`` type, which uses
     ``_proxy_handler`` with per-format route registration.
+
+    The wrapper adds the same cross-cutting concerns that
+    ``_proxy_handler`` provides for LLM routes:
+
+    * Telemetry recording (metrics + request log)
+    * Deep profiling (``_try_start_profiler`` / ``_try_stop_profiler``)
+    * Error dumps (``dump_error``) on unhandled exceptions
     """
     from .model_types import all_model_types
 
@@ -698,17 +705,96 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
         # dependencies between model_types and handler modules.
         raw_handler = desc.pipeline()
 
-        # Wrap the raw handler to inject the gateway config, matching
-        # the ``(request, config) -> Response`` signature used by
-        # embedding and rerank handlers.
-        def _make_handler(h: Callable) -> Callable:
+        # Wrap the raw handler to inject the gateway config AND add
+        # telemetry / profiling / error-dump instrumentation, matching
+        # the cross-cutting concerns that ``_proxy_handler`` provides.
+        def _make_handler(h: Callable, type_name: str) -> Callable:
             async def _handler(request: Any) -> Response:
                 assert _config is not None
-                return await h(request, _config)
+
+                rctx = request_context_var.get()
+                request_id = rctx.request_id if rctx else get_request_id(request)
+
+                # Best-effort model extraction from JSON body
+                model = ""
+                try:
+                    body: dict[str, Any] = request.json()
+                    model = body.get("model", "") or ""
+                except Exception:
+                    pass
+
+                t0 = time.monotonic()
+                status_code = 500
+                error_detail: str | None = None
+                deep_profiler = _try_start_profiler(request.app)
+
+                _raw_persistence = getattr(request.app, "persistence", None)
+                persistence = _raw_persistence if _config.error_dumps_enabled else None
+
+                try:
+                    response = await h(request, _config)
+                    status_code = response.status_code
+                    if status_code >= 400 and hasattr(response, "body"):
+                        body_bytes = response.body
+                        if isinstance(body_bytes, bytes):
+                            error_detail = body_bytes.decode("utf-8", errors="replace")
+                    return response
+                except Exception as exc:
+                    error_detail = str(exc)
+                    logger.exception(
+                        "[%s] unhandled error in %s handler",
+                        request_id,
+                        type_name,
+                    )
+                    status_code = 500
+                    dump_error(
+                        persistence,
+                        request_body=None,
+                        response_text=error_detail,
+                        model=model or None,
+                        source_provider=type_name,
+                        target_provider=type_name,
+                        status_code=500,
+                        error_phase="handler",
+                    )
+                    from .proxy import error_response_for_source
+
+                    resp = error_response_for_source(
+                        "openai_chat",
+                        500,
+                        f"Internal server error: {exc}",
+                    )
+                    resp.headers["x-request-id"] = request_id
+                    return resp
+                finally:
+                    duration_ms = (time.monotonic() - t0) * 1000
+
+                    _try_stop_profiler(
+                        deep_profiler,
+                        request.app,
+                        request_id=request_id,
+                        model=model,
+                        source=type_name,
+                        target=type_name,
+                        is_stream=False,
+                        duration_ms=duration_ms,
+                    )
+
+                    _record_telemetry(
+                        request,
+                        model=model,
+                        source_provider=cast(ProviderType, type_name),
+                        target_provider=cast(ProviderType, type_name),
+                        provider_name=type_name,
+                        is_stream=False,
+                        status_code=status_code,
+                        duration_ms=duration_ms,
+                        error_detail=error_detail,
+                    )
 
             return _handler
 
-        handler = _make_handler(raw_handler)
+        handler = _make_handler(raw_handler, desc.name)
 
         for route_spec in desc.routes:
             app.route(route_spec.path, methods=route_spec.methods)(handler)
