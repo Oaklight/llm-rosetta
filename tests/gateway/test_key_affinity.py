@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.affinity import (
+from llm_rosetta.gateway.middleware.affinity import (
     compute_affinity_identity,
     extract_prefix_from_ir,
 )

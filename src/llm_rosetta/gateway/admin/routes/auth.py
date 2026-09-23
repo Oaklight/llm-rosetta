@@ -8,7 +8,7 @@ from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta.gateway.auth import ADMIN_COOKIE_NAME
+from llm_rosetta.gateway.middleware.auth import ADMIN_COOKIE_NAME
 
 from ..static import load_admin_html, load_static_file
 

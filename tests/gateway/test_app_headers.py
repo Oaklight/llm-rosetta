@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 
 import llm_rosetta.gateway.app as app_module
 from llm_rosetta._vendor.httpserver import JSONResponse
-from llm_rosetta.gateway.headers import build_upstream_extra_headers
+from llm_rosetta.gateway.middleware.headers import build_upstream_extra_headers
 from llm_rosetta.routing import ResolvedRoute
 
 
@@ -40,7 +40,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
         provider_key_affinity: dict[str, bool] = {}
 
         def __init__(self):
-            from llm_rosetta.gateway.circuit_breaker import (
+            from llm_rosetta.gateway.middleware.circuit_breaker import (
                 CircuitBreakerConfig,
                 CircuitBreakerRegistry,
             )

@@ -6,7 +6,7 @@ that enforce per-IP, per-model, or per-key request quotas.
 
 Usage (standalone)::
 
-    from llm_rosetta.gateway.ratelimit import TokenBucketLimiter
+    from llm_rosetta.gateway.middleware.ratelimit import TokenBucketLimiter
 
     limiter = TokenBucketLimiter(rate=10.0, capacity=20)
     result = limiter.acquire("client-ip-1.2.3.4")

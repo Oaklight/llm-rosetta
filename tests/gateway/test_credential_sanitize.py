@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from llm_rosetta.gateway.sanitize import (
+from llm_rosetta.gateway.middleware.sanitize import (
     sanitize_headers,
     sanitize_upstream_error,
     scrub_credential_patterns,

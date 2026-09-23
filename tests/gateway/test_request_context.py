@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from llm_rosetta.gateway.request_context import (
+from llm_rosetta.gateway.middleware.request_context import (
     RequestContext,
     extract_client_ip,
     request_context_var,

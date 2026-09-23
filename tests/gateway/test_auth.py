@@ -8,14 +8,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm_rosetta.gateway.auth import (
+from llm_rosetta.gateway.middleware.auth import (
     AuthState,
     api_key_context_var,
     create_auth_hook,
 )
-from llm_rosetta.gateway.error_format import detect_api_format, is_admin_path
+from llm_rosetta.gateway.middleware.error_format import detect_api_format, is_admin_path
 from llm_rosetta.gateway.keystore import KeyContext, KeyStore
-from llm_rosetta.gateway.request_context import RequestContext, request_context_var
+from llm_rosetta.gateway.middleware.request_context import (
+    RequestContext,
+    request_context_var,
+)
 
 
 # ---------------------------------------------------------------------------

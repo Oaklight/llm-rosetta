@@ -15,7 +15,7 @@ from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.anthropic.converter import AnthropicConverter
 from llm_rosetta.types.ir.stream import StreamStartEvent
 from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.headers import get_preflight_tokens_override
+from llm_rosetta.gateway.middleware.headers import get_preflight_tokens_override
 
 
 # ---------------------------------------------------------------------------
