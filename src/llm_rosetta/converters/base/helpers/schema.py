@@ -72,8 +72,10 @@ def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
     ``{"anyOf": [{"type": "string"}, {"type": "null"}]}``, which we convert to
     ``{"type": "string", "nullable": true}``.
 
-    For single-variant unions we unwrap directly.  For multi-type (non-null)
-    unions we keep only the first non-null variant (lossy but safe).
+    For single-variant unions we unwrap directly.  For genuine multi-type
+    unions (2+ non-null branches) the non-null branches are preserved as
+    ``anyOf`` so that downstream converters can decide how to represent
+    them.  The null branch is stripped and replaced with ``"nullable": true``.
 
     ``allOf`` with a single element is simply unwrapped.
 
@@ -100,8 +102,8 @@ def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
             # Common nullable pattern: merge the single real type
             _deep_merge_schema(base, non_null[0])
         elif len(non_null) > 1:
-            # Multiple non-null types: pick the first (lossy but avoids rejection)
-            _deep_merge_schema(base, non_null[0])
+            # Genuine multi-type union: preserve all non-null branches
+            base["anyOf"] = non_null
         # else: all variants are null → just mark nullable
 
         if has_null:
