@@ -23,7 +23,11 @@ from .auth import (
     create_auth_hook,
 )
 from .config import GatewayConfig, ResolvedRoute
-from .error_format import is_admin_path as _is_admin_path
+from .error_format import (
+    detect_api_format,
+    format_error_response,
+    is_admin_path as _is_admin_path,
+)
 from .keystore import KeyStore
 from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
@@ -248,6 +252,46 @@ def _resolve_or_error(
         return resp
 
 
+def _record_circuit_breaker_outcome(cb: Any, status_code: int) -> None:
+    """Record a circuit breaker success or failure based on HTTP status.
+
+    5xx responses are treated as upstream failures.  Everything else
+    (including 4xx client errors) counts as a success because the
+    upstream is reachable and functioning.
+    """
+    if status_code >= 500:
+        cb.record_failure()
+    else:
+        cb.record_success()
+
+
+def _check_circuit_breaker(
+    cb: Any,
+    provider_name: str,
+    request: Any,
+    request_id: str,
+) -> Response | None:
+    """Return a 503 response if the circuit breaker is open, else None."""
+    if cb.allow_request():
+        return None
+    remaining = cb.cooldown_remaining()
+    api_format = detect_api_format(request.path)
+    resp = format_error_response(
+        api_format,
+        503,
+        (
+            f"Provider '{provider_name}' is temporarily unavailable "
+            f"(circuit breaker open, cooldown {remaining:.0f}s remaining)"
+        ),
+        error_type="service_unavailable",
+        google_status="UNAVAILABLE",
+        cors=True,
+    )
+    resp.headers["x-request-id"] = request_id
+    resp.headers["Retry-After"] = str(max(1, int(remaining)))
+    return resp
+
+
 async def _proxy_handler(
     request: Any,
     source_provider: ProviderType,
@@ -291,6 +335,12 @@ async def _proxy_handler(
     # both see the correct name.
     if route.upstream_model:
         body["model"] = route.upstream_model
+
+    # --- Circuit breaker check ---
+    cb = _config.circuit_breaker_registry.get_or_create(route.provider_name)
+    cb_reject = _check_circuit_breaker(cb, route.provider_name, request, request_id)
+    if cb_reject is not None:
+        return cb_reject
 
     # Determine streaming
     is_stream = force_stream or detect_stream_request(source_provider, body)
@@ -380,6 +430,8 @@ async def _proxy_handler(
         response.headers["x-request-id"] = request_id
         logger.info("[%s] response status=%s", request_id, status_code)
 
+        _record_circuit_breaker_outcome(cb, status_code)
+
         # For streaming responses, defer profiler stop to after the
         # generator is fully consumed via StreamingResponse.background.
         if deep_profiler is not None and isinstance(response, StreamingResponse):
@@ -411,6 +463,7 @@ async def _proxy_handler(
         error_detail = str(exc)
         logger.exception("[%s] unhandled error in proxy handler", request_id)
         status_code = 500
+        cb.record_failure()
         dump_error(
             persistence,
             request_body=body,

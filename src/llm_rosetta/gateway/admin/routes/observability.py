@@ -72,7 +72,24 @@ async def get_metrics(request: Any) -> Response:
     if persistence_snap is not None:
         snap["persistence"] = persistence_snap
 
+    # Include circuit breaker states when the feature is enabled
+    config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    if config is not None and config.circuit_breaker_registry.enabled:
+        snap["circuit_breakers"] = config.circuit_breaker_registry.get_all_states()
+
     return JSONResponse(snap)
+
+
+async def get_circuit_breaker_states(request: Any) -> Response:
+    """Return per-provider circuit breaker states.
+
+    Returns an empty dict when circuit breaking is disabled globally.
+    """
+    config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    if config is None or not config.circuit_breaker_registry.enabled:
+        return JSONResponse({"enabled": False, "providers": {}})
+    states = config.circuit_breaker_registry.get_all_states()
+    return JSONResponse({"enabled": True, "providers": states})
 
 
 def _rebuild_counters_after_mutation(request: Any) -> None:
