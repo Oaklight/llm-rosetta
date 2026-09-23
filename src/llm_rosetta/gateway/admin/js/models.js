@@ -16,10 +16,79 @@ function _activateSegChild(el) {
 
 function _getModelType(info) {
   if (typeof info === 'string') return 'llm';
+  // Server-provided type field takes precedence
   if (info.type) return info.type;
+  // Capability-based fallback for legacy entries
   const caps = info.capabilities || ['text'];
   if (caps.includes('embedding') && !caps.includes('text')) return 'embedding';
+  if (caps.includes('rerank') && !caps.includes('text')) return 'rerank';
   return 'llm';
+}
+
+/** Look up the badge CSS class for a model type from registry metadata. */
+function _typeBadgeClass(typeName) {
+  const types = (S.configData && S.configData.model_types) || [];
+  const desc = types.find(t => t.name === typeName);
+  if (desc && desc.badge_class) return desc.badge_class;
+  // Fallback for types not yet in metadata
+  return 'cap-badge-' + typeName;
+}
+
+/** Return the list of registered model type names from server metadata. */
+function _registeredTypeNames() {
+  const types = (S.configData && S.configData.model_types) || [];
+  return types.map(t => t.name);
+}
+
+/**
+ * Build the filter seg-control and modal seg-control from model_types
+ * metadata.  Called once after config loads.
+ */
+function _buildTypeSegControls() {
+  const typeNames = _registeredTypeNames();
+  if (!typeNames.length) return;
+
+  // --- Filter seg-control (#modelTypeSeg) ---
+  const filterSeg = document.getElementById('modelTypeSeg');
+  if (filterSeg) {
+    filterSeg.innerHTML = '';
+    // "All" option
+    const allDiv = document.createElement('div');
+    allDiv.className = S._modelDomain === 'all' ? 'active' : '';
+    allDiv.setAttribute('role', 'radio');
+    allDiv.setAttribute('aria-checked', S._modelDomain === 'all' ? 'true' : 'false');
+    allDiv.setAttribute('tabindex', S._modelDomain === 'all' ? '0' : '-1');
+    allDiv.setAttribute('onclick', "switchModelDomain(this,'all')");
+    allDiv.innerHTML = `<span data-i18n="filter.all">${t('filter.all')}</span>`;
+    filterSeg.appendChild(allDiv);
+    // One option per registered type
+    for (const name of typeNames) {
+      const div = document.createElement('div');
+      div.className = S._modelDomain === name ? 'active' : '';
+      div.setAttribute('role', 'radio');
+      div.setAttribute('aria-checked', S._modelDomain === name ? 'true' : 'false');
+      div.setAttribute('tabindex', S._modelDomain === name ? '0' : '-1');
+      div.setAttribute('onclick', `switchModelDomain(this,'${name}')`);
+      const labelKey = 'label.' + name;
+      div.innerHTML = `<span data-i18n="${labelKey}">${t(labelKey) || name.toUpperCase()}</span>`;
+      filterSeg.appendChild(div);
+    }
+  }
+
+  // --- Modal seg-control (#modelModalTypeSeg) ---
+  const modalSeg = document.getElementById('modelModalTypeSeg');
+  if (modalSeg) {
+    modalSeg.innerHTML = '';
+    for (let i = 0; i < typeNames.length; i++) {
+      const name = typeNames[i];
+      const div = document.createElement('div');
+      if (i === 0) div.className = 'active';
+      div.setAttribute('onclick', `segModelType(this,'${name}')`);
+      const labelKey = 'label.' + name;
+      div.innerHTML = `<input type="radio" name="modelType" value="${name}"${i === 0 ? ' checked' : ''}><span data-i18n="${labelKey}">${t(labelKey) || name.toUpperCase()}</span>`;
+      modalSeg.appendChild(div);
+    }
+  }
 }
 
 // ── Model modal ──
@@ -87,16 +156,22 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   const expandIcon = modal.querySelector('.expand-link span:first-child');
   if (expandIcon) expandIcon.textContent = '+';
 
-  // Set model type via seg-control
+  // Set model type via seg-control (data-driven: find the matching radio)
   const caps = capabilities || ['text', 'tools'];
-  const isEmbedding = caps.includes('embedding') && !caps.includes('text');
-  const isRerank = caps.includes('rerank') && !caps.includes('text');
-  const detectedType = isRerank ? 'rerank' : isEmbedding ? 'embedding' : 'llm';
+  const detectedType = _getModelType({capabilities: caps, type: null});
   const segLabels = document.getElementById('modelModalTypeSeg').querySelectorAll(':scope > div');
   segLabels.forEach(l => l.classList.remove('active'));
-  const typeIdx = detectedType === 'rerank' ? 2 : detectedType === 'embedding' ? 1 : 0;
-  segLabels[typeIdx].classList.add('active');
-  document.querySelector('input[name="modelType"][value="' + detectedType + '"]').checked = true;
+  // Find the seg-control option matching detectedType
+  const matchingRadio = document.querySelector('input[name="modelType"][value="' + detectedType + '"]');
+  if (matchingRadio) {
+    matchingRadio.checked = true;
+    matchingRadio.closest('div').classList.add('active');
+  } else if (segLabels.length) {
+    // Fallback to first option (LLM)
+    segLabels[0].classList.add('active');
+    const firstRadio = segLabels[0].querySelector('input');
+    if (firstRadio) firstRadio.checked = true;
+  }
   // Set capability chips
   const chipMap = {capText: 'text', capVision: 'vision', capTools: 'tools', capReasoning: 'reasoning'};
   for (const [id, cap] of Object.entries(chipMap)) {
@@ -219,6 +294,45 @@ function goToProviderFromModel(provName) {
   });
 }
 
+// ── Test menu helpers ──
+
+/** Return the default test kind for the primary test button. */
+function _defaultTestKind(modelType) {
+  if (modelType === 'embedding') return 'embedding';
+  if (modelType === 'rerank') return 'rerank';
+  if (modelType === 'llm') return 'text';
+  // Unknown types: use the type name as the test kind
+  return modelType;
+}
+
+/** Build test menu items HTML for a given model type. */
+function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning}) {
+  const n = esc(modelName);
+  if (modelType === 'embedding') {
+    return `
+      <div class="test-menu-item" onclick="runTest('${n}','embedding')">${t('test.embedding')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','embed_batch')">${t('test.embedBatch')}</div>
+      <div class="test-menu-item" onclick="promptMatryoshka('${n}')">${t('test.matryoshka')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','embed_multimodal')">${t('test.embedMultimodal')}</div>`;
+  }
+  if (modelType === 'rerank') {
+    return `
+      <div class="test-menu-item" onclick="runTest('${n}','rerank')">${t('test.rerank')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','rerank_batch')">${t('test.rerankBatch')}</div>`;
+  }
+  if (modelType === 'llm') {
+    return `
+      <div class="test-menu-item" onclick="runTest('${n}','text')">${t('test.text')}</div>
+      <div class="test-menu-item" onclick="runTest('${n}','stream')">${t('test.stream')}</div>
+      <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${n}','tools')` : ''}">${t('test.tools')}</div>
+      <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${n}','vision')` : ''}">${t('test.vision')}</div>
+      <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${n}','reasoning')` : ''}">${t('test.reasoning')}</div>`;
+  }
+  // Fallback for unknown/new types: single test item using type name
+  return `
+    <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}')">${t('btn.test')} ${esc(modelType)}</div>`;
+}
+
 // ── Model rendering ──
 
 const _capIcons = {
@@ -229,6 +343,10 @@ const _capIcons = {
 };
 
 function renderModels() {
+  // Rebuild type seg-controls from server metadata on each render
+  // (cheap DOM update, ensures newly registered types appear immediately)
+  _buildTypeSegControls();
+
   const tbody = document.getElementById('modelTable');
   const models = S.configData.models || {};
   const totalCount = Object.keys(models).length;
@@ -314,8 +432,7 @@ function renderModels() {
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
-    const isEmbedding = caps.includes('embedding');
-    const typeBadgeCls = modelType === 'llm' ? 'cap-badge-llm' : modelType === 'embedding' ? 'cap-badge-embedding' : 'cap-badge-rerank';
+    const typeBadgeCls = _typeBadgeClass(modelType);
     const typeBadge = `<span class="cap-badge ${typeBadgeCls}">${_CAP_ICONS[modelType] || ''}${esc(modelType.toUpperCase())}</span>`;
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const upstreamTag = upstream ? ` <span style="font-size:11px;color:var(--text-dim)" title="Upstream: ${esc(upstream)}">→ ${esc(upstream)}</span>` : '';
@@ -333,24 +450,10 @@ function renderModels() {
       <td style="text-align:right;white-space:nowrap;position:relative">
         <div class="pill-toggle ${modelEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${modelEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
-          <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${modelType === 'embedding' ? 'embedding' : modelType === 'rerank' ? 'rerank' : 'text'}')">${t('btn.test')}</button>
+          <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
           <div class="test-menu">
-            ${modelType === 'embedding' ? `
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','embedding')">${t('test.embedding')}</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','embed_batch')">${t('test.embedBatch')}</div>
-            <div class="test-menu-item" onclick="promptMatryoshka('${esc(name)}')">${t('test.matryoshka')}</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','embed_multimodal')">${t('test.embedMultimodal')}</div>
-            ` : modelType === 'rerank' ? `
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','rerank')">${t('test.rerank')}</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','rerank_batch')">${t('test.rerankBatch')}</div>
-            ` : `
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','text')">${t('test.text')}</div>
-            <div class="test-menu-item" onclick="runTest('${esc(name)}','stream')">${t('test.stream')}</div>
-            <div class="test-menu-item${hasTools ? '' : ' disabled'}" onclick="${hasTools ? `runTest('${esc(name)}','tools')` : ''}">${t('test.tools')}</div>
-            <div class="test-menu-item${hasVision ? '' : ' disabled'}" onclick="${hasVision ? `runTest('${esc(name)}','vision')` : ''}">${t('test.vision')}</div>
-            <div class="test-menu-item${hasReasoning ? '' : ' disabled'}" onclick="${hasReasoning ? `runTest('${esc(name)}','reasoning')` : ''}">${t('test.reasoning')}</div>
-            `}
+            ${_testMenuItems(modelType, name, {hasTools, hasVision, hasReasoning})}
           </div>
         </div>
         <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editModel('${esc(name)}','${esc(prov)}')">${t('btn.edit')}</button>
@@ -376,10 +479,9 @@ async function saveModel() {
   if (!name || !provider) { showToast(t('error.modelRequired'), 'error'); return; }
   const modelType = document.querySelector('input[name="modelType"]:checked').value;
   let capabilities;
-  if (modelType === 'embedding') {
-    capabilities = ['embedding'];
-  } else if (modelType === 'rerank') {
-    capabilities = ['rerank'];
+  if (modelType !== 'llm') {
+    // Non-LLM types: capability is the type name itself
+    capabilities = [modelType];
   } else {
     capabilities = [];
     if (document.getElementById('capText').checked) capabilities.push('text');
@@ -514,6 +616,7 @@ Object.assign(window, {
   renderModels, saveModel, toggleModel, editModel, cloneModel,
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
+  _buildTypeSegControls,
 });
 
 export { renderModels };
