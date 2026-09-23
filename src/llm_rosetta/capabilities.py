@@ -402,6 +402,23 @@ class ToolNameMap:
     # Names that need no translation are left out, as in ``_upstream``.
     _bare: dict[str, str | None] = field(default_factory=dict)
     _contested: frozenset[str] = frozenset()
+    # Names declared outside any namespace.  Recorded even for the tools the
+    # rest of the map leaves out, since those are exactly the ones asked
+    # about: a top-level tool is never renamed, so it never earns an entry.
+    _top_level: frozenset[str] = frozenset()
+
+    def has_top_level(self, name: str) -> bool:
+        """Whether some tool declares this name outside any namespace.
+
+        Such a name is what a client means when it sends a call with no
+        namespace, so a caller reporting an unroutable call should stay quiet
+        about it however ambiguous the name looks from the map's side.
+
+        Deliberately not "is this a name we send upstream": a namespaced tool
+        whose qualification failed also keeps its bare spelling and so is also
+        a name we send, but a bare call was never meant for it.
+        """
+        return name in self._top_level
 
     def is_contested(self, upstream_name: str) -> bool:
         """Whether this upstream name was declared by more than one tool.
@@ -493,6 +510,19 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         if claimants[t["name"]] > 1
         and (t.get("metadata") or {}).get("namespace") is not None
     }
+    # ``t["name"]`` is the client name here as well as the upstream one: a
+    # top-level tool is never renamed, which is also why these names cannot be
+    # recovered from the map below — they earn no entry in it.
+    #
+    # ``is None``, not falsiness, for the same reason as ``contested`` above and
+    # with more at stake: a container with no name of its own gives ``""``, and
+    # reading that as top-level would say a bare call meant such a tool.  It
+    # never does — the tool came from a container the client will name when it
+    # calls, and suppressing the warning is exactly the wrong answer for the
+    # one shape that most needs it.
+    top_level = {
+        t["name"] for t in tools if (t.get("metadata") or {}).get("namespace") is None
+    }
 
     for tool in tools:
         upstream_name = tool["name"]
@@ -518,6 +548,7 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         # something ``to_upstream``'s own fallback would not.
         {k: v for k, v in sole.items() if v is None or v != k},
         frozenset(contested),
+        frozenset(top_level),
     )
 
 
@@ -687,21 +718,28 @@ def apply_upstream_tool_names(
             if namespace is not None:
                 continue
             if name_map.is_contested(upstream_name):
-                # Checked first, and against the *upstream* name: these tools
-                # kept their bare spelling, so the call resolves to a name we
-                # really are sending and the ``declared`` test below would pass
-                # it.  Being sent is not the same as being attributable.
+                # Against the *upstream* name, and checked first because the
+                # two tests can both hold at once.  They ask different things —
+                # contested, whether several tools kept one upstream spelling;
+                # ambiguous, whether one client name reached several — and a
+                # third tool sharing the name can make both true.  Contested is
+                # then the more specific answer, and the branch below would give
+                # the wrong advice: it tells the client to echo the namespace
+                # back, which cannot help when the namespaces are precisely what
+                # could not be folded in.  Do not reorder these.
                 unattributable.add(client_name)
-            elif name_map.is_ambiguous(client_name) and upstream_name not in declared:
+            elif name_map.is_ambiguous(client_name) and not name_map.has_top_level(
+                client_name
+            ):
                 # ``is_ambiguous`` alone over-reports.  A top-level tool and a
                 # namespaced one can share a bare name, and then the name is
                 # ambiguous in the map yet the call is not: omitting the
                 # namespace is how a client says it meant the top-level tool,
                 # and the fallback lands on exactly that tool's upstream name.
-                # Asking whether the result is a name we are actually sending
-                # tells the two apart, and the tool list can answer it where
-                # the map cannot — an unrenamed top-level tool is left out of
-                # the map entirely.
+                # So the question is whether a top-level tool claims the name,
+                # not whether the name is one we send — a namespaced tool that
+                # kept its bare spelling after a failed qualification is also
+                # sent under it, and a bare call was never meant for that one.
                 unresolved.add(client_name)
 
     for client_name in sorted(unresolved):
