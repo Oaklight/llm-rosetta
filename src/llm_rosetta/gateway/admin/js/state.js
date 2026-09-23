@@ -13,11 +13,17 @@ export const DUMP_PAGE_SIZE = 20;
 export const INACTIVITY_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const _TEST_TIMEOUT_MS = 120_000;
 
-export const _CAP_ICONS = {
-  llm: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4c0-1.1.9-2 2-2h8a2 2 0 012 2v5a2 2 0 01-2 2H5l-3 3V4z"/></svg>',
-  embedding: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="4" cy="5" r="1.3"/><circle cx="10" cy="3" r="1.3"/><circle cx="12" cy="9" r="1.3"/><circle cx="6" cy="11" r="1.3"/><circle cx="3" cy="9" r="1"/><circle cx="9" cy="7" r="1"/><circle cx="13" cy="13" r="1"/></svg>',
-  rerank: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 3h8M4 7h6M4 11h10"/><path d="M13 1.5l1.5 1.5-1.5 1.5" stroke-linejoin="round"/><path d="M3 9.5L1.5 11 3 12.5" stroke-linejoin="round"/></svg>',
-};
+export const _CAP_ICONS = {};
+
+/**
+ * Populate _CAP_ICONS from model_types metadata returned by the backend.
+ * Called once after config is first loaded.
+ */
+export function populateCapIcons(modelTypes) {
+  for (const desc of modelTypes) {
+    if (desc.icon_svg) _CAP_ICONS[desc.name] = desc.icon_svg;
+  }
+}
 
 // ---- Mutable state ----------------------------------------------------
 
