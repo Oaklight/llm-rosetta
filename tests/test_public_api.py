@@ -25,6 +25,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         "items": [
             # Converters
             "BaseConverter",
+            "BaseSimpleConverter",
             "OpenAIChatConverter",
             "AnthropicConverter",
             "GoogleGenerateConverter",
@@ -62,7 +63,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "rename_field",
             "set_defaults",
         ],
-        "max_count": 35,
+        "max_count": 36,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
@@ -75,6 +76,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     "llm_rosetta.converters.base": {
         "items": [
             "BaseConverter",
+            "BaseSimpleConverter",
             "BaseRerankConverter",
             "BaseEmbeddingConverter",
             "BaseDecisionConverter",
@@ -82,7 +84,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "MetadataMode",
             "StreamContext",
         ],
-        "max_count": 8,
+        "max_count": 9,
     },
 }
 

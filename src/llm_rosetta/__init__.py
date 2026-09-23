@@ -23,6 +23,7 @@ from .converters import (
     OpenAIChatConverter,
     OpenAIResponsesConverter,
 )
+from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 from .shims import (
@@ -46,6 +47,7 @@ __version__ = "0.14.0.dev11"
 __all__ = [
     # Converters
     "BaseConverter",
+    "BaseSimpleConverter",
     "OpenAIChatConverter",
     "AnthropicConverter",
     "GoogleGenerateConverter",
