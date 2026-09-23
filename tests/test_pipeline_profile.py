@@ -2,6 +2,27 @@
 
 from llm_rosetta.pipeline import ConversionPipeline
 
+# Every profile value is rounded to this many milliseconds, independently.
+_PROFILE_QUANTUM_MS = 0.01
+
+
+def _assert_total_covers_parts(total: float, *parts: float) -> None:
+    """Assert *total* is not below the sum of *parts*, allowing for rounding.
+
+    The parts are nested inside the timed region the total measures, so
+    the true total is always the larger.  Each value is rounded on its
+    own, though, which lets a sum of *n* parts drift up to *n* half-quanta
+    above its true value while the total drifts half a quantum below —
+    a gap that owes nothing to how long the work actually took.  Hence an
+    absolute allowance rather than a percentage: these timings are small
+    enough that 10% of the sum is less than one rounding step.
+    """
+    slack = _PROFILE_QUANTUM_MS / 2 * (len(parts) + 1)
+    assert total >= sum(parts) - slack, (
+        f"total {total}ms is below the sum of {parts} by more than the "
+        f"{slack}ms these roundings can account for"
+    )
+
 
 class TestPipelineProfile:
     """Verify that pipeline.profile is populated after conversion."""
@@ -46,13 +67,13 @@ class TestPipelineProfile:
             assert val >= 0, f"{key} is negative: {val}"
 
         # Total should be >= sum of parts (due to overhead)
-        parts_sum = (
-            p["source_to_ir_ms"]
-            + p["ir_transforms_ms"]
-            + p["ir_to_target_ms"]
-            + p["body_transforms_ms"]
+        _assert_total_covers_parts(
+            p["request_conversion_ms"],
+            p["source_to_ir_ms"],
+            p["ir_transforms_ms"],
+            p["ir_to_target_ms"],
+            p["body_transforms_ms"],
         )
-        assert p["request_conversion_ms"] >= parts_sum * 0.9  # allow small float error
 
     def test_profile_populated_after_convert_response(self):
         pipeline = ConversionPipeline("openai_chat", "anthropic")
@@ -65,8 +86,11 @@ class TestPipelineProfile:
         assert "response_conversion_ms" in p
 
         # Response conversion total should be >= sum of parts
-        parts_sum = p["response_from_target_ms"] + p["response_to_source_ms"]
-        assert p["response_conversion_ms"] >= parts_sum * 0.9
+        _assert_total_covers_parts(
+            p["response_conversion_ms"],
+            p["response_from_target_ms"],
+            p["response_to_source_ms"],
+        )
 
     def test_profile_has_all_keys_after_full_roundtrip(self):
         pipeline = ConversionPipeline("openai_chat", "anthropic")
