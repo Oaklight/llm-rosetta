@@ -1013,6 +1013,46 @@ class TestNamespaceRoundTrip:
         added = [w for w in pipe.warnings[before:] if "more than one declared" in w]
         assert len(added) == 1, f"expected one warning for the stream; got {added}"
 
+    def test_nameless_namespace_container_is_reported_on_both_legs(self):
+        """A container with no name cannot do the one job a namespace has.
+
+        Both safety nets used to be off at once.  ``_dedup_ir_tool_names``
+        skipped qualification without ever reaching ``_qualify_tool_name``,
+        which is where every *other* qualification failure is reported, and
+        the contested set tested the namespace for truth rather than presence,
+        so an empty one looked like a top-level tool and the response leg said
+        nothing either.  Two tools shadowed each other in complete silence.
+        """
+        for label, container in (
+            ("empty name", {"type": "namespace", "name": "", "tools": None}),
+            ("no name key", {"type": "namespace", "tools": None}),
+        ):
+            container = dict(container)
+            container["tools"] = _namespace_container("x", "wait")["tools"]
+            pipe = ConversionPipeline("openai_responses", "openai_chat")
+            request = _request(container)
+            request["tools"] = [{"type": "function", "name": "wait", "parameters": {}}]
+
+            upstream = pipe.convert_request(request)
+
+            # The shadowing itself is unchanged — this is about reporting it.
+            assert [t["function"]["name"] for t in upstream["tools"]] == [
+                "wait",
+                "wait",
+            ], label
+            assert any("has no name of its own" in w for w in pipe.warnings), (
+                f"{label}: expected a request-leg warning; got {pipe.warnings}"
+            )
+
+            before = len(pipe.warnings)
+            out = pipe.convert_response(_chat_completion("wait"))
+
+            calls = [i for i in out["output"] if i.get("type") == "function_call"]
+            assert len(calls) == 1 and "namespace" not in calls[0], label
+            assert any(
+                "more than one declared tool" in w for w in pipe.warnings[before:]
+            ), f"{label}: expected a response-leg warning; got {pipe.warnings[before:]}"
+
     def test_unrenamed_call_is_quiet_on_the_response_leg(self):
         """A plain tool takes the same fallback path, and must stay silent.
 

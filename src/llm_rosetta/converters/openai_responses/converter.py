@@ -585,7 +585,23 @@ class OpenAIResponsesConverter(BaseConverter):
                 continue
             for i in indices:
                 ns = (ir_tools[i].get("metadata") or {}).get("namespace")
+                if ns is None:
+                    # A top-level tool.  There is nothing to qualify it with,
+                    # and a name it shares with a namespaced tool is still its
+                    # own — the namespaced one gets moved out of the way.
+                    continue
                 if not ns:
+                    # A container that carries no name.  Every other way
+                    # qualification fails is reported from inside
+                    # ``_qualify_tool_name``, which this path never reaches,
+                    # so it has to be said here or the tool shadows its
+                    # namesake with nothing appended anywhere.
+                    warnings.append(
+                        f"A namespace container declaring {name!r} has no "
+                        "name of its own, so that tool cannot be told apart "
+                        "from the others declaring the same name and they all "
+                        f"go upstream as {name!r}"
+                    )
                     continue
                 qualified = _qualify_tool_name(ns, name, used_names, warnings)
                 if qualified is None:
