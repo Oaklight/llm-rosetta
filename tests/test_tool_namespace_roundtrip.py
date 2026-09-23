@@ -843,6 +843,67 @@ class TestNamespaceRoundTrip:
             f"expected silence for a top-level call; got {pipe.warnings}"
         )
 
+    def test_history_call_for_a_contested_name_warns(self):
+        """Reaching the provider is not the same as being attributable.
+
+        Both tools kept their bare spelling, so the replayed call resolves to
+        a name we really are sending — which is exactly why the ``declared``
+        check cannot catch this one, and why ``is_contested`` has to be its
+        own trigger rather than a refinement of the ambiguity test.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request, name = self._contested_request()
+        request["input"] += [
+            {"type": "function_call", "call_id": "c0", "name": name, "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
+        ]
+
+        upstream = pipe.convert_request(request)
+
+        replayed = [
+            call for msg in upstream["messages"] for call in msg.get("tool_calls") or []
+        ]
+        assert [c["function"]["name"] for c in replayed] == [name]
+        # The half that defeats the `declared` test: the name is one we send.
+        assert name in {t["function"]["name"] for t in upstream["tools"]}
+        history = [w for w in pipe.warnings if "A history tool call" in w]
+        assert len(history) == 1 and "cannot tell which one" in history[0], (
+            f"expected an unattributable-history warning; got {pipe.warnings}"
+        )
+
+    def test_contested_history_warning_does_not_invent_a_cause(self):
+        """Qualification fails two ways, and the message must not pick one.
+
+        Here ``x/a`` and ``y/a`` fail because top-level ``x_a`` and ``y_a``
+        already hold their qualified spellings — nothing is near the 64-char
+        budget.  A message blaming the length limit would send the reader off
+        to shorten three-character names.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(
+            _namespace_container("x", "a"),
+            _namespace_container("y", "a"),
+        )
+        request["tools"] = [
+            {"type": "function", "name": n, "parameters": {}} for n in ("x_a", "y_a")
+        ]
+        request["input"] += [
+            {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
+            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
+        ]
+
+        upstream = pipe.convert_request(request)
+
+        longest = max(len(t["function"]["name"]) for t in upstream["tools"])
+        assert longest < 10, "no name here is anywhere near the length budget"
+        history = [w for w in pipe.warnings if "A history tool call" in w]
+        assert len(history) == 1 and "length" not in history[0], (
+            f"the cause is a taken spelling, not the length cap; got {history}"
+        )
+        # The accurate cause is carried by the qualification warnings, which
+        # the message defers to, so they have to actually be there.
+        assert [w for w in pipe.warnings if "still collides" in w]
+
     def test_history_call_for_an_undeclared_tool_is_silent(self):
         """The client's own stale history is not ours to complain about."""
         pipe = ConversionPipeline("openai_responses", "openai_chat")
