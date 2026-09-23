@@ -47,6 +47,12 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
             "supports_streaming": desc.supports_streaming,
             "badge_class": desc.badge_class,
             "routes": [{"path": r.path, "methods": r.methods} for r in desc.routes],
+            "config_format_key": desc.config_format_key,
+            "config_path_key": desc.config_path_key,
+            "default_path": desc.default_path,
+            "icon_svg": desc.icon_svg,
+            "color": desc.color,
+            "is_llm": desc.is_llm,
         }
         for desc in all_model_types()
     ]
