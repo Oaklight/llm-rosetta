@@ -5,6 +5,25 @@ import { api, showToast, closeModal, esc } from './core.js';
 
 // ===================== Fetch Models from Provider =====================
 
+/**
+ * Build fetch-models type radios dynamically from model_types metadata.
+ * Replaces the previously hardcoded radio buttons in admin.html.
+ */
+function _buildFetchTypeRadios() {
+  const container = document.getElementById('fetchTypeRadios');
+  if (!container || !S.configData?.model_types) return;
+  container.innerHTML = '';
+  const types = S.configData.model_types;
+  for (let i = 0; i < types.length; i++) {
+    const desc = types[i];
+    const label = document.createElement('label');
+    const checked = desc.is_llm ? ' checked' : '';
+    const labelText = t('label.' + desc.name);
+    label.innerHTML = `<input type="radio" name="fetchModelType" value="${esc(desc.name)}"${checked} onchange="onFetchTypeChange()"> <span data-i18n="label.${esc(desc.name)}">${esc(labelText)}</span>`;
+    container.appendChild(label);
+  }
+}
+
 function openFetchModelsModal() {
   // Populate provider dropdown
   const sel = document.getElementById('fetchProvider');
@@ -25,13 +44,16 @@ function openFetchModelsModal() {
   document.getElementById('fetchPrefix').value = '';
   document.getElementById('fetchModelSearch').value = '';
   document.getElementById('fetchAddBtn').disabled = true;
-  // Reset type/capability selectors
-  document.querySelector('input[name="fetchModelType"][value="llm"]').checked = true;
+  // Build type radios from metadata and reset selectors
+  _buildFetchTypeRadios();
+  const llmRadio = document.querySelector('input[name="fetchModelType"][value="llm"]');
+  if (llmRadio) llmRadio.checked = true;
   document.getElementById('fetchCapText').checked = true;
   document.getElementById('fetchCapVision').checked = false;
   document.getElementById('fetchCapTools').checked = true;
   document.getElementById('fetchCapReasoning').checked = false;
   document.getElementById('fetchCapsRow').style.display = '';
+  onFetchTypeChange();
   openModal('fetchModelsModal');
 }
 
@@ -42,14 +64,17 @@ function onFetchTypeChange() {
 
 function _getFetchCapabilities() {
   const type = document.querySelector('input[name="fetchModelType"]:checked').value;
-  if (type === 'embedding') return ['embedding'];
-  if (type === 'rerank') return ['rerank'];
-  const caps = [];
-  if (document.getElementById('fetchCapText').checked) caps.push('text');
-  if (document.getElementById('fetchCapVision').checked) caps.push('vision');
-  if (document.getElementById('fetchCapTools').checked) caps.push('tools');
-  if (document.getElementById('fetchCapReasoning').checked) caps.push('reasoning');
-  return caps.length > 0 ? caps : ['text'];
+  // LLM: capabilities come from the checkboxes
+  if (type === 'llm') {
+    const caps = [];
+    if (document.getElementById('fetchCapText').checked) caps.push('text');
+    if (document.getElementById('fetchCapVision').checked) caps.push('vision');
+    if (document.getElementById('fetchCapTools').checked) caps.push('tools');
+    if (document.getElementById('fetchCapReasoning').checked) caps.push('reasoning');
+    return caps.length > 0 ? caps : ['text'];
+  }
+  // Non-LLM types: the type name is the single capability
+  return [type];
 }
 
 function _getFetchModelType() {

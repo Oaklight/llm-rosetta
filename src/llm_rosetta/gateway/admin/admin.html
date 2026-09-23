@@ -949,10 +949,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       </div>
       <div class="fetch-type-group">
         <label data-i18n="label.modelType">Model Type</label>
-        <div class="fetch-type-radios">
-          <label><input type="radio" name="fetchModelType" value="llm" checked onchange="onFetchTypeChange()"> <span data-i18n="label.llm">LLM</span></label>
-          <label><input type="radio" name="fetchModelType" value="embedding" onchange="onFetchTypeChange()"> <span data-i18n="label.embedding">Embedding</span></label>
-          <label><input type="radio" name="fetchModelType" value="rerank" onchange="onFetchTypeChange()"> <span data-i18n="label.rerank">Rerank</span></label>
+        <div class="fetch-type-radios" id="fetchTypeRadios">
+          <!-- Populated dynamically from model_types metadata by fetch-models.js -->
         </div>
       </div>
       <div class="fetch-caps-row" id="fetchCapsRow">
