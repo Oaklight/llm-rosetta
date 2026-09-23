@@ -398,6 +398,17 @@ class ToolNameMap:
     _client: dict[str, tuple[str, str | None]] = field(default_factory=dict)
     _sole: dict[str, str] = field(default_factory=dict)
     _ambiguous: frozenset[str] = frozenset()
+    _contested: frozenset[str] = frozenset()
+
+    def is_contested(self, upstream_name: str) -> bool:
+        """Whether this upstream name was declared by more than one tool.
+
+        :meth:`to_client` cannot attribute such a name, so it falls back and
+        the namespace is dropped.  That is indistinguishable from the far
+        more common case of a tool that was never renamed, which is why the
+        contested names are recorded rather than inferred from the fallback.
+        """
+        return upstream_name in self._contested
 
     def is_ambiguous(self, name: str) -> bool:
         """Whether more than one tool answers to this bare client name.
@@ -455,6 +466,14 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
     sole: dict[str, str | None] = {}
+    # Only names a namespace was meant to distinguish: two plain top-level
+    # tools sharing a name lose nothing on the way back, since neither had a
+    # namespace to drop.
+    contested = {
+        t["name"]
+        for t in tools
+        if claimants[t["name"]] > 1 and (t.get("metadata") or {}).get("namespace")
+    }
 
     for tool in tools:
         upstream_name = tool["name"]
@@ -478,6 +497,7 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         client,
         {k: v for k, v in sole.items() if v is not None and v != k},
         frozenset(k for k, v in sole.items() if v is None),
+        frozenset(contested),
     )
 
 
@@ -661,10 +681,39 @@ def apply_upstream_tool_names(
         )
 
 
+def _warn_contested(
+    seen: set[str],
+    name_map: ToolNameMap,
+    warnings: list[str] | None,
+    already_warned: set[str] | None = None,
+) -> None:
+    """Report provider calls the map had to hand back without a namespace.
+
+    This is the leg where the failure becomes visible — the client receives
+    a call it cannot route — and the one leg that cannot repair it.
+
+    *already_warned*, when given, spans more than one call and suppresses
+    names reported before; *seen* covers only the current chunk.
+    """
+    if warnings is None:
+        return
+    for name in sorted(n for n in seen if name_map.is_contested(n)):
+        if already_warned is not None:
+            if name in already_warned:
+                continue
+            already_warned.add(name)
+        warnings.append(
+            f"The provider called {name!r}, but more than one declared tool "
+            "went upstream under that name, so the namespace it belongs to "
+            "cannot be determined and is omitted from the returned call"
+        )
+
+
 def restore_client_tool_names(
     ir_response: dict[str, Any],
     *,
     name_map: ToolNameMap,
+    warnings: list[str] | None = None,
 ) -> None:
     """Restore client-facing tool names on an IR response.
 
@@ -680,11 +729,14 @@ def restore_client_tool_names(
     if not name_map:
         return
 
+    seen: set[str] = set()
+
     def _restore_parts(msg: Any) -> None:
         if not isinstance(msg, dict):
             return
         for part in msg.get("content") or []:
             if isinstance(part, dict) and part.get("type") == "tool_call":
+                seen.add(part.get("tool_name", ""))
                 _to_client_identity(part, name_map)
 
     for choice in ir_response.get("choices") or []:
@@ -694,11 +746,15 @@ def restore_client_tool_names(
     for msg in ir_response.get("messages") or []:
         _restore_parts(msg)
 
+    _warn_contested(seen, name_map, warnings)
+
 
 def restore_client_tool_name_events(
     ir_events: list[dict[str, Any]],
     *,
     name_map: ToolNameMap,
+    warnings: list[str] | None = None,
+    already_warned: set[str] | None = None,
 ) -> None:
     """Restore client-facing tool names on streamed tool calls.
 
@@ -706,13 +762,22 @@ def restore_client_tool_name_events(
     source converter reads the namespace back off ``provider_metadata`` and
     carries it onto the later done/completed items.  The streaming
     counterpart of :func:`restore_client_tool_names`.
+
+    *already_warned* is the caller's whole-stream set of reported names.
+    Pass one: this runs per chunk, and a provider that puts each tool call in
+    its own chunk — the anthropic wire format's normal shape — would otherwise
+    warn once per chunk where the non-streaming leg warns once in total.
     """
     if not name_map:
         return
 
+    seen: set[str] = set()
     for event in ir_events:
         if isinstance(event, dict) and event.get("type") == "tool_call_start":
+            seen.add(event.get("tool_name", ""))
             _to_client_identity(event, name_map)
+
+    _warn_contested(seen, name_map, warnings, already_warned)
 
 
 def unwrap_custom_tool_input(raw: str) -> str:

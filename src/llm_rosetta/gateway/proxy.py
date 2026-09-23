@@ -446,6 +446,17 @@ def _maybe_apply_affinity(
     return provider_info
 
 
+def _log_response_warnings(pipeline: Any | None, first_new: int) -> None:
+    """Log warnings the response leg added, after the request-leg log ran.
+
+    Tolerates a missing pipeline so callers on the streaming path can hand
+    over whatever they have without branching.
+    """
+    new_warnings = pipeline.warnings[first_new:] if pipeline is not None else []
+    if new_warnings:
+        logger.warning("Response conversion warnings: %s", new_warnings)
+
+
 async def handle_non_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -604,6 +615,11 @@ async def handle_non_streaming(
         if u:
             ir_usage.update(u)
 
+    # Warnings logged above cover the request leg only; the response leg adds
+    # its own (a provider call the name map cannot attribute, for one), and
+    # they land on the same list after this point.
+    warnings_before = len(pipeline.warnings)
+
     try:
         source_response = pipeline.convert_response(resp.body, on_ir_ready=_capture_ir)
     except ConversionError as exc:
@@ -626,6 +642,8 @@ async def handle_non_streaming(
 
     # Merge response-phase timings from pipeline
     profile.update(pipeline.profile)
+
+    _log_response_warnings(pipeline, warnings_before)
 
     # Content capture (non-streaming): record all three stages
     if capture_state is not None:
@@ -756,6 +774,8 @@ async def _stream_event_generator(
     capture_record: CapturedRequest | None = None,
     capture_state: CaptureState | None = None,
     dump_ctx: DumpContext | None = None,
+    pipeline: Any | None = None,
+    warnings_before: int = 0,
 ) -> AsyncIterator[str]:
     """Stream SSE events from an already-opened upstream stream.
 
@@ -831,6 +851,11 @@ async def _stream_event_generator(
             yield sse_text
         raise
     finally:
+        # The caller logged the request leg's warnings before the stream was
+        # opened; anything the chunks added lands here.  In the finally so a
+        # stream that died partway still reports what it managed to find.
+        _log_response_warnings(pipeline, warnings_before)
+
         # Write back stream profile to request log entry
         if entry_id and request_log is not None:
             stream_profile: dict[str, Any] = {
@@ -1207,6 +1232,8 @@ async def handle_streaming(
                     provider_name=route.provider_name,
                     upstream_url=str(provider_info.base_url),
                 ),
+                pipeline=pipeline,
+                warnings_before=len(pipeline.warnings),
             ),
             content_type="text/event-stream",
         ),

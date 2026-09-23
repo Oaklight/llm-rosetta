@@ -850,6 +850,131 @@ class TestNamespaceRoundTrip:
 
         assert not [w for w in pipe.warnings if "A history tool call" in w]
 
+    @staticmethod
+    def _contested_request(*, stream: bool = False) -> tuple[dict[str, Any], str]:
+        """A request where qualification cannot fit, and the shared name.
+
+        Two tools in different namespaces share a name that already fills the
+        64-char budget, so neither can be qualified and both go upstream
+        spelled the same way.
+        """
+        name = "w" * 64
+        return _request(
+            _namespace_container("a", name),
+            _namespace_container("b", name),
+            stream=stream,
+        ), name
+
+    def test_contested_call_warns_on_the_response_leg(self):
+        """The namespace is dropped on the way back, and the caller hears why.
+
+        Goes through the pipeline rather than ``restore_client_tool_names``:
+        the warnings list has to actually be threaded from the response leg,
+        which a direct call to the helper cannot show.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request, name = self._contested_request()
+        pipe.convert_request(request)
+        before = len(pipe.warnings)
+
+        out = pipe.convert_response(_chat_completion(name))
+
+        calls = [i for i in out["output"] if i.get("type") == "function_call"]
+        assert len(calls) == 1
+        # Refusing to guess is the right answer; it is also a broken call, so
+        # it cannot pass silently.
+        assert "namespace" not in calls[0]
+        added = pipe.warnings[before:]
+        assert any("more than one declared tool" in w for w in added), (
+            f"expected a contested-call warning from the response leg; got {added}"
+        )
+
+    def test_contested_call_warns_on_the_streaming_leg(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request, name = self._contested_request(stream=True)
+        pipe.convert_request(request)
+        before = len(pipe.warnings)
+        proc = pipe.create_stream_processor()
+
+        events: list[dict[str, Any]] = []
+        for chunk in _chat_chunks(name):
+            events.extend(proc.process_chunk(chunk))
+
+        for event_type, item in _function_calls(events):
+            assert "namespace" not in item, event_type
+        added = pipe.warnings[before:]
+        assert any("more than one declared tool" in w for w in added), (
+            f"expected a contested-call warning from the stream; got {added}"
+        )
+
+    def test_contested_stream_warns_once_however_it_is_chunked(self):
+        """Two calls, two chunks, still one warning — as non-streaming gives.
+
+        The restore runs per chunk, so a set scoped to the chunk would report
+        the same name once per frame.  Whether a provider packs its tool calls
+        into one chunk or sends each in its own — the anthropic wire format
+        does the latter — is not something the reader should hear about.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request, name = self._contested_request(stream=True)
+        pipe.convert_request(request)
+        before = len(pipe.warnings)
+        proc = pipe.create_stream_processor()
+
+        def start(index: int) -> dict[str, Any]:
+            return {
+                "id": "chatcmpl-test",
+                "object": "chat.completion.chunk",
+                "created": 1,
+                "model": "test-model",
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {
+                            "role": "assistant",
+                            "tool_calls": [
+                                {
+                                    "index": index,
+                                    "id": f"call_{index}",
+                                    "type": "function",
+                                    "function": {"name": name, "arguments": "{}"},
+                                }
+                            ],
+                        },
+                        "finish_reason": None,
+                    }
+                ],
+            }
+
+        for chunk in (start(0), start(1)):
+            proc.process_chunk(chunk)
+
+        added = [w for w in pipe.warnings[before:] if "more than one declared" in w]
+        assert len(added) == 1, f"expected one warning for the stream; got {added}"
+
+    def test_unrenamed_call_is_quiet_on_the_response_leg(self):
+        """A plain tool takes the same fallback path, and must stay silent.
+
+        ``to_client`` hands back a bare name both for a contested tool and for
+        one that was never renamed — the overwhelmingly common case.  Warning
+        on the fallback itself would fire on every ordinary call, which is why
+        the contested names are recorded at build time instead.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        # A namespaced tool as well, so the map is non-empty and the restore
+        # actually runs — with only plain tools it short-circuits and the
+        # check below would pass without proving anything.
+        request = _request(_namespace_container("agents", "spawn_agent"))
+        request["tools"] = [
+            {"type": "function", "name": "plain_tool", "parameters": {}}
+        ]
+        pipe.convert_request(request)
+        before = len(pipe.warnings)
+
+        pipe.convert_response(_chat_completion("plain_tool"))
+
+        assert pipe.warnings[before:] == []
+
     def test_name_map_is_built_once_and_reused(self):
         """Response and streaming legs must use the request leg's own map."""
         pipe = ConversionPipeline("openai_responses", "openai_chat")
