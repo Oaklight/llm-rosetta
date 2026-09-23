@@ -586,12 +586,15 @@ def apply_upstream_tool_names(
     alone, the assistant message would name a function the request does not
     declare.  The inverse of :func:`restore_client_tool_names`.
 
-    ``tool_choice`` and the ``allowed_tools`` extension name tools too, and
-    are re-spelled here for the same reason.  Neither carries a namespace,
-    so both resolve by name alone or not at all; either one left naming no
-    declared tool is reported in *warnings* — whether or not this request
-    renamed anything, since a selector naming no declared tool is broken on
-    its own terms.
+    ``tool_choice`` and the ``allowed_tools`` extension are re-spelled here
+    too. Neither carries a namespace, so both resolve by name alone or not at
+    all, and either one left naming no declared tool is reported in
+    *warnings* — even when nothing was renamed, since such a selector is
+    broken on its own terms.
+
+    A history call is reported only when it omits a namespace several tools
+    need, the one failure this flattening causes. Naming a tool the request
+    no longer declares is the client's own history to reconcile.
     """
     declared = {
         t.get("name") for t in ir_request.get("tools") or [] if isinstance(t, dict)
@@ -617,11 +620,12 @@ def apply_upstream_tool_names(
         )
 
     # Only the history rewrite below depends on a rename having happened:
-    # with an empty map every name resolves to itself, so the loop would
-    # write each name back unchanged.
+    # with an empty map every name resolves to itself and nothing is
+    # ambiguous, so the loop would write each name back unchanged.
     if not name_map:
         return
 
+    unresolved: set[str] = set()
     for msg in ir_request.get("messages") or []:
         if not isinstance(msg, dict):
             continue
@@ -630,9 +634,31 @@ def apply_upstream_tool_names(
                 continue
             pm = part.get("provider_metadata")
             namespace = pm.get("namespace") if isinstance(pm, dict) else None
-            part["tool_name"] = name_map.to_upstream(
-                part.get("tool_name", ""), namespace
-            )
+            client_name = part.get("tool_name", "")
+            upstream_name = name_map.to_upstream(client_name, namespace)
+            part["tool_name"] = upstream_name
+            # ``is_ambiguous`` alone over-reports.  A top-level tool and a
+            # namespaced one can share a bare name, and then the name is
+            # ambiguous in the map yet the call is not: omitting the namespace
+            # is how a client says it meant the top-level tool, and the
+            # fallback lands on exactly that tool's upstream name.  Asking
+            # whether the result is a name we are actually sending tells the
+            # two apart, and the tool list can answer it where the map cannot
+            # — an unrenamed top-level tool is left out of the map entirely.
+            if (
+                namespace is None
+                and name_map.is_ambiguous(client_name)
+                and upstream_name not in declared
+            ):
+                unresolved.add(client_name)
+
+    for client_name in sorted(unresolved):
+        warnings.append(
+            f"A history tool call names {client_name!r} with no namespace, but "
+            "tools in more than one namespace declare that name, so it goes "
+            "upstream matching none of them — echo back the 'namespace' field "
+            "returned alongside the call to identify which tool it was"
+        )
 
 
 def restore_client_tool_names(
