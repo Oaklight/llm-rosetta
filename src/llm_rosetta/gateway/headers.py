@@ -1,37 +1,3 @@
-"""Helpers for gateway request header forwarding."""
+"""Backward-compat shim — real module is at gateway.middleware.headers."""
 
-from __future__ import annotations
-
-from typing import Any
-import uuid
-
-
-def get_request_id(request: Any) -> str:
-    """Return the client request ID or generate one."""
-    return request.headers.get("x-request-id") or str(uuid.uuid4())
-
-
-def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str]:
-    """Build the explicit request headers that may be forwarded upstream."""
-    extra_headers: dict[str, str] = {}
-
-    if request_id:
-        extra_headers["x-request-id"] = request_id
-
-    user_agent = request.headers.get("user-agent")
-    if user_agent:
-        extra_headers["User-Agent"] = user_agent
-
-    or_version = request.headers.get("openresponses-version")
-    if or_version:
-        extra_headers["OpenResponses-Version"] = or_version
-
-    return extra_headers
-
-
-def get_preflight_tokens_override(request: Any) -> bool | None:
-    """Return the per-request preflight token count override, or None."""
-    value = request.headers.get("x-rosetta-preflight-tokens")
-    if value is None:
-        return None
-    return value.strip().lower() in ("true", "1", "yes")
+from .middleware.headers import *  # noqa: F401,F403

@@ -17,23 +17,23 @@ from llm_rosetta._vendor.httpserver import (
 )
 from llm_rosetta.auto_detect import ProviderType
 
-from .auth import (
+from .middleware.auth import (
     AuthState,
     api_key_context_var,
     create_auth_hook,
 )
 from .config import GatewayConfig, ResolvedRoute
-from .error_format import (
+from .middleware.error_format import (
     apply_cors_headers,
     detect_api_format,
     format_error_response,
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
-from .circuit_breaker import CircuitBreaker
-from .request_context import request_context_var, setup_request_context
+from .middleware.circuit_breaker import CircuitBreaker
+from .middleware.request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
-from .headers import (
+from .middleware.headers import (
     build_upstream_extra_headers,
     get_preflight_tokens_override,
     get_request_id,
@@ -1150,7 +1150,7 @@ def _install_cors(app: App, admin_cors_origins: list[str]) -> None:
 
 def _install_rate_limiting(app: App, config: GatewayConfig) -> None:
     """Set up rate-limiting before/after hooks and attach state to *app*."""
-    from .ratelimit import (
+    from .middleware.ratelimit import (
         RateLimitState,
         create_rate_limit_after_hook,
         create_rate_limit_hook,

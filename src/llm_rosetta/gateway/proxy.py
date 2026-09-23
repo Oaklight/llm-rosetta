@@ -30,7 +30,10 @@ from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.observability.error_dump import dump_error
 
-from .error_format import detect_api_format_from_provider, format_error_response
+from .middleware.error_format import (
+    detect_api_format_from_provider,
+    format_error_response,
+)
 from .logging import (
     get_logger,
     log_converted_request,
@@ -39,8 +42,8 @@ from .logging import (
     log_stream_summary,
     log_upstream_error,
 )
-from .affinity import compute_affinity_identity, extract_prefix_from_ir
-from .sanitize import sanitize_upstream_error
+from .middleware.affinity import compute_affinity_identity, extract_prefix_from_ir
+from .middleware.sanitize import sanitize_upstream_error
 from .transport import (
     ProviderInfo,
     UpstreamConnectionError,

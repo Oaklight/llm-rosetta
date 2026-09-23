@@ -1,0 +1,272 @@
+"""Gateway API key authentication — before-request hook.
+
+Validates incoming requests against the gateway's API keys stored in
+SQLite (hash-based).
+
+Key extraction uses the format native to each API standard:
+
+- OpenAI Chat/Responses: ``Authorization: Bearer <key>``
+- Anthropic: ``x-api-key: <key>``
+- Google GenAI: ``x-goog-api-key: <key>`` or ``?key=<key>`` query param
+
+When no keys are configured, behavior depends on ``open_on_no_keys``:
+- ``True``:  all requests pass through.
+- ``False``: requests are rejected with 403 (secure default).
+"""
+
+from __future__ import annotations
+
+import contextvars
+import dataclasses
+import hashlib
+import hmac
+from typing import Any
+
+from llm_rosetta._vendor.httpserver import JSONResponse, Response
+
+from .error_format import (
+    detect_api_format,
+    format_error_response,
+    is_admin_path as _is_admin_path,
+)
+from ..keystore import KeyContext, KeyStore
+from .request_context import request_context_var
+
+ADMIN_COOKIE_NAME = "rosetta_admin_session"
+
+# Per-request auth context — set by auth hook, read by telemetry.
+api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.ContextVar(
+    "api_key_context", default=None
+)
+
+# Paths that never require authentication
+_PUBLIC_PATHS = frozenset({"/health", "/favicon.ico", "/.well-known/change-password"})
+
+# Key extraction strategies per API format.  The format is detected by the
+# request-context middleware and stored in ``request_context_var``.  Auth
+# uses it to decide *how* to extract the API key from the request.
+_FORMAT_KEY_STRATEGY: dict[str, str] = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "google": "google",
+}
+
+
+def _extract_key(request: Any) -> str | None:
+    """Extract API key from the request using the appropriate strategy."""
+    rctx = request_context_var.get()
+    strategy = (
+        _FORMAT_KEY_STRATEGY.get(rctx.api_format or "", "openai") if rctx else "openai"
+    )
+
+    # Always extract Bearer token as a fallback — gateway clients may
+    # use a single Authorization header regardless of API format.
+    auth = request.headers.get("authorization", "")
+    bearer_key = auth[7:] if auth.startswith("Bearer ") else None
+
+    if strategy == "anthropic":
+        return request.headers.get("x-api-key") or bearer_key
+    elif strategy == "google":
+        google_key = request.headers.get("x-goog-api-key")
+        if google_key:
+            return google_key
+        vals = request.query_params.get("key")
+        if vals:
+            return vals[0]
+        return bearer_key
+    else:
+        return bearer_key
+
+
+def _error_for_path(path: str, status: int, message: str) -> Response:
+    """Return an error response in the format matching the API standard.
+
+    Non-admin responses include CORS headers because before_request
+    short-circuits bypass after_request where they would normally be set.
+    """
+    api_format = detect_api_format(path)
+
+    # Auth errors use format-specific error types that match each
+    # provider SDK's expectations.
+    if api_format == "anthropic":
+        error_type = "authentication_error"
+    else:
+        error_type = "invalid_request_error"
+
+    return format_error_response(
+        api_format,
+        status,
+        message,
+        error_type=error_type,
+        error_code="invalid_api_key" if api_format == "openai" else None,
+        google_status="UNAUTHENTICATED"
+        if api_format == "google"
+        else "INVALID_ARGUMENT",
+        cors=not _is_admin_path(path),
+    )
+
+
+def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
+    """Authenticate admin panel requests.
+
+    Returns ``None`` to allow the request, or a 401 response to block it.
+    Unauthenticated HTML page requests are allowed through so the JS
+    login UI can render.
+    """
+    if not auth_state.admin_password:
+        return None  # no password configured → pass through
+
+    path = request.path
+
+    # Login, logout, and auth-check endpoints are always accessible
+    if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/auth-check"):
+        return None
+
+    # Check X-Admin-Token header (API clients, backward compat)
+    admin_token = request.headers.get("x-admin-token", "")
+    if admin_token and hmac.compare_digest(admin_token, auth_state.admin_token or ""):
+        return None
+
+    # Check session cookie (browser sessions)
+    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    if cookie_token and hmac.compare_digest(cookie_token, auth_state.admin_token or ""):
+        return None
+
+    # Block unauthenticated API calls
+    if path.startswith("/admin/api/"):
+        return JSONResponse({"error": "Admin authentication required"}, status_code=401)
+
+    # HTML page requests pass through — JS handles login UI
+    return None
+
+
+class AuthState:
+    """Mutable state container for auth hook — allows hot-reload from admin."""
+
+    def __init__(
+        self,
+        keystore: KeyStore | None,
+        internal_token: str | None,
+        admin_password: str | None = None,
+        open_on_no_keys: bool = False,
+    ) -> None:
+        self.keystore = keystore
+        self.internal_token = internal_token
+        self.admin_password = admin_password
+        self.open_on_no_keys = open_on_no_keys
+        # Derive admin token from password + internal_token via HMAC
+        self.admin_token: str | None = None
+        self._recalculate_admin_token()
+
+    def _has_keys(self) -> bool:
+        return self.keystore.has_keys() if self.keystore else False
+
+    def _recalculate_admin_token(self) -> None:
+        """Derive ``admin_token`` from ``admin_password`` + ``internal_token``."""
+        if self.admin_password and self.internal_token:
+            import hmac as _hmac
+
+            self.admin_token = _hmac.new(
+                self.internal_token.encode(),
+                self.admin_password.encode(),
+                hashlib.sha256,
+            ).hexdigest()
+        else:
+            self.admin_token = None
+
+    def rotate_internal_token(self) -> str:
+        """Generate a new internal token and recalculate admin_token.
+
+        Returns:
+            The new admin_token (or empty string if no password is set).
+        """
+        import secrets
+
+        self.internal_token = f"rsk-internal-{secrets.token_hex(16)}"
+        self._recalculate_admin_token()
+        return self.admin_token or ""
+
+    def change_password(self, new_password: str) -> str:
+        """Update the admin password and recalculate admin_token.
+
+        Returns:
+            The new admin_token.
+        """
+        self.admin_password = new_password
+        self._recalculate_admin_token()
+        return self.admin_token or ""
+
+
+def create_auth_hook(auth_state: AuthState) -> Any:
+    """Return a before-request hook that validates API keys.
+
+    The hook reads from ``auth_state`` which can be mutated by the admin
+    panel's hot-reload logic.
+    """
+
+    async def auth_hook(request: Any) -> Response | None:
+        # Reset per-request context before any early return so downstream
+        # hooks never see a stale value from a previous request.
+        api_key_context_var.set(None)
+
+        # CORS preflight must bypass auth — browsers send no credentials
+        # on OPTIONS and need CORS headers back to proceed with the
+        # actual request.
+        if (
+            request.method == "OPTIONS"
+            and request.headers.get("origin")
+            and request.headers.get("access-control-request-method")
+        ):
+            return None
+
+        path = request.path
+
+        # Public paths skip auth
+        if path in _PUBLIC_PATHS:
+            return None
+
+        # Admin panel auth is a separate concern from API key auth
+        if path.startswith("/admin"):
+            return check_admin_auth(request, auth_state)
+
+        # API paths: extract key using format-appropriate strategy
+        key = _extract_key(request)
+
+        # Check internal token first (admin panel test requests) —
+        # must run before the "no keys" gate so admin tests work on
+        # fresh instances that haven't configured client API keys yet.
+        if key and auth_state.internal_token and key == auth_state.internal_token:
+            api_key_context_var.set(
+                KeyContext(
+                    label="internal",
+                    allowed_shims=frozenset({"*"}),
+                    key_hash=hashlib.sha256(key.encode()).hexdigest(),
+                )
+            )
+            return None
+
+        if not auth_state._has_keys():
+            if auth_state.open_on_no_keys:
+                return None
+            return _error_for_path(
+                path, 403, "No API keys configured. Generate one in the admin panel."
+            )
+
+        if not key:
+            return _error_for_path(path, 401, "Invalid or missing API key")
+
+        ctx: KeyContext | None = None
+        if auth_state.keystore:
+            result = auth_state.keystore.validate(key)
+            if result is not None:
+                key_id, ctx = result
+                auth_state.keystore.touch(key_id)
+        if ctx is None:
+            return _error_for_path(path, 401, "Invalid or missing API key")
+
+        api_key_context_var.set(
+            dataclasses.replace(ctx, key_hash=hashlib.sha256(key.encode()).hexdigest())
+        )
+        return None
+
+    return auth_hook

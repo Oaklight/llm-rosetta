@@ -106,7 +106,12 @@ src/llm_rosetta/
 │   └── builtins.py
 ├── gateway/                 # HTTP proxy gateway
 │   ├── app.py, proxy.py, config.py, providers.py
-│   ├── auth.py, logging.py, cli.py, banner.py
+│   ├── model_types.py, keystore.py, logging.py
+│   ├── routing_strategy.py, migrations.py, deferred_startup.py
+│   ├── cli.py, banner.py, __main__.py
+│   ├── middleware/           # Auth, rate limiting, error format, headers, etc.
+│   ├── pipelines/            # Embeddings, rerank, decision handlers
+│   ├── transport/            # Upstream HTTP transport
 │   └── admin/               # Admin panel (metrics, request log, persistence)
 ├── types/                   # Typed IR and provider-specific types
 │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)

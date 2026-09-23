@@ -139,7 +139,7 @@ def _embedding_pipeline() -> Callable[..., Any]:
     that ``model_types`` can be imported without pulling in the full
     handler dependency graph (which would cause circular imports).
     """
-    from llm_rosetta.gateway.embeddings import handle_embeddings
+    from llm_rosetta.gateway.pipelines.embeddings import handle_embeddings
 
     return handle_embeddings
 
@@ -149,7 +149,7 @@ def _rerank_pipeline() -> Callable[..., Any]:
 
     Same rationale as :func:`_embedding_pipeline`.
     """
-    from llm_rosetta.gateway.rerank import handle_rerank
+    from llm_rosetta.gateway.pipelines.rerank import handle_rerank
 
     return handle_rerank
 
@@ -253,7 +253,7 @@ def _register_builtins() -> None:
 
 def _decision_pipeline() -> Callable[..., Any]:
     """Lazy import wrapper for the decision handler."""
-    from llm_rosetta.gateway.decision import handle_decision
+    from llm_rosetta.gateway.pipelines.decision import handle_decision
 
     return handle_decision
 
