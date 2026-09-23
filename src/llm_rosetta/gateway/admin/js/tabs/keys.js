@@ -1,6 +1,6 @@
-import { S } from './state.js';
-import { t } from './i18n.js';
-import { api, showToast, closeModal, esc, inlineConfirm } from './core.js';
+import { S } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, showToast, closeModal, esc, inlineConfirm } from '../core/utils.js';
 
 // ===================== API Keys Tab =====================
 

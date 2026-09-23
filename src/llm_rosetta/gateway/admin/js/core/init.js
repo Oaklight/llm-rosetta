@@ -3,17 +3,17 @@ import { t, setLang, applyI18n } from './i18n.js';
 import {
   setScheme, setMode, setTheme, api, showToast, closeModal, esc,
   _startInactivityTracking, _stopInactivityTracking,
-} from './core.js';
+} from './utils.js';
 import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
-import { loadConfig, renderProviders, applyProviderHealth } from './providers.js';
-import { renderModels } from './models.js';
-import './fetch-models.js';
-import { loadKeys, loadLogKeyLabels, renderKeys } from './keys.js';
-import { loadMetrics, loadDumps, renderPersistence } from './dashboard.js';
-import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from './logs.js';
-import { loadOpsLog, switchLogView, populateOpsLogFilters } from './ops-log.js';
-import './test.js';
-import { initLogoPicker } from './logo-picker.js';
+import { loadConfig, renderProviders, applyProviderHealth } from '../tabs/providers.js';
+import { renderModels } from '../tabs/models.js';
+import '../components/fetch-models.js';
+import { loadKeys, loadLogKeyLabels, renderKeys } from '../tabs/keys.js';
+import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js';
+import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
+import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
+import '../components/test-runner.js';
+import { initLogoPicker } from '../components/logo-picker.js';
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];

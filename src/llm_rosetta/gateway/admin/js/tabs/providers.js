@@ -6,10 +6,10 @@
  * diagnostics, and config loading.
  */
 
-import { S, _CAP_ICONS, populateCapIcons } from './state.js';
-import { t } from './i18n.js';
-import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from './core.js';
-import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from './logo-picker.js';
+import { S, _CAP_ICONS, populateCapIcons } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, showToast, showToastHtml, closeModal, esc, copyText, inlineConfirm } from '../core/utils.js';
+import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 

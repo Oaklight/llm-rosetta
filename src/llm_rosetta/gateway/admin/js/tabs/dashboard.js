@@ -3,9 +3,9 @@
  * and canvas charts.
  */
 
-import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from './state.js';
-import { t } from './i18n.js';
-import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytesShort, fmtBytesLong } from './core.js';
+import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytesShort, fmtBytesLong } from '../core/utils.js';
 
 // ===================== Metrics =====================
 

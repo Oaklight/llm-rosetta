@@ -1,7 +1,7 @@
 // Side-effect-only module: exposes functions via window.* for inline HTML handlers.
-import { S, _TEST_TIMEOUT_MS } from './state.js';
-import { t } from './i18n.js';
-import { api, showToast, esc } from './core.js';
+import { S, _TEST_TIMEOUT_MS } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, showToast, esc } from '../core/utils.js';
 
 // ===================== Test Type Registry =====================
 // Extensible registry for non-LLM test types.  Each entry declares:

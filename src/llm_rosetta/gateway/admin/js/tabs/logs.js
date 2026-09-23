@@ -3,9 +3,9 @@
  * pagination, and log-context model deletion.
  */
 
-import { S, LOG_LIMIT } from './state.js';
-import { t } from './i18n.js';
-import { api, esc, formatDuration, inlineConfirm, showToast } from './core.js';
+import { S, LOG_LIMIT } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, esc, formatDuration, inlineConfirm, showToast } from '../core/utils.js';
 
 // ===================== Request Log =====================
 
