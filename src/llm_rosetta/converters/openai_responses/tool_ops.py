@@ -370,10 +370,21 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Returns:
             OpenAI Responses tool definition dict.
         """
-        # Return passthrough tools as-is (web_search, etc.)
+        # Passthrough tools (web_search, etc.) go back as-is except for the
+        # name, since a rename must follow the tool upstream or nothing else
+        # in the request agrees on it.
+        #
+        # The `provider_tool.get("name")` half is required, not defensive:
+        # `_synthesize_passthrough_tool` falls back to the type string as the
+        # IR name, which is truthy, so testing `renamed` alone would give
+        # every bare {"type": "web_search"} a `name` it never had.
         passthrough = ir_tool.get("_passthrough")
         if passthrough is not None:
-            return dict(passthrough)
+            provider_tool = dict(passthrough)
+            renamed = ir_tool.get("name")
+            if renamed and provider_tool.get("name"):
+                provider_tool["name"] = renamed
+            return provider_tool
 
         tool_type = ir_tool.get("type", "function")
 

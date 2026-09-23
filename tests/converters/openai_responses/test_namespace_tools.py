@@ -9,6 +9,7 @@ from llm_rosetta.converters.openai_responses.tool_ops import (
     OpenAIResponsesToolOps,
     _flatten_namespace_tool,
 )
+from llm_rosetta.pipeline import ConversionPipeline
 
 
 # ---------------------------------------------------------------------------
@@ -295,6 +296,56 @@ class TestDedupIrToolNames:
         # Result entry is a copy
         assert result[1]["name"] == "ns_exec"
         assert result[1] is not original
+
+    def test_passthrough_tool_carries_its_rename_upstream(self):
+        """A hosted tool keeps the name dedup gave it, not the one it came with.
+
+        Hosted types are re-emitted from the untouched provider dict stored
+        in ``_passthrough``.  Left alone that dict still holds the original
+        name, so a tool renamed to break a collision would reintroduce it on
+        the wire and disagree with every other part of the request.
+        """
+        request = {
+            "model": "test-model",
+            "tools": [
+                {"type": "function", "name": "wait", "parameters": {}},
+                {
+                    "type": "namespace",
+                    "name": "agents",
+                    "tools": [{"type": "local_shell", "name": "wait"}],
+                },
+            ],
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "go"}],
+                }
+            ],
+        }
+        pipe = ConversionPipeline("openai_responses", "openai_responses")
+        upstream = pipe.convert_request(request)
+
+        names = [t.get("name") for t in upstream["tools"]]
+        assert names == ["wait", "agents_wait"], names
+
+    def test_passthrough_tool_without_a_name_does_not_gain_one(self):
+        """Nameless hosted tools must not acquire the synthesized IR name."""
+        request = {
+            "model": "test-model",
+            "tools": [{"type": "web_search_preview"}],
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "go"}],
+                }
+            ],
+        }
+        pipe = ConversionPipeline("openai_responses", "openai_responses")
+        upstream = pipe.convert_request(request)
+
+        assert "name" not in upstream["tools"][0], upstream["tools"][0]
 
     def test_long_qualified_name_truncated(self):
         long_ns = "a" * 60
