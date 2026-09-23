@@ -40,14 +40,15 @@ class TestBuiltinRegistration:
         assert desc.name == "rerank"
 
     def test_builtin_count(self) -> None:
-        # At minimum, three built-in types must exist
-        assert len(all_model_types()) >= 3
+        # At minimum, four built-in types must exist
+        assert len(all_model_types()) >= 4
 
     def test_registered_type_names(self) -> None:
         names = registered_type_names()
         assert "llm" in names
         assert "embedding" in names
         assert "rerank" in names
+        assert "decision" in names
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +153,44 @@ class TestRerankDescriptor:
         assert desc.config_format_key == "rerank_format"
         assert desc.config_path_key == "rerank_path"
         assert desc.default_path == "/v1/rerank"
+
+
+class TestDecisionDescriptor:
+    """Verify the decision type descriptor properties."""
+
+    def test_decision_registered(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.name == "decision"
+
+    def test_decision_routes(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        paths = [r.path for r in desc.routes]
+        assert "/v1/decision" in paths
+        assert "/v1/systemone" in paths
+
+    def test_decision_formats(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert "typesafe" in desc.formats
+
+    def test_decision_no_streaming(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.supports_streaming is False
+
+    def test_decision_config_keys(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.config_format_key == "decision_format"
+        assert desc.config_path_key == "decision_path"
+        assert desc.default_path == "/v1/systemone"
+
+    def test_decision_badge_class(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.badge_class == "cap-badge-decision"
 
 
 # ---------------------------------------------------------------------------

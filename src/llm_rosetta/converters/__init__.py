@@ -20,6 +20,12 @@ from .google_generate import (
 from .google_interactions import GoogleInteractionsConverter
 from .openai_chat import OpenAIChatConverter
 from .openai_responses import OpenAIResponsesConverter
+from .decision import (
+    EmbeddingDecisionConverter,
+    LLMChatDecisionConverter,
+    RerankerDecisionConverter,
+    TypeSafeDecisionConverter,
+)
 from .rerank import CohereRerankConverter, JinaRerankConverter, VoyageRerankConverter
 
 __all__ = [
@@ -40,4 +46,8 @@ __all__ = [
     "JinaRerankConverter",
     "CohereRerankConverter",
     "VoyageRerankConverter",
+    "TypeSafeDecisionConverter",
+    "LLMChatDecisionConverter",
+    "RerankerDecisionConverter",
+    "EmbeddingDecisionConverter",
 ]

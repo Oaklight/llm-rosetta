@@ -267,7 +267,7 @@ class TestBuiltinShims:
         load_providers()
 
     def test_official_providers_registered(self):
-        for name in ("openai", "openai_responses", "anthropic", "google"):
+        for name in ("openai", "openai_responses", "anthropic", "google", "typesafe"):
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 

@@ -116,6 +116,7 @@ class TestLoadProviders:
             "alcf--sophia",
             "alcf--metis",
             "alcf--minerva",
+            "typesafe",
         }
 
     def test_all_registered_after_load(self):
@@ -140,6 +141,7 @@ class TestLoadProviders:
             "alcf--sophia",
             "alcf--metis",
             "alcf--minerva",
+            "typesafe",
         ):
             shim = get_shim(name)
             assert shim is not None
@@ -289,6 +291,7 @@ class TestLoadProviders:
             "alcf--sophia": "openai_chat",
             "alcf--metis": "openai_chat",
             "alcf--minerva": "openai_chat",
+            "typesafe": "decision",
         }
         for name, base in expected.items():
             shim = get_shim(name)
@@ -298,7 +301,7 @@ class TestLoadProviders:
             )
 
     # Shims that intentionally have no public logo
-    _LOGO_EXEMPT = {"argo--anthropic", "argo--openai_chat"}
+    _LOGO_EXEMPT = {"argo--anthropic", "argo--openai_chat", "typesafe"}
 
     def test_all_shims_have_logos(self):
         """Every built-in shim (except exempted ones) should have a logo URL."""

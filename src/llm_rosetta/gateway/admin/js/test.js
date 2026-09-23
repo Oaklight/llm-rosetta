@@ -46,6 +46,8 @@ function buildTestPayload(model, type, extraParam) {
       return {model, query: 'What is machine learning?', documents: ['Machine learning is a subset of artificial intelligence.', 'The weather today is sunny.', 'Deep learning uses neural networks with many layers.']};
     case 'rerank_batch':
       return {model, query: 'What is machine learning?', documents: ['Machine learning is a subset of artificial intelligence.', 'The weather today is sunny.', 'Deep learning uses neural networks with many layers.', 'Python is a popular programming language.', 'Gradient descent is an optimization algorithm.'], top_n: 3};
+    case 'decision':
+      return {model, state: 'Customer email: I want a refund for order #4521. Nobody responds. This is ridiculous.', questions: {is_urgent: {type: 'noul', instructions: 'Does this convey urgency?'}, department: {type: 'choice', instructions: 'Which team should handle this?', criteria: {billing: 'Payments and refunds', support: 'General help', escalation: 'Urgent complaints'}}, frustration: {type: 'score', instructions: 'How frustrated is the customer?', criteria: ['Calm', 'Annoyed', 'Very angry']}}};
   }
 }
 
@@ -152,7 +154,8 @@ async function runTest(model, type, extraParam) {
     // handles the upstream call.
     const isEmbedType = ['embedding','embed_batch','embed_multimodal','matryoshka'].includes(type);
     const isRerankType = ['rerank','rerank_batch'].includes(type);
-    const endpoint = isRerankType ? '/v1/rerank' : isEmbedType ? '/v1/embeddings' : '/v1/chat/completions';
+    const isDecisionType = type === 'decision';
+    const endpoint = isDecisionType ? '/v1/decision' : isRerankType ? '/v1/rerank' : isEmbedType ? '/v1/embeddings' : '/v1/chat/completions';
     output.innerHTML = `<span class="test-spinner"></span>${t('test.sending')}`;
     // Show Cancel button and live elapsed timer
     const cancelBtn = document.getElementById('testCancelBtn');
@@ -234,6 +237,25 @@ async function runTest(model, type, extraParam) {
               if (results.length > 0) {
                 output.textContent = `Rerank OK — ${results.length} result${results.length !== 1 ? 's' : ''}\n\n` +
                   results.map((r, i) => `#${i+1} index=${r.index ?? i} score=${(r.relevance_score ?? r.score ?? 0).toFixed(4)}`).join('\n');
+              } else {
+                output.textContent = t('test.emptyResponse');
+              }
+            } else if (isDecisionType) {
+              // Decision result
+              if (body?.usage) {
+                meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.input_tokens || '?'} in / ${body.usage.output_tokens || '?'} out</div>`;
+              }
+              const answers = body?.answers || {};
+              const keys = Object.keys(answers);
+              if (keys.length > 0) {
+                output.textContent = `Decision OK — ${keys.length} answer${keys.length !== 1 ? 's' : ''}\n\n` +
+                  keys.map(k => {
+                    const a = answers[k];
+                    if (a.type === 'noul') return `${k} (noul): ${a.noul?.toFixed(3)}`;
+                    if (a.type === 'choice') return `${k} (choice): ${a.choice} (conf=${a.confidence?.toFixed(2)})`;
+                    if (a.type === 'score') return `${k} (score): ${a.score?.toFixed(2)} (conf=${a.confidence?.toFixed(2)})`;
+                    return `${k}: ${JSON.stringify(a)}`;
+                  }).join('\n');
               } else {
                 output.textContent = t('test.emptyResponse');
               }

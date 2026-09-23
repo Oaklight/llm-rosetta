@@ -55,6 +55,7 @@ tr:hover td { background: var(--bg-hover); }
 .cap-badge-llm { background:color-mix(in srgb, var(--green) 12%, transparent);color:var(--green); }
 .cap-badge-embedding { background:color-mix(in srgb, var(--blue) 12%, transparent);color:var(--blue); }
 .cap-badge-rerank { background:color-mix(in srgb, var(--orange) 12%, transparent);color:var(--orange); }
+.cap-badge-decision { background:color-mix(in srgb, #8b5cf6 12%, transparent);color:#8b5cf6; }
 .cap-badge-text { background:color-mix(in srgb, var(--text-dim) 15%, transparent);color:var(--text-dim); }
 .cap-badge-vision { background:color-mix(in srgb, var(--purple) 12%, transparent);color:var(--purple); }
 .cap-badge-tools { background:color-mix(in srgb, var(--blue) 8%, var(--green) 4%);color:color-mix(in srgb, var(--blue) 50%, var(--green)); }
@@ -78,6 +79,7 @@ tr:hover td { background: var(--bg-hover); }
 .dot-llm { background:var(--purple); }
 .dot-embedding { background:var(--green); }
 .dot-rerank { background:var(--orange); }
+.dot-decision { background:#8b5cf6; }
 .endpoint-section .form-group { margin-bottom:10px; }
 .endpoint-section .form-group label { font-size:11px; }
 .endpoint-section .form-row { display:flex;gap:10px; }

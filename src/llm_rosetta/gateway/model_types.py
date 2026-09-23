@@ -213,4 +213,37 @@ def _register_builtins() -> None:
     )
 
 
+def _decision_pipeline() -> Callable[..., Any]:
+    """Lazy import wrapper for the decision handler."""
+    from llm_rosetta.gateway.decision import handle_decision
+
+    return handle_decision
+
+
+def _register_decision() -> None:
+    """Register the decision model type.
+
+    Currently TypeSafe System One (Jev) is the only native decision API,
+    so ``"typesafe"`` is the sole format.  LLM-backed decision (via
+    structured output) uses the chat pipeline, not this route.
+    """
+    register_model_type(
+        ModelTypeDescriptor(
+            name="decision",
+            routes=[
+                RouteSpec("/v1/decision"),
+                RouteSpec("/v1/systemone"),
+            ],
+            formats=["typesafe"],
+            pipeline=_decision_pipeline,
+            supports_streaming=False,
+            badge_class="cap-badge-decision",
+            config_format_key="decision_format",
+            config_path_key="decision_path",
+            default_path="/v1/systemone",
+        )
+    )
+
+
 _register_builtins()
+_register_decision()

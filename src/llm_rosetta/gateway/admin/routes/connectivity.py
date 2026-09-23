@@ -107,47 +107,51 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             "error": str(exc),
         }
 
-    # 3. Check embedding endpoint if configured (POST-only, so just verify reachable)
-    if provider_cfg.get("embedding_format"):
-        embedding_path = provider_cfg.get("embedding_path", "/v1/embeddings")
-        embed_url = f"{base_url}{embedding_path}"
-        _check_double_prefix(base_url, embedding_path, "embedding", results)
-        try:
-            resp = await client.post(embed_url, headers=auth_headers, json={})
-            results["endpoints"]["embedding"] = {
-                "url": embed_url,
-                "status": resp.status_code,
-                "ok": resp.status_code != 404,
-            }
-        except Exception as exc:
-            results["endpoints"]["embedding"] = {
-                "url": embed_url,
-                "status": None,
-                "ok": False,
-                "error": str(exc),
-            }
-
-    # 4. Check rerank endpoint if configured (POST-only, so just verify reachable)
-    if provider_cfg.get("rerank_format"):
-        rerank_path = provider_cfg.get("rerank_path", "/v1/rerank")
-        rerank_url = f"{base_url}{rerank_path}"
-        _check_double_prefix(base_url, rerank_path, "rerank", results)
-        try:
-            resp = await client.post(rerank_url, headers=auth_headers, json={})
-            results["endpoints"]["rerank"] = {
-                "url": rerank_url,
-                "status": resp.status_code,
-                "ok": resp.status_code != 404,
-            }
-        except Exception as exc:
-            results["endpoints"]["rerank"] = {
-                "url": rerank_url,
-                "status": None,
-                "ok": False,
-                "error": str(exc),
-            }
+    # 3–5. Check optional POST endpoints (embedding, rerank, decision)
+    for ep_name, fmt_key, path_key, default_path in (
+        ("embedding", "embedding_format", "embedding_path", "/v1/embeddings"),
+        ("rerank", "rerank_format", "rerank_path", "/v1/rerank"),
+        ("decision", "decision_format", "decision_path", "/v1/systemone"),
+    ):
+        if not provider_cfg.get(fmt_key):
+            continue
+        await _check_post_endpoint(
+            client,
+            base_url,
+            auth_headers,
+            provider_cfg.get(path_key, default_path),
+            ep_name,
+            results,
+        )
 
     return JSONResponse(results)
+
+
+async def _check_post_endpoint(
+    client: Any,
+    base_url: str,
+    auth_headers: dict[str, str],
+    path: str,
+    ep_name: str,
+    results: dict[str, Any],
+) -> None:
+    """Probe a POST endpoint for reachability."""
+    url = f"{base_url}{path}"
+    _check_double_prefix(base_url, path, ep_name, results)
+    try:
+        resp = await client.post(url, headers=auth_headers, json={})
+        results["endpoints"][ep_name] = {
+            "url": url,
+            "status": resp.status_code,
+            "ok": resp.status_code != 404,
+        }
+    except Exception as exc:
+        results["endpoints"][ep_name] = {
+            "url": url,
+            "status": None,
+            "ok": False,
+            "error": str(exc),
+        }
 
 
 def _check_double_prefix(

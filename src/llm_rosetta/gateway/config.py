@@ -45,6 +45,15 @@ class RerankRoute(NamedTuple):
     provider_info: ProviderInfo
 
 
+class DecisionRoute(NamedTuple):
+    """Resolved decision provider routing info."""
+
+    provider_name: str
+    format: str
+    decision_path: str
+    provider_info: ProviderInfo
+
+
 # ---------------------------------------------------------------------------
 # Config file search paths (checked in order)
 # ---------------------------------------------------------------------------
@@ -397,6 +406,25 @@ class GatewayConfig:
         self.default_embedding_format: str = raw.get(
             "default_embedding_format", "openai"
         )
+
+        # --- Decision routing ---
+        (
+            self.decision_providers,
+            self.decision_provider_infos,
+            self.decision_models,
+        ) = self._extract_endpoint_from_providers(
+            self._raw_providers,
+            format_key="decision_format",
+            path_key="decision_path",
+            default_path="/v1/systemone",
+            info_prefix="decision",
+            global_proxy=self.proxy,
+        )
+        # Merge legacy decision_providers / decision_models
+        for model_name, prov in raw.get("decision_models", {}).items():
+            provider_name = prov if isinstance(prov, str) else prov.get("provider", "")
+            if provider_name in self.decision_providers:
+                self.decision_models.setdefault(model_name, provider_name)
 
         # --- Extract type-tagged models from unified models pool ---
         self._distribute_typed_models(raw.get("models", {}))
@@ -1149,6 +1177,26 @@ class GatewayConfig:
             if provider_name in providers:
                 models[model_name] = provider_name
         return providers, provider_infos, models
+
+    # ---- Decision routing ------------------------------------------------
+
+    def resolve_decision(self, model: str) -> DecisionRoute:
+        """Resolve a decision model to its provider config.
+
+        Raises:
+            KeyError: If the model is not in decision_models.
+        """
+        provider_name = self.decision_models[model]
+        pcfg = self.decision_providers[provider_name]
+        pinfo = self.decision_provider_infos[provider_name]
+        return DecisionRoute(
+            provider_name=provider_name,
+            format=pcfg["format"],
+            decision_path=pcfg["decision_path"],
+            provider_info=pinfo,
+        )
+
+    # ---- Embedding routing ----------------------------------------------
 
     def resolve_embedding(self, model: str) -> EmbeddingRoute:
         """Resolve an embedding model to its provider config.

@@ -132,21 +132,31 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
   document.getElementById('provCapLlm').checked = provCaps.includes('llm');
   document.getElementById('provCapEmbedding').checked = provCaps.includes('embedding');
   document.getElementById('provCapRerank').checked = provCaps.includes('rerank');
+  const dcChk = document.getElementById('provCapDecision');
+  if (dcChk) dcChk.checked = provCaps.includes('decision');
   // Populate format dropdowns
   const embFmts = S.configData?.embedding_formats || ['openai','cohere','jina','voyage'];
   const rrFmts = S.configData?.rerank_formats || ['jina','cohere','voyage'];
+  const dcFmts = S.configData?.decision_formats || ['typesafe'];
   const embFmtSel = document.getElementById('provEmbeddingFormat');
   embFmtSel.innerHTML = embFmts.map(f => `<option value="${f}">${f}</option>`).join('');
   const rrFmtSel = document.getElementById('provRerankFormat');
   rrFmtSel.innerHTML = rrFmts.map(f => `<option value="${f}">${f}</option>`).join('');
+  const dcFmtSel = document.getElementById('provDecisionFormat');
+  if (dcFmtSel) dcFmtSel.innerHTML = dcFmts.map(f => `<option value="${f}">${f}</option>`).join('');
   if (provCfg) {
     if (provCfg.embedding_format) embFmtSel.value = provCfg.embedding_format;
     document.getElementById('provEmbeddingPath').value = provCfg.embedding_path || '/v1/embeddings';
     if (provCfg.rerank_format) rrFmtSel.value = provCfg.rerank_format;
     document.getElementById('provRerankPath').value = provCfg.rerank_path || '/v1/rerank';
+    if (provCfg.decision_format && dcFmtSel) dcFmtSel.value = provCfg.decision_format;
+    const dcPath = document.getElementById('provDecisionPath');
+    if (dcPath) dcPath.value = provCfg.decision_path || '/v1/systemone';
   } else {
     document.getElementById('provEmbeddingPath').value = '';
     document.getElementById('provRerankPath').value = '';
+    const dcPath = document.getElementById('provDecisionPath');
+    if (dcPath) dcPath.value = '';
   }
   toggleProvCapSection();
   openModal('providerModal');
@@ -165,12 +175,16 @@ function toggleProvCapSection() {
   const llm = document.getElementById('provCapLlm').checked;
   const embed = document.getElementById('provCapEmbedding').checked;
   const rerank = document.getElementById('provCapRerank').checked;
+  const decision = document.getElementById('provCapDecision')?.checked || false;
   document.getElementById('provLlmSection').classList.toggle('visible', llm);
   document.getElementById('provEmbeddingSection').classList.toggle('visible', embed);
   document.getElementById('provRerankSection').classList.toggle('visible', rerank);
+  const decSec = document.getElementById('provDecisionSection');
+  if (decSec) decSec.classList.toggle('visible', decision);
   // Populate format dropdowns if shown
   if (embed) _populateFormatDropdown('provEmbeddingFormat', S.configData?.embedding_formats || ['openai','cohere','jina','voyage']);
   if (rerank) _populateFormatDropdown('provRerankFormat', S.configData?.rerank_formats || ['jina','cohere','voyage']);
+  if (decision) _populateFormatDropdown('provDecisionFormat', S.configData?.decision_formats || ['typesafe']);
 }
 
 function _populateFormatDropdown(selectId, formats) {
@@ -355,7 +369,7 @@ function _updateViewToggle() {
 function _getProviderCaps(cfg, provName) {
   const caps = [];
   // LLM if the provider has LLM models, or has url_template, or has no embedding/rerank fields at all
-  const hasEmbedOrRerank = cfg.embedding_format || cfg.rerank_format;
+  const hasEmbedOrRerank = cfg.embedding_format || cfg.rerank_format || cfg.decision_format;
   const hasLlmModels = provName && S.configData && S.configData.models && Object.values(S.configData.models).some(m => {
     const p = typeof m === 'string' ? m : m.provider;
     const t = typeof m === 'object' ? (m.type || 'llm') : 'llm';
@@ -369,13 +383,14 @@ function _getProviderCaps(cfg, provName) {
   if (hasLlmModels || typeIsLlmShim || cfg.url_template || cfg.stream_url_template || !hasEmbedOrRerank) caps.push('llm');
   if (cfg.embedding_format) caps.push('embedding');
   if (cfg.rerank_format) caps.push('rerank');
+  if (cfg.decision_format) caps.push('decision');
   if (caps.length === 0) caps.push('llm');
   return caps;
 }
 
 function _capBadgesHtml(caps) {
   return caps.map(c => {
-    const cls = c === 'llm' ? 'cap-badge-llm' : c === 'embedding' ? 'cap-badge-embedding' : 'cap-badge-rerank';
+    const cls = c === 'llm' ? 'cap-badge-llm' : c === 'embedding' ? 'cap-badge-embedding' : c === 'decision' ? 'cap-badge-decision' : 'cap-badge-rerank';
     return `<span class="cap-badge ${cls}">${_CAP_ICONS[c] || ''}${esc(c.toUpperCase())}</span>`;
   }).join('');
 }
@@ -566,6 +581,13 @@ async function saveProvider() {
   } else {
     body.rerank_format = '';
     body.rerank_path = '';
+  }
+  if (document.getElementById('provCapDecision')?.checked) {
+    body.decision_format = document.getElementById('provDecisionFormat')?.value || 'typesafe';
+    body.decision_path = document.getElementById('provDecisionPath')?.value?.trim() || '/v1/systemone';
+  } else {
+    body.decision_format = '';
+    body.decision_path = '';
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
   if (provTimeoutVal) body.timeout = parseFloat(provTimeoutVal);
