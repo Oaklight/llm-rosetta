@@ -8,15 +8,15 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 from llm_rosetta.gateway.config import GatewayConfig
-from llm_rosetta.gateway.error_format import detect_api_format
-from llm_rosetta.gateway.ratelimit import (
+from llm_rosetta.gateway.middleware.error_format import detect_api_format
+from llm_rosetta.gateway.middleware.ratelimit import (
     RateLimitState,
     _extract_model,
     _rate_limit_response,
     create_rate_limit_after_hook,
     create_rate_limit_hook,
 )
-from llm_rosetta.gateway.request_context import (
+from llm_rosetta.gateway.middleware.request_context import (
     RequestContext,
     extract_client_ip,
     request_context_var,
@@ -161,7 +161,7 @@ class TestExtractModel:
 
 class TestRateLimitResponse:
     def _make_result(self):
-        from llm_rosetta.gateway.ratelimit import RateLimitResult
+        from llm_rosetta.gateway.middleware.ratelimit import RateLimitResult
 
         return RateLimitResult(
             allowed=False,
@@ -353,7 +353,7 @@ class TestRateLimitHook:
         assert r2 is None
 
     def test_per_key_uses_label(self):
-        from llm_rosetta.gateway.auth import api_key_context_var
+        from llm_rosetta.gateway.middleware.auth import api_key_context_var
         from llm_rosetta.gateway.keystore import KeyContext
 
         state = self._make_state(enabled=True, per_key="1/m")
@@ -370,7 +370,7 @@ class TestRateLimitHook:
             api_key_context_var.reset(token)
 
     def test_no_key_skips_per_key(self):
-        from llm_rosetta.gateway.auth import api_key_context_var
+        from llm_rosetta.gateway.middleware.auth import api_key_context_var
 
         state = self._make_state(enabled=True, per_key="1/m")
         hook = create_rate_limit_hook(state)
@@ -391,7 +391,7 @@ class TestRateLimitHook:
 
 class TestRateLimitAfterHook:
     def test_adds_headers_when_result_set(self):
-        from llm_rosetta.gateway.ratelimit import (
+        from llm_rosetta.gateway.middleware.ratelimit import (
             _rate_limit_result_var,
             RateLimitResult,
         )
@@ -411,7 +411,7 @@ class TestRateLimitAfterHook:
             _rate_limit_result_var.reset(token)
 
     def test_no_headers_when_no_result(self):
-        from llm_rosetta.gateway.ratelimit import _rate_limit_result_var
+        from llm_rosetta.gateway.middleware.ratelimit import _rate_limit_result_var
 
         token = _rate_limit_result_var.set(None)
         try:

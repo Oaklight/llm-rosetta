@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.embedding_pipeline import (
+from llm_rosetta.gateway.pipelines.embedding_pipeline import (
     EmbeddingConversionPipeline,
     get_embedding_converter,
 )

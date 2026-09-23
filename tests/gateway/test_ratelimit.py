@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.gateway.ratelimit import (
+from llm_rosetta.gateway.middleware.ratelimit import (
     FixedWindowLimiter,
     GCRALimiter,
     RateLimitResult,

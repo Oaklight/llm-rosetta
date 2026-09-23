@@ -232,7 +232,7 @@ def _dump_error_impl(
 
     # --- Scrub credential patterns and truncate if excessively large ---
     if response_text:
-        from llm_rosetta.gateway.sanitize import scrub_credential_patterns
+        from llm_rosetta.gateway.middleware.sanitize import scrub_credential_patterns
 
         response_text = scrub_credential_patterns(response_text)
         if len(response_text) > 64 * 1024:

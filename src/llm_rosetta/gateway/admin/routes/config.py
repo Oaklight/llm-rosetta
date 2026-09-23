@@ -685,7 +685,7 @@ def _apply_rate_limit_settings(
     server: dict[str, Any], rl_body: dict[str, Any]
 ) -> Response | None:
     """Validate and apply rate_limit settings; return error Response or None."""
-    from llm_rosetta.gateway.ratelimit import parse_quota
+    from llm_rosetta.gateway.middleware.ratelimit import parse_quota
 
     rl_cfg = server.setdefault("rate_limit", {})
     if "enabled" in rl_body:

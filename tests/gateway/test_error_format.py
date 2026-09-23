@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from llm_rosetta.gateway.error_format import (
+from llm_rosetta.gateway.middleware.error_format import (
     apply_cors_headers,
     detect_api_format,
     detect_api_format_from_provider,

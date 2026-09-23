@@ -10,7 +10,7 @@ import threading
 import time
 
 
-from llm_rosetta.gateway.circuit_breaker import (
+from llm_rosetta.gateway.middleware.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
     CircuitBreakerRegistry,
@@ -582,7 +582,7 @@ class TestCircuitBreaker503Integration:
 
     def test_503_response_format_openai(self):
         """When circuit is open, the handler returns a 503 with a clear message."""
-        from llm_rosetta.gateway.error_format import (
+        from llm_rosetta.gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )
@@ -608,7 +608,7 @@ class TestCircuitBreaker503Integration:
         assert "test-provider" in body["error"]["message"]
 
     def test_503_response_format_anthropic(self):
-        from llm_rosetta.gateway.error_format import (
+        from llm_rosetta.gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )
@@ -632,7 +632,7 @@ class TestCircuitBreaker503Integration:
         assert "circuit breaker open" in body["error"]["message"]
 
     def test_503_response_format_google(self):
-        from llm_rosetta.gateway.error_format import (
+        from llm_rosetta.gateway.middleware.error_format import (
             detect_api_format,
             format_error_response,
         )
