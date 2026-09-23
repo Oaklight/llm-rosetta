@@ -12,6 +12,35 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Decision 模型范式** (PR [#705](https://github.com/Oaklight/llm-rosetta/pull/705))：与 chat、embedding、rerank 并列的新模型类别，用于概率化结构决策。Decision 模型对 state 执行类型化 questions，返回校准的概率分布——不涉及文本生成。三种 IR 原语：`noul`（P(true) ∈ [0,1]）、`choice`（类别分布）、`score`（有序分布）。包含 `BaseDecisionConverter` 抽象基类、`TypeSafeDecisionConverter`（TypeSafe System One / Jev API）、provider shim、自动检测和网关路由（`/v1/decision`、`/v1/systemone`）。
 
+### 网关 — 中间件统一与模型类型注册表
+
+- **统一错误响应格式化** (PR [#726](https://github.com/Oaklight/llm-rosetta/pull/726))：将 `proxy.py`、`auth.py`、`ratelimit.py` 三处独立的错误信封实现合并为 `error_format.py` 单一模块。路径 → API 格式 → 错误信封（OpenAI/Anthropic/Google）使用统一映射表。CORS 头逻辑合并。
+- **请求上下文中间件** (PR [#728](https://github.com/Oaklight/llm-rosetta/pull/728))：`RequestContext` 不可变数据类，在最早的 `before_request` hook 中一次填充。替代 auth、ratelimit、proxy 层中重复的路由检测、客户端 IP 提取和管理路径判断。
+- **Provider 熔断器** (PR [#727](https://github.com/Oaklight/llm-rosetta/pull/727))：三态熔断器（CLOSED → OPEN → HALF_OPEN → CLOSED），对持续高错误率的 Provider 短路请求。可按 Provider 配置阈值，默认禁用。Admin API 端点可查看熔断状态。
+- **Admin API 处理函数工具** (PR [#725](https://github.com/Oaklight/llm-rosetta/pull/725))：从 12 个相同的配置变更周期中提取 `parse_json_body()` 和 `config_mutate()` 上下文管理器，`config.py` 减少约 200 行。
+- **模型类型注册表** (PR [#730](https://github.com/Oaklight/llm-rosetta/pull/730))：声明式 `ModelTypeDescriptor` 注册表，添加新模型类型只需一个描述符 + 管道函数。LLM、embedding、rerank、decision 均为注册类型。非 LLM 处理函数自动获得遥测、性能分析和错误转储。模型列表支持 `?type=` 过滤。Admin UI 的分段控件、徽章和测试菜单从注册表元数据驱动。
+
+### Admin — 数据驱动 UI 可扩展性
+
+- **后端元数据增强** (PR [#735](https://github.com/Oaklight/llm-rosetta/pull/735))：`ModelTypeDescriptor` 新增 `icon_svg`、`color`、`is_llm` 字段；`config_format_key`、`config_path_key`、`default_path` 序列化到 `/admin/api/config` 元数据。
+- **数据驱动 Provider 弹窗** (PR [#736](https://github.com/Oaklight/llm-rosetta/pull/736))：能力复选框、端点配置区、分段控件、徽章渲染和保存逻辑全部由后端 `model_types` 元数据驱动。动态 CSS 注入徽章/圆点颜色。添加新模型类型无需修改 HTML/CSS/JS。
+- **测试类型注册表与 i18n 回退** (PR [#737](https://github.com/Oaklight/llm-rosetta/pull/737))：JS 端 `registerTestType()` API 支持可扩展的测试载荷和结果渲染器。动态获取模型类型单选按钮。`t()` 函数对未知 i18n key 自动首字母大写作为回退。
+- **Provider 列表视图紧凑徽章** — 仅显示 SVG 图标（无文字），hover 显示类型名。
+- **按启用状态排序模型** — Actions 列头可按有效启用状态排序（模型启用且 Provider 启用）。
+- **有效开关状态** — 当 Provider 被禁用时，其下模型的开关渲染为关闭状态，tooltip 说明原因。
+
+### 变更 — 代码组织（**破坏性变更**）
+
+- **Gateway 后端重组** (PR [#739](https://github.com/Oaklight/llm-rosetta/pull/739))：将 13 个文件移入 `gateway/middleware/`（8 个文件）和 `gateway/pipelines/`（5 个文件）子包。
+- **Admin JS 重组** (PR [#738](https://github.com/Oaklight/llm-rosetta/pull/738))：将 14 个 JS 文件移入 `js/core/`、`js/tabs/`、`js/components/` 子目录。
+- **移除向后兼容 shim** (PR [#744](https://github.com/Oaklight/llm-rosetta/pull/744))：**破坏性变更** — 旧的扁平 import 路径（`gateway.auth`、`gateway.embeddings` 等）不再有效。所有 import 必须使用规范路径 `gateway.middleware.*` / `gateway.pipelines.*`。下游项目需更新 import（参见 `argo-proxy` [#179](https://github.com/Oaklight/argo-proxy/pull/179)）。
+
+### 修复
+
+- **深色主题文字可见性** — 在 accent 背景上的文字使用 `--accent-on` CSS 变量代替硬编码 `#fff`，修复 minimal 深色主题下分段控件、主按钮、芯片和登录按钮上文字不可见的问题。
+- **测试下拉菜单裁切** — 测试菜单下拉使用 `position: fixed` 配合 JS 计算定位，避免被表格 `overflow` 容器裁切。
+- **包数据 glob** — `pyproject.toml` 从 `js/*.js` 更新为 `js/**/*.js`，以包含重组后子目录中的 JS 文件。
+
 ### 网关 — 多 Provider 路由与基础设施
 
 - **多 Provider 路由与加权轮询** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664))：支持为每个模型配置多个上游 Provider 并按权重分配负载。新增 `RoutingStrategy` 协议和 nginx 风格的平滑 WRR 实现。Provider 特定的错误响应自动按转换器类型映射。支持按 Provider 统计 token 用量和亲和性路由。
