@@ -22,6 +22,7 @@ from .configs import BaseConfigOps  # noqa: F401
 from .content import BaseContentOps  # noqa: F401
 from .context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
+from .simple_converter import BaseSimpleConverter
 from .embedding_converter import BaseEmbeddingConverter
 from .decision_converter import BaseDecisionConverter
 from .rerank_converter import BaseRerankConverter
@@ -34,6 +35,8 @@ from .tools import BaseToolOps  # noqa: F401
 __all__ = [
     # 主转换器 Main converter
     "BaseConverter",
+    # 非聊天转换器基类 Non-chat converter base
+    "BaseSimpleConverter",
     "BaseRerankConverter",
     "BaseEmbeddingConverter",
     "BaseDecisionConverter",
