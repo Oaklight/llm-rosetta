@@ -396,8 +396,11 @@ class ToolNameMap:
 
     _upstream: dict[tuple[str, str | None], str] = field(default_factory=dict)
     _client: dict[str, tuple[str, str | None]] = field(default_factory=dict)
-    _sole: dict[str, str] = field(default_factory=dict)
-    _ambiguous: frozenset[str] = frozenset()
+    # Bare client name -> the single upstream spelling it resolves to, or
+    # None when it resolves to several.  One field rather than a mapping plus
+    # a set of its own None-valued keys: they could only ever disagree.
+    # Names that need no translation are left out, as in ``_upstream``.
+    _bare: dict[str, str | None] = field(default_factory=dict)
     _contested: frozenset[str] = frozenset()
 
     def is_contested(self, upstream_name: str) -> bool:
@@ -411,13 +414,20 @@ class ToolNameMap:
         return upstream_name in self._contested
 
     def is_ambiguous(self, name: str) -> bool:
-        """Whether more than one tool answers to this bare client name.
+        """Whether this bare client name leads to several upstream spellings.
 
         Distinguishes the two ways :meth:`to_upstream` can decline to
-        translate a name given without a namespace: several tools claim it,
-        or no tool does.  Only a caller reporting the failure needs to care.
+        translate a name given without a namespace: several tools claim it
+        under different upstream names, or no tool does.  Only a caller
+        reporting the failure needs to care.
+
+        Not the same question as :meth:`is_contested`, and neither implies
+        the other.  Tools that collide *and* were successfully qualified
+        reach the wire under different names, so the bare name is ambiguous;
+        tools whose qualification was refused share one upstream name, so the
+        bare name resolves cleanly and it is the way *back* that is lost.
         """
-        return name in self._ambiguous
+        return name in self._bare and self._bare[name] is None
 
     def to_upstream(self, name: str, namespace: str | None = None) -> str:
         """Map a client ``(name, namespace)`` to the name the provider knows.
@@ -429,7 +439,9 @@ class ToolNameMap:
         if direct is not None:
             return direct
         if namespace is None:
-            return self._sole.get(name, name)
+            # Missing and ambiguous both fall back: nothing to translate to,
+            # or too many.
+            return self._bare.get(name) or name
         return name
 
     def to_client(self, upstream_name: str) -> tuple[str, str | None]:
@@ -495,8 +507,9 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     return ToolNameMap(
         upstream,
         client,
-        {k: v for k, v in sole.items() if v is not None and v != k},
-        frozenset(k for k, v in sole.items() if v is None),
+        # Ambiguous entries are kept; resolvable ones only when they say
+        # something ``to_upstream``'s own fallback would not.
+        {k: v for k, v in sole.items() if v is None or v != k},
         frozenset(contested),
     )
 
