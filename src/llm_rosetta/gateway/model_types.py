@@ -289,7 +289,7 @@ def _register_decision() -> None:
                 '<circle cx="12" cy="11" r="1"/>'
                 '<path d="M4 12v2M12 12v2"/></svg>'
             ),
-            color="#8b5cf6",
+            color="var(--purple)",
         )
     )
 
