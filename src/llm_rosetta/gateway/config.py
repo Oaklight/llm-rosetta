@@ -264,11 +264,15 @@ class GatewayConfig:
         desc = get_model_type(type_name)
         return list(desc.formats) if desc else []
 
-    # Class-level properties for backward compatibility — these were
-    # previously hardcoded lists.  Now they delegate to the registry
-    # so adding a new format only requires updating the descriptor.
-    EMBEDDING_FORMATS: list[str] = ["openai", "cohere", "jina", "voyage"]
-    RERANK_FORMATS: list[str] = ["jina", "cohere", "voyage"]
+    @staticmethod
+    def embedding_formats() -> list[str]:
+        """Return supported embedding formats from the model type registry."""
+        return GatewayConfig._formats_for_type("embedding")
+
+    @staticmethod
+    def rerank_formats() -> list[str]:
+        """Return supported rerank formats from the model type registry."""
+        return GatewayConfig._formats_for_type("rerank")
 
     def __init__(self, raw: dict[str, Any]) -> None:
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})

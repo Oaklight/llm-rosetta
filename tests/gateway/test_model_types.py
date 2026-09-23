@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+
 import pytest
 
 from llm_rosetta.gateway.model_types import (
-    MODEL_TYPE_REGISTRY,
     ModelTypeDescriptor,
     RouteSpec,
+    _reset_registry,
     all_model_types,
     get_model_type,
     register_model_type,
@@ -185,8 +186,7 @@ class TestRegistryCRUD:
             assert custom_name in registered_type_names()
             assert desc in all_model_types()
         finally:
-            # Clean up to avoid polluting the global registry
-            MODEL_TYPE_REGISTRY.pop(custom_name, None)
+            _reset_registry()
 
     def test_all_model_types_returns_list(self) -> None:
         result = all_model_types()
@@ -226,16 +226,16 @@ class TestConfigIntegration:
 
         desc = get_model_type("embedding")
         assert desc is not None
-        # The class-level list and registry formats should have the same
-        # elements (order may differ).
-        assert set(GatewayConfig.EMBEDDING_FORMATS) == set(desc.formats)
+        # The static method delegates to the registry — results should
+        # match the descriptor's formats.
+        assert set(GatewayConfig.embedding_formats()) == set(desc.formats)
 
     def test_rerank_formats_match_registry(self) -> None:
         from llm_rosetta.gateway.config import GatewayConfig
 
         desc = get_model_type("rerank")
         assert desc is not None
-        assert set(GatewayConfig.RERANK_FORMATS) == set(desc.formats)
+        assert set(GatewayConfig.rerank_formats()) == set(desc.formats)
 
     def test_formats_for_type_helper(self) -> None:
         from llm_rosetta.gateway.config import GatewayConfig
@@ -370,3 +370,103 @@ class TestAdminModelTypeMetadata:
             assert "supports_streaming" in entry
             assert "badge_class" in entry
             assert "routes" in entry
+
+
+# ---------------------------------------------------------------------------
+# Pipeline field tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineField:
+    """Verify that non-LLM descriptors have a callable pipeline."""
+
+    def test_embedding_pipeline_returns_handler(self) -> None:
+        desc = get_model_type("embedding")
+        assert desc is not None
+        assert desc.pipeline is not None
+        handler = desc.pipeline()
+        assert callable(handler)
+
+    def test_rerank_pipeline_returns_handler(self) -> None:
+        desc = get_model_type("rerank")
+        assert desc is not None
+        assert desc.pipeline is not None
+        handler = desc.pipeline()
+        assert callable(handler)
+
+    def test_llm_pipeline_is_none(self) -> None:
+        desc = get_model_type("llm")
+        assert desc is not None
+        assert desc.pipeline is None
+
+
+# ---------------------------------------------------------------------------
+# _reset_registry helper tests
+# ---------------------------------------------------------------------------
+
+
+class TestResetRegistry:
+    """Verify the _reset_registry test helper."""
+
+    def test_reset_clears_custom_types(self) -> None:
+        """Custom types should be gone after reset."""
+        custom_name = "_test_reset_custom"
+        register_model_type(ModelTypeDescriptor(name=custom_name))
+        assert get_model_type(custom_name) is not None
+
+        _reset_registry()
+        assert get_model_type(custom_name) is None
+
+    def test_reset_preserves_builtins(self) -> None:
+        """Built-in types should be re-registered after reset."""
+        _reset_registry()
+        assert get_model_type("llm") is not None
+        assert get_model_type("embedding") is not None
+        assert get_model_type("rerank") is not None
+
+
+# ---------------------------------------------------------------------------
+# No-pipeline warning path test
+# ---------------------------------------------------------------------------
+
+
+class TestNoPipelineWarning:
+    """Verify that _register_non_llm_routes warns on pipeline=None."""
+
+    def test_no_pipeline_logs_warning(self) -> None:
+        """A non-LLM type with pipeline=None should produce a warning."""
+        from unittest.mock import MagicMock, patch
+
+        from llm_rosetta.gateway.app import _register_non_llm_routes
+
+        custom_name = "_test_no_pipeline_type"
+        try:
+            register_model_type(
+                ModelTypeDescriptor(
+                    name=custom_name,
+                    routes=[RouteSpec("/v1/custom_no_pipeline")],
+                    formats=["custom"],
+                    pipeline=None,  # deliberately no handler
+                )
+            )
+
+            mock_app = MagicMock()
+            mock_config = MagicMock()
+
+            # Patch the gateway logger (propagate=False prevents caplog
+            # from seeing it) and capture warning calls directly.
+            with patch("llm_rosetta.gateway.app.logger") as mock_logger:
+                _register_non_llm_routes(mock_app, mock_config)
+
+            # Verify that a warning was logged mentioning the custom type
+            warning_calls = [call.args for call in mock_logger.warning.call_args_list]
+            assert any(
+                custom_name in str(args) and "no pipeline" in str(args)
+                for args in warning_calls
+            ), f"Expected warning about {custom_name!r} having no pipeline"
+
+            # Verify that no routes were registered for the pipeline-less type
+            route_calls = [call.args[0] for call in mock_app.route.call_args_list]
+            assert "/v1/custom_no_pipeline" not in route_calls
+        finally:
+            _reset_registry()

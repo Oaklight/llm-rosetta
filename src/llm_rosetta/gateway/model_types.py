@@ -44,9 +44,11 @@ class ModelTypeDescriptor:
         name: Canonical type name (``"llm"``, ``"embedding"``, ``"rerank"``).
         routes: HTTP routes this type responds on.
         formats: Provider API format strings this type supports.
-        pipeline: Async callable ``(request, config) -> Response`` for
-            non-LLM types.  ``None`` for LLM, which uses the full
-            converter pipeline via ``_proxy_handler``.
+        pipeline: A zero-argument callable that returns the async handler
+            ``(request, config) -> Response`` for non-LLM types.  The
+            callable is invoked lazily at route registration time to
+            avoid circular imports.  ``None`` for LLM, which uses the
+            full converter pipeline via ``_proxy_handler``.
         supports_streaming: Whether streaming is relevant for this type.
         badge_class: CSS class for the admin UI badge.
         config_format_key: Provider config key for the type's format
@@ -60,7 +62,7 @@ class ModelTypeDescriptor:
     name: str
     routes: list[RouteSpec] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
-    pipeline: Callable[..., Any] | None = None
+    pipeline: Callable[[], Callable[..., Any]] | None = None
     supports_streaming: bool = False
     badge_class: str = ""
     config_format_key: str | None = None
@@ -104,9 +106,42 @@ def registered_type_names() -> list[str]:
     return list(MODEL_TYPE_REGISTRY.keys())
 
 
+def _reset_registry() -> None:
+    """Reset the registry to built-in types only.
+
+    Intended for tests that register custom types and need a clean slate
+    without leaking state into other tests.
+    """
+    MODEL_TYPE_REGISTRY.clear()
+    _register_builtins()
+
+
 # ---------------------------------------------------------------------------
 # Built-in type registrations
 # ---------------------------------------------------------------------------
+
+
+def _embedding_pipeline() -> Callable[..., Any]:
+    """Lazy import wrapper for the embedding handler.
+
+    Returned by the embedding descriptor's ``pipeline`` field.  Defers
+    the import of ``gateway.embeddings`` to route-registration time so
+    that ``model_types`` can be imported without pulling in the full
+    handler dependency graph (which would cause circular imports).
+    """
+    from llm_rosetta.gateway.embeddings import handle_embeddings
+
+    return handle_embeddings
+
+
+def _rerank_pipeline() -> Callable[..., Any]:
+    """Lazy import wrapper for the rerank handler.
+
+    Same rationale as :func:`_embedding_pipeline`.
+    """
+    from llm_rosetta.gateway.rerank import handle_rerank
+
+    return handle_rerank
 
 
 def _register_builtins() -> None:
@@ -150,7 +185,7 @@ def _register_builtins() -> None:
                 RouteSpec("/v1/embeddings"),
             ],
             formats=["openai", "cohere", "jina", "voyage"],
-            pipeline=None,  # Set lazily to avoid circular imports
+            pipeline=_embedding_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-embedding",
             config_format_key="embedding_format",
@@ -168,7 +203,7 @@ def _register_builtins() -> None:
                 RouteSpec("/v2/rerank"),
             ],
             formats=["jina", "cohere", "voyage"],
-            pipeline=None,  # Set lazily to avoid circular imports
+            pipeline=_rerank_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-rerank",
             config_format_key="rerank_format",

@@ -33,8 +33,6 @@ from .keystore import KeyStore
 from .circuit_breaker import CircuitBreaker
 from .request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
-from .embeddings import handle_embeddings as _handle_embeddings
-from .rerank import handle_rerank as _handle_rerank
 from .headers import (
     build_upstream_extra_headers,
     get_preflight_tokens_override,
@@ -508,16 +506,6 @@ async def handle_openai_chat(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="openai_chat")
 
 
-async def handle_embeddings(request: Any) -> Response:
-    assert _config is not None
-    return await _handle_embeddings(request, _config)
-
-
-async def handle_rerank(request: Any) -> Response:
-    assert _config is not None
-    return await _handle_rerank(request, _config)
-
-
 async def handle_anthropic(request: Any) -> Response | StreamingResponse:
     return await _proxy_handler(request, source_provider="anthropic")
 
@@ -682,48 +670,15 @@ async def handle_health_ready(request: Any) -> Response:
 # Registry-driven route registration for non-LLM types
 # ---------------------------------------------------------------------------
 
-# Map of type name -> handler callable, populated lazily.  This avoids
-# circular imports: the handler modules import from app.py at call time,
-# not at import time.
-_NON_LLM_HANDLERS: dict[str, Callable] = {}
-
-
-def _get_non_llm_handler(type_name: str) -> Callable | None:
-    """Return the handler for a non-LLM model type, with lazy initialisation.
-
-    Handlers are imported on first call to avoid circular import issues.
-    """
-    if type_name in _NON_LLM_HANDLERS:
-        return _NON_LLM_HANDLERS[type_name]
-
-    if type_name == "embedding":
-
-        async def _embedding_handler(request: Any) -> Response:
-            assert _config is not None
-            return await _handle_embeddings(request, _config)
-
-        _NON_LLM_HANDLERS[type_name] = _embedding_handler
-        return _embedding_handler
-
-    if type_name == "rerank":
-
-        async def _rerank_handler(request: Any) -> Response:
-            assert _config is not None
-            return await _handle_rerank(request, _config)
-
-        _NON_LLM_HANDLERS[type_name] = _rerank_handler
-        return _rerank_handler
-
-    return None
-
 
 def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
     """Register HTTP routes for all non-LLM model types from the registry.
 
-    Loops over the :data:`~model_types.MODEL_TYPE_REGISTRY` and registers
-    each non-LLM type's routes with the corresponding handler.  This
-    replaces the previous manual ``app.route("/v1/embeddings")`` /
-    ``app.route("/v1/rerank")`` calls.
+    For each non-LLM descriptor whose ``pipeline`` is set, resolves the
+    handler via ``desc.pipeline()`` (a lazy import wrapper) and registers
+    its routes.  Descriptors with ``pipeline=None`` are skipped with a
+    warning — this is expected only for the ``llm`` type, which uses
+    ``_proxy_handler`` with per-format route registration.
     """
     from .model_types import all_model_types
 
@@ -731,13 +686,29 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
         if desc.name == "llm":
             continue
 
-        handler = _get_non_llm_handler(desc.name)
-        if handler is None:
+        if desc.pipeline is None:
             logger.warning(
-                "No handler registered for model type %r — routes skipped",
+                "Model type %r has no pipeline — routes skipped",
                 desc.name,
             )
             continue
+
+        # Resolve the handler via the lazy import wrapper stored in
+        # the descriptor.  The wrapper defers imports to avoid circular
+        # dependencies between model_types and handler modules.
+        raw_handler = desc.pipeline()
+
+        # Wrap the raw handler to inject the gateway config, matching
+        # the ``(request, config) -> Response`` signature used by
+        # embedding and rerank handlers.
+        def _make_handler(h: Callable) -> Callable:
+            async def _handler(request: Any) -> Response:
+                assert _config is not None
+                return await h(request, _config)
+
+            return _handler
+
+        handler = _make_handler(raw_handler)
 
         for route_spec in desc.routes:
             app.route(route_spec.path, methods=route_spec.methods)(handler)
