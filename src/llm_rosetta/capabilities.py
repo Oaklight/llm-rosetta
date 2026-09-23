@@ -658,7 +658,14 @@ def apply_upstream_tool_names(
     if not name_map:
         return
 
+    # Two different ways a namespace-less history call goes wrong, told apart
+    # because the client can only act on one of them.  ``unresolved``: the
+    # name reaches the provider matching no declared tool, and echoing the
+    # namespace back would have fixed it.  ``unattributable``: it matches
+    # several, and nothing the client sends can separate them — the tools
+    # needed different upstream names and could not be given any.
     unresolved: set[str] = set()
+    unattributable: set[str] = set()
     for msg in ir_request.get("messages") or []:
         if not isinstance(msg, dict):
             continue
@@ -670,19 +677,24 @@ def apply_upstream_tool_names(
             client_name = part.get("tool_name", "")
             upstream_name = name_map.to_upstream(client_name, namespace)
             part["tool_name"] = upstream_name
-            # ``is_ambiguous`` alone over-reports.  A top-level tool and a
-            # namespaced one can share a bare name, and then the name is
-            # ambiguous in the map yet the call is not: omitting the namespace
-            # is how a client says it meant the top-level tool, and the
-            # fallback lands on exactly that tool's upstream name.  Asking
-            # whether the result is a name we are actually sending tells the
-            # two apart, and the tool list can answer it where the map cannot
-            # — an unrenamed top-level tool is left out of the map entirely.
-            if (
-                namespace is None
-                and name_map.is_ambiguous(client_name)
-                and upstream_name not in declared
-            ):
+            if namespace is not None:
+                continue
+            if name_map.is_contested(upstream_name):
+                # Checked first, and against the *upstream* name: these tools
+                # kept their bare spelling, so the call resolves to a name we
+                # really are sending and the ``declared`` test below would pass
+                # it.  Being sent is not the same as being attributable.
+                unattributable.add(client_name)
+            elif name_map.is_ambiguous(client_name) and upstream_name not in declared:
+                # ``is_ambiguous`` alone over-reports.  A top-level tool and a
+                # namespaced one can share a bare name, and then the name is
+                # ambiguous in the map yet the call is not: omitting the
+                # namespace is how a client says it meant the top-level tool,
+                # and the fallback lands on exactly that tool's upstream name.
+                # Asking whether the result is a name we are actually sending
+                # tells the two apart, and the tool list can answer it where
+                # the map cannot — an unrenamed top-level tool is left out of
+                # the map entirely.
                 unresolved.add(client_name)
 
     for client_name in sorted(unresolved):
@@ -691,6 +703,15 @@ def apply_upstream_tool_names(
             "tools in more than one namespace declare that name, so it goes "
             "upstream matching none of them — echo back the 'namespace' field "
             "returned alongside the call to identify which tool it was"
+        )
+
+    for client_name in sorted(unattributable):
+        warnings.append(
+            f"A history tool call names {client_name!r} with no namespace, and "
+            "more than one of the tools declaring that name went upstream "
+            "under it, so the provider cannot tell which one the call was for "
+            "— see the warnings about that name for why their namespaces could "
+            "not be folded in"
         )
 
 
