@@ -481,10 +481,17 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
     # Only names a namespace was meant to distinguish: two plain top-level
     # tools sharing a name lose nothing on the way back, since neither had a
     # namespace to drop.
+    #
+    # Presence, not truthiness.  A container with no name of its own still
+    # meant to distinguish its tools and still fails to — an empty namespace
+    # is the worst case, not an absent one — and only the harvest writes this
+    # key, so having it at all is what marks a tool as having come from a
+    # container.
     contested = {
         t["name"]
         for t in tools
-        if claimants[t["name"]] > 1 and (t.get("metadata") or {}).get("namespace")
+        if claimants[t["name"]] > 1
+        and (t.get("metadata") or {}).get("namespace") is not None
     }
 
     for tool in tools:
