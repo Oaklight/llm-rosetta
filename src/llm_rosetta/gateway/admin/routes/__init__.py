@@ -70,6 +70,7 @@ from .observability import (
     delete_error_dump,
     db_cleanup,
     export_error_dumps,
+    get_circuit_breaker_states,
     get_error_dump_body,
     get_error_dump_detail,
     get_error_dumps,
@@ -183,6 +184,10 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
     app.route("/admin/api/metrics/rebuild", methods=["POST"])(
         _guard("dashboard", rebuild_metrics)
+    )
+    # Circuit breaker states (dashboard tab)
+    app.route("/admin/api/circuit-breakers", methods=["GET"])(
+        _guard("dashboard", get_circuit_breaker_states)
     )
     # Request log (logs tab)
     app.route("/admin/api/requests", methods=["GET"])(_guard("logs", get_requests))

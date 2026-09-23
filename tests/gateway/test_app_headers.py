@@ -39,6 +39,16 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
         error_dumps_enabled = False
         provider_key_affinity: dict[str, bool] = {}
 
+        def __init__(self):
+            from llm_rosetta.gateway.circuit_breaker import (
+                CircuitBreakerConfig,
+                CircuitBreakerRegistry,
+            )
+
+            self.circuit_breaker_registry = CircuitBreakerRegistry(
+                CircuitBreakerConfig(enabled=False)
+            )
+
         def resolve(self, source_provider, model):
             return (
                 ResolvedRoute(

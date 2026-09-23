@@ -307,6 +307,7 @@ class GatewayConfig:
         self._apply_server_settings(_server)
         self._apply_auth_settings(_server)
         self._apply_rate_limit_settings(_server)
+        self._apply_circuit_breaker_settings(_server)
 
         self._apply_debug_settings(raw.get("debug", {}))
 
@@ -579,6 +580,45 @@ class GatewayConfig:
     _VALID_RL_ALGORITHMS = frozenset(
         {"token_bucket", "fixed_window", "sliding_window", "gcra"}
     )
+
+    def _apply_circuit_breaker_settings(self, _server: dict[str, Any]) -> None:
+        """Parse circuit breaker settings from the server section.
+
+        Supports global defaults under ``server.circuit_breaker`` and
+        per-provider overrides under each provider's ``circuit_breaker``
+        sub-object.  The circuit breaker is disabled by default.
+        """
+        from .circuit_breaker import CircuitBreakerConfig, CircuitBreakerRegistry
+
+        cb = _server.get("circuit_breaker", {}) or {}
+        default_cfg = CircuitBreakerConfig(
+            enabled=bool(cb.get("enabled", False)),
+            error_threshold=int(cb.get("error_threshold", 5)),
+            cooldown_seconds=float(cb.get("cooldown_seconds", 30.0)),
+            half_open_max_probes=int(cb.get("half_open_max_probes", 1)),
+        )
+        self.circuit_breaker_registry = CircuitBreakerRegistry(default_cfg)
+
+        # Per-provider overrides
+        for pname, pcfg in self._raw_providers.items():
+            if not isinstance(pcfg, dict):
+                continue
+            pcb = pcfg.get("circuit_breaker")
+            if not isinstance(pcb, dict):
+                continue
+            override = CircuitBreakerConfig(
+                enabled=bool(pcb.get("enabled", default_cfg.enabled)),
+                error_threshold=int(
+                    pcb.get("error_threshold", default_cfg.error_threshold)
+                ),
+                cooldown_seconds=float(
+                    pcb.get("cooldown_seconds", default_cfg.cooldown_seconds)
+                ),
+                half_open_max_probes=int(
+                    pcb.get("half_open_max_probes", default_cfg.half_open_max_probes)
+                ),
+            )
+            self.circuit_breaker_registry.set_override(pname, override)
 
     def _apply_rate_limit_settings(self, _server: dict[str, Any]) -> None:
         """Parse rate limiting settings from the server section."""
