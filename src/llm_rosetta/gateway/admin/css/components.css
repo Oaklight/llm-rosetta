@@ -5,7 +5,7 @@
   transition: all 0.15s;
 }
 .btn:hover { background: var(--bg-hover); }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-on); }
 .btn-primary:hover { background: var(--accent-hover); }
 .btn-danger { color: var(--red); border-color: color-mix(in srgb, var(--red) 30%, transparent); }
 .btn-danger:hover { background: color-mix(in srgb, var(--red) 6%, transparent); border-color: var(--red); }
@@ -46,7 +46,7 @@ tr:hover td { background: var(--bg-hover); }
 .seg-control > *:last-child { border-right:none; }
 .seg-control > *:hover { background:var(--bg); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
-.seg-control > *.active { background:var(--accent);color:#fff; }
+.seg-control > *.active { background:var(--accent);color:var(--accent-on); }
 /* Capability badges for provider cards */
 /* Capability badges are secondary metadata — kept small so a provider with
    all three still fits its column without squeezing the base URL. */
@@ -93,7 +93,7 @@ tr:hover td { background: var(--bg-hover); }
 .chip-group { display:flex;gap:6px;flex-wrap:wrap; }
 .chip { display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border:1px solid var(--border);border-radius:20px;font-size:13px;cursor:pointer;user-select:none;transition:all 0.15s;background:var(--bg-card);color:var(--text-dim); }
 .chip:hover { border-color:var(--accent);color:var(--accent); }
-.chip.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+.chip.active { background:var(--accent);border-color:var(--accent);color:var(--accent-on); }
 .chip input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .expand-link { font-size:12px;color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-top:6px; }
 .expand-link:hover { text-decoration:underline; }
@@ -491,7 +491,7 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
 .login-box .login-error { color:var(--red);font-size:12px;margin-top:8px;min-height:16px; }
 .login-box button {
   margin-top:16px;width:100%;padding:10px;border:none;border-radius:var(--radius);
-  background:var(--accent);color:#fff;font-size:14px;cursor:pointer;
+  background:var(--accent);color:var(--accent-on);font-size:14px;cursor:pointer;
 }
 .login-box button:hover { background:var(--accent-hover); }
 
