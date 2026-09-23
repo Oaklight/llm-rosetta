@@ -232,9 +232,9 @@ def enforce_custom_tools(
     Must be called **after** source → IR conversion.  When the effective
     supports value is False, each IR tool with ``type == "custom"`` is
     rewritten to ``type = "function"`` with a synthesised JSON schema
-    wrapping the input as ``{"input": string}``.  The original type is
-    preserved in ``metadata["provider_type"]`` so the response path can
-    restore it.
+    wrapping the input as ``{"input": string}``.  The downgrade is recorded
+    as ``metadata["_downgraded_from"] = "custom"`` so the response path can
+    restore the original type.
 
     Resolution: ``config_override`` carries the pre-resolved value from
     ``config.resolve()`` (config override > shim default > False) and is
