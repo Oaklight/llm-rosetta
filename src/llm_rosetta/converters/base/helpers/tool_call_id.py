@@ -14,13 +14,13 @@ itself preserves the original ID for internal correlation.
 
 from __future__ import annotations
 
-import hashlib
 import re
+
+from .truncate import truncate_with_digest
 
 _INVALID_CHARS = re.compile(r"[^a-zA-Z0-9_-]")
 
 MAX_TOOL_CALL_ID_LENGTH = 64
-_HASH_SUFFIX_LEN = 8
 
 
 def sanitize_tool_call_id(
@@ -50,13 +50,6 @@ def sanitize_tool_call_id(
     if not raw_id:
         return raw_id or ""
 
-    sanitized = _INVALID_CHARS.sub("_", raw_id)
-
-    if len(sanitized) <= max_length:
-        return sanitized
-
     # Hash the sanitized form (not raw) — two raw IDs differing only in
     # which invalid chars they use will collide, but this is acceptable.
-    digest = hashlib.sha256(sanitized.encode()).hexdigest()[:_HASH_SUFFIX_LEN]
-    truncated_len = max_length - _HASH_SUFFIX_LEN - 1  # 1 for separator
-    return f"{sanitized[:truncated_len]}_{digest}"
+    return truncate_with_digest(_INVALID_CHARS.sub("_", raw_id), max_length)

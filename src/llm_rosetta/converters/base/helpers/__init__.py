@@ -13,6 +13,7 @@ Modules:
     tool_call_unwind — Unwind parallel tool calls into sequential pairs.
     tool_call_id    — Tool call ID sanitization for provider compatibility.
     tool_content    — Multimodal content block conversion inside tool results.
+    truncate        — Fit an identifier into a length budget uniquely.
 """
 
 # Re-export public functions so call sites can use:
@@ -30,6 +31,7 @@ from .tool_call_id import sanitize_tool_call_id
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .tool_call_unwind import unwind_parallel_tool_calls_ir
 from .tool_content import convert_content_blocks_to_ir, convert_ir_content_blocks_to_p
+from .truncate import truncate_with_digest
 
 __all__ = [
     # orphan_fix
@@ -49,6 +51,8 @@ __all__ = [
     # tool_content
     "convert_content_blocks_to_ir",
     "convert_ir_content_blocks_to_p",
+    # truncate
+    "truncate_with_digest",
 ]
 
 # system_message_hoist
