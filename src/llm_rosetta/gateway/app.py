@@ -679,6 +679,71 @@ async def handle_health_ready(request: Any) -> Response:
 
 
 # ---------------------------------------------------------------------------
+# Registry-driven route registration for non-LLM types
+# ---------------------------------------------------------------------------
+
+# Map of type name -> handler callable, populated lazily.  This avoids
+# circular imports: the handler modules import from app.py at call time,
+# not at import time.
+_NON_LLM_HANDLERS: dict[str, Callable] = {}
+
+
+def _get_non_llm_handler(type_name: str) -> Callable | None:
+    """Return the handler for a non-LLM model type, with lazy initialisation.
+
+    Handlers are imported on first call to avoid circular import issues.
+    """
+    if type_name in _NON_LLM_HANDLERS:
+        return _NON_LLM_HANDLERS[type_name]
+
+    if type_name == "embedding":
+
+        async def _embedding_handler(request: Any) -> Response:
+            assert _config is not None
+            return await _handle_embeddings(request, _config)
+
+        _NON_LLM_HANDLERS[type_name] = _embedding_handler
+        return _embedding_handler
+
+    if type_name == "rerank":
+
+        async def _rerank_handler(request: Any) -> Response:
+            assert _config is not None
+            return await _handle_rerank(request, _config)
+
+        _NON_LLM_HANDLERS[type_name] = _rerank_handler
+        return _rerank_handler
+
+    return None
+
+
+def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
+    """Register HTTP routes for all non-LLM model types from the registry.
+
+    Loops over the :data:`~model_types.MODEL_TYPE_REGISTRY` and registers
+    each non-LLM type's routes with the corresponding handler.  This
+    replaces the previous manual ``app.route("/v1/embeddings")`` /
+    ``app.route("/v1/rerank")`` calls.
+    """
+    from .model_types import all_model_types
+
+    for desc in all_model_types():
+        if desc.name == "llm":
+            continue
+
+        handler = _get_non_llm_handler(desc.name)
+        if handler is None:
+            logger.warning(
+                "No handler registered for model type %r — routes skipped",
+                desc.name,
+            )
+            continue
+
+        for route_spec in desc.routes:
+            app.route(route_spec.path, methods=route_spec.methods)(handler)
+
+
+# ---------------------------------------------------------------------------
 # Persistence flush helpers
 # ---------------------------------------------------------------------------
 
@@ -980,18 +1045,21 @@ def create_app(
 
     # --- Routes ---
     if not ext.skip_default_routes:
+        # LLM routes: explicit registration (complex per-format handler logic)
         app.route("/v1/chat/completions", methods=["POST"])(handle_openai_chat)
-        app.route("/v1/embeddings", methods=["POST"])(handle_embeddings)
-        app.route("/v1/rerank", methods=["POST"])(handle_rerank)
-        app.route("/v2/rerank", methods=["POST"])(handle_rerank)
         app.route("/v1/messages", methods=["POST"])(handle_anthropic)
         app.route("/v1/responses", methods=["POST"])(handle_openai_responses)
-        app.route("/v1/models", methods=["GET"])(handle_list_models)
-        app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
         app.route("/v1beta/models/<path:model_path>", methods=["POST"])(
             handle_google_generate
         )
         app.route("/v1beta/interactions", methods=["POST"])(handle_google_interactions)
+
+        # Non-LLM routes: registered from the model type registry
+        _register_non_llm_routes(app, config)
+
+        # Utility / listing / health routes
+        app.route("/v1/models", methods=["GET"])(handle_list_models)
+        app.route("/v1beta/models", methods=["GET"])(handle_list_models_google)
         app.route("/health", methods=["GET"])(handle_health)
         app.route("/health/live", methods=["GET"])(handle_health_live)
         app.route("/health/ready", methods=["GET"])(handle_health_ready)
