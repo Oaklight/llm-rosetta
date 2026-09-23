@@ -13,6 +13,21 @@ Usage::
 
     raw = load_config("config.jsonc")
     app = create_app(GatewayConfig(raw))
+
+Module map::
+
+    Core proxy          app, proxy, config, providers, routing_strategy
+    Middleware           auth, ratelimit, request_context, error_format,
+                         circuit_breaker, headers, sanitize, affinity
+    Model types          model_types (registry), embeddings, rerank, decision
+                         embedding_pipeline, rerank_pipeline
+    Observability        (in llm_rosetta.observability, re-exported by admin/)
+    Infrastructure       keystore, logging, migrations, deferred_startup
+    Admin UI             admin/ (routes, static assets, JS/CSS)
+    CLI / bootstrap      cli, banner, __main__
+
+    Middleware hook order (registered in create_app):
+    request_context → auth → ratelimit → [extension hooks] → handler
 """
 
 # httpserver and httpclient are vendored in _vendor/ — no external deps needed.
