@@ -763,6 +763,93 @@ class TestNamespaceRoundTrip:
             f"expected an ambiguous-allowed_tools warning; got {pipe.warnings}"
         )
 
+    @staticmethod
+    def _with_history(*calls: tuple[str, str | None]) -> dict[str, Any]:
+        """A two-namespace request replaying *calls* as history."""
+        request = _request(
+            _namespace_container("functions", "wait"),
+            _namespace_container("agents", "wait"),
+        )
+        for i, (name, namespace) in enumerate(calls):
+            call: dict[str, Any] = {
+                "type": "function_call",
+                "call_id": f"c{i}",
+                "name": name,
+                "arguments": "{}",
+            }
+            if namespace:
+                call["namespace"] = namespace
+            request["input"].append(call)
+            request["input"].append(
+                {"type": "function_call_output", "call_id": f"c{i}", "output": "ok"}
+            )
+        return request
+
+    def test_history_call_dropping_its_namespace_warns(self):
+        """A client that ignores the namespace field we added still gets told."""
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe.convert_request(self._with_history(("wait", None)))
+
+        assert any("A history tool call names 'wait'" in w for w in pipe.warnings), (
+            f"expected an unresolved-history warning; got {pipe.warnings}"
+        )
+
+    def test_repeated_history_calls_warn_once(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe.convert_request(self._with_history(*[("wait", None)] * 3))
+
+        assert sum("A history tool call" in w for w in pipe.warnings) == 1
+
+    def test_history_call_keeping_its_namespace_is_silent(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe.convert_request(self._with_history(("wait", "agents")))
+
+        assert not [w for w in pipe.warnings if "A history tool call" in w]
+
+    def test_history_call_for_a_top_level_tool_is_silent(self):
+        """Omitting the namespace is how a client names the top-level tool.
+
+        The bare name is ambiguous in the map — a namespaced tool declares it
+        too — but the call is not, and the fallback already resolves it to the
+        top-level tool's own upstream name.  Warning here would fire on the
+        commonest way the two kinds of tool coexist.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(_namespace_container("agents", "wait"))
+        request["tools"] = [{"type": "function", "name": "wait", "parameters": {}}]
+        request["input"] += [
+            {
+                "type": "function_call",
+                "call_id": "c0",
+                "name": "wait",
+                "arguments": "{}",
+            },
+            {"type": "function_call_output", "call_id": "c0", "output": "ok"},
+        ]
+
+        upstream = pipe.convert_request(request)
+
+        # The collision did happen — otherwise the map is empty and the check
+        # below passes without the warning path ever running.
+        assert {t["function"]["name"] for t in upstream["tools"]} == {
+            "wait",
+            "agents_wait",
+        }
+        replayed = [
+            call for msg in upstream["messages"] for call in msg.get("tool_calls") or []
+        ]
+        assert [c["function"]["name"] for c in replayed] == ["wait"]
+        assert not [w for w in pipe.warnings if "A history tool call" in w], (
+            f"expected silence for a top-level call; got {pipe.warnings}"
+        )
+
+    def test_history_call_for_an_undeclared_tool_is_silent(self):
+        """The client's own stale history is not ours to complain about."""
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe.convert_request(self._with_history(("some_retired_tool", None)))
+
+        assert not [w for w in pipe.warnings if "A history tool call" in w]
+
     def test_name_map_is_built_once_and_reused(self):
         """Response and streaming legs must use the request leg's own map."""
         pipe = ConversionPipeline("openai_responses", "openai_chat")
