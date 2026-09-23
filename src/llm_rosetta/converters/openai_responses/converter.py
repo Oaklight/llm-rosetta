@@ -44,6 +44,7 @@ from ..base.helpers import (
     fix_orphaned_tool_calls_ir,
     sanitize_tool_call_id,
     strip_orphaned_tool_config,
+    truncate_with_digest,
 )
 from .stream_context import OpenAIResponsesStreamContext
 from ._constants import (
@@ -93,36 +94,55 @@ _MAX_TOOL_NAME_LEN = 64
 
 def _qualify_tool_name(
     namespace: str, name: str, used_names: set[str], warnings: list[str]
-) -> str | None:
-    """Build a qualified ``{namespace}_{name}`` that fits in 64 chars.
+) -> str:
+    """Build a name for a namespaced tool that no other tool upstream has.
 
-    Returns ``None`` if no distinct name fits, in which case the caller
-    leaves the tool under its bare name — where it shares that name with
-    another tool and one of the two effectively shadows the other.  That
-    is a silent misroute from the client's side, so the failures go to
-    ``warnings`` rather than the log: callers embedding the pipeline read
-    them off :attr:`ConversionPipeline.warnings`.  The gateway currently
-    only logs that list, so an HTTP client still sees nothing.
+    Always succeeds.  The upstream spelling is ours to choose — the client
+    never sees it, addressing its tools by ``(name, namespace)`` and having
+    them restored through :class:`~llm_rosetta.capabilities.ToolNameMap` —
+    so rather than give up and let two tools share one name, which silently
+    misroutes every call naming it, we keep going until the name is unique.
+
+    Preferences, best first:
+
+    1. ``{namespace}_{name}`` — readable, and what nearly every caller gets.
+    2. The namespace truncated to fit.  Still readable.
+    3. A digest suffix, which is not.  The model reads a tool's name as a
+       hint about what it does, so this one costs prompting quality and
+       earns a warning, but a degraded hint beats a misrouted call.
+
+    Steps 1 and 2 can also be taken by an unrelated tool, so each candidate
+    is checked against *used_names* before it is accepted.
     """
     qualified = f"{namespace}_{name}"
     if len(qualified) > _MAX_TOOL_NAME_LEN:
         max_ns = _MAX_TOOL_NAME_LEN - len(name) - 1
         if max_ns > 0:
             qualified = f"{namespace[:max_ns]}_{name}"
-        else:
-            warnings.append(
-                f"Tool name {name!r} is too long to qualify with namespace "
-                f"{namespace!r} within {_MAX_TOOL_NAME_LEN} characters; "
-                "it stays ambiguous with the other tool of that name"
-            )
-            return None
-    if qualified in used_names:
-        warnings.append(
-            f"Qualified name {qualified!r} for namespace {namespace!r} still "
-            f"collides; {name!r} stays ambiguous with the other tool of that name"
+    if len(qualified) <= _MAX_TOOL_NAME_LEN and qualified not in used_names:
+        return qualified
+
+    # Seed from the pair that must stay distinct, never from list position:
+    # identical requests have to produce identical names or every one is a
+    # prompt-cache miss. The counter only widens the search when a digest is
+    # itself taken, and terminates because the tool list is finite.
+    attempt = 0
+    while True:
+        seed = f"{namespace}\0{name}\0{attempt}" if attempt else f"{namespace}\0{name}"
+        generated = truncate_with_digest(
+            qualified, _MAX_TOOL_NAME_LEN, seed=seed, force=True
         )
-        return None
-    return qualified
+        if generated not in used_names:
+            break
+        attempt += 1
+
+    warnings.append(
+        f"Tool {name!r} in namespace {namespace!r} cannot be qualified within "
+        f"{_MAX_TOOL_NAME_LEN} characters without colliding with another tool, "
+        f"so it goes upstream under the generated name {generated!r}; calls "
+        "still route correctly, but the model sees a less meaningful name"
+    )
+    return generated
 
 
 class OpenAIResponsesConverter(BaseConverter):
@@ -568,7 +588,11 @@ class OpenAIResponsesConverter(BaseConverter):
         method qualifies colliding names as ``{namespace}_{name}`` while
         leaving non-namespaced (top-level) tools unchanged.
 
-        Collisions that cannot be resolved are appended to ``warnings``.
+        A tool whose namespace has a name always ends up with one no other
+        tool has; where that took a generated name rather than a readable
+        one, ``_qualify_tool_name`` says so in ``warnings``.  The exception
+        is a container carrying no name at all, which has nothing to
+        qualify with and is reported here.
 
         Returns a new list; renamed entries are shallow-copied to avoid
         mutating cached references.
@@ -583,29 +607,34 @@ class OpenAIResponsesConverter(BaseConverter):
         for name, indices in name_indices.items():
             if len(indices) <= 1:
                 continue
+            # What will still answer to `name` once this group is done:
+            # top-level tools, never renamed, plus ones from a nameless
+            # container. Everything else moves aside, so a count of one means
+            # no collision is left.
+            bare_keepers = sum(
+                1
+                for i in indices
+                if not (ir_tools[i].get("metadata") or {}).get("namespace")
+            )
             for i in indices:
                 ns = (ir_tools[i].get("metadata") or {}).get("namespace")
                 if ns is None:
-                    # A top-level tool.  There is nothing to qualify it with,
-                    # and a name it shares with a namespaced tool is still its
-                    # own — the namespaced one gets moved out of the way.
+                    # Top-level: nothing to qualify it with, and the name is
+                    # its own — the namespaced tool moves instead.
                     continue
                 if not ns:
-                    # A container that carries no name.  Every other way
-                    # qualification fails is reported from inside
-                    # ``_qualify_tool_name``, which this path never reaches,
-                    # so it has to be said here or the tool shadows its
-                    # namesake with nothing appended anywhere.
-                    warnings.append(
-                        f"A namespace container declaring {name!r} has no "
-                        "name of its own, so that tool cannot be told apart "
-                        "from the others declaring the same name and they all "
-                        f"go upstream as {name!r}"
-                    )
+                    # Nameless container. Every other qualification failure
+                    # is reported inside `_qualify_tool_name`, which this path
+                    # never reaches, so it must be said here.
+                    if bare_keepers > 1:
+                        warnings.append(
+                            f"A namespace container declaring {name!r} has no "
+                            "name of its own, so that tool cannot be told apart "
+                            "from the others declaring the same name and they "
+                            f"all go upstream as {name!r}"
+                        )
                     continue
                 qualified = _qualify_tool_name(ns, name, used_names, warnings)
-                if qualified is None:
-                    continue
                 copy = dict(ir_tools[i])
                 copy["name"] = qualified
                 copy["metadata"] = dict(copy.get("metadata", {}))

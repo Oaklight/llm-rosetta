@@ -382,41 +382,32 @@ class ToolNameMap:
 
     To the client a tool is identified by ``(name, namespace)``; upstream it
     is a single flat name, because no target format carries a namespace.
-    Anything that rewrites a tool name on the request leg registers both
-    spellings here, and every leg that names a tool translates through it:
-
-    - request: history tool calls sent by the client, via :meth:`to_upstream`
-    - response: tool calls echoed by the provider, via :meth:`to_client`
+    Anything that renames a tool on the request leg registers both spellings
+    here; the request leg translates history calls with :meth:`to_upstream`
+    and the response leg translates them back with :meth:`to_client`.
 
     Both directions fall back to the input name, so call sites can translate
-    unconditionally without knowing whether a rewrite happened.  A name the
-    map cannot attribute to exactly one tool falls back too: guessing would
-    route the call to the wrong handler, which is worse than not translating.
+    unconditionally. A name the map cannot attribute to exactly one tool
+    falls back too — guessing would route the call to the wrong handler.
     """
 
     _upstream: dict[tuple[str, str | None], str] = field(default_factory=dict)
     _client: dict[str, tuple[str, str | None]] = field(default_factory=dict)
-    # Bare client name -> the single upstream spelling it resolves to, or
-    # None when it resolves to several.  One field rather than a mapping plus
-    # a set of its own None-valued keys: they could only ever disagree.
-    # Names that need no translation are left out, as in ``_upstream``.
+    # Bare client name -> its single upstream spelling, or None when it
+    # resolves to several. Names needing no translation are left out.
     _bare: dict[str, str | None] = field(default_factory=dict)
     _contested: frozenset[str] = frozenset()
-    # Names declared outside any namespace.  Recorded even for the tools the
-    # rest of the map leaves out, since those are exactly the ones asked
-    # about: a top-level tool is never renamed, so it never earns an entry.
+    # Names declared outside any namespace. Recorded even for tools the rest
+    # of the map leaves out: a top-level tool is never renamed, so it earns
+    # no entry elsewhere, yet it is exactly what gets asked about.
     _top_level: frozenset[str] = frozenset()
 
     def has_top_level(self, name: str) -> bool:
         """Whether some tool declares this name outside any namespace.
 
-        Such a name is what a client means when it sends a call with no
-        namespace, so a caller reporting an unroutable call should stay quiet
-        about it however ambiguous the name looks from the map's side.
-
-        Deliberately not "is this a name we send upstream": a namespaced tool
-        whose qualification failed also keeps its bare spelling and so is also
-        a name we send, but a bare call was never meant for it.
+        Not "is this a name we send upstream": a tool from a nameless
+        container also keeps its bare spelling, but a bare call still cannot
+        be meant for it — the client has no name to point at it with.
         """
         return name in self._top_level
 
@@ -424,25 +415,22 @@ class ToolNameMap:
         """Whether this upstream name was declared by more than one tool.
 
         :meth:`to_client` cannot attribute such a name, so it falls back and
-        the namespace is dropped.  That is indistinguishable from the far
-        more common case of a tool that was never renamed, which is why the
-        contested names are recorded rather than inferred from the fallback.
+        drops the namespace — indistinguishable from a tool that was never
+        renamed, which is why these are recorded rather than inferred.
+
+        Only a nameless container reaches this: a named one always gets its
+        tools a spelling nobody else has.
         """
         return upstream_name in self._contested
 
     def is_ambiguous(self, name: str) -> bool:
         """Whether this bare client name leads to several upstream spellings.
 
-        Distinguishes the two ways :meth:`to_upstream` can decline to
-        translate a name given without a namespace: several tools claim it
-        under different upstream names, or no tool does.  Only a caller
-        reporting the failure needs to care.
-
         Not the same question as :meth:`is_contested`, and neither implies
-        the other.  Tools that collide *and* were successfully qualified
-        reach the wire under different names, so the bare name is ambiguous;
-        tools whose qualification was refused share one upstream name, so the
-        bare name resolves cleanly and it is the way *back* that is lost.
+        the other. Tools that collide but were qualified reach the wire under
+        different names, so the bare name is ambiguous; tools that could not
+        be qualified share one upstream name, so the bare name resolves and
+        it is the way *back* that is lost.
         """
         return name in self._bare and self._bare[name] is None
 
@@ -487,39 +475,28 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
         for t in (ir_request.get("tools") or [])
         if isinstance(t, dict) and t.get("name")
     ]
-    # Qualification can fail — the bare name already fills the 64-char budget,
-    # or the qualified spelling is taken — and then two tools go upstream
-    # under one name.  A call naming it belongs to neither in particular.
+    # Two tools still share one upstream name when a nameless container left
+    # nothing to qualify them with; a call naming it belongs to neither.
     claimants = Counter(t["name"] for t in tools)
 
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
     sole: dict[str, str | None] = {}
-    # Only names a namespace was meant to distinguish: two plain top-level
-    # tools sharing a name lose nothing on the way back, since neither had a
-    # namespace to drop.
+    # Only names a namespace was meant to distinguish: two top-level tools
+    # sharing a name lose nothing on the way back, having none to drop.
     #
-    # Presence, not truthiness.  A container with no name of its own still
-    # meant to distinguish its tools and still fails to — an empty namespace
-    # is the worst case, not an absent one — and only the harvest writes this
-    # key, so having it at all is what marks a tool as having come from a
-    # container.
+    # `is None`, not truthiness: a nameless container gives "", which is the
+    # worst case rather than an absent one. Only the harvest writes this key,
+    # so its presence is what marks a tool as having come from a container.
     contested = {
         t["name"]
         for t in tools
         if claimants[t["name"]] > 1
         and (t.get("metadata") or {}).get("namespace") is not None
     }
-    # ``t["name"]`` is the client name here as well as the upstream one: a
-    # top-level tool is never renamed, which is also why these names cannot be
-    # recovered from the map below — they earn no entry in it.
-    #
-    # ``is None``, not falsiness, for the same reason as ``contested`` above and
-    # with more at stake: a container with no name of its own gives ``""``, and
-    # reading that as top-level would say a bare call meant such a tool.  It
-    # never does — the tool came from a container the client will name when it
-    # calls, and suppressing the warning is exactly the wrong answer for the
-    # one shape that most needs it.
+    # `is None` again, and with more at stake: reading "" as top-level would
+    # claim a bare call meant that tool, when the client has no name to point
+    # at it with and the call is in fact ambiguous.
     top_level = {
         t["name"] for t in tools if (t.get("metadata") or {}).get("namespace") is None
     }
@@ -737,9 +714,10 @@ def apply_upstream_tool_names(
                 # namespace is how a client says it meant the top-level tool,
                 # and the fallback lands on exactly that tool's upstream name.
                 # So the question is whether a top-level tool claims the name,
-                # not whether the name is one we send — a namespaced tool that
-                # kept its bare spelling after a failed qualification is also
-                # sent under it, and a bare call was never meant for that one.
+                # not whether the name is one we send — a tool from a container
+                # with no name of its own also keeps its bare spelling and is
+                # also sent under it, and a bare call was never meant for that
+                # one.
                 unresolved.add(client_name)
 
     for client_name in sorted(unresolved):

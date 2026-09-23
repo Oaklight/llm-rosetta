@@ -872,19 +872,20 @@ class TestNamespaceRoundTrip:
             f"expected an unattributable-history warning; got {pipe.warnings}"
         )
 
-    def test_history_call_warns_when_the_bare_name_is_a_failed_qualification(self):
+    def test_history_call_warns_when_the_bare_name_belongs_to_a_namespace(self):
         """Being a name we send is not the same as being the tool meant.
 
-        ``ns`` declares both ``a`` and ``ns_a``, so ``ns/a`` cannot take its
-        qualified spelling — its sibling already holds it — and it keeps the
-        bare one.  ``other/a`` qualifies cleanly.  The replayed bare call
-        therefore lands on a tool that is genuinely declared upstream, just
-        not one a namespace-less call was ever meant to reach.  Only asking
-        whether a *top-level* tool claims the name tells that apart.
+        The nameless container's ``a`` has nothing to qualify it with, so it
+        keeps the bare spelling, while ``other/a`` qualifies away to
+        ``other_a``.  The replayed bare call therefore lands on a tool that is
+        genuinely declared upstream, just not one a namespace-less call was
+        ever meant to reach — it came from a container, and a client that
+        meant it would have named that container.  Only asking whether a
+        *top-level* tool claims the name tells that apart.
         """
         pipe = ConversionPipeline("openai_responses", "openai_chat")
         request = _request(
-            _namespace_container("ns", "a", "ns_a"),
+            _namespace_container("", "a"),
             _namespace_container("other", "a"),
         )
         request["input"] += [
@@ -897,7 +898,7 @@ class TestNamespaceRoundTrip:
         declared = {t["function"]["name"] for t in upstream["tools"]}
         # No top-level tool anywhere, yet the bare name is declared — the shape
         # the old "is it a name we send" test could not see past.
-        assert declared == {"a", "ns_a", "other_a"}
+        assert declared == {"a", "other_a"}
         replayed = [
             call for msg in upstream["messages"] for call in msg.get("tool_calls") or []
         ]
@@ -910,11 +911,11 @@ class TestNamespaceRoundTrip:
     def test_contested_beats_unresolved_when_both_trigger(self):
         """The two history triggers overlap, and the order decides the advice.
 
-        Top-level ``x_a`` and ``y_a`` occupy the spellings ``x/a`` and ``y/a``
-        would have qualified into, so both keep the bare ``a`` and the name is
-        contested.  ``z/a`` qualifies to ``z_a``, which makes the same client
-        name reach several upstream spellings and so makes it ambiguous too.
-        No top-level ``a`` exists, so neither arm is suppressed.
+        Two containers with no name of their own both declare ``a``, so both
+        keep the bare spelling and the name is contested.  ``z/a`` qualifies
+        to ``z_a``, which makes the same client name reach several upstream
+        spellings and so makes it ambiguous too.  No top-level ``a`` exists,
+        so neither arm is suppressed.
 
         Contested has to win.  The other arm tells the client to echo the
         namespace back, and that cannot help here — the namespaces are exactly
@@ -922,13 +923,10 @@ class TestNamespaceRoundTrip:
         """
         pipe = ConversionPipeline("openai_responses", "openai_chat")
         request = _request(
-            _namespace_container("x", "a"),
-            _namespace_container("y", "a"),
+            _namespace_container("", "a"),
+            _namespace_container("", "a"),
             _namespace_container("z", "a"),
         )
-        request["tools"] = [
-            {"type": "function", "name": n, "parameters": {}} for n in ("x_a", "y_a")
-        ]
         request["input"] += [
             {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
             {"type": "function_call_output", "call_id": "c0", "output": "ok"},
@@ -952,21 +950,18 @@ class TestNamespaceRoundTrip:
         )
 
     def test_contested_history_warning_does_not_invent_a_cause(self):
-        """Qualification fails two ways, and the message must not pick one.
+        """The message defers to a cause, and must not guess at it.
 
-        Here ``x/a`` and ``y/a`` fail because top-level ``x_a`` and ``y_a``
-        already hold their qualified spellings — nothing is near the 64-char
-        budget.  A message blaming the length limit would send the reader off
-        to shorten three-character names.
+        Here the two tools share a name because their containers have none,
+        not because anything ran out of room — every name in the request is a
+        single character.  A message blaming the length limit would send the
+        reader off to shorten them.
         """
         pipe = ConversionPipeline("openai_responses", "openai_chat")
         request = _request(
-            _namespace_container("x", "a"),
-            _namespace_container("y", "a"),
+            _namespace_container("", "a"),
+            _namespace_container("", "a"),
         )
-        request["tools"] = [
-            {"type": "function", "name": n, "parameters": {}} for n in ("x_a", "y_a")
-        ]
         request["input"] += [
             {"type": "function_call", "call_id": "c0", "name": "a", "arguments": "{}"},
             {"type": "function_call_output", "call_id": "c0", "output": "ok"},
@@ -978,11 +973,11 @@ class TestNamespaceRoundTrip:
         assert longest < 10, "no name here is anywhere near the length budget"
         history = [w for w in pipe.warnings if "A history tool call" in w]
         assert len(history) == 1 and "length" not in history[0], (
-            f"the cause is a taken spelling, not the length cap; got {history}"
+            f"the cause is a nameless container, not the length cap; got {history}"
         )
         # The accurate cause is carried by the qualification warnings, which
         # the message defers to, so they have to actually be there.
-        assert [w for w in pipe.warnings if "still collides" in w]
+        assert [w for w in pipe.warnings if "has no name of its own" in w]
 
     def test_nameless_container_does_not_count_as_top_level(self):
         """An empty namespace is still a namespace, and must not suppress.
@@ -1040,16 +1035,19 @@ class TestNamespaceRoundTrip:
 
     @staticmethod
     def _contested_request(*, stream: bool = False) -> tuple[dict[str, Any], str]:
-        """A request where qualification cannot fit, and the shared name.
+        """A request where two tools really do share one upstream name.
 
-        Two tools in different namespaces share a name that already fills the
-        64-char budget, so neither can be qualified and both go upstream
-        spelled the same way.
+        Two containers with no name of their own declare the same tool.  A
+        container that *has* a name always gets its tools a spelling nobody
+        else has, however long the name or however crowded the request, so
+        this is the only way left for one upstream name to mean two tools:
+        there is nothing to qualify these with, and no length that would
+        help.  Both go upstream spelled the same way.
         """
-        name = "w" * 64
+        name = "wait"
         return _request(
-            _namespace_container("a", name),
-            _namespace_container("b", name),
+            _namespace_container("", name),
+            _namespace_container("", name),
             stream=stream,
         ), name
 
