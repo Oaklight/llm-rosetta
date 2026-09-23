@@ -571,9 +571,13 @@ class ConversionPipeline:
         # collision qualification).  History tool calls still carry the name
         # the client knows, so re-spell them to match before they go upstream.
         # Derived from the final IR so both legs agree on the same mapping.
+        # Called unconditionally: it also checks that tool_choice and
+        # allowed_tools name a declared tool, which is worth reporting even
+        # when nothing was renamed.  It skips its own rewrite on an empty map.
         self._name_map = build_tool_name_map(ir_request)
-        if self._name_map:
-            apply_upstream_tool_names(ir_request, name_map=self._name_map)
+        apply_upstream_tool_names(
+            ir_request, name_map=self._name_map, warnings=ctx.warnings
+        )
 
         self._ir_request = ir_request
 
