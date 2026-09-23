@@ -14,6 +14,11 @@ Provides converters for:
 from .cohere import CohereEmbeddingConverter
 from .jina import JinaEmbeddingConverter
 from .openai import OpenAIEmbeddingConverter
+from .pipeline import (
+    EMBEDDING_FORMATS,
+    EmbeddingConversionPipeline,
+    get_embedding_converter,
+)
 from .voyage import VoyageEmbeddingConverter
 
 __all__ = [
@@ -21,4 +26,7 @@ __all__ = [
     "JinaEmbeddingConverter",
     "VoyageEmbeddingConverter",
     "CohereEmbeddingConverter",
+    "EmbeddingConversionPipeline",
+    "EMBEDDING_FORMATS",
+    "get_embedding_converter",
 ]

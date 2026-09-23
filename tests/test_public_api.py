@@ -47,6 +47,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Conversion pipeline
             "ConversionPipeline",
             "ConversionError",
+            "EmbeddingConversionPipeline",
+            "RerankConversionPipeline",
             # Provider shim layer
             "ConnectionConfig",
             "ToolsConfig",
@@ -63,7 +65,11 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "rename_field",
             "set_defaults",
         ],
-        "max_count": 36,
+
+
+
+        "max_count": 38,
+
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

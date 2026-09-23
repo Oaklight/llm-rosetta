@@ -13,6 +13,8 @@ from .auto_detect import (
     get_converter_for_provider,
 )
 from .pipeline import ConversionError, ConversionPipeline
+from .converters.embedding.pipeline import EmbeddingConversionPipeline
+from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
     AnthropicConverter,
     BaseConverter,
@@ -69,6 +71,8 @@ __all__ = [
     # Conversion pipeline
     "ConversionPipeline",
     "ConversionError",
+    "EmbeddingConversionPipeline",
+    "RerankConversionPipeline",
     # Provider shim layer
     "ConnectionConfig",
     "ToolsConfig",
