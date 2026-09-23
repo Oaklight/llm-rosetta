@@ -252,6 +252,21 @@ class GatewayConfig:
 
     # Default capabilities when not specified in config.
     DEFAULT_CAPABILITIES: list[str] = ["text"]
+
+    @staticmethod
+    def _formats_for_type(type_name: str) -> list[str]:
+        """Return supported formats for a model type from the registry.
+
+        Falls back to an empty list if the type is not registered.
+        """
+        from .model_types import get_model_type
+
+        desc = get_model_type(type_name)
+        return list(desc.formats) if desc else []
+
+    # Class-level properties for backward compatibility — these were
+    # previously hardcoded lists.  Now they delegate to the registry
+    # so adding a new format only requires updating the descriptor.
     EMBEDDING_FORMATS: list[str] = ["openai", "cohere", "jina", "voyage"]
     RERANK_FORMATS: list[str] = ["jina", "cohere", "voyage"]
 
@@ -383,12 +398,29 @@ class GatewayConfig:
         self._distribute_typed_models(raw.get("models", {}))
 
     def _distribute_typed_models(self, raw_models: dict[str, Any]) -> None:
-        """Move models with ``type: embedding`` or ``type: rerank`` from the
-        main models pool into the corresponding embedding/rerank models dicts.
+        """Move models with non-LLM ``type`` from the main models pool
+        into the corresponding specialized models dicts.
 
-        Models whose provider lacks the corresponding endpoint config are
-        silently skipped (left in main pool or dropped).
+        Uses the model type registry to determine which types are valid
+        non-LLM types.  Models whose provider lacks the corresponding
+        endpoint config are silently skipped.
         """
+        from .model_types import get_model_type, registered_type_names
+
+        # Build a mapping from type name -> (providers dict, models dict)
+        # so the distribution loop is data-driven.
+        type_pools: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
+        for tname in registered_type_names():
+            if tname == "llm":
+                continue
+            providers_attr = f"{tname}_providers"
+            models_attr = f"{tname}_models"
+            if hasattr(self, providers_attr) and hasattr(self, models_attr):
+                type_pools[tname] = (
+                    getattr(self, providers_attr),
+                    getattr(self, models_attr),
+                )
+
         to_remove: list[str] = []
         for name, value in raw_models.items():
             if not isinstance(value, dict):
@@ -400,19 +432,30 @@ class GatewayConfig:
                 continue
 
             provider_name = value.get("provider", "")
+            pool = type_pools.get(model_type)
 
-            if model_type == "embedding" and provider_name in self.embedding_providers:
-                self.embedding_models.setdefault(name, provider_name)
-                to_remove.append(name)
-            elif model_type == "rerank" and provider_name in self.rerank_providers:
-                self.rerank_models.setdefault(name, provider_name)
-                to_remove.append(name)
-            elif model_type in ("embedding", "rerank"):
-                logger.warning(
-                    "Model %r has type=%s but provider %r lacks %s_format — skipped",
+            if pool is not None:
+                type_providers, type_models = pool
+                if provider_name in type_providers:
+                    type_models.setdefault(name, provider_name)
+                    to_remove.append(name)
+                else:
+                    desc = get_model_type(model_type)
+                    fmt_key = desc.config_format_key if desc else f"{model_type}_format"
+                    logger.warning(
+                        "Model %r has type=%s but provider %r lacks %s — skipped",
+                        name,
+                        model_type,
+                        provider_name,
+                        fmt_key,
+                    )
+            elif get_model_type(model_type) is not None:
+                # Type is registered but no providers/models attributes exist
+                # yet (e.g. a new type without config integration).
+                logger.debug(
+                    "Model %r has type=%s which is registered but has no "
+                    "config pool — skipped",
                     name,
-                    model_type,
-                    provider_name,
                     model_type,
                 )
 

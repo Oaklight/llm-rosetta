@@ -31,6 +31,27 @@ import logging
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
+def _get_model_type_metadata() -> list[dict[str, Any]]:
+    """Return metadata for all registered model types.
+
+    Exposed via ``/admin/api/config`` so the admin UI can render type
+    badges, seg-control options, and filters from server-provided data
+    instead of hardcoding type names.
+    """
+    from ...model_types import all_model_types
+
+    return [
+        {
+            "name": desc.name,
+            "formats": desc.formats,
+            "supports_streaming": desc.supports_streaming,
+            "badge_class": desc.badge_class,
+            "routes": [{"path": r.path, "methods": r.methods} for r in desc.routes],
+        }
+        for desc in all_model_types()
+    ]
+
+
 def _get_gateway_config(request: Any) -> GatewayConfig | None:
     """Return the live GatewayConfig from the app or module."""
     cfg = getattr(request.app, "gateway_config", None)
@@ -211,6 +232,7 @@ async def get_config(request: Any) -> Response:
             ],
             "embedding_formats": GatewayConfig.EMBEDDING_FORMATS,
             "rerank_formats": GatewayConfig.RERANK_FORMATS,
+            "model_types": _get_model_type_metadata(),
         }
     )
 
@@ -456,8 +478,20 @@ async def bulk_update_models(request: Any) -> Response:
 
 
 def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
-    """Build a model config entry from request body."""
+    """Build a model config entry from request body.
+
+    The model type is validated against the model type registry so that
+    new types registered via :func:`~model_types.register_model_type`
+    are automatically accepted without code changes here.
+    """
+    from ...model_types import registered_type_names
+
     model_type = body.get("type", "llm")
+    valid_types = registered_type_names()
+    if model_type not in valid_types:
+        # Fall back to "llm" for unrecognised types — maintains backward
+        # compat with configs that omit the type field entirely.
+        model_type = "llm"
     entry: dict[str, Any] = {
         "provider": provider,
         "capabilities": body.get("capabilities", ["text"]),
