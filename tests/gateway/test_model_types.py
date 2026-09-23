@@ -84,6 +84,22 @@ class TestLLMDescriptor:
         assert desc is not None
         assert desc.supports_streaming is True
 
+    def test_llm_is_llm(self) -> None:
+        desc = get_model_type("llm")
+        assert desc is not None
+        assert desc.is_llm is True
+
+    def test_llm_icon_svg(self) -> None:
+        desc = get_model_type("llm")
+        assert desc is not None
+        assert desc.icon_svg.startswith("<svg")
+        assert "</svg>" in desc.icon_svg
+
+    def test_llm_color(self) -> None:
+        desc = get_model_type("llm")
+        assert desc is not None
+        assert desc.color == "var(--green)"
+
 
 # ---------------------------------------------------------------------------
 # Embedding descriptor details
@@ -119,6 +135,22 @@ class TestEmbeddingDescriptor:
         assert desc.config_path_key == "embedding_path"
         assert desc.default_path == "/v1/embeddings"
 
+    def test_embedding_is_not_llm(self) -> None:
+        desc = get_model_type("embedding")
+        assert desc is not None
+        assert desc.is_llm is False
+
+    def test_embedding_icon_svg(self) -> None:
+        desc = get_model_type("embedding")
+        assert desc is not None
+        assert desc.icon_svg.startswith("<svg")
+        assert "</svg>" in desc.icon_svg
+
+    def test_embedding_color(self) -> None:
+        desc = get_model_type("embedding")
+        assert desc is not None
+        assert desc.color == "var(--blue)"
+
 
 # ---------------------------------------------------------------------------
 # Rerank descriptor details
@@ -153,6 +185,22 @@ class TestRerankDescriptor:
         assert desc.config_format_key == "rerank_format"
         assert desc.config_path_key == "rerank_path"
         assert desc.default_path == "/v1/rerank"
+
+    def test_rerank_is_not_llm(self) -> None:
+        desc = get_model_type("rerank")
+        assert desc is not None
+        assert desc.is_llm is False
+
+    def test_rerank_icon_svg(self) -> None:
+        desc = get_model_type("rerank")
+        assert desc is not None
+        assert desc.icon_svg.startswith("<svg")
+        assert "</svg>" in desc.icon_svg
+
+    def test_rerank_color(self) -> None:
+        desc = get_model_type("rerank")
+        assert desc is not None
+        assert desc.color == "var(--orange)"
 
 
 class TestDecisionDescriptor:
@@ -191,6 +239,22 @@ class TestDecisionDescriptor:
         desc = get_model_type("decision")
         assert desc is not None
         assert desc.badge_class == "cap-badge-decision"
+
+    def test_decision_is_not_llm(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.is_llm is False
+
+    def test_decision_icon_svg(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.icon_svg.startswith("<svg")
+        assert "</svg>" in desc.icon_svg
+
+    def test_decision_color(self) -> None:
+        desc = get_model_type("decision")
+        assert desc is not None
+        assert desc.color == "#8b5cf6"
 
 
 # ---------------------------------------------------------------------------
@@ -409,6 +473,38 @@ class TestAdminModelTypeMetadata:
             assert "supports_streaming" in entry
             assert "badge_class" in entry
             assert "routes" in entry
+            assert "config_format_key" in entry
+            assert "config_path_key" in entry
+            assert "default_path" in entry
+            assert "icon_svg" in entry
+            assert "color" in entry
+            assert "is_llm" in entry
+
+    def test_metadata_llm_is_llm_true(self) -> None:
+        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+
+        metadata = _get_model_type_metadata()
+        llm_entry = next(m for m in metadata if m["name"] == "llm")
+        assert llm_entry["is_llm"] is True
+        assert llm_entry["icon_svg"].startswith("<svg")
+        assert llm_entry["color"] == "var(--green)"
+
+    def test_metadata_non_llm_is_llm_false(self) -> None:
+        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+
+        metadata = _get_model_type_metadata()
+        for entry in metadata:
+            if entry["name"] != "llm":
+                assert entry["is_llm"] is False
+
+    def test_metadata_embedding_config_keys(self) -> None:
+        from llm_rosetta.gateway.admin.routes.config import _get_model_type_metadata
+
+        metadata = _get_model_type_metadata()
+        emb = next(m for m in metadata if m["name"] == "embedding")
+        assert emb["config_format_key"] == "embedding_format"
+        assert emb["config_path_key"] == "embedding_path"
+        assert emb["default_path"] == "/v1/embeddings"
 
 
 # ---------------------------------------------------------------------------

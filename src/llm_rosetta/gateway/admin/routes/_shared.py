@@ -292,6 +292,41 @@ def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -
             entry.pop(key, None)
 
 
+def _optional_provider_keys() -> list[str]:
+    """Return provider config keys that should be set-or-cleared.
+
+    Derives format/path keys from the model type registry so that new
+    types are picked up automatically without hardcoding.
+    """
+    from ...model_types import all_model_types
+
+    keys: list[str] = ["models_path", "logo"]
+    for desc in all_model_types():
+        if desc.is_llm:
+            continue
+        if desc.config_format_key:
+            keys.append(desc.config_format_key)
+        if desc.config_path_key:
+            keys.append(desc.config_path_key)
+    return keys
+
+
+def _apply_optional_provider_fields(
+    entry: dict[str, Any], body: dict[str, Any]
+) -> None:
+    """Set or clear optional provider-level fields on *entry*.
+
+    Truthy values in *body* are stored; keys explicitly sent as empty
+    are removed so the admin UI can clear them.
+    """
+    for opt_key in _optional_provider_keys():
+        val = body.get(opt_key)
+        if val:
+            entry[opt_key] = val
+        elif opt_key in body:
+            entry.pop(opt_key, None)
+
+
 def _build_provider_entry(
     body: dict[str, Any],
     api_key: str,
@@ -337,19 +372,7 @@ def _build_provider_entry(
 
     # Optional provider-level fields: set when truthy, clear when
     # explicitly sent as empty (so the admin UI can remove them).
-    for opt_key in (
-        "models_path",
-        "logo",
-        "embedding_format",
-        "embedding_path",
-        "rerank_format",
-        "rerank_path",
-    ):
-        val = body.get(opt_key)
-        if val:
-            entry[opt_key] = val
-        elif opt_key in body:
-            entry.pop(opt_key, None)
+    _apply_optional_provider_fields(entry, body)
 
     return entry
 

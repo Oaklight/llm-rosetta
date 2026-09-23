@@ -57,6 +57,13 @@ class ModelTypeDescriptor:
             (e.g. ``"embedding_path"``).  Used by config resolution.
         default_path: Default upstream path for this type's endpoint
             (e.g. ``"/v1/embeddings"``).
+        icon_svg: Inline SVG string for the capability icon.  Consumed
+            by the admin UI for badges and filters.
+        color: CSS color string (e.g. ``"var(--green)"``) for badges
+            and status dots in the admin UI.
+        is_llm: ``True`` only for the ``"llm"`` type, indicating that
+            LLM-specific UI elements (shim type, URL templates, tool
+            toggles) should be shown.
     """
 
     name: str
@@ -68,6 +75,9 @@ class ModelTypeDescriptor:
     config_format_key: str | None = None
     config_path_key: str | None = None
     default_path: str | None = None
+    icon_svg: str = ""
+    color: str = ""
+    is_llm: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +184,14 @@ def _register_builtins() -> None:
             pipeline=None,
             supports_streaming=True,
             badge_class="cap-badge-llm",
+            icon_svg=(
+                '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
+                ' stroke-width="1.5" stroke-linecap="round"'
+                ' stroke-linejoin="round"><path d="M2 4c0-1.1.9-2 2-2h8a2'
+                ' 2 0 012 2v5a2 2 0 01-2 2H5l-3 3V4z"/></svg>'
+            ),
+            color="var(--green)",
+            is_llm=True,
         )
     )
 
@@ -191,6 +209,17 @@ def _register_builtins() -> None:
             config_format_key="embedding_format",
             config_path_key="embedding_path",
             default_path="/v1/embeddings",
+            icon_svg=(
+                '<svg viewBox="0 0 16 16" fill="currentColor">'
+                '<circle cx="4" cy="5" r="1.3"/>'
+                '<circle cx="10" cy="3" r="1.3"/>'
+                '<circle cx="12" cy="9" r="1.3"/>'
+                '<circle cx="6" cy="11" r="1.3"/>'
+                '<circle cx="3" cy="9" r="1"/>'
+                '<circle cx="9" cy="7" r="1"/>'
+                '<circle cx="13" cy="13" r="1"/></svg>'
+            ),
+            color="var(--blue)",
         )
     )
 
@@ -209,6 +238,15 @@ def _register_builtins() -> None:
             config_format_key="rerank_format",
             config_path_key="rerank_path",
             default_path="/v1/rerank",
+            icon_svg=(
+                '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
+                ' stroke-width="1.5" stroke-linecap="round">'
+                '<path d="M4 3h8M4 7h6M4 11h10"/>'
+                '<path d="M13 1.5l1.5 1.5-1.5 1.5" stroke-linejoin="round"/>'
+                '<path d="M3 9.5L1.5 11 3 12.5"'
+                ' stroke-linejoin="round"/></svg>'
+            ),
+            color="var(--orange)",
         )
     )
 
@@ -241,6 +279,17 @@ def _register_decision() -> None:
             config_format_key="decision_format",
             config_path_key="decision_path",
             default_path="/v1/systemone",
+            icon_svg=(
+                '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor"'
+                ' stroke-width="1.5" stroke-linecap="round"'
+                ' stroke-linejoin="round">'
+                '<path d="M8 2v4M8 6l-4 4M8 6l4 4"/>'
+                '<circle cx="8" cy="2" r="1"/>'
+                '<circle cx="4" cy="11" r="1"/>'
+                '<circle cx="12" cy="11" r="1"/>'
+                '<path d="M4 12v2M12 12v2"/></svg>'
+            ),
+            color="#8b5cf6",
         )
     )
 
