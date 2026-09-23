@@ -1,7 +1,7 @@
 // auth.js — Authentication, login, settings, token management
 import { S } from './state.js';
 import { t, applyI18n } from './i18n.js';
-import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking } from './core.js';
+import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking } from './utils.js';
 
 // --- Admin Token ---
 let _tokenRotateTimer = null;

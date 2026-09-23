@@ -3,9 +3,9 @@
  * pagination, and view switching within the Logs tab.
  */
 
-import { S, OPS_LOG_LIMIT } from './state.js';
-import { t } from './i18n.js';
-import { api, esc } from './core.js';
+import { S, OPS_LOG_LIMIT } from '../core/state.js';
+import { t } from '../core/i18n.js';
+import { api, esc } from '../core/utils.js';
 
 const EVENT_KEYS = {
   startup: 'event.startup',
