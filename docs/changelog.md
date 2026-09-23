@@ -12,6 +12,35 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 - **Decision model paradigm** (PR [#705](https://github.com/Oaklight/llm-rosetta/pull/705)): new model category alongside chat, embedding, and rerank for probabilistic structured decisions. Decision models evaluate state against typed questions and return calibrated probability distributions — no text generation. Three IR primitives: `noul` (P(true) ∈ [0,1]), `choice` (categorical distribution), `score` (ordinal distribution). Includes `BaseDecisionConverter` ABC, `TypeSafeDecisionConverter` for the TypeSafe System One (Jev) API, provider shim, auto-detection, and gateway routes (`/v1/decision`, `/v1/systemone`).
 
+### Gateway — Middleware unification & model type registry
+
+- **Unified error response formatting** (PR [#726](https://github.com/Oaklight/llm-rosetta/pull/726)): consolidated three independent error-envelope implementations (`proxy.py`, `auth.py`, `ratelimit.py`) into a single `error_format.py` module. Single mapping table for path → API format → error envelope (OpenAI/Anthropic/Google). CORS header logic consolidated.
+- **Request context middleware** (PR [#728](https://github.com/Oaklight/llm-rosetta/pull/728)): `RequestContext` frozen dataclass populated once per request via an early `before_request` hook. Replaces duplicated route detection, client IP extraction, and admin path checking across auth, ratelimit, and proxy layers.
+- **Provider circuit breaker** (PR [#727](https://github.com/Oaklight/llm-rosetta/pull/727)): three-state circuit breaker (CLOSED → OPEN → HALF_OPEN → CLOSED) that short-circuits requests to providers with sustained high error rates. Configurable per-provider thresholds, disabled by default. Admin API endpoint for circuit state visibility.
+- **Admin API handler utilities** (PR [#725](https://github.com/Oaklight/llm-rosetta/pull/725)): `parse_json_body()` and `config_mutate()` context manager extracted from 12 identical config mutation cycles in admin routes, reducing `config.py` by ~200 lines.
+- **Model type registry** (PR [#730](https://github.com/Oaklight/llm-rosetta/pull/730)): declarative `ModelTypeDescriptor` registry where adding a new model type requires one descriptor + pipeline function. LLM, embedding, rerank, and decision are all registered types. Non-LLM handlers get automatic telemetry, profiling, and error dumps. Model listing supports `?type=` filter. Admin UI seg-controls, badges, and test menus driven from registry metadata.
+
+### Admin — Data-driven UI extensibility
+
+- **Backend metadata enrichment** (PR [#735](https://github.com/Oaklight/llm-rosetta/pull/735)): `ModelTypeDescriptor` extended with `icon_svg`, `color`, `is_llm` fields; `config_format_key`, `config_path_key`, `default_path` serialized in `/admin/api/config` metadata.
+- **Data-driven provider modal** (PR [#736](https://github.com/Oaklight/llm-rosetta/pull/736)): capability checkboxes, endpoint sections, seg-controls, badge rendering, and save logic all driven from backend `model_types` metadata. Dynamic CSS injection for badge/dot colors. Adding a new model type requires zero HTML/CSS/JS changes to the provider modal.
+- **Test type registry & i18n fallback** (PR [#737](https://github.com/Oaklight/llm-rosetta/pull/737)): JS-side `registerTestType()` API for extensible test payloads and result renderers. Dynamic fetch-models type radios. `t()` function auto-capitalizes unknown i18n keys as fallback.
+- **Compact provider badges in list view** — icon-only badges (no text label) for space efficiency, with tooltip on hover.
+- **Sort models by enabled status** — Actions column header sortable by effective enabled state (model enabled AND provider enabled).
+- **Effective toggle state** — model toggle renders as OFF when its provider is disabled, with tooltip indicating the reason.
+
+### Changed — Code organization (**breaking**)
+
+- **Gateway backend reorganization** (PR [#739](https://github.com/Oaklight/llm-rosetta/pull/739)): moved 13 files into `gateway/middleware/` (8 files) and `gateway/pipelines/` (5 files) subpackages.
+- **Admin JS reorganization** (PR [#738](https://github.com/Oaklight/llm-rosetta/pull/738)): moved 14 JS files into `js/core/`, `js/tabs/`, `js/components/` subdirectories.
+- **Removed backward-compat shims** (PR [#744](https://github.com/Oaklight/llm-rosetta/pull/744)): **breaking** — old flat import paths (`gateway.auth`, `gateway.embeddings`, etc.) no longer work. All imports must use canonical `gateway.middleware.*` / `gateway.pipelines.*` paths. Downstream projects must update imports (see `argo-proxy` [#179](https://github.com/Oaklight/argo-proxy/pull/179)).
+
+### Fixed
+
+- **Dark theme text visibility** — `--accent-on` CSS variable used for text on accent backgrounds (seg-controls, primary buttons, chips, login button) instead of hardcoded `#fff`, fixing invisible text on minimal dark theme.
+- **Test dropdown clipping** — test menu dropdown uses `position: fixed` with JS-computed positioning to avoid being clipped by table `overflow` container.
+- **Package data glob** — `pyproject.toml` updated from `js/*.js` to `js/**/*.js` to include JS files in subdirectories after reorganization.
+
 ### Gateway — Multi-provider routing & infrastructure
 
 - **Multi-provider routing with weighted round-robin** (PR [#664](https://github.com/Oaklight/llm-rosetta/pull/664)): support configuring multiple upstream providers per model with weighted load distribution. Adds `RoutingStrategy` protocol and nginx-style smooth WRR implementation. Provider-specific error responses auto-map per converter type. Per-provider token usage tracking and affinity support.
