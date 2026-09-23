@@ -62,6 +62,24 @@ class TestFlattenCombination:
         result = _flatten_combination(schema)
         assert result["properties"]["field"]["description"] == "new"
 
+    def test_multi_variant_union_preserved(self):
+        """Multi-type unions should keep all non-null branches."""
+        schema = {
+            "anyOf": [
+                {"type": "number"},
+                {"type": "array", "items": {"type": "number"}},
+                {"type": "null"},
+            ],
+            "description": "a multi-type field",
+        }
+        result = _flatten_combination(schema)
+        assert result["anyOf"] == [
+            {"type": "number"},
+            {"type": "array", "items": {"type": "number"}},
+        ]
+        assert result["nullable"] is True
+        assert result["description"] == "a multi-type field"
+
     def test_no_combination_keywords(self):
         """Schema without anyOf/oneOf/allOf should be returned as-is."""
         schema = {"type": "object", "properties": {"x": {"type": "string"}}}
