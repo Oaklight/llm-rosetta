@@ -1,5 +1,6 @@
 """Tests for namespace tool flattening in OpenAI Responses converter."""
 
+import re
 from typing import Any
 
 import pytest
@@ -259,9 +260,16 @@ class TestDedupIrToolNames:
         return []
 
     @staticmethod
-    def _ir_tool(name: str, ns: str = "") -> dict[str, Any]:
+    def _ir_tool(name: str, ns: str | None = None) -> dict[str, Any]:
+        """An IR tool.  ``ns=None`` is top-level, ``ns=""`` a nameless container.
+
+        Presence of the key, not its truth: the harvest writes ``namespace``
+        for every tool that came from a container, and a container with no
+        name of its own writes it empty.  Collapsing the two would make the
+        nameless case untestable.
+        """
         meta: dict[str, Any] = {}
-        if ns:
+        if ns is not None:
             meta["namespace"] = ns
         return {
             "type": "function",
@@ -369,20 +377,31 @@ class TestDedupIrToolNames:
         # Truncating the namespace still produced a distinct name — no warning
         assert warnings == []
 
-    def test_very_long_name_skips_qualify(self, warnings):
+    def test_very_long_name_still_gets_a_distinct_name(self, warnings):
+        """A name filling the budget leaves no room to prefix — generate one.
+
+        Letting the tool keep the bare name would put two different tools
+        upstream spelled the same way, and every call naming it would be a
+        coin flip.  A generated name is a worse hint for the model and a
+        correct address for the provider; the warning covers the former.
+        """
         long_name = "x" * 64
         tools = [
             self._ir_tool(long_name),
             self._ir_tool(long_name, "ns"),
         ]
         result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        # Name too long to qualify — namespaced tool keeps original name
-        assert result[1]["name"] == long_name
-        assert len(warnings) == 1
-        assert "too long to qualify" in warnings[0]
-        assert long_name in warnings[0]
 
-    def test_qualified_name_collides_warns(self, warnings):
+        assert result[0]["name"] == long_name, "the top-level tool is never renamed"
+        generated = result[1]["name"]
+        assert generated != long_name
+        assert len(generated) <= 64
+        assert re.fullmatch(r"[a-zA-Z0-9_-]+", generated), generated
+        assert result[1]["metadata"]["_original_name"] == long_name
+        assert len(warnings) == 1
+        assert "generated name" in warnings[0]
+
+    def test_qualified_name_collides_falls_back_to_a_generated_name(self, warnings):
         """The qualified spelling can itself be taken by a top-level tool."""
         tools = [
             self._ir_tool("exec"),
@@ -390,10 +409,100 @@ class TestDedupIrToolNames:
             self._ir_tool("ns_exec"),  # squats on the qualified spelling
         ]
         result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
-        assert [t["name"] for t in result] == ["exec", "exec", "ns_exec"]
+
+        names = [t["name"] for t in result]
+        assert names[0] == "exec" and names[2] == "ns_exec", "neither is renamed"
+        assert len(set(names)) == 3, f"every tool needs its own name; got {names}"
+        assert names[1].startswith("ns_exec_")
+        assert len(names[1]) <= 64
+        assert result[1]["metadata"]["_original_name"] == "exec"
         assert len(warnings) == 1
-        assert "still collides" in warnings[0]
-        assert "ns_exec" in warnings[0]
+        assert "generated name" in warnings[0]
+
+    def test_generated_names_are_deterministic(self, warnings):
+        """Same tools in, same names out — or every request is a cache miss."""
+
+        def build() -> list[str]:
+            sink: list[str] = []
+            tools = [
+                self._ir_tool("exec"),
+                self._ir_tool("exec", "ns"),
+                self._ir_tool("ns_exec"),
+            ]
+            return [
+                t["name"]
+                for t in OpenAIResponsesConverter._dedup_ir_tool_names(tools, sink)
+            ]
+
+        assert build() == build()
+
+    def test_two_unqualifiable_tools_get_different_names(self, warnings):
+        """The digest must separate namespaces, not just mark a failure."""
+        long_name = "x" * 64
+        tools = [
+            self._ir_tool(long_name, "ns_a"),
+            self._ir_tool(long_name, "ns_b"),
+        ]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        first, second = (t["name"] for t in result)
+        assert first != second, "two tools sharing one upstream name is the bug"
+        assert len(first) <= 64 and len(second) <= 64
+
+    def test_generated_name_can_itself_be_squatted(self, warnings):
+        """The digest is a guess at a free name, so it has to be checked too.
+
+        Take the name the qualifier would generate, hand it to an unrelated
+        top-level tool, and ask again: the answer has to move, not collide.
+        """
+        # "ns_exec" is taken, so this run is the one that reaches the digest.
+        squatted = [
+            self._ir_tool("exec"),
+            self._ir_tool("exec", "ns"),
+            self._ir_tool("ns_exec"),
+        ]
+        generated = OpenAIResponsesConverter._dedup_ir_tool_names(squatted, [])[1][
+            "name"
+        ]
+        assert generated.startswith("ns_exec_"), generated
+
+        # Now squat that too, leaving the first digest no longer available.
+        tools = squatted + [self._ir_tool(generated)]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        names = [t["name"] for t in result]
+        assert names[2] == "ns_exec" and names[3] == generated, "squatters stay put"
+        assert names[1] != generated, f"collided with the squatter: {names}"
+        assert len(set(names)) == 4, names
+        assert len(names[1]) <= 64
+
+    def test_nameless_container_is_quiet_once_its_namesake_moves_away(self, warnings):
+        """Nothing to qualify with is only a problem if something stays put.
+
+        The named container's tool qualifies away to ``ns_exec``, leaving the
+        nameless one the sole owner of ``exec``.  Warning here would tell the
+        reader their tool is unreachable when it is perfectly reachable.
+        """
+        tools = [
+            self._ir_tool("exec", ""),  # container with no name of its own
+            self._ir_tool("exec", "ns"),
+        ]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        assert [t["name"] for t in result] == ["exec", "ns_exec"]
+        assert warnings == []
+
+    def test_nameless_container_warns_when_a_namesake_stays(self, warnings):
+        """A top-level tool does not move, so the clash is real and reported."""
+        tools = [
+            self._ir_tool("exec"),  # top-level, never renamed
+            self._ir_tool("exec", ""),  # nothing to qualify it with
+        ]
+        result = OpenAIResponsesConverter._dedup_ir_tool_names(tools, warnings)
+
+        assert [t["name"] for t in result] == ["exec", "exec"]
+        assert len(warnings) == 1
+        assert "has no name of its own" in warnings[0]
 
     def test_single_tool_no_dedup(self, warnings):
         tools = [self._ir_tool("only_one", "ns")]
@@ -449,12 +558,12 @@ class TestNamespaceRequestConversion:
         assert "wait" in tool_names
         assert len(ir["tools"]) == 3
 
-    def test_unresolvable_collision_surfaces_in_context_warnings(self):
-        """An unqualifiable collision must reach the caller, not just the log.
+    def test_generated_name_surfaces_in_context_warnings(self):
+        """A generated name must reach the caller, not just the log.
 
-        The tool is left under its bare name, sharing it with another tool,
-        so one of the two is unreachable.  The client cannot see that from
-        the request it sent — the warning is its only signal.
+        The call still routes, so nothing breaks — but the model is now
+        reading a digest where a tool name should be, and the client cannot
+        see that from the request it sent.  The warning is its only signal.
         """
         long_name = "x" * 64
         context = ConversionContext()
@@ -474,9 +583,11 @@ class TestNamespaceRequestConversion:
         }
         ir = self.converter.request_from_provider(request, context=context)
 
-        assert [t["name"] for t in ir["tools"]] == [long_name, long_name]
-        assert any("too long to qualify" in w for w in context.warnings), (
-            f"expected an unqualifiable-collision warning; got {context.warnings}"
+        names = [t["name"] for t in ir["tools"]]
+        assert names[0] == long_name
+        assert names[1] != long_name and len(names[1]) <= 64
+        assert any("generated name" in w for w in context.warnings), (
+            f"expected a generated-name warning; got {context.warnings}"
         )
 
     def test_namespace_collision_with_toplevel(self):

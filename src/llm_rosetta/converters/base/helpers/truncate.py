@@ -15,20 +15,32 @@ import hashlib
 HASH_SUFFIX_LEN = 8
 
 
-def truncate_with_digest(text: str, max_length: int) -> str:
+def truncate_with_digest(
+    text: str, max_length: int, seed: str | None = None, force: bool = False
+) -> str:
     """Shorten *text* to *max_length* with a deterministic digest suffix.
 
     Args:
-        text: The value to shorten.  Returned unchanged if it already fits.
+        text: The value to shorten.  Returned unchanged if it already fits
+            and *force* is not set.
         max_length: The budget the result must fit in.  Must leave room for
             the digest and its separator.
+        seed: Hashed in place of *text* when the two differ — for callers
+            whose uniqueness lives in more than the string being truncated,
+            such as a tool name that must stay distinct per namespace.
+        force: Append the digest even to a value that already fits, for
+            callers whose reason to rewrite is something other than length —
+            a name that fits but is already taken, say.
 
     Returns:
-        *text* itself when it fits, otherwise ``{prefix}_{digest}``.
+        *text* itself when it fits and *force* is not set, otherwise
+        ``{prefix}_{digest}``.
     """
-    if len(text) <= max_length:
+    if len(text) <= max_length and not force:
         return text
 
-    digest = hashlib.sha256(text.encode()).hexdigest()[:HASH_SUFFIX_LEN]
+    digest = hashlib.sha256((seed if seed is not None else text).encode()).hexdigest()[
+        :HASH_SUFFIX_LEN
+    ]
     truncated_len = max_length - HASH_SUFFIX_LEN - 1  # 1 for separator
     return f"{text[:truncated_len]}_{digest}"
