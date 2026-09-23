@@ -580,6 +580,8 @@ class OpenAIResponsesConverter(BaseConverter):
                 copy = dict(ir_tools[i])
                 copy["name"] = qualified
                 copy["metadata"] = dict(copy.get("metadata", {}))
+                # The response leg undoes the qualification with this.
+                copy["metadata"]["_original_name"] = name
                 result[i] = copy
                 used_names.add(qualified)
 
@@ -1555,31 +1557,40 @@ class OpenAIResponsesConverter(BaseConverter):
             context.register_tool_call(call_id, tool_name, tool_type)
             context.register_tool_call_item(call_id, item_id)
 
-        if isinstance(context, OpenAIResponsesStreamContext):
-            output_index = context.next_output_index()
-            context._tool_call_output_indices[call_id] = output_index
+        stream_ctx = (
+            context if isinstance(context, OpenAIResponsesStreamContext) else None
+        )
+
+        if stream_ctx is not None:
+            output_index = stream_ctx.next_output_index()
+            stream_ctx._tool_call_output_indices[call_id] = output_index
+            # Record the namespace once, so the later done/completed items
+            # can be rebuilt with it straight from the context.
+            namespace = pm.get("namespace")
+            if namespace and call_id:
+                stream_ctx._tool_call_namespaces[call_id] = namespace
         else:
             tc_index = event.get("tool_call_index")
             output_index = tc_index if tc_index is not None else 0
 
         if tool_type == "custom":
-            item: dict[str, Any] = {
-                "id": item_id,
-                "type": "custom_tool_call",
-                "call_id": call_id,
-                "name": tool_name,
-                "input": "",
-                "status": "in_progress",
-            }
+            item: dict[str, Any] = self._build_stream_custom_tool_call_item(
+                stream_ctx,
+                item_id=item_id,
+                call_id=call_id,
+                tool_name=tool_name,
+                input_str="",
+                status="in_progress",
+            )
         else:
-            item = {
-                "id": item_id,
-                "type": "function_call",
-                "call_id": call_id,
-                "name": tool_name,
-                "arguments": "",
-                "status": "in_progress",
-            }
+            item = self._build_stream_function_call_item(
+                stream_ctx,
+                item_id=item_id,
+                call_id=call_id,
+                tool_name=tool_name,
+                arguments="",
+                status="in_progress",
+            )
 
         result: dict[str, Any] = {
             "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
@@ -1771,27 +1782,88 @@ class OpenAIResponsesConverter(BaseConverter):
 
             if tool_type == "custom":
                 output.append(
-                    {
-                        "id": tc_item_id,
-                        "type": "custom_tool_call",
-                        "call_id": call_id,
-                        "name": tool_name,
-                        "input": arguments,
-                        "status": "completed",
-                    }
+                    self._build_stream_custom_tool_call_item(
+                        context,
+                        item_id=tc_item_id,
+                        call_id=call_id,
+                        tool_name=tool_name,
+                        input_str=arguments,
+                        status="completed",
+                    )
                 )
             else:
                 output.append(
-                    {
-                        "id": tc_item_id,
-                        "type": "function_call",
-                        "call_id": call_id,
-                        "name": tool_name,
-                        "arguments": arguments,
-                        "status": "completed",
-                    }
+                    self._build_stream_function_call_item(
+                        context,
+                        item_id=tc_item_id,
+                        call_id=call_id,
+                        tool_name=tool_name,
+                        arguments=arguments,
+                        status="completed",
+                    )
                 )
         return output
+
+    @staticmethod
+    def _build_stream_function_call_item(
+        context: OpenAIResponsesStreamContext | None,
+        *,
+        item_id: str,
+        call_id: str,
+        tool_name: str,
+        arguments: str,
+        status: str,
+    ) -> dict[str, Any]:
+        """Build a streamed ``function_call`` item.
+
+        Shared by the three points that emit one — ``output_item.added``,
+        ``output_item.done``, and the ``response.completed`` output list —
+        so they cannot drift apart.  Re-attaches the tool's namespace when
+        it was flattened out of a namespace container on the request leg.
+        """
+        item: dict[str, Any] = {
+            "id": item_id,
+            "type": "function_call",
+            "call_id": call_id,
+            "name": tool_name,
+            "arguments": arguments,
+            "status": status,
+        }
+        if context is not None:
+            namespace = context._tool_call_namespaces.get(call_id)
+            if namespace:
+                item["namespace"] = namespace
+        return item
+
+    @staticmethod
+    def _build_stream_custom_tool_call_item(
+        context: OpenAIResponsesStreamContext | None,
+        *,
+        item_id: str,
+        call_id: str,
+        tool_name: str,
+        input_str: str,
+        status: str,
+    ) -> dict[str, Any]:
+        """Build a streamed ``custom_tool_call`` item.
+
+        The custom-tool counterpart of
+        :meth:`_build_stream_function_call_item`, shared by the same three
+        emit points and carrying the namespace for the same reason.
+        """
+        item: dict[str, Any] = {
+            "id": item_id,
+            "type": "custom_tool_call",
+            "call_id": call_id,
+            "name": tool_name,
+            "input": input_str,
+            "status": status,
+        }
+        if context is not None:
+            namespace = context._tool_call_namespaces.get(call_id)
+            if namespace:
+                item["namespace"] = namespace
+        return item
 
     @staticmethod
     def _build_finish_usage(pending_usage: dict[str, Any]) -> dict[str, Any]:
@@ -1969,14 +2041,14 @@ class OpenAIResponsesConverter(BaseConverter):
                     {
                         "type": ResponsesEventType.OUTPUT_ITEM_DONE,
                         "output_index": output_index,
-                        "item": {
-                            "id": item_id,
-                            "type": "custom_tool_call",
-                            "call_id": call_id,
-                            "name": tool_name,
-                            "input": arguments,
-                            "status": "completed",
-                        },
+                        "item": self._build_stream_custom_tool_call_item(
+                            context,
+                            item_id=item_id,
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            input_str=arguments,
+                            status="completed",
+                        ),
                     }
                 )
             else:
@@ -1995,14 +2067,14 @@ class OpenAIResponsesConverter(BaseConverter):
                     {
                         "type": ResponsesEventType.OUTPUT_ITEM_DONE,
                         "output_index": output_index,
-                        "item": {
-                            "id": item_id,
-                            "type": "function_call",
-                            "call_id": call_id,
-                            "name": tool_name,
-                            "arguments": arguments,
-                            "status": "completed",
-                        },
+                        "item": self._build_stream_function_call_item(
+                            context,
+                            item_id=item_id,
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            status="completed",
+                        ),
                     }
                 )
 

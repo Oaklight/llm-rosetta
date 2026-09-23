@@ -45,6 +45,11 @@ class OpenAIResponsesStreamContext(StreamContext):
     # Tool call output_index storage (call_id → assigned index)
     _tool_call_output_indices: dict[str, int] = field(default_factory=dict, repr=False)
 
+    # Namespace of each tool call (call_id → namespace), for tools that were
+    # flattened out of a `namespace` container on the request leg.  Recorded
+    # at tool_call_start so the later completed/done items can restore it.
+    _tool_call_namespaces: dict[str, str] = field(default_factory=dict, repr=False)
+
     # Reasoning item tracking
     _reasoning_item_id: str = ""
     _reasoning_output_index: int = -1

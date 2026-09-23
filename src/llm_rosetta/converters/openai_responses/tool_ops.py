@@ -260,7 +260,7 @@ def _build_function_call_item(
             item_id = "fc_" + tool_call_id[5:]
         else:
             item_id = "fc_" + tool_call_id
-    return {
+    item = {
         "type": "function_call",
         "id": item_id,
         "call_id": tool_call_id,
@@ -268,6 +268,43 @@ def _build_function_call_item(
         "arguments": arguments,
         "status": "completed",
     }
+    # Flattened upstream; the client dispatches on (name, namespace).
+    namespace = metadata.get("namespace")
+    if namespace:
+        item["namespace"] = namespace
+    return item
+
+
+def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
+    """Parse a ``custom_tool_call`` item into an IR tool call part.
+
+    Custom tools carry plain text ``input`` instead of JSON ``arguments``.
+    IR requires ``tool_input`` to be a dict, so the text is wrapped as
+    ``{"input": str}`` — unless it happens to parse as a JSON object, in
+    which case it is kept structured so other converters can read fields.
+    """
+    input_str = provider_tool_call.get("input", "")
+    try:
+        parsed_input = json.loads(input_str) if input_str else {}
+    except (json.JSONDecodeError, TypeError):
+        parsed_input = {"input": input_str}
+    if not isinstance(parsed_input, dict):
+        parsed_input = {"input": parsed_input}
+
+    part = ToolCallPart(
+        type="tool_call",
+        tool_call_id=provider_tool_call.get(
+            "call_id", provider_tool_call.get("id", "")
+        ),
+        tool_name=provider_tool_call.get("name", ""),
+        tool_input=parsed_input,
+        tool_type="custom",
+    )
+    # Keep it: (name, namespace) is what the request leg maps back.
+    namespace = provider_tool_call.get("namespace")
+    if namespace:
+        part["provider_metadata"] = {"namespace": namespace}
+    return part
 
 
 # ==================== additional_tools extraction ====================
@@ -630,12 +667,17 @@ class OpenAIResponsesToolOps(BaseToolOps):
                     if isinstance(tool_input, dict)
                     else str(tool_input)
                 )
-            return {
+            item: dict[str, Any] = {
                 "type": "custom_tool_call",
                 "call_id": tool_call_id,
                 "name": tool_name,
                 "input": input_str,
             }
+            # Same round-trip as a function_call above.
+            namespace = (ir_tool_call.get("provider_metadata") or {}).get("namespace")
+            if namespace:
+                item["namespace"] = namespace
+            return item
         elif tool_type == "web_search":
             return {
                 "type": "function_web_search",
@@ -719,8 +761,15 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 tool_input=tool_input,
                 tool_type="function",
             )
+            pm: dict[str, Any] = {}
             if item_id and item_id != call_id:
-                part["provider_metadata"] = {"responses_item_id": item_id}
+                pm["responses_item_id"] = item_id
+            # Keep it: (name, namespace) is what the request leg maps back.
+            namespace = provider_tool_call.get("namespace")
+            if namespace:
+                pm["namespace"] = namespace
+            if pm:
+                part["provider_metadata"] = pm
             return part
         elif item_type == "mcp_call":
             # MCP call may use server/tool fields or name field
@@ -754,27 +803,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 },
             )
         elif item_type == "custom_tool_call":
-            # custom_tool_call uses plain text 'input' instead of JSON
-            # 'arguments'.  Wrap as {"input": str} for IR compatibility
-            # (tool_input must be dict).  If the input happens to be valid
-            # JSON, parse it so cross-provider converters can inspect fields.
-            input_str = provider_tool_call.get("input", "")
-            try:
-                parsed_input = json.loads(input_str) if input_str else {}
-            except (json.JSONDecodeError, TypeError):
-                parsed_input = {"input": input_str}
-            # Ensure tool_input is always a dict
-            if not isinstance(parsed_input, dict):
-                parsed_input = {"input": parsed_input}
-            return ToolCallPart(
-                type="tool_call",
-                tool_call_id=provider_tool_call.get(
-                    "call_id", provider_tool_call.get("id", "")
-                ),
-                tool_name=provider_tool_call.get("name", ""),
-                tool_input=parsed_input,
-                tool_type="custom",
-            )
+            return _custom_tool_call_to_ir(provider_tool_call)
         else:
             raise ValueError(f"Unsupported OpenAI Responses item type: {item_type}")
 

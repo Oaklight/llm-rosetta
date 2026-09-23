@@ -32,7 +32,12 @@ from llm_rosetta.capabilities import (
     relocate_oversized_tool_descriptions,
     enforce_reasoning,
     enforce_vision,
+    ToolNameMap,
+    apply_upstream_tool_names,
+    build_tool_name_map,
     get_custom_tool_names,
+    restore_client_tool_name_events,
+    restore_client_tool_names,
     restore_custom_tool_calls,
     strip_reasoning_for_non_reasoning,
     unwrap_custom_tool_input,
@@ -330,6 +335,10 @@ class ConversionPipeline:
         # Set after convert_request()
         self._ctx: ConversionContext | None = None
         self._ir_request: dict[str, Any] | None = None
+        # Built once from the final IR request; the response and streaming
+        # legs must translate names through the same map the request leg
+        # used, so it is stored rather than rederived per leg.
+        self._name_map: ToolNameMap = ToolNameMap()
 
         # Per-phase timing (always-on, ~30ns per perf_counter call)
         self._profile: dict[str, float] = {}
@@ -557,6 +566,15 @@ class ConversionPipeline:
             hoist_system_messages=self._hoist_system_messages,
         )
         self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
+
+        # Tool definitions may have been renamed above (namespace flattening,
+        # collision qualification).  History tool calls still carry the name
+        # the client knows, so re-spell them to match before they go upstream.
+        # Derived from the final IR so both legs agree on the same mapping.
+        self._name_map = build_tool_name_map(ir_request)
+        if self._name_map:
+            apply_upstream_tool_names(ir_request, name_map=self._name_map)
+
         self._ir_request = ir_request
 
         # Phase 2b: IR → Target
@@ -671,6 +689,11 @@ class ConversionPipeline:
             if custom_names:
                 restore_custom_tool_calls(ir_response, custom_tool_names=custom_names)
 
+        # Undo any request-leg tool renaming (namespace flattening,
+        # collision qualification) before handing calls to the client
+        if self._name_map:
+            restore_client_tool_names(ir_response, name_map=self._name_map)
+
         # Phase 4c: IR → Source response
         t0 = time.perf_counter()
         ctx.options["response_id_prefix"] = self._source_id_prefix
@@ -758,6 +781,7 @@ class ConversionPipeline:
             pre_ir_transforms=self._target_pre_ir_transforms,
             post_ir_transforms=self._source_post_ir_transforms,
             custom_tool_names=custom_names,
+            name_map=self._name_map,
             on_ir_event=on_ir_event,
         )
 
@@ -940,6 +964,8 @@ class StreamProcessor:
         pre_ir_transforms: Shim pre_ir_transforms to apply before conversion.
         custom_tool_names: Names of tools downgraded from custom to
             function by :func:.
+        name_map: Bidirectional map for tools renamed on the request leg
+            (namespace flattening, collision qualification).
         on_ir_event: Optional callback for each IR event.
     """
 
@@ -954,6 +980,7 @@ class StreamProcessor:
         pre_ir_transforms: tuple[Transform, ...] = (),
         post_ir_transforms: tuple[Transform, ...] = (),
         custom_tool_names: frozenset[str] = frozenset(),
+        name_map: ToolNameMap | None = None,
         on_ir_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self._target_converter = target_converter
@@ -964,6 +991,7 @@ class StreamProcessor:
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
         self._custom_tool_names = custom_tool_names
+        self._name_map = name_map or ToolNameMap()
         self._custom_arg_buffers: dict[str, str] = {}
         self._on_ir_event = on_ir_event
         self._usage: dict[str, int] | None = None
@@ -1023,6 +1051,9 @@ class StreamProcessor:
         # Restore custom tool types for downgraded tools
         if self._custom_tool_names:
             ir_events = self._restore_custom_tool_events(ir_events)
+
+        # Undo any request-leg tool renaming before events reach the client
+        restore_client_tool_name_events(ir_events, name_map=self._name_map)
 
         # IR → Source events
         result: list[dict[str, Any]] = []
