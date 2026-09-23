@@ -29,6 +29,7 @@ from .error_format import (
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
+from .request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
 from .rerank import handle_rerank as _handle_rerank
@@ -127,7 +128,9 @@ def _record_telemetry(
             api_key_label=(
                 _kctx.label if (_kctx := api_key_context_var.get()) else None
             ),
-            client_ip=_extract_client_ip(request),
+            client_ip=(
+                _rctx.client_ip if (_rctx := request_context_var.get()) else None
+            ),
             profile=profile,
             input_tokens=_input_tokens,
             output_tokens=_output_tokens,
@@ -142,25 +145,6 @@ def _record_telemetry(
             entry = _dc_replace(entry, id=entry_id_override)
         request_log.add(entry)
         return entry.id
-    return None
-
-
-def _extract_client_ip(request: Any) -> str | None:
-    """Extract the client IP from the request.
-
-    Checks ``X-Forwarded-For`` and ``X-Real-IP`` headers first (set by
-    reverse proxies), then falls back to the TCP peer address.
-    """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # X-Forwarded-For may contain a chain: "client, proxy1, proxy2"
-        return forwarded.split(",")[0].strip()
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    addr = getattr(request, "client_addr", None)
-    if addr and isinstance(addr, (tuple, list)) and addr[0]:
-        return str(addr[0])
     return None
 
 
@@ -301,8 +285,10 @@ async def _proxy_handler(
     """Shared handler for all proxy endpoints."""
     assert _config is not None
 
-    # Generate or honour a request ID for end-to-end traceability.
-    request_id = get_request_id(request)
+    # Read request ID from context (populated by the early middleware
+    # hook) and fall back to header extraction for safety.
+    rctx = request_context_var.get()
+    request_id = rctx.request_id if rctx else get_request_id(request)
 
     try:
         body: dict[str, Any] = request.json()
@@ -1009,6 +995,9 @@ def create_app(
 
     # --- Resolve data directory (shared by keystore + persistence) ---
     resolved_data_dir = _resolve_data_dir_for_app(config, config_path)
+
+    # --- Request context (earliest hook — before auth and rate limiting) ---
+    app.before_request(setup_request_context(trust_proxy=config.rate_limit_trust_proxy))
 
     # --- Auth (SQLite keystore + config fallback) ---
     internal_token, keystore, auth_state = _setup_auth(

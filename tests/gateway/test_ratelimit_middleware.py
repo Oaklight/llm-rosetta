@@ -8,14 +8,18 @@ from typing import Any, cast
 from unittest.mock import MagicMock
 
 from llm_rosetta.gateway.config import GatewayConfig
+from llm_rosetta.gateway.error_format import detect_api_format
 from llm_rosetta.gateway.ratelimit import (
     RateLimitState,
-    _detect_format,
-    _extract_client_ip,
     _extract_model,
     _rate_limit_response,
     create_rate_limit_after_hook,
     create_rate_limit_hook,
+)
+from llm_rosetta.gateway.request_context import (
+    RequestContext,
+    extract_client_ip,
+    request_context_var,
 )
 
 
@@ -86,19 +90,19 @@ def _run(coro):
 
 class TestDetectFormat:
     def test_openai_chat(self):
-        assert _detect_format("/v1/chat/completions") == "openai"
+        assert detect_api_format("/v1/chat/completions") == "openai"
 
     def test_openai_responses(self):
-        assert _detect_format("/v1/responses") == "openai"
+        assert detect_api_format("/v1/responses") == "openai"
 
     def test_anthropic(self):
-        assert _detect_format("/v1/messages") == "anthropic"
+        assert detect_api_format("/v1/messages") == "anthropic"
 
     def test_google(self):
-        assert _detect_format("/v1beta/models/gemini:generateContent") == "google"
+        assert detect_api_format("/v1beta/models/gemini:generateContent") == "google"
 
     def test_unknown_defaults_openai(self):
-        assert _detect_format("/unknown/path") == "openai"
+        assert detect_api_format("/unknown/path") == "openai"
 
 
 # ---------------------------------------------------------------------------
@@ -107,28 +111,28 @@ class TestDetectFormat:
 
 
 class TestExtractClientIp:
-    def test_xff_ignored_by_default(self):
+    def test_xff_ignored_when_untrusted(self):
         req = FakeRequest(
             headers={"x-forwarded-for": "1.2.3.4"},
             client_addr=("10.0.0.1", 1),
         )
-        assert _extract_client_ip(req) == "10.0.0.1"
+        assert extract_client_ip(req, trust_proxy=False) == "10.0.0.1"
 
     def test_xff_trusted_when_enabled(self):
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
-        assert _extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
 
     def test_xff_chain_takes_first(self):
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8"})
-        assert _extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
 
     def test_x_real_ip_trusted(self):
         req = FakeRequest(headers={"x-real-ip": "10.0.0.1"})
-        assert _extract_client_ip(req, trust_proxy=True) == "10.0.0.1"
+        assert extract_client_ip(req, trust_proxy=True) == "10.0.0.1"
 
     def test_client_addr_fallback(self):
         req = FakeRequest(client_addr=("192.168.1.1", 9999))
-        assert _extract_client_ip(req) == "192.168.1.1"
+        assert extract_client_ip(req, trust_proxy=False) == "192.168.1.1"
 
 
 # ---------------------------------------------------------------------------
@@ -311,11 +315,22 @@ class TestRateLimitHook:
     def test_per_ip_isolation(self):
         state = self._make_state(enabled=True, per_ip="1/m")
         hook = create_rate_limit_hook(state)
-        r1 = _run(hook(FakeRequest(client_addr=("1.1.1.1", 1))))
+
+        def _run_with_ip(ip: str):
+            ctx = RequestContext(
+                request_id="test", client_ip=ip, api_format="openai", is_admin=False
+            )
+            tok = request_context_var.set(ctx)
+            try:
+                return _run(hook(FakeRequest(client_addr=(ip, 1))))
+            finally:
+                request_context_var.reset(tok)
+
+        r1 = _run_with_ip("1.1.1.1")
         assert r1 is None
-        r2 = _run(hook(FakeRequest(client_addr=("2.2.2.2", 1))))
+        r2 = _run_with_ip("2.2.2.2")
         assert r2 is None
-        r3 = _run(hook(FakeRequest(client_addr=("1.1.1.1", 1))))
+        r3 = _run_with_ip("1.1.1.1")
         assert r3 is not None
         assert r3.status_code == 429
 
