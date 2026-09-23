@@ -24,6 +24,8 @@ from __future__ import annotations
 import copy
 
 import logging
+from collections import Counter
+from dataclasses import dataclass, field
 from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
@@ -372,6 +374,183 @@ def restore_custom_tool_calls(
                 and part.get("tool_name") in custom_tool_names
             ):
                 part["tool_type"] = "custom"
+
+
+@dataclass(frozen=True)
+class ToolNameMap:
+    """Bidirectional map between client tool identities and upstream names.
+
+    To the client a tool is identified by ``(name, namespace)``; upstream it
+    is a single flat name, because no target format carries a namespace.
+    Anything that rewrites a tool name on the request leg registers both
+    spellings here, and every leg that names a tool translates through it:
+
+    - request: history tool calls sent by the client, via :meth:`to_upstream`
+    - response: tool calls echoed by the provider, via :meth:`to_client`
+
+    Both directions fall back to the input name, so call sites can translate
+    unconditionally without knowing whether a rewrite happened.  A name the
+    map cannot attribute to exactly one tool falls back too: guessing would
+    route the call to the wrong handler, which is worse than not translating.
+    """
+
+    _upstream: dict[tuple[str, str | None], str] = field(default_factory=dict)
+    _client: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+
+    def to_upstream(self, name: str, namespace: str | None = None) -> str:
+        """Map a client ``(name, namespace)`` to the name the provider knows."""
+        return self._upstream.get((name, namespace), name)
+
+    def to_client(self, upstream_name: str) -> tuple[str, str | None]:
+        """Map a provider name back to the client's ``(name, namespace)``."""
+        return self._client.get(upstream_name, (upstream_name, None))
+
+    def __bool__(self) -> bool:
+        return bool(self._client or self._upstream)
+
+
+def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
+    """Derive a :class:`ToolNameMap` from the IR request's tool definitions.
+
+    Tools harvested from a ``namespace`` container carry
+    ``metadata.namespace`` (set during flattening).  Colliding names are
+    additionally rewritten to ``{namespace}_{name}`` by
+    ``_dedup_ir_tool_names``, which records the pre-rename name in
+    ``metadata._original_name``.
+
+    Tools whose name survived unchanged and that carry no namespace are
+    skipped — there is nothing to translate, and leaving them out keeps the
+    map falsy for the common case.
+    """
+    tools = [
+        t
+        for t in (ir_request.get("tools") or [])
+        if isinstance(t, dict) and t.get("name")
+    ]
+    # Qualification can fail — the bare name already fills the 64-char budget,
+    # or the qualified spelling is taken — and then two tools go upstream
+    # under one name.  A call naming it belongs to neither in particular.
+    claimants = Counter(t["name"] for t in tools)
+
+    upstream: dict[tuple[str, str | None], str] = {}
+    client: dict[str, tuple[str, str | None]] = {}
+
+    for tool in tools:
+        upstream_name = tool["name"]
+        meta = tool.get("metadata") or {}
+        namespace = meta.get("namespace")
+        client_name = meta.get("_original_name") or upstream_name
+        if namespace is None and client_name == upstream_name:
+            continue
+        upstream[(client_name, namespace)] = upstream_name
+        if claimants[upstream_name] == 1:
+            client[upstream_name] = (client_name, namespace)
+
+    return ToolNameMap(upstream, client)
+
+
+def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
+    """Rewrite one IR tool call from its upstream name to the client's.
+
+    Works on any dict carrying ``tool_name`` — both a ToolCallPart and a
+    ``tool_call_start`` stream event qualify.  No-op when the name was never
+    rewritten.
+    """
+    upstream_name = target.get("tool_name", "")
+    client_name, namespace = name_map.to_client(upstream_name)
+    if client_name == upstream_name and namespace is None:
+        return
+    target["tool_name"] = client_name
+    if namespace is None:
+        return
+    pm = target.get("provider_metadata")
+    if not isinstance(pm, dict):
+        pm = {}
+        target["provider_metadata"] = pm
+    pm["namespace"] = namespace
+
+
+def apply_upstream_tool_names(
+    ir_request: dict[str, Any],
+    *,
+    name_map: ToolNameMap,
+) -> None:
+    """Re-spell history tool calls to match the request's tool definitions.
+
+    Mutates *ir_request* in place.  A client that received a namespaced call
+    echoes it back as ``(bare name, namespace)``; the tool definitions in the
+    same request may have been flattened to a qualified upstream name.  Left
+    alone, the assistant message would name a function the request does not
+    declare.  The inverse of :func:`restore_client_tool_names`.
+    """
+    if not name_map:
+        return
+
+    for msg in ir_request.get("messages") or []:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("content") or []:
+            if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            pm = part.get("provider_metadata")
+            namespace = pm.get("namespace") if isinstance(pm, dict) else None
+            part["tool_name"] = name_map.to_upstream(
+                part.get("tool_name", ""), namespace
+            )
+
+
+def restore_client_tool_names(
+    ir_response: dict[str, Any],
+    *,
+    name_map: ToolNameMap,
+) -> None:
+    """Restore client-facing tool names on an IR response.
+
+    Mutates *ir_response* in place.  For each tool call whose ``tool_name``
+    was rewritten on the request leg, restores the client's spelling and
+    records any namespace under ``provider_metadata.namespace`` so the source
+    converter can emit it.
+
+    Chat Completions cannot represent a namespace, so the provider echoes
+    back only the flat name and the client could not otherwise route the call.
+    Called on the non-streaming path after Target → IR conversion.
+    """
+    if not name_map:
+        return
+
+    def _restore_parts(msg: Any) -> None:
+        if not isinstance(msg, dict):
+            return
+        for part in msg.get("content") or []:
+            if isinstance(part, dict) and part.get("type") == "tool_call":
+                _to_client_identity(part, name_map)
+
+    for choice in ir_response.get("choices") or []:
+        if isinstance(choice, dict):
+            _restore_parts(choice.get("message"))
+
+    for msg in ir_response.get("messages") or []:
+        _restore_parts(msg)
+
+
+def restore_client_tool_name_events(
+    ir_events: list[dict[str, Any]],
+    *,
+    name_map: ToolNameMap,
+) -> None:
+    """Restore client-facing tool names on streamed tool calls.
+
+    Mutates the ``tool_call_start`` events in *ir_events* in place.  The
+    source converter reads the namespace back off ``provider_metadata`` and
+    carries it onto the later done/completed items.  The streaming
+    counterpart of :func:`restore_client_tool_names`.
+    """
+    if not name_map:
+        return
+
+    for event in ir_events:
+        if isinstance(event, dict) and event.get("type") == "tool_call_start":
+            _to_client_identity(event, name_map)
 
 
 def unwrap_custom_tool_input(raw: str) -> str:
