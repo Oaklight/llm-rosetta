@@ -7,6 +7,7 @@ from typing import Any
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ...keystore import KeyStore
+from ._shared import parse_json_body
 
 
 def _get_keystore(request: Any) -> KeyStore:
@@ -84,8 +85,6 @@ async def create_api_key(request: Any) -> Response:
 
 async def update_api_key(request: Any, **kwargs: Any) -> Response:
     """Update an API key's label and/or allowed_shims."""
-    from ._shared import parse_json_body
-
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 

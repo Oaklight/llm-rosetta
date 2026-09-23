@@ -24,11 +24,13 @@ from .auth import (
 )
 from .config import GatewayConfig, ResolvedRoute
 from .error_format import (
+    apply_cors_headers,
     detect_api_format,
     format_error_response,
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyStore
+from .circuit_breaker import CircuitBreaker
 from .request_context import request_context_var, setup_request_context
 from .transport import ProviderInfo
 from .embeddings import handle_embeddings as _handle_embeddings
@@ -236,7 +238,7 @@ def _resolve_or_error(
         return resp
 
 
-def _record_circuit_breaker_outcome(cb: Any, status_code: int) -> None:
+def _record_circuit_breaker_outcome(cb: CircuitBreaker, status_code: int) -> None:
     """Record a circuit breaker success or failure based on HTTP status.
 
     5xx responses are treated as upstream failures.  Everything else
@@ -250,7 +252,7 @@ def _record_circuit_breaker_outcome(cb: Any, status_code: int) -> None:
 
 
 def _check_circuit_breaker(
-    cb: Any,
+    cb: CircuitBreaker,
     provider_name: str,
     request: Any,
     request_id: str,
@@ -259,7 +261,10 @@ def _check_circuit_breaker(
     if cb.allow_request():
         return None
     remaining = cb.cooldown_remaining()
-    api_format = detect_api_format(request.path)
+    rctx = request_context_var.get()
+    api_format = (
+        rctx.api_format if rctx and rctx.api_format else detect_api_format(request.path)
+    )
     resp = format_error_response(
         api_format,
         503,
@@ -1034,14 +1039,14 @@ def create_app(
     async def handle_404(request: Any, exc: Any) -> Response:
         resp = JSONResponse({"error": "Not Found"}, status_code=404)
         if not _is_admin_path(request.path):
-            resp.headers["Access-Control-Allow-Origin"] = "*"
+            apply_cors_headers(resp)
         return resp
 
     @app.errorhandler(405)
     async def handle_405(request: Any, exc: Any) -> Response:
         resp = JSONResponse({"error": "Method Not Allowed"}, status_code=405)
         if not _is_admin_path(request.path):
-            resp.headers["Access-Control-Allow-Origin"] = "*"
+            apply_cors_headers(resp)
         return resp
 
     # --- Admin routes ---

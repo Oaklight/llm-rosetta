@@ -303,7 +303,7 @@ class TestGetSnapshot:
         snap = cb.get_snapshot()
         assert snap["state"] == "CLOSED"
         assert snap["failure_count"] == 0
-        assert snap["last_failure"] is None
+        assert snap["seconds_since_last_failure"] is None
         assert snap["cooldown_remaining"] == 0.0
 
     def test_open_snapshot(self):
@@ -314,7 +314,8 @@ class TestGetSnapshot:
         snap = cb.get_snapshot()
         assert snap["state"] == "OPEN"
         assert snap["failure_count"] == 1
-        assert snap["last_failure"] is not None
+        assert snap["seconds_since_last_failure"] is not None
+        assert snap["seconds_since_last_failure"] >= 0.0
         assert snap["cooldown_remaining"] > 0.0
 
     def test_snapshot_after_success_reset(self):
