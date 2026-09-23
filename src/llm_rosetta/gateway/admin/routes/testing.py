@@ -11,6 +11,7 @@ from llm_rosetta._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
+from ._shared import parse_json_body
 
 # In-memory store: task_id → {status, result, asyncio_task, started, ...}
 _test_tasks: dict[str, dict[str, Any]] = {}
@@ -120,8 +121,6 @@ async def start_test(request: Any) -> Response:
     POST /admin/api/test
     Body: {endpoint: "/v1/...", payload: {...}}
     """
-    from ._shared import parse_json_body
-
     _cleanup_stale_tasks()
 
     body, err = parse_json_body(request)

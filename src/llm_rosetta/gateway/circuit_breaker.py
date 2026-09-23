@@ -176,10 +176,15 @@ class CircuitBreaker:
             if self._state == CircuitState.OPEN and self._opened_at is not None:
                 elapsed = time.monotonic() - self._opened_at
                 remaining = max(0.0, self._config.cooldown_seconds - elapsed)
+            seconds_since_last_failure: float | None = None
+            if self._last_failure_time is not None:
+                seconds_since_last_failure = round(
+                    time.monotonic() - self._last_failure_time, 1
+                )
             return {
                 "state": self._state.value,
                 "failure_count": self._consecutive_failures,
-                "last_failure": self._last_failure_time,
+                "seconds_since_last_failure": seconds_since_last_failure,
                 "cooldown_remaining": round(remaining, 1),
             }
 
@@ -256,8 +261,8 @@ class CircuitBreakerRegistry:
     def get_all_states(self) -> dict[str, dict[str, Any]]:
         """Return a snapshot of all tracked providers for dashboard display."""
         with self._lock:
-            names = list(self._breakers.keys())
-        return {name: self._breakers[name].get_snapshot() for name in names}
+            breakers = dict(self._breakers)
+        return {name: cb.get_snapshot() for name, cb in breakers.items()}
 
     @property
     def enabled(self) -> bool:

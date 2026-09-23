@@ -242,8 +242,8 @@ class TestSetupRequestContext:
 class TestContextvarIsolation:
     def test_default_is_none(self):
         """Without the hook, context should be None."""
-        assert request_context_var.get() is None or True
-        # Reset to ensure clean state
+        # Explicitly reset to ensure clean state (earlier tests in the
+        # same process may have set the contextvar in the main thread).
         token = request_context_var.set(None)
         assert request_context_var.get() is None
         request_context_var.reset(token)

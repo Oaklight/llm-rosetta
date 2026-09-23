@@ -37,7 +37,7 @@ def parse_json_body(request: Any) -> tuple[dict[str, Any], Response | None]:
     """Parse the JSON body from a request.
 
     Returns:
-        A ``(body, None)`` tuple on success, or ``(None, error_response)``
+        A ``(body, None)`` tuple on success, or ``({}, error_response)``
         on failure (invalid JSON).
     """
     try:
