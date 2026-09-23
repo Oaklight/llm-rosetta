@@ -13,7 +13,9 @@ from llm_rosetta.gateway.auth import (
     api_key_context_var,
     create_auth_hook,
 )
+from llm_rosetta.gateway.error_format import detect_api_format, is_admin_path
 from llm_rosetta.gateway.keystore import KeyContext, KeyStore
+from llm_rosetta.gateway.request_context import RequestContext, request_context_var
 
 
 # ---------------------------------------------------------------------------
@@ -27,12 +29,28 @@ def _make_request(
     headers: dict[str, str] | None = None,
     query_params: dict[str, list[str]] | None = None,
 ) -> MagicMock:
-    """Build a minimal mock request matching httpserver conventions."""
+    """Build a minimal mock request matching httpserver conventions.
+
+    Also populates ``request_context_var`` so that the auth hook can
+    read ``api_format`` from the context (as it would in production
+    where the context middleware runs first).
+    """
     req = MagicMock()
     req.path = path
     req.method = method
     req.headers = headers or {}
     req.query_params = query_params or {}
+    # Populate request context so auth can read api_format from it.
+    admin = is_admin_path(path)
+    api_format = None if admin else detect_api_format(path)
+    request_context_var.set(
+        RequestContext(
+            request_id="test-id",
+            client_ip="127.0.0.1",
+            api_format=api_format,
+            is_admin=admin,
+        )
+    )
     return req
 
 

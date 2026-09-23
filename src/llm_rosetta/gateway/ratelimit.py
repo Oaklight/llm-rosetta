@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 from llm_rosetta._vendor.httpserver import Response
 
 from .error_format import detect_api_format, format_error_response, is_admin_path
+from .request_context import request_context_var
 
 from llm_rosetta._vendor.ratelimit import (
     FixedWindowLimiter,
@@ -158,10 +159,6 @@ class RateLimitState:
 # ---------------------------------------------------------------------------
 
 
-def _detect_format(path: str) -> str:
-    return detect_api_format(path)
-
-
 def _rate_limit_response(
     path: str, result: RateLimitResult, dimension: str
 ) -> Response:
@@ -200,23 +197,6 @@ def _extract_model(request: Any) -> str | None:
         return request.json().get("model")
     except Exception:
         return None
-
-
-# ---------------------------------------------------------------------------
-# Client IP extraction
-# ---------------------------------------------------------------------------
-
-
-def _extract_client_ip(request: Any, *, trust_proxy: bool = False) -> str:
-    """Extract client IP, only trusting proxy headers when explicitly enabled."""
-    if trust_proxy:
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        real_ip = request.headers.get("x-real-ip")
-        if real_ip:
-            return real_ip.strip()
-    return request.client_addr[0] if request.client_addr else "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -279,9 +259,11 @@ def create_rate_limit_hook(
         if denied:
             return denied
 
+        rctx = request_context_var.get()
+        client_ip = rctx.client_ip if rctx else "unknown"
         denied, tightest = _check_limiter(
             snap.ip,
-            _extract_client_ip(request, trust_proxy=state.trust_proxy),
+            client_ip,
             "per_ip",
             path,
             tightest,

@@ -30,6 +30,7 @@ from .error_format import (
     is_admin_path as _is_admin_path,
 )
 from .keystore import KeyContext, KeyStore
+from .request_context import request_context_var
 
 ADMIN_COOKIE_NAME = "rosetta_admin_session"
 
@@ -41,24 +42,22 @@ api_key_context_var: contextvars.ContextVar[KeyContext | None] = contextvars.Con
 # Paths that never require authentication
 _PUBLIC_PATHS = frozenset({"/health", "/favicon.ico", "/.well-known/change-password"})
 
-# Route prefix → key extraction strategy
-_ROUTE_EXTRACTORS: list[tuple[str, str]] = [
-    # Order matters: more specific prefixes first
-    ("/v1beta/models", "google"),
-    ("/v1/messages", "anthropic"),
-    ("/v1/", "openai"),  # chat/completions, responses, models
-]
+# Key extraction strategies per API format.  The format is detected by the
+# request-context middleware and stored in ``request_context_var``.  Auth
+# uses it to decide *how* to extract the API key from the request.
+_FORMAT_KEY_STRATEGY: dict[str, str] = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "google": "google",
+}
 
 
 def _extract_key(request: Any) -> str | None:
     """Extract API key from the request using the appropriate strategy."""
-    path = request.path
-
-    strategy = "openai"  # default fallback
-    for prefix, strat in _ROUTE_EXTRACTORS:
-        if path.startswith(prefix):
-            strategy = strat
-            break
+    rctx = request_context_var.get()
+    strategy = (
+        _FORMAT_KEY_STRATEGY.get(rctx.api_format or "", "openai") if rctx else "openai"
+    )
 
     # Always extract Bearer token as a fallback — gateway clients may
     # use a single Authorization header regardless of API format.
