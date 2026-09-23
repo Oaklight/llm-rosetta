@@ -11,6 +11,7 @@ from typing import Any
 
 from llm_rosetta.capabilities import (
     ToolNameMap,
+    apply_upstream_tool_names,
     build_tool_name_map,
     restore_client_tool_names,
 )
@@ -262,6 +263,46 @@ class TestBuildToolNameMap:
         name_map = build_tool_name_map(ir)
         assert name_map.to_client("exec") == ("exec", None)
 
+    def test_resolves_bare_name_while_one_tool_claims_it(self):
+        """``tool_choice`` has no namespace field, so it resolves by name."""
+        ir = {
+            "tools": [
+                {
+                    "name": "agents_wait",
+                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                }
+            ]
+        }
+        assert build_tool_name_map(ir).to_upstream("wait") == "agents_wait"
+
+    def test_bare_name_unresolved_when_two_tools_claim_it(self):
+        ir = {
+            "tools": [
+                {
+                    "name": "functions_wait",
+                    "metadata": {"namespace": "functions", "_original_name": "wait"},
+                },
+                {
+                    "name": "agents_wait",
+                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                },
+            ]
+        }
+        assert build_tool_name_map(ir).to_upstream("wait") == "wait"
+
+    def test_bare_name_unresolved_when_an_untouched_tool_claims_it(self):
+        """The untouched top-level tool is a claimant too, and blocks the guess."""
+        ir = {
+            "tools": [
+                {"name": "wait", "metadata": {}},
+                {
+                    "name": "agents_wait",
+                    "metadata": {"namespace": "agents", "_original_name": "wait"},
+                },
+            ]
+        }
+        assert build_tool_name_map(ir).to_upstream("wait") == "wait"
+
     def test_empty_when_no_tools(self):
         assert not build_tool_name_map({})
 
@@ -274,6 +315,116 @@ class TestBuildToolNameMap:
 # ---------------------------------------------------------------------------
 # apply_upstream_tool_names — the selector fields
 # ---------------------------------------------------------------------------
+
+
+class TestApplyUpstreamSelectors:
+    """``tool_choice`` and ``allowed_tools`` name tools, so they translate too."""
+
+    IR_TOOLS = [
+        {
+            "name": "agents_wait",
+            "metadata": {"namespace": "agents", "_original_name": "wait"},
+        }
+    ]
+
+    # Two tools answer to the bare name, so a selector naming it resolves
+    # to neither.
+    AMBIGUOUS_TOOLS = IR_TOOLS + [
+        {
+            "name": "functions_wait",
+            "metadata": {"namespace": "functions", "_original_name": "wait"},
+        }
+    ]
+
+    def _apply(self, ir: dict[str, Any]) -> list[str]:
+        ir.setdefault("tools", self.IR_TOOLS)
+        warnings: list[str] = []
+        apply_upstream_tool_names(
+            ir, name_map=build_tool_name_map(ir), warnings=warnings
+        )
+        return warnings
+
+    def test_tool_choice_is_respelled(self):
+        ir: dict[str, Any] = {"tool_choice": {"mode": "tool", "tool_name": "wait"}}
+        assert self._apply(ir) == []
+        assert ir["tool_choice"]["tool_name"] == "agents_wait"
+
+    def test_allowed_tools_entries_are_respelled(self):
+        ir: dict[str, Any] = {
+            "provider_extensions": {
+                "allowed_tools": [{"type": "function", "name": "wait"}, "wait"]
+            }
+        }
+        assert self._apply(ir) == []
+        assert ir["provider_extensions"]["allowed_tools"] == [
+            {"type": "function", "name": "agents_wait"},
+            "agents_wait",
+        ]
+
+    def test_ambiguous_allowed_tools_entry_warns(self):
+        """An entry no single tool claims goes upstream naming nothing."""
+        ir: dict[str, Any] = {
+            "tools": self.AMBIGUOUS_TOOLS,
+            "provider_extensions": {"allowed_tools": ["wait"]},
+        }
+        warnings = self._apply(ir)
+
+        assert ir["provider_extensions"]["allowed_tools"] == ["wait"]
+        assert any(
+            "shared by tools in more than one namespace" in w for w in warnings
+        ), f"expected an ambiguous-allowed_tools warning; got {warnings}"
+
+    def test_selector_naming_no_tool_at_all_says_so(self):
+        """A name nothing claims is a typo, not an ambiguity — say which."""
+        ir: dict[str, Any] = {
+            "tools": self.AMBIGUOUS_TOOLS,
+            "tool_choice": {"mode": "tool", "tool_name": "totally_made_up"},
+        }
+        warnings = self._apply(ir)
+
+        assert len(warnings) == 1, warnings
+        assert "no tool of that name was declared" in warnings[0]
+        assert "more than one namespace" not in warnings[0]
+
+    def test_selector_is_checked_even_when_nothing_was_renamed(self):
+        """Whether a selector names a real tool does not depend on namespaces.
+
+        A request with no namespace containers builds an empty name map, but
+        the typo it may carry is exactly as broken as it would be alongside
+        one — so the check runs before the map is consulted.
+        """
+        ir: dict[str, Any] = {
+            "tools": [{"name": "exec"}, {"name": "read"}],
+            "tool_choice": {"mode": "tool", "tool_name": "totally_made_up"},
+        }
+        warnings = self._apply(ir)
+
+        assert len(warnings) == 1, warnings
+        assert "no tool of that name was declared" in warnings[0]
+
+    def test_valid_selector_is_quiet_when_nothing_was_renamed(self):
+        ir: dict[str, Any] = {
+            "tools": [{"name": "exec"}, {"name": "read"}],
+            "tool_choice": {"mode": "tool", "tool_name": "exec"},
+        }
+        assert self._apply(ir) == []
+        assert ir["tool_choice"]["tool_name"] == "exec"
+
+    def test_allowed_tools_accepts_the_wrapped_shape(self):
+        ir: dict[str, Any] = {
+            "provider_extensions": {
+                "allowed_tools": {"mode": "auto", "tools": [{"name": "wait"}]}
+            }
+        }
+        self._apply(ir)
+        assert ir["provider_extensions"]["allowed_tools"]["tools"] == [
+            {"name": "agents_wait"}
+        ]
+
+    def test_unrecognised_allowed_tools_shape_is_left_alone(self):
+        ir: dict[str, Any] = {"provider_extensions": {"allowed_tools": "everything"}}
+        assert self._apply(ir) == []
+        assert ir["provider_extensions"]["allowed_tools"] == "everything"
 
 
 # ---------------------------------------------------------------------------
@@ -532,6 +683,85 @@ class TestNamespaceRoundTrip:
         for event_type, item in calls:
             assert item["name"] == "edit", event_type
             assert item.get("namespace") == "b", event_type
+
+    def test_ambiguous_tool_choice_warns_instead_of_guessing(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(
+            _namespace_container("functions", "wait"),
+            _namespace_container("agents", "wait"),
+        )
+        request["tool_choice"] = {"type": "function", "name": "wait"}
+        upstream = pipe.convert_request(request)
+
+        # Neither namespace can be assumed, so the name is left as sent —
+        # but the caller is told it now matches nothing.
+        assert upstream["tool_choice"]["function"]["name"] == "wait"
+        assert any("tool_choice names 'wait'" in w for w in pipe.warnings), (
+            f"expected an ambiguous-tool_choice warning; got {pipe.warnings}"
+        )
+
+    def test_undeclared_tool_choice_warns_with_no_namespaces_in_play(self):
+        """The selector check must not hang off whether a rename happened.
+
+        A request with no namespace containers builds an empty name map.
+        The pipeline still has to run the check, so this goes through
+        :class:`ConversionPipeline` rather than calling the helper directly —
+        a unit test cannot see a caller that skips the call.
+        """
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request: dict[str, Any] = {
+            "model": "test-model",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "go"}],
+                }
+            ],
+            "tools": [{"type": "function", "name": "exec", "parameters": {}}],
+            "tool_choice": {"type": "function", "name": "totally_made_up"},
+        }
+        pipe.convert_request(request)
+
+        assert any("no tool of that name was declared" in w for w in pipe.warnings), (
+            f"expected an undeclared-tool_choice warning; got {pipe.warnings}"
+        )
+
+    def test_valid_tool_choice_stays_quiet_with_no_namespaces_in_play(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request: dict[str, Any] = {
+            "model": "test-model",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "go"}],
+                }
+            ],
+            "tools": [{"type": "function", "name": "exec", "parameters": {}}],
+            "tool_choice": {"type": "function", "name": "exec"},
+        }
+        pipe.convert_request(request)
+
+        assert pipe.warnings == [], pipe.warnings
+
+    def test_ambiguous_allowed_tools_warns_through_the_pipeline(self):
+        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        request = _request(
+            _namespace_container("functions", "wait"),
+            _namespace_container("agents", "wait"),
+        )
+        request["allowed_tools"] = ["wait"]
+        upstream = pipe.convert_request(request)
+
+        names = [t.get("function", t).get("name") for t in upstream["tools"]]
+        assert names == ["functions_wait", "agents_wait"]
+        # The selector rides through as an extension, so it reaches the wire
+        # naming a tool the same request no longer declares.
+        assert upstream["allowed_tools"] == ["wait"]
+        assert any("allowed_tools names 'wait'" in w for w in pipe.warnings), (
+            f"expected an ambiguous-allowed_tools warning; got {pipe.warnings}"
+        )
 
     def test_name_map_is_built_once_and_reused(self):
         """Response and streaming legs must use the request leg's own map."""

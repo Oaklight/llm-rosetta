@@ -396,10 +396,30 @@ class ToolNameMap:
 
     _upstream: dict[tuple[str, str | None], str] = field(default_factory=dict)
     _client: dict[str, tuple[str, str | None]] = field(default_factory=dict)
+    _sole: dict[str, str] = field(default_factory=dict)
+    _ambiguous: frozenset[str] = frozenset()
+
+    def is_ambiguous(self, name: str) -> bool:
+        """Whether more than one tool answers to this bare client name.
+
+        Distinguishes the two ways :meth:`to_upstream` can decline to
+        translate a name given without a namespace: several tools claim it,
+        or no tool does.  Only a caller reporting the failure needs to care.
+        """
+        return name in self._ambiguous
 
     def to_upstream(self, name: str, namespace: str | None = None) -> str:
-        """Map a client ``(name, namespace)`` to the name the provider knows."""
-        return self._upstream.get((name, namespace), name)
+        """Map a client ``(name, namespace)`` to the name the provider knows.
+
+        Without a namespace — ``tool_choice`` has nowhere to put one — the
+        name resolves only while a single tool answers to it.
+        """
+        direct = self._upstream.get((name, namespace))
+        if direct is not None:
+            return direct
+        if namespace is None:
+            return self._sole.get(name, name)
+        return name
 
     def to_client(self, upstream_name: str) -> tuple[str, str | None]:
         """Map a provider name back to the client's ``(name, namespace)``."""
@@ -434,19 +454,31 @@ def build_tool_name_map(ir_request: dict[str, Any]) -> ToolNameMap:
 
     upstream: dict[tuple[str, str | None], str] = {}
     client: dict[str, tuple[str, str | None]] = {}
+    sole: dict[str, str | None] = {}
 
     for tool in tools:
         upstream_name = tool["name"]
         meta = tool.get("metadata") or {}
         namespace = meta.get("namespace")
         client_name = meta.get("_original_name") or upstream_name
+
+        # Tracked for every tool, including untranslated ones: an untouched
+        # top-level `exec` is what makes a namespaced `exec` unresolvable.
+        if sole.setdefault(client_name, upstream_name) != upstream_name:
+            sole[client_name] = None
+
         if namespace is None and client_name == upstream_name:
             continue
         upstream[(client_name, namespace)] = upstream_name
         if claimants[upstream_name] == 1:
             client[upstream_name] = (client_name, namespace)
 
-    return ToolNameMap(upstream, client)
+    return ToolNameMap(
+        upstream,
+        client,
+        {k: v for k, v in sole.items() if v is not None and v != k},
+        frozenset(k for k, v in sole.items() if v is None),
+    )
 
 
 def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
@@ -470,10 +502,81 @@ def _to_client_identity(target: dict[str, Any], name_map: ToolNameMap) -> None:
     pm["namespace"] = namespace
 
 
+def _select_upstream_name(
+    name: str,
+    *,
+    selector: str,
+    name_map: ToolNameMap,
+    declared: set[Any],
+    warnings: list[str],
+) -> str:
+    """Re-spell one name used by a tool selector, warning if it resolves to nothing.
+
+    Selectors carry no namespace, so the map can only answer while a single
+    tool claims the bare name. Otherwise the name goes upstream unchanged and
+    matches nothing, silently as far as the provider is concerned — hence
+    *selector* in the warning. The two causes are reported apart because a
+    shared name is ours to explain and an undeclared one is the client's typo.
+    """
+    chosen = name_map.to_upstream(name)
+    if chosen in declared:
+        return chosen
+    if name_map.is_ambiguous(name):
+        warnings.append(
+            f"{selector} names {chosen!r}, which is not among the tools sent "
+            "upstream — the name is shared by tools in more than one namespace "
+            f"and {selector} has no namespace to disambiguate it"
+        )
+    else:
+        warnings.append(
+            f"{selector} names {chosen!r}, which is not among the tools sent "
+            "upstream — no tool of that name was declared"
+        )
+    return chosen
+
+
+def _apply_upstream_allowed_tools(
+    allowed: Any,
+    *,
+    name_map: ToolNameMap,
+    declared: set[Any],
+    warnings: list[str],
+) -> None:
+    """Re-spell the tool names inside an ``allowed_tools`` extension.
+
+    Passed through from the provider request verbatim, so it arrives either
+    as a bare list of entries or wrapped in ``{"mode", "tools"}``, and an
+    entry is either a name or a ``{"type", "name"}`` dict.  Mutates in place;
+    anything of another shape is left alone.
+    """
+    unwrapped: Any = allowed.get("tools") if isinstance(allowed, dict) else allowed
+    if not isinstance(unwrapped, list):
+        return
+    entries: list[Any] = unwrapped
+    for i, entry in enumerate(entries):
+        if isinstance(entry, str):
+            entries[i] = _select_upstream_name(
+                entry,
+                selector="allowed_tools",
+                name_map=name_map,
+                declared=declared,
+                warnings=warnings,
+            )
+        elif isinstance(entry, dict) and isinstance(entry.get("name"), str):
+            entry["name"] = _select_upstream_name(
+                entry["name"],
+                selector="allowed_tools",
+                name_map=name_map,
+                declared=declared,
+                warnings=warnings,
+            )
+
+
 def apply_upstream_tool_names(
     ir_request: dict[str, Any],
     *,
     name_map: ToolNameMap,
+    warnings: list[str],
 ) -> None:
     """Re-spell history tool calls to match the request's tool definitions.
 
@@ -482,7 +585,40 @@ def apply_upstream_tool_names(
     same request may have been flattened to a qualified upstream name.  Left
     alone, the assistant message would name a function the request does not
     declare.  The inverse of :func:`restore_client_tool_names`.
+
+    ``tool_choice`` and the ``allowed_tools`` extension name tools too, and
+    are re-spelled here for the same reason.  Neither carries a namespace,
+    so both resolve by name alone or not at all; either one left naming no
+    declared tool is reported in *warnings* — whether or not this request
+    renamed anything, since a selector naming no declared tool is broken on
+    its own terms.
     """
+    declared = {
+        t.get("name") for t in ir_request.get("tools") or [] if isinstance(t, dict)
+    }
+
+    choice = ir_request.get("tool_choice")
+    if isinstance(choice, dict) and choice.get("tool_name"):
+        choice["tool_name"] = _select_upstream_name(
+            choice["tool_name"],
+            selector="tool_choice",
+            name_map=name_map,
+            declared=declared,
+            warnings=warnings,
+        )
+
+    extensions = ir_request.get("provider_extensions")
+    if isinstance(extensions, dict):
+        _apply_upstream_allowed_tools(
+            extensions.get("allowed_tools"),
+            name_map=name_map,
+            declared=declared,
+            warnings=warnings,
+        )
+
+    # Only the history rewrite below depends on a rename having happened:
+    # with an empty map every name resolves to itself, so the loop would
+    # write each name back unchanged.
     if not name_map:
         return
 
