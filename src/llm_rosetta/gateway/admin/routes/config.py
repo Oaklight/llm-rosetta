@@ -230,8 +230,8 @@ async def get_config(request: Any) -> Response:
                 }
                 for s in list_shims()
             ],
-            "embedding_formats": GatewayConfig.EMBEDDING_FORMATS,
-            "rerank_formats": GatewayConfig.RERANK_FORMATS,
+            "embedding_formats": GatewayConfig.embedding_formats(),
+            "rerank_formats": GatewayConfig.rerank_formats(),
             "model_types": _get_model_type_metadata(),
         }
     )
