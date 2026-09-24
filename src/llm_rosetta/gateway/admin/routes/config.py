@@ -705,13 +705,15 @@ def _apply_rate_limit_settings(
         if quota_key in rl_body:
             val = rl_body[quota_key]
             if val:
-                try:
-                    parse_quota(val)
-                except ValueError as exc:
-                    return JSONResponse(
-                        {"error": f"Invalid {quota_key} quota: {exc}"},
-                        status_code=400,
-                    )
+                quotas = val if isinstance(val, list) else [val]
+                for q in quotas:
+                    try:
+                        parse_quota(q)
+                    except ValueError as exc:
+                        return JSONResponse(
+                            {"error": f"Invalid {quota_key} quota: {exc}"},
+                            status_code=400,
+                        )
                 rl_cfg[quota_key] = val
             else:
                 rl_cfg.pop(quota_key, None)

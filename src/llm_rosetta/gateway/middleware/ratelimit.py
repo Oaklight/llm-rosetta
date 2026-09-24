@@ -35,6 +35,7 @@ from .error_format import detect_api_format, format_error_response, is_admin_pat
 from .request_context import request_context_var
 
 from llm_rosetta._vendor.ratelimit import (
+    CompositeLimiter,
     FixedWindowLimiter,
     GCRALimiter,
     RateLimitExceeded,
@@ -60,6 +61,7 @@ __all__ = [
     "FixedWindowLimiter",
     "SlidingWindowLimiter",
     "GCRALimiter",
+    "CompositeLimiter",
     "ThreadSafeLimiter",
     "RateLimitExceeded",
     "ratelimit",
@@ -83,9 +85,12 @@ _GOOGLE_MODEL_RE = re.compile(r"/v1beta/models/([^/:]+)")
 # ---------------------------------------------------------------------------
 
 
-def _build_limiter(algorithm: str, quota: str | None) -> RateLimiter | None:
+def _build_limiter(algorithm: str, quota: str | list[str] | None) -> RateLimiter | None:
     if not quota:
         return None
+    if isinstance(quota, list):
+        limiters = [create_limiter(algorithm, q) for q in quota]
+        return ThreadSafeLimiter(CompositeLimiter(limiters))
     return ThreadSafeLimiter(create_limiter(algorithm, quota))
 
 
