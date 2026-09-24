@@ -27,10 +27,8 @@ _DB_FILENAME = "gateway.db"
 _LEGACY_LOG = "request_log.jsonl"
 _LEGACY_METRICS = "metrics.json"
 
-# Retention defaults: keep many successes for capacity planning, keep
-# errors longer because they are rare and operationally valuable.
+# Retention defaults.
 DEFAULT_SUCCESS_MAX = 50000
-DEFAULT_ERROR_MAX = 10000
 
 DEFAULT_MAX_AGE_DAYS = 90
 
@@ -41,19 +39,19 @@ DEFAULT_OPS_WARN_MAX = 5000
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
 
-    The request log uses a dual-threshold retention policy: successful
-    requests (status_code < 400) and error requests (status_code >= 400)
-    are pruned independently.  Errors typically make up a tiny fraction
-    of traffic but are the most valuable rows to keep around for
-    debugging, so they get their own cap that the success rotation
-    cannot evict.
+    The request log retains successful entries up to ``success_max``.
+    Error entries (status_code >= 400) are retained without a separate
+    count cap — they are bounded by age-based cleanup only.
+
+    Error *dumps* (the ``error_dumps`` table) have their own retention
+    cap controlled by ``dump_max``.
 
     Args:
         data_dir: Directory for the database file (created if missing).
         success_max: Maximum number of successful request log entries to
             retain.  Defaults to :data:`DEFAULT_SUCCESS_MAX`.
-        error_max: Maximum number of error request log entries to retain
-            (status_code >= 400).  Defaults to :data:`DEFAULT_ERROR_MAX`.
+        dump_max: Maximum number of error dump entries to retain.
+            Defaults to :data:`DEFAULT_DUMP_MAX` (10 000).
         max_entries: Deprecated.  When provided and ``success_max`` is
             not, used as the success cap for backward compatibility.
             Emits a :class:`DeprecationWarning`.
@@ -63,7 +61,7 @@ class PersistenceManager:
         self,
         data_dir: str,
         success_max: int | None = None,
-        error_max: int | None = None,
+        dump_max: int | None = None,
         *,
         max_entries: int | None = None,
         ops_info_max: int | None = None,
@@ -73,7 +71,7 @@ class PersistenceManager:
         if max_entries is not None:
             warnings.warn(
                 "PersistenceManager(max_entries=...) is deprecated; "
-                "use success_max= (and optionally error_max=) instead.",
+                "use success_max= instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
@@ -84,7 +82,7 @@ class PersistenceManager:
         self._success_max = (
             success_max if success_max is not None else DEFAULT_SUCCESS_MAX
         )
-        self._error_max = error_max if error_max is not None else DEFAULT_ERROR_MAX
+        self._dump_max = dump_max if dump_max is not None else self.DEFAULT_DUMP_MAX
         self._insert_count = 0
         # Legacy single-cap fallback: ops_log_max sets both if specific caps absent
         self._ops_info_max = (
@@ -116,13 +114,13 @@ class PersistenceManager:
         self._success_max = value
 
     @property
-    def error_max(self) -> int:
-        """Cap on retained error request log entries (status_code >= 400)."""
-        return self._error_max
+    def dump_max(self) -> int:
+        """Cap on retained error dump entries."""
+        return self._dump_max
 
-    @error_max.setter
-    def error_max(self, value: int) -> None:
-        self._error_max = value
+    @dump_max.setter
+    def dump_max(self, value: int) -> None:
+        self._dump_max = value
 
     @property
     def db_path(self) -> Path:
@@ -321,9 +319,7 @@ class PersistenceManager:
         if self._insert_count >= 100:
             self._prune()
             self._insert_count = 0
-        elif self.count_success_entries() > self._success_max or (
-            self.count_error_entries() > self._error_max
-        ):
+        elif self.count_success_entries() > self._success_max:
             self._prune()
 
     def query_log_entries(
@@ -801,8 +797,7 @@ class PersistenceManager:
     # Error dumps
     # ------------------------------------------------------------------
 
-    # Default retention cap for error_dumps rows (independent of
-    # request_log error_max).  The design calls for 10K as a default.
+    # Default retention cap for error_dumps rows.
     DEFAULT_DUMP_MAX = 10000
 
     def insert_dump_body(self, body_hash: str, data: bytes, orig_bytes: int) -> None:
@@ -1012,6 +1007,16 @@ class PersistenceManager:
             return False
         return True
 
+    def vacuum(self) -> dict[str, Any]:
+        """Run VACUUM and return freed bytes."""
+        size_before = self.db_path.stat().st_size
+        ok = self._vacuum()
+        size_after = self.db_path.stat().st_size
+        return {
+            "freed_bytes": max(0, size_before - size_after),
+            "vacuumed": ok,
+        }
+
     def cleanup_logs_by_age(self, max_age_days: int) -> dict[str, Any]:
         """Delete request_log rows older than *max_age_days* and vacuum."""
         from datetime import datetime, timedelta, timezone
@@ -1191,7 +1196,7 @@ class PersistenceManager:
         Also cleans up orphaned dump_bodies entries.
         """
         count = self.count_error_dumps()
-        if count <= self.DEFAULT_DUMP_MAX:
+        if count <= self._dump_max:
             return
 
         self._conn.execute(
@@ -1199,7 +1204,7 @@ class PersistenceManager:
             "    SELECT id FROM error_dumps "
             "    ORDER BY timestamp DESC LIMIT ?"
             ")",
-            (self.DEFAULT_DUMP_MAX,),
+            (self._dump_max,),
         )
         # Clean up orphaned bodies
         self._conn.execute(
@@ -1233,10 +1238,10 @@ class PersistenceManager:
     # ------------------------------------------------------------------
 
     def _prune(self) -> None:
-        """Remove oldest entries beyond the per-class retention limits.
+        """Remove oldest successful entries beyond the retention cap.
 
-        Success and error rows are pruned independently so that rare
-        error rows are not evicted by a flood of successful traffic.
+        Error rows (status_code >= 400) are not pruned by count — they
+        are bounded by age-based cleanup only.
         """
         self._conn.execute(
             "DELETE FROM request_log "
@@ -1245,14 +1250,6 @@ class PersistenceManager:
             "    ORDER BY timestamp DESC LIMIT ?"
             ")",
             (self._success_max,),
-        )
-        self._conn.execute(
-            "DELETE FROM request_log "
-            "WHERE status_code >= 400 AND id NOT IN ("
-            "    SELECT id FROM request_log WHERE status_code >= 400 "
-            "    ORDER BY timestamp DESC LIMIT ?"
-            ")",
-            (self._error_max,),
         )
         self._conn.commit()
 

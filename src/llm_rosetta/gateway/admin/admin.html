@@ -589,9 +589,9 @@
         <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.25a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 0 1.5h-4.5A.75.75 0 0 1 5 3.25Zm-2 2a.75.75 0 0 1 .75-.75h8.5a.75.75 0 0 1 0 1.5h-8.5A.75.75 0 0 1 3 5.25ZM1 8a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8Zm1.5.5v4h11v-4h-11Z"/></svg>
         <span data-i18n="label.logRetention">Log Retention</span>
       </div>
-      <div class="settings-grid">
+      <div class="settings-grid" style="grid-template-columns:repeat(3,1fr);gap:2px 16px">
         <div class="settings-popup-item" style="grid-column:1/-1">
-          <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.requestLogSection">Request Log</label>
+          <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.requestLogSection">Request Log & Error Dumps</label>
         </div>
         <div class="settings-popup-item">
           <label data-i18n="label.successMax">Success Cap</label>
@@ -601,15 +601,9 @@
           <label data-i18n="label.maxAgeDays">Max Age (days)</label>
           <input type="number" id="settingsMaxAgeDays" min="1" step="1" value="90">
         </div>
-        <div class="settings-popup-item" style="grid-column:1/-1;margin-top:2px">
-          <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.errorDumpSection">Error Dumps</label>
-        </div>
         <div class="settings-popup-item">
           <label data-i18n="label.errorDumpMax">Error Dump Cap</label>
           <input type="number" id="settingsErrorDumpMax" min="1000" step="1000" value="10000">
-        </div>
-        <div class="settings-popup-item" style="justify-content:flex-end">
-          <button class="btn btn-sm" onclick="openExportDumpsModal()" data-i18n="btn.export">Export...</button>
         </div>
         <div class="settings-popup-item" style="grid-column:1/-1;margin-top:2px">
           <label style="font-size:12px;font-weight:600;color:var(--text-dim)" data-i18n="label.opsLogSection">Server Ops Log</label>
@@ -628,10 +622,12 @@
         </div>
         <div class="settings-popup-item" style="grid-column:1/-1;display:flex;justify-content:flex-end;gap:6px;margin-top:4px;padding-top:8px;border-top:1px solid var(--border)">
           <button class="btn btn-sm" onclick="saveLogRetention()" data-i18n="btn.save">Save</button>
+          <button class="btn btn-sm" onclick="openExportDumpsModal()" data-i18n="btn.export">Export...</button>
           <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('logs')" data-i18n="btn.cleanupLogs">Cleanup Logs</button>
           <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('errors')" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
           <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('ops')" data-i18n="btn.cleanupOps">Cleanup Ops</button>
           <button class="btn btn-sm btn-danger-fill" onclick="openCleanupConfirm('all')" data-i18n="btn.cleanupAll">Cleanup All</button>
+          <button class="btn btn-sm" onclick="doVacuum()" data-i18n="btn.vacuum" title="Reclaim disk space">Vacuum</button>
         </div>
       </div>
     </div>

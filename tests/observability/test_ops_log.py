@@ -210,7 +210,7 @@ class TestOpsLogInMemory:
 class TestOpsLogPersistence:
     @pytest.fixture()
     def pm(self, tmp_path):
-        return PersistenceManager(str(tmp_path), success_max=100, error_max=50)
+        return PersistenceManager(str(tmp_path), success_max=100)
 
     def test_add_and_query(self, pm):
         log = OpsLog(persistence=pm)

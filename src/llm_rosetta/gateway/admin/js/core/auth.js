@@ -280,6 +280,16 @@ async function onCleanupConfirmClick() {
   if (target === 'errors' || target === 'all') window.invalidateDumpCache?.();
 }
 
+// --- Vacuum ---
+async function doVacuum() {
+  try {
+    const d = await api.post('/admin/api/db/vacuum');
+    if (d.freed_bytes > 0) showToast(t('toast.vacuumDone', {freed: fmtBytesLong(d.freed_bytes)}));
+    else showToast(t('toast.vacuumNone'));
+  } catch { showToast(t('toast.error'), 'error'); }
+  window.loadMetrics?.();
+}
+
 // --- Error Dump Export ---
 function openExportDumpsModal() {
   document.getElementById('exportStartDate').value = '';
@@ -471,6 +481,6 @@ Object.assign(window, {
   copyAdminToken, changeAdminPassword, showLoginOverlay, doLogin,
   checkAuthAndInit, _doTokenRotate,
   onRlToggle, saveRateLimitSettings,
-  openCleanupConfirm, onCleanupConfirmInput, onCleanupConfirmClick,
+  openCleanupConfirm, onCleanupConfirmInput, onCleanupConfirmClick, doVacuum,
   openExportDumpsModal, doExportDumps,
 });

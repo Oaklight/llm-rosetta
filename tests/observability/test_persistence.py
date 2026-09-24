@@ -8,7 +8,7 @@ from llm_rosetta.observability import PersistenceManager, RequestLogEntry
 @pytest.fixture
 def pm(tmp_path):
     """Create a PersistenceManager using a temp directory."""
-    return PersistenceManager(str(tmp_path), success_max=100, error_max=50)
+    return PersistenceManager(str(tmp_path), success_max=100)
 
 
 class TestPersistenceManager:
@@ -74,7 +74,7 @@ class TestPersistenceManager:
 
 class TestPersistenceRetention:
     def test_prune_success(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), success_max=5, error_max=5)
+        pm = PersistenceManager(str(tmp_path), success_max=5)
         for i in range(10):
             entry = RequestLogEntry.create(
                 model=f"model-{i}",
@@ -88,8 +88,8 @@ class TestPersistenceRetention:
         # After pruning, should have at most success_max
         assert pm.count_success_entries() <= 5
 
-    def test_prune_errors_independently(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), success_max=5, error_max=3)
+    def test_errors_not_pruned_by_count(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path), success_max=5)
         # Add errors
         for i in range(10):
             entry = RequestLogEntry.create(
@@ -101,4 +101,4 @@ class TestPersistenceRetention:
                 duration_ms=10.0,
             )
             pm.insert_log_entries([entry.to_dict()])
-        assert pm.count_error_entries() <= 3
+        assert pm.count_error_entries() == 10
