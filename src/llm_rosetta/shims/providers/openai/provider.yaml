@@ -12,7 +12,7 @@ tools:
 response_id_prefix: "chatcmpl-"
 reasoning:
   effort_field: reasoning_effort
-  effort_range: [minimal, high]
+  effort_range: [minimal, max]
   visibility_modes:
     auto: auto
     concise: concise
