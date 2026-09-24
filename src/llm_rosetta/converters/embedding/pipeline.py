@@ -9,12 +9,20 @@ from __future__ import annotations
 
 from typing import Any
 
+# Import converter submodules directly (not through __init__) to avoid
+# circular imports — __init__.py re-exports from this module.
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConverter
 from llm_rosetta.converters.embedding.cohere import CohereEmbeddingConverter
 from llm_rosetta.converters.embedding.jina import JinaEmbeddingConverter
 from llm_rosetta.converters.embedding.openai import OpenAIEmbeddingConverter
 from llm_rosetta.converters.embedding.voyage import VoyageEmbeddingConverter
+
+__all__ = [
+    "EMBEDDING_FORMATS",
+    "EmbeddingConversionPipeline",
+    "get_embedding_converter",
+]
 
 _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
     "openai": OpenAIEmbeddingConverter,
