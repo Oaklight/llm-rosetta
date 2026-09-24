@@ -108,13 +108,15 @@
 
     // Rate limiting (disabled by default).
     // Quota strings: "N/unit" (e.g. "100/m", "10/s", "10000/d").
+    // Multi-window: use an array to enforce multiple windows simultaneously,
+    // e.g. ["60/m", "1000/h"] enforces both per-minute and per-hour limits.
     // Recommended hierarchy: global >= per_ip >= per_key >= per_model.
     // Set trust_proxy to true when behind a reverse proxy that sets X-Forwarded-For.
     // "rate_limit": {
     //   "enabled": true,
     //   "algorithm": "sliding_window",
     //   "global": "600/m",
-    //   "per_ip": "120/m",
+    //   "per_ip": ["120/m", "5000/h"],
     //   "per_key": "60/m",
     //   "per_model": "30/m",
     //   "trust_proxy": false,
