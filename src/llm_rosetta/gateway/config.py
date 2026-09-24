@@ -425,6 +425,9 @@ class GatewayConfig:
             provider_name = prov if isinstance(prov, str) else prov.get("provider", "")
             if provider_name in self.decision_providers:
                 self.decision_models.setdefault(model_name, provider_name)
+        self.default_decision_format: str = raw.get(
+            "default_decision_format", "typesafe"
+        )
 
         # --- Extract type-tagged models from unified models pool ---
         self._distribute_typed_models(raw.get("models", {}))

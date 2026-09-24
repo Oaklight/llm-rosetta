@@ -10,11 +10,19 @@ from __future__ import annotations
 
 from typing import Any
 
+# Import converter submodules directly (not through __init__) to avoid
+# circular imports — __init__.py re-exports from this module.
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.rerank_converter import BaseRerankConverter
 from llm_rosetta.converters.rerank.cohere import CohereRerankConverter
 from llm_rosetta.converters.rerank.jina import JinaRerankConverter
 from llm_rosetta.converters.rerank.voyage import VoyageRerankConverter
+
+__all__ = [
+    "RERANK_FORMATS",
+    "RerankConversionPipeline",
+    "get_rerank_converter",
+]
 
 _RERANK_CONVERTERS: dict[str, type[BaseRerankConverter]] = {
     "jina": JinaRerankConverter,

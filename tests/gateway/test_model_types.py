@@ -254,7 +254,7 @@ class TestDecisionDescriptor:
     def test_decision_color(self) -> None:
         desc = get_model_type("decision")
         assert desc is not None
-        assert desc.color == "#8b5cf6"
+        assert desc.color == "var(--purple)"
 
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,7 @@ from .auto_detect import (
     get_converter_for_provider,
 )
 from .pipeline import ConversionError, ConversionPipeline
+from .converters.decision.pipeline import DecisionConversionPipeline
 from .converters.embedding.pipeline import EmbeddingConversionPipeline
 from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
@@ -71,6 +72,7 @@ __all__ = [
     # Conversion pipeline
     "ConversionPipeline",
     "ConversionError",
+    "DecisionConversionPipeline",
     "EmbeddingConversionPipeline",
     "RerankConversionPipeline",
     # Provider shim layer
