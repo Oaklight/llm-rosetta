@@ -1171,7 +1171,7 @@ def _install_lifecycle_hooks(app: App) -> None:
     @app.on_response_started
     async def _on_response_started(request: Any, response: Any) -> None:
         ctx = request_context_var.get()
-        if ctx is None:
+        if ctx is None or ctx.request_start is None:
             return
         ttfb_ms = round((time.monotonic() - ctx.request_start) * 1000, 2)
         request.state.ttfb_ms = ttfb_ms
@@ -1198,7 +1198,7 @@ def _install_lifecycle_hooks(app: App) -> None:
                 request_log.update_profile(entry_id, {"client_disconnected": True})
 
         ctx = request_context_var.get()
-        logger.info(
+        logger.debug(
             "Client disconnected mid-response: client=%s path=%s request_id=%s",
             ctx.client_ip if ctx else "unknown",
             request.path,

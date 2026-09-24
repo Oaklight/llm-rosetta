@@ -42,13 +42,14 @@ class RequestContext:
         is_admin: Whether the request targets an admin panel path.
         request_start: Monotonic timestamp captured when the request
             context is created, used to compute gateway-level TTFB.
+            ``None`` for contexts created without timing (e.g. tests).
     """
 
     request_id: str
     client_ip: str
     api_format: str | None
     is_admin: bool
-    request_start: float = 0.0
+    request_start: float | None = None
 
 
 # ---------------------------------------------------------------------------
