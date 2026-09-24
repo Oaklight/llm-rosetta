@@ -1,4 +1,4 @@
-"""Backward-compat shim — real module is at converters.decision.pipeline."""
+"""Gateway-local re-export — real module is at converters.decision.pipeline."""
 
 from llm_rosetta.converters.decision.pipeline import (  # noqa: F401
     DECISION_FORMATS,
