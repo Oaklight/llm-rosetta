@@ -36,6 +36,12 @@ def truncate_with_digest(
         *text* itself when it fits and *force* is not set, otherwise
         ``{prefix}_{digest}``.
     """
+    min_length = HASH_SUFFIX_LEN + 1
+    if max_length < min_length:
+        raise ValueError(
+            f"max_length must be >= {min_length} (digest + separator), got {max_length}"
+        )
+
     if len(text) <= max_length and not force:
         return text
 

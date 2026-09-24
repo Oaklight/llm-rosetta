@@ -107,6 +107,11 @@ class OpenAIResponsesStreamContext(StreamContext):
         ctx._tool_call_order = base._tool_call_order
         ctx._tool_call_types = base._tool_call_types
         ctx._tool_call_index = base._tool_call_index
+        # Subclass-only fields below start empty and are populated during
+        # streaming, so they are not copied from `base` (which is a plain
+        # StreamContext).  Listed here so a new field is not silently lost.
+        # _tool_call_output_indices: allocated during streaming
+        # _tool_call_namespaces: populated at tool_call_start events
         return ctx
 
     def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
