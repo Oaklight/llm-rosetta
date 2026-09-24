@@ -1300,7 +1300,12 @@ def create_app(
 
 
 async def run_gateway(
-    app: App, host: str, port: int, *, socket: str | None = None
+    app: App,
+    host: str,
+    port: int,
+    *,
+    socket: str | None = None,
+    ssl_context: Any | None = None,
 ) -> None:
     """Start the gateway with lifecycle management."""
     # Expose bind address so admin test tasks can self-call.
@@ -1357,7 +1362,7 @@ async def run_gateway(
     refresh_tasks = await start_token_refreshers(static_providers)
 
     try:
-        await app._serve(host, port, socket=socket)
+        await app._serve(host, port, socket=socket, ssl_context=ssl_context)
     finally:
         if deferred is not None:
             await deferred.shutdown()
