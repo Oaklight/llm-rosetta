@@ -80,6 +80,7 @@ from .observability import (
     get_ops_log_event_types,
     get_ops_log_sources,
     get_provider_key,
+    get_rate_limit_status,
     get_request_key_labels,
     get_token_usage,
     backfill_dump_log_ids,
@@ -192,6 +193,10 @@ def register_admin_routes(app: Any) -> None:
     # Circuit breaker states (dashboard tab)
     app.route("/admin/api/circuit-breakers", methods=["GET"])(
         _guard("dashboard", get_circuit_breaker_states)
+    )
+    # Rate limit introspection (dashboard tab)
+    app.route("/admin/api/rate-limits", methods=["GET"])(
+        _guard("dashboard", get_rate_limit_status)
     )
     # Request log (logs tab)
     app.route("/admin/api/requests", methods=["GET"])(_guard("logs", get_requests))

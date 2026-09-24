@@ -96,6 +96,19 @@ async def get_circuit_breaker_states(request: Any) -> Response:
     return JSONResponse({"enabled": True, "providers": states})
 
 
+async def get_rate_limit_status(request: Any) -> Response:
+    """Return rate limiter introspection: enabled state and per-dimension status.
+
+    Query params:
+        key: Limiter key to peek (default: ``__global__``).
+    """
+    rate_limit_state = getattr(request.app, "rate_limit_state", None)
+    if rate_limit_state is None:
+        return JSONResponse({"enabled": False, "dimensions": {}})
+    key = _qp(request, "key", "__global__")
+    return JSONResponse(rate_limit_state.snapshot(key=key))
+
+
 def _rebuild_counters_after_mutation(request: Any) -> None:
     """Rebuild in-memory counters from request_log after admin-initiated deletion."""
     metrics = getattr(request.app, "metrics", None)
