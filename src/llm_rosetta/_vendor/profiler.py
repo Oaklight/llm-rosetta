@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.1.0"
+# version = "0.1.1"
 # deps = []
 # tier = "medium"
 # category = "devtools"
@@ -971,7 +971,8 @@ def _render_flame_html(
         'placeholder="Search functions\u2026" autocomplete="off">\n'
         '<button id="reset-zoom" class="btn">Reset Zoom</button>\n'
         '<button id="theme-toggle" class="btn" title="Toggle theme">'
-        "\U0001f319</button>\n"
+        f"{_SVG_MOON}{_SVG_SUN}"
+        "</button>\n"
         "</div>\n"
         f'<div id="flame-container" class="flame-container'
         f'{" inverted" if inverted else ""}">\n'
@@ -1039,7 +1040,8 @@ def _render_table_html(
         '<input type="text" id="filter-input" class="filter-input" '
         'placeholder="Filter functions\u2026" autocomplete="off">\n'
         '<button id="theme-toggle" class="btn" title="Toggle theme">'
-        "\U0001f319</button>\n"
+        f"{_SVG_MOON}{_SVG_SUN}"
+        "</button>\n"
         "</div>\n"
         '<div class="table-wrap">\n'
         '<table id="profile-table">\n<thead><tr>\n'
@@ -1062,6 +1064,13 @@ def _render_table_html(
         "</body>\n</html>"
     )
 
+
+# ---------------------------------------------------------------------------
+# Inline SVG icons for theme toggle
+# ---------------------------------------------------------------------------
+
+_SVG_MOON = '<svg id="icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>'
+_SVG_SUN = '<svg id="icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
 
 # ---------------------------------------------------------------------------
 # Inline CSS for HTML table output
@@ -1172,7 +1181,10 @@ _TABLE_JS = """\
         next=mq&&mq.matches?'light':'dark';
       }
       html.setAttribute('data-theme',next);
-      tb.textContent=next==='dark'?'\\u2600':'\\uD83C\\uDF19';
+      var moon=document.getElementById('icon-moon');
+      var sun=document.getElementById('icon-sun');
+      if(moon)moon.style.display=next==='dark'?'none':'';
+      if(sun)sun.style.display=next==='dark'?'':'none';
     });
   });
 })();
@@ -1364,7 +1376,10 @@ _FLAME_JS = """\
       next=mq&&mq.matches?'light':'dark';
     }
     html.setAttribute('data-theme',next);
-    tb.textContent=next==='dark'?'\\u2600':'\\uD83C\\uDF19';
+    var moon=document.getElementById('icon-moon');
+    var sun=document.getElementById('icon-sun');
+    if(moon)moon.style.display=next==='dark'?'none':'';
+    if(sun)sun.style.display=next==='dark'?'':'none';
   });
 
   render(FLAME_DATA,TOTAL_TIME);

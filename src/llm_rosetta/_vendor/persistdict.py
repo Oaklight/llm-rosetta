@@ -2,7 +2,7 @@
 # version = "0.4.1"
 # deps = []
 # tier = "medium"
-# category = "data"
+# category = "storage"
 # note = "Install/update via `zerodep add persistdict`"
 # ///
 """Persistent dictionary with pluggable backends.
