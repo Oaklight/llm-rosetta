@@ -34,7 +34,7 @@ jobs:
         env:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
         run: |
-          llm-rosetta-gateway --config ci/comply-gateway-config.jsonc --no-banner &
+          llm-rosetta-gateway --config .github/ci/comply-gateway-config.jsonc --no-banner &
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:18765/health/ready > /dev/null 2>&1; then
               echo "Gateway ready"

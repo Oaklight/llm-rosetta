@@ -11,10 +11,10 @@ Supports two test modes:
 Requires API keys in .env (or environment variables).
 
 Usage:
-    python dev_scripts/test_roundtrip_live.py                    # both modes
-    python dev_scripts/test_roundtrip_live.py --mode text         # text only
-    python dev_scripts/test_roundtrip_live.py --mode tools        # tools only
-    python dev_scripts/test_roundtrip_live.py --provider google
+    python scripts/integration/test_roundtrip_live.py                    # both modes
+    python scripts/integration/test_roundtrip_live.py --mode text         # text only
+    python scripts/integration/test_roundtrip_live.py --mode tools        # tools only
+    python scripts/integration/test_roundtrip_live.py --provider google
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ TOOL_SCHEMA: dict[str, Any] = {
 
 def load_env() -> None:
     """Load .env file from project root."""
-    env_path = Path(__file__).resolve().parent.parent / ".env"
+    env_path = Path(__file__).resolve().parent.parent.parent / ".env"
     if not env_path.exists():
         return
     for line in env_path.read_text().splitlines():

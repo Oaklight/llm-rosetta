@@ -7,7 +7,7 @@ For each provider, sends a realistic SSE event sequence through:
 Compares input event count vs output event count to detect inflation.
 
 Usage:
-    python dev_scripts/test_roundtrip_inflation.py
+    python scripts/integration/test_roundtrip_inflation.py
 """
 
 from __future__ import annotations
