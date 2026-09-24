@@ -412,14 +412,15 @@ class OpenAIResponsesToolOps(BaseToolOps):
         Handles both flat format (Responses API native) and nested format
         (with ``function`` key).  ``type: "namespace"`` containers are
         expanded into individual child tools via ``_flatten_namespace_tool``.
-        Non-function tool types without a ``name`` field (e.g.
-        ``web_search``) are stored as passthrough so they can be
-        round-tripped without modification.  Named non-function tools (e.g.
-        Codex ``"custom"`` ``apply_patch``) are downgraded to IR
-        ``type: "function"`` so the request passes IR validation; this
-        mirrors the existing downgrade in ``openai_chat/tool_ops.py``.  The
-        original provider type is retained in ``metadata["provider_type"]``
-        for diagnostics.
+        A tool whose type is outside the IR set (e.g. ``web_search``) is
+        stored as passthrough, keeping its original type in
+        ``metadata["provider_type"]`` so ``ir_tool_definition_to_p`` can
+        restore it unmodified.  Everything else is an IR type already —
+        ``function``, ``mcp`` or ``custom`` — and keeps it.  Notably a Codex
+        ``custom`` tool such as ``apply_patch`` is *not* downgraded here; a
+        provider that cannot accept one is served later and separately, by
+        :func:`~llm_rosetta.capabilities.downgrade_custom_tools`, which
+        records itself under ``metadata["_downgraded_from"]``.
 
         Args:
             provider_tool: OpenAI Responses tool definition dict.
@@ -456,17 +457,15 @@ class OpenAIResponsesToolOps(BaseToolOps):
             params = provider_tool.get("parameters", {})
             if tool_type != "function" and not params:
                 params = provider_tool.get("schema", {})
-            # Downgrade unknown provider tool types (e.g. Codex "custom") to
-            # IR "function" so the request passes IR validation.
-            ir_type = tool_type if tool_type in _IR_ALLOWED_TYPES else "function"
+            # No downgrade to make: every type outside the IR set has already
+            # returned above as a passthrough, so what reaches here is an IR
+            # type and stays one.
             result = {
-                "type": ir_type,
+                "type": tool_type,
                 "name": provider_tool.get("name", ""),
                 "description": provider_tool.get("description", ""),
                 "parameters": params,
             }
-            if ir_type != tool_type:
-                result["_downgraded_from"] = tool_type
 
         # Extract required_parameters from JSON Schema if available
         parameters = result.get("parameters", {})
@@ -475,10 +474,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
         else:
             result["required_parameters"] = []
 
-        downgraded_from = result.pop("_downgraded_from", None)
-        meta: dict[str, Any] = (
-            {"provider_type": downgraded_from} if downgraded_from else {}
-        )
+        meta: dict[str, Any] = {}
         fmt = provider_tool.get("format")
         if fmt:
             meta["format"] = fmt
