@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
 import dotenv
+import pytest
 import requests
 
 from llm_rosetta.converters.rerank import (
@@ -44,12 +45,26 @@ DOCUMENTS = [
 TOP_N = 2
 
 
+def _api_key(name: str) -> str:
+    """The named credential, or skip the test for want of it.
+
+    Unlike its siblings in this directory, this module has no import-time
+    credential guard — it reaches four providers and any one of them may be
+    configured on its own.  So the check belongs at the point of use, and an
+    absent key means the test did not run rather than that it failed.
+    """
+    try:
+        return os.environ[name]
+    except KeyError:
+        pytest.skip(f"{name} is not set in .env")
+
+
 def _call_jina() -> dict:
     resp = requests.post(
         "https://api.jina.ai/v1/rerank",
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.environ['JINA_API_KEY']}",
+            "Authorization": f"Bearer {_api_key('JINA_API_KEY')}",
         },
         json={
             "model": "jina-reranker-v2-base-multilingual",
@@ -69,7 +84,7 @@ def _call_cohere() -> dict:
         "https://api.cohere.com/v2/rerank",
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.environ['COHERE_API_KEY']}",
+            "Authorization": f"Bearer {_api_key('COHERE_API_KEY')}",
         },
         json={
             "model": "rerank-v3.5",
@@ -88,7 +103,7 @@ def _call_voyage() -> dict:
         "https://api.voyageai.com/v1/rerank",
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.environ['VOYAGE_API_KEY']}",
+            "Authorization": f"Bearer {_api_key('VOYAGE_API_KEY')}",
         },
         json={
             "model": "rerank-2-lite",
@@ -109,7 +124,7 @@ def _call_siliconflow() -> dict:
         f"{base_url}/v1/rerank",
         headers={
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {os.environ['SILICONFLOW_API_KEY']}",
+            "Authorization": f"Bearer {_api_key('SILICONFLOW_API_KEY')}",
         },
         json={
             "model": "BAAI/bge-reranker-v2-m3",
