@@ -2,6 +2,11 @@ name: zhipu
 base: openai_chat
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
 
+# Domestic (China mainland): open.bigmodel.cn; international: api.z.ai
 connection:
   base_url: https://open.bigmodel.cn/api/paas/v4
   api_key_env: ZHIPU_API_KEY
+reasoning:
+  thinking_modes:
+    enabled: enabled
+    disabled: disabled
