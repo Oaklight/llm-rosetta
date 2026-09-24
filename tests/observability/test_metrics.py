@@ -62,13 +62,15 @@ class TestMetricsCollector:
                 model="gpt-4o",
                 source="openai_chat",
                 target="anthropic",
-                status_code=200,
+                status_code=500,
                 duration_ms=100.0,
                 is_stream=False,
-                provider_name="My Anthropic",
+                provider_name="test-provider",
+                error_detail="fail",
             )
+        assert m.any_critical_provider()
         health = m.provider_health_snapshot()
-        assert "My Anthropic" in health
+        assert health["test-provider"]["status"] == "critical"
 
     def test_rebuild_counters(self):
         m = MetricsCollector()
