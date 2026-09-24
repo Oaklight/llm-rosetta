@@ -56,13 +56,13 @@ function openSettings() {
   const rlAlgo = document.getElementById('rlAlgorithm');
   if (rlAlgo && rl.algorithm) rlAlgo.value = rl.algorithm;
   const rlG = document.getElementById('rlGlobal');
-  if (rlG) rlG.value = rl.global || '';
+  if (rlG) rlG.value = _quotaToDisplay(rl.global);
   const rlI = document.getElementById('rlPerIp');
-  if (rlI) rlI.value = rl.per_ip || '';
+  if (rlI) rlI.value = _quotaToDisplay(rl.per_ip);
   const rlK = document.getElementById('rlPerKey');
-  if (rlK) rlK.value = rl.per_key || '';
+  if (rlK) rlK.value = _quotaToDisplay(rl.per_key);
   const rlM = document.getElementById('rlPerModel');
-  if (rlM) rlM.value = rl.per_model || '';
+  if (rlM) rlM.value = _quotaToDisplay(rl.per_model);
   _validateRlQuotas();
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
@@ -151,6 +151,19 @@ function _parseQuota(q) {
   if (!(unit in _RL_UNIT_MAP)) return {error: 'Unknown unit: ' + m[2]};
   return {limit: parseInt(m[1]), period: _RL_UNIT_MAP[unit]};
 }
+function _quotaToDisplay(v) {
+  if (!v) return '';
+  return Array.isArray(v) ? v.join(', ') : String(v);
+}
+function _splitQuotas(raw) {
+  if (!raw || !raw.trim()) return [];
+  return raw.split(',').map(s => s.trim()).filter(Boolean);
+}
+function _quotaToPayload(raw) {
+  const parts = _splitQuotas(raw);
+  if (parts.length === 0) return null;
+  return parts.length === 1 ? parts[0] : parts;
+}
 function _toRpm(p) { return p ? (p.limit / p.period) * 60 : null; }
 function _fmtRpm(v) { return v >= 1 ? Math.round(v) + ' req/min' : (v * 60).toFixed(1) + ' req/hr'; }
 
@@ -167,14 +180,21 @@ function _validateRlQuotas() {
   const fields = [{id:'rlGlobal',name:'Global'},{id:'rlPerIp',name:'Per IP'},{id:'rlPerKey',name:'Per API Key'},{id:'rlPerModel',name:'Per Model'}];
   const warnings = [], errors = [], parsed = {};
   for (const f of fields) {
-    const val = document.getElementById(f.id)?.value?.trim();
-    if (!val) { parsed[f.id] = null; continue; }
-    const p = _parseQuota(val);
-    if (p && p.error) { errors.push(f.name + ': ' + p.error); document.getElementById(f.id).style.borderColor = 'var(--red)'; }
-    else { document.getElementById(f.id).style.borderColor = ''; parsed[f.id] = p; }
+    const raw = document.getElementById(f.id)?.value?.trim();
+    if (!raw) { parsed[f.id] = null; continue; }
+    const parts = _splitQuotas(raw);
+    let hasError = false;
+    const allParsed = [];
+    for (const part of parts) {
+      const p = _parseQuota(part);
+      if (p && p.error) { errors.push(f.name + ' ("' + part + '"): ' + p.error); hasError = true; }
+      else if (p) { allParsed.push(p); }
+    }
+    if (hasError) { document.getElementById(f.id).style.borderColor = 'var(--red)'; }
+    else { document.getElementById(f.id).style.borderColor = ''; parsed[f.id] = allParsed.length === 1 ? allParsed[0] : allParsed[0] || null; }
   }
   const rpm = {};
-  for (const f of fields) if (parsed[f.id]) rpm[f.id] = _toRpm(parsed[f.id]);
+  for (const f of fields) if (parsed[f.id] && !Array.isArray(parsed[f.id])) rpm[f.id] = _toRpm(parsed[f.id]);
   if (rpm.rlGlobal && rpm.rlPerIp && rpm.rlPerIp > rpm.rlGlobal) warnings.push('Per IP (' + _fmtRpm(rpm.rlPerIp) + ') > Global (' + _fmtRpm(rpm.rlGlobal) + ')');
   if (rpm.rlPerIp && rpm.rlPerKey && rpm.rlPerKey > rpm.rlPerIp) warnings.push('Per API Key (' + _fmtRpm(rpm.rlPerKey) + ') > Per IP (' + _fmtRpm(rpm.rlPerIp) + ')');
   if (rpm.rlGlobal && rpm.rlPerKey && rpm.rlPerKey > rpm.rlGlobal) warnings.push('Per API Key (' + _fmtRpm(rpm.rlPerKey) + ') > Global (' + _fmtRpm(rpm.rlGlobal) + ')');
@@ -194,7 +214,7 @@ async function saveRateLimitSettings() {
   const payload = { rate_limit: { enabled: document.getElementById('rlEnabled').checked, algorithm: document.getElementById('rlAlgorithm').value } };
   for (const [id, key] of [['rlGlobal','global'],['rlPerIp','per_ip'],['rlPerKey','per_key'],['rlPerModel','per_model']]) {
     const v = document.getElementById(id)?.value?.trim();
-    payload.rate_limit[key] = v || null;
+    payload.rate_limit[key] = _quotaToPayload(v);
   }
   try { await api.put('/admin/api/config/server', payload); await window.loadConfig(); showToast(t('toast.saved')); } catch { showToast(t('toast.error'), 'error'); }
 }
