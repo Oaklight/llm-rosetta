@@ -12,6 +12,7 @@ and ``is_admin_path``, and on :mod:`headers` for ``get_request_id``.
 from __future__ import annotations
 
 import contextvars
+import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -39,12 +40,15 @@ class RequestContext:
             for paths where format detection is not meaningful (e.g.
             admin, health).
         is_admin: Whether the request targets an admin panel path.
+        request_start: Monotonic timestamp captured when the request
+            context is created, used to compute gateway-level TTFB.
     """
 
     request_id: str
     client_ip: str
     api_format: str | None
     is_admin: bool
+    request_start: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +129,7 @@ def setup_request_context(*, trust_proxy: bool = True) -> Any:
             client_ip=extract_client_ip(request, trust_proxy=trust_proxy),
             api_format=api_format,
             is_admin=admin,
+            request_start=time.monotonic(),
         )
         request_context_var.set(ctx)
 
