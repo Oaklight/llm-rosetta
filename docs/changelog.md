@@ -35,6 +35,20 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Admin JS reorganization** (PR [#738](https://github.com/Oaklight/llm-rosetta/pull/738)): moved 14 JS files into `js/core/`, `js/tabs/`, `js/components/` subdirectories.
 - **Removed backward-compat shims** (PR [#744](https://github.com/Oaklight/llm-rosetta/pull/744)): **breaking** — old flat import paths (`gateway.auth`, `gateway.embeddings`, etc.) no longer work. All imports must use canonical `gateway.middleware.*` / `gateway.pipelines.*` paths. Downstream projects must update imports (see `argo-proxy` [#179](https://github.com/Oaklight/argo-proxy/pull/179)).
 
+### Fixed — Shims
+
+- **Provider shim audit** (PR [#758](https://github.com/Oaklight/llm-rosetta/pull/758)): systematic audit of all provider shim configs against latest API docs (2026-09-24), verified with live API calls. Key fixes:
+    - **Anthropic**: added model overrides for Claude Sonnet 5, Opus 5, Opus 5.5 — these models reject `thinking.type: "enabled"` and require `adaptive`. Opus 5.5 additionally rejects `disabled` (thinking is always on).
+    - **OpenAI** (Chat + Responses): widened `effort_range` from `[minimal, high]` to `[minimal, max]` — gpt-6-sol supports `max` effort.
+    - **xAI**: kept `effort_range` at `[minimal, xhigh]` — live testing confirmed Grok now accepts `minimal`.
+    - **Volcengine**: fixed `api_key_env` from `VOLCENGINE_API_KEY` to `ARK_API_KEY`, widened `effort_range` to `[minimal, max]`, added `thinking_modes` to Responses shim.
+    - **MiniMax**: fixed `thinking_modes` mapping `enabled` → `adaptive`, removed unsupported `effort_field`/`effort_range`.
+    - **Moonshot**: added reasoning config (`thinking.type` + `reasoning_effort`).
+    - **OpenRouter**: corrected `effort_range` floor from `[low, xhigh]` to `[minimal, xhigh]`.
+    - **Zhipu**: added `thinking_modes` config (`enabled`/`disabled`).
+    - **DeepSeek**: added `frequency_penalty` and `presence_penalty` to strip list (deprecated fields).
+    - Added domestic/international endpoint annotations for Chinese providers (MiniMax, Moonshot, Zhipu, Volcengine, Qwen).
+
 ### Fixed
 
 - **Dark theme text visibility** — `--accent-on` CSS variable used for text on accent backgrounds (seg-controls, primary buttons, chips, login button) instead of hardcoded `#fff`, fixing invisible text on minimal dark theme.
