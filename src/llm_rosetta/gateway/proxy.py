@@ -266,33 +266,6 @@ def _soft_error_response(
     )
 
 
-def _handle_stream_soft_error(
-    matched: SoftErrorPattern,
-    chunk: dict[str, Any],
-    model: str,
-    dump_ctx: DumpContext | None,
-    entry_id: str | None,
-) -> str:
-    """Log and dump a soft-error detected in a stream chunk. Returns the error message."""
-    logger.warning("Soft-error detected in stream chunk: %s", matched.pattern)
-    _dc = dump_ctx or DumpContext()
-    dump_error(
-        _dc.persistence,
-        request_body=_dc.request_body,
-        response_text=json.dumps(chunk)[:2000],
-        converted_body=_dc.converted_body,
-        model=model,
-        source_provider=_dc.source_provider,
-        target_provider=_dc.target_provider,
-        provider_name=_dc.provider_name,
-        status_code=matched.status_code,
-        error_phase="soft_error",
-        upstream_url=_dc.upstream_url,
-        request_log_id=entry_id,
-    )
-    return matched.message
-
-
 def _detect_stream_chunk_error(
     chunk: dict[str, Any],
     *,
@@ -308,34 +281,39 @@ def _detect_stream_chunk_error(
     """
     soft_match = _check_soft_errors(soft_error_patterns, chunk)
     if soft_match:
-        return _handle_stream_soft_error(soft_match, chunk, model, dump_ctx, entry_id)
-
-    if is_upstream_error_chunk(chunk):
+        logger.warning("Soft-error detected in stream chunk: %s", soft_match.pattern)
+        error_msg = soft_match.message
+        error_status = soft_match.status_code
+        error_phase = "soft_error"
+    elif is_upstream_error_chunk(chunk):
         error_msg = extract_upstream_error_message(chunk)
+        error_status = stream_status
+        error_phase = "stream_chunk"
         log_upstream_error(
             stream_status,
             json.dumps(chunk)[:2000],
             endpoint=model,
             is_streaming=True,
         )
-        _dc = dump_ctx or DumpContext()
-        dump_error(
-            _dc.persistence,
-            request_body=_dc.request_body,
-            response_text=json.dumps(chunk)[:2000],
-            converted_body=_dc.converted_body,
-            model=model,
-            source_provider=_dc.source_provider,
-            target_provider=_dc.target_provider,
-            provider_name=_dc.provider_name,
-            status_code=stream_status,
-            error_phase="stream_chunk",
-            upstream_url=_dc.upstream_url,
-            request_log_id=entry_id,
-        )
-        return error_msg
+    else:
+        return None
 
-    return None
+    _dc = dump_ctx or DumpContext()
+    dump_error(
+        _dc.persistence,
+        request_body=_dc.request_body,
+        response_text=json.dumps(chunk)[:2000],
+        converted_body=_dc.converted_body,
+        model=model,
+        source_provider=_dc.source_provider,
+        target_provider=_dc.target_provider,
+        provider_name=_dc.provider_name,
+        status_code=error_status,
+        error_phase=error_phase,
+        upstream_url=_dc.upstream_url,
+        request_log_id=entry_id,
+    )
+    return error_msg
 
 
 @dataclass
