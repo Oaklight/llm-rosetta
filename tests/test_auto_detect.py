@@ -396,7 +396,7 @@ class TestConvert:
             force_conversion=True,
         )
 
-        assert result["reasoning"] == {"effort": "high"}
+        assert result["reasoning"] == {"effort": "xhigh"}
         assert "reasoning_effort" not in result
 
     def test_convert_with_tools(self):
