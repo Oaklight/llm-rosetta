@@ -721,10 +721,10 @@ class GatewayConfig:
             )
             algorithm = "sliding_window"
         self.rate_limit_algorithm: str = algorithm
-        self.rate_limit_global: str | None = rl.get("global")
-        self.rate_limit_per_ip: str | None = rl.get("per_ip")
-        self.rate_limit_per_key: str | None = rl.get("per_key")
-        self.rate_limit_per_model: str | None = rl.get("per_model")
+        self.rate_limit_global: str | list[str] | None = rl.get("global")
+        self.rate_limit_per_ip: str | list[str] | None = rl.get("per_ip")
+        self.rate_limit_per_key: str | list[str] | None = rl.get("per_key")
+        self.rate_limit_per_model: str | list[str] | None = rl.get("per_model")
         self.rate_limit_exclude: list[str] = rl.get(
             "exclude_paths", ["/health", "/admin"]
         )

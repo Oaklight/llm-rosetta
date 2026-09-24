@@ -61,10 +61,10 @@ class FakeConfig:
         self,
         enabled: bool = True,
         algorithm: str = "sliding_window",
-        global_quota: str | None = None,
-        per_ip: str | None = None,
-        per_key: str | None = None,
-        per_model: str | None = None,
+        global_quota: str | list[str] | None = None,
+        per_ip: str | list[str] | None = None,
+        per_key: str | list[str] | None = None,
+        per_model: str | list[str] | None = None,
         exclude: list[str] | None = None,
     ):
         self.rate_limit_enabled = enabled
@@ -482,3 +482,94 @@ class TestRateLimitConfig:
         }
         config = GatewayConfig(raw)
         assert config.rate_limit_algorithm == "sliding_window"
+
+
+# ---------------------------------------------------------------------------
+# Multi-window (CompositeLimiter) support
+# ---------------------------------------------------------------------------
+
+
+class TestBuildLimiterComposite:
+    def test_single_string_returns_simple_limiter(self):
+        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+
+        lim = _build_limiter("sliding_window", "100/m")
+        assert lim is not None
+        r = lim.acquire("k")
+        assert r.allowed
+
+    def test_list_returns_composite(self):
+        from llm_rosetta.gateway.middleware.ratelimit import (
+            CompositeLimiter,
+            ThreadSafeLimiter,
+            _build_limiter,
+        )
+
+        lim = _build_limiter("sliding_window", ["10/m", "100/h"])
+        assert lim is not None
+        assert isinstance(lim, ThreadSafeLimiter)
+        assert isinstance(lim.limiter, CompositeLimiter)
+        assert len(lim.limiter) == 2
+
+    def test_none_returns_none(self):
+        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+
+        assert _build_limiter("sliding_window", None) is None
+
+    def test_empty_list_returns_none(self):
+        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+
+        assert _build_limiter("sliding_window", []) is None
+
+    def test_composite_enforces_strictest(self):
+        from llm_rosetta.gateway.middleware.ratelimit import _build_limiter
+
+        lim = _build_limiter("sliding_window", ["2/m", "1000/h"])
+        assert lim is not None
+        lim.acquire("k")
+        lim.acquire("k")
+        r = lim.acquire("k")
+        assert not r.allowed
+
+
+class TestRateLimitStateComposite:
+    def test_rebuild_with_list_quota(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, per_ip=["60/m", "1000/h"])
+        state.rebuild(cast(GatewayConfig, config))
+        assert state.enabled is True
+        assert state._snap.ip is not None
+
+    def test_hook_enforces_composite(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, global_quota=["2/m", "100/h"])
+        state.rebuild(cast(GatewayConfig, config))
+
+        hook = create_rate_limit_hook(state)
+        req = FakeRequest(path="/v1/chat/completions")
+
+        assert _run(hook(req)) is None
+        assert _run(hook(req)) is None
+        resp = _run(hook(req))
+        assert resp is not None
+        assert resp.status_code == 429
+
+
+class TestConfigMultiWindow:
+    def test_config_accepts_list_quota(self):
+        from llm_rosetta.gateway.config import GatewayConfig
+
+        raw = {
+            "providers": {"test": {"api_key": "k", "base_url": "http://x"}},
+            "models": {"m": "test"},
+            "server": {
+                "rate_limit": {
+                    "enabled": True,
+                    "per_ip": ["60/m", "1000/h"],
+                    "global": "600/m",
+                }
+            },
+        }
+        config = GatewayConfig(raw)
+        assert config.rate_limit_per_ip == ["60/m", "1000/h"]
+        assert config.rate_limit_global == "600/m"
