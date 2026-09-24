@@ -2,12 +2,12 @@ name: minimax--openai_chat
 base: openai_chat
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/minimax.svg
 
+# Domestic (China mainland): api.minimaxi.com; international: api.minimax.io
 connection:
   base_url: https://api.minimaxi.com/v1
   api_key_env: MINIMAX_API_KEY
 reasoning:
   thinking_modes:
     auto: adaptive
-    enabled: enabled
+    enabled: adaptive
     disabled: disabled
-  effort_range: [low, high]
