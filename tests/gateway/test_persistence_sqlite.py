@@ -7,7 +7,6 @@ import time
 import pytest
 
 from llm_rosetta.gateway.admin.persistence import (
-    DEFAULT_ERROR_MAX,
     DEFAULT_SUCCESS_MAX,
     PersistenceManager,
 )
@@ -228,20 +227,20 @@ class TestPersistenceManagerRetention:
     def test_defaults(self, tmp_path):
         pm = PersistenceManager(str(tmp_path))
         assert pm.success_max == DEFAULT_SUCCESS_MAX
-        assert pm.error_max == DEFAULT_ERROR_MAX
+        assert pm.dump_max == PersistenceManager.DEFAULT_DUMP_MAX
         pm.close()
 
     def test_explicit_caps(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), success_max=123, error_max=45)
+        pm = PersistenceManager(str(tmp_path), success_max=123, dump_max=45)
         assert pm.success_max == 123
-        assert pm.error_max == 45
+        assert pm.dump_max == 45
         pm.close()
 
     def test_legacy_max_entries_maps_to_success(self, tmp_path):
         with pytest.warns(DeprecationWarning, match="success_max"):
             pm = PersistenceManager(str(tmp_path), max_entries=77)
         assert pm.success_max == 77
-        assert pm.error_max == DEFAULT_ERROR_MAX
+        assert pm.dump_max == PersistenceManager.DEFAULT_DUMP_MAX
         pm.close()
 
     def test_legacy_does_not_override_explicit_success_max(self, tmp_path):
@@ -254,7 +253,7 @@ class TestPersistenceManagerRetention:
     def test_errors_not_evicted_by_success_flood(self, tmp_path):
         # Tiny success cap, generous error cap: a flood of successes must
         # not evict the rare error rows.
-        pm = PersistenceManager(str(tmp_path), success_max=20, error_max=10)
+        pm = PersistenceManager(str(tmp_path), success_max=20)
 
         err_entries = [_make_entry_dict(status=500, model=f"e-{i}") for i in range(5)]
         pm.insert_log_entries(err_entries)
@@ -267,8 +266,8 @@ class TestPersistenceManagerRetention:
         assert pm.count_error_entries() == 5
         pm.close()
 
-    def test_error_cap_pruned_independently(self, tmp_path):
-        pm = PersistenceManager(str(tmp_path), success_max=1000, error_max=10)
+    def test_errors_not_pruned_by_count(self, tmp_path):
+        pm = PersistenceManager(str(tmp_path), success_max=1000)
         # 150 errors, batched to trigger periodic prune at 100.
         for batch in range(3):
             entries = [
@@ -276,7 +275,7 @@ class TestPersistenceManagerRetention:
             ]
             pm.insert_log_entries(entries)
 
-        assert pm.count_error_entries() <= 10
+        assert pm.count_error_entries() == 150
         assert pm.count_success_entries() == 0
         pm.close()
 

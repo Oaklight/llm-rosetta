@@ -733,7 +733,7 @@ def _apply_log_format(debug: dict, raw_value: Any) -> Response | None:
     return None
 
 
-_RL_FIELDS = (("success_max", 50000), ("error_max", 5000), ("max_age_days", 1))
+_RL_FIELDS = (("success_max", 50000), ("error_dump_max", 1000), ("max_age_days", 1))
 _OL_FIELDS = (("info_max", 100), ("warn_max", 100), ("max_age_days", 1))
 
 

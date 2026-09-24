@@ -236,8 +236,8 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
         rl_cfg = new_config.request_log or {}
         if "success_max" in rl_cfg:
             persistence.success_max = int(rl_cfg["success_max"])
-        if "error_max" in rl_cfg:
-            persistence.error_max = int(rl_cfg["error_max"])
+        if "error_dump_max" in rl_cfg:
+            persistence.dump_max = int(rl_cfg["error_dump_max"])
         ol_cfg = new_config.ops_log or {}
         if "info_max" in ol_cfg:
             persistence._ops_info_max = max(100, int(ol_cfg["info_max"]))

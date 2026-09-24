@@ -7,7 +7,6 @@ import os
 from typing import TYPE_CHECKING, Any
 
 from llm_rosetta.observability import (
-    DEFAULT_ERROR_MAX,
     DEFAULT_SUCCESS_MAX,
     EVENT_ADMIN_SETUP,
     MetricsCollector,
@@ -27,10 +26,10 @@ __all__ = ["setup_admin", "MetricsCollector", "RequestLog", "PersistenceManager"
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
-    """Resolve (success_max, error_max) from env vars and config.
+def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
+    """Resolve (success_max, dump_max) from env vars and config.
 
-    Precedence: env vars > config.request_log.{success,error}_max >
+    Precedence: env vars > config.request_log.{success_max,error_dump_max} >
     legacy config.request_log.max_entries > built-in defaults.
     """
     rl_cfg: dict[str, Any] = getattr(config, "request_log", {}) or {}
@@ -46,22 +45,25 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int]:
             return None
 
     success_max = _parse_int_env("REQUEST_LOG_SUCCESS_MAX")
-    error_max = _parse_int_env("REQUEST_LOG_ERROR_MAX")
     if success_max is None:
         success_max = rl_cfg.get("success_max")
-    if error_max is None:
-        error_max = rl_cfg.get("error_max")
     legacy = rl_cfg.get("max_entries")
     if legacy is not None and success_max is None:
         logger.warning(
             "config: server.request_log.max_entries is deprecated; "
-            "use success_max (and optionally error_max) instead."
+            "use success_max instead."
         )
         success_max = legacy
 
+    dump_max = _parse_int_env("ERROR_DUMP_MAX")
+    if dump_max is None:
+        dump_max = rl_cfg.get("error_dump_max")
+    if dump_max is not None:
+        dump_max = int(dump_max)
+
     return (
         int(success_max) if success_max is not None else DEFAULT_SUCCESS_MAX,
-        int(error_max) if error_max is not None else DEFAULT_ERROR_MAX,
+        dump_max,
     )
 
 
@@ -90,7 +92,7 @@ def _init_persistence(
     if not resolved_data_dir:
         return None
 
-    success_max, error_max = _resolve_log_caps(config)
+    success_max, dump_max = _resolve_log_caps(config)
     ol_cfg = getattr(config, "ops_log", {}) or {}
     ops_info_max = ol_cfg.get("info_max")
     ops_warn_max = ol_cfg.get("warn_max")
@@ -101,7 +103,7 @@ def _init_persistence(
     persistence = PersistenceManager(
         resolved_data_dir,
         success_max=success_max,
-        error_max=error_max,
+        dump_max=dump_max,
         ops_info_max=ops_info_max,
         ops_warn_max=ops_warn_max,
     )

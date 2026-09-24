@@ -585,18 +585,20 @@ function renderPersistence(p, totalReq) {
   el.classList.remove('hidden');
 
   const successCap = p.log_max_success || 0;
-  const errorCap = p.log_max_error || 0;
   const successN = p.log_success_entries || 0;
   const errorN = p.log_error_entries || 0;
+  const dumpN = p.dump_entries || 0;
+  const dumpCap = p.dump_max || 0;
   const successPct = successCap > 0 ? Math.round((successN / successCap) * 100) : 0;
-  const errorPct = errorCap > 0 ? Math.round((errorN / errorCap) * 100) : 0;
+  const dumpPct = dumpCap > 0 ? Math.round((dumpN / dumpCap) * 100) : 0;
   const pctClass = (pct) => pct >= 95 ? 'crit' : (pct >= 75 ? 'warn' : '');
   const fmtN = (n) => Number.isFinite(n) ? n.toLocaleString() : '–';
 
   el.innerHTML = `
     <span class="seg" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
     <span class="seg" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
-    <span class="seg" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v ${pctClass(errorPct)}">${errorN}/${errorCap} (${errorPct}%)</span></span>
+    <span class="seg" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v">${fmtN(errorN)}</span></span>
+    <span class="seg" title="${t('footer.tip.dumps')}"><span class="k">${t('footer.dumps')}</span><span class="v ${pctClass(dumpPct)}">${dumpN}/${dumpCap} (${dumpPct}%)</span></span>
     <span class="seg" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytesShort(p.db_bytes)}</span></span>
     <span class="seg" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytesShort(p.wal_bytes)}</span></span>
   `;

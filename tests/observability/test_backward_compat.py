@@ -2,7 +2,6 @@
 
 from llm_rosetta.gateway.admin.metrics import MetricsCollector, _RollingWindow
 from llm_rosetta.gateway.admin.persistence import (
-    DEFAULT_ERROR_MAX,
     DEFAULT_SUCCESS_MAX,
     PersistenceManager,
 )
@@ -29,7 +28,6 @@ class TestBackwardCompatImports:
 
     def test_persistence_defaults_identity(self):
         assert DEFAULT_SUCCESS_MAX is obs.DEFAULT_SUCCESS_MAX
-        assert DEFAULT_ERROR_MAX is obs.DEFAULT_ERROR_MAX
 
     def test_request_log_identity(self):
         assert RequestLog is obs.RequestLog

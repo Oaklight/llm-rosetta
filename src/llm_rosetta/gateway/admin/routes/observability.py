@@ -53,7 +53,8 @@ def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
             "log_success_entries": persistence.count_success_entries(),
             "log_error_entries": persistence.count_error_entries(),
             "log_max_success": persistence.success_max,
-            "log_max_error": persistence.error_max,
+            "dump_entries": persistence.count_error_dumps(),
+            "dump_max": persistence.dump_max,
         }
     except Exception:
         # Persistence introspection is purely informational; never let
@@ -462,6 +463,16 @@ async def db_cleanup(request: Any) -> Response:
 
     result = persistence.cleanup_by_age(max_age_days)
     _rebuild_counters_after_mutation(request)
+    return JSONResponse({"ok": True, **result})
+
+
+async def db_vacuum(request: Any) -> Response:
+    """Run VACUUM on the database to reclaim disk space."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    result = persistence.vacuum()
     return JSONResponse({"ok": True, **result})
 
 

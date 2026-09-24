@@ -59,7 +59,6 @@ from .ops_log import (
     OpsLogEntry,
 )
 from .persistence import (
-    DEFAULT_ERROR_MAX,
     DEFAULT_MAX_AGE_DAYS,
     DEFAULT_OPS_INFO_MAX,
     DEFAULT_OPS_WARN_MAX,
@@ -75,7 +74,6 @@ __all__ = [
     "ALL_SOURCES",
     "CapturedRequest",
     "CaptureState",
-    "DEFAULT_ERROR_MAX",
     "DEFAULT_MAX_AGE_DAYS",
     "DEFAULT_OPS_INFO_MAX",
     "DEFAULT_OPS_WARN_MAX",
