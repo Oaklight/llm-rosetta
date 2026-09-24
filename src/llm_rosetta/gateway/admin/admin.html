@@ -196,6 +196,7 @@
         <span id="profilingBadge" class="badge" style="padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600">OFF</span>
         <label style="font-size:13px" data-i18n="profiling.requests">Requests:</label>
         <input type="number" id="profilingCount" value="5" min="1" max="100" style="width:60px;padding:4px 6px;border:1px solid var(--border);border-radius:4px;background:var(--bg);color:var(--text)">
+        <label style="font-size:13px;display:inline-flex;align-items:center;gap:4px;cursor:pointer"><input type="checkbox" id="profilingTracing"> <span data-i18n="profiling.tracing">Tracing</span></label>
         <button class="btn btn-sm" onclick="toggleProfiling()" id="profilingToggleBtn" data-i18n="profiling.enable">Enable</button>
         <button class="btn btn-sm" onclick="clearProfilingResults()" data-i18n="profiling.clear">Clear</button>
         <button class="btn btn-sm" onclick="downloadAllFlamegraphs()" id="profilingDownloadAll" style="display:none" data-i18n="profiling.downloadAll">Download All</button>
@@ -215,6 +216,7 @@
           <th data-i18n="col.sourceTarget">Source &rarr; Target</th>
           <th data-i18n="col.mode">Mode</th>
           <th data-i18n="col.duration">Duration</th>
+          <th data-i18n="profiling.type">Type</th>
           <th data-i18n="profiling.flamegraph">Flamegraph</th>
         </tr></thead>
         <tbody id="profilingResults"></tbody>
