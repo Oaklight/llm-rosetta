@@ -573,3 +573,62 @@ class TestConfigMultiWindow:
         config = GatewayConfig(raw)
         assert config.rate_limit_per_ip == ["60/m", "1000/h"]
         assert config.rate_limit_global == "600/m"
+
+
+# ---------------------------------------------------------------------------
+# Limiter introspection (snapshot)
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimitSnapshot:
+    def test_disabled_snapshot(self):
+        state = RateLimitState()
+        snap = state.snapshot()
+        assert snap["enabled"] is False
+        assert all(v is None for v in snap["dimensions"].values())
+
+    def test_single_limiter_snapshot(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, global_quota="10/m")
+        state.rebuild(cast(GatewayConfig, config))
+        snap = state.snapshot()
+        assert snap["enabled"] is True
+        gl = snap["dimensions"]["global"]
+        assert gl is not None
+        assert gl["limit"] == 10
+        assert gl["remaining"] == 10
+        assert gl["allowed"] is True
+        assert snap["dimensions"]["per_ip"] is None
+
+    def test_composite_limiter_snapshot(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, global_quota=["5/m", "100/h"])
+        state.rebuild(cast(GatewayConfig, config))
+        snap = state.snapshot()
+        gl = snap["dimensions"]["global"]
+        assert "windows" in gl
+        assert len(gl["windows"]) == 2
+        assert gl["windows"][0]["limit"] == 5
+        assert gl["windows"][1]["limit"] == 100
+
+    def test_snapshot_reflects_usage(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, global_quota="10/m")
+        state.rebuild(cast(GatewayConfig, config))
+        state._snap.gl.acquire("__global__")  # ty: ignore[unresolved-attribute]
+        state._snap.gl.acquire("__global__")  # ty: ignore[unresolved-attribute]
+        snap = state.snapshot()
+        gl = snap["dimensions"]["global"]
+        assert gl["remaining"] == 8
+
+    def test_snapshot_with_custom_key(self):
+        state = RateLimitState()
+        config = FakeConfig(enabled=True, per_ip="5/m")
+        state.rebuild(cast(GatewayConfig, config))
+        state._snap.ip.acquire("10.0.0.1")  # ty: ignore[unresolved-attribute]
+        snap = state.snapshot(key="10.0.0.1")
+        ip = snap["dimensions"]["per_ip"]
+        assert ip["remaining"] == 4
+        snap2 = state.snapshot(key="10.0.0.2")
+        ip2 = snap2["dimensions"]["per_ip"]
+        assert ip2["remaining"] == 5
