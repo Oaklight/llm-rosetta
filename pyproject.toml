@@ -43,7 +43,7 @@ openai = ["openai>=2.0.0"]
 anthropic = ["anthropic>=0.84.0"]
 google = ["google-genai>=1.67.0"]
 gateway = []
-profiling = ["pyinstrument>=5.0.0"]
+
 dev = [
     "python-dotenv",
     "pytest",
@@ -57,7 +57,7 @@ dev = [
     "twine>=6.1.0",
 ]
 
-all = ["llm-rosetta[openai,anthropic,google,gateway,profiling,dev]"]
+all = ["llm-rosetta[openai,anthropic,google,gateway,dev]"]
 
 [project.urls]
 Documentation = "https://llm-rosetta.readthedocs.io"

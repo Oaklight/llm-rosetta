@@ -36,18 +36,6 @@ async def enable_profiling(request: Any) -> Response:
     """Enable profiling for the next N requests."""
     state: ProfilerState = request.app.profiler_state
 
-    # Pre-check: is pyinstrument available?
-    try:
-        import pyinstrument  # noqa: F401
-    except ImportError:
-        return JSONResponse(
-            {
-                "error": "pyinstrument is not installed. "
-                "Install with: pip install llm-rosetta[profiling]"
-            },
-            status_code=400,
-        )
-
     try:
         body = request.json()
     except Exception:
