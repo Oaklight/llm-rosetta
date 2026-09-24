@@ -126,8 +126,9 @@ def _qualify_tool_name(
     # identical requests have to produce identical names or every one is a
     # prompt-cache miss. The counter only widens the search when a digest is
     # itself taken, and terminates because the tool list is finite.
+    _MAX_QUALIFY_ATTEMPTS = 1000
     attempt = 0
-    while True:
+    while attempt < _MAX_QUALIFY_ATTEMPTS:
         seed = f"{namespace}\0{name}\0{attempt}" if attempt else f"{namespace}\0{name}"
         generated = truncate_with_digest(
             qualified, _MAX_TOOL_NAME_LEN, seed=seed, force=True
@@ -135,6 +136,11 @@ def _qualify_tool_name(
         if generated not in used_names:
             break
         attempt += 1
+    else:
+        raise RuntimeError(
+            f"Tool name qualification exhausted {_MAX_QUALIFY_ATTEMPTS} attempts "
+            f"for {name!r} in namespace {namespace!r}"
+        )
 
     warnings.append(
         f"Tool {name!r} in namespace {namespace!r} cannot be qualified within "
