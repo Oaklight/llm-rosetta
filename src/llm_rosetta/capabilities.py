@@ -620,6 +620,54 @@ def _apply_upstream_allowed_tools(
             )
 
 
+def _respell_history_tool_calls(
+    ir_request: dict[str, Any],
+    *,
+    name_map: ToolNameMap,
+) -> tuple[set[str], set[str]]:
+    """Re-spell history tool calls in place, and sort the broken ones.
+
+    Mutates the ``tool_call`` parts of *ir_request* to their upstream
+    spelling, and returns ``(unresolved, unattributable)`` — the two ways a
+    namespace-less history call goes wrong, kept apart because the client can
+    only act on one. ``unresolved``: the name matches no declared tool, and
+    echoing the namespace back would have fixed it. ``unattributable``: it
+    matches several, and nothing the client sends can separate them.
+    """
+    unresolved: set[str] = set()
+    unattributable: set[str] = set()
+    for msg in ir_request.get("messages") or []:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("content") or []:
+            if not isinstance(part, dict) or part.get("type") != "tool_call":
+                continue
+            pm = part.get("provider_metadata")
+            namespace = pm.get("namespace") if isinstance(pm, dict) else None
+            client_name = part.get("tool_name", "")
+            upstream_name = name_map.to_upstream(client_name, namespace)
+            part["tool_name"] = upstream_name
+            if namespace is not None:
+                continue
+            if name_map.is_contested(upstream_name):
+                # Tested against the *upstream* name, and first: a third tool
+                # sharing the name makes both branches true, and this is the
+                # more specific answer. The other would then advise echoing
+                # the namespace back, which cannot help when the namespaces
+                # are precisely what could not be folded in.
+                # Do not reorder these.
+                unattributable.add(client_name)
+            elif name_map.is_ambiguous(client_name) and not name_map.has_top_level(
+                client_name
+            ):
+                # `is_ambiguous` alone over-reports: when a top-level tool and
+                # a namespaced one share a bare name, omitting the namespace
+                # is how the client says it meant the top-level one, and the
+                # fallback lands on exactly that tool.
+                unresolved.add(client_name)
+    return unresolved, unattributable
+
+
 def apply_upstream_tool_names(
     ir_request: dict[str, Any],
     *,
@@ -673,52 +721,9 @@ def apply_upstream_tool_names(
     if not name_map:
         return
 
-    # Two different ways a namespace-less history call goes wrong, told apart
-    # because the client can only act on one of them.  ``unresolved``: the
-    # name reaches the provider matching no declared tool, and echoing the
-    # namespace back would have fixed it.  ``unattributable``: it matches
-    # several, and nothing the client sends can separate them — the tools
-    # needed different upstream names and could not be given any.
-    unresolved: set[str] = set()
-    unattributable: set[str] = set()
-    for msg in ir_request.get("messages") or []:
-        if not isinstance(msg, dict):
-            continue
-        for part in msg.get("content") or []:
-            if not isinstance(part, dict) or part.get("type") != "tool_call":
-                continue
-            pm = part.get("provider_metadata")
-            namespace = pm.get("namespace") if isinstance(pm, dict) else None
-            client_name = part.get("tool_name", "")
-            upstream_name = name_map.to_upstream(client_name, namespace)
-            part["tool_name"] = upstream_name
-            if namespace is not None:
-                continue
-            if name_map.is_contested(upstream_name):
-                # Against the *upstream* name, and checked first because the
-                # two tests can both hold at once.  They ask different things —
-                # contested, whether several tools kept one upstream spelling;
-                # ambiguous, whether one client name reached several — and a
-                # third tool sharing the name can make both true.  Contested is
-                # then the more specific answer, and the branch below would give
-                # the wrong advice: it tells the client to echo the namespace
-                # back, which cannot help when the namespaces are precisely what
-                # could not be folded in.  Do not reorder these.
-                unattributable.add(client_name)
-            elif name_map.is_ambiguous(client_name) and not name_map.has_top_level(
-                client_name
-            ):
-                # ``is_ambiguous`` alone over-reports.  A top-level tool and a
-                # namespaced one can share a bare name, and then the name is
-                # ambiguous in the map yet the call is not: omitting the
-                # namespace is how a client says it meant the top-level tool,
-                # and the fallback lands on exactly that tool's upstream name.
-                # So the question is whether a top-level tool claims the name,
-                # not whether the name is one we send — a tool from a container
-                # with no name of its own also keeps its bare spelling and is
-                # also sent under it, and a bare call was never meant for that
-                # one.
-                unresolved.add(client_name)
+    unresolved, unattributable = _respell_history_tool_calls(
+        ir_request, name_map=name_map
+    )
 
     for client_name in sorted(unresolved):
         warnings.append(
