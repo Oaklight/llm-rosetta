@@ -158,6 +158,49 @@ class RateLimitState:
                 ", ".join(dims) or "none",
             )
 
+    def snapshot(self, key: str = "__global__") -> dict[str, Any]:
+        """Return introspection data for all rate limit dimensions.
+
+        Args:
+            key: The limiter key to peek.  Defaults to ``"__global__"``.
+        """
+        snap = self._snap
+
+        def _limiter_info(lim: RateLimiter | None, key: str) -> dict[str, Any] | None:
+            if lim is None:
+                return None
+            inner = lim.limiter if isinstance(lim, ThreadSafeLimiter) else lim
+            if isinstance(inner, CompositeLimiter):
+                details = inner.detail(key)
+                return {
+                    "windows": [
+                        {
+                            "limit": int(r.limit),
+                            "remaining": max(0, int(r.remaining)),
+                            "reset_at": round(r.reset_at, 2),
+                            "allowed": r.allowed,
+                        }
+                        for r in details
+                    ],
+                }
+            result = lim.peek(key)
+            return {
+                "limit": int(result.limit),
+                "remaining": max(0, int(result.remaining)),
+                "reset_at": round(result.reset_at, 2),
+                "allowed": result.allowed,
+            }
+
+        return {
+            "enabled": self.enabled,
+            "dimensions": {
+                "global": _limiter_info(snap.gl, "__global__"),
+                "per_ip": _limiter_info(snap.ip, key),
+                "per_key": _limiter_info(snap.key, key),
+                "per_model": _limiter_info(snap.model, key),
+            },
+        }
+
 
 # ---------------------------------------------------------------------------
 # Format-aware 429 response
