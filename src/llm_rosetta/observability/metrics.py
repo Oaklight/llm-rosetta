@@ -192,6 +192,9 @@ class MetricsCollector:
     by_model_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
     by_provider_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
 
+    # Client disconnects (mid-response)
+    total_client_disconnects: int = 0
+
     # Gauge
     active_streams: int = 0
 
@@ -317,6 +320,10 @@ class MetricsCollector:
             duration_ms, is_error=is_error, error_detail=error_detail
         )
 
+    def record_disconnect(self) -> None:
+        """Record a client disconnect during response delivery."""
+        self.total_client_disconnects += 1
+
     def record_usage(
         self,
         *,
@@ -362,6 +369,7 @@ class MetricsCollector:
             "total_requests": self.total_requests,
             "total_errors": self.total_errors,
             "total_streams": self.total_streams,
+            "total_client_disconnects": self.total_client_disconnects,
             "by_model": dict(self.by_model),
             "by_source_provider": dict(self.by_source_provider),
             "by_target_provider": dict(self.by_target_provider),
@@ -382,6 +390,7 @@ class MetricsCollector:
         self.total_requests = data.get("total_requests", 0)
         self.total_errors = data.get("total_errors", 0)
         self.total_streams = data.get("total_streams", 0)
+        self.total_client_disconnects = data.get("total_client_disconnects", 0)
         self.by_model = dict(data.get("by_model", {}))
         self.by_source_provider = dict(data.get("by_source_provider", {}))
         self.by_target_provider = dict(data.get("by_target_provider", {}))
@@ -463,9 +472,12 @@ class MetricsCollector:
             )
 
         # Atomic swap — active_streams is live state, not rebuilt.
+        # total_client_disconnects is a transport-level event not stored
+        # in request log rows, so it resets to 0 on rebuild.
         self.total_requests = total_requests
         self.total_errors = total_errors
         self.total_streams = total_streams
+        self.total_client_disconnects = 0
         self.by_model = by_model
         self.by_source_provider = by_source
         self.by_target_provider = by_target
@@ -586,6 +598,7 @@ class MetricsCollector:
             "total_requests": self.total_requests,
             "total_errors": self.total_errors,
             "total_streams": self.total_streams,
+            "total_client_disconnects": self.total_client_disconnects,
             "error_rate": error_rate,
             "active_streams": self.active_streams,
             "by_model": dict(self.by_model),

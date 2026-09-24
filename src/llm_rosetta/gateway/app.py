@@ -368,8 +368,10 @@ async def _proxy_handler(
     persistence = _raw_persistence if _config.error_dumps_enabled else None
     deep_profiler = _try_start_profiler(request.app)
 
-    # Shared across streaming / non-streaming paths
+    # Shared across streaming / non-streaming paths — also stored on
+    # request.state so lifecycle hooks can write back to the log entry.
     pre_entry_id = uuid.uuid4().hex
+    request.state.log_entry_id = pre_entry_id
     _kctx = api_key_context_var.get()
     _client_key_hash = _kctx.key_hash if _kctx else ""
     _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
@@ -1163,6 +1165,47 @@ def _install_rate_limiting(app: App, config: GatewayConfig) -> None:
     app.after_request(create_rate_limit_after_hook())
 
 
+def _install_lifecycle_hooks(app: App) -> None:
+    """Register httpserver response lifecycle hooks for TTFB and disconnect tracking."""
+
+    @app.on_response_started
+    async def _on_response_started(request: Any, response: Any) -> None:
+        ctx = request_context_var.get()
+        if ctx is None:
+            return
+        ttfb_ms = round((time.monotonic() - ctx.request_start) * 1000, 2)
+        request.state.ttfb_ms = ttfb_ms
+
+    @app.on_response_completed
+    async def _on_response_completed(request: Any, response: Any) -> None:
+        ttfb_ms = getattr(request.state, "ttfb_ms", None)
+        entry_id = getattr(request.state, "log_entry_id", None)
+        if ttfb_ms is not None and entry_id is not None:
+            request_log = getattr(request.app, "request_log", None)
+            if request_log is not None:
+                request_log.update_profile(entry_id, {"ttfb_ms": ttfb_ms})
+
+    @app.on_client_disconnect
+    async def _on_client_disconnect(request: Any) -> None:
+        metrics = getattr(request.app, "metrics", None)
+        if metrics is not None:
+            metrics.record_disconnect()
+
+        entry_id = getattr(request.state, "log_entry_id", None)
+        if entry_id is not None:
+            request_log = getattr(request.app, "request_log", None)
+            if request_log is not None:
+                request_log.update_profile(entry_id, {"client_disconnected": True})
+
+        ctx = request_context_var.get()
+        logger.info(
+            "Client disconnected mid-response: client=%s path=%s request_id=%s",
+            ctx.client_ip if ctx else "unknown",
+            request.path,
+            ctx.request_id if ctx else "unknown",
+        )
+
+
 def create_app(
     config: GatewayConfig,
     config_path: str | None = None,
@@ -1295,6 +1338,9 @@ def create_app(
             branding=ext.branding,
             data_dir=resolved_data_dir,
         )
+
+    # --- Response lifecycle hooks (httpserver 0.5.0+) ---
+    _install_lifecycle_hooks(app)
 
     return app
 
