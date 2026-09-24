@@ -1287,6 +1287,90 @@ class PersistenceManager:
         )
         self._conn.commit()
 
+    def query_token_usage_by_day(
+        self,
+        *,
+        days: int = 7,
+        api_key_label: str | None = None,
+    ) -> dict[str, Any]:
+        """Aggregate token usage grouped by day.
+
+        Args:
+            days: Number of days to look back.
+            api_key_label: Optional filter by API key label.
+
+        Returns:
+            Dict with ``days`` (list of per-day dicts) and ``totals``.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        sql = (
+            "SELECT date(timestamp) as day, "
+            "COUNT(*) as request_count, "
+            "COALESCE(SUM(input_tokens), 0), "
+            "COALESCE(SUM(output_tokens), 0), "
+            "COALESCE(SUM(total_tokens), 0), "
+            "COALESCE(SUM(cache_read_tokens), 0), "
+            "COALESCE(SUM(cache_creation_tokens), 0), "
+            "COALESCE(SUM(reasoning_tokens), 0) "
+            "FROM request_log WHERE timestamp >= ?"
+        )
+        params: list[Any] = [cutoff]
+        if api_key_label:
+            sql += " AND api_key_label = ?"
+            params.append(api_key_label)
+        sql += " GROUP BY date(timestamp) ORDER BY day DESC"
+
+        rows = self._conn.execute(sql, params).fetchall()
+        day_list = []
+        totals = {
+            "request_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "total_tokens": 0,
+            "cache_read_tokens": 0,
+            "cache_creation_tokens": 0,
+            "reasoning_tokens": 0,
+        }
+        for r in rows:
+            entry = {
+                "day": r[0],
+                "request_count": r[1],
+                "input_tokens": r[2],
+                "output_tokens": r[3],
+                "total_tokens": r[4],
+                "cache_read_tokens": r[5],
+                "cache_creation_tokens": r[6],
+                "reasoning_tokens": r[7],
+            }
+            day_list.append(entry)
+            for k in totals:
+                totals[k] += entry[k]
+        return {"days": day_list, "totals": totals}
+
+    def query_rolling_24h_tokens(self) -> dict[str, int]:
+        """Sum token usage over the last 24 hours."""
+        from datetime import datetime, timedelta, timezone
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        row = self._conn.execute(
+            "SELECT COALESCE(SUM(input_tokens), 0), "
+            "COALESCE(SUM(output_tokens), 0), "
+            "COALESCE(SUM(cache_read_tokens), 0), "
+            "COALESCE(SUM(cache_creation_tokens), 0), "
+            "COALESCE(SUM(reasoning_tokens), 0) "
+            "FROM request_log WHERE timestamp >= ?",
+            (cutoff,),
+        ).fetchone()
+        return {
+            "input_tokens_24h": row[0],
+            "output_tokens_24h": row[1],
+            "cache_read_tokens_24h": row[2],
+            "cache_creation_tokens_24h": row[3],
+            "reasoning_tokens_24h": row[4],
+        }
+
     def update_entry_usage(
         self,
         entry_id: str,

@@ -81,6 +81,7 @@ from .observability import (
     get_ops_log_sources,
     get_provider_key,
     get_request_key_labels,
+    get_token_usage,
     backfill_dump_log_ids,
     get_request_by_id,
     get_requests,
@@ -184,6 +185,9 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/metrics", methods=["GET"])(get_metrics)
     app.route("/admin/api/metrics/rebuild", methods=["POST"])(
         _guard("dashboard", rebuild_metrics)
+    )
+    app.route("/admin/api/token-usage", methods=["GET"])(
+        _guard("dashboard", get_token_usage)
     )
     # Circuit breaker states (dashboard tab)
     app.route("/admin/api/circuit-breakers", methods=["GET"])(
