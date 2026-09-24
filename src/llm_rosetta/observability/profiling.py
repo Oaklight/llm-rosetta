@@ -1,8 +1,8 @@
 """On-demand deep profiling state management.
 
-Provides :class:`ProfilerState` for managing pyinstrument profiling
-sessions.  The data layer is framework-agnostic — route handlers that
-wire ``ProfilerState`` into a web framework live in the consumer
+Provides :class:`ProfilerState` for managing profiling sessions.
+The data layer is framework-agnostic — route handlers that wire
+``ProfilerState`` into a web framework live in the consumer
 (e.g. ``gateway/admin/routes/profiling.py``).
 
 This module is framework-agnostic and can be used by any consumer
@@ -16,7 +16,7 @@ from typing import Any
 
 
 class ProfilerState:
-    """Manages on-demand per-request pyinstrument profiling sessions.
+    """Manages on-demand per-request profiling sessions.
 
     Each profiled request gets its own
     :class:`~llm_rosetta.profiling.DeepProfiler` instance to avoid
@@ -25,26 +25,31 @@ class ProfilerState:
     Attributes:
         enabled: Whether profiling is currently active.
         remaining: Number of requests left to profile.
+        tracing: Whether to use per-call tracing mode.
         results: Collected profiling results (capped at *max_results*).
     """
 
     def __init__(self, *, max_results: int = 20) -> None:
         self.enabled: bool = False
         self.remaining: int = 0
+        self.tracing: bool = False
         self.results: list[dict[str, Any]] = []
         self._max_results = max_results
 
-    def enable(self, requests: int = 5) -> dict[str, Any]:
+    def enable(self, requests: int = 5, *, tracing: bool = False) -> dict[str, Any]:
         """Enable profiling for the next *requests* requests.
 
         Args:
             requests: Number of requests to profile.
+            tracing: If ``True``, use per-call tracing instead of
+                cProfile-based sampling.
 
         Returns:
             Current status dict.
         """
         self.enabled = True
         self.remaining = max(1, requests)
+        self.tracing = tracing
         return self.status()
 
     def disable(self) -> dict[str, Any]:
@@ -55,6 +60,7 @@ class ProfilerState:
         """
         self.enabled = False
         self.remaining = 0
+        self.tracing = False
         return self.status()
 
     def should_profile(self) -> bool:
@@ -76,13 +82,10 @@ class ProfilerState:
 
         Returns:
             A :class:`~llm_rosetta.profiling.DeepProfiler` instance.
-
-        Raises:
-            RuntimeError: If pyinstrument is not installed.
         """
         from llm_rosetta.profiling import DeepProfiler
 
-        return DeepProfiler(async_mode=True)
+        return DeepProfiler(async_mode=True, tracing=self.tracing)
 
     def store_result(
         self,
@@ -114,6 +117,7 @@ class ProfilerState:
             "target": target,
             "is_stream": is_stream,
             "duration_ms": round(duration_ms, 2),
+            "tracing": getattr(profiler, "is_tracing", False),
             "html": profiler.output_html(),
             "text": profiler.output_text(),
         }
@@ -127,6 +131,7 @@ class ProfilerState:
         return {
             "enabled": self.enabled,
             "remaining": self.remaining,
+            "tracing": self.tracing,
             "results_count": len(self.results),
             "max_results": self._max_results,
         }

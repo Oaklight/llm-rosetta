@@ -42,7 +42,8 @@ async def enable_profiling(request: Any) -> Response:
         body = {}
     requests = int(body.get("requests", 5))
     requests = max(1, min(requests, 100))  # clamp to [1, 100]
-    return JSONResponse(state.enable(requests))
+    tracing = bool(body.get("tracing", False))
+    return JSONResponse(state.enable(requests, tracing=tracing))
 
 
 async def disable_profiling(request: Any) -> Response:

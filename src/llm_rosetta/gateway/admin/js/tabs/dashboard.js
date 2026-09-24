@@ -44,6 +44,8 @@ async function loadProfilingStatus() {
       }
     }
     if (btn) btn.textContent = s.enabled ? t('profiling.disable') : t('profiling.enable');
+    const cb = document.getElementById('profilingTracing');
+    if (cb && s.enabled) cb.checked = !!s.tracing;
   } catch (e) { /* ignore */ }
 }
 
@@ -74,6 +76,7 @@ async function loadProfilingResults() {
         <td>${esc(r.source || '-')} → ${esc(r.target || '-')}</td>
         <td>${mode}</td>
         <td>${dur}</td>
+        <td>${r.tracing ? '<span style="color:var(--orange,#f59e0b);font-weight:600">trace</span>' : 'cProfile'}</td>
         <td style="white-space:nowrap"><button class="btn btn-sm" onclick="viewFlamegraph(${i})" title="View"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 14c-2.5 0-5-1.5-5-5 0-2 1-3.5 2.5-5.5C7 1.5 8 1 8 1s1 .5 2.5 2.5C12 5.5 13 7 13 9c0 3.5-2.5 5-5 5z"/><path d="M8 14c-1.5 0-2.5-1-2.5-3 0-1 .5-2 1.5-3 .5-.5 1-1 1-1s.5.5 1 1c1 1 1.5 2 1.5 3 0 2-1 3-2.5 3z"/></svg></button> <button class="btn btn-sm" onclick="downloadFlamegraph(${i}, '${esc(r.model||"profile")}')" title="Download"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
       </tr>`;
     }).join('');
@@ -85,7 +88,8 @@ async function toggleProfiling() {
     await api.post('/admin/api/profiling/disable');
   } else {
     const n = parseInt(document.getElementById('profilingCount')?.value || '5', 10);
-    const res = await api.post('/admin/api/profiling/enable', { requests: Math.max(1, Math.min(100, n)) });
+    const tracing = !!document.getElementById('profilingTracing')?.checked;
+    const res = await api.post('/admin/api/profiling/enable', { requests: Math.max(1, Math.min(100, n)), tracing });
     if (res && res.error) { showToast(res.error, 'error'); return; }
   }
   await loadProfilingStatus();

@@ -13,6 +13,7 @@ class TestDeepProfiler:
     def test_class_importable(self):
         dp = DeepProfiler()
         assert not dp.is_running
+        assert not dp.is_tracing
 
     def test_output_before_start_raises(self):
         dp = DeepProfiler()
@@ -81,5 +82,54 @@ class TestDeepProfiler:
             with dp:
                 raise ValueError("test error")
         assert not dp.is_running
+        text = dp.output_text()
+        assert isinstance(text, str)
+
+
+class TestDeepProfilerTracing:
+    """Tests for DeepProfiler with tracing=True."""
+
+    def test_tracing_flag(self):
+        dp = DeepProfiler(tracing=True, async_mode=False)
+        assert dp.is_tracing
+
+    def test_tracing_context_manager(self):
+        with DeepProfiler(tracing=True, async_mode=False) as dp:
+            total = sum(range(1000))
+            assert total == 499500
+        text = dp.output_text()
+        assert isinstance(text, str)
+        assert len(text) > 0
+
+    def test_tracing_output_html(self):
+        with DeepProfiler(tracing=True, async_mode=False) as dp:
+            _ = sum(range(100))
+        html = dp.output_html()
+        assert "<html" in html.lower()
+
+    def test_tracing_traces(self):
+        with DeepProfiler(tracing=True, async_mode=False) as dp:
+            _ = sum(range(100))
+        records = dp.traces()
+        assert isinstance(records, list)
+        assert len(records) > 0
+        rec = records[0]
+        assert hasattr(rec, "func")
+        assert hasattr(rec, "start_ns")
+        assert hasattr(rec, "end_ns")
+
+    def test_traces_raises_without_tracing(self):
+        with DeepProfiler(tracing=False, async_mode=False) as dp:
+            _ = sum(range(100))
+        with pytest.raises(RuntimeError, match="tracing=True"):
+            dp.traces()
+
+    def test_tracing_async_context_manager(self):
+        async def _run():
+            async with DeepProfiler(tracing=True, async_mode=True) as dp:
+                await asyncio.sleep(0.01)
+            return dp
+
+        dp = asyncio.run(_run())
         text = dp.output_text()
         assert isinstance(text, str)

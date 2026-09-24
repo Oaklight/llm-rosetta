@@ -60,11 +60,25 @@ class TestProfilerState:
         assert not state.enabled
         assert not state.should_profile()
 
+    def test_enable_with_tracing(self):
+        state = ProfilerState()
+        result = state.enable(requests=3, tracing=True)
+        assert state.tracing
+        assert result["tracing"] is True
+
+    def test_disable_resets_tracing(self):
+        state = ProfilerState()
+        state.enable(5, tracing=True)
+        result = state.disable()
+        assert not state.tracing
+        assert result["tracing"] is False
+
     def test_store_result(self):
         state = ProfilerState()
 
-        # Create a mock profiler
         class MockProfiler:
+            is_tracing = False
+
             def output_html(self):
                 return "<html>flamegraph</html>"
 
@@ -87,11 +101,14 @@ class TestProfilerState:
         assert result["html"] == "<html>flamegraph</html>"
         assert result["text"] == "call tree text"
         assert result["duration_ms"] == 150.3
+        assert result["tracing"] is False
 
     def test_store_result_caps_at_max(self):
         state = ProfilerState(max_results=3)
 
         class MockProfiler:
+            is_tracing = False
+
             def output_html(self):
                 return ""
 
@@ -110,6 +127,8 @@ class TestProfilerState:
         state = ProfilerState()
 
         class MockProfiler:
+            is_tracing = False
+
             def output_html(self):
                 return ""
 

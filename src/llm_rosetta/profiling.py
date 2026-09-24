@@ -18,6 +18,12 @@ Usage (async)::
         target = pipeline.convert_request(body)
         resp = await transport.send(target)
     dp.save_html("profile.html")
+
+Per-call tracing (higher overhead, finer granularity)::
+
+    with DeepProfiler(tracing=True) as dp:
+        result = convert(body, "anthropic")
+    records = dp.traces()  # list of TraceRecord
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta._vendor.profiler import Profiler
+from llm_rosetta._vendor.profiler import Profiler, TracingProfiler
 
 __all__ = ["DeepProfiler"]
 
@@ -35,15 +41,25 @@ class DeepProfiler:
 
     Args:
         async_mode: If ``True`` (default), create the underlying
-            ``Profiler`` with ``async_mode=True`` so it can be used
+            profiler with ``async_mode=True`` so it can be used
             as an async context manager.  Set to ``False`` for purely
             synchronous workloads.
+        tracing: If ``True``, use ``TracingProfiler`` (per-call tracing
+            via ``sys.monitoring`` / ``sys.settrace``) instead of the
+            default cProfile-based ``Profiler``.  Higher overhead but
+            records every function call with nanosecond timing.
     """
 
-    def __init__(self, *, async_mode: bool = True) -> None:
+    def __init__(self, *, async_mode: bool = True, tracing: bool = False) -> None:
         self._async_mode = async_mode
-        self._profiler = Profiler(async_mode=async_mode)
+        self._tracing = tracing
         self._started = False
+        self._tracing_profiler: TracingProfiler | None = None
+        if tracing:
+            self._tracing_profiler = TracingProfiler(async_mode=async_mode)
+            self._profiler: Profiler | TracingProfiler = self._tracing_profiler
+        else:
+            self._profiler = Profiler(async_mode=async_mode)
 
     # ------------------------------------------------------------------
     # Explicit start / stop API
@@ -74,6 +90,11 @@ class DeepProfiler:
     def is_running(self) -> bool:
         """Whether the profiler is currently active."""
         return self._profiler.is_running
+
+    @property
+    def is_tracing(self) -> bool:
+        """Whether this instance uses per-call tracing."""
+        return self._tracing
 
     # ------------------------------------------------------------------
     # Sync context manager
@@ -138,6 +159,21 @@ class DeepProfiler:
         """
         html = self.output_html(**kwargs)
         Path(path).write_text(html, encoding="utf-8")
+
+    def traces(self) -> list:
+        """Return raw per-call trace records (tracing mode only).
+
+        Returns:
+            List of ``TraceRecord`` named tuples.
+
+        Raises:
+            RuntimeError: If not in tracing mode, or if the profiler
+                was never started or is still running.
+        """
+        if not self._tracing or self._tracing_profiler is None:
+            raise RuntimeError("traces() requires tracing=True")
+        self._check_stopped()
+        return self._tracing_profiler.traces()
 
     # ------------------------------------------------------------------
     # Internals
