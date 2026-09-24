@@ -35,6 +35,20 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Admin JS 重组** (PR [#738](https://github.com/Oaklight/llm-rosetta/pull/738))：将 14 个 JS 文件移入 `js/core/`、`js/tabs/`、`js/components/` 子目录。
 - **移除向后兼容 shim** (PR [#744](https://github.com/Oaklight/llm-rosetta/pull/744))：**破坏性变更** — 旧的扁平 import 路径（`gateway.auth`、`gateway.embeddings` 等）不再有效。所有 import 必须使用规范路径 `gateway.middleware.*` / `gateway.pipelines.*`。下游项目需更新 import（参见 `argo-proxy` [#179](https://github.com/Oaklight/argo-proxy/pull/179)）。
 
+### 修复 — Shims
+
+- **Provider shim 审计** (PR [#758](https://github.com/Oaklight/llm-rosetta/pull/758))：对所有 provider shim 配置进行系统审计，对照最新 API 文档（2026-09-24），并通过真实 API 调用验证。主要修复：
+    - **Anthropic**：新增 Claude Sonnet 5、Opus 5、Opus 5.5 的 model override——这些模型拒绝 `thinking.type: "enabled"`，需要使用 `adaptive`。Opus 5.5 还拒绝 `disabled`（思考始终开启）。
+    - **OpenAI**（Chat + Responses）：`effort_range` 从 `[minimal, high]` 扩展至 `[minimal, max]`——gpt-6-sol 支持 `max` effort。
+    - **xAI**：保持 `effort_range` 为 `[minimal, xhigh]`——实测确认 Grok 现已接受 `minimal`。
+    - **Volcengine**：`api_key_env` 从 `VOLCENGINE_API_KEY` 修正为 `ARK_API_KEY`，`effort_range` 扩展至 `[minimal, max]`，为 Responses shim 新增 `thinking_modes`。
+    - **MiniMax**：修正 `thinking_modes` 映射 `enabled` → `adaptive`，移除不支持的 `effort_field`/`effort_range`。
+    - **Moonshot**：新增 reasoning 配置（`thinking.type` + `reasoning_effort`）。
+    - **OpenRouter**：`effort_range` 下限从 `[low, xhigh]` 修正为 `[minimal, xhigh]`。
+    - **Zhipu**：新增 `thinking_modes` 配置（`enabled`/`disabled`）。
+    - **DeepSeek**：将已废弃的 `frequency_penalty`、`presence_penalty` 加入 strip 列表。
+    - 为国内厂商（MiniMax、Moonshot、Zhipu、Volcengine、Qwen）添加国内/国际端点注释。
+
 ### 修复
 
 - **深色主题文字可见性** — 在 accent 背景上的文字使用 `--accent-on` CSS 变量代替硬编码 `#fff`，修复 minimal 深色主题下分段控件、主按钮、芯片和登录按钮上文字不可见的问题。
