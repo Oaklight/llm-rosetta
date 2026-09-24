@@ -650,6 +650,14 @@ class GatewayConfig:
         self.ops_log: dict[str, Any] = _server.get("ops_log", {}) or {}
         self.data_dir: str | None = _server.get("data_dir")
 
+        # TLS termination: paths to PEM cert/key files.
+        self.tls_cert: str | None = _server.get("tls_cert")
+        self.tls_key: str | None = _server.get("tls_key")
+        if bool(self.tls_cert) != bool(self.tls_key):
+            raise ValueError(
+                "config: tls_cert and tls_key must both be set or both be omitted"
+            )
+
     def _apply_auth_settings(self, _server: dict[str, Any]) -> None:
         """Parse API key storage settings from the server section."""
         # Custom SQLite DB path for API key storage (default: alongside config)

@@ -474,6 +474,16 @@ def main() -> None:
         help="Listen on a Unix domain socket instead of TCP (e.g. /run/user/1000/rosetta.sock)",
     )
     parser.add_argument(
+        "--tls-cert",
+        default=None,
+        help="Path to TLS certificate PEM file (requires --tls-key)",
+    )
+    parser.add_argument(
+        "--tls-key",
+        default=None,
+        help="Path to TLS private key PEM file (requires --tls-cert)",
+    )
+    parser.add_argument(
         "--proxy",
         default=None,
         help="HTTP/SOCKS proxy URL for upstream requests (overrides config)",
@@ -612,6 +622,10 @@ def main() -> None:
         raw_config.setdefault("server", {})["proxy"] = args.proxy
     if args.data_dir:
         raw_config.setdefault("server", {})["data_dir"] = args.data_dir
+    if args.tls_cert:
+        raw_config.setdefault("server", {})["tls_cert"] = args.tls_cert
+    if args.tls_key:
+        raw_config.setdefault("server", {})["tls_key"] = args.tls_key
 
     config = GatewayConfig(raw_config)
 
@@ -628,11 +642,21 @@ def main() -> None:
     port = args.port or config.port
     socket_path = args.socket or config.socket
 
+    # Build TLS context when cert/key are configured
+    ssl_context = None
+    if config.tls_cert and config.tls_key:
+        import ssl
+
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_context.load_cert_chain(config.tls_cert, config.tls_key)
+
     logger.info("Config loaded from %s", config_path)
     if socket_path:
-        logger.info("Starting llm-rosetta gateway on unix:%s", socket_path)
+        scheme = "https+unix" if ssl_context else "unix"
+        logger.info("Starting llm-rosetta gateway on %s:%s", scheme, socket_path)
     else:
-        logger.info("Starting llm-rosetta gateway on %s:%d", host, port)
+        scheme = "https" if ssl_context else "http"
+        logger.info("Starting llm-rosetta gateway on %s://%s:%d", scheme, host, port)
     logger.info("Configured providers: %s", list(config.providers.keys()))
     logger.info("Configured models: %s", list(config.models.keys()))
     if verbose:
@@ -645,6 +669,8 @@ def main() -> None:
     from .app import run_gateway
 
     try:
-        asyncio.run(run_gateway(app, host, port, socket=socket_path))
+        asyncio.run(
+            run_gateway(app, host, port, socket=socket_path, ssl_context=ssl_context)
+        )
     except KeyboardInterrupt:
         pass
