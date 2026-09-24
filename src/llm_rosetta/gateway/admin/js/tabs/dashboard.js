@@ -5,7 +5,7 @@
 
 import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, _adminHeaders, showToast, esc, formatDuration, closeModal, fmtBytesShort, fmtBytesLong } from '../core/utils.js';
+import { api, _adminHeaders, showToast, esc, formatDuration, openModal, closeModal, fmtBytesShort, fmtBytesLong, fmtTokens } from '../core/utils.js';
 
 // ===================== Metrics =====================
 
@@ -605,12 +605,19 @@ function renderPersistence(p, totalReq) {
 function renderStats(d) {
   const uptime = formatDuration(d.uptime_seconds);
   const errRate = (d.error_rate * 100).toFixed(1) + '%';
+  const has24h = d.input_tokens_24h != null;
+  const tokIn = has24h ? (d.input_tokens_24h||0) : (d.total_input_tokens||0);
+  const tokOut = has24h ? (d.output_tokens_24h||0) : (d.total_output_tokens||0);
+  const tokCacheR = has24h ? (d.cache_read_tokens_24h||0) : (d.total_cache_read_tokens||0);
+  const tokCacheW = has24h ? (d.cache_creation_tokens_24h||0) : (d.total_cache_creation_tokens||0);
+  const tokReason = has24h ? (d.reasoning_tokens_24h||0) : (d.total_reasoning_tokens||0);
+  const tokLabel = has24h ? t('stat.tokens24h') : t('stat.totalTokens');
   document.getElementById('statsGrid').innerHTML = `
     <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${d.total_requests}</div></div>
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
     <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${d.active_streams}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>
-    <div class="stat-card"><div class="label">${t('stat.totalTokens')}</div><div class="value">${fmtTokens((d.total_input_tokens||0)+(d.total_output_tokens||0))}</div><div class="sub">↑${fmtTokens(d.total_input_tokens||0)} ↓${fmtTokens(d.total_output_tokens||0)}${(d.total_cache_read_tokens||0)>0?` · ${t('stat.cacheRead')} ${fmtTokens(d.total_cache_read_tokens)}`:''}${(d.total_cache_creation_tokens||0)>0?` · ${t('stat.cacheWrite')} ${fmtTokens(d.total_cache_creation_tokens)}`:''}${(d.total_reasoning_tokens||0)>0?` · ${t('stat.reasoning')} ${fmtTokens(d.total_reasoning_tokens)}`:''}</div></div>
+    <div class="stat-card"><div class="label">${tokLabel}</div><div class="value">${fmtTokens(tokIn+tokOut)}</div><div class="sub">↑${fmtTokens(tokIn)} ↓${fmtTokens(tokOut)}${tokCacheR>0?` · ${t('stat.cacheRead')} ${fmtTokens(tokCacheR)}`:''}${tokCacheW>0?` · ${t('stat.cacheWrite')} ${fmtTokens(tokCacheW)}`:''}${tokReason>0?` · ${t('stat.reasoning')} ${fmtTokens(tokReason)}`:''}</div><div class="sub" style="margin-top:4px"><a href="#" onclick="event.preventDefault();openTokenUsageModal()" style="color:var(--accent);font-size:11px;text-decoration:none">${t('tokenUsage.details')}</a></div></div>
   `;
 }
 
@@ -789,6 +796,86 @@ function drawLatencyChart(canvasId, series) {
 }
 
 
+// ===================== Token Usage Modal =====================
+
+let _tokenUsageDays = 1;
+
+function openTokenUsageModal() {
+  _tokenUsageDays = 1;
+  const rangeCtrl = document.getElementById('tokenUsageRange');
+  if (rangeCtrl) {
+    rangeCtrl.querySelectorAll('label').forEach((l, i) => {
+      l.classList.toggle('active', i === 0);
+    });
+  }
+  const kSel = document.getElementById('tokenUsageKeyFilter');
+  if (kSel) {
+    const labels = (S.keysData && S.keysData.keys) || [];
+    const allLabels = [...new Set([...labels.map(k => k.label), ...S.logKeyLabels].filter(Boolean))].sort();
+    kSel.innerHTML = `<option value="">${t('filter.allKeys')}</option>` + allLabels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+    kSel.value = '';
+  }
+  openModal('tokenUsageModal');
+  loadTokenUsage();
+}
+
+function setTokenUsageRange(days) {
+  _tokenUsageDays = days;
+  const rangeCtrl = document.getElementById('tokenUsageRange');
+  if (rangeCtrl) {
+    const vals = [1, 7, 30];
+    rangeCtrl.querySelectorAll('label').forEach((l, i) => {
+      l.classList.toggle('active', vals[i] === days);
+    });
+  }
+  loadTokenUsage();
+}
+
+async function loadTokenUsage() {
+  const keyFilter = document.getElementById('tokenUsageKeyFilter')?.value || '';
+  let url = `/admin/api/token-usage?days=${_tokenUsageDays}`;
+  if (keyFilter) url += `&api_key_label=${encodeURIComponent(keyFilter)}`;
+  try {
+    const data = await api.get(url);
+    renderTokenUsageTable(data);
+  } catch { /* ignore */ }
+}
+
+function renderTokenUsageTable(data) {
+  const tbody = document.getElementById('tokenUsageTable');
+  const summaryEl = document.getElementById('tokenUsageSummary');
+  const days = data.days || [];
+  const totals = data.totals || {};
+
+  if (days.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--text-dim)">${t('tokenUsage.noData')}</td></tr>`;
+    summaryEl.innerHTML = '';
+    return;
+  }
+
+  summaryEl.innerHTML = `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
+    <span><strong>${t('tokenUsage.summary')}</strong></span>
+    <span>${t('tokenUsage.col.requests')}: <strong>${(totals.request_count||0).toLocaleString()}</strong></span>
+    <span>↑ <strong>${fmtTokens(totals.input_tokens||0)}</strong></span>
+    <span>↓ <strong>${fmtTokens(totals.output_tokens||0)}</strong></span>
+    <span>${t('stat.cacheRead')} <strong>${fmtTokens(totals.cache_read_tokens||0)}</strong></span>
+    <span>${t('stat.cacheWrite')} <strong>${fmtTokens(totals.cache_creation_tokens||0)}</strong></span>
+    <span>${t('stat.reasoning')} <strong>${fmtTokens(totals.reasoning_tokens||0)}</strong></span>
+    <span>${t('tokenUsage.col.total')}: <strong>${fmtTokens(totals.total_tokens||0)}</strong></span>
+  </div>`;
+
+  tbody.innerHTML = days.map(d => `<tr>
+    <td>${esc(d.day)}</td>
+    <td>${d.request_count.toLocaleString()}</td>
+    <td>${fmtTokens(d.input_tokens)}</td>
+    <td>${fmtTokens(d.output_tokens)}</td>
+    <td>${fmtTokens(d.cache_read_tokens)}</td>
+    <td>${fmtTokens(d.cache_creation_tokens)}</td>
+    <td>${fmtTokens(d.reasoning_tokens)}</td>
+    <td><strong>${fmtTokens(d.total_tokens)}</strong></td>
+  </tr>`).join('');
+}
+
 // ===================== Cross-linking =====================
 
 async function backfillDumpLogIds() {
@@ -936,6 +1023,7 @@ Object.assign(window, {
   selectAllCapture, updateCaptureBulk, bulkDownloadCapture,
   selectAllDumps, updateDumpBulk, bulkDownloadDumps, bulkDeleteDumps,
   rebuildMetrics, drawThroughputChart, drawLatencyChart,
+  openTokenUsageModal, setTokenUsageRange, loadTokenUsage,
 });
 
 export { loadMetrics, loadDumps, invalidateDumpCache, renderPersistence, renderStats, renderProviderBreakdown,

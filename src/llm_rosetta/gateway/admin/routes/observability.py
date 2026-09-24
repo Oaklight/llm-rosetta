@@ -68,9 +68,13 @@ async def get_metrics(request: Any) -> Response:
     seconds = max(1, min(seconds, 300))
     snap = metrics.snapshot(series_seconds=seconds)
 
-    persistence_snap = _persistence_snapshot(getattr(request.app, "persistence", None))
+    persistence = getattr(request.app, "persistence", None)
+    persistence_snap = _persistence_snapshot(persistence)
     if persistence_snap is not None:
         snap["persistence"] = persistence_snap
+
+    if persistence is not None:
+        snap.update(persistence.query_rolling_24h_tokens())
 
     # Include circuit breaker states when the feature is enabled
     config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
@@ -133,6 +137,19 @@ async def rebuild_metrics(request: Any) -> Response:
             "before": before,
             "counters": after,
         }
+    )
+
+
+async def get_token_usage(request: Any) -> Response:
+    """Return daily-aggregated token usage, optionally filtered by API key."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"days": [], "totals": {}})
+    days = int(_qp(request, "days", "7"))
+    days = max(1, min(days, 365))
+    api_key_label = _qp(request, "api_key_label")
+    return JSONResponse(
+        persistence.query_token_usage_by_day(days=days, api_key_label=api_key_label)
     )
 
 

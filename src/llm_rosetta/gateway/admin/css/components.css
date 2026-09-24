@@ -163,7 +163,7 @@ tr:hover td { background: var(--bg-hover); }
 
 /* ── Stage 1: full row (>=1500px) ── */
 .provider-grid.list-view {
-  grid-template-columns: minmax(100px, 333px) auto minmax(80px, 202px) minmax(80px, 1fr) auto;
+  grid-template-columns: minmax(100px, 333px) minmax(180px, auto) minmax(80px, 202px) minmax(80px, 1fr) auto;
   gap: 4px 24px;
 }
 .provider-grid.list-view .provider-card {
@@ -198,7 +198,7 @@ tr:hover td { background: var(--bg-hover); }
 /* ── Stage 2: compact row (1100-1500px) ── */
 @media (max-width: 1500px) {
   .provider-grid.list-view {
-    grid-template-columns: minmax(100px, 260px) auto minmax(70px, 150px) minmax(60px, 1fr) auto;
+    grid-template-columns: minmax(100px, 260px) minmax(160px, auto) minmax(70px, 150px) minmax(60px, 1fr) auto;
     gap: 4px 16px;
   }
   .provider-grid.list-view .provider-card { padding: 6px 12px; }
