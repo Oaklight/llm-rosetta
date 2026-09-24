@@ -18,13 +18,16 @@ reasoning:
     concise: summarized
     detailed: summarized
     none: omitted
-  # Anthropic Official thinking support matrix (tested 2026-06-18):
-  #   Haiku 4.5:  enabled+budget only (adaptive → 400, effort → 400)
-  #   Sonnet 4.6: both enabled+budget and adaptive work
-  #   Opus 4.6:   both work
-  #   Opus 4.7+:  adaptive only (enabled → 400)
-  # The effort param is only supported on Opus 4.5/4.6/4.7/4.8 and Sonnet 4.6.
-  # Haiku rejects it (400), so disable effort emission for Haiku.
+  # Anthropic Official thinking support matrix (updated 2026-09-24):
+  #   Haiku 4.5:    enabled+budget only (adaptive → 400, effort → 400)
+  #   Sonnet 4.6:   both enabled+budget and adaptive work
+  #   Opus 4.5/4.6: both work
+  #   Opus 4.7/4.8: adaptive only (enabled → 400)
+  #   Sonnet 5:     adaptive only (enabled → 400)
+  #   Opus 5:       adaptive only (enabled → 400, disabled rejected at xhigh/max)
+  #   Opus 5.5:     adaptive only (both enabled and disabled → 400)
+  # Effort supported on: Sonnet 4.6, Opus 4.5-4.8, Sonnet 5, Opus 5, Opus 5.5,
+  #   Fable 5/5.1, Mythos 5/5.1. Haiku rejects it (400).
   model_overrides:
     claude-haiku-4-5-20251001:
       thinking_modes: {enabled: enabled, disabled: disabled}
@@ -34,3 +37,9 @@ reasoning:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claude-opus-4-8:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+    claude-sonnet-5:
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+    claude-opus-5:
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+    claude-opus-5-5:
+      thinking_modes: {auto: adaptive, enabled: adaptive}
