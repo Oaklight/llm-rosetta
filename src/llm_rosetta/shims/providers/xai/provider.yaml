@@ -7,4 +7,4 @@ connection:
   api_key_env: XAI_API_KEY
 reasoning:
   effort_field: reasoning_effort
-  effort_range: [low, xhigh]
+  effort_range: [minimal, xhigh]

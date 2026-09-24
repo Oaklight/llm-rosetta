@@ -2,6 +2,8 @@ name: qwen
 base: openai_chat
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/qwen.svg
 
+# Shared China endpoint; international uses workspace-dedicated domains:
+# https://{WorkspaceId}.{region}.maas.aliyuncs.com/compatible-mode/v1
 connection:
   base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
   api_key_env: DASHSCOPE_API_KEY
