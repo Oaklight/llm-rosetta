@@ -1,8 +1,8 @@
 """JSON Schema sanitization for LLM provider compatibility.
 
 Recursively strips unsupported keywords, resolves ``$ref`` references,
-and flattens ``anyOf``/``oneOf``/``allOf`` combination patterns that
-providers like Vertex AI reject.
+and normalizes ``anyOf``/``oneOf``/``allOf`` combination patterns for
+broad provider compatibility.
 
 Used by all provider tool-definition converters to clean parameter schemas
 before sending them upstream.
@@ -10,10 +10,9 @@ before sending them upstream.
 
 from typing import Any
 
-# JSON Schema keywords not supported by OpenAI / Vertex AI compatible
-# endpoints.  These are valid per the JSON Schema spec but upstream servers
-# (e.g. Vertex AI's OpenAI-compatible layer) reject them with Pydantic
-# ``extra='forbid'`` validation errors.
+# JSON Schema keywords not supported by major LLM provider endpoints.
+# These are valid per the JSON Schema spec but upstream servers reject
+# them (e.g. with Pydantic ``extra='forbid'`` validation errors).
 UNSUPPORTED_SCHEMA_KEYS: set[str] = {
     "propertyNames",
     "const",
@@ -65,17 +64,14 @@ def _deep_merge_schema(base: dict[str, Any], overlay: dict[str, Any]) -> None:
 
 
 def _flatten_combination(schema: dict[str, Any]) -> dict[str, Any]:
-    """Flatten ``anyOf``/``oneOf`` nullable patterns into a simple typed schema.
+    """Normalize ``anyOf``/``oneOf``/``allOf`` combination schemas.
 
-    Vertex AI's OpenAI-compatible layer does not support ``anyOf``/``oneOf``
-    at all.  The most common pattern is a nullable union like
-    ``{"anyOf": [{"type": "string"}, {"type": "null"}]}``, which we convert to
-    ``{"type": "string", "nullable": true}``.
+    Single-variant nullable unions (e.g. ``[{"type": "string"}, {"type": "null"}]``)
+    are unwrapped to ``{"type": "string", "nullable": true}``.
 
-    For single-variant unions we unwrap directly.  For genuine multi-type
-    unions (2+ non-null branches) the non-null branches are preserved as
-    ``anyOf`` so that downstream converters can decide how to represent
-    them.  The null branch is stripped and replaced with ``"nullable": true``.
+    Genuine multi-type unions (2+ non-null branches) are preserved as ``anyOf``
+    so that providers receive the full type information.  The null branch is
+    stripped and replaced with ``"nullable": true``.
 
     ``allOf`` with a single element is simply unwrapped.
 
@@ -223,9 +219,9 @@ def sanitize_schema(
     """Recursively remove unsupported JSON Schema keywords.
 
     Also resolves ``$ref`` references by inlining the referenced definition,
-    and flattens ``anyOf``/``oneOf``/``allOf`` combination keywords into
-    simple typed schemas, as required by Vertex AI's OpenAI-compatible layer
-    which does not support these constructs at all.
+    and normalizes ``anyOf``/``oneOf``/``allOf`` combination keywords —
+    single-variant nullable unions are unwrapped, while genuine multi-type
+    unions are preserved.
 
     Results are cached at the top-level entry point (where ``defs is None``)
     to avoid redundant work when the same tool schemas are converted
