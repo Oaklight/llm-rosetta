@@ -55,6 +55,13 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
         )
         success_max = legacy
 
+    # Warn if old error_max key is still in config
+    if rl_cfg.get("error_max") is not None:
+        logger.warning(
+            "config: server.request_log.error_max is deprecated and ignored; "
+            "use error_dump_max to control error dump retention instead."
+        )
+
     dump_max = _parse_int_env("ERROR_DUMP_MAX")
     if dump_max is None:
         dump_max = rl_cfg.get("error_dump_max")
