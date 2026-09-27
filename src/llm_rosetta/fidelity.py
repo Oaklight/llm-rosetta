@@ -21,6 +21,31 @@ from typing import Any, Literal
 
 FidelityMode = Literal["critical", "full"]
 
+#: Severity levels for fidelity differences, most severe first.
+FidelitySeverity = Literal["critical", "warning", "info"]
+
+#: Default severity derived from a diff's :attr:`FidelityDiff.kind`.
+#:
+#: - ``missing`` — a field was dropped by the round-trip (information loss).
+#: - ``type_changed`` — incompatible types, likely to break consumers.
+#: - ``changed`` — value altered, impact depends on the field.
+#: - ``added`` — extra field introduced, usually harmless.
+DEFAULT_SEVERITY_BY_KIND: dict[str, FidelitySeverity] = {
+    "missing": "critical",
+    "type_changed": "critical",
+    "changed": "warning",
+    "added": "info",
+}
+
+
+def severity_for_kind(kind: str) -> FidelitySeverity:
+    """Return the default severity for a diff ``kind``.
+
+    Unknown kinds default to ``"warning"`` so a new diff category is never
+    silently classified as harmless.
+    """
+    return DEFAULT_SEVERITY_BY_KIND.get(kind, "warning")
+
 
 # ============================================================================
 # Critical field paths — known fragile spots in round-trips
@@ -150,6 +175,15 @@ class FidelityDiff:
     original: Any = field(repr=False, default=None)
     roundtripped: Any = field(repr=False, default=None)
     kind: str = ""  # "missing", "added", "changed", "type_changed"
+    #: Explicit severity override; ``None`` defers to :func:`severity_for_kind`.
+    severity: str | None = None
+
+    @property
+    def effective_severity(self) -> str:
+        """Severity used for baselines: the override or the kind-derived default."""
+        if self.severity is not None:
+            return self.severity
+        return severity_for_kind(self.kind)
 
     def __str__(self) -> str:
         if self.kind == "missing":
