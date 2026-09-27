@@ -535,7 +535,7 @@ function renderModels() {
         ${upstreamTag || urlTplTag ? `<div style="margin-top:2px">${upstreamTag}${urlTplTag}</div>` : ''}
       </td>
       <td style="text-align:center">${typeBadge}</td>
-      <td>${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
+      <td style="text-align:center">${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
       <td>${_renderProviderCell(name, info, disabledProviders)}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
         <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>

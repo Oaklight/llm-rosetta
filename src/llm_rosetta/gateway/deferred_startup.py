@@ -315,7 +315,10 @@ class DeferredStartup:
                     keystore.backfill_last_used(persistence.db_path) or 0
                 )
 
-            # 3. Backfill error dump log IDs
+            # 3. Backfill total_tokens (cache tokens were excluded)
+            results["total_tokens"] = persistence.backfill_total_tokens() or 0
+
+            # 4. Backfill error dump log IDs
             aliases = config.model_upstream_names if config else {}
             results["error_dump_log_ids"] = (
                 persistence.backfill_error_dump_log_ids(model_aliases=aliases) or 0

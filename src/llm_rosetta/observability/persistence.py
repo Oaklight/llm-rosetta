@@ -249,6 +249,34 @@ class PersistenceManager:
             self._conn.commit()
         return total
 
+    def backfill_total_tokens(self) -> int:
+        """Recalculate total_tokens for rows where cache tokens were excluded.
+
+        Anthropic's cache_read/cache_creation tokens are additive to
+        input_tokens, but earlier code computed total = input + output
+        only.  This backfill corrects historical rows.
+
+        Returns:
+            Number of rows updated.
+        """
+        cursor = self._conn.execute(
+            "UPDATE request_log "
+            "SET total_tokens = COALESCE(input_tokens, 0) "
+            "    + COALESCE(output_tokens, 0) "
+            "    + COALESCE(cache_read_tokens, 0) "
+            "    + COALESCE(cache_creation_tokens, 0) "
+            "WHERE (cache_read_tokens > 0 OR cache_creation_tokens > 0) "
+            "  AND total_tokens < COALESCE(input_tokens, 0) "
+            "    + COALESCE(output_tokens, 0) "
+            "    + COALESCE(cache_read_tokens, 0) "
+            "    + COALESCE(cache_creation_tokens, 0)"
+        )
+        updated = cursor.rowcount
+        if updated:
+            self._conn.commit()
+            logger.info("Backfilled total_tokens for %d rows", updated)
+        return updated
+
     # ------------------------------------------------------------------
     # Request log
     # ------------------------------------------------------------------
