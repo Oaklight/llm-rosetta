@@ -595,6 +595,7 @@ async def handle_non_streaming(
         supports_custom_tools=route.supports_custom_tools,
         max_tool_description_length=route.max_tool_description_length,
         hoist_system_messages=route.hoist_system_messages,
+        force_conversion=route.force_conversion,
     )
 
     # Phase 1+2: Source → IR → Target
@@ -1140,6 +1141,7 @@ async def handle_streaming(
         supports_custom_tools=route.supports_custom_tools,
         max_tool_description_length=route.max_tool_description_length,
         hoist_system_messages=route.hoist_system_messages,
+        force_conversion=route.force_conversion,
     )
 
     # Phase 1+2: Source → IR → Target

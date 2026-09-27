@@ -44,6 +44,10 @@ class ResolvedRoute:
             (e.g. ``["text", "vision"]``).
         reasoning_override: Per-model reasoning config override from
             the admin UI / config, or ``None``.
+        force_conversion: Whether to run the IR round-trip even when
+            ``source_provider == target_provider``.  ``True`` (the
+            default) always normalises through IR; ``False`` opts a
+            same-format route into passthrough.
     """
 
     source_provider: ProviderType
@@ -59,6 +63,7 @@ class ResolvedRoute:
     preflight_token_count: bool = False
     max_tool_description_length: int | None = None
     soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
+    force_conversion: bool = True
 
 
 class Router(Protocol):
