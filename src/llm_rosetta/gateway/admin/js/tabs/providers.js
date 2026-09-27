@@ -816,9 +816,9 @@ async function runNetDiag() {
 
 // ── Config loading ──────────────────────────────────────────────────
 
-async function loadConfig() {
+async function loadConfig(prefetchedData) {
   try {
-    S.configData = await api.get('/admin/api/config');
+    S.configData = prefetchedData || await api.get('/admin/api/config');
     S._credentialVisible = S.configData.credential_visible !== false;
     // Populate data-driven UI from model_types metadata
     if (S.configData.model_types) {

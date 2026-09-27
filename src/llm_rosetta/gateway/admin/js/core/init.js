@@ -21,8 +21,8 @@ function _tabEnabled(id) { return _dt.indexOf(id) === -1; }
 function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
 // ===================== Init =====================
-function initApp() {
-  loadConfig();
+function initApp(prefetchedConfig) {
+  loadConfig(prefetchedConfig);
   if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
   api.get('/admin/api/internal-token').then(r => { S.internalToken = r.token; }).catch(() => {});
   api.get('/admin/api/metrics?seconds=1').then(data => {

@@ -444,25 +444,27 @@ async function doLogin() {
 
 async function checkAuthAndInit() {
   try {
-    const r = await fetch('/admin/api/auth-check');
-    const data = await r.json();
-    if (data.requires_auth) {
-      // Verify existing session cookie by trying to load config
-      const test = await fetch('/admin/api/config', {credentials: 'include'});
-      if (test.status === 401) {
-        showLoginOverlay();
-        return;
-      }
+    const [authRes, configRes] = await Promise.all([
+      fetch('/admin/api/auth-check'),
+      fetch('/admin/api/config', {credentials: 'include'}),
+    ]);
+    const authData = await authRes.json();
+    if (authData.requires_auth && configRes.status === 401) {
+      showLoginOverlay();
+      return;
+    }
+    if (authData.requires_auth) {
       const btn = document.getElementById('logoutBtn');
       if (btn) btn.style.display = '';
       _startInactivityTracking();
     }
     document.body.classList.remove('auth-pending');
-    window.initApp();
+    const configData = await configRes.json();
+    window.initApp(configData);
   } catch(e) {
     console.error('Auth check failed:', e);
     document.body.classList.remove('auth-pending');
-    window.initApp(); // fallback: try to load anyway
+    window.initApp();
   }
 }
 
