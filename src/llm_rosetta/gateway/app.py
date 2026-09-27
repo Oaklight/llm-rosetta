@@ -213,11 +213,13 @@ def _resolve_or_error(
     source_provider: ProviderType,
     model: str,
     request_id: str,
+    *,
+    client_identity: str | None = None,
 ) -> tuple[ResolvedRoute, ProviderInfo] | Response:
     """Resolve model to route+provider, returning a Response on failure."""
     assert _config is not None
     try:
-        return _config.resolve(source_provider, model)
+        return _config.resolve(source_provider, model, client_identity=client_identity)
     except ProviderNotReady as exc:
         status = 502 if exc.failed else 503
         resp = error_response_for_source(source_provider, status, str(exc))
@@ -313,8 +315,14 @@ async def _proxy_handler(
     if model_override and "model" not in body:
         body["model"] = model_override
 
+    # Extract client identity early so affinity routing can use it.
+    _kctx_early = api_key_context_var.get()
+    _client_identity = _kctx_early.key_hash if _kctx_early else None
+
     # Resolve target provider via unified routing
-    result = _resolve_or_error(source_provider, model, request_id)
+    result = _resolve_or_error(
+        source_provider, model, request_id, client_identity=_client_identity
+    )
     if isinstance(result, Response):
         return result
     route, provider_info = result
@@ -372,7 +380,7 @@ async def _proxy_handler(
     # request.state so lifecycle hooks can write back to the log entry.
     pre_entry_id = uuid.uuid4().hex
     request.state.log_entry_id = pre_entry_id
-    _kctx = api_key_context_var.get()
+    _kctx = _kctx_early  # reuse early extraction
     _client_key_hash = _kctx.key_hash if _kctx else ""
     _key_affinity = _config.provider_key_affinity.get(route.provider_name, True)
 

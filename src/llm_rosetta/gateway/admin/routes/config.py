@@ -840,6 +840,89 @@ async def remove_model_provider(request: Any, **kwargs: Any) -> Response:
     return JSONResponse(result)
 
 
+def _validate_weight(raw: Any) -> tuple[int | None, Response | None]:
+    """Parse and validate a weight value from a request body.
+
+    Returns ``(weight, None)`` on success or ``(None, error_response)``
+    on failure.
+    """
+    if raw is None:
+        return None, None
+    try:
+        w = int(raw)
+    except (TypeError, ValueError):
+        return None, JSONResponse(
+            {"error": "'weight' must be an integer"}, status_code=400
+        )
+    if w < 1:
+        return None, JSONResponse({"error": "'weight' must be >= 1"}, status_code=400)
+    return w, None
+
+
+def _set_provider_weight(plist: list[Any], provider: str, weight: int | None) -> bool:
+    """Find *provider* in *plist* and apply *weight*.  Returns True if found."""
+    for i, entry in enumerate(plist):
+        pname = entry if isinstance(entry, str) else entry.get("name", "")
+        if pname != provider:
+            continue
+        if isinstance(entry, str):
+            new_entry: dict[str, Any] = {"name": entry}
+            plist[i] = new_entry
+            entry = new_entry
+        if weight is not None:
+            if weight == 1:
+                entry.pop("weight", None)
+            else:
+                entry["weight"] = weight
+        return True
+    return False
+
+
+async def update_model_provider(request: Any, **kwargs: Any) -> Response:
+    """Update a provider's attributes (e.g. weight) on a multi-provider model."""
+    name = request.path_params["name"]
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    provider = body.get("provider")
+    if not provider:
+        return JSONResponse({"error": "'provider' is required"}, status_code=400)
+
+    weight, weight_err = _validate_weight(body.get("weight"))
+    if weight_err:
+        return weight_err
+
+    with config_mutate(request) as ctx:
+        if ctx.error:
+            return ctx.error
+
+        models = ctx.data.get("models", {})
+        if name not in models:
+            return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+
+        existing = models[name]
+        if not isinstance(existing, dict) or "providers" not in existing:
+            return JSONResponse(
+                {"error": "Weights are only supported for multi-provider models"},
+                status_code=400,
+            )
+
+        if not _set_provider_weight(existing["providers"], provider, weight):
+            return JSONResponse(
+                {"error": f"Provider '{provider}' not found on model '{name}'"},
+                status_code=404,
+            )
+
+        ctx.commit()
+
+    if ctx.error:
+        return ctx.error
+
+    return JSONResponse({"ok": True, "model": name, "provider": provider})
+
+
 def _apply_rate_limit_settings(
     server: dict[str, Any], rl_body: dict[str, Any]
 ) -> Response | None:

@@ -51,6 +51,7 @@ from .config import (
     remove_model_provider,
     toggle_model,
     toggle_provider,
+    update_model_provider,
 )
 from .keys import (
     backfill_keys_last_used,
@@ -175,6 +176,9 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/models/<path:name>/remove-provider", methods=["POST"])(
         _guard("models", remove_model_provider)
+    )
+    app.route("/admin/api/config/models/<path:name>/update-provider", methods=["POST"])(
+        _guard("models", update_model_provider)
     )
     app.route("/admin/api/config/models/bulk", methods=["POST"])(
         _guard("models", bulk_update_models)

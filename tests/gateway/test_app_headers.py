@@ -49,7 +49,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
                 CircuitBreakerConfig(enabled=False)
             )
 
-        def resolve(self, source_provider, model):
+        def resolve(self, source_provider, model, **kwargs):
             return (
                 ResolvedRoute(
                     source_provider=source_provider,

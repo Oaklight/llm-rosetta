@@ -377,7 +377,8 @@ function _renderProviderCell(name, info, disabledProviders) {
   const priDis = disabledProviders.has(primary.name);
   const items = details.map(p => {
     const dis = disabledProviders.has(p.name);
-    const weightTag = (p.weight && p.weight !== 1) ? ` <span class="provider-weight">w:${p.weight}</span>` : '';
+    const w = p.weight || 1;
+    const weightTag = ` <input type="number" class="weight-input" min="1" value="${w}" title="Routing weight" onchange="updateProviderWeight('${esc(name)}','${esc(p.name)}',this.value)" onkeydown="if(event.key==='Enter'){this.blur()}">`;
     const upTag = p.upstream_model ? ` <span class="provider-upstream">→ ${esc(p.upstream_model)}</span>` : '';
     const disTag = dis ? ` <span style="color:var(--text-dim);font-size:10px">(${t('provider.disabled')})</span>` : '';
     return `<div class="provider-list-item">
@@ -397,6 +398,18 @@ async function removeProviderFromModel(modelName, providerName) {
   const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/remove-provider`, {provider: providerName});
   if (res.ok) {
     showToast(`Removed ${providerName} from ${modelName}`);
+    window.loadConfig();
+  } else {
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
+async function updateProviderWeight(modelName, providerName, newWeight) {
+  const w = parseInt(newWeight, 10);
+  if (isNaN(w) || w < 1) { showToast('Weight must be >= 1', 'error'); window.loadConfig(); return; }
+  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/update-provider`, {provider: providerName, weight: w});
+  if (res.ok) {
+    showToast(`${providerName} weight → ${w}`);
     window.loadConfig();
   } else {
     showToast(res.error || 'Failed', 'error');
@@ -698,7 +711,7 @@ Object.assign(window, {
   renderModels, saveModel, toggleModel, editModel, cloneModel,
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
-  removeProviderFromModel, _buildTypeSegControls,
+  removeProviderFromModel, updateProviderWeight, _buildTypeSegControls,
 });
 
 export { renderModels };

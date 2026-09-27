@@ -23,8 +23,16 @@ class ProviderEntry:
 class RoutingStrategy(Protocol):
     """Interface for selecting a provider from a weighted list."""
 
-    def select(self, providers: list[ProviderEntry]) -> str:
-        """Return the name of the chosen provider."""
+    def select(
+        self, providers: list[ProviderEntry], *, identity: str | None = None
+    ) -> str:
+        """Return the name of the chosen provider.
+
+        Args:
+            providers: Candidate providers with weights.
+            identity: Optional client identity string for affinity-based
+                routing.  Strategies that don't use affinity ignore it.
+        """
         ...
 
 
@@ -42,7 +50,9 @@ class WeightedRoundRobinStrategy:
         self._current_weights: list[int] = []
         self._initialized_for: list[ProviderEntry] | None = None
 
-    def select(self, providers: list[ProviderEntry]) -> str:
+    def select(
+        self, providers: list[ProviderEntry], *, identity: str | None = None
+    ) -> str:
         n = len(providers)
         if n == 0:
             raise ValueError("No providers configured")
@@ -66,9 +76,38 @@ class WeightedRoundRobinStrategy:
         return providers[best_idx].name
 
 
+class AffinityRoundRobinStrategy:
+    """Hash client identity to a preferred provider for cache locality.
+
+    When an ``identity`` string is provided, uses a deterministic hash
+    to pick the same provider every time — preserving provider-side
+    prompt cache across requests from the same client.
+
+    Falls back to weighted round-robin when no identity is provided
+    or the provider list is trivial.
+    """
+
+    def __init__(self) -> None:
+        self._fallback = WeightedRoundRobinStrategy()
+
+    def select(
+        self, providers: list[ProviderEntry], *, identity: str | None = None
+    ) -> str:
+        if not providers:
+            raise ValueError("No providers configured")
+        if len(providers) == 1:
+            return providers[0].name
+        if identity is None:
+            return self._fallback.select(providers)
+        # Deterministic selection based on identity hash
+        idx = hash(identity) % len(providers)
+        return providers[idx].name
+
+
 # Strategy registry
 _STRATEGIES: dict[str, type[RoutingStrategy]] = {
     "weighted_round_robin": WeightedRoundRobinStrategy,
+    "affinity_round_robin": AffinityRoundRobinStrategy,
 }
 
 DEFAULT_STRATEGY = "weighted_round_robin"
@@ -103,13 +142,23 @@ class ModelRoute:
     def __post_init__(self) -> None:
         self._entry_by_name = {p.name: p for p in self.providers}
 
-    def select(self) -> str:
-        """Pick the next provider according to the strategy."""
-        return self.strategy.select(self.providers)
+    def select(self, *, identity: str | None = None) -> str:
+        """Pick the next provider according to the strategy.
 
-    def select_entry(self) -> ProviderEntry:
-        """Pick the next provider and return the full entry."""
-        return self._entry_by_name[self.strategy.select(self.providers)]
+        Args:
+            identity: Optional client identity for affinity routing.
+        """
+        return self.strategy.select(self.providers, identity=identity)
+
+    def select_entry(self, *, identity: str | None = None) -> ProviderEntry:
+        """Pick the next provider and return the full entry.
+
+        Args:
+            identity: Optional client identity for affinity routing.
+        """
+        return self._entry_by_name[
+            self.strategy.select(self.providers, identity=identity)
+        ]
 
     @property
     def provider_names(self) -> list[str]:

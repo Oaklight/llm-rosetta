@@ -75,6 +75,9 @@ tr:hover td { background: var(--bg-hover); }
 .provider-list-item .provider-link { font-size:12px; }
 .provider-list-item .provider-weight { font-size:10px;color:var(--text-dim);background:var(--bg);padding:1px 4px;border-radius:3px; }
 .provider-list-item .provider-upstream { font-size:10px;color:var(--text-dim); }
+.provider-list-item .weight-input { width:40px;padding:1px 4px;font-size:11px;text-align:center;border:1px solid var(--border);border-radius:3px;background:var(--bg);color:var(--text);font-family:var(--mono); }
+.provider-list-item .weight-input::-webkit-inner-spin-button { opacity:0; }
+.provider-list-item .weight-input:hover::-webkit-inner-spin-button { opacity:1; }
 .provider-list-item .remove-provider { opacity:0;cursor:pointer;font-size:10px;color:var(--text-dim);background:none;border:none;padding:0 2px;line-height:1; }
 .provider-list-item:hover .remove-provider { opacity:0.6; }
 .provider-list-item .remove-provider:hover { opacity:1;color:var(--danger, #cf222e); }

@@ -939,6 +939,8 @@ class GatewayConfig:
         self,
         source_provider: ProviderType,
         model: str,
+        *,
+        client_identity: str | None = None,
     ) -> tuple[ResolvedRoute, ProviderInfo]:
         """Resolve *model* to a :class:`ResolvedRoute` and :class:`ProviderInfo`.
 
@@ -949,6 +951,9 @@ class GatewayConfig:
         Args:
             source_provider: API standard of the incoming request.
             model: Model name as specified by the client.
+            client_identity: Optional client identity string for
+                affinity-based routing.  Passed through to the routing
+                strategy's ``select()`` method.
 
         Returns:
             ``(route, provider_info)`` — the route contains all
@@ -965,7 +970,7 @@ class GatewayConfig:
         from .deferred_startup import ProviderInitState, ProviderNotReady
 
         model_route = self.models[model]
-        entry = model_route.select_entry()
+        entry = model_route.select_entry(identity=client_identity)
         provider_name = entry.name
 
         # Skip providers whose initial token fetch has not completed.
