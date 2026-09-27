@@ -540,6 +540,39 @@ def _build_model_entry(body: dict[str, Any], provider: str) -> dict[str, Any]:
     return entry
 
 
+def _update_multi_provider_entry(
+    existing: dict[str, Any], body: dict[str, Any]
+) -> None:
+    """Update a multi-provider model entry without destroying the providers list."""
+    if "capabilities" in body:
+        existing["capabilities"] = body["capabilities"]
+    model_type = body.get("type")
+    if model_type and model_type != "llm":
+        existing["type"] = model_type
+    elif "type" in existing and (not model_type or model_type == "llm"):
+        del existing["type"]
+    for key in ("upstream_model", "url_template", "stream_url_template"):
+        if body.get(key):
+            existing[key] = body[key]
+        elif key in existing and key in body:
+            del existing[key]
+    if body.get("flatten_system") is not None:
+        existing["flatten_system"] = bool(body["flatten_system"])
+    if body.get("timeout") not in (None, ""):
+        existing["timeout"] = float(body["timeout"])
+    elif "timeout" in existing and "timeout" in body:
+        del existing["timeout"]
+    reasoning_override = body.get("reasoning_override")
+    if isinstance(reasoning_override, dict):
+        cleaned = {k: v for k, v in reasoning_override.items() if v is not None}
+        if cleaned:
+            existing["reasoning_override"] = cleaned
+        elif "reasoning_override" in existing:
+            del existing["reasoning_override"]
+    if body.get("enabled") is not None:
+        existing["enabled"] = body["enabled"]
+
+
 def _get_existing_provider_label(existing: Any) -> str:
     """Return a human-readable provider label for an existing model entry."""
     if isinstance(existing, str):
@@ -634,7 +667,16 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
                 del models[rename_from]
 
         if not merged:
-            ctx.data.setdefault("models", {})[name] = _build_model_entry(body, provider)
+            models_section = ctx.data.setdefault("models", {})
+            existing = models_section.get(name)
+            if (
+                isinstance(existing, dict)
+                and "providers" in existing
+                and not body.get("_force_single")
+            ):
+                _update_multi_provider_entry(existing, body)
+            else:
+                models_section[name] = _build_model_entry(body, provider)
             ctx.commit()
 
     if ctx.error:
@@ -679,6 +721,123 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
             "models": list(ctx.new_config.models),
         }
     )
+
+
+def _remove_provider_from_entry(
+    models: dict[str, Any], name: str, provider: str
+) -> Response | None:
+    """Remove *provider* from the model entry *name* inside *models*.
+
+    Returns a :class:`JSONResponse` error on failure, or ``None`` on
+    success (caller should commit).
+    """
+    existing = models[name]
+
+    # Single-provider shorthand (string or dict without "providers")
+    if isinstance(existing, str):
+        if existing != provider:
+            return JSONResponse(
+                {"error": f"Provider '{provider}' not found on model '{name}'"},
+                status_code=404,
+            )
+        del models[name]
+        return None
+
+    if not isinstance(existing, dict):
+        return JSONResponse({"error": "Invalid model entry"}, status_code=400)
+
+    if "providers" not in existing:
+        if existing.get("provider") != provider:
+            return JSONResponse(
+                {"error": f"Provider '{provider}' not found on model '{name}'"},
+                status_code=404,
+            )
+        del models[name]
+        return None
+
+    # Multi-provider list
+    plist = existing["providers"]
+    new_list = [
+        p for p in plist if (p if isinstance(p, str) else p.get("name", "")) != provider
+    ]
+    if len(new_list) == len(plist):
+        return JSONResponse(
+            {"error": f"Provider '{provider}' not found on model '{name}'"},
+            status_code=404,
+        )
+
+    if not new_list:
+        del models[name]
+    elif len(new_list) == 1:
+        _collapse_to_single_provider(models, name, existing, new_list[0])
+    else:
+        existing["providers"] = new_list
+
+    return None
+
+
+def _collapse_to_single_provider(
+    models: dict[str, Any],
+    name: str,
+    existing: dict[str, Any],
+    sole: Any,
+) -> None:
+    """Collapse a multi-provider model to single-provider format."""
+    sole_name = sole if isinstance(sole, str) else sole.get("name", "")
+    entry: dict[str, Any] = {"provider": sole_name}
+    if isinstance(sole, dict) and sole.get("upstream_model"):
+        entry["upstream_model"] = sole["upstream_model"]
+    for key in (
+        "capabilities",
+        "type",
+        "enabled",
+        "flatten_system",
+        "timeout",
+        "reasoning_override",
+        "url_template",
+        "stream_url_template",
+    ):
+        if key in existing:
+            entry[key] = existing[key]
+    models[name] = entry
+
+
+async def remove_model_provider(request: Any, **kwargs: Any) -> Response:
+    """Remove a single provider from a multi-provider model entry."""
+    name = request.path_params["name"]
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    provider = body.get("provider")
+    if not provider:
+        return JSONResponse({"error": "'provider' is required"}, status_code=400)
+
+    with config_mutate(request) as ctx:
+        if ctx.error:
+            return ctx.error
+
+        models = ctx.data.get("models", {})
+        if name not in models:
+            return JSONResponse({"error": f"Model '{name}' not found"}, status_code=404)
+
+        err_resp = _remove_provider_from_entry(models, name, provider)
+        if err_resp is not None:
+            return err_resp
+
+        ctx.commit()
+
+    if ctx.error:
+        return ctx.error
+    assert ctx.new_config is not None
+
+    deleted = name not in ctx.new_config.models and name not in models
+    result: dict[str, Any] = {"ok": True, "model": name, "removed_provider": provider}
+    if deleted:
+        result["deleted"] = name
+    result["models"] = list(ctx.new_config.models)
+    return JSONResponse(result)
 
 
 def _apply_rate_limit_settings(

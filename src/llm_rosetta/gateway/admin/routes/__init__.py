@@ -48,6 +48,7 @@ from .config import (
     put_server_settings,
     reload_config,
     bulk_update_models,
+    remove_model_provider,
     toggle_model,
     toggle_provider,
 )
@@ -171,6 +172,9 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/models/<path:name>/toggle", methods=["POST"])(
         _guard("models", toggle_model)
+    )
+    app.route("/admin/api/config/models/<path:name>/remove-provider", methods=["POST"])(
+        _guard("models", remove_model_provider)
     )
     app.route("/admin/api/config/models/bulk", methods=["POST"])(
         _guard("models", bulk_update_models)

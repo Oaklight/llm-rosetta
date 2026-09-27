@@ -145,6 +145,18 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
       sel.appendChild(opt);
     }
   }
+  // Multi-provider indicator
+  const multiHint = document.getElementById('modelMultiProviderHint');
+  if (multiHint) {
+    const modelInfo = model && S.configData ? S.configData.models[model] : null;
+    const isMulti = modelInfo && typeof modelInfo === 'object' && modelInfo.providers && modelInfo.providers.length > 1;
+    if (isMulti) {
+      multiHint.textContent = `This model has ${modelInfo.providers.length} providers. Manage providers in the model list.`;
+      multiHint.style.display = '';
+    } else {
+      multiHint.style.display = 'none';
+    }
+  }
   // Reset to General tab
   const modal = document.getElementById('modelModal');
   modal.querySelectorAll('.model-tab-content').forEach(el => el.classList.remove('active'));
@@ -333,6 +345,64 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
     <div class="test-menu-item" onclick="runTest('${n}','${esc(modelType)}')">${t('btn.test')} ${esc(modelType)}</div>`;
 }
 
+// ── Multi-provider helpers ──
+
+function _getAllProviders(info) {
+  if (typeof info === 'string') return [info];
+  if (info.providers && Array.isArray(info.providers)) {
+    return info.providers.map(p => typeof p === 'string' ? p : p.name || '');
+  }
+  return [info.provider || ''];
+}
+
+function _getProviderDetails(info) {
+  if (typeof info === 'string') return [{name: info}];
+  if (info.providers && Array.isArray(info.providers)) {
+    return info.providers.map(p => {
+      if (typeof p === 'string') return {name: p};
+      return {name: p.name || '', weight: p.weight, upstream_model: p.upstream_model};
+    });
+  }
+  return [{name: info.provider || '', upstream_model: info.upstream_model}];
+}
+
+function _renderProviderCell(name, info, disabledProviders) {
+  const details = _getProviderDetails(info);
+  if (details.length <= 1) {
+    const p = details[0] || {name: ''};
+    const dis = disabledProviders.has(p.name);
+    return `<span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}</span>${dis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}`;
+  }
+  const primary = details.find(p => !disabledProviders.has(p.name)) || details[0];
+  const priDis = disabledProviders.has(primary.name);
+  const items = details.map(p => {
+    const dis = disabledProviders.has(p.name);
+    const weightTag = (p.weight && p.weight !== 1) ? ` <span class="provider-weight">w:${p.weight}</span>` : '';
+    const upTag = p.upstream_model ? ` <span class="provider-upstream">→ ${esc(p.upstream_model)}</span>` : '';
+    const disTag = dis ? ` <span style="color:var(--text-dim);font-size:10px">(${t('provider.disabled')})</span>` : '';
+    return `<div class="provider-list-item">
+      <span class="provider-link" onclick="goToProviderFromModel('${esc(p.name)}')">${esc(p.name)}</span>${weightTag}${upTag}${disTag}
+      <button class="remove-provider" title="Remove provider" onclick="event.stopPropagation();removeProviderFromModel('${esc(name)}','${esc(p.name)}')">✕</button>
+    </div>`;
+  }).join('');
+  return `<span class="provider-link" onclick="goToProviderFromModel('${esc(primary.name)}')">${esc(primary.name)}</span>${priDis ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}
+    <div class="provider-list">
+      <span class="provider-list-toggle" onclick="this.classList.toggle('open')"><span class="arrow">▸</span> ${details.length} providers</span>
+      <div class="provider-list-items">${items}</div>
+    </div>`;
+}
+
+async function removeProviderFromModel(modelName, providerName) {
+  if (!confirm(`Remove provider "${providerName}" from model "${modelName}"?`)) return;
+  const res = await api.post(`/admin/api/config/models/${encodeURIComponent(modelName)}/remove-provider`, {provider: providerName});
+  if (res.ok) {
+    showToast(`Removed ${providerName} from ${modelName}`);
+    window.loadConfig();
+  } else {
+    showToast(res.error || 'Failed', 'error');
+  }
+}
+
 // ── Model rendering ──
 
 const _capIcons = {
@@ -356,7 +426,7 @@ function renderModels() {
   const prevProv = provFilter.value;
   const provSet = new Set();
   for (const [, info] of Object.entries(models)) {
-    provSet.add(typeof info === 'string' ? info : info.provider);
+    _getAllProviders(info).forEach(p => provSet.add(p));
   }
   provFilter.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
     [...provSet].sort().map(p => `<option value="${esc(p)}"${p === prevProv ? ' selected' : ''}>${esc(p)}</option>`).join('');
@@ -377,14 +447,15 @@ function renderModels() {
   const selectedProv = provFilter.value;
   const query = (document.getElementById('modelSearch').value || '').trim().toLowerCase();
   let entries = Object.entries(models).map(([name, info]) => {
-    const prov = typeof info === 'string' ? info : info.provider;
-    return {name, prov, info};
+    const provs = _getAllProviders(info);
+    const prov = provs[0] || '';
+    return {name, prov, provs, info};
   });
   if (selectedProv) {
-    entries = entries.filter(e => e.prov === selectedProv);
+    entries = entries.filter(e => e.provs.includes(selectedProv));
   }
   if (query) {
-    entries = entries.filter(e => e.name.toLowerCase().includes(query) || e.prov.toLowerCase().includes(query));
+    entries = entries.filter(e => e.name.toLowerCase().includes(query) || e.provs.some(p => p.toLowerCase().includes(query)));
   }
 
   // Filter by model type (domain)
@@ -422,11 +493,12 @@ function renderModels() {
 
 
 
-  tbody.innerHTML = entries.map(({name, prov, info}) => {
-    const provDisabled = disabledProviders.has(prov);
+  tbody.innerHTML = entries.map(({name, prov, provs, info}) => {
+    const allProvsDisabled = provs.every(p => disabledProviders.has(p));
+    const anyProvEnabled = provs.some(p => !disabledProviders.has(p));
     const modelEnabled = typeof info === 'object' ? info.enabled !== false : true;
-    const effectiveEnabled = modelEnabled && !provDisabled;
-    const rowDimmed = provDisabled || !modelEnabled;
+    const effectiveEnabled = modelEnabled && anyProvEnabled;
+    const rowDimmed = !modelEnabled || allProvsDisabled;
     const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
     const modelType = _getModelType(info);
     const capBadges = modelType === 'llm' ? caps.map(c => {
@@ -451,9 +523,9 @@ function renderModels() {
       </td>
       <td style="text-align:center">${typeBadge}</td>
       <td>${capBadges || '<span style="color:var(--text-dim);font-size:11px">—</span>'}</td>
-      <td><span class="provider-link" onclick="goToProviderFromModel('${esc(prov)}')">${esc(prov)}</span>${provDisabled ? ` <span style="color:var(--text-dim);font-size:11px">(${t('provider.disabled')})</span>` : ''}</td>
+      <td>${_renderProviderCell(name, info, disabledProviders)}</td>
       <td style="text-align:right;white-space:nowrap;position:relative">
-        <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${provDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
+        <div class="pill-toggle ${effectiveEnabled ? 'is-on' : 'is-off'}" role="switch" tabindex="0" aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onclick="toggleModel('${esc(name)}')" onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleModel('${esc(name)}')}" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}" style="vertical-align:middle;margin-right:4px"><span class="pill-on">${t('label.on')}</span><span class="pill-off">${t('label.off')}</span></div>
         <div class="test-group" style="display:inline-block">
           <button class="btn btn-sm btn-test${modelType !== 'llm' ? ' btn-test-embed' : ''}" onclick="runTest('${esc(name)}','${_defaultTestKind(modelType)}')">${t('btn.test')}</button>
           <button class="btn btn-sm btn-caret" onclick="toggleTestMenu(this)">&#9662;</button>
@@ -563,7 +635,12 @@ function editModel(name, provider) {
   const info = S.configData.models[name];
   const caps = (typeof info === 'object' && info.capabilities) ? info.capabilities : ['text'];
   const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
-  openModelModal(name, provider, caps, upstream);
+  const provs = _getAllProviders(info);
+  const prov = provs.length > 1 ? (provs.find(p => {
+    const cfg = (S.configData.providers || {})[p];
+    return cfg && cfg.enabled !== false;
+  }) || provs[0]) : provider;
+  openModelModal(name, prov, caps, upstream);
 }
 
 function cloneModel(name) {
@@ -621,7 +698,7 @@ Object.assign(window, {
   renderModels, saveModel, toggleModel, editModel, cloneModel,
   selectAllModels, updateModelBulk, bulkModels, toggleMoreMenu,
   deleteModel, goToModelsForProvider, goToProviderFromModel,
-  _buildTypeSegControls,
+  removeProviderFromModel, _buildTypeSegControls,
 });
 
 export { renderModels };
