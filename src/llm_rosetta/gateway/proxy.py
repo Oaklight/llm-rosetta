@@ -853,7 +853,7 @@ def _write_back_stream_usage(
     if inp is None and outp is None:
         return
     if total is None and inp is not None:
-        total = (inp or 0) + (outp or 0)
+        total = (inp or 0) + (outp or 0) + (cache_read or 0) + (cache_creation or 0)
     try:
         request_log.update_usage(
             entry_id,

@@ -1034,6 +1034,22 @@ class StreamProcessor:
         """
         return self._usage
 
+    def _merge_usage(self, u: dict[str, Any]) -> None:
+        """Merge an IR usage dict into accumulated usage.
+
+        The first usage event (typically from ``message_start``) seeds
+        the accumulator; subsequent events (e.g. ``message_delta``)
+        merge non-zero values so that fields like ``prompt_tokens``
+        from earlier events are not overwritten by a later event that
+        only carries ``completion_tokens``.
+        """
+        if self._usage is None:
+            self._usage = dict(u)
+        else:
+            for k, v in u.items():
+                if v is not None and v != 0:
+                    self._usage[k] = v
+
     def process_chunk(self, chunk: dict[str, Any]) -> list[dict[str, Any]]:
         """Convert one upstream chunk to source-format events.
 
@@ -1086,7 +1102,7 @@ class StreamProcessor:
             if ir_event.get("type") == "usage":
                 u = ir_event.get("usage")
                 if u:
-                    self._usage = dict(u)
+                    self._merge_usage(u)
 
             if self._on_ir_event is not None:
                 self._on_ir_event(ir_event)

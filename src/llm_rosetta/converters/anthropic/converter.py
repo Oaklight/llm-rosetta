@@ -444,18 +444,26 @@ class AnthropicConverter(BaseConverter):
 
     @staticmethod
     def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo:
-        """Build IR usage dict from Anthropic usage."""
+        """Build IR usage dict from Anthropic usage.
+
+        Note: Anthropic's ``cache_read_input_tokens`` and
+        ``cache_creation_input_tokens`` are **additive** to
+        ``input_tokens`` (not a subset like OpenAI/Google), so the
+        total must include them.
+        """
         input_tokens = p_usage.get("input_tokens") or 0
         output_tokens = p_usage.get("output_tokens") or 0
+        cache_read = p_usage.get("cache_read_input_tokens") or 0
+        cache_creation = p_usage.get("cache_creation_input_tokens") or 0
         usage_info: dict[str, Any] = {
             "prompt_tokens": input_tokens,
             "completion_tokens": output_tokens,
-            "total_tokens": input_tokens + output_tokens,
+            "total_tokens": input_tokens + output_tokens + cache_read + cache_creation,
         }
         if "cache_read_input_tokens" in p_usage:
-            usage_info["cache_read_tokens"] = p_usage["cache_read_input_tokens"]
+            usage_info["cache_read_tokens"] = cache_read
         if "cache_creation_input_tokens" in p_usage:
-            usage_info["cache_creation_tokens"] = p_usage["cache_creation_input_tokens"]
+            usage_info["cache_creation_tokens"] = cache_creation
         otd = p_usage.get("output_tokens_details")
         if isinstance(otd, dict):
             thinking = otd.get("thinking_tokens")
