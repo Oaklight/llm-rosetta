@@ -1,9 +1,9 @@
 # /// zerodep
-# version = "0.5.0"
+# version = "0.5.1"
 # deps = []
 # tier = "subsystem"
 # category = "network"
-# note = "Install/update via `zerodep add httpserver`"
+# note = "Install/update via: https://zerodep.readthedocs.io/en/latest/guide/cli/"
 # ///
 
 """Zero-dependency async HTTP server with decorator-based routing.
@@ -122,6 +122,11 @@ _PARAM_CONVERTERS: dict[str, tuple[str, Callable[[str], Any]]] = {
 _PARAM_RE = re.compile(r"<(?:(\w+):)?(\w+)>")
 
 _SENTINEL = object()
+
+# Seconds between disconnect checks while waiting for the next chunk from
+# a streaming generator.  Only matters when the generator is blocked on
+# slow upstream I/O; fast generators never hit the timeout.
+_STREAMING_DISCONNECT_CHECK_INTERVAL: float = 30.0
 
 
 # ── Exceptions ───────────────────────────────────────────────────────────────
@@ -510,6 +515,8 @@ class StreamingResponse:
         background: Optional callable invoked after the stream completes
             (including client disconnect).  Accepts both sync and async
             callables.  Exceptions are logged and suppressed.
+        disconnect_check_interval: Seconds between client-disconnect
+            checks while the generator is blocked.  Defaults to 30.
     """
 
     __slots__ = (
@@ -519,6 +526,7 @@ class StreamingResponse:
         "content_type",
         "background",
         "_cookie_headers",
+        "_disconnect_check_interval",
     )
 
     def __init__(
@@ -528,6 +536,7 @@ class StreamingResponse:
         headers: dict[str, str] | None = None,
         content_type: str = "application/octet-stream",
         background: Callable[[], Any] | None = None,
+        disconnect_check_interval: float | None = None,
     ):
         self._generator = generator
         self.status_code = status_code
@@ -535,6 +544,11 @@ class StreamingResponse:
         self.content_type = content_type
         self.background = background
         self._cookie_headers: list[str] = []
+        self._disconnect_check_interval = (
+            disconnect_check_interval
+            if disconnect_check_interval is not None
+            else _STREAMING_DISCONNECT_CHECK_INTERVAL
+        )
 
     def set_cookie(
         self,
@@ -608,7 +622,49 @@ class StreamingResponse:
         await writer.drain()
 
         try:
-            async for chunk in self._generator:
+            aiter = self._generator.__aiter__()
+            is_closing = getattr(writer, "is_closing", None)
+            while True:
+                # Detect client disconnect between generator yields.
+                # When the generator blocks on slow upstream I/O (e.g.
+                # an LLM API producing the next SSE chunk), plain
+                # ``async for`` never checks the writer state.  We
+                # race the next-chunk coroutine against a periodic
+                # disconnect check so CLOSE_WAIT connections don't
+                # accumulate.
+                if is_closing is not None and is_closing():
+                    raise BrokenPipeError("client disconnected (detected)")
+
+                next_coro = aiter.__anext__()
+                if is_closing is None:
+                    # Writer has no is_closing (e.g. mock) — fall back
+                    # to plain await without disconnect detection.
+                    try:
+                        chunk = await next_coro
+                    except StopAsyncIteration:
+                        break
+                else:
+                    next_task = asyncio.ensure_future(next_coro)
+                    try:
+                        chunk = await _anext_or_disconnect(
+                            next_task,
+                            is_closing,
+                            self._disconnect_check_interval,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    except (
+                        BrokenPipeError,
+                        ConnectionResetError,
+                        ConnectionAbortedError,
+                    ):
+                        next_task.cancel()
+                        try:
+                            await next_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                        raise
+
                 if isinstance(chunk, str):
                     chunk = chunk.encode("utf-8")
                 writer.write(f"{len(chunk):x}\r\n".encode("latin-1"))
@@ -801,6 +857,36 @@ async def _read_chunked_body(
 
 
 # ── Utilities ────────────────────────────────────────────────────────────────
+
+
+async def _anext_or_disconnect(
+    next_task: asyncio.Task[Any],
+    is_closing: Callable[[], bool],
+    interval: float,
+) -> Any:
+    """Await *next_task* while periodically checking for client disconnect.
+
+    Polls ``is_closing()`` every *interval* seconds.  If the writer is
+    closing, cancels the pending ``__anext__`` task and raises
+    ``BrokenPipeError`` so the caller can clean up the generator.
+
+    If the task completes normally the chunk value is returned.  If it
+    raises ``StopAsyncIteration`` (generator exhausted) that exception
+    propagates to the caller unchanged.
+    """
+    while True:
+        try:
+            return await asyncio.wait_for(asyncio.shield(next_task), timeout=interval)
+        except asyncio.TimeoutError:
+            if is_closing():
+                next_task.cancel()
+                try:
+                    await next_task
+                except (asyncio.CancelledError, StopAsyncIteration, Exception):
+                    pass
+                raise BrokenPipeError("client disconnected (detected)")
+            # Generator is still working on the next chunk; keep waiting.
+            continue
 
 
 def _http_date(timestamp: float | None = None) -> str:

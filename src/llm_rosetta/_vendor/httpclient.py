@@ -1,9 +1,9 @@
 # /// zerodep
-# version = "0.5.0"
+# version = "0.5.1"
 # deps = []
 # tier = "subsystem"
 # category = "network"
-# note = "Install/update via `zerodep add httpclient`"
+# note = "Install/update via: https://zerodep.readthedocs.io/en/latest/guide/cli/"
 # ///
 
 """Zero-dependency sync + async HTTP REST client.
@@ -850,10 +850,11 @@ class StreamingResponse:
     async def _aiter_fixed_length(self, chunk_size: int) -> AsyncIterator[bytes]:
         """Read a known-length response body in chunks."""
         assert self._async_reader is not None
+        reader = self._async_reader
         while self._bytes_remaining is not None and self._bytes_remaining > 0:
             to_read = min(chunk_size, self._bytes_remaining)
             data = await asyncio.wait_for(
-                self._async_reader.read(to_read),
+                reader.read(to_read),
                 timeout=self._async_timeout,
             )
             if not data:
@@ -864,9 +865,10 @@ class StreamingResponse:
     async def _aiter_until_eof(self, chunk_size: int) -> AsyncIterator[bytes]:
         """Read response body until EOF in chunks."""
         assert self._async_reader is not None
+        reader = self._async_reader
         while True:
             data = await asyncio.wait_for(
-                self._async_reader.read(chunk_size),
+                reader.read(chunk_size),
                 timeout=self._async_timeout,
             )
             if not data:
@@ -949,6 +951,7 @@ class StreamingResponse:
                     self.url,
                     exc_info=True,
                 )
+            self._sync_resp = None
         if self._sync_conn is not None:
             try:
                 self._sync_conn.close()
@@ -958,6 +961,18 @@ class StreamingResponse:
                     self.url,
                     exc_info=True,
                 )
+            self._sync_conn = None
+        # Release async reader reference (unblock pending reads if possible).
+        if self._async_reader is not None:
+            try:
+                self._async_reader.feed_eof()
+            except Exception:
+                logger.debug(
+                    "failed to feed_eof async reader for %s",
+                    self.url,
+                    exc_info=True,
+                )
+            self._async_reader = None
         if self._async_writer is not None:
             try:
                 self._async_writer.close()
@@ -967,6 +982,7 @@ class StreamingResponse:
                     self.url,
                     exc_info=True,
                 )
+            self._async_writer = None
 
     async def aclose(self) -> None:
         """Close the underlying async connection."""
@@ -974,6 +990,20 @@ class StreamingResponse:
             return
         self._closed = True
         # Tier 2: best-effort observable -- active streaming resource
+        #
+        # Release the reader first: feed_eof() unblocks any pending reads
+        # so the writer close can complete cleanly.  Then drop the reference
+        # to allow GC of the transport/socket even if the writer close fails.
+        if self._async_reader is not None:
+            try:
+                self._async_reader.feed_eof()
+            except Exception:
+                logger.debug(
+                    "failed to feed_eof async reader for %s",
+                    self.url,
+                    exc_info=True,
+                )
+            self._async_reader = None
         if self._async_writer is not None:
             try:
                 self._async_writer.close()
@@ -984,6 +1014,7 @@ class StreamingResponse:
                     self.url,
                     exc_info=True,
                 )
+            self._async_writer = None
 
     def __del__(self) -> None:
         if not self._closed:
