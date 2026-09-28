@@ -210,7 +210,7 @@ class TestOpsLogInMemory:
                 )
             )
         # In-memory deque limits to 3
-        assert len(log) == 3
+        assert len(log._entries) == 3
 
 
 class TestOpsLogPersistence:

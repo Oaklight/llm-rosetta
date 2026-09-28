@@ -203,9 +203,3 @@ class OpsLog:
             count = len(self._entries)
             self._entries.clear()
         return count
-
-    def __len__(self) -> int:
-        # Sync length for backward compat; in-memory mode only accurate.
-        if self._persistence is not None:
-            return 0
-        return len(self._entries)

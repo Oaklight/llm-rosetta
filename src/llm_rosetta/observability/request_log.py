@@ -340,13 +340,3 @@ class RequestLog:
 
     async def __aexit__(self, *args: Any) -> None:
         pass
-
-    def __len__(self) -> int:
-        # This remains sync for backward compat — only used for in-memory mode
-        # or when the count is already cached. For async-accurate count,
-        # use count_log_entries on persistence directly.
-        if self._persistence is not None:
-            # Cannot call async from sync; return 0 as a sentinel.
-            # Callers needing accurate counts should use persistence directly.
-            return 0
-        return len(self._entries)

@@ -71,7 +71,7 @@ class TestRequestLog:
         log = RequestLog(max_entries=3)
         for i in range(5):
             await log.add(self._make_entry(model=f"model-{i}"))
-        assert len(log) == 3
+        assert len(log._entries) == 3
         entries, total = await log.get_entries(limit=10)
         assert total == 3
         # Should have models 2, 3, 4 (oldest evicted)
@@ -164,6 +164,6 @@ class TestRequestLog:
         log = RequestLog()
         await log.add(self._make_entry())
         await log.add(self._make_entry())
-        assert len(log) == 2
+        assert len(log._entries) == 2
         await log.clear()
-        assert len(log) == 0
+        assert len(log._entries) == 0
