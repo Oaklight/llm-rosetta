@@ -176,7 +176,7 @@ _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
 @runtime_checkable
 class StreamProcessorProtocol(Protocol):
-    """Shared interface for StreamProcessor and PassthroughStreamProcessor."""
+    """Shared interface for StreamProcessor and BaselineStreamProcessor."""
 
     @property
     def source_context(self) -> Any: ...
@@ -217,10 +217,13 @@ class ConversionPipeline:
           target_shim.pre_ir → Target→IR → IR→Source →
           source_shim.post_ir
 
-    In passthrough mode (source == target, force_conversion=False),
-    the IR round-trip is skipped but shim body-level transforms still
-    apply: source pre_ir → target post_ir (request) and target pre_ir
-    → source post_ir (response).
+    In baseline mode (source == target, baseline=True), the IR
+    round-trip is skipped but shim body-level transforms still apply:
+    source pre_ir → target post_ir (request) and target pre_ir →
+    source post_ir (response).  Baseline mode exists for fidelity
+    shadow-testing — diffing unconverted output against IR-converted
+    output to catch round-trip regressions — not as a production
+    path.  The gateway always converts through IR.  See #577.
 
     Args:
         source_provider: Client API format (e.g. ``"openai_chat"``).
@@ -246,7 +249,7 @@ class ConversionPipeline:
         supports_custom_tools: bool | None = None,
         max_tool_description_length: int | None = None,
         hoist_system_messages: bool = True,
-        force_conversion: bool = True,
+        baseline: bool = False,
         fidelity_mode: Literal["critical", "full"] | None = None,
         metadata_mode: str = "preserve",
         google_output_format: str = "rest",
@@ -279,9 +282,9 @@ class ConversionPipeline:
         self._metadata_mode = metadata_mode
         self._google_output_format = google_output_format
 
-        self._passthrough = source_provider == target_provider and not force_conversion
+        self._baseline = source_provider == target_provider and baseline
         self._fidelity: Any = None
-        if self._passthrough and fidelity_mode is not None:
+        if self._baseline and fidelity_mode is not None:
             from llm_rosetta.fidelity import FidelityChecker
 
             self._fidelity = FidelityChecker(
@@ -466,10 +469,10 @@ class ConversionPipeline:
         ctx = ConversionContext()
         self._ctx = ctx
 
-        # Same-format short-circuit: skip IR round-trip, apply only shim
-        # body-level transforms.  This avoids lossy round-trips when
-        # source == target (e.g. Anthropic → gateway → Anthropic upstream).
-        if self._passthrough:
+        # Baseline mode: skip IR round-trip, apply only shim body-level
+        # transforms.  Used for fidelity shadow-testing (diffing against
+        # the converted output to catch round-trip regressions).
+        if self._baseline:
             t0 = time.perf_counter()
             result = body
             if self._source_pre_ir_transforms:
@@ -479,7 +482,7 @@ class ConversionPipeline:
                     self._target_post_ir_transforms,
                     dict(result) if result is body else result,
                 )
-            # No IR produced in passthrough mode
+            # No IR produced in baseline mode
             self._ir_request = {}
             # Shadow round-trip for fidelity monitoring
             if self._fidelity is not None:
@@ -635,7 +638,7 @@ class ConversionPipeline:
         ctx = self.context  # raises RuntimeError if not ready
 
         # Same-format short-circuit: skip IR round-trip for response too
-        if self._passthrough:
+        if self._baseline:
             t0 = time.perf_counter()
             result = upstream_response
             if self._target_response_body_transforms:
@@ -755,9 +758,9 @@ class ConversionPipeline:
         """
         ctx = self.context  # raises RuntimeError if not ready
 
-        # Same-format short-circuit: return a passthrough processor
-        if self._passthrough:
-            return PassthroughStreamProcessor(
+        # Baseline mode: return a baseline stream processor
+        if self._baseline:
+            return BaselineStreamProcessor(
                 response_body_transforms=self._target_response_body_transforms,
                 pre_ir_transforms=self._target_pre_ir_transforms,
                 post_ir_transforms=self._source_post_ir_transforms,
@@ -803,12 +806,13 @@ class ConversionPipeline:
 # ---------------------------------------------------------------------------
 
 
-class PassthroughStreamProcessor:
-    """No-op stream processor for same-format pipelines.
+class BaselineStreamProcessor:
+    """No-op stream processor for same-format baseline pipelines.
 
     Forwards upstream chunks directly, applying only shim body-level
-    transforms.  Has a dummy ``source_context`` so the gateway's
-    terminal-event logic doesn't crash.
+    transforms.  Used for fidelity shadow-testing, not production.
+    Has a dummy ``source_context`` so the gateway's terminal-event
+    logic doesn't crash.
     """
 
     def __init__(
@@ -821,15 +825,15 @@ class PassthroughStreamProcessor:
         self._response_body_transforms = response_body_transforms
         self._pre_ir_transforms = pre_ir_transforms
         self._post_ir_transforms = post_ir_transforms
-        self._ctx = self._PassthroughCtx()
+        self._ctx = self._BaselineCtx()
         self._usage: dict[str, int] | None = None
 
     @property
     def source_context(self) -> Any:
-        """Minimal context for passthrough — enough for gateway error handling."""
+        """Minimal context for baseline mode — enough for gateway error handling."""
         return self._ctx
 
-    class _PassthroughCtx:
+    class _BaselineCtx:
         def __init__(self) -> None:
             self.is_ended = False
             self.response_id = ""
@@ -851,7 +855,7 @@ class PassthroughStreamProcessor:
     )
 
     def get_accumulated_usage(self) -> dict[str, int] | None:
-        """Return token usage extracted from passthrough chunks."""
+        """Return token usage extracted from baseline chunks."""
         return self._usage
 
     @staticmethod

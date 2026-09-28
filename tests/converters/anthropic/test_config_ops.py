@@ -259,7 +259,7 @@ class TestAnthropicConfigOps:
     def test_reasoning_config_roundtrip_adaptive_no_effort(self):
         """Test round-trip: adaptive (no effort) → IR → adaptive.
 
-        Regression test for argo-proxy#502: force_conversion caused
+        Regression test for argo-proxy#502: baseline caused
         {"type": "adaptive"} to become {"type": "enabled"} (without
         budget_tokens), which Anthropic API rejects.
         """

@@ -262,7 +262,7 @@ def convert(
     source_provider: ProviderType | str | None = None,
     *,
     model: str | None = None,
-    force_conversion: bool = False,
+    baseline: bool = True,
 ) -> dict[str, Any]:
     """Auto-detect source provider and convert to target provider format.
 
@@ -278,8 +278,9 @@ def convert(
             Auto-detected from *source_body* when not provided.
         model: Optional model name passed as ``upstream_model`` to the
             pipeline (used for per-model shim overrides).
-        force_conversion: When ``True``, always run the full conversion
-            pipeline even when source and target providers are the same.
+        baseline: When ``True`` (default for library helpers), skip the
+            IR round-trip when source and target providers are the same.
+            Set to ``False`` to force a full IR conversion regardless.
 
     Returns:
         Target provider format request body.
@@ -297,9 +298,9 @@ def convert(
         >>> # With shim transforms
         >>> body = convert(req, "anthropic", source_provider="deepseek", model="deepseek-r1")
 
-        >>> # Force normalisation even for same-provider passthrough
+        >>> # Force IR round-trip even for same-provider
         >>> body = {"messages": [...], "max_tokens": 256}
-        >>> normalised = convert(body, "openai_chat", force_conversion=True)
+        >>> normalised = convert(body, "openai_chat", baseline=False)
     """
     from .pipeline import ConversionPipeline
     from .shims import get_shim
@@ -312,7 +313,7 @@ def convert(
         source_shim=get_shim(src),
         target_shim=get_shim(str(target_provider)),
         upstream_model=model,
-        force_conversion=force_conversion,
+        baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
         google_output_format="sdk",
     )
@@ -326,7 +327,7 @@ def convert_response(
     target_provider: ProviderType | str,
     *,
     model: str | None = None,
-    force_conversion: bool = False,
+    baseline: bool = True,
 ) -> dict[str, Any]:
     """Convert a response body from target provider format back to source.
 
@@ -341,8 +342,9 @@ def convert_response(
         source_provider: The client/source provider type or shim name.
         target_provider: The upstream/target provider type or shim name.
         model: Optional model name for per-model shim overrides.
-        force_conversion: When ``True``, run full conversion even for
-            same-provider passthrough.
+        baseline: When ``True`` (default), skip the IR round-trip for
+            same-provider requests.  Set to ``False`` to force full
+            IR conversion.
 
     Returns:
         Source-format response body.
@@ -362,7 +364,7 @@ def convert_response(
         source_shim=get_shim(src),
         target_shim=get_shim(tgt),
         upstream_model=model,
-        force_conversion=force_conversion,
+        baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
         google_output_format="sdk",
     )

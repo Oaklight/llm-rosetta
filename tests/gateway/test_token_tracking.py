@@ -395,12 +395,12 @@ class TestStreamProcessorUsageTracking:
         assert usage["total_tokens"] == 150
 
 
-class TestPassthroughStreamProcessorUsage:
+class TestBaselineStreamProcessorUsage:
     @pytest.mark.asyncio
     async def test_extract_openai_usage(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
-        p = PassthroughStreamProcessor()
+        p = BaselineStreamProcessor()
 
         p.process_chunk(
             {
@@ -421,9 +421,9 @@ class TestPassthroughStreamProcessorUsage:
 
     @pytest.mark.asyncio
     async def test_extract_anthropic_usage(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
-        p = PassthroughStreamProcessor()
+        p = BaselineStreamProcessor()
         p.process_chunk(
             {
                 "type": "message_delta",
@@ -438,9 +438,9 @@ class TestPassthroughStreamProcessorUsage:
 
     @pytest.mark.asyncio
     async def test_extract_google_usage(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
-        p = PassthroughStreamProcessor()
+        p = BaselineStreamProcessor()
         p.process_chunk(
             {
                 "usageMetadata": {
@@ -459,9 +459,9 @@ class TestPassthroughStreamProcessorUsage:
 
     @pytest.mark.asyncio
     async def test_no_usage_returns_none(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
-        p = PassthroughStreamProcessor()
+        p = BaselineStreamProcessor()
         p.process_chunk({"choices": [{"delta": {"content": "hi"}}]})
 
         assert p.get_accumulated_usage() is None
@@ -470,9 +470,9 @@ class TestPassthroughStreamProcessorUsage:
 class TestPassthroughZeroTokens:
     @pytest.mark.asyncio
     async def test_zero_prompt_tokens_preserved(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
-        p = PassthroughStreamProcessor()
+        p = BaselineStreamProcessor()
         p.process_chunk(
             {
                 "usage": {
@@ -996,7 +996,7 @@ class TestPersistenceExtendedTokenColumns:
 class TestPassthroughExtendedUsageExtraction:
     @pytest.mark.asyncio
     async def test_extract_openai_cache_and_reasoning(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
         chunk = {
             "usage": {
@@ -1007,14 +1007,14 @@ class TestPassthroughExtendedUsageExtraction:
                 "completion_tokens_details": {"reasoning_tokens": 200},
             }
         }
-        result = PassthroughStreamProcessor._extract_usage(chunk)
+        result = BaselineStreamProcessor._extract_usage(chunk)
         assert result is not None
         assert result["cache_read_tokens"] == 300
         assert result["reasoning_tokens"] == 200
 
     @pytest.mark.asyncio
     async def test_extract_anthropic_cache_tokens(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
         chunk = {
             "usage": {
@@ -1024,14 +1024,14 @@ class TestPassthroughExtendedUsageExtraction:
                 "cache_creation_input_tokens": 100,
             }
         }
-        result = PassthroughStreamProcessor._extract_usage(chunk)
+        result = BaselineStreamProcessor._extract_usage(chunk)
         assert result is not None
         assert result["cache_read_tokens"] == 300
         assert result["cache_creation_tokens"] == 100
 
     @pytest.mark.asyncio
     async def test_extract_anthropic_thinking_tokens(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
         chunk = {
             "usage": {
@@ -1040,13 +1040,13 @@ class TestPassthroughExtendedUsageExtraction:
                 "output_tokens_details": {"thinking_tokens": 200},
             }
         }
-        result = PassthroughStreamProcessor._extract_usage(chunk)
+        result = BaselineStreamProcessor._extract_usage(chunk)
         assert result is not None
         assert result["reasoning_tokens"] == 200
 
     @pytest.mark.asyncio
     async def test_extract_google_cache_and_reasoning(self):
-        from llm_rosetta.pipeline import PassthroughStreamProcessor
+        from llm_rosetta.pipeline import BaselineStreamProcessor
 
         chunk = {
             "usageMetadata": {
@@ -1057,7 +1057,7 @@ class TestPassthroughExtendedUsageExtraction:
                 "thoughtsTokenCount": 200,
             }
         }
-        result = PassthroughStreamProcessor._extract_usage(chunk)
+        result = BaselineStreamProcessor._extract_usage(chunk)
         assert result is not None
         assert result["cache_read_tokens"] == 300
         assert result["reasoning_tokens"] == 200

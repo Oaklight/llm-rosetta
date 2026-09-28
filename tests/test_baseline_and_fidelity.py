@@ -1,4 +1,4 @@
-"""Tests for ConversionPipeline passthrough mode and FidelityChecker."""
+"""Tests for ConversionPipeline baseline mode and FidelityChecker."""
 
 from __future__ import annotations
 
@@ -12,10 +12,8 @@ from llm_rosetta.pipeline import ConversionPipeline
 
 
 class TestPassthroughMode:
-    def test_same_format_passthrough_returns_body_identity(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", force_conversion=False
-        )
+    def test_same_format_baseline_returns_body_identity(self) -> None:
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
         body = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hi"}],
@@ -23,8 +21,8 @@ class TestPassthroughMode:
         result = pipeline.convert_request(body)
         assert result is body
 
-    def test_same_format_response_passthrough(self) -> None:
-        pipeline = ConversionPipeline("anthropic", "anthropic", force_conversion=False)
+    def test_same_format_response_baseline(self) -> None:
+        pipeline = ConversionPipeline("anthropic", "anthropic", baseline=True)
         body = {
             "model": "claude-sonnet-4",
             "messages": [{"role": "user", "content": "hi"}],
@@ -41,10 +39,8 @@ class TestPassthroughMode:
         result = pipeline.convert_response(response)
         assert result is response
 
-    def test_force_conversion_true_does_roundtrip(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", force_conversion=True
-        )
+    def test_baseline_false_does_roundtrip(self) -> None:
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=False)
         body = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hi"}],
@@ -55,9 +51,7 @@ class TestPassthroughMode:
         assert result["model"] == "gpt-4o"
 
     def test_different_format_always_converts(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "anthropic", force_conversion=False
-        )
+        pipeline = ConversionPipeline("openai_chat", "anthropic", baseline=True)
         body = {
             "model": "claude-sonnet-4",
             "messages": [{"role": "user", "content": "hi"}],
@@ -67,10 +61,8 @@ class TestPassthroughMode:
         assert "max_tokens" in result or "messages" in result
         assert result is not body
 
-    def test_passthrough_stream_processor(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", force_conversion=False
-        )
+    def test_baseline_stream_processor(self) -> None:
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -79,19 +71,15 @@ class TestPassthroughMode:
         result = processor.process_chunk(chunk)
         assert result == [chunk]
 
-    def test_passthrough_profile(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", force_conversion=False
-        )
+    def test_baseline_profile(self) -> None:
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
         assert "request_conversion_ms" in pipeline.profile
 
-    def test_passthrough_ir_request_empty(self) -> None:
-        pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", force_conversion=False
-        )
+    def test_baseline_ir_request_empty(self) -> None:
+        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -199,11 +187,11 @@ class TestFidelityCheckerFull:
 
 
 class TestFidelityIntegration:
-    def test_fidelity_check_runs_in_passthrough(self) -> None:
+    def test_fidelity_check_runs_in_baseline(self) -> None:
         pipeline = ConversionPipeline(
             "openai_chat",
             "openai_chat",
-            force_conversion=False,
+            baseline=True,
             fidelity_mode="critical",
         )
         body = {
@@ -218,26 +206,26 @@ class TestFidelityIntegration:
         pipeline = ConversionPipeline(
             "openai_chat",
             "openai_chat",
-            force_conversion=False,
+            baseline=True,
             fidelity_mode=None,
         )
         assert pipeline._fidelity is None
 
-    def test_fidelity_mode_only_on_passthrough(self) -> None:
+    def test_fidelity_mode_only_on_baseline(self) -> None:
         pipeline = ConversionPipeline(
             "openai_chat",
             "anthropic",
-            force_conversion=False,
+            baseline=True,
             fidelity_mode="critical",
         )
         # Different formats → not passthrough → no fidelity checker
         assert pipeline._fidelity is None
 
-    def test_fidelity_full_mode_in_passthrough(self) -> None:
+    def test_fidelity_full_mode_in_baseline(self) -> None:
         pipeline = ConversionPipeline(
             "openai_chat",
             "openai_chat",
-            force_conversion=False,
+            baseline=True,
             fidelity_mode="full",
         )
         body = {

@@ -684,7 +684,7 @@ class TestForcedResponsesStreamPipeline:
     @staticmethod
     def _run(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         pipeline = ConversionPipeline(
-            "openai_responses", "openai_responses", force_conversion=True
+            "openai_responses", "openai_responses", baseline=False
         )
         pipeline.convert_request(
             {"model": "gpt-test", "input": "hello", "stream": True}

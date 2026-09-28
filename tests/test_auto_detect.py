@@ -353,15 +353,15 @@ class TestConvert:
         result = convert(openai_body, "openai_chat")
         assert result == openai_body
 
-    def test_convert_same_provider_force_conversion(self):
-        """force_conversion=True normalises params even when source==target."""
+    def test_convert_same_provider_baseline_off(self):
+        """baseline=False normalises params even when source==target."""
         openai_body = {
             "messages": [{"role": "user", "content": "Hello"}],
             "model": "gpt-4o",
             "max_tokens": 256,
         }
 
-        result = convert(openai_body, "openai_chat", force_conversion=True)
+        result = convert(openai_body, "openai_chat", baseline=False)
 
         # max_tokens should be normalised to max_completion_tokens
         assert "max_completion_tokens" in result
@@ -393,7 +393,7 @@ class TestConvert:
             responses_body,
             "openai_responses",
             source_provider="openai_responses",
-            force_conversion=True,
+            baseline=False,
         )
 
         assert result["reasoning"] == {"effort": "xhigh"}
@@ -598,7 +598,7 @@ class TestConvertResponse:
         assert "choices" in openai_response
         assert openai_response["choices"][0]["message"]["content"] == "Hi there!"
 
-    def test_same_provider_passthrough(self):
+    def test_same_provider_baseline(self):
         """Same-provider response conversion returns body as-is."""
         from llm_rosetta import convert_response
 
@@ -621,8 +621,8 @@ class TestConvertResponse:
         )
         assert result == response
 
-    def test_force_conversion_same_provider(self):
-        """force_conversion=True triggers full pipeline even for same provider."""
+    def test_baseline_off_same_provider(self):
+        """baseline=False triggers full pipeline even for same provider."""
         from llm_rosetta import convert_response
 
         request = {
@@ -648,7 +648,7 @@ class TestConvertResponse:
             request,
             source_provider="openai_chat",
             target_provider="openai_chat",
-            force_conversion=True,
+            baseline=False,
         )
         assert "choices" in result
         assert result["choices"][0]["message"]["content"] == "hello"
@@ -731,7 +731,7 @@ class TestDualShimPipeline:
             unregister_shim("__test_dual_src__")
             unregister_shim("__test_dual_tgt__")
 
-    def test_passthrough_with_dual_shims(self):
+    def test_baseline_with_dual_shims(self):
         """Passthrough mode applies both source and target body transforms."""
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
@@ -756,7 +756,7 @@ class TestDualShimPipeline:
                 "openai_chat",
                 source_shim="__test_pass_src__",
                 target_shim="__test_pass_tgt__",
-                force_conversion=False,
+                baseline=True,
             )
             body = {
                 "model": "gpt-4",

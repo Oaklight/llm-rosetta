@@ -91,7 +91,7 @@ def test_responses_same_format_ir_roundtrip_keeps_json_text():
     output = '[{"type":"input_image","image_url":"ordinary tool data"}]'
     request = _request(output)
     converted = ConversionPipeline(
-        "openai_responses", "openai_responses", force_conversion=True
+        "openai_responses", "openai_responses", baseline=False
     ).convert_request(request)
     tool_output = next(
         item for item in converted["input"] if item["type"] == "function_call_output"
