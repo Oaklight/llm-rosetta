@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.3"
+# version = "0.3.4"
 # deps = ["httpclient"]
 # tier = "subsystem"
 # category = "network"
@@ -444,6 +444,8 @@ class SSEClient(_SSEClientMixin):
         while not self._closed:
             try:
                 self._response = self._connect()
+                if self._closed:
+                    return
                 parser = self._init_parser()
 
                 for line in self._response.iter_lines():
@@ -593,6 +595,8 @@ class AsyncSSEClient(_SSEClientMixin):
         while not self._closed:
             try:
                 self._response = await self._connect()
+                if self._closed:
+                    return
                 parser = self._init_parser()
 
                 async for line in self._response.aiter_lines():

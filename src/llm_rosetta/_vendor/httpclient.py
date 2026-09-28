@@ -3,7 +3,7 @@
 # deps = []
 # tier = "subsystem"
 # category = "network"
-# note = "Install/update via: https://zerodep.readthedocs.io/en/latest/guide/cli/"
+# note = "Install/update via `zerodep add httpclient`"
 # ///
 
 """Zero-dependency sync + async HTTP REST client.
