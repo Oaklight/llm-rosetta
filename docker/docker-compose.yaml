@@ -38,6 +38,7 @@ services:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    # Raise fd limit — the gateway holds many concurrent upstream connections
     ulimits:
       nofile:
         soft: 65536
