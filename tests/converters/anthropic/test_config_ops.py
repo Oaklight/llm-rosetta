@@ -209,12 +209,16 @@ class TestAnthropicConfigOps:
         assert result["output_config"]["effort"] == "low"
 
     def test_ir_reasoning_config_effort_with_budget(self):
-        """Test effort + budget_tokens combined."""
+        """Test effort + budget_tokens: adaptive drops budget_tokens.
+
+        Anthropic API rejects budget_tokens on adaptive thinking
+        ('thinking.adaptive.budget_tokens: Extra inputs are not permitted').
+        """
         result = AnthropicConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "medium", "budget_tokens": 4096})
         )
         assert result["thinking"]["type"] == "adaptive"
-        assert result["thinking"]["budget_tokens"] == 4096
+        assert "budget_tokens" not in result["thinking"]
         assert result["output_config"]["effort"] == "medium"
 
     def test_ir_reasoning_config_budget_only(self):

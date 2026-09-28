@@ -384,7 +384,7 @@ def _build_anthropic_thinking(
     """Build the Anthropic ``thinking`` dict for a given type."""
     if thinking_type != "enabled":
         obj: dict[str, Any] = {"type": thinking_type}
-        if budget_tokens is not None:
+        if budget_tokens is not None and thinking_type not in ("adaptive", "disabled"):
             obj["budget_tokens"] = budget_tokens
         return obj
 
