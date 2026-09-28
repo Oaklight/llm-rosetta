@@ -25,6 +25,24 @@ from ..base import BaseContentOps
 from ._constants import generate_reasoning_id
 
 
+def _extract_content_text(raw_content: Any) -> str:
+    """Extract text from a reasoning ``content`` field.
+
+    Handles both plain strings and DeepSeek-style typed item lists
+    (e.g. ``[{"type": "reasoning_text", "text": "..."}]``).
+    """
+    if isinstance(raw_content, str):
+        return raw_content
+    if isinstance(raw_content, list):
+        texts = [
+            c.get("text", "")
+            for c in raw_content
+            if isinstance(c, dict) and c.get("text")
+        ]
+        return "".join(texts)
+    return ""
+
+
 class OpenAIResponsesContentOps(BaseContentOps):
     """OpenAI Responses API content conversion operations.
 
@@ -337,12 +355,12 @@ class OpenAIResponsesContentOps(BaseContentOps):
         if isinstance(summary, list):
             metadata["responses_reasoning_summary"] = summary
 
-        # Open Responses spec: raw `content` field (distinct from `summary`)
+        # Open Responses spec: raw `content` field (distinct from `summary`).
         raw_content = provider_reasoning.get("content")
         if raw_content:
             metadata["responses_reasoning_content"] = raw_content
-            if not reasoning_content and isinstance(raw_content, str):
-                reasoning_content = raw_content
+            if not reasoning_content:
+                reasoning_content = _extract_content_text(raw_content)
 
         part = ReasoningPart(type="reasoning")
 

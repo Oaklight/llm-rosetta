@@ -349,8 +349,8 @@ class TestOpenAIResponsesContentOps:
         assert result["signature"] == "enc_sig_xyz"
         assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
 
-    def test_p_reasoning_to_ir_list_content_not_stringified(self):
-        """List content with empty summary stays structured, not stringified."""
+    def test_p_reasoning_to_ir_list_content_extracts_text(self):
+        """List content with reasoning_text items extracts text into IR."""
         raw_content = [{"type": "reasoning_text", "text": "raw"}]
         provider = {
             "type": "reasoning",
@@ -360,8 +360,59 @@ class TestOpenAIResponsesContentOps:
         }
         result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
-        assert result.get("reasoning", "") == ""
+        assert result["reasoning"] == "raw"
         assert result["provider_metadata"]["responses_reasoning_content"] == raw_content
+
+    def test_p_reasoning_to_ir_deepseek_reasoning_text(self):
+        """DeepSeek reasoning items with reasoning_text content are extracted."""
+        provider = {
+            "type": "reasoning",
+            "id": "06db1fb0-bcef-447d-88bb-b2a3aaad9f91",
+            "status": "completed",
+            "content": [
+                {
+                    "type": "reasoning_text",
+                    "text": "We need to answer simple. 2+2=4.",
+                }
+            ],
+            "summary": [],
+            "encrypted_content": "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0",
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result["reasoning"] == "We need to answer simple. 2+2=4."
+        assert result["signature"] == "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0"
+        assert (
+            result["provider_metadata"]["responses_reasoning_content"]
+            == provider["content"]
+        )
+
+    def test_p_reasoning_to_ir_multi_reasoning_text(self):
+        """Multiple reasoning_text items are concatenated."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_multi",
+            "summary": [],
+            "content": [
+                {"type": "reasoning_text", "text": "First thought. "},
+                {"type": "reasoning_text", "text": "Second thought."},
+            ],
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result["reasoning"] == "First thought. Second thought."
+
+    def test_p_reasoning_to_ir_list_content_no_text(self):
+        """List content with no text fields yields no reasoning text."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_empty",
+            "summary": [],
+            "content": [{"type": "other", "data": "something"}],
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result.get("reasoning", "") == ""
 
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
