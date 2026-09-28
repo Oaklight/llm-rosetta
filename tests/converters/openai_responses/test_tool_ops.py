@@ -157,6 +157,64 @@ class TestOpenAIResponsesToolOps:
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
 
+    def test_tool_definition_preserves_strict(self):
+        """Tool definitions preserve the strict field through round-trip."""
+        provider_tool = {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get weather",
+            "parameters": {
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+                "required": ["location"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        }
+        ir = cast(
+            ToolDefinition,
+            OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool),
+        )
+        assert ir["metadata"]["strict"] is True
+        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir)
+        assert restored["strict"] is True
+
+    def test_tool_definition_preserves_output_schema(self):
+        """Tool definitions preserve output_schema through round-trip."""
+        provider_tool = {
+            "type": "function",
+            "name": "get_weather",
+            "description": "Get weather",
+            "parameters": {"type": "object", "properties": {}},
+            "output_schema": {
+                "type": "object",
+                "properties": {"temp": {"type": "number"}},
+            },
+        }
+        ir = cast(
+            ToolDefinition,
+            OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool),
+        )
+        assert ir["metadata"]["output_schema"] == provider_tool["output_schema"]
+        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir)
+        assert restored["output_schema"] == provider_tool["output_schema"]
+
+    def test_tool_definition_strict_false_default(self):
+        """Tool definitions without strict metadata default to False."""
+        ir_tool = cast(
+            ToolDefinition,
+            {
+                "type": "function",
+                "name": "test",
+                "description": "",
+                "parameters": {},
+                "required_parameters": [],
+                "metadata": {},
+            },
+        )
+        provider = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        assert provider["strict"] is False
+
     # ==================== Tool Choice ====================
 
     def test_ir_tool_choice_none(self):

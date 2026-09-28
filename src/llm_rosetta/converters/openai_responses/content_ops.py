@@ -293,7 +293,7 @@ class OpenAIResponsesContentOps(BaseContentOps):
             item_id = generate_reasoning_id(response_id, reasoning_index)
         result["id"] = item_id
         if output_item:
-            result["status"] = "completed"
+            result["status"] = metadata.get("responses_reasoning_status", "completed")
 
         # Preserve an explicit structured summary, including an empty list.
         if "responses_reasoning_summary" in metadata:
@@ -352,6 +352,9 @@ class OpenAIResponsesContentOps(BaseContentOps):
         item_id = provider_reasoning.get("id")
         if item_id:
             metadata["responses_reasoning_id"] = item_id
+        reasoning_status = provider_reasoning.get("status")
+        if reasoning_status is not None:
+            metadata["responses_reasoning_status"] = reasoning_status
         if isinstance(summary, list):
             metadata["responses_reasoning_summary"] = summary
 

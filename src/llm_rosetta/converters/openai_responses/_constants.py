@@ -122,9 +122,13 @@ RESPONSES_PRESERVE_FIELDS: set[str] = {
     "user",
     "metadata",
     # Lifecycle metadata
+    "access_programs",
     "billing",
+    "content_filters",
     "error",
     "incomplete_details",
+    "moderation",
+    "tool_usage",
 }
 
 # Fields the Open Responses spec requires in every response resource.

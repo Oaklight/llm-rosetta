@@ -442,13 +442,17 @@ class OpenAIResponsesToolOps(BaseToolOps):
         parameters = ir_tool.get("parameters", {})
         if isinstance(parameters, dict):
             parameters = sanitize_schema(parameters)
-        result = {
+        metadata = ir_tool.get("metadata") or {}
+        result: dict[str, Any] = {
             "type": "function",
             "name": ir_tool["name"],
             "description": ir_tool.get("description", ""),
             "parameters": parameters,
-            "strict": False,
+            "strict": metadata.get("strict", False),
         }
+        output_schema = metadata.get("output_schema")
+        if output_schema is not None:
+            result["output_schema"] = output_schema
         return result
 
     @staticmethod
@@ -526,6 +530,12 @@ class OpenAIResponsesToolOps(BaseToolOps):
         fmt = provider_tool.get("format")
         if fmt:
             meta["format"] = fmt
+        strict = provider_tool.get("strict")
+        if strict is not None:
+            meta["strict"] = strict
+        output_schema = provider_tool.get("output_schema")
+        if output_schema is not None:
+            meta["output_schema"] = output_schema
         result["metadata"] = meta
         return cast(ToolDefinition, result)
 

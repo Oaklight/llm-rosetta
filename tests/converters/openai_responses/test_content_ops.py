@@ -414,6 +414,41 @@ class TestOpenAIResponsesContentOps:
         assert result is not None
         assert result.get("reasoning", "") == ""
 
+    def test_p_reasoning_to_ir_preserves_status(self):
+        """Reasoning item status is preserved in provider_metadata."""
+        provider = {
+            "type": "reasoning",
+            "id": "rs_ds",
+            "status": "completed",
+            "summary": [],
+            "content": [],
+            "encrypted_content": "enc-123",
+        }
+        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        assert result is not None
+        assert result["provider_metadata"]["responses_reasoning_status"] == "completed"
+
+    def test_reasoning_status_round_trip(self):
+        """Reasoning status survives IR→provider round-trip."""
+        provider_in = {
+            "type": "reasoning",
+            "id": "rs_status_rt",
+            "status": "in_progress",
+            "summary": [],
+        }
+        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider_in)
+        assert ir is not None
+        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        assert restored is not None
+        assert restored["status"] == "in_progress"
+
+    def test_reasoning_status_default_completed(self):
+        """Without preserved status, output items default to completed."""
+        ir = ReasoningPart(type="reasoning", reasoning="test")
+        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        assert restored is not None
+        assert restored["status"] == "completed"
+
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
         original = ReasoningPart(type="reasoning", reasoning="Step by step analysis")
