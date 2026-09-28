@@ -320,6 +320,29 @@ class TestPersistenceManagerRetention:
         assert await pm.count_error_entries() == 3
         await pm.close()
 
+    @pytest.mark.asyncio
+    async def test_prune_batching_large_excess(self, tmp_path):
+        """Large excess is pruned via batched deletion."""
+        pm = await PersistenceManager.create(str(tmp_path), success_max=100)
+        for batch in range(12):
+            entries = [_make_entry_dict(model=f"m-{batch}-{i}") for i in range(1000)]
+            await pm.insert_log_entries(entries)
+
+        assert await pm.count_success_entries() == 100
+        await pm.close()
+
+    @pytest.mark.asyncio
+    async def test_prune_idempotent(self, tmp_path):
+        """Calling _prune() when already under cap is a no-op."""
+        pm = await PersistenceManager.create(str(tmp_path), success_max=50)
+        entries = [_make_entry_dict(model=f"m-{i}") for i in range(30)]
+        await pm.insert_log_entries(entries)
+
+        assert await pm.count_success_entries() == 30
+        await pm._prune()
+        assert await pm.count_success_entries() == 30
+        await pm.close()
+
 
 class TestPersistenceManagerSizes:
     @pytest.mark.asyncio

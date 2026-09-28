@@ -40,6 +40,8 @@ DEFAULT_MAX_AGE_DAYS = 90
 DEFAULT_OPS_INFO_MAX = 10000
 DEFAULT_OPS_WARN_MAX = 5000
 
+_PRUNE_BATCH_SIZE = 5000
+
 
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
@@ -197,6 +199,8 @@ class PersistenceManager:
                 ON request_log(timestamp DESC);
             CREATE INDEX IF NOT EXISTS idx_rl_status
                 ON request_log(status_code);
+            CREATE INDEX IF NOT EXISTS idx_rl_success_ts
+                ON request_log(timestamp ASC) WHERE status_code < 400;
             CREATE TABLE IF NOT EXISTS metrics (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
@@ -791,23 +795,38 @@ class PersistenceManager:
 
     async def _prune_ops_log(self) -> None:
         """Remove oldest ops log entries beyond per-severity retention limits."""
-        await self._conn.execute(
-            "DELETE FROM ops_log "
-            "WHERE severity = 'info' AND id NOT IN ("
-            "    SELECT id FROM ops_log WHERE severity = 'info' "
-            "    ORDER BY timestamp DESC LIMIT ?"
-            ")",
-            (self._ops_info_max,),
-        )
-        await self._conn.execute(
-            "DELETE FROM ops_log "
-            "WHERE severity != 'info' AND id NOT IN ("
-            "    SELECT id FROM ops_log WHERE severity != 'info' "
-            "    ORDER BY timestamp DESC LIMIT ?"
-            ")",
-            (self._ops_warn_max,),
-        )
-        await self._conn.commit()
+        committed = False
+
+        info_excess = await self.count_ops_info_entries() - self._ops_info_max
+        if info_excess > 0:
+            await self._conn.execute(
+                "DELETE FROM ops_log "
+                "WHERE rowid IN ("
+                "    SELECT rowid FROM ops_log "
+                "    WHERE severity = 'info' "
+                "    ORDER BY timestamp ASC "
+                "    LIMIT ?"
+                ")",
+                (info_excess,),
+            )
+            committed = True
+
+        warn_excess = await self.count_ops_warn_entries() - self._ops_warn_max
+        if warn_excess > 0:
+            await self._conn.execute(
+                "DELETE FROM ops_log "
+                "WHERE rowid IN ("
+                "    SELECT rowid FROM ops_log "
+                "    WHERE severity != 'info' "
+                "    ORDER BY timestamp ASC "
+                "    LIMIT ?"
+                ")",
+                (warn_excess,),
+            )
+            committed = True
+
+        if committed:
+            await self._conn.commit()
 
     @classmethod
     def _ops_row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -1278,15 +1297,18 @@ class PersistenceManager:
         Also cleans up orphaned dump_bodies entries.
         """
         count = await self.count_error_dumps()
-        if count <= self._dump_max:
+        excess = count - self._dump_max
+        if excess <= 0:
             return
 
         await self._conn.execute(
-            "DELETE FROM error_dumps WHERE id NOT IN ("
-            "    SELECT id FROM error_dumps "
-            "    ORDER BY timestamp DESC LIMIT ?"
+            "DELETE FROM error_dumps "
+            "WHERE rowid IN ("
+            "    SELECT rowid FROM error_dumps "
+            "    ORDER BY timestamp ASC "
+            "    LIMIT ?"
             ")",
-            (self._dump_max,),
+            (excess,),
         )
         # Clean up orphaned bodies
         await self._conn.execute(
@@ -1326,16 +1348,37 @@ class PersistenceManager:
 
         Error rows (status_code >= 400) are not pruned by count — they
         are bounded by age-based cleanup only.
+
+        Deletes the oldest *excess* rows by rowid.  When the excess is
+        large (e.g. first run against a bloated table), deletion is
+        batched to avoid holding a long write-lock.
         """
-        await self._conn.execute(
-            "DELETE FROM request_log "
-            "WHERE status_code < 400 AND id NOT IN ("
-            "    SELECT id FROM request_log WHERE status_code < 400 "
-            "    ORDER BY timestamp DESC LIMIT ?"
-            ")",
-            (self._success_max,),
-        )
-        await self._conn.commit()
+        count = await self.count_success_entries()
+        excess = count - self._success_max
+        if excess <= 0:
+            return
+
+        was_large = excess > _PRUNE_BATCH_SIZE
+        while excess > 0:
+            batch = min(excess, _PRUNE_BATCH_SIZE)
+            await self._conn.execute(
+                "DELETE FROM request_log "
+                "WHERE rowid IN ("
+                "    SELECT rowid FROM request_log "
+                "    WHERE status_code < 400 "
+                "    ORDER BY timestamp ASC "
+                "    LIMIT ?"
+                ")",
+                (batch,),
+            )
+            await self._conn.commit()
+            excess -= batch
+
+        if was_large:
+            try:
+                await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass
 
     async def update_entry_profile(
         self, entry_id: str, profile_update: dict[str, Any]
