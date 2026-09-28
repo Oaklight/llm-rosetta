@@ -275,7 +275,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     api_key = body.get("api_key", "")
     base_url = body.get("base_url", "")
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -323,7 +323,7 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     """Remove a provider entry."""
     name = request.path_params["name"]
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -392,7 +392,7 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
     """Toggle a provider's enabled/disabled state."""
     name = request.path_params["name"]
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -424,7 +424,7 @@ async def toggle_model(request: Any, **kwargs: Any) -> Response:
     """Toggle a model's enabled/disabled state."""
     name = request.path_params["name"]
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -466,7 +466,7 @@ async def bulk_update_models(request: Any) -> Response:
             status_code=400,
         )
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -633,7 +633,7 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
 
     merged = False
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -699,7 +699,7 @@ async def delete_model(request: Any, **kwargs: Any) -> Response:
     """Remove a model routing entry."""
     name = request.path_params["name"]
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -814,7 +814,7 @@ async def remove_model_provider(request: Any, **kwargs: Any) -> Response:
     if not provider:
         return JSONResponse({"error": "'provider' is required"}, status_code=400)
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -894,7 +894,7 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
     if weight_err:
         return weight_err
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -999,7 +999,7 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
     if err:
         return err
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
@@ -1060,7 +1060,7 @@ async def reload_config(request: Any) -> Response:
     config_path = _get_config_path(request)
 
     try:
-        new_config = _reload_gateway_config(request, config_path)
+        new_config = await _reload_gateway_config(request, config_path)
     except Exception as exc:
         return JSONResponse({"error": f"Reload failed: {exc}"}, status_code=500)
 
@@ -1402,7 +1402,7 @@ async def bulk_add_models(request: Any) -> Response:
             status_code=400,
         )
 
-    with config_mutate(request) as ctx:
+    async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 

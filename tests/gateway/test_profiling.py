@@ -1,12 +1,15 @@
 """Tests for ProfilerState and profiling admin routes."""
 
+import pytest
+
 from llm_rosetta.gateway.admin.routes.profiling import ProfilerState
 
 
 class TestProfilerState:
     """Unit tests for the ProfilerState class."""
 
-    def test_initial_state(self):
+    @pytest.mark.asyncio
+    async def test_initial_state(self):
         state = ProfilerState()
         assert not state.enabled
         assert state.remaining == 0
@@ -16,7 +19,8 @@ class TestProfilerState:
         assert status["remaining"] == 0
         assert status["results_count"] == 0
 
-    def test_enable(self):
+    @pytest.mark.asyncio
+    async def test_enable(self):
         state = ProfilerState()
         result = state.enable(requests=3)
         assert state.enabled
@@ -24,12 +28,14 @@ class TestProfilerState:
         assert result["enabled"] is True
         assert result["remaining"] == 3
 
-    def test_enable_clamps_minimum(self):
+    @pytest.mark.asyncio
+    async def test_enable_clamps_minimum(self):
         state = ProfilerState()
         state.enable(requests=0)
         assert state.remaining == 1  # clamped to >= 1
 
-    def test_disable(self):
+    @pytest.mark.asyncio
+    async def test_disable(self):
         state = ProfilerState()
         state.enable(5)
         result = state.disable()
@@ -37,7 +43,8 @@ class TestProfilerState:
         assert state.remaining == 0
         assert result["enabled"] is False
 
-    def test_should_profile_decrements(self):
+    @pytest.mark.asyncio
+    async def test_should_profile_decrements(self):
         state = ProfilerState()
         state.enable(requests=2)
 
@@ -49,31 +56,36 @@ class TestProfilerState:
         assert state.remaining == 0
         assert not state.enabled  # auto-disabled
 
-    def test_should_profile_returns_false_when_disabled(self):
+    @pytest.mark.asyncio
+    async def test_should_profile_returns_false_when_disabled(self):
         state = ProfilerState()
         assert not state.should_profile()
 
-    def test_should_profile_auto_disables(self):
+    @pytest.mark.asyncio
+    async def test_should_profile_auto_disables(self):
         state = ProfilerState()
         state.enable(requests=1)
         assert state.should_profile()
         assert not state.enabled
         assert not state.should_profile()
 
-    def test_enable_with_tracing(self):
+    @pytest.mark.asyncio
+    async def test_enable_with_tracing(self):
         state = ProfilerState()
         result = state.enable(requests=3, tracing=True)
         assert state.tracing
         assert result["tracing"] is True
 
-    def test_disable_resets_tracing(self):
+    @pytest.mark.asyncio
+    async def test_disable_resets_tracing(self):
         state = ProfilerState()
         state.enable(5, tracing=True)
         result = state.disable()
         assert not state.tracing
         assert result["tracing"] is False
 
-    def test_store_result(self):
+    @pytest.mark.asyncio
+    async def test_store_result(self):
         state = ProfilerState()
 
         class MockProfiler:
@@ -103,7 +115,8 @@ class TestProfilerState:
         assert result["duration_ms"] == 150.3
         assert result["tracing"] is False
 
-    def test_store_result_caps_at_max(self):
+    @pytest.mark.asyncio
+    async def test_store_result_caps_at_max(self):
         state = ProfilerState(max_results=3)
 
         class MockProfiler:
@@ -123,7 +136,8 @@ class TestProfilerState:
         assert state.results[0]["model"] == "model-2"
         assert state.results[2]["model"] == "model-4"
 
-    def test_clear_results(self):
+    @pytest.mark.asyncio
+    async def test_clear_results(self):
         state = ProfilerState()
 
         class MockProfiler:
@@ -144,7 +158,8 @@ class TestProfilerState:
 class TestStreamingProfilerDefer:
     """Test that streaming responses defer profiler stop via background callback."""
 
-    def test_streaming_sets_background_and_clears_profiler(self):
+    @pytest.mark.asyncio
+    async def test_streaming_sets_background_and_clears_profiler(self):
         from unittest.mock import MagicMock
 
         from llm_rosetta._vendor.httpserver import StreamingResponse
@@ -190,7 +205,8 @@ class TestStreamingProfilerDefer:
         assert response.background is not None
         assert deep_profiler is None
 
-    def test_non_streaming_does_not_set_background(self):
+    @pytest.mark.asyncio
+    async def test_non_streaming_does_not_set_background(self):
         from llm_rosetta._vendor.httpserver import Response
 
         response = Response(body=b'{"result": "ok"}', content_type="application/json")
@@ -202,7 +218,8 @@ class TestStreamingProfilerDefer:
 class TestRequestLogProfile:
     """Test profile field in RequestLogEntry."""
 
-    def test_create_with_profile(self):
+    @pytest.mark.asyncio
+    async def test_create_with_profile(self):
         from llm_rosetta.gateway.admin.request_log import RequestLogEntry
 
         profile = {"request_conversion_ms": 2.45, "upstream_ms": 150.3}
@@ -217,7 +234,8 @@ class TestRequestLogProfile:
         )
         assert entry.profile == profile
 
-    def test_create_without_profile(self):
+    @pytest.mark.asyncio
+    async def test_create_without_profile(self):
         from llm_rosetta.gateway.admin.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
@@ -230,7 +248,8 @@ class TestRequestLogProfile:
         )
         assert entry.profile is None
 
-    def test_to_dict_includes_profile(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_includes_profile(self):
         from llm_rosetta.gateway.admin.request_log import RequestLogEntry
 
         profile = {"request_conversion_ms": 2.45}
@@ -246,7 +265,8 @@ class TestRequestLogProfile:
         d = entry.to_dict()
         assert d["profile"] == profile
 
-    def test_to_dict_omits_none_profile(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_omits_none_profile(self):
         from llm_rosetta.gateway.admin.request_log import RequestLogEntry
 
         entry = RequestLogEntry.create(
@@ -260,7 +280,8 @@ class TestRequestLogProfile:
         d = entry.to_dict()
         assert "profile" not in d
 
-    def test_update_profile_in_memory(self):
+    @pytest.mark.asyncio
+    async def test_update_profile_in_memory(self):
         from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
 
         log = RequestLog()
@@ -273,16 +294,16 @@ class TestRequestLogProfile:
             duration_ms=100.0,
             profile={"request_conversion_ms": 2.0},
         )
-        log.add(entry)
+        await log.add(entry)
 
         # Update with stream metrics
-        log.update_profile(
+        await log.update_profile(
             entry.id,
             {"stream_ttfb_ms": 120.5, "stream_complete": True},
         )
 
         # Verify merged
-        result = log.get_entry(entry.id)
+        result = await log.get_entry(entry.id)
         assert result is not None
         assert result["profile"]["request_conversion_ms"] == 2.0
         assert result["profile"]["stream_ttfb_ms"] == 120.5
@@ -292,12 +313,13 @@ class TestRequestLogProfile:
 class TestPersistenceProfile:
     """Test profile column in SQLite persistence."""
 
-    def test_insert_and_query_with_profile(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_insert_and_query_with_profile(self, tmp_path):
         from llm_rosetta.gateway.admin.persistence import PersistenceManager
 
-        pm = PersistenceManager(str(tmp_path))
+        pm = await PersistenceManager.create(str(tmp_path))
         profile = {"request_conversion_ms": 2.45, "upstream_ms": 150.3}
-        pm.insert_log_entries(
+        await pm.insert_log_entries(
             [
                 {
                     "id": "test-1",
@@ -313,16 +335,17 @@ class TestPersistenceProfile:
             ]
         )
 
-        entry = pm.get_log_entry("test-1")
+        entry = await pm.get_log_entry("test-1")
         assert entry is not None
         assert entry["profile"] == profile
-        pm.close()
+        await pm.close()
 
-    def test_insert_without_profile(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_insert_without_profile(self, tmp_path):
         from llm_rosetta.gateway.admin.persistence import PersistenceManager
 
-        pm = PersistenceManager(str(tmp_path))
-        pm.insert_log_entries(
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.insert_log_entries(
             [
                 {
                     "id": "test-2",
@@ -337,16 +360,17 @@ class TestPersistenceProfile:
             ]
         )
 
-        entry = pm.get_log_entry("test-2")
+        entry = await pm.get_log_entry("test-2")
         assert entry is not None
         assert "profile" not in entry  # omitted when None
-        pm.close()
+        await pm.close()
 
-    def test_update_entry_profile(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_update_entry_profile(self, tmp_path):
         from llm_rosetta.gateway.admin.persistence import PersistenceManager
 
-        pm = PersistenceManager(str(tmp_path))
-        pm.insert_log_entries(
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.insert_log_entries(
             [
                 {
                     "id": "test-3",
@@ -363,27 +387,29 @@ class TestPersistenceProfile:
         )
 
         # Update with stream metrics
-        pm.update_entry_profile(
+        await pm.update_entry_profile(
             "test-3",
             {"stream_ttfb_ms": 120.5, "stream_complete": True},
         )
 
-        entry = pm.get_log_entry("test-3")
+        entry = await pm.get_log_entry("test-3")
         assert entry is not None
         assert entry["profile"]["request_conversion_ms"] == 2.0
         assert entry["profile"]["stream_ttfb_ms"] == 120.5
         assert entry["profile"]["stream_complete"] is True
-        pm.close()
+        await pm.close()
 
-    def test_update_entry_profile_nonexistent(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_update_entry_profile_nonexistent(self, tmp_path):
         """Updating a non-existent entry is a no-op."""
         from llm_rosetta.gateway.admin.persistence import PersistenceManager
 
-        pm = PersistenceManager(str(tmp_path))
-        pm.update_entry_profile("nonexistent", {"foo": 1})
-        pm.close()
+        pm = await PersistenceManager.create(str(tmp_path))
+        await pm.update_entry_profile("nonexistent", {"foo": 1})
+        await pm.close()
 
-    def test_migration_adds_profile_column(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_migration_adds_profile_column(self, tmp_path):
         """Verify the profile column is added by migration."""
         import sqlite3
 
@@ -412,8 +438,8 @@ class TestPersistenceProfile:
         # PersistenceManager should add the profile column via migration
         from llm_rosetta.gateway.admin.persistence import PersistenceManager
 
-        pm = PersistenceManager(str(tmp_path))
-        cursor = pm._conn.execute("PRAGMA table_info(request_log)")
-        columns = {row[1] for row in cursor.fetchall()}
+        pm = await PersistenceManager.create(str(tmp_path))
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in await cursor.fetchall()}
         assert "profile" in columns
-        pm.close()
+        await pm.close()

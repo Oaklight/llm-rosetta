@@ -1,10 +1,13 @@
 """Tests for the admin panel RequestLog."""
 
+import pytest
+
 from llm_rosetta.gateway.admin.request_log import RequestLog, RequestLogEntry
 
 
 class TestRequestLogEntry:
-    def test_create(self):
+    @pytest.mark.asyncio
+    async def test_create(self):
         e = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -19,7 +22,8 @@ class TestRequestLogEntry:
         assert e.timestamp  # non-empty ISO timestamp
         assert e.error_detail is None
 
-    def test_to_dict(self):
+    @pytest.mark.asyncio
+    async def test_to_dict(self):
         e = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -54,19 +58,21 @@ class TestRequestLog:
             api_key_label=api_key_label,
         )
 
-    def test_add_and_get(self):
+    @pytest.mark.asyncio
+    async def test_add_and_get(self):
         log = RequestLog(max_entries=100)
-        log.add(self._make_entry())
-        entries, total = log.get_entries()
+        await log.add(self._make_entry())
+        entries, total = await log.get_entries()
         assert total == 1
         assert len(entries) == 1
 
-    def test_max_entries_eviction(self):
+    @pytest.mark.asyncio
+    async def test_max_entries_eviction(self):
         log = RequestLog(max_entries=3)
         for i in range(5):
-            log.add(self._make_entry(model=f"model-{i}"))
+            await log.add(self._make_entry(model=f"model-{i}"))
         assert len(log) == 3
-        entries, total = log.get_entries(limit=10)
+        entries, total = await log.get_entries(limit=10)
         assert total == 3
         # Should have models 2, 3, 4 (oldest evicted)
         models = [e["model"] for e in entries]
@@ -74,81 +80,90 @@ class TestRequestLog:
         assert "model-1" not in models
         assert "model-4" in models
 
-    def test_filter_by_model(self):
+    @pytest.mark.asyncio
+    async def test_filter_by_model(self):
         log = RequestLog()
-        log.add(self._make_entry(model="gpt-4o"))
-        log.add(self._make_entry(model="claude"))
-        log.add(self._make_entry(model="gpt-4o"))
-        entries, total = log.get_entries(model="gpt-4o")
+        await log.add(self._make_entry(model="gpt-4o"))
+        await log.add(self._make_entry(model="claude"))
+        await log.add(self._make_entry(model="gpt-4o"))
+        entries, total = await log.get_entries(model="gpt-4o")
         assert total == 2
         assert all(e["model"] == "gpt-4o" for e in entries)
 
-    def test_filter_by_provider(self):
+    @pytest.mark.asyncio
+    async def test_filter_by_provider(self):
         log = RequestLog()
-        log.add(self._make_entry(provider="openai_chat"))
-        log.add(self._make_entry(provider="anthropic"))
-        entries, total = log.get_entries(provider="anthropic")
+        await log.add(self._make_entry(provider="openai_chat"))
+        await log.add(self._make_entry(provider="anthropic"))
+        entries, total = await log.get_entries(provider="anthropic")
         assert total == 1
         assert entries[0]["target_provider"] == "anthropic"
 
-    def test_filter_by_status(self):
+    @pytest.mark.asyncio
+    async def test_filter_by_status(self):
         log = RequestLog()
-        log.add(self._make_entry(status=200))
-        log.add(self._make_entry(status=500))
-        log.add(self._make_entry(status=404))
+        await log.add(self._make_entry(status=200))
+        await log.add(self._make_entry(status=500))
+        await log.add(self._make_entry(status=404))
 
-        ok_entries, ok_total = log.get_entries(status="ok")
+        ok_entries, ok_total = await log.get_entries(status="ok")
         assert ok_total == 1
 
-        err_entries, err_total = log.get_entries(status="error")
+        err_entries, err_total = await log.get_entries(status="error")
         assert err_total == 2
 
-    def test_pagination(self):
+    @pytest.mark.asyncio
+    async def test_pagination(self):
         log = RequestLog()
         for i in range(10):
-            log.add(self._make_entry(model=f"m-{i}"))
+            await log.add(self._make_entry(model=f"m-{i}"))
 
-        entries, total = log.get_entries(limit=3, offset=0)
+        entries, total = await log.get_entries(limit=3, offset=0)
         assert total == 10
         assert len(entries) == 3
 
-        entries2, _ = log.get_entries(limit=3, offset=3)
+        entries2, _ = await log.get_entries(limit=3, offset=3)
         assert len(entries2) == 3
         # Different entries
         assert entries[0]["id"] != entries2[0]["id"]
 
-    def test_newest_first(self):
+    @pytest.mark.asyncio
+    async def test_newest_first(self):
         log = RequestLog()
-        log.add(self._make_entry(model="first"))
-        log.add(self._make_entry(model="second"))
-        entries, _ = log.get_entries()
+        await log.add(self._make_entry(model="first"))
+        await log.add(self._make_entry(model="second"))
+        entries, _ = await log.get_entries()
         assert entries[0]["model"] == "second"
         assert entries[1]["model"] == "first"
 
-    def test_get_entry_by_id(self):
+    @pytest.mark.asyncio
+    async def test_get_entry_by_id(self):
         log = RequestLog()
         e = self._make_entry()
-        log.add(e)
-        found = log.get_entry(e.id)
+        await log.add(e)
+        found = await log.get_entry(e.id)
         assert found is not None
         assert found["id"] == e.id
 
-    def test_get_entry_not_found(self):
+    @pytest.mark.asyncio
+    async def test_get_entry_not_found(self):
         log = RequestLog()
-        assert log.get_entry("nonexistent") is None
+        assert await log.get_entry("nonexistent") is None
 
-    def test_get_api_key_labels(self):
+    @pytest.mark.asyncio
+    async def test_get_api_key_labels(self):
         log = RequestLog()
-        log.add(self._make_entry(api_key_label="bob"))
-        log.add(self._make_entry(api_key_label="alice"))
-        log.add(self._make_entry(api_key_label="bob"))
-        log.add(self._make_entry())
-        assert log.get_api_key_labels() == ["alice", "bob"]
+        await log.add(self._make_entry(api_key_label="bob"))
+        await log.add(self._make_entry(api_key_label="alice"))
+        await log.add(self._make_entry(api_key_label="bob"))
+        await log.add(self._make_entry())
+        assert await log.get_api_key_labels() == ["alice", "bob"]
 
-    def test_clear(self):
+    @pytest.mark.asyncio
+    async def test_clear(self):
         log = RequestLog()
-        log.add(self._make_entry())
-        log.add(self._make_entry())
+        await log.add(self._make_entry())
+        await log.add(self._make_entry())
         assert len(log) == 2
-        log.clear()
+        await log.clear()
         assert len(log) == 0

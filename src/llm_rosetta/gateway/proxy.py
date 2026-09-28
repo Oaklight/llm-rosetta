@@ -72,7 +72,7 @@ logger = get_logger()
 # ---------------------------------------------------------------------------
 
 
-def _upstream_error_passthrough(
+async def _upstream_error_passthrough(
     resp_status: int,
     resp_error_text: str,
     resp_raw_content: str | bytes,
@@ -96,7 +96,7 @@ def _upstream_error_passthrough(
         endpoint=str(route.target_provider),
         is_streaming=is_streaming,
     )
-    dump_error(
+    await dump_error(
         persistence,
         request_body=body,
         response_text=resp_error_text,
@@ -133,7 +133,7 @@ def _upstream_error_passthrough(
     )
 
 
-def _connection_error_response(
+async def _connection_error_response(
     exc: UpstreamConnectionError,
     *,
     body: dict[str, Any],
@@ -147,7 +147,7 @@ def _connection_error_response(
     error_phase: str = "upstream",
 ) -> Response:
     """Build a 502 response for a connection-level upstream failure."""
-    dump_error(
+    await dump_error(
         persistence,
         request_body=body,
         response_text=str(exc),
@@ -232,7 +232,7 @@ def _check_soft_errors(
     return None
 
 
-def _soft_error_response(
+async def _soft_error_response(
     route: ResolvedRoute,
     resp_body: Any,
     body: dict[str, Any],
@@ -249,7 +249,7 @@ def _soft_error_response(
     if matched is None:
         return None
     logger.warning("Soft-error detected in upstream 200 response: %s", matched.pattern)
-    return _upstream_error_passthrough(
+    return await _upstream_error_passthrough(
         matched.status_code,
         matched.message,
         json.dumps(resp_body).encode() if resp_body else b"",
@@ -266,7 +266,7 @@ def _soft_error_response(
     )
 
 
-def _detect_stream_chunk_error(
+async def _detect_stream_chunk_error(
     chunk: dict[str, Any],
     *,
     soft_error_patterns: tuple[SoftErrorPattern, ...],
@@ -299,7 +299,7 @@ def _detect_stream_chunk_error(
         return None
 
     _dc = dump_ctx or DumpContext()
-    dump_error(
+    await dump_error(
         _dc.persistence,
         request_body=_dc.request_body,
         response_text=json.dumps(chunk)[:2000],
@@ -603,7 +603,7 @@ async def handle_non_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        dump_error(
+        await dump_error(
             persistence,
             request_body=body,
             response_text=str(exc),
@@ -655,7 +655,7 @@ async def handle_non_streaming(
         except UpstreamConnectionError as exc:
             profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
             return (
-                _connection_error_response(
+                await _connection_error_response(
                     exc,
                     body=body,
                     target_body=target_body,
@@ -691,7 +691,7 @@ async def handle_non_streaming(
     # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
     # with an error embedded in the body, e.g. Argo auth warnings).
     _err = (
-        _upstream_error_passthrough(
+        await _upstream_error_passthrough(
             resp.status_code,
             resp.error_text,
             resp.raw_content,
@@ -706,7 +706,7 @@ async def handle_non_streaming(
             capture_state=capture_state,
         )
         if resp.is_error
-        else _soft_error_response(
+        else await _soft_error_response(
             route,
             resp.body,
             body,
@@ -741,7 +741,7 @@ async def handle_non_streaming(
         source_response = pipeline.convert_response(resp.body, on_ir_ready=_capture_ir)
     except ConversionError as exc:
         profile.update(pipeline.profile)
-        dump_error(
+        await dump_error(
             persistence,
             request_body=body,
             response_text=str(exc),
@@ -832,7 +832,7 @@ def _terminal_error_sse(
         return []
 
 
-def _write_back_stream_usage(
+async def _write_back_stream_usage(
     processor: Any,
     entry_id: str | None,
     request_log: Any | None,
@@ -855,7 +855,7 @@ def _write_back_stream_usage(
     if total is None and inp is not None:
         total = (inp or 0) + (outp or 0) + (cache_read or 0) + (cache_creation or 0)
     try:
-        request_log.update_usage(
+        await request_log.update_usage(
             entry_id,
             inp,
             outp,
@@ -921,7 +921,7 @@ async def _stream_event_generator(
                 if upstream_chunks is not None:
                     upstream_chunks.append(chunk)
 
-                stream_error = _detect_stream_chunk_error(
+                stream_error = await _detect_stream_chunk_error(
                     chunk,
                     soft_error_patterns=soft_error_patterns,
                     stream_status=getattr(stream, "status_code", 200),
@@ -972,11 +972,11 @@ async def _stream_event_generator(
             if stream_error is not None:
                 stream_profile["stream_error"] = stream_error[:500]
             try:
-                request_log.update_profile(entry_id, stream_profile)
+                await request_log.update_profile(entry_id, stream_profile)
             except Exception:
                 logger.debug("Failed to write stream profile for %s", entry_id)
 
-            _write_back_stream_usage(
+            await _write_back_stream_usage(
                 processor,
                 entry_id,
                 request_log,
@@ -1148,7 +1148,7 @@ async def handle_streaming(
             body, on_ir_ready=store.inject_into_request
         )
     except ConversionError as exc:
-        dump_error(
+        await dump_error(
             persistence,
             request_body=body,
             response_text=str(exc),
@@ -1218,7 +1218,7 @@ async def handle_streaming(
                 (time.perf_counter() - t_connect) * 1000, 2
             )
             return (
-                _connection_error_response(
+                await _connection_error_response(
                     exc,
                     body=body,
                     target_body=target_body,
@@ -1266,7 +1266,7 @@ async def handle_streaming(
     # error_text; sanitize_upstream_error() accepts str | bytes.
     if stream_error_text is not None:
         return (
-            _upstream_error_passthrough(
+            await _upstream_error_passthrough(
                 stream_error_code,
                 stream_error_text,
                 stream_error_text,

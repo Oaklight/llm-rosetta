@@ -17,7 +17,7 @@ def _get_keystore(request: Any) -> KeyStore:
     return ks
 
 
-def _log_key_event(
+async def _log_key_event(
     request: Any, event_type: str, message: str, details: dict[str, Any]
 ) -> None:
     """Record an API key operation in the ops log."""
@@ -30,7 +30,7 @@ def _log_key_event(
         SOURCE_KEYS,
     )
 
-    ops_log.add(
+    await ops_log.add(
         OpsLogEntry.create(
             event_type=event_type,
             severity=SEVERITY_INFO,
@@ -74,7 +74,7 @@ async def create_api_key(request: Any) -> Response:
     created_entry["key"] = raw_key
     from llm_rosetta.observability.ops_log import EVENT_KEY_CREATE
 
-    _log_key_event(
+    await _log_key_event(
         request,
         EVENT_KEY_CREATE,
         f"API key created: {label or '(no label)'}",
@@ -106,7 +106,7 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     from llm_rosetta.observability.ops_log import EVENT_KEY_UPDATE
 
     changed = [k for k in ("label", "allowed_shims") if body.get(k) is not None]
-    _log_key_event(
+    await _log_key_event(
         request,
         EVENT_KEY_UPDATE,
         f"API key updated: {key_id}",
@@ -129,7 +129,7 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
 
     from llm_rosetta.observability.ops_log import EVENT_KEY_DELETE
 
-    _log_key_event(
+    await _log_key_event(
         request,
         EVENT_KEY_DELETE,
         f"API key deleted: {label or key_id}",
@@ -153,7 +153,7 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
 
     from llm_rosetta.observability.ops_log import EVENT_KEY_ROTATE
 
-    _log_key_event(
+    await _log_key_event(
         request,
         EVENT_KEY_ROTATE,
         f"API key rotated: {label or key_id}",

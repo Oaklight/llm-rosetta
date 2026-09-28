@@ -143,9 +143,10 @@ def _match_status(status_code: int, status_filter: str) -> bool:
 class RequestLog:
     """Proxy request log with optional SQLite persistence.
 
-    When *persistence* is provided, all operations delegate to SQLite.
-    Otherwise falls back to an in-memory :class:`collections.deque`
-    ring buffer (used when no config path is available).
+    When *persistence* is provided, all operations delegate to SQLite
+    (and are ``async``).  Otherwise falls back to an in-memory
+    :class:`collections.deque` ring buffer (used when no config path is
+    available).
     """
 
     def __init__(
@@ -158,15 +159,15 @@ class RequestLog:
         self._entries: deque[RequestLogEntry] = deque(maxlen=max_entries)
         self._pending: list[RequestLogEntry] = []
 
-    def add(self, entry: RequestLogEntry) -> None:
+    async def add(self, entry: RequestLogEntry) -> None:
         """Record a proxy request."""
         if self._persistence is not None:
-            self._persistence.insert_log_entries([entry.to_dict()])
+            await self._persistence.insert_log_entries([entry.to_dict()])
         else:
             self._entries.append(entry)
             self._pending.append(entry)
 
-    def get_entries(
+    async def get_entries(
         self,
         *,
         limit: int = 50,
@@ -188,7 +189,7 @@ class RequestLog:
             api_key_label: Filter by API key label (exact match).
         """
         if self._persistence is not None:
-            return self._persistence.query_log_entries(
+            return await self._persistence.query_log_entries(
                 limit=limit,
                 offset=offset,
                 model=model,
@@ -222,19 +223,19 @@ class RequestLog:
         page = filtered[offset : offset + limit]
         return [e.to_dict() for e in page], total
 
-    def get_entry(self, entry_id: str) -> dict[str, Any] | None:
+    async def get_entry(self, entry_id: str) -> dict[str, Any] | None:
         """Return a single entry by id, or ``None``."""
         if self._persistence is not None:
-            return self._persistence.get_log_entry(entry_id)
+            return await self._persistence.get_log_entry(entry_id)
         for e in self._entries:
             if e.id == entry_id:
                 return e.to_dict()
         return None
 
-    def get_api_key_labels(self) -> list[str]:
+    async def get_api_key_labels(self) -> list[str]:
         """Return distinct API key labels seen in request logs."""
         if self._persistence is not None:
-            return self._persistence.get_api_key_labels()
+            return await self._persistence.get_api_key_labels()
         return sorted({e.api_key_label for e in self._entries if e.api_key_label})
 
     def load_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -258,7 +259,9 @@ class RequestLog:
         self._pending.clear()
         return entries
 
-    def update_profile(self, entry_id: str, profile_update: dict[str, Any]) -> None:
+    async def update_profile(
+        self, entry_id: str, profile_update: dict[str, Any]
+    ) -> None:
         """Merge additional profile data into an existing entry.
 
         Used by the streaming path to write back stream metrics
@@ -270,7 +273,7 @@ class RequestLog:
                 ``{"stream_ttfb_ms": 120.5, "stream_complete": True}``).
         """
         if self._persistence is not None:
-            self._persistence.update_entry_profile(entry_id, profile_update)
+            await self._persistence.update_entry_profile(entry_id, profile_update)
         else:
             # In-memory: find and rebuild the frozen entry
             for i, entry in enumerate(self._entries):
@@ -279,7 +282,7 @@ class RequestLog:
                     self._entries[i] = replace(entry, profile=merged)
                     break
 
-    def update_usage(
+    async def update_usage(
         self,
         entry_id: str,
         input_tokens: int | None,
@@ -295,7 +298,7 @@ class RequestLog:
         final stream chunk.
         """
         if self._persistence is not None:
-            self._persistence.update_entry_usage(
+            await self._persistence.update_entry_usage(
                 entry_id,
                 input_tokens,
                 output_tokens,
@@ -318,14 +321,32 @@ class RequestLog:
                     )
                     break
 
-    def clear(self) -> None:
+    async def clear(self) -> None:
         """Remove all entries."""
         if self._persistence is not None:
-            self._persistence.clear_log()
+            await self._persistence.clear_log()
         else:
             self._entries.clear()
 
-    def __len__(self) -> int:
+    async def update_log_settings(self, **kwargs: Any) -> None:
+        """Update log retention settings on the underlying persistence."""
         if self._persistence is not None:
-            return self._persistence.count_log_entries()
+            for key, val in kwargs.items():
+                if hasattr(self._persistence, key):
+                    setattr(self._persistence, key, val)
+
+    async def __aenter__(self) -> RequestLog:
+        return self
+
+    async def __aexit__(self, *args: Any) -> None:
+        pass
+
+    def __len__(self) -> int:
+        # This remains sync for backward compat — only used for in-memory mode
+        # or when the count is already cached. For async-accurate count,
+        # use count_log_entries on persistence directly.
+        if self._persistence is not None:
+            # Cannot call async from sync; return 0 as a sentinel.
+            # Callers needing accurate counts should use persistence directly.
+            return 0
         return len(self._entries)

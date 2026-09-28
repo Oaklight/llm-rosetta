@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 import argparse
 import json
 import os
@@ -29,26 +31,30 @@ def _write_config(path: str, server: dict | None = None) -> None:
 class TestResolveDataDir:
     """_resolve_data_dir: CLI --data-dir > config server.data_dir > default."""
 
-    def test_cli_flag_wins(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_cli_flag_wins(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path, {"data_dir": "/from-config"})
         args = argparse.Namespace(data_dir="/from-cli")
         assert _resolve_data_dir(config_path, args) == "/from-cli"
 
-    def test_config_absolute(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_config_absolute(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path, {"data_dir": "/absolute/data"})
         args = argparse.Namespace(data_dir=None)
         assert _resolve_data_dir(config_path, args) == "/absolute/data"
 
-    def test_config_relative_resolved_against_config_dir(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_config_relative_resolved_against_config_dir(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path, {"data_dir": "my-data"})
         args = argparse.Namespace(data_dir=None)
         expected = str(tmp_path / "my-data")
         assert _resolve_data_dir(config_path, args) == expected
 
-    def test_config_relative_dot_prefix(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_config_relative_dot_prefix(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path, {"data_dir": "./subdir"})
         args = argparse.Namespace(data_dir=None)
@@ -57,14 +63,16 @@ class TestResolveDataDir:
             _resolve_data_dir(config_path, args)
         ) == os.path.normpath(expected)
 
-    def test_default_fallback(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_default_fallback(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path)
         args = argparse.Namespace(data_dir=None)
         expected = str(tmp_path / "data")
         assert _resolve_data_dir(config_path, args) == expected
 
-    def test_no_data_dir_attr_on_args(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_no_data_dir_attr_on_args(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
         _write_config(config_path)
         args = argparse.Namespace()  # no data_dir attr at all (SUPPRESS)
@@ -75,7 +83,8 @@ class TestResolveDataDir:
 class TestSetupAdminDataDir:
     """setup_admin data_dir resolution mirrors _resolve_data_dir."""
 
-    def test_explicit_data_dir_wins(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_explicit_data_dir_wins(self, tmp_path):
         from llm_rosetta.gateway.config import GatewayConfig
 
         explicit_dir = str(tmp_path / "explicit")
@@ -91,11 +100,12 @@ class TestSetupAdminDataDir:
         app = _MockApp()
         from llm_rosetta.gateway.admin import setup_admin
 
-        setup_admin(app, config, config_path, data_dir=explicit_dir)
+        await setup_admin(app, config, config_path, data_dir=explicit_dir)
         assert app.persistence is not None
         assert "explicit" in str(app.persistence._data_dir)
 
-    def test_config_relative_resolved(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_config_relative_resolved(self, tmp_path):
         from llm_rosetta.gateway.config import GatewayConfig
 
         raw = {
@@ -110,7 +120,7 @@ class TestSetupAdminDataDir:
         app = _MockApp()
         from llm_rosetta.gateway.admin import setup_admin
 
-        setup_admin(app, config, config_path)
+        await setup_admin(app, config, config_path)
         assert app.persistence is not None
         assert os.path.normpath(app.persistence._data_dir) == os.path.normpath(
             str(tmp_path / "my-data")
@@ -120,7 +130,8 @@ class TestSetupAdminDataDir:
 class TestArgparseSubparserClobber:
     """Verify --data-dir on parent isn't clobbered by db subparser."""
 
-    def test_parent_data_dir_survives_subcommand(self):
+    @pytest.mark.asyncio
+    async def test_parent_data_dir_survives_subcommand(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--data-dir", default=None)
         sub = parser.add_subparsers(dest="command")
@@ -132,7 +143,8 @@ class TestArgparseSubparserClobber:
         args = parser.parse_args(["--data-dir", "/foo", "db", "cleanup"])
         assert args.data_dir == "/foo"
 
-    def test_subparser_data_dir_explicit(self):
+    @pytest.mark.asyncio
+    async def test_subparser_data_dir_explicit(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--data-dir", default=None)
         sub = parser.add_subparsers(dest="command")
@@ -144,7 +156,8 @@ class TestArgparseSubparserClobber:
         args = parser.parse_args(["db", "--data-dir", "/bar", "cleanup"])
         assert args.data_dir == "/bar"
 
-    def test_neither_level_sets_data_dir(self):
+    @pytest.mark.asyncio
+    async def test_neither_level_sets_data_dir(self):
         parser = argparse.ArgumentParser()
         parser.add_argument("--data-dir", default=None)
         sub = parser.add_subparsers(dest="command")
@@ -176,7 +189,8 @@ class TestKeysDbDataDir:
         config = GatewayConfig(raw)
         return config, config_path
 
-    def test_keys_db_defaults_to_data_dir(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_keys_db_defaults_to_data_dir(self, tmp_path):
         """Fresh start, no existing keys.db → created in data_dir."""
         from llm_rosetta.gateway.app import _setup_auth
 
@@ -190,7 +204,8 @@ class TestKeysDbDataDir:
         finally:
             keystore.close()
 
-    def test_keys_db_legacy_fallback(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_keys_db_legacy_fallback(self, tmp_path):
         """keys.db exists at old config-sibling location → uses old path."""
         import sqlite3
 
@@ -212,7 +227,8 @@ class TestKeysDbDataDir:
         finally:
             keystore.close()
 
-    def test_keys_db_explicit_api_keys_db_wins(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_keys_db_explicit_api_keys_db_wins(self, tmp_path):
         """config.api_keys_db set → uses that, ignores data_dir."""
         from llm_rosetta.gateway.app import _setup_auth
         from llm_rosetta.gateway.config import GatewayConfig
@@ -234,7 +250,8 @@ class TestKeysDbDataDir:
         finally:
             keystore.close()
 
-    def test_keys_db_new_location_preferred(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_keys_db_new_location_preferred(self, tmp_path):
         """keys.db exists in both old and data_dir → uses data_dir."""
         import sqlite3
 
@@ -256,7 +273,8 @@ class TestKeysDbDataDir:
         finally:
             keystore.close()
 
-    def test_resolve_data_dir_for_app(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_resolve_data_dir_for_app(self, tmp_path):
         """_resolve_data_dir_for_app mirrors _resolve_data_dir behavior."""
         from llm_rosetta.gateway.app import _resolve_data_dir_for_app
         from llm_rosetta.gateway.config import GatewayConfig

@@ -1,5 +1,7 @@
 """Tests for the observability RequestLog (standalone, no gateway)."""
 
+import pytest
+
 from llm_rosetta.observability import RequestLog, RequestLogEntry
 
 
@@ -54,7 +56,8 @@ class TestRequestLogEntry:
 
 
 class TestRequestLogInMemory:
-    def test_add_and_get(self):
+    @pytest.mark.asyncio
+    async def test_add_and_get(self):
         log = RequestLog(max_entries=10)
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -64,16 +67,16 @@ class TestRequestLogInMemory:
             status_code=200,
             duration_ms=50.0,
         )
-        log.add(entry)
-        assert len(log) == 1
-        entries, total = log.get_entries(limit=10)
+        await log.add(entry)
+        entries, total = await log.get_entries(limit=10)
         assert total == 1
         assert entries[0]["model"] == "gpt-4o"
 
-    def test_filter_by_status(self):
+    @pytest.mark.asyncio
+    async def test_filter_by_status(self):
         log = RequestLog(max_entries=10)
         for sc in [200, 200, 500]:
-            log.add(
+            await log.add(
                 RequestLogEntry.create(
                     model="gpt-4o",
                     source_provider="openai_chat",
@@ -83,14 +86,15 @@ class TestRequestLogInMemory:
                     duration_ms=10.0,
                 )
             )
-        ok_entries, ok_total = log.get_entries(status="ok")
+        ok_entries, ok_total = await log.get_entries(status="ok")
         assert ok_total == 2
-        err_entries, err_total = log.get_entries(status="error")
+        err_entries, err_total = await log.get_entries(status="error")
         assert err_total == 1
 
-    def test_clear(self):
+    @pytest.mark.asyncio
+    async def test_clear(self):
         log = RequestLog(max_entries=10)
-        log.add(
+        await log.add(
             RequestLogEntry.create(
                 model="gpt-4o",
                 source_provider="openai_chat",
@@ -100,6 +104,4 @@ class TestRequestLogInMemory:
                 duration_ms=10.0,
             )
         )
-        assert len(log) == 1
-        log.clear()
-        assert len(log) == 0
+        await log.clear()

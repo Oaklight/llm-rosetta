@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import time
+
+import pytest
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import State
@@ -145,7 +147,8 @@ class TestOnResponseStarted:
 
 
 class TestOnResponseCompleted:
-    def test_writes_ttfb_to_request_log(self):
+    @pytest.mark.asyncio
+    async def test_writes_ttfb_to_request_log(self):
         request_log = RequestLog()
         app = FakeApp(request_log=request_log)
         capture = _build_hooks()
@@ -161,16 +164,16 @@ class TestOnResponseCompleted:
             status_code=200,
             duration_ms=100.0,
         )
-        request_log.add(entry)
+        await request_log.add(entry)
 
         req = FakeRequest(app=app)
         req.state.ttfb_ms = 42.5  # ty: ignore[unresolved-attribute]
         req.state.log_entry_id = entry.id  # ty: ignore[unresolved-attribute]
         resp = FakeResponse()
 
-        _run(handler(req, resp))
+        await handler(req, resp)
 
-        result = request_log.get_entry(entry.id)
+        result = await request_log.get_entry(entry.id)
         assert result is not None
         assert result["profile"]["ttfb_ms"] == 42.5
 
@@ -219,7 +222,8 @@ class TestOnClientDisconnect:
         _run(run())
         assert metrics.total_client_disconnects == 1
 
-    def test_marks_entry_as_disconnected(self):
+    @pytest.mark.asyncio
+    async def test_marks_entry_as_disconnected(self):
         request_log = RequestLog()
         metrics = MetricsCollector()
         app = FakeApp(metrics=metrics, request_log=request_log)
@@ -236,7 +240,7 @@ class TestOnClientDisconnect:
             status_code=200,
             duration_ms=500.0,
         )
-        request_log.add(entry)
+        await request_log.add(entry)
 
         req = FakeRequest(app=app)
         req.state.log_entry_id = entry.id  # ty: ignore[unresolved-attribute]
@@ -255,9 +259,9 @@ class TestOnClientDisconnect:
             finally:
                 request_context_var.reset(tok)
 
-        _run(run())
+        await run()
 
-        result = request_log.get_entry(entry.id)
+        result = await request_log.get_entry(entry.id)
         assert result is not None
         assert result["profile"]["client_disconnected"] is True
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
+import pytest
+
 from unittest.mock import MagicMock
 
 from llm_rosetta.gateway.config import GatewayConfig
@@ -32,56 +33,63 @@ def _find_root_get_route(app):
 
 
 class TestRootRedirectConfig:
-    def test_default_none(self):
+    @pytest.mark.asyncio
+    async def test_default_none(self):
         cfg = GatewayConfig(_minimal_raw())
         assert cfg.root_redirect is None
 
-    def test_set_to_admin(self):
+    @pytest.mark.asyncio
+    async def test_set_to_admin(self):
         cfg = GatewayConfig(_minimal_raw(root_redirect="/admin"))
         assert cfg.root_redirect == "/admin"
 
-    def test_set_to_custom_path(self):
+    @pytest.mark.asyncio
+    async def test_set_to_custom_path(self):
         cfg = GatewayConfig(_minimal_raw(root_redirect="/dashboard"))
         assert cfg.root_redirect == "/dashboard"
 
 
 class TestRootRedirectRoute:
-    def test_root_route_registered_when_configured(self):
+    @pytest.mark.asyncio
+    async def test_root_route_registered_when_configured(self):
         from llm_rosetta.gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/admin"))
-        app = create_app(cfg)
+        app = await create_app(cfg)
         assert _find_root_get_route(app) is not None
 
-    def test_root_route_not_registered_when_disabled(self):
+    @pytest.mark.asyncio
+    async def test_root_route_not_registered_when_disabled(self):
         from llm_rosetta.gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw())
-        app = create_app(cfg)
+        app = await create_app(cfg)
         assert _find_root_get_route(app) is None
 
-    def test_redirect_returns_307_to_admin(self):
+    @pytest.mark.asyncio
+    async def test_redirect_returns_307_to_admin(self):
         from llm_rosetta.gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/admin"))
-        app = create_app(cfg)
+        app = await create_app(cfg)
         route = _find_root_get_route(app)
         assert route is not None
 
         request = MagicMock()
-        resp = asyncio.run(route.handler(request))
+        resp = await route.handler(request)
         assert resp.status_code == 307
         assert resp.headers["Location"] == "/admin"
 
-    def test_redirect_to_custom_path(self):
+    @pytest.mark.asyncio
+    async def test_redirect_to_custom_path(self):
         from llm_rosetta.gateway.app import create_app
 
         cfg = GatewayConfig(_minimal_raw(root_redirect="/dashboard"))
-        app = create_app(cfg)
+        app = await create_app(cfg)
         route = _find_root_get_route(app)
         assert route is not None
 
         request = MagicMock()
-        resp = asyncio.run(route.handler(request))
+        resp = await route.handler(request)
         assert resp.status_code == 307
         assert resp.headers["Location"] == "/dashboard"

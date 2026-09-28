@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from typing import Any, overload
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
 
@@ -71,15 +71,15 @@ class ConfigMutationContext:
         self._committed = True
 
 
-@contextmanager
-def config_mutate(
+@asynccontextmanager
+async def config_mutate(
     request: Any,
-) -> Generator[ConfigMutationContext, None, None]:
-    """Context manager for the lock → load → mutate → save → reload cycle.
+) -> AsyncGenerator[ConfigMutationContext, None]:
+    """Async context manager for the lock -> load -> mutate -> save -> reload cycle.
 
     Usage::
 
-        with config_mutate(request) as ctx:
+        async with config_mutate(request) as ctx:
             if ctx.error:
                 return ctx.error
             # ... validate and mutate ctx.data ...
@@ -122,7 +122,7 @@ def config_mutate(
 
     # Reload happens outside the lock
     try:
-        ctx.new_config = _reload_gateway_config(request, config_path)
+        ctx.new_config = await _reload_gateway_config(request, config_path)
     except Exception as exc:
         ctx.error = JSONResponse(
             {
@@ -188,7 +188,7 @@ def _get_config_io(request: Any) -> ConfigIO:
     return io
 
 
-def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
+async def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
     """Re-read config from disk, rebuild GatewayConfig, swap into app state."""
     import llm_rosetta.gateway.app as _app_mod
 
@@ -254,7 +254,7 @@ def _reload_gateway_config(request: Any, config_path: str) -> GatewayConfig:
             SOURCE_CONFIG,
         )
 
-        ops_log.add(
+        await ops_log.add(
             OpsLogEntry.create(
                 event_type=EVENT_CONFIG_RELOAD,
                 severity=SEVERITY_INFO,

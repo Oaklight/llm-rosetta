@@ -3,6 +3,10 @@
 Keys are stored as SHA-256 hashes — plaintext is never persisted.
 An in-memory cache (hash → KeyContext) keeps auth lookups at O(1)
 without hitting SQLite on every request.
+
+TODO: Convert to async via aiosqlite, similar to PersistenceManager.
+      Left synchronous for now because the keystore is low-traffic
+      (mainly startup, occasional admin CRUD, and throttled touch()).
 """
 
 from __future__ import annotations

@@ -296,7 +296,7 @@ async def change_password(request: Any) -> Response:
             )
 
     # Hot-reload config (syncs auth state via _sync_auth_middleware)
-    _reload_gateway_config(request, config_path)
+    await _reload_gateway_config(request, config_path)
 
     # Set new session cookie so browser stays authenticated
     resp = JSONResponse({"ok": True})

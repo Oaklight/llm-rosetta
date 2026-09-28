@@ -137,9 +137,9 @@ class OpsLogEntry:
 class OpsLog:
     """Server operations log with optional SQLite persistence.
 
-    When *persistence* is provided, all operations delegate to SQLite.
-    Otherwise falls back to an in-memory :class:`collections.deque`
-    ring buffer.
+    When *persistence* is provided, all operations delegate to SQLite
+    (and are ``async``).  Otherwise falls back to an in-memory
+    :class:`collections.deque` ring buffer.
     """
 
     def __init__(
@@ -150,7 +150,7 @@ class OpsLog:
         self._persistence = persistence
         self._entries: deque[OpsLogEntry] = deque(maxlen=max_entries)
 
-    def add(self, entry: OpsLogEntry, *, _skip_prune: bool = False) -> None:
+    async def add(self, entry: OpsLogEntry, *, _skip_prune: bool = False) -> None:
         """Record an operational event.
 
         Args:
@@ -158,13 +158,13 @@ class OpsLog:
                 events to avoid unnecessary work before close).
         """
         if self._persistence is not None:
-            self._persistence.insert_ops_log_entries(
+            await self._persistence.insert_ops_log_entries(
                 [entry.to_dict()], _skip_prune=_skip_prune
             )
         else:
             self._entries.append(entry)
 
-    def get_entries(
+    async def get_entries(
         self,
         *,
         limit: int = 50,
@@ -175,7 +175,7 @@ class OpsLog:
     ) -> tuple[list[dict[str, Any]], int]:
         """Return filtered entries (newest-first) and total count."""
         if self._persistence is not None:
-            return self._persistence.query_ops_log_entries(
+            return await self._persistence.query_ops_log_entries(
                 limit=limit,
                 offset=offset,
                 event_type=event_type,
@@ -194,17 +194,18 @@ class OpsLog:
         page = filtered[offset : offset + limit]
         return [e.to_dict() for e in page], total
 
-    def clear(self) -> int:
+    async def clear(self) -> int:
         """Remove all entries. Returns the count of cleared entries."""
         if self._persistence is not None:
-            count = self._persistence.count_ops_log_entries()
-            self._persistence.clear_ops_log()
+            count = await self._persistence.count_ops_log_entries()
+            await self._persistence.clear_ops_log()
         else:
             count = len(self._entries)
             self._entries.clear()
         return count
 
     def __len__(self) -> int:
+        # Sync length for backward compat; in-memory mode only accurate.
         if self._persistence is not None:
-            return self._persistence.count_ops_log_entries()
+            return 0
         return len(self._entries)

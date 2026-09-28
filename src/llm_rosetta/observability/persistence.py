@@ -4,6 +4,10 @@ Stores request log entries and metrics counters in a single SQLite
 database (``gateway.db``) using WAL journal mode.  Automatically
 migrates legacy JSONL/JSON files on first startup.
 
+All methods that touch the database are ``async`` — SQLite I/O runs on
+a dedicated worker thread via the vendored ``aiosqlite`` module so
+callers never block the asyncio event loop.
+
 This module is framework-agnostic and can be used by any consumer
 (the llm-rosetta gateway, argo-proxy, or standalone scripts).
 """
@@ -13,11 +17,12 @@ from __future__ import annotations
 import gzip
 import json
 import logging
-import sqlite3
 import warnings
-from collections.abc import Iterator, Mapping
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from typing import Any
+
+from llm_rosetta._vendor import aiosqlite
 
 logger = logging.getLogger("llm-rosetta.observability")
 
@@ -45,6 +50,14 @@ class PersistenceManager:
 
     Error *dumps* (the ``error_dumps`` table) have their own retention
     cap controlled by ``dump_max``.
+
+    Use the async :meth:`create` classmethod to construct instances::
+
+        pm = await PersistenceManager.create("/var/data/myproxy")
+
+    The synchronous ``__init__`` is retained for backward compatibility
+    but the instance will not have an open database connection — call
+    :meth:`_open` before using any database methods.
 
     Args:
         data_dir: Directory for the database file (created if missing).
@@ -98,11 +111,45 @@ class PersistenceManager:
         self._ops_insert_count = 0
         self._data_dir.mkdir(parents=True, exist_ok=True)
 
-        self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
-        self._conn.execute("PRAGMA journal_mode=WAL")
-        self._conn.execute("PRAGMA synchronous=NORMAL")
-        self._init_tables()
-        self._migrate_legacy()
+        # Connection is opened by create() or _open(); asserted non-None
+        # in all methods (callers must use create() or _open() first).
+        self._conn: aiosqlite.Connection = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+
+    async def _open(self) -> None:
+        """Open the database connection, create tables, and run migrations."""
+        self._conn = await aiosqlite.connect(str(self.db_path))
+        await self._conn.execute("PRAGMA journal_mode=WAL")
+        await self._conn.execute("PRAGMA synchronous=NORMAL")
+        await self._init_tables()
+        await self._migrate_legacy()
+
+    @classmethod
+    async def create(
+        cls,
+        data_dir: str,
+        success_max: int | None = None,
+        dump_max: int | None = None,
+        *,
+        max_entries: int | None = None,
+        ops_info_max: int | None = None,
+        ops_warn_max: int | None = None,
+        ops_log_max: int | None = None,
+    ) -> PersistenceManager:
+        """Async factory: create a PersistenceManager with an open connection.
+
+        This is the preferred way to construct instances in async code.
+        """
+        instance = cls(
+            data_dir,
+            success_max=success_max,
+            dump_max=dump_max,
+            max_entries=max_entries,
+            ops_info_max=ops_info_max,
+            ops_warn_max=ops_warn_max,
+            ops_log_max=ops_log_max,
+        )
+        await instance._open()
+        return instance
 
     @property
     def success_max(self) -> int:
@@ -130,8 +177,8 @@ class PersistenceManager:
     # Schema
     # ------------------------------------------------------------------
 
-    def _init_tables(self) -> None:
-        self._conn.executescript("""
+    async def _init_tables(self) -> None:
+        await self._conn.executescript("""
             CREATE TABLE IF NOT EXISTS request_log (
                 id              TEXT PRIMARY KEY,
                 timestamp       TEXT NOT NULL,
@@ -196,12 +243,12 @@ class PersistenceManager:
             CREATE INDEX IF NOT EXISTS idx_ol_severity_ts
                 ON ops_log(severity, timestamp DESC);
         """)
-        self._migrate_add_columns()
+        await self._migrate_add_columns()
 
-    def _migrate_add_columns(self) -> None:
+    async def _migrate_add_columns(self) -> None:
         """Add nullable columns missing from older schema versions."""
-        cursor = self._conn.execute("PRAGMA table_info(request_log)")
-        columns = {row[1] for row in cursor.fetchall()}
+        cursor = await self._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in await cursor.fetchall()}
         added = False
         for col, col_type in (
             ("target_provider_name", "TEXT"),
@@ -215,15 +262,17 @@ class PersistenceManager:
             ("reasoning_tokens", "INTEGER"),
         ):
             if col not in columns:
-                self._conn.execute(
+                await self._conn.execute(
                     f"ALTER TABLE request_log ADD COLUMN {col} {col_type}"
                 )
                 added = True
         if added:
-            self._conn.commit()
+            await self._conn.commit()
 
-    def backfill_provider_names(self, model_to_provider: Mapping[str, str]) -> int:
-        """Backfill target_provider_name for old entries using the model→provider mapping.
+    async def backfill_provider_names(
+        self, model_to_provider: Mapping[str, str]
+    ) -> int:
+        """Backfill target_provider_name for old entries using the model->provider mapping.
 
         Only updates rows where target_provider_name is NULL and the
         model exists in the current config.
@@ -239,17 +288,17 @@ class PersistenceManager:
             return 0
         total = 0
         for model_name, provider_name in model_to_provider.items():
-            cursor = self._conn.execute(
+            cursor = await self._conn.execute(
                 "UPDATE request_log SET target_provider_name = ? "
                 "WHERE model = ? AND target_provider_name IS NULL",
                 (provider_name, model_name),
             )
             total += cursor.rowcount
         if total:
-            self._conn.commit()
+            await self._conn.commit()
         return total
 
-    def backfill_total_tokens(self) -> int:
+    async def backfill_total_tokens(self) -> int:
         """Recalculate total_tokens for rows where cache tokens were excluded.
 
         Anthropic's cache_read/cache_creation tokens are additive to
@@ -259,7 +308,7 @@ class PersistenceManager:
         Returns:
             Number of rows updated.
         """
-        cursor = self._conn.execute(
+        cursor = await self._conn.execute(
             "UPDATE request_log "
             "SET total_tokens = COALESCE(input_tokens, 0) "
             "    + COALESCE(output_tokens, 0) "
@@ -273,7 +322,7 @@ class PersistenceManager:
         )
         updated = cursor.rowcount
         if updated:
-            self._conn.commit()
+            await self._conn.commit()
             logger.info("Backfilled total_tokens for %d rows", updated)
         return updated
 
@@ -303,11 +352,11 @@ class PersistenceManager:
         "reasoning_tokens",
     ]
 
-    def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
+    async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
         """Insert request log entries, pruning oldest if over capacity."""
         if not entries:
             return
-        self._conn.executemany(
+        await self._conn.executemany(
             "INSERT OR IGNORE INTO request_log "
             "(id, timestamp, model, source_provider, target_provider, "
             "is_stream, status_code, duration_ms, error_detail, api_key_label, "
@@ -340,17 +389,17 @@ class PersistenceManager:
                 for e in entries
             ],
         )
-        self._conn.commit()
+        await self._conn.commit()
         self._insert_count += len(entries)
         # Periodic prune amortizes the DELETE cost; opportunistic prune
         # bounds memory when the success cap is small.
         if self._insert_count >= 100:
-            self._prune()
+            await self._prune()
             self._insert_count = 0
-        elif self.count_success_entries() > self._success_max:
-            self._prune()
+        elif await self.count_success_entries() > self._success_max:
+            await self._prune()
 
-    def query_log_entries(
+    async def query_log_entries(
         self,
         *,
         limit: int = 50,
@@ -413,21 +462,21 @@ class PersistenceManager:
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
-        count_row = self._conn.execute(
+        count_row = await self._conn.execute_fetchone(
             f"SELECT COUNT(*) FROM request_log {where_sql}", params
-        ).fetchone()
+        )
         total = count_row[0] if count_row else 0
 
-        rows = self._conn.execute(
+        rows = await self._conn.execute_fetchall(
             f"SELECT * FROM request_log {where_sql} "
             f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
-        ).fetchall()
+        )
 
         entries = [self._row_to_dict(row) for row in rows]
         return entries, total
 
-    def get_log_entry(self, entry_id: str) -> dict[str, Any] | None:
+    async def get_log_entry(self, entry_id: str) -> dict[str, Any] | None:
         """Return a single log entry by id, or ``None``.
 
         Includes ``_offset`` — the entry's position in the newest-first
@@ -435,20 +484,20 @@ class PersistenceManager:
         Uses an indexed timestamp comparison; acceptable for single-entry
         lookups (not called in hot paths).
         """
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT * FROM request_log WHERE id = ?", (entry_id,)
-        ).fetchone()
+        )
         if row is None:
             return None
         d = self._row_to_dict(row)
-        offset_row = self._conn.execute(
+        offset_row = await self._conn.execute_fetchone(
             "SELECT COUNT(*) FROM request_log WHERE timestamp > ?",
             (d["timestamp"],),
-        ).fetchone()
+        )
         d["_offset"] = offset_row[0] if offset_row else 0
         return d
 
-    def backfill_error_dump_log_ids(
+    async def backfill_error_dump_log_ids(
         self,
         window_seconds: float = 0.1,
         model_aliases: dict[str, str] | None = None,
@@ -467,11 +516,10 @@ class PersistenceManager:
         for req_name, up_name in (model_aliases or {}).items():
             reverse_aliases.setdefault(up_name, []).append(req_name)
 
-        cur = self._conn.execute(
+        unmatched = await self._conn.execute_fetchall(
             "SELECT id, timestamp, model, status_code, source_provider, target_provider "
             "FROM error_dumps WHERE request_log_id IS NULL OR request_log_id = ''"
         )
-        unmatched = cur.fetchall()
         if not unmatched:
             return 0
         updated = 0
@@ -484,7 +532,7 @@ class PersistenceManager:
                     candidate_models.append(alias)
             row = None
             for m in candidate_models:
-                row = self._conn.execute(
+                row = await self._conn.execute_fetchone(
                     "SELECT id FROM request_log "
                     "WHERE source_provider = ? AND target_provider = ? "
                     "AND status_code = ? AND model = ? "
@@ -492,13 +540,13 @@ class PersistenceManager:
                     "ORDER BY abs(julianday(timestamp) - julianday(?)) "
                     "LIMIT 1",
                     (source, target, status, m, ts, window_seconds, ts),
-                ).fetchone()
+                )
                 if row:
                     break
             if not row and dump_model:
                 # Fallback: match without model constraint. May mis-link if
                 # two different models error with the same status in the window.
-                row = self._conn.execute(
+                row = await self._conn.execute_fetchone(
                     "SELECT id FROM request_log "
                     "WHERE source_provider = ? AND target_provider = ? "
                     "AND status_code = ? "
@@ -506,29 +554,29 @@ class PersistenceManager:
                     "ORDER BY abs(julianday(timestamp) - julianday(?)) "
                     "LIMIT 1",
                     (source, target, status, ts, window_seconds, ts),
-                ).fetchone()
+                )
             if row:
-                self._conn.execute(
+                await self._conn.execute(
                     "UPDATE error_dumps SET request_log_id = ? WHERE id = ?",
                     (row[0], dump_id),
                 )
                 updated += 1
         if updated:
-            self._conn.commit()
+            await self._conn.commit()
         return updated
 
-    def get_api_key_labels(self) -> list[str]:
+    async def get_api_key_labels(self) -> list[str]:
         """Return distinct API key labels seen in request logs."""
-        rows = self._conn.execute(
+        rows = await self._conn.execute_fetchall(
             "SELECT DISTINCT api_key_label FROM request_log "
             "WHERE api_key_label IS NOT NULL AND api_key_label != '' "
             "ORDER BY api_key_label"
-        ).fetchall()
+        )
         return [row[0] for row in rows]
 
-    def iter_log_rows_for_rebuild(
+    async def iter_log_rows_for_rebuild(
         self, batch_size: int = 5000
-    ) -> Iterator[dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Yield lightweight dicts for every log entry (for counter rebuild).
 
         Only fetches the columns needed by
@@ -536,7 +584,7 @@ class PersistenceManager:
         in batches of *batch_size* to bound memory usage regardless of
         table size.
         """
-        cursor = self._conn.execute(
+        cursor = await self._conn.execute(
             "SELECT model, source_provider, target_provider, "
             "target_provider_name, is_stream, status_code, "
             "input_tokens, output_tokens, total_tokens, "
@@ -544,7 +592,7 @@ class PersistenceManager:
             "FROM request_log"
         )
         while True:
-            batch = cursor.fetchmany(batch_size)
+            batch = await cursor.fetchmany(batch_size)
             if not batch:
                 break
             for r in batch:
@@ -563,23 +611,23 @@ class PersistenceManager:
                     "reasoning_tokens": r[11],
                 }
 
-    def count_log_entries(self) -> int:
+    async def count_log_entries(self) -> int:
         """Return the total number of log entries."""
-        row = self._conn.execute("SELECT COUNT(*) FROM request_log").fetchone()
+        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM request_log")
         return row[0] if row else 0
 
-    def count_success_entries(self) -> int:
+    async def count_success_entries(self) -> int:
         """Return the number of successful log entries (status_code < 400)."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT COUNT(*) FROM request_log WHERE status_code < 400"
-        ).fetchone()
+        )
         return row[0] if row else 0
 
-    def count_error_entries(self) -> int:
+    async def count_error_entries(self) -> int:
         """Return the number of error log entries (status_code >= 400)."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT COUNT(*) FROM request_log WHERE status_code >= 400"
-        ).fetchone()
+        )
         return row[0] if row else 0
 
     def db_file_sizes(self) -> dict[str, int]:
@@ -603,10 +651,10 @@ class PersistenceManager:
                 sizes[key] = 0
         return sizes
 
-    def clear_log(self) -> None:
+    async def clear_log(self) -> None:
         """Delete all request log entries."""
-        self._conn.execute("DELETE FROM request_log")
-        self._conn.commit()
+        await self._conn.execute("DELETE FROM request_log")
+        await self._conn.commit()
 
     # ------------------------------------------------------------------
     # Ops log
@@ -622,7 +670,7 @@ class PersistenceManager:
         "source",
     ]
 
-    def insert_ops_log_entries(
+    async def insert_ops_log_entries(
         self,
         entries: list[dict[str, Any]],
         *,
@@ -631,7 +679,7 @@ class PersistenceManager:
         """Insert ops log entries, pruning oldest if over capacity."""
         if not entries:
             return
-        self._conn.executemany(
+        await self._conn.executemany(
             "INSERT OR IGNORE INTO ops_log "
             "(id, timestamp, event_type, severity, message, details, source) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -648,15 +696,15 @@ class PersistenceManager:
                 for e in entries
             ],
         )
-        self._conn.commit()
+        await self._conn.commit()
         if _skip_prune:
             return
         self._ops_insert_count += len(entries)
         if self._ops_insert_count >= 100:
-            self._prune_ops_log()
+            await self._prune_ops_log()
             self._ops_insert_count = 0
 
-    def query_ops_log_entries(
+    async def query_ops_log_entries(
         self,
         *,
         limit: int = 50,
@@ -680,54 +728,56 @@ class PersistenceManager:
 
         clause = (" WHERE " + " AND ".join(where)) if where else ""
 
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             f"SELECT COUNT(*) FROM ops_log{clause}", params
-        ).fetchone()
+        )
         total = row[0] if row else 0
 
-        rows = self._conn.execute(
+        rows = await self._conn.execute_fetchall(
             f"SELECT {', '.join(self._OPS_LOG_COLUMNS)} FROM ops_log"
             f"{clause} ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
-        ).fetchall()
+        )
         entries = [self._ops_row_to_dict(r) for r in rows]
         return entries, total
 
-    def count_ops_log_entries(self) -> int:
+    async def count_ops_log_entries(self) -> int:
         """Return the total number of ops log entries."""
-        row = self._conn.execute("SELECT COUNT(*) FROM ops_log").fetchone()
+        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM ops_log")
         return row[0] if row else 0
 
-    def count_ops_info_entries(self) -> int:
+    async def count_ops_info_entries(self) -> int:
         """Return ops log entries with severity='info'."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT COUNT(*) FROM ops_log WHERE severity = 'info'"
-        ).fetchone()
+        )
         return row[0] if row else 0
 
-    def count_ops_warn_entries(self) -> int:
+    async def count_ops_warn_entries(self) -> int:
         """Return ops log entries with severity in ('warning', 'error')."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT COUNT(*) FROM ops_log WHERE severity != 'info'"
-        ).fetchone()
+        )
         return row[0] if row else 0
 
-    def clear_ops_log(self) -> None:
+    async def clear_ops_log(self) -> None:
         """Delete all ops log entries."""
-        self._conn.execute("DELETE FROM ops_log")
-        self._conn.commit()
+        await self._conn.execute("DELETE FROM ops_log")
+        await self._conn.commit()
 
-    def cleanup_ops_log_by_age(self, max_age_days: int) -> dict[str, Any]:
+    async def cleanup_ops_log_by_age(self, max_age_days: int) -> dict[str, Any]:
         """Delete ops_log rows older than *max_age_days* and vacuum."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
 
-        cur = self._conn.execute("DELETE FROM ops_log WHERE timestamp < ?", (cutoff,))
+        cur = await self._conn.execute(
+            "DELETE FROM ops_log WHERE timestamp < ?", (cutoff,)
+        )
         deleted = cur.rowcount
-        self._conn.commit()
-        vacuum_ok = self._vacuum()
+        await self._conn.commit()
+        vacuum_ok = await self._vacuum()
         size_after = self.db_path.stat().st_size
 
         return {
@@ -739,9 +789,9 @@ class PersistenceManager:
             "vacuum": vacuum_ok,
         }
 
-    def _prune_ops_log(self) -> None:
+    async def _prune_ops_log(self) -> None:
         """Remove oldest ops log entries beyond per-severity retention limits."""
-        self._conn.execute(
+        await self._conn.execute(
             "DELETE FROM ops_log "
             "WHERE severity = 'info' AND id NOT IN ("
             "    SELECT id FROM ops_log WHERE severity = 'info' "
@@ -749,7 +799,7 @@ class PersistenceManager:
             ")",
             (self._ops_info_max,),
         )
-        self._conn.execute(
+        await self._conn.execute(
             "DELETE FROM ops_log "
             "WHERE severity != 'info' AND id NOT IN ("
             "    SELECT id FROM ops_log WHERE severity != 'info' "
@@ -757,7 +807,7 @@ class PersistenceManager:
             ")",
             (self._ops_warn_max,),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
     @classmethod
     def _ops_row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -781,19 +831,19 @@ class PersistenceManager:
     # Metrics
     # ------------------------------------------------------------------
 
-    def save_metrics(self, data: dict[str, Any]) -> None:
+    async def save_metrics(self, data: dict[str, Any]) -> None:
         """Persist metrics counters."""
-        self._conn.execute(
+        await self._conn.execute(
             "INSERT OR REPLACE INTO metrics (key, value) VALUES (?, ?)",
             ("counters", json.dumps(data, ensure_ascii=False)),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def load_metrics(self) -> dict[str, Any] | None:
+    async def load_metrics(self) -> dict[str, Any] | None:
         """Load metrics counters, or ``None`` if not yet saved."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT value FROM metrics WHERE key = ?", ("counters",)
-        ).fetchone()
+        )
         if row is None:
             return None
         try:
@@ -802,22 +852,22 @@ class PersistenceManager:
             logger.warning("Failed to load metrics: %s", exc)
             return None
 
-    def set_rebuild_flag(self) -> None:
+    async def set_rebuild_flag(self) -> None:
         """Signal that counters need rebuilding (used by CLI cleanup)."""
-        self._conn.execute(
+        await self._conn.execute(
             "INSERT OR REPLACE INTO metrics (key, value) VALUES (?, ?)",
             ("rebuild_needed", "1"),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def check_and_clear_rebuild_flag(self) -> bool:
+    async def check_and_clear_rebuild_flag(self) -> bool:
         """Check if a rebuild was requested; atomically clear the flag if set."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "DELETE FROM metrics WHERE key = ? AND value = ? RETURNING value",
             ("rebuild_needed", "1"),
-        ).fetchone()
+        )
         if row is not None:
-            self._conn.commit()
+            await self._conn.commit()
             return True
         return False
 
@@ -828,21 +878,23 @@ class PersistenceManager:
     # Default retention cap for error_dumps rows.
     DEFAULT_DUMP_MAX = 10000
 
-    def insert_dump_body(self, body_hash: str, data: bytes, orig_bytes: int) -> None:
+    async def insert_dump_body(
+        self, body_hash: str, data: bytes, orig_bytes: int
+    ) -> None:
         """Insert a compressed body blob, deduplicating by hash.
 
         If the hash already exists the row is silently skipped.
         """
         from datetime import datetime, timezone
 
-        self._conn.execute(
+        await self._conn.execute(
             "INSERT OR IGNORE INTO dump_bodies (hash, data, orig_bytes, created) "
             "VALUES (?, ?, ?, ?)",
             (body_hash, data, orig_bytes, datetime.now(timezone.utc).isoformat()),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def insert_error_dump(
+    async def insert_error_dump(
         self,
         *,
         dump_id: str,
@@ -860,7 +912,7 @@ class PersistenceManager:
         converted_body_hash: str | None = None,
     ) -> None:
         """Insert an error dump record and prune if over capacity."""
-        self._conn.execute(
+        await self._conn.execute(
             "INSERT OR IGNORE INTO error_dumps "
             "(id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
@@ -882,10 +934,10 @@ class PersistenceManager:
                 converted_body_hash,
             ),
         )
-        self._conn.commit()
-        self._prune_error_dumps()
+        await self._conn.commit()
+        await self._prune_error_dumps()
 
-    def query_error_dumps(
+    async def query_error_dumps(
         self,
         *,
         limit: int = 50,
@@ -916,9 +968,9 @@ class PersistenceManager:
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
 
-        count_row = self._conn.execute(
+        count_row = await self._conn.execute_fetchone(
             f"SELECT COUNT(*) FROM error_dumps {where_sql}", params
-        ).fetchone()
+        )
         total = count_row[0] if count_row else 0
 
         cols = (
@@ -926,11 +978,11 @@ class PersistenceManager:
             "target_provider, provider_name, status_code, error_phase, "
             "body_hash, response_text, upstream_url, converted_body_hash"
         )
-        rows = self._conn.execute(
+        rows = await self._conn.execute_fetchall(
             f"SELECT {cols} FROM error_dumps {where_sql} "
             f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
             [*params, limit, offset],
-        ).fetchall()
+        )
 
         col_names = [
             "id",
@@ -952,16 +1004,16 @@ class PersistenceManager:
         ]
         return entries, total
 
-    def get_error_dump(self, dump_id: str) -> dict[str, Any] | None:
+    async def get_error_dump(self, dump_id: str) -> dict[str, Any] | None:
         """Return a single error dump by ID, or ``None``."""
         cols = (
             "id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
             "body_hash, response_text, upstream_url, converted_body_hash"
         )
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             f"SELECT {cols} FROM error_dumps WHERE id = ?", (dump_id,)
-        ).fetchone()
+        )
         if row is None:
             return None
         col_names = [
@@ -981,41 +1033,43 @@ class PersistenceManager:
         ]
         return {k: v for k, v in zip(col_names, row) if v is not None}
 
-    def get_dump_body(self, body_hash: str) -> bytes | None:
+    async def get_dump_body(self, body_hash: str) -> bytes | None:
         """Return the compressed body blob for a hash, or ``None``."""
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT data FROM dump_bodies WHERE hash = ?", (body_hash,)
-        ).fetchone()
+        )
         return row[0] if row else None
 
-    def count_error_dumps(self) -> int:
+    async def count_error_dumps(self) -> int:
         """Return the total number of error dump entries."""
-        row = self._conn.execute("SELECT COUNT(*) FROM error_dumps").fetchone()
+        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM error_dumps")
         return row[0] if row else 0
 
-    def delete_error_dump(self, dump_id: str) -> bool:
+    async def delete_error_dump(self, dump_id: str) -> bool:
         """Delete a single error dump by ID and clean up orphaned bodies."""
-        cur = self._conn.execute("DELETE FROM error_dumps WHERE id = ?", (dump_id,))
+        cur = await self._conn.execute(
+            "DELETE FROM error_dumps WHERE id = ?", (dump_id,)
+        )
         if cur.rowcount == 0:
             return False
-        self._delete_orphan_bodies()
-        self._conn.commit()
+        await self._delete_orphan_bodies()
+        await self._conn.commit()
         return True
 
-    def clear_error_dumps(self) -> None:
+    async def clear_error_dumps(self) -> None:
         """Delete all error dumps and orphaned bodies."""
-        self._conn.execute("DELETE FROM error_dumps")
-        self._conn.execute(
+        await self._conn.execute("DELETE FROM error_dumps")
+        await self._conn.execute(
             "DELETE FROM dump_bodies WHERE hash NOT IN "
             "(SELECT body_hash FROM error_dumps WHERE body_hash IS NOT NULL "
             " UNION SELECT converted_body_hash FROM error_dumps "
             " WHERE converted_body_hash IS NOT NULL)"
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def _delete_orphan_bodies(self) -> int:
+    async def _delete_orphan_bodies(self) -> int:
         """Delete dump_bodies not referenced by any error_dumps."""
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             "DELETE FROM dump_bodies WHERE hash NOT IN ("
             "    SELECT body_hash FROM error_dumps "
             "    WHERE body_hash IS NOT NULL"
@@ -1026,38 +1080,38 @@ class PersistenceManager:
         )
         return cur.rowcount
 
-    def _vacuum(self) -> bool:
+    async def _vacuum(self) -> bool:
         """Run VACUUM; return True on success, False if locked."""
         try:
-            self._conn.execute("VACUUM")
-        except sqlite3.OperationalError:
+            await self._conn.execute("VACUUM")
+        except Exception:
             logger.warning("VACUUM skipped — database is locked by another connection")
             return False
         return True
 
-    def vacuum(self) -> dict[str, Any]:
+    async def vacuum(self) -> dict[str, Any]:
         """Run VACUUM and return freed bytes."""
         size_before = self.db_path.stat().st_size
-        ok = self._vacuum()
+        ok = await self._vacuum()
         size_after = self.db_path.stat().st_size
         return {
             "freed_bytes": max(0, size_before - size_after),
             "vacuumed": ok,
         }
 
-    def cleanup_logs_by_age(self, max_age_days: int) -> dict[str, Any]:
+    async def cleanup_logs_by_age(self, max_age_days: int) -> dict[str, Any]:
         """Delete request_log rows older than *max_age_days* and vacuum."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
 
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
         )
         deleted = cur.rowcount
-        self._conn.commit()
-        vacuum_ok = self._vacuum()
+        await self._conn.commit()
+        vacuum_ok = await self._vacuum()
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1069,21 +1123,21 @@ class PersistenceManager:
             "vacuum": vacuum_ok,
         }
 
-    def cleanup_error_dumps_by_age(self, max_age_days: int) -> dict[str, Any]:
+    async def cleanup_error_dumps_by_age(self, max_age_days: int) -> dict[str, Any]:
         """Delete error_dumps and orphaned dump_bodies older than *max_age_days*."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
 
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
         )
         error_dumps_deleted = cur.rowcount
 
-        dump_bodies_deleted = self._delete_orphan_bodies()
-        self._conn.commit()
-        vacuum_ok = self._vacuum()
+        dump_bodies_deleted = await self._delete_orphan_bodies()
+        await self._conn.commit()
+        vacuum_ok = await self._vacuum()
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1096,7 +1150,7 @@ class PersistenceManager:
             "vacuum": vacuum_ok,
         }
 
-    def cleanup_by_age(self, max_age_days: int = 90) -> dict[str, Any]:
+    async def cleanup_by_age(self, max_age_days: int = 90) -> dict[str, Any]:
         """Delete all records older than *max_age_days* and vacuum.
 
         Convenience method that cleans both request logs and error dumps.
@@ -1106,19 +1160,19 @@ class PersistenceManager:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
 
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
         )
         request_log_deleted = cur.rowcount
 
-        cur = self._conn.execute(
+        cur = await self._conn.execute(
             "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
         )
         error_dumps_deleted = cur.rowcount
 
-        dump_bodies_deleted = self._delete_orphan_bodies()
-        self._conn.commit()
-        vacuum_ok = self._vacuum()
+        dump_bodies_deleted = await self._delete_orphan_bodies()
+        await self._conn.commit()
+        vacuum_ok = await self._vacuum()
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1132,7 +1186,7 @@ class PersistenceManager:
             "vacuum": vacuum_ok,
         }
 
-    def export_error_dumps(
+    async def export_error_dumps(
         self, *, start: str | None = None, end: str | None = None
     ) -> bytes:
         """Export error dumps in a date range as tar.gz bytes.
@@ -1180,10 +1234,10 @@ class PersistenceManager:
             "upstream_url",
             "converted_body_hash",
         ]
-        rows = self._conn.execute(
+        rows = await self._conn.execute_fetchall(
             f"SELECT {cols} FROM error_dumps {where_sql} ORDER BY timestamp DESC",
             params,
-        ).fetchall()
+        )
 
         entries = [
             {k: v for k, v in zip(col_names, row) if v is not None} for row in rows
@@ -1207,9 +1261,9 @@ class PersistenceManager:
 
             # bodies/<hash>.bin
             for h in sorted(hashes):
-                row = self._conn.execute(
+                row = await self._conn.execute_fetchone(
                     "SELECT data FROM dump_bodies WHERE hash = ?", (h,)
-                ).fetchone()
+                )
                 if row and row[0]:
                     data = row[0]
                     info = tarfile.TarInfo(name=f"bodies/{h}.bin")
@@ -1218,16 +1272,16 @@ class PersistenceManager:
 
         return buf.getvalue()
 
-    def _prune_error_dumps(self) -> None:
+    async def _prune_error_dumps(self) -> None:
         """Remove oldest error dumps beyond the retention cap.
 
         Also cleans up orphaned dump_bodies entries.
         """
-        count = self.count_error_dumps()
+        count = await self.count_error_dumps()
         if count <= self._dump_max:
             return
 
-        self._conn.execute(
+        await self._conn.execute(
             "DELETE FROM error_dumps WHERE id NOT IN ("
             "    SELECT id FROM error_dumps "
             "    ORDER BY timestamp DESC LIMIT ?"
@@ -1235,7 +1289,7 @@ class PersistenceManager:
             (self._dump_max,),
         )
         # Clean up orphaned bodies
-        self._conn.execute(
+        await self._conn.execute(
             "DELETE FROM dump_bodies WHERE hash NOT IN ("
             "    SELECT body_hash FROM error_dumps "
             "    WHERE body_hash IS NOT NULL"
@@ -1244,20 +1298,22 @@ class PersistenceManager:
             "    WHERE converted_body_hash IS NOT NULL"
             ")"
         )
-        self._conn.commit()
+        await self._conn.commit()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def close(self) -> None:
+    async def close(self) -> None:
         """Commit and close the database connection."""
+        if self._conn is None:
+            return
         try:
-            self._conn.commit()
+            await self._conn.commit()
         except Exception:
             pass
         try:
-            self._conn.close()
+            await self._conn.close()
         except Exception:
             pass
 
@@ -1265,13 +1321,13 @@ class PersistenceManager:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _prune(self) -> None:
+    async def _prune(self) -> None:
         """Remove oldest successful entries beyond the retention cap.
 
         Error rows (status_code >= 400) are not pruned by count — they
         are bounded by age-based cleanup only.
         """
-        self._conn.execute(
+        await self._conn.execute(
             "DELETE FROM request_log "
             "WHERE status_code < 400 AND id NOT IN ("
             "    SELECT id FROM request_log WHERE status_code < 400 "
@@ -1279,9 +1335,9 @@ class PersistenceManager:
             ")",
             (self._success_max,),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def update_entry_profile(
+    async def update_entry_profile(
         self, entry_id: str, profile_update: dict[str, Any]
     ) -> None:
         """Merge additional profile data into an existing log entry.
@@ -1294,9 +1350,9 @@ class PersistenceManager:
             entry_id: The log entry ID to update.
             profile_update: Profile keys to merge.
         """
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT profile FROM request_log WHERE id = ?", (entry_id,)
-        ).fetchone()
+        )
         if row is None:
             return
         existing: dict[str, Any] = {}
@@ -1306,13 +1362,13 @@ class PersistenceManager:
             except (json.JSONDecodeError, TypeError):
                 pass
         existing.update(profile_update)
-        self._conn.execute(
+        await self._conn.execute(
             "UPDATE request_log SET profile = ? WHERE id = ?",
             (json.dumps(existing, ensure_ascii=False), entry_id),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
-    def query_token_usage_by_day(
+    async def query_token_usage_by_day(
         self,
         *,
         days: int = 7,
@@ -1347,7 +1403,7 @@ class PersistenceManager:
             params.append(api_key_label)
         sql += " GROUP BY date(timestamp) ORDER BY day DESC"
 
-        rows = self._conn.execute(sql, params).fetchall()
+        rows = await self._conn.execute_fetchall(sql, params)
         day_list = []
         totals = {
             "request_count": 0,
@@ -1374,12 +1430,12 @@ class PersistenceManager:
                 totals[k] += entry[k]
         return {"days": day_list, "totals": totals}
 
-    def query_rolling_24h_tokens(self) -> dict[str, int]:
+    async def query_rolling_24h_tokens(self) -> dict[str, int]:
         """Sum token usage over the last 24 hours."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-        row = self._conn.execute(
+        row = await self._conn.execute_fetchone(
             "SELECT COALESCE(SUM(input_tokens), 0), "
             "COALESCE(SUM(output_tokens), 0), "
             "COALESCE(SUM(cache_read_tokens), 0), "
@@ -1387,7 +1443,7 @@ class PersistenceManager:
             "COALESCE(SUM(reasoning_tokens), 0) "
             "FROM request_log WHERE timestamp >= ?",
             (cutoff,),
-        ).fetchone()
+        )
         return {
             "input_tokens_24h": row[0],
             "output_tokens_24h": row[1],
@@ -1396,7 +1452,7 @@ class PersistenceManager:
             "reasoning_tokens_24h": row[4],
         }
 
-    def update_entry_usage(
+    async def update_entry_usage(
         self,
         entry_id: str,
         input_tokens: int | None,
@@ -1412,7 +1468,7 @@ class PersistenceManager:
         Used by the streaming path to record usage extracted from the
         final stream event.
         """
-        self._conn.execute(
+        await self._conn.execute(
             "UPDATE request_log SET input_tokens = ?, output_tokens = ?, "
             "total_tokens = ?, cache_read_tokens = ?, "
             "cache_creation_tokens = ?, reasoning_tokens = ? WHERE id = ?",
@@ -1426,7 +1482,7 @@ class PersistenceManager:
                 entry_id,
             ),
         )
-        self._conn.commit()
+        await self._conn.commit()
 
     @classmethod
     def _row_to_dict(cls, row: tuple[Any, ...]) -> dict[str, Any]:
@@ -1465,7 +1521,7 @@ class PersistenceManager:
     # Legacy migration
     # ------------------------------------------------------------------
 
-    def _migrate_legacy(self) -> None:
+    async def _migrate_legacy(self) -> None:
         """Import data from legacy JSONL/JSON files if present."""
         migrated_anything = False
 
@@ -1482,7 +1538,7 @@ class PersistenceManager:
             # Then current log
             entries.extend(_read_jsonl(log_path))
             if entries:
-                self.insert_log_entries(entries)
+                await self.insert_log_entries(entries)
                 logger.info(
                     "Migrated %d request log entries from legacy files",
                     len(entries),
@@ -1495,7 +1551,7 @@ class PersistenceManager:
         if metrics_path.exists():
             try:
                 data = json.loads(metrics_path.read_text(encoding="utf-8"))
-                self.save_metrics(data)
+                await self.save_metrics(data)
                 logger.info("Migrated metrics from legacy JSON file")
             except Exception as exc:
                 logger.warning("Failed to migrate metrics: %s", exc)

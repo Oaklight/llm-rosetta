@@ -25,6 +25,12 @@ from llm_rosetta.gateway.transport.provider_info import (
 from llm_rosetta.observability.metrics import MetricsCollector
 
 
+async def _async_iter(items):
+    """Convert a list to an async iterator for mocking iter_log_rows_for_rebuild."""
+    for item in items:
+        yield item
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -483,7 +489,7 @@ class TestDeferredCounterRebuild:
         metrics.by_model = {"gpt-4o": 10}
 
         persistence = MagicMock()
-        persistence.iter_log_rows_for_rebuild.return_value = [
+        _rebuild_rows = [
             {
                 "model": "gpt-4o",
                 "source_provider": "openai_chat",
@@ -493,7 +499,8 @@ class TestDeferredCounterRebuild:
                 "status_code": 200,
             }
         ] * 50
-        persistence.save_metrics = MagicMock()
+        persistence.iter_log_rows_for_rebuild = lambda: _async_iter(_rebuild_rows)
+        persistence.save_metrics = AsyncMock()
 
         config = _FakeConfig({})
         app = _FakeApp()
@@ -511,7 +518,12 @@ class TestDeferredCounterRebuild:
     def test_rebuild_failure_clears_pending(self):
         """Exception in executor still clears pending_tasks."""
         persistence = MagicMock()
-        persistence.iter_log_rows_for_rebuild.side_effect = RuntimeError("DB error")
+
+        async def _raise_error():
+            raise RuntimeError("DB error")
+            yield  # noqa: RET503 — makes this an async generator
+
+        persistence.iter_log_rows_for_rebuild = _raise_error
 
         config = _FakeConfig({})
         app = _FakeApp()
@@ -536,8 +548,9 @@ class TestDeferredBackfills:
         from llm_rosetta.gateway.routing_strategy import ModelRoute, ProviderEntry
 
         persistence = MagicMock()
-        persistence.backfill_provider_names.return_value = 3
-        persistence.backfill_error_dump_log_ids.return_value = 1
+        persistence.backfill_provider_names = AsyncMock(return_value=3)
+        persistence.backfill_error_dump_log_ids = AsyncMock(return_value=1)
+        persistence.backfill_total_tokens = AsyncMock(return_value=0)
         persistence.db_path = "/tmp/test.db"
 
         keystore = MagicMock()
@@ -565,7 +578,9 @@ class TestDeferredBackfills:
     def test_backfills_failure_clears_pending(self):
         """Exception in backfills still clears pending_tasks."""
         persistence = MagicMock()
-        persistence.backfill_provider_names.side_effect = RuntimeError("DB error")
+        persistence.backfill_provider_names = AsyncMock(
+            side_effect=RuntimeError("DB error")
+        )
 
         config = _FakeConfig({})
         config.models = {}

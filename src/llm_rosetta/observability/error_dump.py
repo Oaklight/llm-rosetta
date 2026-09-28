@@ -120,7 +120,7 @@ def decompress_body(data: bytes) -> dict[str, Any]:
 # ------------------------------------------------------------------
 
 
-def dump_error(
+async def dump_error(
     persistence: PersistenceManager | None,
     *,
     request_body: dict[str, Any] | None,
@@ -164,7 +164,7 @@ def dump_error(
         return None
 
     try:
-        return _dump_error_impl(
+        return await _dump_error_impl(
             persistence,
             request_body=request_body,
             response_text=response_text,
@@ -183,7 +183,7 @@ def dump_error(
         return None
 
 
-def _dump_error_impl(
+async def _dump_error_impl(
     persistence: PersistenceManager,
     *,
     request_body: dict[str, Any] | None,
@@ -210,7 +210,7 @@ def _dump_error_impl(
             offloaded = offload_images(request_body)
             body_hash = compute_body_hash(offloaded)
             compressed, orig_bytes = compress_body(offloaded)
-            persistence.insert_dump_body(body_hash, compressed, orig_bytes)
+            await persistence.insert_dump_body(body_hash, compressed, orig_bytes)
         else:
             logger.debug(
                 "Skipping body dump: %d bytes exceeds %d limit",
@@ -226,7 +226,7 @@ def _dump_error_impl(
             offloaded_conv = offload_images(converted_body)
             converted_body_hash = compute_body_hash(offloaded_conv)
             compressed_conv, orig_conv = compress_body(offloaded_conv)
-            persistence.insert_dump_body(
+            await persistence.insert_dump_body(
                 converted_body_hash, compressed_conv, orig_conv
             )
 
@@ -239,7 +239,7 @@ def _dump_error_impl(
             response_text = response_text[: 64 * 1024] + "\n…[truncated]"
 
     # --- Insert the error dump record ---
-    persistence.insert_error_dump(
+    await persistence.insert_error_dump(
         dump_id=dump_id,
         request_log_id=request_log_id,
         timestamp=timestamp,

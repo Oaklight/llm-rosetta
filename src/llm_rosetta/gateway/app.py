@@ -55,7 +55,7 @@ from .deferred_startup import ProviderNotReady
 logger = get_logger()
 
 
-def _record_telemetry(
+async def _record_telemetry(
     request: Any,
     *,
     model: str,
@@ -143,7 +143,7 @@ def _record_telemetry(
         # generator can write back profile data by this ID.
         if entry_id_override:
             entry = _dc_replace(entry, id=entry_id_override)
-        request_log.add(entry)
+        await request_log.add(entry)
         return entry.id
     return None
 
@@ -463,7 +463,7 @@ async def _proxy_handler(
         logger.exception("[%s] unhandled error in proxy handler", request_id)
         status_code = 500
         cb.record_failure()
-        dump_error(
+        await dump_error(
             persistence,
             request_body=body,
             response_text=error_detail,
@@ -494,7 +494,7 @@ async def _proxy_handler(
             duration_ms=duration_ms,
         )
 
-        _record_telemetry(
+        await _record_telemetry(
             request,
             model=model,
             source_provider=source_provider,
@@ -854,7 +854,7 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
                         type_name,
                     )
                     status_code = 500
-                    dump_error(
+                    await dump_error(
                         persistence,
                         request_body=None,
                         response_text=error_detail,
@@ -887,7 +887,7 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
                         duration_ms=duration_ms,
                     )
 
-                    _record_telemetry(
+                    await _record_telemetry(
                         request,
                         model=model,
                         source_provider=cast(ProviderType, type_name),
@@ -924,18 +924,21 @@ async def _periodic_flush(app: App) -> None:
         metrics = getattr(app, "metrics", None)
         if metrics is not None:
             try:
-                if persistence.check_and_clear_rebuild_flag():
+                if await persistence.check_and_clear_rebuild_flag():
                     logger.info(
                         "Rebuild flag detected (external cleanup), rebuilding counters"
                     )
-                    metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
-                persistence.save_metrics(metrics.export_counters())
+                    rows = [
+                        row async for row in persistence.iter_log_rows_for_rebuild()
+                    ]
+                    metrics.rebuild_counters(iter(rows))
+                await persistence.save_metrics(metrics.export_counters())
             except Exception as exc:
                 logger.warning("Failed to flush metrics: %s", exc)
 
 
-def _flush_now(app: App) -> None:
-    """Final synchronous flush on shutdown."""
+async def _flush_now(app: App) -> None:
+    """Final async flush on shutdown."""
     persistence = getattr(app, "persistence", None)
     if persistence is None:
         return
@@ -943,7 +946,7 @@ def _flush_now(app: App) -> None:
     metrics = getattr(app, "metrics", None)
     if metrics is not None:
         try:
-            persistence.save_metrics(metrics.export_counters())
+            await persistence.save_metrics(metrics.export_counters())
         except Exception as exc:
             logger.warning("Shutdown: failed to flush metrics: %s", exc)
 
@@ -957,7 +960,7 @@ def _flush_now(app: App) -> None:
             SOURCE_GATEWAY,
         )
 
-        ops_log.add(
+        await ops_log.add(
             OpsLogEntry.create(
                 event_type=EVENT_SHUTDOWN,
                 severity=SEVERITY_INFO,
@@ -967,7 +970,7 @@ def _flush_now(app: App) -> None:
             _skip_prune=True,
         )
 
-    persistence.close()
+    await persistence.close()
 
     keystore = getattr(app, "keystore", None)
     if keystore is not None:
@@ -1191,7 +1194,7 @@ def _install_lifecycle_hooks(app: App) -> None:
         if ttfb_ms is not None and entry_id is not None:
             request_log = getattr(request.app, "request_log", None)
             if request_log is not None:
-                request_log.update_profile(entry_id, {"ttfb_ms": ttfb_ms})
+                await request_log.update_profile(entry_id, {"ttfb_ms": ttfb_ms})
 
     @app.on_client_disconnect
     async def _on_client_disconnect(request: Any) -> None:
@@ -1203,7 +1206,9 @@ def _install_lifecycle_hooks(app: App) -> None:
         if entry_id is not None:
             request_log = getattr(request.app, "request_log", None)
             if request_log is not None:
-                request_log.update_profile(entry_id, {"client_disconnected": True})
+                await request_log.update_profile(
+                    entry_id, {"client_disconnected": True}
+                )
 
         ctx = request_context_var.get()
         logger.debug(
@@ -1214,7 +1219,7 @@ def _install_lifecycle_hooks(app: App) -> None:
         )
 
 
-def create_app(
+async def create_app(
     config: GatewayConfig,
     config_path: str | None = None,
     extensions: GatewayExtensions | None = None,
@@ -1336,7 +1341,7 @@ def create_app(
     app.keystore = keystore  # type: ignore
 
     if not ext.skip_admin_setup:
-        setup_admin(
+        await setup_admin(
             app,
             config,
             config_path,
@@ -1376,7 +1381,7 @@ async def run_gateway(
         )
 
         config = getattr(app, "gateway_config", None)
-        ops_log.add(
+        await ops_log.add(
             OpsLogEntry.create(
                 event_type=EVENT_STARTUP,
                 severity=SEVERITY_INFO,
@@ -1434,7 +1439,7 @@ async def run_gateway(
             await flush_task
         except asyncio.CancelledError:
             pass
-        _flush_now(app)
+        await _flush_now(app)
         await close_resources(
             transport=app.transport,  # type: ignore
             metadata_store=app.metadata_store,  # type: ignore

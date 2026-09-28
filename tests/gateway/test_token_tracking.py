@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import pytest
+import pytest_asyncio
 
 from llm_rosetta.observability.metrics import MetricsCollector
 from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
 
 
 class TestRequestLogEntryTokenFields:
-    def test_create_with_tokens(self):
+    @pytest.mark.asyncio
+    async def test_create_with_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -25,7 +27,8 @@ class TestRequestLogEntryTokenFields:
         assert entry.output_tokens == 50
         assert entry.total_tokens == 150
 
-    def test_create_without_tokens(self):
+    @pytest.mark.asyncio
+    async def test_create_without_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -38,7 +41,8 @@ class TestRequestLogEntryTokenFields:
         assert entry.output_tokens is None
         assert entry.total_tokens is None
 
-    def test_to_dict_includes_tokens(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_includes_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -55,7 +59,8 @@ class TestRequestLogEntryTokenFields:
         assert d["output_tokens"] == 50
         assert d["total_tokens"] == 150
 
-    def test_to_dict_omits_none_tokens(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_omits_none_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -71,7 +76,8 @@ class TestRequestLogEntryTokenFields:
 
 
 class TestRequestLogUpdateUsage:
-    def test_update_usage_in_memory(self):
+    @pytest.mark.asyncio
+    async def test_update_usage_in_memory(self):
         log = RequestLog(persistence=None)
         entry = RequestLogEntry.create(
             model="gpt-4o",
@@ -81,23 +87,25 @@ class TestRequestLogUpdateUsage:
             status_code=200,
             duration_ms=500.0,
         )
-        log.add(entry)
+        await log.add(entry)
 
-        log.update_usage(entry.id, 200, 100, 300)
+        await log.update_usage(entry.id, 200, 100, 300)
 
-        d = log.get_entry(entry.id)
+        d = await log.get_entry(entry.id)
         assert d is not None
         assert d["input_tokens"] == 200
         assert d["output_tokens"] == 100
         assert d["total_tokens"] == 300
 
-    def test_update_usage_nonexistent_id(self):
+    @pytest.mark.asyncio
+    async def test_update_usage_nonexistent_id(self):
         log = RequestLog(persistence=None)
-        log.update_usage("nonexistent", 100, 50, 150)
+        await log.update_usage("nonexistent", 100, 50, 150)
 
 
 class TestMetricsCollectorTokenTracking:
-    def test_record_request_with_tokens(self):
+    @pytest.mark.asyncio
+    async def test_record_request_with_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -114,7 +122,8 @@ class TestMetricsCollectorTokenTracking:
         assert m.by_model_tokens["gpt-4o"]["input_tokens"] == 100
         assert m.by_model_tokens["gpt-4o"]["output_tokens"] == 50
 
-    def test_record_request_without_tokens(self):
+    @pytest.mark.asyncio
+    async def test_record_request_without_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -128,7 +137,8 @@ class TestMetricsCollectorTokenTracking:
         assert m.total_output_tokens == 0
         assert m.by_model_tokens == {}
 
-    def test_token_accumulation(self):
+    @pytest.mark.asyncio
+    async def test_token_accumulation(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -155,7 +165,8 @@ class TestMetricsCollectorTokenTracking:
         assert m.by_model_tokens["gpt-4o"]["input_tokens"] == 300
         assert m.by_model_tokens["gpt-4o"]["output_tokens"] == 150
 
-    def test_record_usage_separate(self):
+    @pytest.mark.asyncio
+    async def test_record_usage_separate(self):
         m = MetricsCollector()
         m.record_usage(model="gpt-4o", input_tokens=500, output_tokens=200)
         assert m.total_input_tokens == 500
@@ -163,7 +174,8 @@ class TestMetricsCollectorTokenTracking:
         assert m.by_model_tokens["gpt-4o"]["input_tokens"] == 500
         assert m.by_model_tokens["gpt-4o"]["output_tokens"] == 200
 
-    def test_snapshot_includes_tokens(self):
+    @pytest.mark.asyncio
+    async def test_snapshot_includes_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -181,7 +193,8 @@ class TestMetricsCollectorTokenTracking:
         assert snap["by_model_tokens"]["gpt-4o"]["input_tokens"] == 1000
         assert snap["by_model_tokens"]["gpt-4o"]["output_tokens"] == 500
 
-    def test_export_load_preserves_tokens(self):
+    @pytest.mark.asyncio
+    async def test_export_load_preserves_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -201,7 +214,8 @@ class TestMetricsCollectorTokenTracking:
         assert m2.total_output_tokens == 500
         assert m2.by_model_tokens["gpt-4o"]["input_tokens"] == 1000
 
-    def test_rebuild_counters_with_tokens(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_counters_with_tokens(self):
         m = MetricsCollector()
         rows = [
             {
@@ -233,13 +247,14 @@ class TestMetricsCollectorTokenTracking:
 
 
 class TestPersistenceTokenColumns:
-    @pytest.fixture()
-    def pm(self, tmp_path):
+    @pytest_asyncio.fixture()
+    async def pm(self, tmp_path):
         from llm_rosetta.observability.persistence import PersistenceManager
 
-        return PersistenceManager(data_dir=tmp_path)
+        return await PersistenceManager.create(data_dir=tmp_path)
 
-    def test_insert_and_query_with_tokens(self, pm):
+    @pytest.mark.asyncio
+    async def test_insert_and_query_with_tokens(self, pm):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -251,16 +266,17 @@ class TestPersistenceTokenColumns:
             output_tokens=50,
             total_tokens=150,
         )
-        pm.insert_log_entries([entry.to_dict()])
+        await pm.insert_log_entries([entry.to_dict()])
 
-        entries, total = pm.query_log_entries(limit=10)
+        entries, total = await pm.query_log_entries(limit=10)
         assert total == 1
         e = entries[0]
         assert e["input_tokens"] == 100
         assert e["output_tokens"] == 50
         assert e["total_tokens"] == 150
 
-    def test_insert_without_tokens(self, pm):
+    @pytest.mark.asyncio
+    async def test_insert_without_tokens(self, pm):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -269,16 +285,17 @@ class TestPersistenceTokenColumns:
             status_code=200,
             duration_ms=150.0,
         )
-        pm.insert_log_entries([entry.to_dict()])
+        await pm.insert_log_entries([entry.to_dict()])
 
-        entries, total = pm.query_log_entries(limit=10)
+        entries, total = await pm.query_log_entries(limit=10)
         assert total == 1
         e = entries[0]
         assert "input_tokens" not in e
         assert "output_tokens" not in e
         assert "total_tokens" not in e
 
-    def test_update_entry_usage(self, pm):
+    @pytest.mark.asyncio
+    async def test_update_entry_usage(self, pm):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -287,17 +304,18 @@ class TestPersistenceTokenColumns:
             status_code=200,
             duration_ms=500.0,
         )
-        pm.insert_log_entries([entry.to_dict()])
+        await pm.insert_log_entries([entry.to_dict()])
 
-        pm.update_entry_usage(entry.id, 200, 100, 300)
+        await pm.update_entry_usage(entry.id, 200, 100, 300)
 
-        e = pm.get_log_entry(entry.id)
+        e = await pm.get_log_entry(entry.id)
         assert e is not None
         assert e["input_tokens"] == 200
         assert e["output_tokens"] == 100
         assert e["total_tokens"] == 300
 
-    def test_migration_adds_token_columns(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_migration_adds_token_columns(self, tmp_path):
         """Simulate an old DB without token columns and verify migration."""
         import sqlite3
 
@@ -325,17 +343,18 @@ class TestPersistenceTokenColumns:
 
         from llm_rosetta.observability.persistence import PersistenceManager
 
-        pm = PersistenceManager(data_dir=tmp_path)
+        pm = await PersistenceManager.create(data_dir=tmp_path)
 
-        cursor = pm._conn.execute("PRAGMA table_info(request_log)")
-        columns = {row[1] for row in cursor.fetchall()}
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in await cursor.fetchall()}
         assert "input_tokens" in columns
         assert "output_tokens" in columns
         assert "total_tokens" in columns
 
 
 class TestStreamProcessorUsageTracking:
-    def test_get_accumulated_usage_from_ir_event(self):
+    @pytest.mark.asyncio
+    async def test_get_accumulated_usage_from_ir_event(self):
         from unittest.mock import MagicMock
 
         from llm_rosetta.pipeline import StreamProcessor
@@ -378,7 +397,8 @@ class TestStreamProcessorUsageTracking:
 
 
 class TestPassthroughStreamProcessorUsage:
-    def test_extract_openai_usage(self):
+    @pytest.mark.asyncio
+    async def test_extract_openai_usage(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         p = PassthroughStreamProcessor()
@@ -400,7 +420,8 @@ class TestPassthroughStreamProcessorUsage:
         assert usage["completion_tokens"] == 50
         assert usage["total_tokens"] == 150
 
-    def test_extract_anthropic_usage(self):
+    @pytest.mark.asyncio
+    async def test_extract_anthropic_usage(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         p = PassthroughStreamProcessor()
@@ -416,7 +437,8 @@ class TestPassthroughStreamProcessorUsage:
         assert usage["prompt_tokens"] == 200
         assert usage["completion_tokens"] == 80
 
-    def test_extract_google_usage(self):
+    @pytest.mark.asyncio
+    async def test_extract_google_usage(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         p = PassthroughStreamProcessor()
@@ -436,7 +458,8 @@ class TestPassthroughStreamProcessorUsage:
         assert usage["completion_tokens"] == 120
         assert usage["total_tokens"] == 420
 
-    def test_no_usage_returns_none(self):
+    @pytest.mark.asyncio
+    async def test_no_usage_returns_none(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         p = PassthroughStreamProcessor()
@@ -446,7 +469,8 @@ class TestPassthroughStreamProcessorUsage:
 
 
 class TestPassthroughZeroTokens:
-    def test_zero_prompt_tokens_preserved(self):
+    @pytest.mark.asyncio
+    async def test_zero_prompt_tokens_preserved(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         p = PassthroughStreamProcessor()
@@ -472,7 +496,8 @@ class TestPassthroughZeroTokens:
 class TestProviderTokenTracking:
     """by_provider_tokens aggregation in MetricsCollector."""
 
-    def test_record_request_tracks_provider_tokens(self):
+    @pytest.mark.asyncio
+    async def test_record_request_tracks_provider_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -488,7 +513,8 @@ class TestProviderTokenTracking:
         assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
         assert m.by_provider_tokens["openai_a"]["output_tokens"] == 50
 
-    def test_record_request_without_provider_name(self):
+    @pytest.mark.asyncio
+    async def test_record_request_without_provider_name(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -502,7 +528,8 @@ class TestProviderTokenTracking:
         )
         assert m.by_provider_tokens == {}
 
-    def test_provider_token_accumulation(self):
+    @pytest.mark.asyncio
+    async def test_provider_token_accumulation(self):
         m = MetricsCollector()
         for _ in range(3):
             m.record_request(
@@ -519,7 +546,8 @@ class TestProviderTokenTracking:
         assert m.by_provider_tokens["openai_a"]["input_tokens"] == 300
         assert m.by_provider_tokens["openai_a"]["output_tokens"] == 150
 
-    def test_multi_provider_separation(self):
+    @pytest.mark.asyncio
+    async def test_multi_provider_separation(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -546,7 +574,8 @@ class TestProviderTokenTracking:
         assert m.by_provider_tokens["openai_a"]["input_tokens"] == 100
         assert m.by_provider_tokens["openai_b"]["input_tokens"] == 200
 
-    def test_record_usage_with_provider_name(self):
+    @pytest.mark.asyncio
+    async def test_record_usage_with_provider_name(self):
         m = MetricsCollector()
         m.record_usage(
             model="gpt-4o",
@@ -557,12 +586,14 @@ class TestProviderTokenTracking:
         assert m.by_provider_tokens["openai_a"]["input_tokens"] == 500
         assert m.by_provider_tokens["openai_a"]["output_tokens"] == 200
 
-    def test_record_usage_without_provider_name(self):
+    @pytest.mark.asyncio
+    async def test_record_usage_without_provider_name(self):
         m = MetricsCollector()
         m.record_usage(model="gpt-4o", input_tokens=500, output_tokens=200)
         assert m.by_provider_tokens == {}
 
-    def test_snapshot_includes_provider_tokens(self):
+    @pytest.mark.asyncio
+    async def test_snapshot_includes_provider_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -578,7 +609,8 @@ class TestProviderTokenTracking:
         snap = m.snapshot()
         assert snap["by_provider_tokens"]["openai_a"]["input_tokens"] == 1000
 
-    def test_export_load_preserves_provider_tokens(self):
+    @pytest.mark.asyncio
+    async def test_export_load_preserves_provider_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="gpt-4o",
@@ -596,7 +628,8 @@ class TestProviderTokenTracking:
         m2.load_counters(exported)
         assert m2.by_provider_tokens["openai_a"]["input_tokens"] == 1000
 
-    def test_rebuild_counters_with_provider_tokens(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_counters_with_provider_tokens(self):
         m = MetricsCollector()
         rows = [
             {
@@ -630,7 +663,8 @@ class TestProviderTokenTracking:
 class TestExtendedTokenFields:
     """Tests for cache_read_tokens, cache_creation_tokens, reasoning_tokens."""
 
-    def test_entry_create_with_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_entry_create_with_extended_tokens(self):
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
             source_provider="openai_chat",
@@ -649,7 +683,8 @@ class TestExtendedTokenFields:
         assert entry.cache_creation_tokens == 100
         assert entry.reasoning_tokens == 200
 
-    def test_entry_create_without_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_entry_create_without_extended_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -662,7 +697,8 @@ class TestExtendedTokenFields:
         assert entry.cache_creation_tokens is None
         assert entry.reasoning_tokens is None
 
-    def test_to_dict_includes_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_includes_extended_tokens(self):
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
             source_provider="openai_chat",
@@ -678,7 +714,8 @@ class TestExtendedTokenFields:
         assert d["reasoning_tokens"] == 200
         assert "cache_creation_tokens" not in d
 
-    def test_to_dict_omits_none_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_to_dict_omits_none_extended_tokens(self):
         entry = RequestLogEntry.create(
             model="gpt-4o",
             source_provider="openai_chat",
@@ -692,7 +729,8 @@ class TestExtendedTokenFields:
         assert "cache_creation_tokens" not in d
         assert "reasoning_tokens" not in d
 
-    def test_update_usage_with_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_update_usage_with_extended_tokens(self):
         log = RequestLog(max_entries=10)
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
@@ -702,8 +740,8 @@ class TestExtendedTokenFields:
             status_code=200,
             duration_ms=500.0,
         )
-        log.add(entry)
-        log.update_usage(
+        await log.add(entry)
+        await log.update_usage(
             entry.id,
             input_tokens=1000,
             output_tokens=500,
@@ -712,7 +750,7 @@ class TestExtendedTokenFields:
             cache_creation_tokens=100,
             reasoning_tokens=200,
         )
-        entries, _ = log.get_entries()
+        entries, _ = await log.get_entries()
         updated = next(e for e in entries if e["id"] == entry.id)
         assert updated["cache_read_tokens"] == 300
         assert updated["cache_creation_tokens"] == 100
@@ -720,7 +758,8 @@ class TestExtendedTokenFields:
 
 
 class TestMetricsExtendedTokens:
-    def test_record_request_with_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_record_request_with_extended_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="claude-sonnet-4-6",
@@ -745,7 +784,8 @@ class TestMetricsExtendedTokens:
         pt = m.by_provider_tokens["Anthropic"]
         assert pt["cache_read_tokens"] == 300
 
-    def test_record_usage_with_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_record_usage_with_extended_tokens(self):
         m = MetricsCollector()
         m.record_usage(
             model="claude-sonnet-4-6",
@@ -758,7 +798,8 @@ class TestMetricsExtendedTokens:
         assert m.total_cache_read_tokens == 300
         assert m.total_reasoning_tokens == 200
 
-    def test_snapshot_includes_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_snapshot_includes_extended_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="claude-sonnet-4-6",
@@ -776,7 +817,8 @@ class TestMetricsExtendedTokens:
         assert snap["total_cache_creation_tokens"] == 100
         assert snap["total_reasoning_tokens"] == 200
 
-    def test_export_load_preserves_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_export_load_preserves_extended_tokens(self):
         m = MetricsCollector()
         m.record_request(
             model="claude-sonnet-4-6",
@@ -794,7 +836,8 @@ class TestMetricsExtendedTokens:
         assert m2.total_cache_read_tokens == 300
         assert m2.total_reasoning_tokens == 200
 
-    def test_rebuild_counters_with_extended_tokens(self):
+    @pytest.mark.asyncio
+    async def test_rebuild_counters_with_extended_tokens(self):
         m = MetricsCollector()
         rows = [
             {
@@ -833,13 +876,14 @@ class TestMetricsExtendedTokens:
 
 
 class TestPersistenceExtendedTokenColumns:
-    @pytest.fixture
-    def pm(self, tmp_path):
+    @pytest_asyncio.fixture
+    async def pm(self, tmp_path):
         from llm_rosetta.observability.persistence import PersistenceManager
 
-        return PersistenceManager(str(tmp_path / "test.db"))
+        return await PersistenceManager.create(str(tmp_path / "test.db"))
 
-    def test_insert_and_query_with_extended_tokens(self, pm):
+    @pytest.mark.asyncio
+    async def test_insert_and_query_with_extended_tokens(self, pm):
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
             source_provider="openai_chat",
@@ -854,13 +898,14 @@ class TestPersistenceExtendedTokenColumns:
             cache_creation_tokens=100,
             reasoning_tokens=200,
         )
-        pm.insert_log_entries([entry.to_dict()])
-        rows, _ = pm.query_log_entries(limit=1)
+        await pm.insert_log_entries([entry.to_dict()])
+        rows, _ = await pm.query_log_entries(limit=1)
         assert rows[0]["cache_read_tokens"] == 300
         assert rows[0]["cache_creation_tokens"] == 100
         assert rows[0]["reasoning_tokens"] == 200
 
-    def test_update_entry_usage_with_extended_tokens(self, pm):
+    @pytest.mark.asyncio
+    async def test_update_entry_usage_with_extended_tokens(self, pm):
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
             source_provider="openai_chat",
@@ -869,8 +914,8 @@ class TestPersistenceExtendedTokenColumns:
             status_code=200,
             duration_ms=500.0,
         )
-        pm.insert_log_entries([entry.to_dict()])
-        pm.update_entry_usage(
+        await pm.insert_log_entries([entry.to_dict()])
+        await pm.update_entry_usage(
             entry.id,
             1000,
             500,
@@ -879,12 +924,13 @@ class TestPersistenceExtendedTokenColumns:
             cache_creation_tokens=100,
             reasoning_tokens=200,
         )
-        rows, _ = pm.query_log_entries(limit=1)
+        rows, _ = await pm.query_log_entries(limit=1)
         assert rows[0]["cache_read_tokens"] == 300
         assert rows[0]["cache_creation_tokens"] == 100
         assert rows[0]["reasoning_tokens"] == 200
 
-    def test_iter_log_rows_includes_all_token_fields(self, pm):
+    @pytest.mark.asyncio
+    async def test_iter_log_rows_includes_all_token_fields(self, pm):
         entry = RequestLogEntry.create(
             model="claude-sonnet-4-6",
             source_provider="openai_chat",
@@ -899,8 +945,8 @@ class TestPersistenceExtendedTokenColumns:
             cache_creation_tokens=100,
             reasoning_tokens=200,
         )
-        pm.insert_log_entries([entry.to_dict()])
-        rows = list(pm.iter_log_rows_for_rebuild())
+        await pm.insert_log_entries([entry.to_dict()])
+        rows = [row async for row in pm.iter_log_rows_for_rebuild()]
         assert len(rows) == 1
         r = rows[0]
         assert r["input_tokens"] == 1000
@@ -909,7 +955,8 @@ class TestPersistenceExtendedTokenColumns:
         assert r["cache_creation_tokens"] == 100
         assert r["reasoning_tokens"] == 200
 
-    def test_migration_adds_extended_token_columns(self, tmp_path):
+    @pytest.mark.asyncio
+    async def test_migration_adds_extended_token_columns(self, tmp_path):
         import sqlite3
 
         db_path = tmp_path / "gateway.db"
@@ -939,16 +986,17 @@ class TestPersistenceExtendedTokenColumns:
 
         from llm_rosetta.observability.persistence import PersistenceManager
 
-        pm = PersistenceManager(data_dir=tmp_path)
-        cursor = pm._conn.execute("PRAGMA table_info(request_log)")
-        columns = {row[1] for row in cursor.fetchall()}
+        pm = await PersistenceManager.create(data_dir=tmp_path)
+        cursor = await pm._conn.execute("PRAGMA table_info(request_log)")
+        columns = {row[1] for row in await cursor.fetchall()}
         assert "cache_read_tokens" in columns
         assert "cache_creation_tokens" in columns
         assert "reasoning_tokens" in columns
 
 
 class TestPassthroughExtendedUsageExtraction:
-    def test_extract_openai_cache_and_reasoning(self):
+    @pytest.mark.asyncio
+    async def test_extract_openai_cache_and_reasoning(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         chunk = {
@@ -965,7 +1013,8 @@ class TestPassthroughExtendedUsageExtraction:
         assert result["cache_read_tokens"] == 300
         assert result["reasoning_tokens"] == 200
 
-    def test_extract_anthropic_cache_tokens(self):
+    @pytest.mark.asyncio
+    async def test_extract_anthropic_cache_tokens(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         chunk = {
@@ -981,7 +1030,8 @@ class TestPassthroughExtendedUsageExtraction:
         assert result["cache_read_tokens"] == 300
         assert result["cache_creation_tokens"] == 100
 
-    def test_extract_anthropic_thinking_tokens(self):
+    @pytest.mark.asyncio
+    async def test_extract_anthropic_thinking_tokens(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         chunk = {
@@ -995,7 +1045,8 @@ class TestPassthroughExtendedUsageExtraction:
         assert result is not None
         assert result["reasoning_tokens"] == 200
 
-    def test_extract_google_cache_and_reasoning(self):
+    @pytest.mark.asyncio
+    async def test_extract_google_cache_and_reasoning(self):
         from llm_rosetta.pipeline import PassthroughStreamProcessor
 
         chunk = {

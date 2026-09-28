@@ -36,7 +36,7 @@ def _detect_host_ip() -> dict[str, Any]:
         return {"ok": False, "error": str(exc)}
 
 
-def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
+async def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
     """Build the persistence sub-block for the metrics snapshot.
 
     Returns a dict with on-disk byte sizes and per-class entry counts
@@ -49,11 +49,11 @@ def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
         sizes = persistence.db_file_sizes()
         return {
             **sizes,
-            "log_entries": persistence.count_log_entries(),
-            "log_success_entries": persistence.count_success_entries(),
-            "log_error_entries": persistence.count_error_entries(),
+            "log_entries": await persistence.count_log_entries(),
+            "log_success_entries": await persistence.count_success_entries(),
+            "log_error_entries": await persistence.count_error_entries(),
             "log_max_success": persistence.success_max,
-            "dump_entries": persistence.count_error_dumps(),
+            "dump_entries": await persistence.count_error_dumps(),
             "dump_max": persistence.dump_max,
         }
     except Exception:
@@ -70,12 +70,12 @@ async def get_metrics(request: Any) -> Response:
     snap = metrics.snapshot(series_seconds=seconds)
 
     persistence = getattr(request.app, "persistence", None)
-    persistence_snap = _persistence_snapshot(persistence)
+    persistence_snap = await _persistence_snapshot(persistence)
     if persistence_snap is not None:
         snap["persistence"] = persistence_snap
 
     if persistence is not None:
-        snap.update(persistence.query_rolling_24h_tokens())
+        snap.update(await persistence.query_rolling_24h_tokens())
 
     # Include circuit breaker states when the feature is enabled
     config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
@@ -110,14 +110,15 @@ async def get_rate_limit_status(request: Any) -> Response:
     return JSONResponse(rate_limit_state.snapshot(key=key))
 
 
-def _rebuild_counters_after_mutation(request: Any) -> None:
+async def _rebuild_counters_after_mutation(request: Any) -> None:
     """Rebuild in-memory counters from request_log after admin-initiated deletion."""
     metrics = getattr(request.app, "metrics", None)
     persistence = getattr(request.app, "persistence", None)
     if metrics is None or persistence is None:
         return
-    metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
-    persistence.save_metrics(metrics.export_counters())
+    rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
+    metrics.rebuild_counters(iter(rows))
+    await persistence.save_metrics(metrics.export_counters())
 
 
 async def rebuild_metrics(request: Any) -> Response:
@@ -138,11 +139,12 @@ async def rebuild_metrics(request: Any) -> Response:
 
     metrics = request.app.metrics
     before = metrics.export_counters()
-    count = metrics.rebuild_counters(persistence.iter_log_rows_for_rebuild())
+    rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
+    count = metrics.rebuild_counters(iter(rows))
     after = metrics.export_counters()
 
     # Persist the rebuilt counters immediately
-    persistence.save_metrics(after)
+    await persistence.save_metrics(after)
 
     return JSONResponse(
         {
@@ -163,14 +165,16 @@ async def get_token_usage(request: Any) -> Response:
     days = max(1, min(days, 365))
     api_key_label = _qp(request, "api_key_label")
     return JSONResponse(
-        persistence.query_token_usage_by_day(days=days, api_key_label=api_key_label)
+        await persistence.query_token_usage_by_day(
+            days=days, api_key_label=api_key_label
+        )
     )
 
 
 async def get_request_key_labels(request: Any) -> Response:
     """Return API key labels seen in request logs."""
     log = request.app.request_log
-    return JSONResponse({"labels": log.get_api_key_labels()})
+    return JSONResponse({"labels": await log.get_api_key_labels()})
 
 
 async def get_requests(request: Any) -> Response:
@@ -209,7 +213,7 @@ async def get_requests(request: Any) -> Response:
             except Exception:
                 pass
 
-    entries, total = log.get_entries(
+    entries, total = await log.get_entries(
         limit=limit,
         offset=offset,
         model=model,
@@ -228,7 +232,7 @@ async def backfill_dump_log_ids(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
     config = getattr(request.app, "gateway_config", None)
     aliases = config.model_upstream_names if config else {}
-    updated = persistence.backfill_error_dump_log_ids(model_aliases=aliases)
+    updated = await persistence.backfill_error_dump_log_ids(model_aliases=aliases)
     return JSONResponse({"updated": updated})
 
 
@@ -236,7 +240,7 @@ async def get_request_by_id(request: Any, **kwargs: Any) -> Response:
     """Return a single request log entry by ID."""
     log = request.app.request_log
     entry_id = kwargs.get("entry_id") or request.path_params["entry_id"]
-    entry = log.get_entry(entry_id)
+    entry = await log.get_entry(entry_id)
     if entry is None:
         return JSONResponse({"error": "Not found"}, status_code=404)
     return JSONResponse(entry)
@@ -245,8 +249,8 @@ async def get_request_by_id(request: Any, **kwargs: Any) -> Response:
 async def clear_requests(request: Any) -> Response:
     """Clear the request log."""
     log = request.app.request_log
-    log.clear()
-    _rebuild_counters_after_mutation(request)
+    await log.clear()
+    await _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True})
 
 
@@ -358,7 +362,7 @@ async def get_error_dumps(request: Any) -> Response:
     error_phase = _qp(request, "error_phase")
     provider = _qp(request, "provider")
 
-    entries, total = persistence.query_error_dumps(
+    entries, total = await persistence.query_error_dumps(
         limit=limit,
         offset=offset,
         model=model,
@@ -375,7 +379,7 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     dump_id = request.path_params["dump_id"]
-    entry = persistence.get_error_dump(dump_id)
+    entry = await persistence.get_error_dump(dump_id)
     if entry is None:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
@@ -383,7 +387,7 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
 
     # Decompress request body if present
     if "body_hash" in entry:
-        body_data = persistence.get_dump_body(entry["body_hash"])
+        body_data = await persistence.get_dump_body(entry["body_hash"])
         if body_data:
             try:
                 entry["request_body"] = decompress_body(body_data)
@@ -392,7 +396,7 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
 
     # Decompress converted body if present
     if "converted_body_hash" in entry:
-        conv_data = persistence.get_dump_body(entry["converted_body_hash"])
+        conv_data = await persistence.get_dump_body(entry["converted_body_hash"])
         if conv_data:
             try:
                 entry["converted_body"] = decompress_body(conv_data)
@@ -409,7 +413,7 @@ async def get_error_dump_body(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     dump_id = request.path_params["dump_id"]
-    entry = persistence.get_error_dump(dump_id)
+    entry = await persistence.get_error_dump(dump_id)
     if entry is None:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
@@ -419,7 +423,7 @@ async def get_error_dump_body(request: Any, **kwargs: Any) -> Response:
             {"error": "No request body stored for this dump"}, status_code=404
         )
 
-    body_data = persistence.get_dump_body(body_hash)
+    body_data = await persistence.get_dump_body(body_hash)
     if not body_data:
         return JSONResponse({"error": "Body data not found"}, status_code=404)
 
@@ -442,7 +446,7 @@ async def clear_error_dumps(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    persistence.clear_error_dumps()
+    await persistence.clear_error_dumps()
     return JSONResponse({"ok": True})
 
 
@@ -453,7 +457,7 @@ async def delete_error_dump(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
     dump_id = request.path_params["dump_id"]
-    if persistence.delete_error_dump(dump_id):
+    if await persistence.delete_error_dump(dump_id):
         return JSONResponse({"ok": True})
     return JSONResponse({"error": "Not found"}, status_code=404)
 
@@ -474,8 +478,8 @@ async def db_cleanup(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = persistence.cleanup_by_age(max_age_days)
-    _rebuild_counters_after_mutation(request)
+    result = await persistence.cleanup_by_age(max_age_days)
+    await _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True, **result})
 
 
@@ -485,7 +489,7 @@ async def db_vacuum(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    result = persistence.vacuum()
+    result = await persistence.vacuum()
     return JSONResponse({"ok": True, **result})
 
 
@@ -505,8 +509,8 @@ async def cleanup_requests_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = persistence.cleanup_logs_by_age(max_age_days)
-    _rebuild_counters_after_mutation(request)
+    result = await persistence.cleanup_logs_by_age(max_age_days)
+    await _rebuild_counters_after_mutation(request)
     return JSONResponse({"ok": True, **result})
 
 
@@ -526,7 +530,7 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = persistence.cleanup_error_dumps_by_age(max_age_days)
+    result = await persistence.cleanup_error_dumps_by_age(max_age_days)
     return JSONResponse({"ok": True, **result})
 
 
@@ -539,7 +543,7 @@ async def export_error_dumps(request: Any) -> Response:
     start = _qp(request, "start")
     end = _qp(request, "end")
 
-    data = persistence.export_error_dumps(start=start, end=end)
+    data = await persistence.export_error_dumps(start=start, end=end)
 
     return Response(
         body=data,
@@ -564,7 +568,7 @@ async def get_ops_log(request: Any) -> Response:
     event_type = _qp(request, "event_type")
     severity = _qp(request, "severity")
     source = _qp(request, "source")
-    entries, total = ops_log.get_entries(
+    entries, total = await ops_log.get_entries(
         limit=limit,
         offset=offset,
         event_type=event_type,
@@ -587,8 +591,8 @@ async def clear_ops_log(request: Any) -> Response:
         SOURCE_ADMIN,
     )
 
-    count = ops_log.clear()
-    ops_log.add(
+    count = await ops_log.clear()
+    await ops_log.add(
         OpsLogEntry.create(
             event_type=EVENT_OPS_LOG_CLEARED,
             severity=SEVERITY_INFO,
@@ -630,5 +634,5 @@ async def cleanup_ops_log_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    result = persistence.cleanup_ops_log_by_age(max_age_days)
+    result = await persistence.cleanup_ops_log_by_age(max_age_days)
     return JSONResponse({"ok": True, **result})

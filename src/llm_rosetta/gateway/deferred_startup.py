@@ -247,7 +247,7 @@ class DeferredStartup:
     # -- Counter rebuild (thread executor) ----------------------------------
 
     async def _rebuild_counters(self) -> None:
-        """Rebuild metrics counters in a background thread, then merge."""
+        """Rebuild metrics counters from the async persistence layer."""
         from llm_rosetta.observability import MetricsCollector
 
         metrics = getattr(self._app, "metrics", None)
@@ -257,23 +257,19 @@ class DeferredStartup:
             return
 
         try:
-            # Snapshot current state *before* the rebuild starts (on event loop)
+            # Snapshot current state *before* the rebuild starts
             pre_snapshot = metrics.export_counters()
 
-            loop = asyncio.get_running_loop()
-
-            def _sync_rebuild() -> dict:
-                tmp = MetricsCollector()
-                count = tmp.rebuild_counters(persistence.iter_log_rows_for_rebuild())
-                logger.info("Background counter rebuild processed %d rows", count)
-                return tmp.export_counters()
-
             logger.info("Starting background counter rebuild")
-            baseline = await loop.run_in_executor(None, _sync_rebuild)
+            tmp = MetricsCollector()
+            rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
+            count = tmp.rebuild_counters(iter(rows))
+            logger.info("Background counter rebuild processed %d rows", count)
+            baseline = tmp.export_counters()
 
-            # Merge back on the event-loop thread
+            # Merge back
             metrics.merge_rebuild(baseline, pre_snapshot)
-            persistence.save_metrics(metrics.export_counters())
+            await persistence.save_metrics(metrics.export_counters())
             logger.info("Counter rebuild complete, metrics merged")
         except Exception:
             logger.exception("Background counter rebuild failed")
@@ -283,12 +279,7 @@ class DeferredStartup:
     # -- Backfills (thread executor) ----------------------------------------
 
     async def _run_backfills(self) -> None:
-        """Run all database backfills sequentially in a background thread.
-
-        The persistence layer uses SQLite in WAL mode, which allows
-        concurrent reads from the event-loop thread while the executor
-        thread performs backfill writes.
-        """
+        """Run all database backfills sequentially via the async persistence layer."""
         persistence = getattr(self._app, "persistence", None)
         if persistence is None:
             self._pending_tasks.discard("backfills")
@@ -297,7 +288,7 @@ class DeferredStartup:
         config = self._config
         keystore = getattr(self._app, "keystore", None)
 
-        def _sync_backfills() -> dict[str, int]:
+        try:
             results: dict[str, int] = {}
             logger.info("Starting deferred database backfills")
 
@@ -306,30 +297,26 @@ class DeferredStartup:
                 model: route.provider_names[0] for model, route in config.models.items()
             }
             results["provider_names"] = (
-                persistence.backfill_provider_names(model_to_provider) or 0
+                await persistence.backfill_provider_names(model_to_provider) or 0
             )
 
-            # 2. Backfill API key last_used
+            # 2. Backfill API key last_used (keystore is still sync)
             if keystore is not None:
                 results["key_last_used"] = (
                     keystore.backfill_last_used(persistence.db_path) or 0
                 )
 
             # 3. Backfill total_tokens (cache tokens were excluded)
-            results["total_tokens"] = persistence.backfill_total_tokens() or 0
+            results["total_tokens"] = await persistence.backfill_total_tokens() or 0
 
             # 4. Backfill error dump log IDs
             aliases = config.model_upstream_names if config else {}
             results["error_dump_log_ids"] = (
-                persistence.backfill_error_dump_log_ids(model_aliases=aliases) or 0
+                await persistence.backfill_error_dump_log_ids(model_aliases=aliases)
+                or 0
             )
 
             logger.info("Deferred backfills complete: %s", results)
-            return results
-
-        try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, _sync_backfills)
         except Exception:
             logger.exception("Deferred backfills failed")
         finally:

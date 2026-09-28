@@ -278,11 +278,17 @@ def _cmd_db_cleanup(args: argparse.Namespace) -> None:
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    pm = PersistenceManager(data_dir)
-    result = pm.cleanup_by_age(args.max_age_days)
-    if result["request_log_deleted"] > 0:
-        pm.set_rebuild_flag()
-    pm.close()
+    async def _do_cleanup() -> dict:
+        pm = await PersistenceManager.create(data_dir)
+        try:
+            r = await pm.cleanup_by_age(args.max_age_days)
+            if r["request_log_deleted"] > 0:
+                await pm.set_rebuild_flag()
+            return r
+        finally:
+            await pm.close()
+
+    result = asyncio.run(_do_cleanup())
 
     total = (
         result["request_log_deleted"]
@@ -319,11 +325,17 @@ def _cmd_db_cleanup_logs(args: argparse.Namespace) -> None:
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    pm = PersistenceManager(data_dir)
-    result = pm.cleanup_logs_by_age(args.max_age_days)
-    if result["deleted"] > 0:
-        pm.set_rebuild_flag()
-    pm.close()
+    async def _do_cleanup_logs() -> dict:
+        pm = await PersistenceManager.create(data_dir)
+        try:
+            r = await pm.cleanup_logs_by_age(args.max_age_days)
+            if r["deleted"] > 0:
+                await pm.set_rebuild_flag()
+            return r
+        finally:
+            await pm.close()
+
+    result = asyncio.run(_do_cleanup_logs())
 
     if result["deleted"] == 0:
         print(f"Nothing to clean up — no logs older than {args.max_age_days} days.")
@@ -354,9 +366,14 @@ def _cmd_db_cleanup_errors(args: argparse.Namespace) -> None:
         print(f"Database not found: {db_path}", file=sys.stderr)
         sys.exit(1)
 
-    pm = PersistenceManager(data_dir)
-    result = pm.cleanup_error_dumps_by_age(args.max_age_days)
-    pm.close()
+    async def _do_cleanup_errors() -> dict:
+        pm = await PersistenceManager.create(data_dir)
+        try:
+            return await pm.cleanup_error_dumps_by_age(args.max_age_days)
+        finally:
+            await pm.close()
+
+    result = asyncio.run(_do_cleanup_errors())
 
     total = result["error_dumps_deleted"] + result["dump_bodies_deleted"]
     if total == 0:
@@ -394,9 +411,14 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     start = f"{args.start}T00:00:00Z" if args.start else None
     end = f"{args.end}T23:59:59Z" if args.end else None
 
-    pm = PersistenceManager(data_dir)
-    data = pm.export_error_dumps(start=start, end=end)
-    pm.close()
+    async def _do_export() -> bytes:
+        pm = await PersistenceManager.create(data_dir)
+        try:
+            return await pm.export_error_dumps(start=start, end=end)
+        finally:
+            await pm.close()
+
+    data = asyncio.run(_do_export())
 
     output = args.output or "error-dumps.tar.gz"
     with open(output, "wb") as f:
@@ -435,7 +457,7 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
     return False
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     """Parse CLI arguments and either run a subcommand or start the server."""
     from .app import create_app
 
@@ -664,13 +686,13 @@ def main() -> None:
     if config.log_bodies:
         logger.info("Request/response body logging enabled")
 
-    app = create_app(config, config_path=config_path)
+    async def _run() -> None:
+        app = await create_app(config, config_path=config_path)
+        await run_gateway(app, host, port, socket=socket_path, ssl_context=ssl_context)
 
     from .app import run_gateway
 
     try:
-        asyncio.run(
-            run_gateway(app, host, port, socket=socket_path, ssl_context=ssl_context)
-        )
+        asyncio.run(_run())
     except KeyboardInterrupt:
         pass

@@ -77,7 +77,7 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
 _VALID_TABS = frozenset({"providers", "models", "keys", "dashboard", "logs"})
 
 
-def _init_persistence(
+async def _init_persistence(
     config: Any,
     config_path: str | None,
     data_dir: str | None,
@@ -107,7 +107,7 @@ def _init_persistence(
         ops_info_max = int(ops_info_max)
     if ops_warn_max is not None:
         ops_warn_max = int(ops_warn_max)
-    persistence = PersistenceManager(
+    persistence = await PersistenceManager.create(
         resolved_data_dir,
         success_max=success_max,
         dump_max=dump_max,
@@ -115,7 +115,7 @@ def _init_persistence(
         ops_warn_max=ops_warn_max,
     )
 
-    saved_metrics = persistence.load_metrics()
+    saved_metrics = await persistence.load_metrics()
     if saved_metrics:
         metrics.load_counters(saved_metrics)
         logger.info(
@@ -127,9 +127,9 @@ def _init_persistence(
     # a background task so the server starts accepting connections immediately.
     # Only flag when counters < log — the reverse (counters > log) is
     # expected when log retention caps purge old entries.
-    log_entries = persistence.count_log_entries()
+    log_entries = await persistence.count_log_entries()
     _counter_rebuild_needed = False
-    if persistence.check_and_clear_rebuild_flag():
+    if await persistence.check_and_clear_rebuild_flag():
         logger.info(
             "Rebuild flag detected (external cleanup) — "
             "rebuild will run in the background after startup"
@@ -147,7 +147,7 @@ def _init_persistence(
     return persistence, _counter_rebuild_needed
 
 
-def setup_admin(
+async def setup_admin(
     app: Any,
     config: GatewayConfig,
     config_path: str | None,
@@ -206,7 +206,7 @@ def setup_admin(
         config_io = JsoncConfigIO()
     metrics = MetricsCollector()
 
-    result = _init_persistence(config, config_path, data_dir, metrics)
+    result = await _init_persistence(config, config_path, data_dir, metrics)
     if result is not None:
         persistence, counter_rebuild_needed = result
     else:
@@ -265,7 +265,7 @@ def setup_admin(
     app.admin_custom_head = "\n".join(parts)
 
     # Record admin setup event (after all wiring is complete)
-    ops_log.add(
+    await ops_log.add(
         OpsLogEntry.create(
             event_type=EVENT_ADMIN_SETUP,
             severity=SEVERITY_INFO,
