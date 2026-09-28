@@ -19,7 +19,7 @@ import json
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response, StreamingResponse
 
@@ -569,6 +569,52 @@ def _log_response_warnings(pipeline: Any | None, first_new: int) -> None:
         logger.warning("Response conversion warnings: %s", new_warnings)
 
 
+def _check_fidelity(
+    source_provider: str,
+    target_provider: str,
+    original: dict[str, Any],
+    converted: dict[str, Any],
+    direction: Literal["request", "response"],
+    profile: dict[str, Any],
+) -> bool:
+    """Run fidelity diff for same-format routes.
+
+    Returns ``True`` if any critical-severity diffs were found.
+    Results are injected into *profile* under ``"fidelity"``.
+    """
+    if source_provider != target_provider:
+        return False
+    try:
+        from llm_rosetta.fidelity import FidelityChecker
+
+        checker = FidelityChecker(mode="critical", format_name=source_provider)
+        diffs = checker.compare(original, converted, direction=direction)
+    except Exception:
+        logger.debug("Fidelity check failed", exc_info=True)
+        return False
+    if not diffs:
+        return False
+    max_sev = max(d.effective_severity for d in diffs)
+    summary = {
+        "diff_count": len(diffs),
+        "max_severity": max_sev,
+        "diffs": [
+            {"path": d.path, "kind": d.kind, "severity": d.effective_severity}
+            for d in diffs[:20]
+        ],
+    }
+    profile.setdefault("fidelity", {})[direction] = summary
+    from .logging import log_fidelity_warning
+
+    log_fidelity_warning(
+        len(diffs),
+        max_sev,
+        direction,
+        source_provider=source_provider,
+    )
+    return max_sev == "critical"
+
+
 async def handle_non_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -629,6 +675,15 @@ async def handle_non_streaming(
         return error_response_for_source(route.source_provider, 400, str(exc)), profile
 
     profile.update(pipeline.profile)
+
+    _check_fidelity(
+        route.source_provider,
+        route.target_provider,
+        body,
+        target_body,
+        "request",
+        profile,
+    )
 
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
@@ -769,6 +824,15 @@ async def handle_non_streaming(
 
     # Merge response-phase timings from pipeline
     profile.update(pipeline.profile)
+
+    _check_fidelity(
+        route.source_provider,
+        route.target_provider,
+        resp.body,
+        source_response,
+        "response",
+        profile,
+    )
 
     _log_response_warnings(pipeline, warnings_before)
 
@@ -1175,6 +1239,14 @@ async def handle_streaming(
 
     profile.update(pipeline.profile)
 
+    _check_fidelity(
+        route.source_provider,
+        route.target_provider,
+        body,
+        target_body,
+        "request",
+        profile,
+    )
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
         logger.warning("Conversion warnings: %s", pipeline.warnings)

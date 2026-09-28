@@ -114,6 +114,8 @@ _STRUCTURED_EXTRA_KEYS: frozenset[str] = frozenset(
         "status",
         "target_provider",
         "truncate_tools",
+        "fidelity_diffs",
+        "fidelity_severity",
     }
 )
 
@@ -601,5 +603,31 @@ def log_upstream_error(
         request_type,
         status_code,
         error_text,
+        extra=extra,
+    )
+
+
+def log_fidelity_warning(
+    diff_count: int,
+    max_severity: str,
+    direction: str,
+    *,
+    model: str | None = None,
+    source_provider: str | None = None,
+) -> None:
+    """Log a fidelity diff warning in structured format."""
+    extra = _structured_extra(
+        model=model,
+        source_provider=source_provider,
+        fidelity_diffs=diff_count,
+        fidelity_severity=max_severity,
+    )
+    _logger.warning(
+        "[FIDELITY] %s: %d diff(s), max_severity=%s, provider=%s, model=%s",
+        direction,
+        diff_count,
+        max_severity,
+        source_provider,
+        model,
         extra=extra,
     )
