@@ -216,9 +216,13 @@ class Connection:
             except BaseException as exc:
                 if self._loop and not self._loop.is_closed():
                     self._loop.call_soon_threadsafe(future.set_exception, exc)
+                else:
+                    future.cancel()
             else:
                 if self._loop and not self._loop.is_closed():
                     self._loop.call_soon_threadsafe(future.set_result, result)
+                else:
+                    future.cancel()
 
     # -- Internal dispatch --------------------------------------------------
 
@@ -278,6 +282,8 @@ class Connection:
                 stacklevel=2,
             )
             self._queue.put((None, _STOP, ()))
+            if self._thread is not None:
+                self._thread.join(timeout=1.0)
 
     # -- Query methods ------------------------------------------------------
 
