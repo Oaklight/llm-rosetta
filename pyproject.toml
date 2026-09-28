@@ -85,8 +85,10 @@ include = ["src", "tests"]
 exclude = ["src/llm_rosetta/_vendor", "llm_api_simple_tests", "tests/integration"]
 
 [tool.ty.rules]
-# pytest.skip() / pytest.fail() are mistyped by ty's pytest stubs
+# pytest.skip() / pytest.fail() are mistyped by some ty pytest stubs;
+# the ignore comments flip between needed/unused across ty versions.
 too-many-positional-arguments = "ignore"
+unused-ignore-comment = "ignore"
 
 [tool.ruff]
 target-version = "py310"
