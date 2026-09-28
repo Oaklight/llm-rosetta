@@ -55,7 +55,7 @@ class TestWeightedRoundRobinStrategy:
         # Key invariant: no more than 2 consecutive "a"s
         for i in range(len(results) - 2):
             if results[i] == results[i + 1] == results[i + 2] == "a":
-                pytest.fail(f"Three consecutive 'a' at index {i}: {results}")  # ty: ignore[invalid-argument-type]
+                pytest.fail(f"Three consecutive 'a' at index {i}: {results}")
 
     def test_three_providers(self):
         s = WeightedRoundRobinStrategy()
