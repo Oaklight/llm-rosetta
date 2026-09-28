@@ -6,6 +6,7 @@ from typing import Any
 import uuid
 
 HOP_COUNT_HEADER = "x-rosetta-hop-count"
+# Generous for legitimate chained gateways, catches infinite loops within a few round-trips.
 MAX_HOPS = 4
 
 
