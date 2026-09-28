@@ -623,6 +623,14 @@ class GatewayConfig:
         # default).  Set to True for trusted, localhost-only deployments.
         self.open_on_no_keys: bool = bool(_server.get("open_on_no_keys", False))
 
+        # When a model has providers in multiple API formats, prefer the
+        # one matching the client's format to avoid unnecessary cross-format
+        # conversion.  Off by default: enabling changes which upstream a
+        # multi-format model reaches.
+        self.prefer_same_format: bool = bool(_server.get("prefer_same_format", False))
+        # Keyed by (model, source_provider); see _same_format_route.
+        self._same_format_routes: dict[tuple[str, str], ModelRoute | None] = {}
+
         self.admin_password: str | None = _server.get("admin_password")
         if self.admin_password and _ENV_VAR_RE.search(self.admin_password):
             raise ValueError(
@@ -935,6 +943,64 @@ class GatewayConfig:
         strategy = create_strategy(strategy_name)
         return ModelRoute(entries, strategy)
 
+    def _same_format_route(
+        self,
+        model: str,
+        model_route: ModelRoute,
+        source_provider: str,
+    ) -> ModelRoute | None:
+        """Return a sub-route of providers speaking *source_provider*.
+
+        ``None`` when the feature is off, when nothing matches, or when
+        everything matches — reusing the original route then preserves its
+        load-balancing state.
+
+        Provider types are compared as exact strings:
+        ``open_responses`` and ``openai_responses`` share a converter
+        but are distinct types and would still cross-convert.
+        """
+        if not self.prefer_same_format:
+            return None
+
+        key = (model, source_provider)
+        # ``None`` is a meaningful cached value, so test membership.
+        if key in self._same_format_routes:
+            return self._same_format_routes[key]
+
+        matching = [
+            p
+            for p in model_route.providers
+            if self.provider_types.get(p.name) == source_provider
+        ]
+        if not matching or len(matching) == len(model_route.providers):
+            sub = None
+        else:
+            # Its own strategy instance: weight counters are indexed by
+            # position, so the subset cannot share the parent route's.
+            sub = ModelRoute(matching, type(model_route.strategy)())
+        self._same_format_routes[key] = sub
+        return sub
+
+    def _select_ready_entry(
+        self,
+        model_route: ModelRoute,
+        *,
+        identity: str | None = None,
+    ) -> ProviderEntry | None:
+        """Pick a ready provider from *model_route*, or ``None`` if none is.
+
+        Alternatives are scanned over the provider list directly rather
+        than via the strategy, leaving the round-robin counter alone and
+        checking every candidate whatever the strategy.
+        """
+        entry = model_route.select_entry(identity=identity)
+        if self.providers[entry.name].ready:
+            return entry
+        for alt in model_route.providers:
+            if alt.name != entry.name and self.providers[alt.name].ready:
+                return alt
+        return None
+
     def resolve(
         self,
         source_provider: ProviderType,
@@ -970,31 +1036,25 @@ class GatewayConfig:
         from .deferred_startup import ProviderInitState, ProviderNotReady
 
         model_route = self.models[model]
-        entry = model_route.select_entry(identity=client_identity)
+
+        # Fall back to the full provider list when affinity is off, matches
+        # nothing, or matches only providers that are still initializing.
+        entry = None
+        affine_route = self._same_format_route(model, model_route, source_provider)
+        if affine_route is not None:
+            entry = self._select_ready_entry(affine_route, identity=client_identity)
+        if entry is None:
+            entry = self._select_ready_entry(model_route, identity=client_identity)
+        if entry is None:
+            deferred = getattr(self, "_deferred_startup", None)
+            all_failed = deferred is not None and all(
+                deferred.provider_state(p.name) == ProviderInitState.FAILED
+                for p in model_route.providers
+                if not self.providers[p.name].ready
+            )
+            raise ProviderNotReady(model, failed=all_failed)
+
         provider_name = entry.name
-
-        # Skip providers whose initial token fetch has not completed.
-        # Iterate the provider list directly (not via select()) to avoid
-        # perturbing the WRR counter and to guarantee all candidates are
-        # checked regardless of the routing strategy.
-        if not self.providers[provider_name].ready:
-            for alt_entry in model_route.providers:
-                if (
-                    alt_entry.name != provider_name
-                    and self.providers[alt_entry.name].ready
-                ):
-                    entry = alt_entry
-                    provider_name = alt_entry.name
-                    break
-            else:
-                deferred = getattr(self, "_deferred_startup", None)
-                all_failed = deferred is not None and all(
-                    deferred.provider_state(p.name) == ProviderInitState.FAILED
-                    for p in model_route.providers
-                    if not self.providers[p.name].ready
-                )
-                raise ProviderNotReady(model, failed=all_failed)
-
         provider_type = self.provider_types[provider_name]
         shim_name = self.provider_shim_names.get(provider_name)
         upstream_model = entry.upstream_model or self.model_upstream_names.get(model)
