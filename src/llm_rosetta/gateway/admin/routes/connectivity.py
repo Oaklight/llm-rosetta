@@ -49,80 +49,79 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
 
     proxy = provider_cfg.get("proxy") or getattr(config, "proxy", None)
     timeout = float(provider_cfg.get("timeout", 10))
-    client = AsyncClient(timeout=min(timeout, 10), proxy=proxy)
+    async with AsyncClient(timeout=min(timeout, 10), proxy=proxy) as client:
+        # Build auth headers from provider config (same as fetch-models)
+        pinfo = config.providers.get(name) if hasattr(config, "providers") else None
+        auth_headers = pinfo.auth_headers() if pinfo else {}
 
-    # Build auth headers from provider config (same as fetch-models)
-    pinfo = config.providers.get(name) if hasattr(config, "providers") else None
-    auth_headers = pinfo.auth_headers() if pinfo else {}
-
-    results: dict[str, Any] = {
-        "provider": name,
-        "base_url": base_url,
-        "endpoints": {},
-        "warnings": [],
-    }
-
-    # 1. Probe base URL — deliberately unauthenticated. This only answers
-    # "can we reach the host at all", so an auth rejection would be noise;
-    # any HTTP response, including 401/404, proves reachability.
-    try:
-        resp = await client.get(base_url)
-        results["reachable"] = True
-        results["base_status"] = resp.status_code
-    except Exception as exc:
-        results["reachable"] = False
-        results["base_status"] = None
-        results["base_error"] = str(exc)
-
-    # 2. Check models endpoint (type-aware URL, same as fetch_upstream_models)
-    ptype = (
-        config.provider_types.get(name, "unknown")
-        if hasattr(config, "provider_types")
-        else "unknown"
-    )
-    explicit_path = _resolve_models_path(provider_cfg, config, name)
-    if explicit_path:
-        if explicit_path.startswith(("https://", "http://")):
-            models_url = explicit_path
-        else:
-            models_url = f"{base_url}{explicit_path}"
-    elif ptype == "google":
-        models_url = f"{base_url}/v1beta/models"
-    elif ptype == "anthropic":
-        models_url = f"{base_url}/v1/models"
-    else:
-        models_url = f"{base_url}/models"
-    try:
-        resp = await client.get(models_url, headers=auth_headers)
-        results["endpoints"]["models"] = {
-            "url": models_url,
-            "status": resp.status_code,
-            "ok": resp.status_code < 400,
-        }
-    except Exception as exc:
-        results["endpoints"]["models"] = {
-            "url": models_url,
-            "status": None,
-            "ok": False,
-            "error": str(exc),
+        results: dict[str, Any] = {
+            "provider": name,
+            "base_url": base_url,
+            "endpoints": {},
+            "warnings": [],
         }
 
-    # 3–5. Check optional POST endpoints (embedding, rerank, decision)
-    for ep_name, fmt_key, path_key, default_path in (
-        ("embedding", "embedding_format", "embedding_path", "/v1/embeddings"),
-        ("rerank", "rerank_format", "rerank_path", "/v1/rerank"),
-        ("decision", "decision_format", "decision_path", "/v1/systemone"),
-    ):
-        if not provider_cfg.get(fmt_key):
-            continue
-        await _check_post_endpoint(
-            client,
-            base_url,
-            auth_headers,
-            provider_cfg.get(path_key, default_path),
-            ep_name,
-            results,
+        # 1. Probe base URL — deliberately unauthenticated. This only answers
+        # "can we reach the host at all", so an auth rejection would be noise;
+        # any HTTP response, including 401/404, proves reachability.
+        try:
+            resp = await client.get(base_url)
+            results["reachable"] = True
+            results["base_status"] = resp.status_code
+        except Exception as exc:
+            results["reachable"] = False
+            results["base_status"] = None
+            results["base_error"] = str(exc)
+
+        # 2. Check models endpoint (type-aware URL, same as fetch_upstream_models)
+        ptype = (
+            config.provider_types.get(name, "unknown")
+            if hasattr(config, "provider_types")
+            else "unknown"
         )
+        explicit_path = _resolve_models_path(provider_cfg, config, name)
+        if explicit_path:
+            if explicit_path.startswith(("https://", "http://")):
+                models_url = explicit_path
+            else:
+                models_url = f"{base_url}{explicit_path}"
+        elif ptype == "google":
+            models_url = f"{base_url}/v1beta/models"
+        elif ptype == "anthropic":
+            models_url = f"{base_url}/v1/models"
+        else:
+            models_url = f"{base_url}/models"
+        try:
+            resp = await client.get(models_url, headers=auth_headers)
+            results["endpoints"]["models"] = {
+                "url": models_url,
+                "status": resp.status_code,
+                "ok": resp.status_code < 400,
+            }
+        except Exception as exc:
+            results["endpoints"]["models"] = {
+                "url": models_url,
+                "status": None,
+                "ok": False,
+                "error": str(exc),
+            }
+
+        # 3–5. Check optional POST endpoints (embedding, rerank, decision)
+        for ep_name, fmt_key, path_key, default_path in (
+            ("embedding", "embedding_format", "embedding_path", "/v1/embeddings"),
+            ("rerank", "rerank_format", "rerank_path", "/v1/rerank"),
+            ("decision", "decision_format", "decision_path", "/v1/systemone"),
+        ):
+            if not provider_cfg.get(fmt_key):
+                continue
+            await _check_post_endpoint(
+                client,
+                base_url,
+                auth_headers,
+                provider_cfg.get(path_key, default_path),
+                ep_name,
+                results,
+            )
 
     return JSONResponse(results)
 
