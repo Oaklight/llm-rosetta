@@ -257,6 +257,17 @@ class TestStreamResponseFromProvider:
         events = self.converter.stream_response_from_provider(chunk)
         assert events == []
 
+    def test_null_delta_is_ignored(self):
+        """A provider may send an annotation chunk with an explicit null delta."""
+        chunk = {"choices": [{"index": 0, "delta": None, "finish_reason": None}]}
+        events = self.converter.stream_response_from_provider(chunk)
+        assert events == []
+
+    def test_null_choice_is_ignored(self):
+        """A null choice in a provider chunk does not terminate the stream."""
+        events = self.converter.stream_response_from_provider({"choices": [None]})
+        assert events == []
+
     def test_no_choices(self):
         """Chunk with no choices and no usage produces no events."""
         chunk = {"choices": []}

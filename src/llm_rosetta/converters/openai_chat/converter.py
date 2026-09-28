@@ -605,6 +605,8 @@ class OpenAIChatConverter(BaseConverter):
 
         choices = chunk.get("choices", [])
         for p_choice in choices:
+            if p_choice is None:
+                continue
             self._handle_p_choice_to_ir(p_choice, context, events)
 
         usage = chunk.get("usage")
@@ -649,7 +651,7 @@ class OpenAIChatConverter(BaseConverter):
     ) -> None:
         """Process a single choice from an OpenAI SSE chunk."""
         choice_index = p_choice.get("index", 0)
-        delta = p_choice.get("delta", {})
+        delta = p_choice.get("delta") or {}
 
         # Text delta (skip empty content from role-only chunks)
         content = delta.get("content")
