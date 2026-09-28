@@ -438,13 +438,23 @@ class ProviderMetadataStore:
 
     def _evict_expired(self) -> None:
         now = time.monotonic()
-        expired = [k for k, e in self._store.items() if now - e.created > self._ttl]
+        # Entries are inserted in monotonic time order and never refreshed,
+        # so iteration order == creation order.  Stop at the first
+        # non-expired entry instead of scanning the entire store.
+        expired = []
+        for k, e in self._store.items():
+            if now - e.created > self._ttl:
+                expired.append(k)
+            else:
+                break
         for k in expired:
             del self._store[k]
 
     def _evict_oldest(self) -> None:
         if len(self._store) >= self._max_size:
-            oldest_key = min(self._store, key=lambda k: self._store[k].created)
+            # dict preserves insertion order (Python 3.7+) and entries are
+            # never refreshed, so the first key is always the oldest.
+            oldest_key = next(iter(self._store))
             del self._store[oldest_key]
 
     def cache_from_response(self, ir_response: dict[str, Any]) -> None:

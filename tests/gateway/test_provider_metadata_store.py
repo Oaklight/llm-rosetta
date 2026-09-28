@@ -218,3 +218,46 @@ class TestEdgeCases:
     def test_request_without_messages_is_noop(self):
         store = ProviderMetadataStore()
         store.inject_into_request({})  # no crash
+
+
+class TestEvictionOrder:
+    """Verify FIFO eviction relies on dict insertion order, not min() scan."""
+
+    def test_fifo_eviction_order_across_many_inserts(self):
+        store = ProviderMetadataStore(max_size=5)
+        for i in range(5):
+            store.cache_from_response(_make_ir_response(f"c{i}", {"i": i}))
+        assert len(store) == 5
+
+        # Insert 3 more — should evict c0, c1, c2 in order
+        for i in range(5, 8):
+            store.cache_from_response(_make_ir_response(f"c{i}", {"i": i}))
+        assert len(store) == 5
+
+        ir_req = _make_ir_request([f"c{i}" for i in range(8)])
+        store.inject_into_request(ir_req)
+        parts = ir_req["messages"][0]["content"]
+        for i in range(3):
+            assert "provider_metadata" not in parts[i], f"c{i} should be evicted"
+        for i in range(3, 8):
+            assert parts[i]["provider_metadata"] == {"i": i}
+
+    def test_expired_eviction_stops_at_non_expired(self):
+        store = ProviderMetadataStore(ttl=0.05)
+        # Insert 2 entries that will expire
+        store.cache_from_response(_make_ir_response("old_a", {"v": "a"}))
+        store.cache_from_response(_make_ir_response("old_b", {"v": "b"}))
+
+        time.sleep(0.06)
+
+        # Insert a fresh entry (won't be expired)
+        store.cache_from_response(_make_ir_response("new_c", {"v": "c"}))
+
+        # Trigger eviction via inject
+        ir_req = _make_ir_request(["old_a", "old_b", "new_c"])
+        store.inject_into_request(ir_req)
+        parts = ir_req["messages"][0]["content"]
+        assert "provider_metadata" not in parts[0]
+        assert "provider_metadata" not in parts[1]
+        assert parts[2]["provider_metadata"] == {"v": "c"}
+        assert len(store) == 1
