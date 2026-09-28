@@ -46,6 +46,21 @@ class TestStreamResponseFromProvider:
         assert events[0]["type"] == "text_delta"
         assert events[0]["text"] == "Hello"
 
+    def test_text_delta_with_extra_fields(self):
+        """Extra fields (e.g. argo obfuscation) on delta events are ignored."""
+        event = {
+            "type": "response.output_text.delta",
+            "delta": "Hi",
+            "output_index": 0,
+            "content_index": 0,
+            "obfuscation": "KBYmTIWn5odcaz",
+            "logprobs": [],
+        }
+        events = cast(list[Any], self.converter.stream_response_from_provider(event))
+        assert len(events) == 1
+        assert events[0]["type"] == "text_delta"
+        assert events[0]["text"] == "Hi"
+
     def test_text_delta_empty_string(self):
         """Empty text delta still produces an event."""
         event = {
@@ -789,6 +804,40 @@ class TestStreamResponseFromProviderWithContext:
         assert events[0]["created"] == 1700000000
         assert ctx.response_id == "abc123"
         assert ctx.model == "gpt-4o"
+        assert ctx.is_started is True
+
+    def test_response_created_with_argo_extra_fields(self):
+        """response.created with argo-style extra fields doesn't crash."""
+        ctx = OpenAIResponsesStreamContext()
+        event = {
+            "type": "response.created",
+            "sequence_number": 0,
+            "response": {
+                "id": "resp_049e7fbe",
+                "model": "aiops-cels-gpt-4-1-nano",
+                "created_at": 1790581278.0,
+                "status": "in_progress",
+                "output": [],
+                "content_filters": None,
+                "frequency_penalty": 0.0,
+                "presence_penalty": 0.0,
+                "store": False,
+                "tool_usage": {
+                    "image_gen": {
+                        "input_tokens": 0,
+                        "output_tokens": 0,
+                        "total_tokens": 0,
+                    },
+                    "web_search": {"num_requests": 0},
+                },
+            },
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert len(events) == 1
+        assert events[0]["type"] == "stream_start"
         assert ctx.is_started is True
 
     def test_response_created_without_context_no_events(self):
