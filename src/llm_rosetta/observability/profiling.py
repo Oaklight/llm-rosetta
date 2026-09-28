@@ -35,6 +35,7 @@ class ProfilerState:
         self.tracing: bool = False
         self.results: list[dict[str, Any]] = []
         self._max_results = max_results
+        self._active: bool = False
 
     def enable(self, requests: int = 5, *, tracing: bool = False) -> dict[str, Any]:
         """Enable profiling for the next *requests* requests.
@@ -68,14 +69,27 @@ class ProfilerState:
 
         Returns ``True`` if the current request should be profiled
         (and decrements the remaining counter).  Auto-disables when
-        the counter reaches zero.
+        the counter reaches zero.  Skips without consuming a slot
+        when another request is already being profiled (cProfile
+        only supports one active profiler per process).
         """
         if not self.enabled or self.remaining <= 0:
             return False
+        if self._active:
+            return False
+        self._active = True
         self.remaining -= 1
         if self.remaining <= 0:
             self.enabled = False
         return True
+
+    def release(self) -> None:
+        """Mark the current profiling session as finished.
+
+        Must be called after the profiler is stopped so subsequent
+        requests can acquire the profiling slot.
+        """
+        self._active = False
 
     def create_profiler(self) -> Any:
         """Create a new per-request DeepProfiler instance.

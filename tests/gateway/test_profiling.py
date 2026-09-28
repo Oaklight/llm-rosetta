@@ -44,6 +44,7 @@ class TestProfilerState:
         assert state.should_profile()  # remaining: 2 -> 1
         assert state.remaining == 1
         assert state.enabled  # still enabled
+        state.release()  # simulate profiler stop
 
         assert state.should_profile()  # remaining: 1 -> 0
         assert state.remaining == 0

@@ -166,11 +166,14 @@ def _try_start_profiler(app: Any) -> Any | None:
         profiler = state.create_profiler()
         profiler.start()
         return profiler
-    except RuntimeError:
-        # pyinstrument not installed — restore the consumed slot
+    except Exception:
+        # cProfile on Python 3.12+ raises ValueError when a second
+        # profiler is started concurrently (tool-ID collision).
+        # Restore the consumed slot so remaining count stays accurate.
         state.remaining += 1
         if not state.enabled:
             state.enabled = True
+        state.release()
         return None
 
 
@@ -188,9 +191,9 @@ def _try_stop_profiler(
     """Stop a running deep profiler and store the result."""
     if profiler is None:
         return
+    state = getattr(app, "profiler_state", None)
     try:
         profiler.stop()
-        state = getattr(app, "profiler_state", None)
         if state is not None:
             state.store_result(
                 profiler,
@@ -203,6 +206,9 @@ def _try_stop_profiler(
             )
     except Exception:
         logger.debug("Failed to store profiling result")
+    finally:
+        if state is not None:
+            state.release()
 
 
 # Global config — set at startup
@@ -374,6 +380,7 @@ async def _proxy_handler(
     # Error dump persistence — pass None to disable dump_error in handlers
     _raw_persistence = getattr(request.app, "persistence", None)
     persistence = _raw_persistence if _config.error_dumps_enabled else None
+    capture_state = getattr(request.app, "capture_state", None)
     deep_profiler = _try_start_profiler(request.app)
 
     # Shared across streaming / non-streaming paths — also stored on
@@ -407,6 +414,7 @@ async def _proxy_handler(
                 preflight_token_count=preflight,
                 client_key_hash=_client_key_hash,
                 key_affinity=_key_affinity,
+                capture_state=capture_state,
             )
         else:
             response, profile = await handle_non_streaming(
@@ -420,6 +428,7 @@ async def _proxy_handler(
                 entry_id=pre_entry_id,
                 client_key_hash=_client_key_hash,
                 key_affinity=_key_affinity,
+                capture_state=capture_state,
             )
         status_code = response.status_code
         if status_code >= 400 and hasattr(response, "body"):

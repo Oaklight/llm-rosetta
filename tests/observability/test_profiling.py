@@ -53,10 +53,28 @@ class TestProfilerState:
         state.enable(requests=2)
         assert state.should_profile() is True
         assert state.remaining == 1
+        state.release()  # simulate profiler stop
         assert state.should_profile() is True
         assert state.remaining == 0
         assert not state.enabled
         assert state.should_profile() is False
+
+    def test_should_profile_skips_when_active(self):
+        state = ProfilerState()
+        state.enable(requests=3)
+        assert state.should_profile() is True
+        assert state.remaining == 2
+        # Without release(), second call should skip without consuming a slot
+        assert state.should_profile() is False
+        assert state.remaining == 2  # slot not consumed
+        state.release()
+        # After release, next call works
+        assert state.should_profile() is True
+        assert state.remaining == 1
+
+    def test_release_without_active_is_safe(self):
+        state = ProfilerState()
+        state.release()  # no-op, should not raise
 
     def test_create_profiler_default(self):
         state = ProfilerState()
