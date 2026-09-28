@@ -305,7 +305,7 @@ code.copyable:hover { background: var(--bg-hover); }
 .toast {
   position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
   padding: 12px 20px; border-radius: var(--radius); font-size: 13px;
-  z-index: 200; opacity: 0; transition: opacity 0.3s;
+  z-index: 300; opacity: 0; transition: opacity 0.3s;
 }
 .toast.show { opacity: 0.95; }
 .toast.success { background: var(--bg-card); color: var(--text); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
