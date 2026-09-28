@@ -2824,3 +2824,78 @@ class TestStreamingRefusal:
         )
         assert restored["type"] == "response.content_part.added"
         assert restored["part"]["type"] == "refusal"
+
+    def test_function_call_args_done_without_deltas_emits_delta(self):
+        """A .done carrying the whole payload must still reach the IR.
+
+        ARGO's native /v1/responses sends no
+        ``response.function_call_arguments.delta`` for some turns and puts the
+        complete arguments on ``.done``.  The delta handler is the only path
+        that moves arguments into the IR, so without this the target format
+        emits ``arguments: ""`` and clients fail to parse the tool call.
+        """
+        ctx = OpenAIResponsesStreamContext()
+        added = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "fc_001",
+                "call_id": "call_001",
+                "name": "get_weather",
+                "arguments": "",
+            },
+        }
+        self.converter.stream_response_from_provider(added, context=ctx)
+
+        done = {
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_001",
+            "output_index": 0,
+            "arguments": '{"city":"NYC"}',
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(done, context=ctx),
+        )
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["arguments_delta"] == '{"city":"NYC"}'
+
+    def test_function_call_args_done_after_deltas_emits_nothing(self):
+        """When deltas already delivered the payload, .done stays silent."""
+        ctx = OpenAIResponsesStreamContext()
+        added = {
+            "type": "response.output_item.added",
+            "output_index": 0,
+            "item": {
+                "type": "function_call",
+                "id": "fc_001",
+                "call_id": "call_001",
+                "name": "get_weather",
+                "arguments": "",
+            },
+        }
+        self.converter.stream_response_from_provider(added, context=ctx)
+        for fragment in ('{"city":', '"NYC"}'):
+            self.converter.stream_response_from_provider(
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "item_id": "fc_001",
+                    "output_index": 0,
+                    "delta": fragment,
+                },
+                context=ctx,
+            )
+
+        done = {
+            "type": "response.function_call_arguments.done",
+            "item_id": "fc_001",
+            "output_index": 0,
+            "arguments": '{"city":"NYC"}',
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(done, context=ctx),
+        )
+        assert [e for e in events if e["type"] == "tool_call_delta"] == []

@@ -1131,6 +1131,37 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> None:
         call_id = resolve_call_id(chunk, context)
         arguments = chunk.get("arguments", "")
+
+        # Some upstreams deliver the complete arguments only on the .done
+        # event, with no preceding .delta -- ARGO's native /v1/responses does
+        # this for cached turns.  The delta handler is the only thing that
+        # puts arguments into the IR stream, so without this the payload is
+        # silently dropped and the target format emits ``arguments: ""``.
+        # Only safe with a context: it is what tells us how much of
+        # ``arguments`` the deltas already delivered.  Without one, keep the
+        # historical "done is redundant" behaviour rather than risk emitting
+        # the payload twice.
+        if context is not None and call_id:
+            accumulated = context._tool_call_args.get(call_id, "")
+        else:
+            accumulated = arguments
+        if arguments and arguments != accumulated:
+            residual = (
+                arguments[len(accumulated) :]
+                if arguments.startswith(accumulated)
+                else arguments
+            )
+            if residual:
+                delta_event = ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id=call_id,
+                    arguments_delta=residual,
+                )
+                output_index = chunk.get("output_index")
+                if output_index is not None:
+                    delta_event["tool_call_index"] = output_index
+                events.append(delta_event)
+
         # Store final arguments in context
         if context is not None and call_id:
             context.set_tool_call_args(call_id, arguments)
