@@ -588,7 +588,7 @@ function renderProviders() {
   grid.innerHTML = entries.map(([name, cfg]) => {
     const enabled = cfg.enabled !== false;
     const typeName = cfg.type || name;
-    const logo = shimLogo[typeName] || cfg.logo || '';
+    const logo = cfg.logo || shimLogo[name] || shimLogo[typeName] || '';
     const logoHtml = logo
       ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
       : '<span class="pc-logo pc-logo-empty"></span>';

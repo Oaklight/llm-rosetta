@@ -120,11 +120,14 @@ function copyProviderEntry(name) {
 }
 
 // ===================== Toast =====================
+let _toastTimer = null;
+
 function _renderToast(type, delay, apply) {
+  if (_toastTimer) clearTimeout(_toastTimer);
   const el = document.getElementById('toast');
   apply(el);
   el.className = 'toast show ' + type;
-  setTimeout(() => { el.className = 'toast'; el.textContent = ''; }, delay);
+  _toastTimer = setTimeout(() => { el.className = 'toast'; el.textContent = ''; _toastTimer = null; }, delay);
 }
 
 /** Show a plain-text toast. Text is never parsed as HTML. */
