@@ -38,3 +38,7 @@ services:
     # extra_hosts:
     #   - "host.docker.internal:host-gateway"
     restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
