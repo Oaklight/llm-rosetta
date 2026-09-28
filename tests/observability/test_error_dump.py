@@ -6,7 +6,6 @@ import json
 import zlib
 
 import pytest
-import pytest_asyncio
 
 from llm_rosetta.observability.error_dump import (
     compress_body,
@@ -159,7 +158,7 @@ class TestCompressDecompress:
 class TestDumpError:
     """Integration tests for the dump_error function."""
 
-    @pytest_asyncio.fixture()
+    @pytest.fixture
     async def persistence(self, tmp_path: object) -> PersistenceManager:
         return await PersistenceManager.create(str(tmp_path))
 
@@ -308,7 +307,7 @@ class TestDumpError:
 class TestPersistenceErrorDumps:
     """Direct tests for PersistenceManager error dump operations."""
 
-    @pytest_asyncio.fixture()
+    @pytest.fixture
     async def persistence(self, tmp_path: object) -> PersistenceManager:
         return await PersistenceManager.create(str(tmp_path))
 

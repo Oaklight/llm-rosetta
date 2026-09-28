@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
 from llm_rosetta.observability.metrics import MetricsCollector
 from llm_rosetta.observability.request_log import RequestLog, RequestLogEntry
@@ -247,7 +246,7 @@ class TestMetricsCollectorTokenTracking:
 
 
 class TestPersistenceTokenColumns:
-    @pytest_asyncio.fixture()
+    @pytest.fixture
     async def pm(self, tmp_path):
         from llm_rosetta.observability.persistence import PersistenceManager
 
@@ -876,7 +875,7 @@ class TestMetricsExtendedTokens:
 
 
 class TestPersistenceExtendedTokenColumns:
-    @pytest_asyncio.fixture
+    @pytest.fixture
     async def pm(self, tmp_path):
         from llm_rosetta.observability.persistence import PersistenceManager
 

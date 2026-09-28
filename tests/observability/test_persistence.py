@@ -1,12 +1,11 @@
 """Tests for the observability PersistenceManager (standalone, no gateway)."""
 
 import pytest
-import pytest_asyncio
 
 from llm_rosetta.observability import PersistenceManager, RequestLogEntry
 
 
-@pytest_asyncio.fixture
+@pytest.fixture
 async def pm(tmp_path):
     """Create a PersistenceManager using a temp directory."""
     return await PersistenceManager.create(str(tmp_path), success_max=100)

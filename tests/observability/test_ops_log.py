@@ -1,7 +1,6 @@
 """Tests for the observability OpsLog (standalone, no gateway)."""
 
 import pytest
-import pytest_asyncio
 
 from llm_rosetta.observability import (
     OpsLog,
@@ -215,7 +214,7 @@ class TestOpsLogInMemory:
 
 
 class TestOpsLogPersistence:
-    @pytest_asyncio.fixture()
+    @pytest.fixture
     async def pm(self, tmp_path):
         return await PersistenceManager.create(str(tmp_path), success_max=100)
 
