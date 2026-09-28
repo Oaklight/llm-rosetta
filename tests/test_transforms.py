@@ -221,7 +221,7 @@ class TestBuiltinTransforms:
         assert result["model"] == "test"
 
     def test_deepseek_strips_unsupported(self):
-        shim = get_shim("deepseek")
+        shim = get_shim("deepseek--openai_chat")
         assert shim is not None
         body = {
             "model": "deepseek-chat",

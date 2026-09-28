@@ -377,7 +377,9 @@ class TestConvert:
             "reasoning_effort": "none",
         }
 
-        result = convert(openai_body, "deepseek", source_provider="openai_chat")
+        result = convert(
+            openai_body, "deepseek--openai_chat", source_provider="openai_chat"
+        )
 
         assert result["thinking"] == {"type": "disabled"}
         assert "reasoning_effort" not in result

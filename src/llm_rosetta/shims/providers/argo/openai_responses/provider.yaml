@@ -1,0 +1,21 @@
+name: argo--openai_responses
+base: openai_responses
+logo: https://i.111666.best/image/wgp6hAUArNq2O6pICMRRvj.png
+
+connection:
+  base_url: https://apps.inside.anl.gov/argoapi/v1
+  api_key_env: ARGO_API_KEY
+  model_id_field: internal_id
+
+tools:
+  custom_tools: true
+  max_description_length: 1024
+reasoning:
+  effort_field: reasoning.effort
+
+soft_error_patterns:
+  - pattern: "AUTHENTICATION NOTICE FROM ARGO"
+    status_code: 403
+    message: >-
+      ARGO authentication error: the upstream ARGO gateway rejected the
+      request. Verify your username and API key configuration.

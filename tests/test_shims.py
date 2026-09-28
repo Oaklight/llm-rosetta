@@ -175,7 +175,7 @@ class TestGroupedConfig:
         assert openai.tools.custom_tools is True
         assert openai.tools.max_description_length == 1024
 
-        ds = get_shim("deepseek")
+        ds = get_shim("deepseek--openai_chat")
         assert ds is not None
         assert ds.connection.base_url == "https://api.deepseek.com"
         assert ds.tools.custom_tools is False
@@ -246,8 +246,8 @@ class TestResolveBase:
         assert resolve_base("open_responses") == "open_responses"
 
     def test_shim_name_resolves(self):
-        register_shim(ProviderShim(name="deepseek", base="openai_chat"))
-        assert resolve_base("deepseek") == "openai_chat"
+        register_shim(ProviderShim(name="deepseek--openai_chat", base="openai_chat"))
+        assert resolve_base("deepseek--openai_chat") == "openai_chat"
 
     def test_unknown_name_passthrough(self):
         assert resolve_base("unknown") == "unknown"
@@ -273,7 +273,8 @@ class TestBuiltinShims:
 
     def test_third_party_providers_registered(self):
         for name in (
-            "deepseek",
+            "deepseek--openai_chat",
+            "deepseek--openai_responses",
             "volcengine--openai_chat",
             "volcengine--openai_responses",
             "openrouter--openai_chat",
@@ -290,9 +291,19 @@ class TestBuiltinShims:
         assert shim.base == "openai_chat"
 
     def test_deepseek_base_type(self):
-        shim = get_shim("deepseek")
+        shim = get_shim("deepseek--openai_chat")
         assert shim is not None
         assert shim.base == "openai_chat"
+
+    def test_deepseek_responses_base_type(self):
+        shim = get_shim("deepseek--openai_responses")
+        assert shim is not None
+        assert shim.base == "openai_responses"
+
+    def test_argo_responses_base_type(self):
+        shim = get_shim("argo--openai_responses")
+        assert shim is not None
+        assert shim.base == "openai_responses"
 
     def test_anthropic_base_type(self):
         shim = get_shim("anthropic")
@@ -348,8 +359,22 @@ class TestShimConverterIntegration:
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import OpenAIChatConverter
 
-        converter = get_converter_for_provider("deepseek")
+        converter = get_converter_for_provider("deepseek--openai_chat")
         assert isinstance(converter, OpenAIChatConverter)
+
+    def test_deepseek_responses_resolves_to_responses_converter(self):
+        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta.converters import OpenAIResponsesConverter
+
+        converter = get_converter_for_provider("deepseek--openai_responses")
+        assert isinstance(converter, OpenAIResponsesConverter)
+
+    def test_argo_responses_resolves_to_responses_converter(self):
+        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta.converters import OpenAIResponsesConverter
+
+        converter = get_converter_for_provider("argo--openai_responses")
+        assert isinstance(converter, OpenAIResponsesConverter)
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
@@ -449,8 +474,14 @@ class TestGroupedProviders:
 
     def test_mixed_flat_and_grouped(self):
         """Flat shims and grouped shims coexist in the registry."""
-        flat_names = ("openai", "anthropic", "deepseek", "google")
-        grouped_names = ("argo--anthropic", "argo--openai_chat")
+        flat_names = ("openai", "anthropic", "google")
+        grouped_names = (
+            "argo--anthropic",
+            "argo--openai_chat",
+            "argo--openai_responses",
+            "deepseek--openai_chat",
+            "deepseek--openai_responses",
+        )
         for name in (*flat_names, *grouped_names):
             assert get_shim(name) is not None, f"Shim '{name}' not found"
 

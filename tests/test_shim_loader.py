@@ -97,13 +97,15 @@ class TestLoadProviders:
         assert names == {
             "argo--anthropic",
             "argo--openai_chat",
+            "argo--openai_responses",
             "openai",
             "openai_responses",
             "openrouter--openai_chat",
             "openrouter--anthropic",
             "anthropic",
             "google",
-            "deepseek",
+            "deepseek--openai_chat",
+            "deepseek--openai_responses",
             "minimax--openai_chat",
             "minimax--anthropic",
             "moonshot",
@@ -128,7 +130,8 @@ class TestLoadProviders:
             "openrouter--anthropic",
             "anthropic",
             "google",
-            "deepseek",
+            "deepseek--openai_chat",
+            "deepseek--openai_responses",
             "volcengine--openai_chat",
             "volcengine--openai_responses",
             "xai",
@@ -161,9 +164,9 @@ class TestLoadProviders:
         assert "messages" in result
 
     def test_deepseek_has_transforms(self):
-        """DeepSeek shim should strip n, logit_bias, seed."""
+        """DeepSeek chat shim should strip n, logit_bias, seed."""
         load_providers()
-        s = get_shim("deepseek")
+        s = get_shim("deepseek--openai_chat")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
         assert len(s.pre_ir_transforms) == 0
@@ -279,7 +282,9 @@ class TestLoadProviders:
             "anthropic": "anthropic",
             "google": "google_generate",
             "google_interactions": "google_interactions",
-            "deepseek": "openai_chat",
+            "deepseek--openai_chat": "openai_chat",
+            "deepseek--openai_responses": "openai_responses",
+            "argo--openai_responses": "openai_responses",
             "minimax--openai_chat": "openai_chat",
             "minimax--anthropic": "anthropic",
             "moonshot": "openai_chat",
@@ -301,7 +306,12 @@ class TestLoadProviders:
             )
 
     # Shims that intentionally have no public logo
-    _LOGO_EXEMPT = {"argo--anthropic", "argo--openai_chat", "typesafe"}
+    _LOGO_EXEMPT = {
+        "argo--anthropic",
+        "argo--openai_chat",
+        "argo--openai_responses",
+        "typesafe",
+    }
 
     def test_all_shims_have_logos(self):
         """Every built-in shim (except exempted ones) should have a logo URL."""

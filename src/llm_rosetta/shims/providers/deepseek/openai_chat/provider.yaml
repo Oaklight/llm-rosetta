@@ -1,4 +1,4 @@
-name: deepseek
+name: deepseek--openai_chat
 base: openai_chat
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 
