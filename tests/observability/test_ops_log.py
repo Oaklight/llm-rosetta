@@ -399,7 +399,7 @@ class TestConstants:
     def test_all_event_types(self):
         assert EVENT_STARTUP in ALL_EVENT_TYPES
         assert EVENT_OPS_LOG_CLEARED in ALL_EVENT_TYPES
-        assert len(ALL_EVENT_TYPES) == 10
+        assert len(ALL_EVENT_TYPES) == 11
 
     def test_all_severities(self):
         assert SEVERITY_INFO in ALL_SEVERITIES

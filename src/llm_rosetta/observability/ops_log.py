@@ -46,6 +46,7 @@ EVENT_KEY_ROTATE = "key_rotate"
 EVENT_HEALTH_CHANGE = "health_status_change"
 EVENT_ADMIN_SETUP = "admin_setup"
 EVENT_OPS_LOG_CLEARED = "ops_log_cleared"
+EVENT_SESSION_LOGOUT_ALL = "session_logout_all"
 
 ALL_EVENT_TYPES = [
     EVENT_STARTUP,
@@ -58,6 +59,7 @@ ALL_EVENT_TYPES = [
     EVENT_HEALTH_CHANGE,
     EVENT_ADMIN_SETUP,
     EVENT_OPS_LOG_CLEARED,
+    EVENT_SESSION_LOGOUT_ALL,
 ]
 
 # -- Severity constants ----------------------------------------------------

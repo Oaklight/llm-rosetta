@@ -208,10 +208,9 @@ async def admin_login(request: Any) -> Response:
         return JSONResponse(resp, status_code=401)
 
     _clear_login_failures(ip)
+    session_id = auth_state.create_session(ip=ip)
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(
-        resp, auth_state.admin_token, secure=_is_secure_request(request)
-    )
+    _set_session_cookie(resp, session_id, secure=_is_secure_request(request))
     return resp
 
 
@@ -223,7 +222,11 @@ async def admin_check(request: Any) -> Response:
 
 
 async def admin_logout(request: Any) -> Response:
-    """Clear the admin session cookie."""
+    """Clear the admin session cookie and invalidate the session."""
+    auth_state = request.app.auth_state
+    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    if cookie_token:
+        auth_state.invalidate_session(cookie_token)
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
     return resp
@@ -295,30 +298,54 @@ async def change_password(request: Any) -> Response:
                 {"error": f"Failed to write config: {exc}"}, status_code=500
             )
 
-    # Hot-reload config (syncs auth state via _sync_auth_middleware)
+    # Hot-reload config (syncs auth state via _sync_auth_middleware).
+    # This calls change_password() on AuthState, which invalidates all sessions.
     await _reload_gateway_config(request, config_path)
 
-    # Set new session cookie so browser stays authenticated
+    # Create a new session for the current user so they stay logged in.
+    session_id = auth_state.create_session(ip=ip)
     resp = JSONResponse({"ok": True})
-    _set_session_cookie(
-        resp, auth_state.admin_token, secure=_is_secure_request(request)
-    )
+    _set_session_cookie(resp, session_id, secure=_is_secure_request(request))
     return resp
 
 
 async def rotate_token(request: Any) -> Response:
-    """Rotate the internal proxy token and recalculate admin token.
+    """Rotate the internal proxy token.
 
     The new token is in-memory only — not persisted to config.  A restart
     regenerates a fresh token regardless, so persistence is unnecessary.
-    The copied token stops working after restart by design.
+    Sessions are NOT affected by rotation.
     """
     auth_state = request.app.auth_state
-    new_admin_token = auth_state.rotate_internal_token()
-
-    # Also update the app-level internal_token reference
+    auth_state.rotate_internal_token()
     request.app.internal_token = auth_state.internal_token
+    return JSONResponse({"ok": True})
 
-    resp = JSONResponse({"ok": True})
-    _set_session_cookie(resp, new_admin_token, secure=_is_secure_request(request))
+
+async def logout_all_sessions(request: Any) -> Response:
+    """Invalidate all admin sessions."""
+    auth_state = request.app.auth_state
+    count = auth_state.invalidate_all_sessions()
+
+    ops_log = getattr(request.app, "ops_log", None)
+    if ops_log is not None:
+        from llm_rosetta.observability.ops_log import (
+            EVENT_SESSION_LOGOUT_ALL,
+            OpsLogEntry,
+            SEVERITY_INFO,
+            SOURCE_ADMIN,
+        )
+
+        await ops_log.add(
+            OpsLogEntry.create(
+                event_type=EVENT_SESSION_LOGOUT_ALL,
+                severity=SEVERITY_INFO,
+                message=f"All admin sessions invalidated ({count} cleared)",
+                details={"sessions_cleared": count},
+                source=SOURCE_ADMIN,
+            )
+        )
+
+    resp = JSONResponse({"ok": True, "sessions_cleared": count})
+    resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
     return resp

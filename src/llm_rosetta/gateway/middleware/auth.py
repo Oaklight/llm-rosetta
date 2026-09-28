@@ -20,6 +20,8 @@ import contextvars
 import dataclasses
 import hashlib
 import hmac
+import secrets
+import time
 from typing import Any
 
 from llm_rosetta._vendor.httpserver import JSONResponse, Response
@@ -122,14 +124,19 @@ def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
     if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/auth-check"):
         return None
 
-    # Check X-Admin-Token header (API clients, backward compat)
-    admin_token = request.headers.get("x-admin-token", "")
-    if admin_token and hmac.compare_digest(admin_token, auth_state.admin_token or ""):
+    # Check X-Admin-Token header — accepts the internal_token directly
+    # so users can curl admin endpoints with the token copied from settings.
+    header_token = request.headers.get("x-admin-token", "")
+    if (
+        header_token
+        and auth_state.internal_token
+        and hmac.compare_digest(header_token, auth_state.internal_token)
+    ):
         return None
 
     # Check session cookie (browser sessions)
     cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
-    if cookie_token and hmac.compare_digest(cookie_token, auth_state.admin_token or ""):
+    if cookie_token and auth_state.validate_session(cookie_token):
         return None
 
     # Block unauthenticated API calls
@@ -138,6 +145,14 @@ def check_admin_auth(request: Any, auth_state: AuthState) -> Response | None:
 
     # HTML page requests pass through — JS handles login UI
     return None
+
+
+@dataclasses.dataclass(slots=True)
+class SessionInfo:
+    """Metadata for an active admin session."""
+
+    created_at: float
+    ip: str
 
 
 class AuthState:
@@ -154,47 +169,54 @@ class AuthState:
         self.internal_token = internal_token
         self.admin_password = admin_password
         self.open_on_no_keys = open_on_no_keys
-        # Derive admin token from password + internal_token via HMAC
-        self.admin_token: str | None = None
-        self._recalculate_admin_token()
+        self._sessions: dict[str, SessionInfo] = {}
 
     def _has_keys(self) -> bool:
         return self.keystore.has_keys() if self.keystore else False
 
-    def _recalculate_admin_token(self) -> None:
-        """Derive ``admin_token`` from ``admin_password`` + ``internal_token``."""
-        if self.admin_password and self.internal_token:
-            import hmac as _hmac
+    # ── Session management ──
 
-            self.admin_token = _hmac.new(
-                self.internal_token.encode(),
-                self.admin_password.encode(),
-                hashlib.sha256,
-            ).hexdigest()
-        else:
-            self.admin_token = None
+    def create_session(self, ip: str = "") -> str:
+        """Create a new admin session and return the session ID."""
+        session_id = secrets.token_hex(32)
+        self._sessions[session_id] = SessionInfo(created_at=time.time(), ip=ip)
+        return session_id
+
+    def validate_session(self, session_id: str) -> bool:
+        """Check whether a session ID is valid."""
+        return session_id in self._sessions
+
+    def invalidate_session(self, session_id: str) -> bool:
+        """Remove a single session. Returns True if it existed."""
+        return self._sessions.pop(session_id, None) is not None
+
+    def invalidate_all_sessions(self) -> int:
+        """Remove all sessions. Returns the count of cleared sessions."""
+        count = len(self._sessions)
+        self._sessions.clear()
+        return count
+
+    @property
+    def session_count(self) -> int:
+        return len(self._sessions)
+
+    # ── Token rotation ──
 
     def rotate_internal_token(self) -> str:
-        """Generate a new internal token and recalculate admin_token.
+        """Generate a new internal token.
+
+        Sessions are NOT invalidated — they are decoupled from the token.
 
         Returns:
-            The new admin_token (or empty string if no password is set).
+            The new internal_token.
         """
-        import secrets
-
         self.internal_token = f"rsk-internal-{secrets.token_hex(16)}"
-        self._recalculate_admin_token()
-        return self.admin_token or ""
+        return self.internal_token
 
-    def change_password(self, new_password: str) -> str:
-        """Update the admin password and recalculate admin_token.
-
-        Returns:
-            The new admin_token.
-        """
+    def change_password(self, new_password: str) -> None:
+        """Update the admin password and invalidate all sessions."""
         self.admin_password = new_password
-        self._recalculate_admin_token()
-        return self.admin_token or ""
+        self.invalidate_all_sessions()
 
 
 def create_auth_hook(auth_state: AuthState) -> Any:

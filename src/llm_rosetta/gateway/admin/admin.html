@@ -644,6 +644,7 @@
         <span class="settings-token-row" style="flex:1;min-width:180px"><span id="settingsTokenDisplay">—</span></span>
         <button class="btn btn-sm" onclick="copyAdminToken()" data-i18n="btn.copy">Copy</button>
         <button class="btn btn-sm" onclick="_doTokenRotate()" data-i18n="btn.rotate">Rotate</button>
+        <button class="btn btn-sm btn-danger" onclick="logoutAllSessions()" data-i18n="btn.logoutAll">Logout All</button>
         <span class="countdown" id="tokenCountdown"></span>
         <select id="settingsRotateInterval" style="font-size:11px;padding:3px 6px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px" onchange="localStorage.setItem('tokenRotateMinutes',this.value)">
           <option value="5">5 min</option>

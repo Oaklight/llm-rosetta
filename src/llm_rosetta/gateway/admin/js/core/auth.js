@@ -367,14 +367,21 @@ async function _doTokenRotate() {
   if (_tokenCountdownTimer) { clearInterval(_tokenCountdownTimer); _tokenCountdownTimer = null; }
   document.getElementById('tokenCountdown').textContent = '';
   try {
-    const data = await api.post('/admin/api/token/rotate');
-    // api.post returns parsed JSON directly, not a Response
-    // Session cookie updated automatically by server response
-    // Refresh internal token display
+    await api.post('/admin/api/token/rotate');
     const td = await api.get('/admin/api/internal-token');
     S.internalToken = td.token;
     _refreshTokenDisplay();
     showToast(t('toast.tokenRotated'));
+  } catch (e) {
+    showToast(t('toast.error'), 'error');
+  }
+}
+
+async function logoutAllSessions() {
+  try {
+    const data = await api.post('/admin/api/sessions/logout-all');
+    showToast(t('toast.logoutAll', { count: data.sessions_cleared || 0 }));
+    showLoginOverlay();
   } catch (e) {
     showToast(t('toast.error'), 'error');
   }
@@ -481,7 +488,7 @@ export {
 Object.assign(window, {
   openSettings, saveSettingsField, saveAutoRefresh, saveLogRetention, updateCvLabel,
   copyAdminToken, changeAdminPassword, showLoginOverlay, doLogin,
-  checkAuthAndInit, _doTokenRotate,
+  checkAuthAndInit, _doTokenRotate, logoutAllSessions,
   onRlToggle, saveRateLimitSettings,
   openCleanupConfirm, onCleanupConfirmInput, onCleanupConfirmClick, doVacuum,
   openExportDumpsModal, doExportDumps,

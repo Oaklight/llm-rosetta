@@ -417,3 +417,149 @@ class TestKeyContextTracking:
         _, ctx = _run(_run_and_get_context(hook, req))
         assert ctx is not None
         assert ctx.label == "Production"
+
+
+# ---------------------------------------------------------------------------
+# Admin session-based auth
+# ---------------------------------------------------------------------------
+
+
+class TestAdminSessionAuth:
+    """Tests for session store and admin auth after HMAC removal."""
+
+    def _make_auth_state(self) -> AuthState:
+        return AuthState(
+            keystore=None,
+            internal_token="rsk-internal-test1234",
+            admin_password="secret",
+        )
+
+    def _admin_request(
+        self,
+        path: str = "/admin/api/config",
+        headers: dict[str, str] | None = None,
+        cookies: dict[str, str] | None = None,
+    ) -> MagicMock:
+        req = _make_request(path, headers=headers or {})
+        req.cookies = cookies or {}
+        return req
+
+    # -- Session store --
+
+    def test_create_and_validate_session(self):
+        state = self._make_auth_state()
+        sid = state.create_session(ip="1.2.3.4")
+        assert state.validate_session(sid) is True
+        assert state.session_count == 1
+
+    def test_validate_unknown_session(self):
+        state = self._make_auth_state()
+        assert state.validate_session("nonexistent") is False
+
+    def test_invalidate_session(self):
+        state = self._make_auth_state()
+        sid = state.create_session()
+        assert state.invalidate_session(sid) is True
+        assert state.validate_session(sid) is False
+        assert state.invalidate_session(sid) is False
+
+    def test_invalidate_all_sessions(self):
+        state = self._make_auth_state()
+        state.create_session()
+        state.create_session()
+        state.create_session()
+        count = state.invalidate_all_sessions()
+        assert count == 3
+        assert state.session_count == 0
+
+    # -- change_password clears sessions --
+
+    def test_change_password_clears_sessions(self):
+        state = self._make_auth_state()
+        sid = state.create_session()
+        state.change_password("new_secret")
+        assert state.admin_password == "new_secret"
+        assert state.validate_session(sid) is False
+        assert state.session_count == 0
+
+    # -- rotate does NOT clear sessions --
+
+    def test_rotate_preserves_sessions(self):
+        state = self._make_auth_state()
+        sid = state.create_session()
+        old_token = state.internal_token
+        new_token = state.rotate_internal_token()
+        assert new_token != old_token
+        assert state.internal_token == new_token
+        assert state.validate_session(sid) is True
+
+    # -- check_admin_auth with internal_token header --
+
+    def test_admin_auth_accepts_internal_token_header(self):
+        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+
+        state = self._make_auth_state()
+        req = self._admin_request(headers={"x-admin-token": "rsk-internal-test1234"})
+        result = check_admin_auth(req, state)
+        assert result is None  # allowed
+
+    def test_admin_auth_rejects_wrong_token_header(self):
+        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+
+        state = self._make_auth_state()
+        req = self._admin_request(headers={"x-admin-token": "wrong-token"})
+        result = check_admin_auth(req, state)
+        assert result is not None
+        assert result.status_code == 401
+
+    # -- check_admin_auth with session cookie --
+
+    def test_admin_auth_accepts_valid_session_cookie(self):
+        from llm_rosetta.gateway.middleware.auth import (
+            ADMIN_COOKIE_NAME,
+            check_admin_auth,
+        )
+
+        state = self._make_auth_state()
+        sid = state.create_session()
+        req = self._admin_request(cookies={ADMIN_COOKIE_NAME: sid})
+        result = check_admin_auth(req, state)
+        assert result is None  # allowed
+
+    def test_admin_auth_rejects_invalid_cookie(self):
+        from llm_rosetta.gateway.middleware.auth import (
+            ADMIN_COOKIE_NAME,
+            check_admin_auth,
+        )
+
+        state = self._make_auth_state()
+        req = self._admin_request(cookies={ADMIN_COOKIE_NAME: "bogus"})
+        result = check_admin_auth(req, state)
+        assert result is not None
+        assert result.status_code == 401
+
+    # -- No password configured → pass through --
+
+    def test_admin_auth_no_password_allows_all(self):
+        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+
+        state = AuthState(
+            keystore=None, internal_token="rsk-internal-x", admin_password=None
+        )
+        req = self._admin_request()
+        result = check_admin_auth(req, state)
+        assert result is None
+
+    # -- Login/logout/auth-check always allowed --
+
+    def test_admin_auth_always_allows_login(self):
+        from llm_rosetta.gateway.middleware.auth import check_admin_auth
+
+        state = self._make_auth_state()
+        for path in (
+            "/admin/api/login",
+            "/admin/api/logout",
+            "/admin/api/auth-check",
+        ):
+            req = self._admin_request(path=path)
+            assert check_admin_auth(req, state) is None

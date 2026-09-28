@@ -917,6 +917,29 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Background token rotation
+# ---------------------------------------------------------------------------
+
+_DEFAULT_TOKEN_ROTATE_SECONDS = 15 * 60
+
+
+async def _periodic_token_rotation(app: App) -> None:
+    """Periodically rotate the internal token in the background."""
+    config = getattr(app, "gateway_config", None)
+    interval = _DEFAULT_TOKEN_ROTATE_SECONDS
+    if config is not None:
+        interval = getattr(config, "token_rotate_seconds", 0) or interval
+    while True:
+        await asyncio.sleep(interval)
+        auth_state = getattr(app, "auth_state", None)
+        if auth_state is None:
+            continue
+        auth_state.rotate_internal_token()
+        app.internal_token = auth_state.internal_token  # type: ignore
+        logger.debug("Background token rotation completed")
+
+
+# ---------------------------------------------------------------------------
 # Persistence flush helpers
 # ---------------------------------------------------------------------------
 
@@ -1411,6 +1434,7 @@ async def run_gateway(
         )
 
     flush_task = asyncio.create_task(_periodic_flush(app))
+    rotation_task = asyncio.create_task(_periodic_token_rotation(app))
 
     # Deferred startup: token seeding, counter rebuild, backfills
     from .deferred_startup import DeferredStartup
@@ -1444,15 +1468,17 @@ async def run_gateway(
         for task in all_refresh:
             task.cancel()
         flush_task.cancel()
+        rotation_task.cancel()
         for task in all_refresh:
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-        try:
-            await flush_task
-        except asyncio.CancelledError:
-            pass
+        for bg in (flush_task, rotation_task):
+            try:
+                await bg
+            except asyncio.CancelledError:
+                pass
         await _flush_now(app)
         await close_resources(
             transport=app.transport,  # type: ignore

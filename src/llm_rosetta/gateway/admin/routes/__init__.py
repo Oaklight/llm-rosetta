@@ -32,6 +32,7 @@ from .auth import (
     admin_login,
     admin_logout,
     change_password,
+    logout_all_sessions,
     rotate_token,
     serve_admin_html,
     serve_admin_static,
@@ -152,6 +153,7 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/logout", methods=["POST"])(admin_logout)
     app.route("/admin/api/config/password", methods=["PUT"])(change_password)
     app.route("/admin/api/token/rotate", methods=["POST"])(rotate_token)
+    app.route("/admin/api/sessions/logout-all", methods=["POST"])(logout_all_sessions)
     # Config CRUD (providers + models tabs)
     app.route("/admin/api/config", methods=["GET"])(get_config)
     app.route("/admin/api/config/providers/<name>", methods=["PUT"])(
