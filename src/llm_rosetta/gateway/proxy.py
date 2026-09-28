@@ -615,6 +615,38 @@ def _check_fidelity(
     return max_sev == "critical"
 
 
+async def _fidelity_check_and_dump(
+    route: ResolvedRoute,
+    original: dict[str, Any],
+    converted: dict[str, Any],
+    direction: Literal["request", "response"],
+    profile: dict[str, Any],
+    model: str,
+    persistence: Any | None,
+    entry_id: str | None,
+) -> None:
+    """Run fidelity diff and dump on critical severity."""
+    if _check_fidelity(
+        route.source_provider,
+        route.target_provider,
+        original,
+        converted,
+        direction,
+        profile,
+    ):
+        await dump_error(
+            persistence,
+            request_body=original,
+            converted_body=converted,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            error_phase="fidelity",
+            request_log_id=entry_id,
+        )
+
+
 async def handle_non_streaming(
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -676,13 +708,8 @@ async def handle_non_streaming(
 
     profile.update(pipeline.profile)
 
-    _check_fidelity(
-        route.source_provider,
-        route.target_provider,
-        body,
-        target_body,
-        "request",
-        profile,
+    await _fidelity_check_and_dump(
+        route, body, target_body, "request", profile, model, persistence, entry_id
     )
 
     log_original_request(pipeline.ir_request)
@@ -825,13 +852,15 @@ async def handle_non_streaming(
     # Merge response-phase timings from pipeline
     profile.update(pipeline.profile)
 
-    _check_fidelity(
-        route.source_provider,
-        route.target_provider,
+    await _fidelity_check_and_dump(
+        route,
         resp.body,
         source_response,
         "response",
         profile,
+        model,
+        persistence,
+        entry_id,
     )
 
     _log_response_warnings(pipeline, warnings_before)
@@ -1239,13 +1268,8 @@ async def handle_streaming(
 
     profile.update(pipeline.profile)
 
-    _check_fidelity(
-        route.source_provider,
-        route.target_provider,
-        body,
-        target_body,
-        "request",
-        profile,
+    await _fidelity_check_and_dump(
+        route, body, target_body, "request", profile, model, persistence, entry_id
     )
     log_original_request(pipeline.ir_request)
     if pipeline.warnings:
