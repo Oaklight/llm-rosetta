@@ -44,8 +44,8 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         - ``top_logprobs`` → ``top_logprobs`` (direct)
         - ``truncation`` → ``truncation`` (direct)
         - ``top_k`` → not supported (warning)
-        - ``frequency_penalty`` → not supported (warning)
-        - ``presence_penalty`` → not supported (warning)
+        - ``frequency_penalty`` → ``frequency_penalty`` (direct)
+        - ``presence_penalty`` → ``presence_penalty`` (direct)
         - ``logit_bias`` → not supported (warning)
         - ``seed`` → not supported (warning)
         - ``n`` → not supported (warning)
@@ -60,7 +60,13 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         result: dict[str, Any] = {}
 
         # Direct mapping fields
-        _DIRECT_FIELDS = ["temperature", "top_p", "top_logprobs"]
+        _DIRECT_FIELDS = [
+            "temperature",
+            "top_p",
+            "top_logprobs",
+            "frequency_penalty",
+            "presence_penalty",
+        ]
         for field in _DIRECT_FIELDS:
             if field in ir_config:
                 result[field] = cast(dict, ir_config)[field]
@@ -76,8 +82,6 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
         # Unsupported fields
         _UNSUPPORTED = [
             "top_k",
-            "frequency_penalty",
-            "presence_penalty",
             "logit_bias",
             "seed",
             "n",
@@ -112,7 +116,13 @@ class OpenAIResponsesConfigOps(BaseConfigOps):
             return cast(GenerationConfig, result)
 
         # Direct mapping fields
-        _DIRECT_FIELDS = ["temperature", "top_p", "top_logprobs"]
+        _DIRECT_FIELDS = [
+            "temperature",
+            "top_p",
+            "top_logprobs",
+            "frequency_penalty",
+            "presence_penalty",
+        ]
         for field in _DIRECT_FIELDS:
             if field in provider_config:
                 result[field] = provider_config[field]

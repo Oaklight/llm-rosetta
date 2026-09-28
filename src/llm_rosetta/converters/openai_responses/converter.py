@@ -89,6 +89,36 @@ def _capture_item_metadata(item: dict[str, Any]) -> dict[str, Any]:
     return meta
 
 
+_PASSTHROUGH_REQUEST_FIELDS = (
+    "store",
+    "background",
+    "metadata",
+    "user",
+    "previous_response_id",
+    "safety_identifier",
+    "prompt",
+)
+
+
+def _forward_passthrough_request_fields(
+    provider_request: dict[str, Any], ir_request: dict[str, Any]
+) -> None:
+    """Forward Responses-specific request fields via ``provider_extensions``.
+
+    These fields have no IR equivalent but must reach the upstream in
+    same-format round-trips so the client's values are honoured.
+    """
+    for field in _PASSTHROUGH_REQUEST_FIELDS:
+        val = provider_request.get(field)
+        if val is not None:
+            ir_request.setdefault("provider_extensions", {})[field] = val
+    text_obj = provider_request.get("text")
+    if isinstance(text_obj, dict) and "verbosity" in text_obj:
+        ir_request.setdefault("provider_extensions", {})["_text_verbosity"] = text_obj[
+            "verbosity"
+        ]
+
+
 _MAX_TOOL_NAME_LEN = 64
 
 
@@ -278,6 +308,11 @@ class OpenAIResponsesConverter(BaseConverter):
         # 11. Provider extensions (pass-through)
         extensions = ir_request.get("provider_extensions")
         if extensions:
+            extensions = dict(extensions)
+            # Merge _text_verbosity back into the text object
+            verbosity = extensions.pop("_text_verbosity", None)
+            if verbosity is not None:
+                result.setdefault("text", {})["verbosity"] = verbosity
             result.update(extensions)
 
         return result
@@ -378,6 +413,9 @@ class OpenAIResponsesConverter(BaseConverter):
             ir_request.setdefault("provider_extensions", {})["allowed_tools"] = (
                 allowed_tools
             )
+
+        # 12. Responses-specific request fields not modelled in IR.
+        _forward_passthrough_request_fields(provider_request, ir_request)
 
         # Preserve mode: capture request fields for echo-back in response
         ctx = context if context is not None else ConversionContext()

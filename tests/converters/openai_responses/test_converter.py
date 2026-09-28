@@ -1069,6 +1069,107 @@ class TestOpenAIResponsesConverterFullRoundTrip:
         assert len(system_msgs) >= 1
 
 
+class TestRequestFieldForwarding:
+    """Verify Responses-specific request fields survive IR round-trip."""
+
+    def setup_method(self):
+        self.converter = OpenAIResponsesConverter()
+
+    def test_store_forwarded_via_extensions(self):
+        """store field reaches the target request via provider_extensions."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "store": False,
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        assert ir["provider_extensions"]["store"] is False
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["store"] is False
+
+    def test_background_forwarded(self):
+        """background field reaches the target request."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "background": True,
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["background"] is True
+
+    def test_metadata_forwarded(self):
+        """metadata dict reaches the target request."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "metadata": {"session": "abc", "tag": "test"},
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["metadata"] == {"session": "abc", "tag": "test"}
+
+    def test_user_forwarded(self):
+        """user field reaches the target request."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "user": "user-123",
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["user"] == "user-123"
+
+    def test_text_verbosity_forwarded(self):
+        """text.verbosity merges into the text object on the target side."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "text": {"format": {"type": "text"}, "verbosity": "low"},
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        assert ir["provider_extensions"]["_text_verbosity"] == "low"
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["text"]["verbosity"] == "low"
+
+    def test_frequency_penalty_round_trip(self):
+        """frequency_penalty survives Responses→IR→Responses via GenerationConfig."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "frequency_penalty": 0.7,
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        assert ir["generation"]["frequency_penalty"] == 0.7
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["frequency_penalty"] == 0.7
+
+    def test_presence_penalty_round_trip(self):
+        """presence_penalty survives Responses→IR→Responses via GenerationConfig."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "presence_penalty": 0.3,
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        assert ir["generation"]["presence_penalty"] == 0.3
+        restored, _ = self.converter.request_to_provider(ir)
+        assert restored["presence_penalty"] == 0.3
+
+    def test_none_values_not_forwarded(self):
+        """Fields with None values are not put into provider_extensions."""
+        provider_request = {
+            "model": "gpt-4o",
+            "input": "Hello",
+            "store": None,
+            "user": None,
+        }
+        ir = self.converter.request_from_provider(provider_request)
+        ext = ir.get("provider_extensions", {})
+        assert "store" not in ext
+        assert "user" not in ext
+
+
 class TestResponseIdPrefix:
     """Tests for response ID prefix stripping and adding."""
 

@@ -58,19 +58,19 @@ class TestOpenAIResponsesConfigOps:
                 cast(GenerationConfig, {"top_k": 40})
             )
 
-    def test_ir_generation_config_frequency_penalty_warning(self):
-        """Test frequency_penalty produces warning."""
-        with pytest.warns(UserWarning, match="frequency_penalty"):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
-                cast(GenerationConfig, {"frequency_penalty": 0.5})
-            )
+    def test_ir_generation_config_frequency_penalty(self):
+        """Test frequency_penalty direct mapping."""
+        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            cast(GenerationConfig, {"frequency_penalty": 0.5})
+        )
+        assert result["frequency_penalty"] == 0.5
 
-    def test_ir_generation_config_presence_penalty_warning(self):
-        """Test presence_penalty produces warning."""
-        with pytest.warns(UserWarning, match="presence_penalty"):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
-                cast(GenerationConfig, {"presence_penalty": 0.3})
-            )
+    def test_ir_generation_config_presence_penalty(self):
+        """Test presence_penalty direct mapping."""
+        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            cast(GenerationConfig, {"presence_penalty": 0.3})
+        )
+        assert result["presence_penalty"] == 0.3
 
     def test_ir_generation_config_logit_bias_warning(self):
         """Test logit_bias produces warning."""
@@ -115,6 +115,8 @@ class TestOpenAIResponsesConfigOps:
             "top_p": 0.9,
             "top_logprobs": 3,
             "truncation": "auto",
+            "frequency_penalty": 0.5,
+            "presence_penalty": 0.3,
         }
         result = OpenAIResponsesConfigOps.p_generation_config_to_ir(provider)
         assert result["temperature"] == 0.5
@@ -122,6 +124,8 @@ class TestOpenAIResponsesConfigOps:
         assert result["top_p"] == 0.9
         assert result["top_logprobs"] == 3
         assert result["truncation"] == "auto"
+        assert result["frequency_penalty"] == 0.5
+        assert result["presence_penalty"] == 0.3
 
     def test_p_generation_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
