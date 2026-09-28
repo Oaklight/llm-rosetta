@@ -5,10 +5,24 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
+HOP_COUNT_HEADER = "x-rosetta-hop-count"
+MAX_HOPS = 4
+
 
 def get_request_id(request: Any) -> str:
     """Return the client request ID or generate one."""
     return request.headers.get("x-request-id") or str(uuid.uuid4())
+
+
+def get_hop_count(request: Any) -> int:
+    """Return the current hop count from the inbound request."""
+    raw = request.headers.get(HOP_COUNT_HEADER)
+    if raw is None:
+        return 0
+    try:
+        return max(0, int(raw))
+    except (ValueError, TypeError):
+        return 0
 
 
 def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str]:
@@ -17,6 +31,9 @@ def build_upstream_extra_headers(request: Any, request_id: str) -> dict[str, str
 
     if request_id:
         extra_headers["x-request-id"] = request_id
+
+    # Propagate hop count, incremented by one for this hop.
+    extra_headers[HOP_COUNT_HEADER] = str(get_hop_count(request) + 1)
 
     user_agent = request.headers.get("user-agent")
     if user_agent:

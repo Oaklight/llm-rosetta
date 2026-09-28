@@ -1469,3 +1469,15 @@ async def bulk_add_models(request: Any) -> Response:
             "models": list(ctx.new_config.models),
         }
     )
+
+
+async def check_routing_loops(request: Any) -> Response:
+    """Return any detected routing loops in the current config."""
+    from ...config import detect_routing_loops
+
+    config = getattr(request.app, "config", None)
+    if config is None:
+        return JSONResponse({"warnings": []})
+
+    warnings = detect_routing_loops(config.models, config.model_upstream_names)
+    return JSONResponse({"warnings": warnings})

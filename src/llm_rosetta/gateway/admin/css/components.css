@@ -670,3 +670,11 @@ body { padding-bottom: 26px; }
 
 /* Invert dark provider logos in dark mode for visibility */
 [data-mode="dark"] .pc-logo { filter: invert(1); }
+
+/* ── Routing loop warning banner ── */
+.loop-warning-banner {
+  padding:10px 14px;margin-bottom:12px;border-radius:var(--radius);
+  background:color-mix(in srgb, var(--yellow, #eab308) 15%, var(--bg-card));
+  border:1px solid var(--yellow, #eab308);color:var(--text);
+  font-size:13px;line-height:1.5;
+}

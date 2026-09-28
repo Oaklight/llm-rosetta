@@ -425,10 +425,28 @@ const _capIcons = {
   reasoning: '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 00-4 12.7V17h8v-2.3A7 7 0 0012 2z"/></svg>',
 };
 
+function _checkRoutingLoops() {
+  api('/admin/api/config/models/loop-check')
+    .then(data => {
+      const banner = document.getElementById('loopWarningBanner');
+      if (!banner) return;
+      if (data.warnings && data.warnings.length) {
+        banner.innerHTML = '<strong>⚠ Routing loop detected:</strong> ' +
+          data.warnings.map(w => esc(w)).join('<br>');
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    })
+    .catch(() => {});
+}
+
 function renderModels() {
   // Rebuild type seg-controls from server metadata on each render
   // (cheap DOM update, ensures newly registered types appear immediately)
   _buildTypeSegControls();
+
+  _checkRoutingLoops();
 
   const tbody = document.getElementById('modelTable');
   const models = S.configData.models || {};

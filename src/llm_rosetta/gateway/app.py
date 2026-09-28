@@ -1291,6 +1291,11 @@ async def create_app(
     # --- Request context (earliest hook — before auth and rate limiting) ---
     app.before_request(setup_request_context(trust_proxy=config.rate_limit_trust_proxy))
 
+    # --- Hop-count loop detection (before auth — no point authenticating a loop) ---
+    from .middleware.hop_limit import create_hop_limit_hook
+
+    app.before_request(create_hop_limit_hook())
+
     # --- Auth (SQLite keystore + config fallback) ---
     internal_token, keystore, auth_state = _setup_auth(
         config, config_path, data_dir=resolved_data_dir

@@ -117,6 +117,8 @@
           <button class="btn btn-primary btn-sm" onclick="openModelModal()" data-i18n="btn.addModel">+ Add Model</button>
         </div>
       </div>
+      <!-- Routing loop warning banner (populated by JS) -->
+      <div id="loopWarningBanner" class="loop-warning-banner" style="display:none"></div>
       <!-- Row 2: Filters only -->
       <div class="model-toolbar">
         <select id="modelProviderFilter" onchange="renderModels()">

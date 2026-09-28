@@ -252,6 +252,69 @@ def discover_config(explicit_path: str | None = None) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Routing loop detection
+# ---------------------------------------------------------------------------
+
+
+def detect_routing_loops(
+    models: dict[str, ModelRoute],
+    upstream_names: dict[str, str],
+) -> list[str]:
+    """Detect potential routing loops in the model configuration.
+
+    A loop risk exists when model A's upstream_model is also a registered
+    model name — if the upstream provider's base_url points back at this
+    gateway, the request would be re-routed internally.  Also detects
+    transitive chains (A → B → C → A).
+
+    Returns a list of human-readable warning strings (empty if clean).
+    """
+    warnings: list[str] = []
+
+    # Collect all edges: model_name → upstream_model (where upstream is
+    # also a model key).  Include both model-level and per-entry overrides.
+    edges: dict[str, str] = {}
+    for model_name, route in models.items():
+        up = upstream_names.get(model_name)
+        if up and up in models:
+            edges[model_name] = up
+            continue
+        for entry in route.providers:
+            if entry.upstream_model and entry.upstream_model in models:
+                edges[model_name] = entry.upstream_model
+                break
+
+    # Report every edge as a potential loop — even non-cyclic chains like
+    # A→B are dangerous when the upstream provider points back at this
+    # gateway.  True cycles (A→B→A) get a stronger message.
+    reported: set[str] = set()
+    for source, target in edges.items():
+        if source in reported:
+            continue
+        # Walk forward to detect cycles.
+        chain = [source]
+        node: str | None = target
+        chain_set = {source}
+        while node and node not in chain_set:
+            chain.append(node)
+            chain_set.add(node)
+            node = edges.get(node)
+        if node and node in chain_set:
+            cycle_start = chain.index(node)
+            cycle = chain[cycle_start:] + [node]
+            warnings.append(f"routing loop: {' → '.join(cycle)}")
+            reported.update(cycle)
+        else:
+            warnings.append(
+                f"upstream_model collision: '{source}' maps to"
+                f" '{target}' which is also a routable model"
+            )
+            reported.add(source)
+
+    return warnings
+
+
+# ---------------------------------------------------------------------------
 # Config class
 # ---------------------------------------------------------------------------
 
@@ -777,6 +840,10 @@ class GatewayConfig:
                     raise ValueError(
                         f"config: model '{model}' references unknown provider '{pname}'"
                     )
+
+        # Warn about potential routing loops.
+        for warning in detect_routing_loops(self.models, self.model_upstream_names):
+            logger.warning("config: %s", warning)
 
     @staticmethod
     def _resolve_provider_types(

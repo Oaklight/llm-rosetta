@@ -25,6 +25,7 @@ def test_build_upstream_extra_headers_preserves_user_agent_and_responses_version
 
     assert headers == {
         "x-request-id": "req-123",
+        "x-rosetta-hop-count": "1",
         "User-Agent": "codex-cli/1.2.3",
         "OpenResponses-Version": "2025-06-18",
     }
