@@ -127,6 +127,21 @@ tests/
 ├── test_auto_detect.py
 └── test_tool_ops.py
 
+scripts/
+├── alcf-token.py                 # ALCF token management
+├── rosetta-test-*.sh             # Agent integration test runners
+├── run_gateway_integration.sh    # Gateway integration test runner
+├── dev/                          # Developer tools (not user-facing)
+│   ├── extract_google_types.py
+│   ├── extract_tool_choice_types.py
+│   ├── scan_sdk_types.py
+│   ├── merge-pr.sh
+│   └── probe/                    # Upstream API probing
+│       └── probe_argo.py         # Unified ARGO model probe
+└── integration/                  # Integration test scripts
+    ├── test_roundtrip_inflation.py
+    └── test_roundtrip_live.py
+
 docs_en/, docs_zh/           # Documentation (git worktrees, orphan branches)
 docker/                      # Dockerfile for gateway image
 examples/                    # Usage examples

@@ -24,4 +24,4 @@ jobs:
         run: pip install --upgrade openai anthropic google-genai
 
       - name: Run type coverage scan
-        run: python scripts/scan_sdk_types.py >> "$GITHUB_STEP_SUMMARY"
+        run: python scripts/dev/scan_sdk_types.py >> "$GITHUB_STEP_SUMMARY"
