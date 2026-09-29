@@ -70,6 +70,20 @@ build-package: clean-package
 	python -m build
 	@echo "Build complete. Distribution files are in $(DIST_DIR)/"
 
+# Build wheel with dev version stamp (x.y.z.devN+gHASH)
+build-wheel: clean-package
+	@set -e; \
+	ORIG_VER=$(VERSION); \
+	COMMIT=$$(git rev-parse --short HEAD); \
+	DEV_VER=$$(printf '%s' "$$ORIG_VER" | grep -q '\.dev[0-9]' && printf '%s+g%s' "$$ORIG_VER" "$$COMMIT" || printf '%s.dev0+g%s' "$$ORIG_VER" "$$COMMIT"); \
+	INIT=src/llm_rosetta/__init__.py; \
+	cp "$$INIT" "$$INIT.bak"; \
+	trap 'mv "$$INIT.bak" "$$INIT"' EXIT; \
+	sed -i 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$INIT"; \
+	echo "Building wheel $$DEV_VER..."; \
+	python -m build --wheel -q; \
+	echo "Built: $$(ls dist/*.whl)"
+
 # Push the package to PyPI
 push-package:
 	@echo "Pushing $(PACKAGE_NAME) to PyPI..."
@@ -301,19 +315,11 @@ SSH_TARGET ?=
 DEVTEST_STACK ?= /dockervol/dockge/stacks/llm-rosetta-devtest
 DEVTEST_CONTAINER ?= llm-rosetta-devtest-llm-rosetta-gateway-devtest-1
 
-deploy-dev:
+deploy-dev: build-wheel
 ifndef SSH_TARGET
 	$(error SSH_TARGET is required. Usage: make deploy-dev SSH_TARGET=cloud.usa2)
 endif
 	@set -e; \
-	COMMIT=$$(git rev-parse --short HEAD); \
-	ORIG_VER=$$(python -c 'import re; print(re.search(r"__version__ = \"([^\"]+)\"", open("src/llm_rosetta/__init__.py").read()).group(1))'); \
-	DEV_VER=$$(printf '%s' "$$ORIG_VER" | grep -q '\.dev[0-9]' && printf '%s+g%s' "$$ORIG_VER" "$$COMMIT" || printf '%s.dev0+g%s' "$$ORIG_VER" "$$COMMIT"); \
-	echo "==> Building dev wheel $$DEV_VER..."; \
-	python -c 'from pathlib import Path; p=Path("src/llm_rosetta/__init__.py"); s=p.read_text(); p.write_text(s.replace("__version__ = \"'"$$ORIG_VER"'\"", "__version__ = \"'"$$DEV_VER"'\""))'; \
-	rm -rf dist build; \
-	conda run -n llm-rosetta python -m build --wheel -q; \
-	python -c 'from pathlib import Path; p=Path("src/llm_rosetta/__init__.py"); s=p.read_text(); p.write_text(s.replace("__version__ = \"'"$$DEV_VER"'\"", "__version__ = \"'"$$ORIG_VER"'\""))'; \
 	WHEEL=$$(ls dist/*.whl | head -1 | xargs basename); \
 	echo "==> Building Docker image from $$WHEEL..."; \
 	docker build -f docker/Dockerfile --build-arg LOCAL_WHEEL=$$WHEEL -t $(DOCKER_IMAGE):dev-test -q .; \
@@ -342,6 +348,7 @@ help:
 	@echo ""
 	@echo "Package:"
 	@echo "  build-package  - Build the Python package"
+	@echo "  build-wheel    - Build wheel with dev version stamp (+gHASH)"
 	@echo "  push-package   - Push the package to PyPI"
 	@echo "  clean-package  - Clean up build and distribution files"
 	@echo ""
@@ -392,4 +399,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test test-integration test-gateway build-package push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint lint-fix test test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
