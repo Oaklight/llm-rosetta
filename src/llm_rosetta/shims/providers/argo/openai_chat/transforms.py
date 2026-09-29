@@ -2,16 +2,19 @@
 
 Request-side (post_ir_transforms) — body-level
 -------------------------------------------
-- ``rename_field("max_tokens", "max_completion_tokens")``: converts the
-  deprecated ``max_tokens`` parameter for newer OpenAI models.
+- ``rename_field("max_tokens", "max_completion_tokens", pattern=r"^gemini")``:
+  converts ``max_tokens`` to ``max_completion_tokens`` for Gemini models
+  only — Gemini via Argo rejects ``max_tokens``, while Claude via Argo
+  rejects ``max_completion_tokens`` alone (500 "Streaming is required").
 - ``replace_message_field("role", "developer", "system")``: downgrades
   the ``developer`` role (OpenAI 2024-12-17+) to ``system`` for upstream
   gateways that don't support it.
 - ``default_message_field("content", "")``: replaces ``content: null``
   with an empty string — upstream gateways (e.g. Argo Gemini) crash on
   null content when iterating message bodies.
-- ``strip_fields_for_model(r"^claudeopus47", "temperature")``: strips
-  ``temperature`` for reasoning models that reject it (e.g. Claude Opus 4.7).
+- ``strip_fields_for_model(..., "temperature", "top_p", "top_k")``: strips
+  sampling params for models that reject them on the OAI Chat endpoint.
+  Covers GPT-5 base/5.5/5.6, Claude Opus 4.7, Claude Sonnet 5.
 - ``flatten_system_content(pattern=r"^gemini")``: flattens system message
   content arrays to plain strings for Gemini models, which don't handle
   structured content in system messages.
@@ -42,10 +45,15 @@ from llm_rosetta.shims.transforms import (
 from ..model_utils import model_list_transform  # noqa: F401
 
 post_ir_transforms = (
-    rename_field("max_tokens", "max_completion_tokens"),
+    rename_field("max_tokens", "max_completion_tokens", pattern=r"^gemini"),
     replace_message_field("role", "developer", "system"),
     default_message_field("content", ""),
-    strip_fields_for_model(r"^claudeopus47", "temperature"),
+    strip_fields_for_model(
+        r"^(gpt5(nano|mini)?$|gpt5[56]|claudeopus47$|claudesonnet5$)",
+        "temperature",
+        "top_p",
+        "top_k",
+    ),
     flatten_system_content(pattern=r"^gemini"),
 )
 pre_ir_transforms = ()

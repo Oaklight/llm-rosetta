@@ -1,11 +1,17 @@
 """Argo Anthropic schema transforms.
 
+Request-side (post_ir_transforms)
+---------------------------------
+- ``strip_fields_for_model(..., "temperature", "top_p", "top_k")``: strips
+  sampling params for Claude 4.7+ which reject them on the Anthropic endpoint.
+  Earlier models (4.5–4.6) accept T xor P; that mutual exclusion is left to
+  the upstream 400.
+
 Response-side (pre_ir_transforms)
---------------------------------
-``_normalize_openai_response`` rewrites OpenAI Chat Completions format responses
-to Anthropic Messages format.  Argo's ``/v1/messages`` endpoint inconsistently
-returns ``choices[0].message`` for some Claude model versions; this transform
-normalises those responses before the Anthropic converter sees them.
+---------------------------------
+- ``_normalize_openai_response``: rewrites OpenAI Chat Completions format
+  responses to Anthropic Messages format.  Argo's ``/v1/messages`` endpoint
+  inconsistently returns ``choices[0].message`` for some Claude model versions.
 
 Request-side thinking normalization (``enabled`` ↔ ``adaptive`` per model) is
 handled declaratively via ``reasoning.model_overrides`` in ``provider.yaml``
@@ -22,6 +28,7 @@ from llm_rosetta.shims.transforms import (
     _NamedTransform,
     auto_cache_breakpoints,
     hoist_late_system_messages,
+    strip_fields_for_model,
 )
 
 # Re-export shared Argo model list transform for convention-based hook
@@ -131,7 +138,18 @@ def _normalize_openai_response(body: dict[str, Any]) -> dict[str, Any]:
 # Transform tuples (consumed by the shim loader)
 # ---------------------------------------------------------------------------
 
-post_ir_transforms = ()
+post_ir_transforms = (
+    # Claude 4.7+ rejects all sampling params on the Anthropic endpoint.
+    # Earlier models (4.5–4.6) accept T xor P but not both — that mutual
+    # exclusion is left to the upstream 400 since silently dropping one
+    # would surprise the user.
+    strip_fields_for_model(
+        r"^(claudeopus4[789]|claudeopus[5-9]|claudesonnet[5-9])",
+        "temperature",
+        "top_p",
+        "top_k",
+    ),
+)
 pre_ir_transforms = (
     _NamedTransform(_normalize_openai_response, "normalize_openai_response()"),
 )

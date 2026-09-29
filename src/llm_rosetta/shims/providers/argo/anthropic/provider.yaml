@@ -21,21 +21,28 @@ reasoning:
     detailed: summarized
     none: omitted
   unsigned_blocks: preserve
-  # Argo Anthropic thinking support matrix (tested 2026-06-18):
-  #   claudehaiku45:  enabled+budget only (adaptive → 400)
-  #   claudesonnet4:  enabled+budget only (adaptive → 400)
-  #   claudeopus46:   both enabled and adaptive work
-  #   claudeopus47+:  adaptive only (enabled → 400)
+  # Argo Anthropic thinking support matrix (probed 2026-09-28):
+  #   Gen 1 (4.5):     enabled+budget only (adaptive → 400)
+  #   Gen 2 (4.6):     enabled+budget + adaptive
+  #   Gen 3 (4.7+):    adaptive only (enabled → 400)
   model_overrides:
     claudehaiku45:
       thinking_modes: {enabled: enabled, disabled: disabled}
       budget_ratio: 0.8
-    claudesonnet4:
+    claudesonnet45:
       thinking_modes: {enabled: enabled, disabled: disabled}
       budget_ratio: 0.8
+    claudeopus45:
+      thinking_modes: {enabled: enabled, disabled: disabled}
+      budget_ratio: 0.8
+    # claudesonnet46 and claudeopus46: default modes work (both enabled+budget and adaptive)
     claudeopus47:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
     claudeopus48:
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+    claudesonnet5:
+      thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
+    claudeopus5:
       thinking_modes: {auto: adaptive, enabled: adaptive, disabled: disabled}
 
 soft_error_patterns:

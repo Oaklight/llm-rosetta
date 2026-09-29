@@ -69,18 +69,40 @@ def strip_fields(*keys: str) -> Transform:
     return _NamedTransform(_strip, f"strip_fields({', '.join(repr(k) for k in keys)})")
 
 
-def rename_field(old: str, new: str) -> Transform:
+def rename_field(old: str, new: str, *, pattern: str | None = None) -> Transform:
     """Return a transform that renames a top-level field.
 
     No-op if *old* does not exist (idempotent).
+
+    When *pattern* is set, the rename only fires if ``body["model"]``
+    matches the regex (search on normalised model string: lowercase,
+    non-alphanumeric stripped).
+
+    Example::
+
+        rename_field("max_tokens", "max_completion_tokens")
+        rename_field("max_tokens", "max_completion_tokens", pattern=r"^gemini")
     """
+    compiled = re.compile(pattern) if pattern else None
 
     def _rename(body: dict[str, Any]) -> dict[str, Any]:
-        if old in body:
-            body[new] = body.pop(old)
+        if old not in body:
+            return body
+        if compiled is not None:
+            model = body.get("model")
+            if not model or not isinstance(model, str):
+                return body
+            normalised = re.sub(r"[^a-z0-9]", "", model.lower())
+            if not compiled.search(normalised):
+                return body
+        body[new] = body.pop(old)
         return body
 
-    return _NamedTransform(_rename, f"rename_field({old!r}, {new!r})")
+    label = f"rename_field({old!r}, {new!r}"
+    if pattern:
+        label += f", pattern={pattern!r}"
+    label += ")"
+    return _NamedTransform(_rename, label)
 
 
 def set_defaults(**defaults: Any) -> Transform:

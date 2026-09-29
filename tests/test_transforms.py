@@ -587,39 +587,67 @@ class TestArgoOpenaiChatTransforms:
         result = apply_transforms(shim.post_ir_transforms, body)
         assert result["messages"][0]["content"] == ""
 
-    def test_argo_strips_temperature_for_opus47(self):
+    def test_argo_strips_sampling_for_matching_models(self):
+        """Models that reject sampling params get them stripped."""
         shim = get_shim("argo--openai_chat")
         assert shim is not None
-        body = {
-            "model": "claudeopus47",
-            "temperature": 0.7,
-            "messages": [{"role": "user", "content": "hi"}],
-        }
-        result = apply_transforms(shim.post_ir_transforms, body)
-        assert "temperature" not in result
+        for model in (
+            "claudeopus47",
+            "claudesonnet5",
+            "gpt5",
+            "gpt5nano",
+            "gpt55",
+            "gpt56sol",
+        ):
+            body = {
+                "model": model,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            result = apply_transforms(shim.post_ir_transforms, body)
+            assert "temperature" not in result, f"{model}: temperature not stripped"
+            assert "top_p" not in result, f"{model}: top_p not stripped"
 
-    def test_argo_keeps_temperature_for_other_models(self):
+    def test_argo_keeps_sampling_for_non_matching_models(self):
+        """Models that accept sampling params keep them."""
         shim = get_shim("argo--openai_chat")
         assert shim is not None
-        body = {
-            "model": "gpt-4o",
-            "temperature": 0.7,
-            "messages": [{"role": "user", "content": "hi"}],
-        }
-        result = apply_transforms(shim.post_ir_transforms, body)
-        assert result["temperature"] == 0.7
+        for model in ("gpt-4o", "gpt41nano", "gpt51", "gpt54", "claudehaiku45"):
+            body = {
+                "model": model,
+                "temperature": 0.7,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            result = apply_transforms(shim.post_ir_transforms, body)
+            assert result["temperature"] == 0.7, f"{model}: temperature stripped"
 
-    def test_argo_renames_max_tokens(self):
+    def test_argo_renames_max_tokens_for_gemini(self):
         shim = get_shim("argo--openai_chat")
         assert shim is not None
         body = {
-            "model": "gpt-4",
+            "model": "gemini25flash",
             "max_tokens": 100,
             "messages": [{"role": "user", "content": "hi"}],
         }
         result = apply_transforms(shim.post_ir_transforms, body)
         assert "max_tokens" not in result
         assert result["max_completion_tokens"] == 100
+
+    def test_argo_keeps_max_tokens_for_non_gemini(self):
+        """Non-Gemini models keep max_tokens unchanged — Claude via Argo
+        OAI rejects max_completion_tokens alone."""
+        shim = get_shim("argo--openai_chat")
+        assert shim is not None
+        for model in ("gpt-4o", "claudeopus47"):
+            body = {
+                "model": model,
+                "max_tokens": 100,
+                "messages": [{"role": "user", "content": "hi"}],
+            }
+            result = apply_transforms(shim.post_ir_transforms, body)
+            assert result["max_tokens"] == 100
+            assert "max_completion_tokens" not in result
 
 
 # ============================================================================
