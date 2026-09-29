@@ -36,10 +36,10 @@ function openSettings() {
   // Sync log retention
   if (S.configData?.server?.request_log) {
     const sm = document.getElementById('settingsSuccessMax');
-    const em = document.getElementById('settingsErrorMax');
+    const em = document.getElementById('settingsErrorDumpMax');
     const mad = document.getElementById('settingsMaxAgeDays');
     if (sm) sm.value = S.configData.server.request_log.success_max || 50000;
-    if (em) em.value = S.configData.server.request_log.error_max || 10000;
+    if (em) em.value = S.configData.server.request_log.error_dump_max || 10000;
     if (mad) mad.value = S.configData.server.request_log.max_age_days || 90;
   }
   const olCfg = S.configData?.server?.ops_log || {};
@@ -124,16 +124,16 @@ function saveAutoRefresh(val) {
 
 async function saveLogRetention() {
   const sm = parseInt(document.getElementById('settingsSuccessMax')?.value || '50000', 10);
-  const em = parseInt(document.getElementById('settingsErrorMax')?.value || '10000', 10);
+  const em = parseInt(document.getElementById('settingsErrorDumpMax')?.value || '10000', 10);
   const mad = parseInt(document.getElementById('settingsMaxAgeDays')?.value || '90', 10);
   const oim = parseInt(document.getElementById('settingsOpsInfoMax')?.value || '10000', 10);
   const owm = parseInt(document.getElementById('settingsOpsWarnMax')?.value || '5000', 10);
   const omad = parseInt(document.getElementById('settingsOpsMaxAgeDays')?.value || '90', 10);
-  if (sm < 50000 || em < 5000) { showToast(t('toast.retentionMin'), 'error'); return; }
+  if (sm < 50000 || em < 1000) { showToast(t('toast.retentionMin'), 'error'); return; }
   if (mad < 1 || oim < 100 || owm < 100 || omad < 1) { showToast(t('toast.error'), 'error'); return; }
   try {
     await api.put('/admin/api/config/server', {
-      request_log: { success_max: sm, error_max: em, max_age_days: mad },
+      request_log: { success_max: sm, error_dump_max: em, max_age_days: mad },
       ops_log: { info_max: oim, warn_max: owm, max_age_days: omad },
     });
     await window.loadConfig(); showToast(t('toast.saved'));
@@ -221,9 +221,38 @@ async function saveRateLimitSettings() {
 
 // --- Database Cleanup ---
 let _cleanupTarget = 'all';
+let _cleanupMode = 'olderThan';
+
+function _showWorkingToast(key) {
+  const el = document.getElementById('toast');
+  el.textContent = t(key);
+  el.className = 'toast show info';
+}
+
+function setCleanupMode(mode) {
+  _cleanupMode = mode;
+  document.querySelectorAll('.cleanupModeBtn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.querySelectorAll('.cleanupModePanel').forEach(p => { p.style.display = 'none'; });
+  const panelId = mode === 'olderThan' ? 'cleanupModeOlderThan'
+    : mode === 'beforeDate' ? 'cleanupModeBeforeDate'
+    : mode === 'dateRange' ? 'cleanupModeDateRange'
+    : 'cleanupModeTrimToCap';
+  document.getElementById(panelId).style.display = '';
+  if (mode === 'trimToCap') {
+    const sm = S.configData?.server?.request_log?.success_max || 50000;
+    const em = S.configData?.server?.request_log?.error_dump_max || 10000;
+    document.getElementById('cleanupTrimInfo').textContent =
+      `Success cap: ${sm.toLocaleString()}, Error dump cap: ${em.toLocaleString()}`;
+  }
+  document.getElementById('cleanupConfirmInput').value = '';
+  onCleanupConfirmInput();
+}
 
 function openCleanupConfirm(target) {
   _cleanupTarget = target || 'all';
+  _cleanupMode = 'olderThan';
   const daysEl = target === 'ops' ? 'settingsOpsMaxAgeDays' : 'settingsMaxAgeDays';
   const days = parseInt(document.getElementById(daysEl)?.value || '90', 10);
   if (days < 1) { showToast(t('toast.error'), 'error'); return; }
@@ -233,8 +262,12 @@ function openCleanupConfirm(target) {
     : 'confirm.cleanupMsg';
   document.getElementById('cleanupConfirmMsg').innerHTML = t(msgKey, {days});
   document.getElementById('cleanupConfirmInput').value = '';
-  document.getElementById('cleanupConfirmBtn').disabled = true;
+  document.getElementById('cleanupBeforeDate').value = '';
+  document.getElementById('cleanupRangeStart').value = '';
+  document.getElementById('cleanupRangeEnd').value = '';
+  setCleanupMode('olderThan');
   const btn = document.getElementById('cleanupConfirmBtn');
+  btn.disabled = true;
   btn.style.background = '#ccc'; btn.style.color = '#888'; btn.style.cursor = 'not-allowed';
   openModal('cleanupConfirmModal');
   document.getElementById('cleanupConfirmInput').focus();
@@ -249,39 +282,84 @@ function onCleanupConfirmInput() {
   btn.style.cursor = matched ? 'pointer' : 'not-allowed';
 }
 
+const _TARGET_LABELS = {logs: 'log', errors: 'error dump', ops: 'ops log', all: ''};
+
 async function onCleanupConfirmClick() {
   const target = _cleanupTarget;
-  const daysEl = target === 'ops' ? 'settingsOpsMaxAgeDays' : 'settingsMaxAgeDays';
-  const days = parseInt(document.getElementById(daysEl)?.value || '90', 10);
+  const mode = _cleanupMode;
   closeModal('cleanupConfirmModal');
+  _showWorkingToast('toast.cleanupWorking');
+
   try {
-    const url = target === 'logs' ? '/admin/api/requests/cleanup'
-      : target === 'errors' ? '/admin/api/error-dumps/cleanup'
-      : target === 'ops' ? '/admin/api/ops-log/cleanup'
-      : '/admin/api/db/cleanup';
-    const d = await api.post(url, { max_age_days: days });
-    if (target === 'logs') {
-      if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
-      else showToast(t('toast.cleanupLogsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
-    } else if (target === 'errors') {
-      const total = d.error_dumps_deleted + d.dump_bodies_deleted;
-      if (total === 0) showToast(t('toast.cleanupNone', {days}));
-      else showToast(t('toast.cleanupErrorsDone', {ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
-    } else if (target === 'ops') {
-      if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
-      else showToast(t('toast.cleanupOpsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
-    } else {
-      const total = d.request_log_deleted + d.error_dumps_deleted + d.dump_bodies_deleted;
-      if (total === 0) showToast(t('toast.cleanupNone', {days}));
-      else showToast(t('toast.cleanupDone', {rl: d.request_log_deleted, ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
+    let d;
+    if (mode === 'olderThan') {
+      const daysEl = target === 'ops' ? 'settingsOpsMaxAgeDays' : 'settingsMaxAgeDays';
+      const days = parseInt(document.getElementById(daysEl)?.value || '90', 10);
+      const url = target === 'logs' ? '/admin/api/requests/cleanup'
+        : target === 'errors' ? '/admin/api/error-dumps/cleanup'
+        : target === 'ops' ? '/admin/api/ops-log/cleanup'
+        : '/admin/api/db/cleanup';
+      d = await api.post(url, { max_age_days: days });
+      _showOlderThanResult(target, d, days);
+    } else if (mode === 'beforeDate') {
+      const before = document.getElementById('cleanupBeforeDate').value;
+      if (!before) { showToast(t('toast.error'), 'error'); return; }
+      d = await api.post('/admin/api/db/cleanup-before', { target, before: before + 'T00:00:00Z' });
+      const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
+      if (total === 0) showToast(t('toast.cleanupNone', {days: before}));
+      else showToast(t('toast.cleanupBeforeDone', {total, date: before, freed: fmtBytesLong(d.freed_bytes)}));
+    } else if (mode === 'dateRange') {
+      const start = document.getElementById('cleanupRangeStart').value;
+      const end = document.getElementById('cleanupRangeEnd').value;
+      if (!start || !end) { showToast(t('toast.error'), 'error'); return; }
+      d = await api.post('/admin/api/db/cleanup-range', { target, start: start + 'T00:00:00Z', end: end + 'T23:59:59Z' });
+      const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
+      if (total === 0) showToast(t('toast.cleanupNone', {days: `${start} ~ ${end}`}));
+      else showToast(t('toast.cleanupRangeDone', {total, freed: fmtBytesLong(d.freed_bytes)}));
+    } else if (mode === 'trimToCap') {
+      d = await api.post('/admin/api/db/trim');
+      const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
+      if (total === 0) showToast(t('toast.trimNone'));
+      else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
     }
   } catch { showToast(t('toast.error'), 'error'); }
   window.loadMetrics?.();
   if (target === 'errors' || target === 'all') window.invalidateDumpCache?.();
 }
 
+function _showOlderThanResult(target, d, days) {
+  if (target === 'logs') {
+    if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
+    else showToast(t('toast.cleanupLogsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
+  } else if (target === 'errors') {
+    const total = d.error_dumps_deleted + d.dump_bodies_deleted;
+    if (total === 0) showToast(t('toast.cleanupNone', {days}));
+    else showToast(t('toast.cleanupErrorsDone', {ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
+  } else if (target === 'ops') {
+    if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
+    else showToast(t('toast.cleanupOpsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
+  } else {
+    const total = d.request_log_deleted + d.error_dumps_deleted + d.dump_bodies_deleted;
+    if (total === 0) showToast(t('toast.cleanupNone', {days}));
+    else showToast(t('toast.cleanupDone', {rl: d.request_log_deleted, ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
+  }
+}
+
+// --- Trim to Cap (quick action) ---
+async function doTrimToCap() {
+  _showWorkingToast('toast.trimWorking');
+  try {
+    const d = await api.post('/admin/api/db/trim');
+    const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
+    if (total === 0) showToast(t('toast.trimNone'));
+    else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
+  } catch { showToast(t('toast.error'), 'error'); }
+  window.loadMetrics?.();
+}
+
 // --- Vacuum ---
 async function doVacuum() {
+  _showWorkingToast('toast.vacuumWorking');
   try {
     const d = await api.post('/admin/api/db/vacuum');
     if (d.freed_bytes > 0) showToast(t('toast.vacuumDone', {freed: fmtBytesLong(d.freed_bytes)}));
@@ -490,6 +568,6 @@ Object.assign(window, {
   copyAdminToken, changeAdminPassword, showLoginOverlay, doLogin,
   checkAuthAndInit, _doTokenRotate, logoutAllSessions,
   onRlToggle, saveRateLimitSettings,
-  openCleanupConfirm, onCleanupConfirmInput, onCleanupConfirmClick, doVacuum,
+  openCleanupConfirm, onCleanupConfirmInput, onCleanupConfirmClick, setCleanupMode, doTrimToCap, doVacuum,
   openExportDumpsModal, doExportDumps,
 });

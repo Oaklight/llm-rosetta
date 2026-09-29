@@ -41,6 +41,7 @@ DEFAULT_OPS_INFO_MAX = 10000
 DEFAULT_OPS_WARN_MAX = 5000
 
 _PRUNE_BATCH_SIZE = 5000
+_VACUUM_THRESHOLD = 1000
 
 
 class PersistenceManager:
@@ -770,18 +771,13 @@ class PersistenceManager:
         await self._conn.commit()
 
     async def cleanup_ops_log_by_age(self, max_age_days: int) -> dict[str, Any]:
-        """Delete ops_log rows older than *max_age_days* and vacuum."""
+        """Delete ops_log rows older than *max_age_days*."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
-
-        cur = await self._conn.execute(
-            "DELETE FROM ops_log WHERE timestamp < ?", (cutoff,)
-        )
-        deleted = cur.rowcount
-        await self._conn.commit()
-        vacuum_ok = await self._vacuum()
+        deleted = await self._batched_delete("ops_log", "timestamp < ?", (cutoff,))
+        vacuum_ok = await self._conditional_vacuum(deleted)
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1108,6 +1104,35 @@ class PersistenceManager:
             return False
         return True
 
+    async def _conditional_vacuum(self, total_deleted: int) -> bool:
+        """VACUUM only when enough rows were deleted to justify the cost."""
+        if total_deleted >= _VACUUM_THRESHOLD:
+            return await self._vacuum()
+        if total_deleted > 0:
+            try:
+                await self._conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            except Exception:
+                pass
+        return False
+
+    async def _batched_delete(
+        self, table: str, where: str, params: tuple[Any, ...]
+    ) -> int:
+        """Delete rows matching *where* in batches, return total deleted."""
+        total = 0
+        while True:
+            cur = await self._conn.execute(
+                f"DELETE FROM {table} WHERE rowid IN ("  # noqa: S608
+                f"  SELECT rowid FROM {table} WHERE {where} LIMIT ?"
+                f")",
+                (*params, _PRUNE_BATCH_SIZE),
+            )
+            await self._conn.commit()
+            if cur.rowcount == 0:
+                break
+            total += cur.rowcount
+        return total
+
     async def vacuum(self) -> dict[str, Any]:
         """Run VACUUM and return freed bytes."""
         size_before = self.db_path.stat().st_size
@@ -1119,18 +1144,13 @@ class PersistenceManager:
         }
 
     async def cleanup_logs_by_age(self, max_age_days: int) -> dict[str, Any]:
-        """Delete request_log rows older than *max_age_days* and vacuum."""
+        """Delete request_log rows older than *max_age_days*."""
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
-
-        cur = await self._conn.execute(
-            "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
-        )
-        deleted = cur.rowcount
-        await self._conn.commit()
-        vacuum_ok = await self._vacuum()
+        deleted = await self._batched_delete("request_log", "timestamp < ?", (cutoff,))
+        vacuum_ok = await self._conditional_vacuum(deleted)
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1148,15 +1168,12 @@ class PersistenceManager:
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
-
-        cur = await self._conn.execute(
-            "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
+        error_dumps_deleted = await self._batched_delete(
+            "error_dumps", "timestamp < ?", (cutoff,)
         )
-        error_dumps_deleted = cur.rowcount
-
         dump_bodies_deleted = await self._delete_orphan_bodies()
         await self._conn.commit()
-        vacuum_ok = await self._vacuum()
+        vacuum_ok = await self._conditional_vacuum(error_dumps_deleted)
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1170,7 +1187,7 @@ class PersistenceManager:
         }
 
     async def cleanup_by_age(self, max_age_days: int = 90) -> dict[str, Any]:
-        """Delete all records older than *max_age_days* and vacuum.
+        """Delete all records older than *max_age_days*.
 
         Convenience method that cleans both request logs and error dumps.
         """
@@ -1178,20 +1195,16 @@ class PersistenceManager:
 
         cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
         size_before = self.db_path.stat().st_size
-
-        cur = await self._conn.execute(
-            "DELETE FROM request_log WHERE timestamp < ?", (cutoff,)
+        request_log_deleted = await self._batched_delete(
+            "request_log", "timestamp < ?", (cutoff,)
         )
-        request_log_deleted = cur.rowcount
-
-        cur = await self._conn.execute(
-            "DELETE FROM error_dumps WHERE timestamp < ?", (cutoff,)
+        error_dumps_deleted = await self._batched_delete(
+            "error_dumps", "timestamp < ?", (cutoff,)
         )
-        error_dumps_deleted = cur.rowcount
-
         dump_bodies_deleted = await self._delete_orphan_bodies()
         await self._conn.commit()
-        vacuum_ok = await self._vacuum()
+        total = request_log_deleted + error_dumps_deleted
+        vacuum_ok = await self._conditional_vacuum(total)
         size_after = self.db_path.stat().st_size
 
         return {
@@ -1202,6 +1215,139 @@ class PersistenceManager:
             "size_before": size_before,
             "size_after": size_after,
             "max_age_days": max_age_days,
+            "vacuum": vacuum_ok,
+        }
+
+    # ------------------------------------------------------------------
+    # Targeted cleanup: by date / date range / trim to cap
+    # ------------------------------------------------------------------
+
+    async def cleanup_before(
+        self,
+        before_iso: str,
+        *,
+        tables: tuple[str, ...] = ("request_log", "error_dumps", "ops_log"),
+    ) -> dict[str, Any]:
+        """Delete rows with ``timestamp < before_iso`` from *tables*."""
+        size_before = self.db_path.stat().st_size
+        result: dict[str, Any] = {}
+        total = 0
+        for table in tables:
+            n = await self._batched_delete(table, "timestamp < ?", (before_iso,))
+            result[f"{table}_deleted"] = n
+            total += n
+        if "error_dumps" in tables:
+            result["dump_bodies_deleted"] = await self._delete_orphan_bodies()
+            await self._conn.commit()
+        vacuum_ok = await self._conditional_vacuum(total)
+        size_after = self.db_path.stat().st_size
+        result.update(
+            freed_bytes=max(0, size_before - size_after),
+            vacuum=vacuum_ok,
+        )
+        return result
+
+    async def cleanup_range(
+        self,
+        start_iso: str,
+        end_iso: str,
+        *,
+        tables: tuple[str, ...] = ("request_log", "error_dumps", "ops_log"),
+    ) -> dict[str, Any]:
+        """Delete rows with ``start_iso <= timestamp < end_iso`` from *tables*."""
+        size_before = self.db_path.stat().st_size
+        result: dict[str, Any] = {}
+        total = 0
+        for table in tables:
+            n = await self._batched_delete(
+                table, "timestamp >= ? AND timestamp < ?", (start_iso, end_iso)
+            )
+            result[f"{table}_deleted"] = n
+            total += n
+        if "error_dumps" in tables:
+            result["dump_bodies_deleted"] = await self._delete_orphan_bodies()
+            await self._conn.commit()
+        vacuum_ok = await self._conditional_vacuum(total)
+        size_after = self.db_path.stat().st_size
+        result.update(
+            freed_bytes=max(0, size_before - size_after),
+            vacuum=vacuum_ok,
+        )
+        return result
+
+    async def trim_to_cap(self) -> dict[str, Any]:
+        """Trim all tables to their configured retention caps."""
+        size_before = self.db_path.stat().st_size
+
+        success_count = await self.count_success_entries()
+        rl_excess = max(0, success_count - self._success_max)
+        rl_trimmed = 0
+        if rl_excess > 0:
+            while rl_excess > 0:
+                batch = min(rl_excess, _PRUNE_BATCH_SIZE)
+                await self._conn.execute(
+                    "DELETE FROM request_log "
+                    "WHERE rowid IN ("
+                    "    SELECT rowid FROM request_log "
+                    "    WHERE status_code < 400 "
+                    "    ORDER BY timestamp ASC "
+                    "    LIMIT ?"
+                    ")",
+                    (batch,),
+                )
+                await self._conn.commit()
+                rl_trimmed += batch
+                rl_excess -= batch
+
+        dump_count = await self.count_error_dumps()
+        dump_excess = max(0, dump_count - self._dump_max)
+        dumps_trimmed = 0
+        if dump_excess > 0:
+            await self._conn.execute(
+                "DELETE FROM error_dumps "
+                "WHERE rowid IN ("
+                "    SELECT rowid FROM error_dumps "
+                "    ORDER BY timestamp ASC "
+                "    LIMIT ?"
+                ")",
+                (dump_excess,),
+            )
+            dumps_trimmed = dump_excess
+            await self._delete_orphan_bodies()
+            await self._conn.commit()
+
+        ops_trimmed = 0
+        for severity, cap in (
+            ("info", self._ops_info_max),
+            ("warn", self._ops_warn_max),
+        ):
+            where = "severity = 'info'" if severity == "info" else "severity != 'info'"
+            row = await self._conn.execute_fetchone(
+                f"SELECT COUNT(*) FROM ops_log WHERE {where}"  # noqa: S608
+            )
+            count = row[0] if row else 0
+            excess = max(0, count - cap)
+            if excess > 0:
+                await self._conn.execute(
+                    f"DELETE FROM ops_log WHERE rowid IN ("  # noqa: S608
+                    f"  SELECT rowid FROM ops_log WHERE {where} "
+                    f"  ORDER BY timestamp ASC LIMIT ?"
+                    f")",
+                    (excess,),
+                )
+                ops_trimmed += excess
+        if ops_trimmed > 0:
+            await self._conn.commit()
+
+        total = rl_trimmed + dumps_trimmed + ops_trimmed
+        vacuum_ok = await self._conditional_vacuum(total)
+        size_after = self.db_path.stat().st_size
+
+        return {
+            "request_log_trimmed": rl_trimmed,
+            "error_dumps_trimmed": dumps_trimmed,
+            "ops_log_trimmed": ops_trimmed,
+            "freed_bytes": max(0, size_before - size_after),
             "vacuum": vacuum_ok,
         }
 

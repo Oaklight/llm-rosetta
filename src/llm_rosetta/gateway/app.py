@@ -944,6 +944,49 @@ async def _periodic_token_rotation(app: App) -> None:
 # ---------------------------------------------------------------------------
 
 _FLUSH_METRICS_INTERVAL = 30  # seconds
+_CLEANUP_INTERVAL = 7 * 24 * 3600  # weekly
+_CLEANUP_INITIAL_DELAY = 120  # seconds
+
+
+async def _periodic_cleanup(app: App) -> None:
+    """Periodically delete records older than the configured max_age_days."""
+    await asyncio.sleep(_CLEANUP_INITIAL_DELAY)
+    while True:
+        try:
+            persistence = getattr(app, "persistence", None)
+            config = getattr(app, "gateway_config", None)
+            if persistence is not None and config is not None:
+                raw_cfg = getattr(config, "_raw", {})
+                server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}
+                rl_age = int((server.get("request_log") or {}).get("max_age_days", 90))
+                ol_age = int((server.get("ops_log") or {}).get("max_age_days", 90))
+
+                rl = await persistence.cleanup_logs_by_age(rl_age)
+                ed = await persistence.cleanup_error_dumps_by_age(rl_age)
+                ol = await persistence.cleanup_ops_log_by_age(ol_age)
+
+                total = (
+                    rl.get("deleted", 0)
+                    + ed.get("error_dumps_deleted", 0)
+                    + ol.get("deleted", 0)
+                )
+                if total > 0:
+                    logger.info(
+                        "Periodic cleanup: %d log, %d dump, %d ops removed",
+                        rl.get("deleted", 0),
+                        ed.get("error_dumps_deleted", 0),
+                        ol.get("deleted", 0),
+                    )
+                    metrics = getattr(app, "metrics", None)
+                    if metrics is not None:
+                        rows = [
+                            row async for row in persistence.iter_log_rows_for_rebuild()
+                        ]
+                        metrics.rebuild_counters(iter(rows))
+                        await persistence.save_metrics(metrics.export_counters())
+        except Exception as exc:
+            logger.warning("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(_CLEANUP_INTERVAL)
 
 
 async def _periodic_flush(app: App) -> None:
@@ -1434,7 +1477,13 @@ async def run_gateway(
         )
 
     flush_task = asyncio.create_task(_periodic_flush(app))
+    cleanup_task = asyncio.create_task(_periodic_cleanup(app))
     rotation_task = asyncio.create_task(_periodic_token_rotation(app))
+    logger.info(
+        "Periodic cleanup armed (interval=%ds, initial_delay=%ds)",
+        _CLEANUP_INTERVAL,
+        _CLEANUP_INITIAL_DELAY,
+    )
 
     # Deferred startup: token seeding, counter rebuild, backfills
     from .deferred_startup import DeferredStartup
@@ -1468,13 +1517,14 @@ async def run_gateway(
         for task in all_refresh:
             task.cancel()
         flush_task.cancel()
+        cleanup_task.cancel()
         rotation_task.cancel()
         for task in all_refresh:
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-        for bg in (flush_task, rotation_task):
+        for bg in (flush_task, cleanup_task, rotation_task):
             try:
                 await bg
             except asyncio.CancelledError:

@@ -629,6 +629,7 @@
           <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('errors')" data-i18n="btn.cleanupErrors">Cleanup Errors</button>
           <button class="btn btn-sm btn-danger" onclick="openCleanupConfirm('ops')" data-i18n="btn.cleanupOps">Cleanup Ops</button>
           <button class="btn btn-sm btn-danger-fill" onclick="openCleanupConfirm('all')" data-i18n="btn.cleanupAll">Cleanup All</button>
+          <button class="btn btn-sm" onclick="doTrimToCap()" data-i18n="btn.trimToCap">Trim to Cap</button>
           <button class="btn btn-sm" onclick="doVacuum()" data-i18n="btn.vacuum" title="Reclaim disk space">Vacuum</button>
         </div>
       </div>
@@ -980,9 +981,43 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 
 <!-- Cleanup Confirmation Modal -->
 <div class="modal-overlay" role="dialog" aria-modal="true" id="cleanupConfirmModal">
-  <div class="modal">
+  <div class="modal" style="max-width:420px">
     <h3 data-i18n="confirm.cleanupTitle">Database Cleanup</h3>
-    <p id="cleanupConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
+    <!-- Mode selector -->
+    <div style="display:flex;gap:4px;margin:8px 0 12px;flex-wrap:wrap">
+      <button class="btn btn-sm cleanupModeBtn active" data-mode="olderThan" onclick="setCleanupMode('olderThan')" data-i18n="cleanup.modeOlderThan">Older Than</button>
+      <button class="btn btn-sm cleanupModeBtn" data-mode="beforeDate" onclick="setCleanupMode('beforeDate')" data-i18n="cleanup.modeBeforeDate">Before Date</button>
+      <button class="btn btn-sm cleanupModeBtn" data-mode="dateRange" onclick="setCleanupMode('dateRange')" data-i18n="cleanup.modeDateRange">Date Range</button>
+      <button class="btn btn-sm cleanupModeBtn" data-mode="trimToCap" onclick="setCleanupMode('trimToCap')" data-i18n="cleanup.modeTrimToCap">Trim to Cap</button>
+    </div>
+    <!-- Older Than inputs -->
+    <div id="cleanupModeOlderThan" class="cleanupModePanel">
+      <p id="cleanupConfirmMsg" style="margin:0 0 8px;color:var(--text-dim);font-size:13px"></p>
+    </div>
+    <!-- Before Date inputs -->
+    <div id="cleanupModeBeforeDate" class="cleanupModePanel" style="display:none">
+      <div style="margin:0 0 8px">
+        <label style="font-size:12px;color:var(--text-dim)">Delete records before:</label>
+        <input type="date" id="cleanupBeforeDate" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+    </div>
+    <!-- Date Range inputs -->
+    <div id="cleanupModeDateRange" class="cleanupModePanel" style="display:none">
+      <div style="display:flex;gap:8px;margin:0 0 8px">
+        <div style="flex:1">
+          <label style="font-size:12px;color:var(--text-dim)">From:</label>
+          <input type="date" id="cleanupRangeStart" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        </div>
+        <div style="flex:1">
+          <label style="font-size:12px;color:var(--text-dim)">To:</label>
+          <input type="date" id="cleanupRangeEnd" style="width:100%;padding:6px;margin-top:4px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        </div>
+      </div>
+    </div>
+    <!-- Trim to Cap info -->
+    <div id="cleanupModeTrimToCap" class="cleanupModePanel" style="display:none">
+      <p style="margin:0 0 8px;color:var(--text-dim);font-size:13px" id="cleanupTrimInfo"></p>
+    </div>
     <div class="form-group">
       <input id="cleanupConfirmInput" autocomplete="off" spellcheck="false"
         oninput="onCleanupConfirmInput()" style="font-family:monospace"

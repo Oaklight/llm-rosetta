@@ -636,3 +636,73 @@ async def cleanup_ops_log_by_age(request: Any) -> Response:
 
     result = await persistence.cleanup_ops_log_by_age(max_age_days)
     return JSONResponse({"ok": True, **result})
+
+
+_TARGET_TABLES: dict[str, tuple[str, ...]] = {
+    "logs": ("request_log",),
+    "errors": ("error_dumps",),
+    "ops": ("ops_log",),
+    "all": ("request_log", "error_dumps", "ops_log"),
+}
+
+
+async def db_cleanup_before(request: Any) -> Response:
+    """Delete rows with timestamp < *before* from selected tables."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    before = body.get("before", "")
+    if not isinstance(before, str) or not before:
+        return JSONResponse(
+            {"error": "before must be a non-empty ISO-8601 string"}, status_code=400
+        )
+
+    tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
+    result = await persistence.cleanup_before(before, tables=tables)
+    if "request_log" in tables:
+        await _rebuild_counters_after_mutation(request)
+    return JSONResponse({"ok": True, **result})
+
+
+async def db_cleanup_range(request: Any) -> Response:
+    """Delete rows with *start* <= timestamp < *end* from selected tables."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    body, err = parse_json_body(request)
+    if err:
+        return err
+
+    start = body.get("start", "")
+    end = body.get("end", "")
+    if not isinstance(start, str) or not start:
+        return JSONResponse(
+            {"error": "start must be a non-empty ISO-8601 string"}, status_code=400
+        )
+    if not isinstance(end, str) or not end:
+        return JSONResponse(
+            {"error": "end must be a non-empty ISO-8601 string"}, status_code=400
+        )
+
+    tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
+    result = await persistence.cleanup_range(start, end, tables=tables)
+    if "request_log" in tables:
+        await _rebuild_counters_after_mutation(request)
+    return JSONResponse({"ok": True, **result})
+
+
+async def db_trim(request: Any) -> Response:
+    """Trim all tables to their configured retention caps."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    result = await persistence.trim_to_cap()
+    await _rebuild_counters_after_mutation(request)
+    return JSONResponse({"ok": True, **result})
