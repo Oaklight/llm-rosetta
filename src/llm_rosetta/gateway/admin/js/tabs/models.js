@@ -426,7 +426,7 @@ const _capIcons = {
 };
 
 function _checkRoutingLoops() {
-  api('/admin/api/config/models/loop-check')
+  api.get('/admin/api/config/models/loop-check')
     .then(data => {
       const banner = document.getElementById('loopWarningBanner');
       if (!banner) return;
