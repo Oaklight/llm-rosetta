@@ -7,6 +7,7 @@ list of provider entries with a strategy for selection.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -99,8 +100,9 @@ class AffinityRoundRobinStrategy:
             return providers[0].name
         if identity is None:
             return self._fallback.select(providers)
-        # Deterministic selection based on identity hash
-        idx = hash(identity) % len(providers)
+        idx = int.from_bytes(
+            hashlib.sha256(identity.encode()).digest()[:8], "big"
+        ) % len(providers)
         return providers[idx].name
 
 
