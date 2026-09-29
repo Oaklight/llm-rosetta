@@ -1161,33 +1161,33 @@ class OpenAIResponsesConverter(BaseConverter):
 
         events.append(delta_event)
 
-    def _handle_p_function_call_args_done_to_ir(
+    def _emit_residual_tool_call_delta(
         self,
+        final_text: str,
+        call_id: str,
         chunk: dict[str, Any],
         context: StreamContext | None,
         events: list[IRStreamEvent],
     ) -> None:
-        call_id = resolve_call_id(chunk, context)
-        arguments = chunk.get("arguments", "")
+        """Emit a ToolCallDeltaEvent for any portion of *final_text* not yet
+        delivered by preceding ``.delta`` events, then store *final_text* as
+        the authoritative value in *context*.
 
-        # Some upstreams deliver the complete arguments only on the .done
-        # event, with no preceding .delta -- ARGO's native /v1/responses does
-        # this for cached turns.  The delta handler is the only thing that
-        # puts arguments into the IR stream, so without this the payload is
-        # silently dropped and the target format emits ``arguments: ""``.
-        # Only safe with a context: it is what tells us how much of
-        # ``arguments`` the deltas already delivered.  Without one, keep the
-        # historical "done is redundant" behaviour rather than risk emitting
-        # the payload twice.
+        Some upstreams deliver the complete payload only on the ``.done``
+        event with no preceding ``.delta`` — ARGO's native /v1/responses does
+        this for cached turns (#800).  The delta handler is the only path that
+        moves arguments into the IR stream, so without this guard the payload
+        is silently dropped.  See #800 and #803.
+        """
         if context is not None and call_id:
             accumulated = context._tool_call_args.get(call_id, "")
         else:
-            accumulated = arguments
-        if arguments and arguments != accumulated:
+            accumulated = final_text
+        if final_text and final_text != accumulated:
             residual = (
-                arguments[len(accumulated) :]
-                if arguments.startswith(accumulated)
-                else arguments
+                final_text[len(accumulated) :]
+                if final_text.startswith(accumulated)
+                else final_text
             )
             if residual:
                 delta_event = ToolCallDeltaEvent(
@@ -1200,9 +1200,19 @@ class OpenAIResponsesConverter(BaseConverter):
                     delta_event["tool_call_index"] = output_index
                 events.append(delta_event)
 
-        # Store final arguments in context
         if context is not None and call_id:
-            context.set_tool_call_args(call_id, arguments)
+            context.set_tool_call_args(call_id, final_text)
+
+    def _handle_p_function_call_args_done_to_ir(
+        self,
+        chunk: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        call_id = resolve_call_id(chunk, context)
+        self._emit_residual_tool_call_delta(
+            chunk.get("arguments", ""), call_id, chunk, context, events
+        )
 
     def _handle_p_custom_tool_call_input_delta_to_ir(
         self,
@@ -1236,35 +1246,9 @@ class OpenAIResponsesConverter(BaseConverter):
     ) -> None:
         """Handle custom_tool_call_input.done — store final input text."""
         call_id = resolve_call_id(chunk, context)
-        input_text = chunk.get("input", "")
-
-        # Same residual-emit pattern as _handle_p_function_call_args_done_to_ir
-        # (see #800).  Some upstreams send .done-only with no preceding .delta
-        # for custom tool calls; without this the input is silently dropped.
-        # See #803 for details.
-        if context is not None and call_id:
-            accumulated = context._tool_call_args.get(call_id, "")
-        else:
-            accumulated = input_text
-        if input_text and input_text != accumulated:
-            residual = (
-                input_text[len(accumulated) :]
-                if input_text.startswith(accumulated)
-                else input_text
-            )
-            if residual:
-                delta_event = ToolCallDeltaEvent(
-                    type="tool_call_delta",
-                    tool_call_id=call_id,
-                    arguments_delta=residual,
-                )
-                output_index = chunk.get("output_index")
-                if output_index is not None:
-                    delta_event["tool_call_index"] = output_index
-                events.append(delta_event)
-
-        if context is not None and call_id:
-            context.set_tool_call_args(call_id, input_text)
+        self._emit_residual_tool_call_delta(
+            chunk.get("input", ""), call_id, chunk, context, events
+        )
 
     def _handle_p_response_completed_to_ir(
         self,
