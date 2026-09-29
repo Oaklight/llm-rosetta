@@ -155,11 +155,11 @@ class TestSanitizeSchemaRequiredValidation:
         nested = result["properties"]["nested"]
         assert nested["required"] == ["x"]
 
-    def test_required_without_properties_unchanged(self):
-        """Required without properties key should be left as-is."""
+    def test_required_without_properties_stripped(self):
+        """Required without properties key should be stripped (Google rejects it)."""
         schema = {
             "type": "object",
             "required": ["a", "b"],
         }
         result = sanitize_schema(schema)
-        assert result["required"] == ["a", "b"]
+        assert "required" not in result

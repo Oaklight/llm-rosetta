@@ -158,7 +158,10 @@ def _sanitize_value(
 
 def _strip_orphaned_required(result: dict[str, Any]) -> None:
     """Remove ``required`` entries that reference non-existent properties."""
-    if "required" not in result or "properties" not in result:
+    if "required" not in result:
+        return
+    if "properties" not in result:
+        del result["required"]
         return
     props = result["properties"]
     if not isinstance(props, dict) or not isinstance(result["required"], list):
