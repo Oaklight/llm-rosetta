@@ -74,7 +74,9 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
     )
 
 
-_VALID_TABS = frozenset({"providers", "models", "keys", "dashboard", "logs"})
+_VALID_TABS = frozenset(
+    {"providers", "models", "keys", "dashboard", "logs", "settings"}
+)
 
 
 async def _init_persistence(

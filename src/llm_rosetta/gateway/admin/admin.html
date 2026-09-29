@@ -47,7 +47,7 @@
   </div>
   <div class="header-right">
     <span style="font-size:12px;color:var(--text-dim);margin-right:8px"><span style="margin-right:4px" data-i18n="label.systemTime">System Time</span><span id="systemClock" style="font-family:var(--mono)"></span></span>
-    <button class="btn btn-sm" onclick="openSettings()" data-i18n-title="modal.settings" title="Settings" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <button class="btn btn-sm" onclick="goToTab('settings')" data-i18n-title="modal.settings" title="Settings" style="display:inline-flex;align-items:center;justify-content:center;padding:4px 8px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <button id="logoutBtn" class="btn btn-sm" onclick="doLogout()" style="display:none" data-i18n="btn.logout">Logout</button>
   </div>
 </div>
@@ -60,6 +60,7 @@
   <div class="tab" role="tab" id="tabBtn-logs" tabindex="-1" aria-selected="false" aria-controls="tab-logs" data-tab="logs" data-i18n="tab.logs">Request Log</div>
   <div style="flex:1"></div>
   <div class="config-path" id="configPath"></div>
+  <div class="tab" role="tab" id="tabBtn-settings" tabindex="-1" aria-selected="false" aria-controls="tab-settings" data-tab="settings" style="display:none"></div>
 </div>
 
 <div class="content">
@@ -454,12 +455,10 @@
   </div>
 </div>
 
-<!-- Settings Popup (wide section-card layout) -->
-<div class="settings-popup" id="settingsPopup" role="dialog" aria-modal="true" onclick="closeModal('settingsPopup')">
-  <div class="settings-popup-panel" onclick="event.stopPropagation()">
-    <h3 data-i18n="modal.settings">Settings</h3>
-
-    <!-- ── Appearance & Display ── -->
+<!-- Settings Tab Panel -->
+<div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tabBtn-settings">
+  <div class="settings-tab-content">
+<!-- ── Appearance & Display ── -->
     <div class="settings-section">
       <div class="settings-section-title">
         <svg class="section-icon" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 8 1Zm0 10a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm0-1.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm5.657-5.157a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 1 1-1.061-1.06l1.06-1.061a.75.75 0 0 1 1.06 0ZM15 8a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1 0-1.5h1.5A.75.75 0 0 1 15 8Zm-2.343 5.657a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 1 1 1.06-1.061l1.061 1.06a.75.75 0 0 1 0 1.06ZM8 15a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 1.5 0v1.5A.75.75 0 0 1 8 15ZM2.343 12.657a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 1.06l-1.06 1.061a.75.75 0 0 1-1.06 0ZM1 8a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 0 1.5h-1.5A.75.75 0 0 1 1 8Zm2.343-5.657a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1-1.06 1.061L3.343 3.404a.75.75 0 0 1 0-1.06Z"/></svg>
@@ -696,6 +695,9 @@
     </div>
   </div>
 </div>
+
+<!-- Settings Popup (legacy stub — content moved to tab-settings) -->
+<div class="settings-popup" id="settingsPopup" style="display:none"></div>
 
 <!-- Provider Modal -->
 <div class="modal-overlay" role="dialog" aria-modal="true" id="providerModal">

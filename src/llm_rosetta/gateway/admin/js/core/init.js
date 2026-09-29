@@ -36,7 +36,8 @@ function initApp(prefetchedConfig) {
     populateOpsLogFilters();
   }
   if (S.currentTab === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
-  if (location.hash === "#change-password") { openSettings(); history.replaceState(null, "", location.pathname); }
+  if (S.currentTab === 'settings') { openSettings(); }
+  if (location.hash === "#change-password") { goToTab('settings'); }
 }
 
 // ===================== Tabs =====================
@@ -55,6 +56,7 @@ function activateTab(tab) {
   document.getElementById('tab-' + id).classList.add('active');
   S.currentTab = id;
   localStorage.setItem('llm-rosetta-tab', id);
+  history.replaceState(null, '', '#' + id);
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); loadDumps(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
   if (id === 'logs' && _tabEnabled('logs')) {
@@ -65,6 +67,7 @@ function activateTab(tab) {
   if (id === 'providers' || id === 'models') { loadConfig(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
+  if (id === 'settings') { openSettings(); }
 }
 
 document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
@@ -81,10 +84,22 @@ document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
   });
 });
 
-if (S.currentTab !== 'providers') {
-  const savedTab = document.querySelector(`.tab[data-tab="${S.currentTab}"]`);
+// Hash routing: #tab-name overrides localStorage
+const _hashTab = location.hash.replace('#', '');
+const _initialTab = (document.querySelector(`.tab[data-tab="${_hashTab}"]`) ? _hashTab : null)
+  || S.currentTab || 'providers';
+if (_initialTab !== 'providers') {
+  const savedTab = document.querySelector(`.tab[data-tab="${_initialTab}"]`);
   if (savedTab) activateTab(savedTab);
+} else {
+  history.replaceState(null, '', '#providers');
 }
+
+window.addEventListener('popstate', () => {
+  const hash = location.hash.replace('#', '');
+  const tab = document.querySelector(`.tab[data-tab="${hash}"]`);
+  if (tab && hash !== S.currentTab) activateTab(tab);
+});
 
 function goToTab(tabId, callback) {
   const tab = document.querySelector('.tab[data-tab="' + tabId + '"]');
@@ -119,8 +134,6 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 // Close popups/modals on Escape key
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    const sp = document.getElementById('settingsPopup');
-    if (sp && sp.classList.contains('open')) closeModal('settingsPopup');
     const testModal = document.getElementById('testModal');
     if (testModal && testModal.classList.contains('open')) closeModal('testModal');
   }
@@ -189,7 +202,7 @@ document.addEventListener('keydown', e => {
   }
   // Redirect away from disabled tabs
   if (b.disabled_tabs && b.disabled_tabs.indexOf(S.currentTab) !== -1) {
-    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'logs'];
+    const _allTabs = b.all_tabs || ['providers', 'models', 'keys', 'dashboard', 'logs', 'settings'];
     for (let i = 0; i < _allTabs.length; i++) {
       if (b.disabled_tabs.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
     }

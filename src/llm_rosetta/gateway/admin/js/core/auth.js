@@ -9,7 +9,6 @@ let _tokenRotateEnd = 0;
 let _tokenCountdownTimer = null;
 
 function openSettings() {
-  const popup = document.getElementById('settingsPopup');
   // Sync theme & language
   const ss = document.getElementById('settingsSchemeSelect');
   if (ss) ss.value = S.currentScheme;
@@ -85,8 +84,6 @@ function openSettings() {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   document.getElementById('settingsPwError').textContent = '';
-  if (popup.classList.contains('open')) { closeModal('settingsPopup'); }
-  else { openModal('settingsPopup'); }
 }
 
 async function saveSettingsField(field, value) {
@@ -251,7 +248,6 @@ function setCleanupMode(mode) {
 }
 
 function openCleanupConfirm(target) {
-  closeModal('settingsPopup');
   _cleanupTarget = target || 'all';
   _cleanupMode = 'olderThan';
   const daysEl = target === 'ops' ? 'settingsOpsMaxAgeDays' : 'settingsMaxAgeDays';
@@ -371,7 +367,6 @@ async function doVacuum() {
 
 // --- Error Dump Export ---
 function openExportDumpsModal() {
-  closeModal('settingsPopup');
   document.getElementById('exportStartDate').value = '';
   document.getElementById('exportEndDate').value = '';
   openModal('exportDumpsModal');

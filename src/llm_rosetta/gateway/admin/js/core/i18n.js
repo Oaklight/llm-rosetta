@@ -15,7 +15,7 @@ import { S } from './state.js';
 export const I18N = {
   en: {
     'tab.providers':'Providers', 'col.type':'Type', 'col.capabilities':'Capabilities', 'col.status':'Status', 'col.actions':'Actions', 'tab.models':'Models', 'tab.keys':'API Keys',
-    'tab.dashboard':'Dashboard', 'tab.logs':'Request Log',
+    'tab.dashboard':'Dashboard', 'tab.logs':'Request Log', 'tab.settings':'Settings',
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL',
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
@@ -174,7 +174,7 @@ export const I18N = {
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
     'tab.providers':'\u670d\u52a1\u65b9', 'col.type':'\u7c7b\u578b', 'col.capabilities':'\u80fd\u529b', 'col.status':'\u72b6\u6001', 'col.actions':'\u64cd\u4f5c', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
-    'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7',
+    'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.logs':'\u8bf7\u6c42\u65e5\u5fd7', 'tab.settings':'设置',
     'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u65b9', 'section.models':'\u6a21\u578b\u8def\u7531',
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL',
     'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u65b9\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
