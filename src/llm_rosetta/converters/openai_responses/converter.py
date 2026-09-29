@@ -1237,6 +1237,32 @@ class OpenAIResponsesConverter(BaseConverter):
         """Handle custom_tool_call_input.done — store final input text."""
         call_id = resolve_call_id(chunk, context)
         input_text = chunk.get("input", "")
+
+        # Same residual-emit pattern as _handle_p_function_call_args_done_to_ir
+        # (see #800).  Some upstreams send .done-only with no preceding .delta
+        # for custom tool calls; without this the input is silently dropped.
+        # See #803 for details.
+        if context is not None and call_id:
+            accumulated = context._tool_call_args.get(call_id, "")
+        else:
+            accumulated = input_text
+        if input_text and input_text != accumulated:
+            residual = (
+                input_text[len(accumulated) :]
+                if input_text.startswith(accumulated)
+                else input_text
+            )
+            if residual:
+                delta_event = ToolCallDeltaEvent(
+                    type="tool_call_delta",
+                    tool_call_id=call_id,
+                    arguments_delta=residual,
+                )
+                output_index = chunk.get("output_index")
+                if output_index is not None:
+                    delta_event["tool_call_index"] = output_index
+                events.append(delta_event)
+
         if context is not None and call_id:
             context.set_tool_call_args(call_id, input_text)
 

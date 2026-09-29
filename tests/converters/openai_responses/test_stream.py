@@ -1590,8 +1590,11 @@ class TestCustomToolCallStreaming:
         assert events[0]["arguments_delta"] == "hello "
         assert ctx.get_tool_call_args("call_custom_1") == "hello "
 
-    def test_custom_tool_call_input_done(self):
-        """response.custom_tool_call_input.done stores final input in context."""
+    def test_custom_tool_call_input_done_after_deltas_emits_residual(self):
+        """Residual not covered by deltas is emitted as a ToolCallDeltaEvent.
+
+        Same pattern as function_call_arguments.done (#800).  See #803.
+        """
         ctx = OpenAIResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         ctx.append_tool_call_args("call_custom_1", "hello ")
@@ -1604,10 +1607,52 @@ class TestCustomToolCallStreaming:
             list[Any],
             self.converter.stream_response_from_provider(event, context=ctx),
         )
-        # Done event produces no IR events
-        assert len(events) == 0
-        # But the final input is stored in context
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["arguments_delta"] == "world"
         assert ctx.get_tool_call_args("call_custom_1") == "hello world"
+
+    def test_custom_tool_call_input_done_after_full_deltas_emits_nothing(self):
+        """When deltas already delivered the full input, .done stays silent."""
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        ctx.append_tool_call_args("call_custom_1", "hello world")
+        event = {
+            "type": "response.custom_tool_call_input.done",
+            "call_id": "call_custom_1",
+            "input": "hello world",
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        assert [e for e in events if e["type"] == "tool_call_delta"] == []
+        assert ctx.get_tool_call_args("call_custom_1") == "hello world"
+
+    def test_custom_tool_call_input_done_without_deltas_emits_delta(self):
+        """A .done carrying the whole input with no preceding deltas must emit.
+
+        Mirrors test_function_call_args_done_without_deltas_emits_delta.
+        Some upstreams (e.g. ARGO cached turns) send .done-only with no
+        preceding .delta for custom tool calls.  See #803.
+        """
+        ctx = OpenAIResponsesStreamContext()
+        ctx.register_tool_call("call_custom_1", "my_tool", "custom")
+        event = {
+            "type": "response.custom_tool_call_input.done",
+            "call_id": "call_custom_1",
+            "input": "the full input text",
+            "output_index": 0,
+        }
+        events = cast(
+            list[Any],
+            self.converter.stream_response_from_provider(event, context=ctx),
+        )
+        deltas = [e for e in events if e["type"] == "tool_call_delta"]
+        assert len(deltas) == 1
+        assert deltas[0]["arguments_delta"] == "the full input text"
+        assert deltas[0]["tool_call_index"] == 0
+        assert ctx.get_tool_call_args("call_custom_1") == "the full input text"
 
     def test_custom_tool_call_output_item_done(self):
         """response.output_item.done with custom_tool_call stores input in context."""
