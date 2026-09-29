@@ -59,6 +59,10 @@
         "model_id_field": {
           "type": "string",
           "description": "JSON field name to use as model identifier when fetching the upstream model list. Defaults to 'id'."
+        },
+        "auth_header": {
+          "type": "string",
+          "description": "Custom auth header name (e.g. 'x-access-tokens'). When set, the API key is sent as this header instead of the base-type default (Bearer, x-api-key, x-goog-api-key)."
         }
       }
     },

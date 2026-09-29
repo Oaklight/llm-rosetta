@@ -91,13 +91,17 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all 20 built-in shims."""
+        """Verify the real providers/ directory loads all built-in shims."""
         shims = load_providers()
         names = {s.name for s in shims}
         assert names == {
             "argo--anthropic",
             "argo--openai_chat",
             "argo--openai_responses",
+            "asksage--openai_chat",
+            "asksage--openai_responses",
+            "asksage--anthropic",
+            "asksage--google_generate",
             "openai",
             "openai_responses",
             "openrouter--openai_chat",
@@ -119,7 +123,9 @@ class TestLoadProviders:
             "alcf--metis",
             "alcf--minerva",
             "typesafe",
-        }
+        }, (
+            f"Unexpected shim diff: {names.symmetric_difference({'argo--anthropic', 'argo--openai_chat', 'argo--openai_responses', 'asksage--openai_chat', 'asksage--openai_responses', 'asksage--anthropic', 'asksage--google_generate', 'openai', 'openai_responses', 'openrouter--openai_chat', 'openrouter--anthropic', 'anthropic', 'google', 'deepseek--openai_chat', 'deepseek--openai_responses', 'minimax--openai_chat', 'minimax--anthropic', 'moonshot', 'qwen', 'volcengine--openai_chat', 'volcengine--openai_responses', 'xai', 'zhipu', 'google_interactions', 'alcf--sophia', 'alcf--metis', 'alcf--minerva', 'typesafe'})}"
+        )
 
     def test_all_registered_after_load(self):
         """After load_providers, all shims are queryable via get_shim."""
@@ -145,6 +151,10 @@ class TestLoadProviders:
             "alcf--metis",
             "alcf--minerva",
             "typesafe",
+            "asksage--openai_chat",
+            "asksage--openai_responses",
+            "asksage--anthropic",
+            "asksage--google_generate",
         ):
             shim = get_shim(name)
             assert shim is not None
@@ -271,6 +281,45 @@ class TestLoadProviders:
         assert "seed" not in result
         assert "messages" in result
 
+    def test_asksage_openai_chat_has_transforms(self):
+        """AskSage OpenAI Chat shim should rename max_tokens to max_completion_tokens."""
+        load_providers()
+        s = get_shim("asksage--openai_chat")
+        assert s is not None
+        assert len(s.post_ir_transforms) == 1
+        assert len(s.pre_ir_transforms) == 0
+        body = {"max_tokens": 100, "messages": []}
+        result = s.post_ir_transforms[0](body)
+        assert "max_tokens" not in result
+        assert result["max_completion_tokens"] == 100
+        assert result["messages"] == []
+
+    def test_asksage_openai_responses_has_transforms(self):
+        """AskSage OpenAI Responses shim should rename max_tokens."""
+        load_providers()
+        s = get_shim("asksage--openai_responses")
+        assert s is not None
+        assert len(s.post_ir_transforms) == 1
+        body = {"max_tokens": 50, "input": "hello"}
+        result = s.post_ir_transforms[0](body)
+        assert "max_tokens" not in result
+        assert result["max_completion_tokens"] == 50
+
+    def test_asksage_anthropic_no_transforms(self):
+        """AskSage Anthropic shim should have no transforms."""
+        load_providers()
+        s = get_shim("asksage--anthropic")
+        assert s is not None
+        assert len(s.post_ir_transforms) == 0
+        assert len(s.pre_ir_transforms) == 0
+
+    def test_asksage_google_generate_auth_header(self):
+        """AskSage Google Generate shim should use x-access-tokens auth header."""
+        load_providers()
+        s = get_shim("asksage--google_generate")
+        assert s is not None
+        assert s.connection.auth_header == "x-access-tokens"
+
     def test_base_types_correct(self):
         """Each shim should have the expected base converter type."""
         load_providers()
@@ -297,6 +346,10 @@ class TestLoadProviders:
             "alcf--metis": "openai_chat",
             "alcf--minerva": "openai_chat",
             "typesafe": "decision",
+            "asksage--openai_chat": "openai_chat",
+            "asksage--openai_responses": "openai_responses",
+            "asksage--anthropic": "anthropic",
+            "asksage--google_generate": "google_generate",
         }
         for name, base in expected.items():
             shim = get_shim(name)
@@ -310,6 +363,10 @@ class TestLoadProviders:
         "argo--anthropic",
         "argo--openai_chat",
         "argo--openai_responses",
+        "asksage--openai_chat",
+        "asksage--openai_responses",
+        "asksage--anthropic",
+        "asksage--google_generate",
         "typesafe",
     }
 

@@ -272,6 +272,7 @@ def _load_single_provider(
             api_key_env=conn_raw.get("api_key_env"),
             models_path=conn_raw.get("models_path"),
             model_id_field=conn_raw.get("model_id_field"),
+            auth_header=conn_raw.get("auth_header"),
         )
     else:
         connection = ConnectionConfig(

@@ -1,0 +1,6 @@
+name: asksage--anthropic
+base: anthropic
+
+connection:
+  base_url: https://api.asksage.ai/server/anthropic
+  api_key_env: ASKSAGE_API_KEY

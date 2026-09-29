@@ -1,0 +1,6 @@
+name: asksage--openai_responses
+base: openai_responses
+
+connection:
+  base_url: https://api.asksage.ai/server/openai/v1
+  api_key_env: ASKSAGE_API_KEY

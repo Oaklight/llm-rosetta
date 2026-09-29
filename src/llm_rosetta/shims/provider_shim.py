@@ -118,6 +118,7 @@ class ConnectionConfig:
     api_key_env: str | None = None
     models_path: str | None = None
     model_id_field: str | None = None
+    auth_header: str | None = None
 
 
 @dataclass(frozen=True)

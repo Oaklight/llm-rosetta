@@ -208,7 +208,6 @@ def build_provider_info(
         url_tpl = reg["url_template"]
         stream_tpl = reg.get("stream_url_template")
     else:
-        # Unknown / custom provider — best-effort defaults
         auth_fn = openai_auth
         url_tpl = "{base_url}/"
         stream_tpl = None
@@ -216,6 +215,13 @@ def build_provider_info(
             "Unknown provider type '%s'; using Bearer auth and generic URL template",
             base_type,
         )
+
+    # Per-shim auth_header override: when the shim declares a custom
+    # auth header name, build a simple key→value header function that
+    # replaces the base-type default.
+    if shim is not None and shim.connection.auth_header:
+        header_name = shim.connection.auth_header
+        auth_fn = lambda key, _h=header_name: {_h: key}  # noqa: E731
 
     # Per-provider url_template / stream_url_template override from config
     if "url_template" in cfg:
