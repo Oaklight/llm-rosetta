@@ -4,7 +4,7 @@
 PACKAGE_NAME := llm-rosetta
 DOCKER_IMAGE := oaklight/llm-rosetta-gateway
 DIST_DIR := dist
-VERSION := $(shell grep -oE '__version__[[:space:]]*=[[:space:]]*"[^"]+"' src/llm_rosetta/__init__.py | grep -oE '"[^"]+"' | tr -d '"' || echo "0.1.0")
+VERSION := $(shell sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py || echo "0.1.0")
 
 # Optional variables
 V ?= $(VERSION)
@@ -79,7 +79,7 @@ build-wheel: clean-package
 	INIT=src/llm_rosetta/__init__.py; \
 	cp "$$INIT" "$$INIT.bak"; \
 	trap 'mv "$$INIT.bak" "$$INIT"' EXIT; \
-	sed -i 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$INIT"; \
+	sed 's/^__version__ = ".*"/__version__ = "'"$$DEV_VER"'"/' "$$INIT.bak" > "$$INIT"; \
 	echo "Building wheel $$DEV_VER..."; \
 	python -m build --wheel -q; \
 	echo "Built: $$(ls dist/*.whl)"

@@ -29,13 +29,13 @@ jobs:
           VERSION="${{ inputs.version }}"
           TAG="v$VERSION"
           read_pkg_ver() {
-            python -c "import re; m=re.search(r'__version__\s*=\s*\"(.+?)\"', open('src/llm_rosetta/__init__.py').read()); print(m.group(1))"
+            sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py
           }
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
             # Back-release: tag already exists. Verify __init__.py *at the tag*
             # matches, so we publish exactly what was tagged.
             echo "Tag $TAG already exists — back-release mode."
-            PKG_VER=$(git show "$TAG:src/llm_rosetta/__init__.py" | python -c "import re,sys; m=re.search(r'__version__\s*=\s*\"(.+?)\"', sys.stdin.read()); print(m.group(1))")
+            PKG_VER=$(git show "$TAG:src/llm_rosetta/__init__.py" | sed -n 's/^__version__ = "\(.*\)"/\1/p')
             echo "Package version at $TAG: $PKG_VER"
             [ "$PKG_VER" = "$VERSION" ] || \
               (echo "::error::Version mismatch: $TAG has $PKG_VER but release requested $VERSION"; exit 1)

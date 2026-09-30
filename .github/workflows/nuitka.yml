@@ -123,7 +123,7 @@ jobs:
         shell: bash
         env:
           NUITKA_EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags }}
-        run: make build-binary
+        run: make build-binary VERSION=${{ needs.prepare.outputs.version }}
 
       - name: UPX compression (Linux/Windows)
         if: inputs.upx && matrix.os != 'macos'
@@ -247,7 +247,7 @@ jobs:
       - name: Build musl binary
         env:
           NUITKA_EXTRA_FLAGS: ${{ inputs.nuitka_extra_flags }}
-        run: make build-binary-musl
+        run: make build-binary-musl VERSION=${{ needs.prepare.outputs.version }}
 
       - name: UPX compression (musl)
         if: inputs.upx

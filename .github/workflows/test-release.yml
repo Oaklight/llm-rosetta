@@ -24,7 +24,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          PKG_VER=$(python -c "import re; m=re.search(r'__version__\s*=\s*\"(.+?)\"', open('src/llm_rosetta/__init__.py').read()); print(m.group(1))")
+          PKG_VER=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' src/llm_rosetta/__init__.py)
           echo "Package version: $PKG_VER"
           echo "Requested version: $INPUT_VERSION"
           [ "$PKG_VER" = "$INPUT_VERSION" ] || \
