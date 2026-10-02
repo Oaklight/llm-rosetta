@@ -144,6 +144,18 @@ class ToolResultPart(TypedDict):
     type: Required[Literal["tool_result"]]
     tool_call_id: Required[str]
     result: Required[Any]  # 可以是字符串、对象等 Can be string, object, etc.
+    # 与对应ToolCallPart的tool_type一致，缺省时由调用方推断。
+    # Mirrors the matching ToolCallPart's tool_type; absent means "infer".
+    tool_type: NotRequired[
+        Literal[
+            "function",
+            "mcp",
+            "custom",
+            "web_search",
+            "code_interpreter",
+            "file_search",
+        ]
+    ]
     is_error: NotRequired[bool]  # 是否是错误结果 Whether it is an error result
     provider_metadata: NotRequired[
         dict[str, Any]

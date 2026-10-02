@@ -623,6 +623,51 @@ class TestOpenAIResponsesToolOps:
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
+    def test_custom_tool_result_round_trip(self):
+        """A custom tool output survives provider → IR → provider.
+
+        The context's tool-type map is only filled while streaming a
+        response, so without the IR field this came back as a
+        ``function_call_output`` paired with a ``custom_tool_call``.
+        """
+        original = {
+            "type": "custom_tool_call_output",
+            "call_id": "call_rt_custom",
+            "output": "README.md",
+        }
+        ir = OpenAIResponsesToolOps.p_tool_result_to_ir(original)
+        assert ir["tool_type"] == "custom"
+        restored = OpenAIResponsesToolOps.ir_tool_result_to_p(ir)
+        assert restored["type"] == "custom_tool_call_output"
+        assert restored["call_id"] == original["call_id"]
+        assert restored["output"] == original["output"]
+
+    def test_p_tool_result_to_ir_function_output_has_no_tool_type(self):
+        """The default type stays absent, leaving the context fallback."""
+        ir = OpenAIResponsesToolOps.p_tool_result_to_ir(
+            {"type": "function_call_output", "call_id": "call_fn", "output": "ok"}
+        )
+        assert "tool_type" not in ir
+
+    def test_ir_tool_result_to_p_prefers_ir_tool_type_over_context(self):
+        """A context that disagrees does not override the IR part."""
+
+        class _Ctx:
+            def get_tool_type(self, call_id: str) -> str:
+                return "function"
+
+        ir = cast(
+            ToolResultPart,
+            {
+                "type": "tool_result",
+                "tool_call_id": "call_ctx",
+                "result": "ok",
+                "tool_type": "custom",
+            },
+        )
+        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir, context=_Ctx())
+        assert result["type"] == "custom_tool_call_output"
+
     def test_p_tool_result_to_ir_converts_input_image_to_ir(self):
         """Test input_image in an actual output array → IR ImagePart."""
         provider_tr = {
