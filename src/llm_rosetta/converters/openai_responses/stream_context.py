@@ -8,6 +8,21 @@ from ..base.context import StreamContext
 
 
 @dataclass
+class ReasoningItemState:
+    """One reasoning item being assembled on the outbound stream.
+
+    ``encrypted_content`` is cryptographically bound to ``item_id``
+    upstream, so the two must stay together: replaying a blob under
+    another item's id fails verification on the next turn.
+    """
+
+    item_id: str
+    output_index: int = -1
+    accumulated_text: str = ""
+    encrypted_content: str = ""
+
+
+@dataclass
 class OpenAIResponsesStreamContext(StreamContext):
     """Stream context with OpenAI Responses API specific state.
 
@@ -50,11 +65,36 @@ class OpenAIResponsesStreamContext(StreamContext):
     # at tool_call_start so the later completed/done items can restore it.
     _tool_call_namespaces: dict[str, str] = field(default_factory=dict, repr=False)
 
-    # Reasoning item tracking
-    _reasoning_item_id: str = ""
-    _reasoning_output_index: int = -1
-    _reasoning_accumulated_text: str = ""
-    _reasoning_encrypted_content: str = ""
+    # Reasoning items being assembled outbound (IR → Responses), in
+    # arrival order.  A turn can hold several — one per stretch of
+    # thinking between tool calls — and each carries its own
+    # encrypted_content, so this cannot collapse to a single item.
+    _reasoning_items: list[ReasoningItemState] = field(default_factory=list, repr=False)
+
+    # Id of the reasoning item currently streaming inbound (Responses →
+    # IR), used to tag deltas with their source item.  Separate from
+    # _reasoning_items: inbound and outbound use different contexts.
+    _inbound_reasoning_item_id: str = ""
+
+    def reasoning_item(self, item_id: str) -> ReasoningItemState | None:
+        """Return the outbound reasoning item with this id, if started."""
+        for item in self._reasoning_items:
+            if item.item_id == item_id:
+                return item
+        return None
+
+    def start_reasoning_item(
+        self, item_id: str, output_index: int
+    ) -> ReasoningItemState:
+        """Begin a new outbound reasoning item and return its state."""
+        item = ReasoningItemState(item_id=item_id, output_index=output_index)
+        self._reasoning_items.append(item)
+        return item
+
+    @property
+    def current_reasoning_item(self) -> ReasoningItemState | None:
+        """The most recently started outbound reasoning item."""
+        return self._reasoning_items[-1] if self._reasoning_items else None
 
     def next_output_index(self) -> int:
         """Allocate the next output_index.
@@ -112,6 +152,8 @@ class OpenAIResponsesStreamContext(StreamContext):
         # StreamContext).  Listed here so a new field is not silently lost.
         # _tool_call_output_indices: allocated during streaming
         # _tool_call_namespaces: populated at tool_call_start events
+        # _reasoning_items: appended as reasoning items start
+        # _inbound_reasoning_item_id: set at reasoning output_item events
         return ctx
 
     def register_tool_call_item(self, tool_call_id: str, item_id: str) -> None:
