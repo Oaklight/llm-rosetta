@@ -14,7 +14,7 @@ format with type/name/description/parameters at the top level.
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from ..base.helpers.tool_content import (
     convert_content_blocks_to_ir,
@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
 
 #: Result item types whose tool_type is not the "function" default.
-_RESULT_ITEM_TOOL_TYPES = {
+_RESULT_ITEM_TOOL_TYPES: dict[str, Literal["custom", "mcp"]] = {
     "custom_tool_call_output": "custom",
     "mcp_call_output": "mcp",
 }
