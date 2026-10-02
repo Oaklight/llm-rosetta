@@ -772,6 +772,244 @@ class TestForcedResponsesStreamPipeline:
         assert observed["done_blob"] is None
         assert observed["completed_blob"] is None
 
+    @staticmethod
+    def _multi_reasoning_chunks(
+        blocks: list[tuple[str, str, str]],
+    ) -> list[dict[str, Any]]:
+        """A turn that thinks several times, as it streams between tool calls."""
+        final_items: list[dict[str, Any]] = []
+        chunks: list[dict[str, Any]] = [
+            {
+                "type": "response.created",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "in_progress",
+                    "output": [],
+                },
+            }
+        ]
+        for index, (item_id, text, blob) in enumerate(blocks):
+            final_item = {
+                "id": item_id,
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": text}],
+                "status": "completed",
+                "encrypted_content": blob,
+            }
+            final_items.append(final_item)
+            chunks += [
+                {
+                    "type": "response.output_item.added",
+                    "output_index": index,
+                    "item": {
+                        "id": item_id,
+                        "type": "reasoning",
+                        "summary": [],
+                        "status": "in_progress",
+                    },
+                },
+                {
+                    "type": "response.reasoning_summary_part.added",
+                    "item_id": item_id,
+                    "output_index": index,
+                    "summary_index": 0,
+                    "part": {"type": "summary_text", "text": ""},
+                },
+                {
+                    "type": "response.reasoning_summary_text.delta",
+                    "item_id": item_id,
+                    "output_index": index,
+                    "summary_index": 0,
+                    "delta": text,
+                },
+                {
+                    "type": "response.reasoning_summary_text.done",
+                    "item_id": item_id,
+                    "output_index": index,
+                    "summary_index": 0,
+                    "text": text,
+                },
+                {
+                    "type": "response.reasoning_summary_part.done",
+                    "item_id": item_id,
+                    "output_index": index,
+                    "summary_index": 0,
+                    "part": {"type": "summary_text", "text": text},
+                },
+                {
+                    "type": "response.output_item.done",
+                    "output_index": index,
+                    "item": final_item,
+                },
+            ]
+        chunks.append(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "completed",
+                    "output": final_items,
+                },
+            }
+        )
+        return chunks
+
+    BLOCKS = [
+        ("rs_first", "step one", "enc_first"),
+        ("rs_second", "step two", "enc_second"),
+        ("rs_third", "step three", "enc_third"),
+    ]
+
+    def test_each_reasoning_item_keeps_its_own_encrypted_content(self):
+        """Every item must be relayed carrying the blob minted against its id.
+
+        Collapsing a multi-item turn into one item pairs the first id with
+        the last blob, which upstream rejects on the next turn with
+        ``invalid_encrypted_content``.
+        """
+        events = self._run(self._multi_reasoning_chunks(self.BLOCKS))
+        completed = next(
+            event for event in events if event["type"] == "response.completed"
+        )
+        relayed = [
+            item
+            for item in completed["response"]["output"]
+            if item["type"] == "reasoning"
+        ]
+
+        assert [(item["id"], item.get("encrypted_content")) for item in relayed] == [
+            (item_id, blob) for item_id, _, blob in self.BLOCKS
+        ]
+
+    def test_each_reasoning_item_gets_its_own_done_event_and_index(self):
+        """Each item needs a distinct output_index and its own done event."""
+        events = self._run(self._multi_reasoning_chunks(self.BLOCKS))
+        done = [
+            event
+            for event in events
+            if event["type"] == "response.output_item.done"
+            and event["item"]["type"] == "reasoning"
+        ]
+
+        assert [
+            (event["item"]["id"], event["item"].get("encrypted_content"))
+            for event in done
+        ] == [(item_id, blob) for item_id, _, blob in self.BLOCKS]
+        assert len({event["output_index"] for event in done}) == len(self.BLOCKS)
+
+    def test_reasoning_interleaved_with_tool_calls_keeps_emission_order(self):
+        """Each reasoning item must stay in front of the call it produced.
+
+        Grouping all reasoning items at the head of the output array
+        separates them from their tool calls, which upstream rejects when
+        the turn is replayed.
+        """
+        chunks: list[dict[str, Any]] = [
+            {
+                "type": "response.created",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "in_progress",
+                    "output": [],
+                },
+            }
+        ]
+        final_items: list[dict[str, Any]] = []
+        for pair, (reasoning_id, blob, call_id) in enumerate(
+            [("rs_one", "enc_one", "call_one"), ("rs_two", "enc_two", "call_two")]
+        ):
+            r_index, c_index = pair * 2, pair * 2 + 1
+            reasoning_item = {
+                "id": reasoning_id,
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": "think"}],
+                "status": "completed",
+                "encrypted_content": blob,
+            }
+            call_item = {
+                "id": f"fc_{call_id}",
+                "type": "function_call",
+                "call_id": call_id,
+                "name": "shell",
+                "arguments": "{}",
+                "status": "completed",
+            }
+            final_items += [reasoning_item, call_item]
+            chunks += [
+                {
+                    "type": "response.output_item.added",
+                    "output_index": r_index,
+                    "item": {
+                        "id": reasoning_id,
+                        "type": "reasoning",
+                        "summary": [],
+                        "status": "in_progress",
+                    },
+                },
+                {
+                    "type": "response.reasoning_summary_text.delta",
+                    "item_id": reasoning_id,
+                    "output_index": r_index,
+                    "summary_index": 0,
+                    "delta": "think",
+                },
+                {
+                    "type": "response.output_item.done",
+                    "output_index": r_index,
+                    "item": reasoning_item,
+                },
+                {
+                    "type": "response.output_item.added",
+                    "output_index": c_index,
+                    "item": {**call_item, "arguments": "", "status": "in_progress"},
+                },
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "item_id": f"fc_{call_id}",
+                    "output_index": c_index,
+                    "delta": "{}",
+                },
+                {
+                    "type": "response.output_item.done",
+                    "output_index": c_index,
+                    "item": call_item,
+                },
+            ]
+        chunks.append(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_source",
+                    "model": "gpt-test",
+                    "created_at": 1_700_000_000,
+                    "status": "completed",
+                    "output": final_items,
+                },
+            }
+        )
+
+        events = self._run(chunks)
+        completed = next(
+            event for event in events if event["type"] == "response.completed"
+        )
+        relayed = [
+            (item["type"], item.get("id") or item.get("call_id"))
+            for item in completed["response"]["output"]
+        ]
+
+        assert relayed == [
+            ("reasoning", "rs_one"),
+            ("function_call", "fc_call_one"),
+            ("reasoning", "rs_two"),
+            ("function_call", "fc_call_two"),
+        ]
+
 
 class TestStreamResponseFromProviderWithContext:
     """Tests for stream_response_from_provider with StreamContext."""

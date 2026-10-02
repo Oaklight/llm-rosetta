@@ -960,10 +960,10 @@ class OpenAIResponsesConverter(BaseConverter):
         )
         if (
             isinstance(context, OpenAIResponsesStreamContext)
-            and context._reasoning_item_id
+            and context._inbound_reasoning_item_id
         ):
             event["provider_metadata"] = {
-                "responses_reasoning_id": context._reasoning_item_id,
+                "responses_reasoning_id": context._inbound_reasoning_item_id,
             }
         events.append(event)
 
@@ -1022,7 +1022,7 @@ class OpenAIResponsesConverter(BaseConverter):
                 # done event re-confirms authoritatively.
                 item_id = item.get("id", "")
                 if item_id:
-                    context._reasoning_item_id = item_id
+                    context._inbound_reasoning_item_id = item_id
 
             elif item_type == "message":
                 # Message-level output item — no IR event needed.
@@ -1113,10 +1113,9 @@ class OpenAIResponsesConverter(BaseConverter):
         ):
             item_id = item.get("id", "")
             if item_id:
-                context._reasoning_item_id = item_id
+                context._inbound_reasoning_item_id = item_id
             encrypted_content = item.get("encrypted_content")
             if encrypted_content:
-                context._reasoning_encrypted_content = str(encrypted_content)
                 # Zero-text delta carries encrypted_content through IR;
                 # suppressed on the outbound side when reasoning is empty.
                 event = ReasoningDeltaEvent(
@@ -1631,20 +1630,30 @@ class OpenAIResponsesConverter(BaseConverter):
         if not isinstance(source_item_id, str):
             source_item_id = ""
 
-        if ctx is not None and ctx._reasoning_item_id == "":
-            output_index = ctx.next_output_index()
-            ctx._reasoning_output_index = output_index
-            item_id = source_item_id or generate_reasoning_id(
-                ctx.response_id, output_index
+        item = None
+        if ctx is not None:
+            # Deltas with no provenance all belong to one item; a new
+            # source id starts a new one, so each item keeps the
+            # encrypted_content that was minted against its own id.
+            item = (
+                ctx.reasoning_item(source_item_id)
+                if source_item_id
+                else ctx.current_reasoning_item
             )
-            ctx._reasoning_item_id = item_id
+
+        if ctx is not None and item is None:
+            output_index = ctx.next_output_index()
+            item = ctx.start_reasoning_item(
+                source_item_id or generate_reasoning_id(ctx.response_id, output_index),
+                output_index,
+            )
 
             results.append(
                 {
                     "type": ResponsesEventType.OUTPUT_ITEM_ADDED,
-                    "output_index": output_index,
+                    "output_index": item.output_index,
                     "item": {
-                        "id": item_id,
+                        "id": item.item_id,
                         "type": "reasoning",
                         "summary": [],
                         "status": "in_progress",
@@ -1654,25 +1663,25 @@ class OpenAIResponsesConverter(BaseConverter):
             results.append(
                 {
                     "type": ResponsesEventType.REASONING_SUMMARY_PART_ADDED,
-                    "item_id": item_id,
-                    "output_index": output_index,
+                    "item_id": item.item_id,
+                    "output_index": item.output_index,
                     "summary_index": 0,
                     "part": {"type": "summary_text", "text": ""},
                 }
             )
 
         enc = event.get("encrypted_content", "")
-        if ctx is not None and source_item_id and enc:
-            ctx._reasoning_encrypted_content = enc
+        if item is not None and source_item_id and enc:
+            item.encrypted_content = enc
             if not event["reasoning"]:
                 return results
 
         reasoning_text = event["reasoning"]
-        if ctx is not None:
-            ctx._reasoning_accumulated_text += reasoning_text
+        if item is not None:
+            item.accumulated_text += reasoning_text
 
-        item_id = ctx._reasoning_item_id if ctx is not None else ""
-        r_idx = ctx._reasoning_output_index if ctx is not None else 0
+        item_id = item.item_id if item is not None else ""
+        r_idx = item.output_index if item is not None else 0
         results.append(
             {
                 "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DELTA,
@@ -1879,24 +1888,27 @@ class OpenAIResponsesConverter(BaseConverter):
         if context is None:
             return output
 
-        # Reasoning item comes first in output array
-        if context._reasoning_item_id:
+        # (output_index, item) so the array can be restored to emission
+        # order below — a reasoning item has to stay immediately before
+        # the tool call it produced, which front-loading would break
+        # once a turn holds more than one.
+        entries: list[tuple[int, dict[str, Any]]] = []
+
+        for item in context._reasoning_items:
             reasoning_item: dict[str, Any] = {
-                "id": context._reasoning_item_id,
+                "id": item.item_id,
                 "type": "reasoning",
                 "summary": [
                     {
                         "type": "summary_text",
-                        "text": context._reasoning_accumulated_text,
+                        "text": item.accumulated_text,
                     }
                 ],
                 "status": "completed",
             }
-            if context._reasoning_encrypted_content:
-                reasoning_item["encrypted_content"] = (
-                    context._reasoning_encrypted_content
-                )
-            output.append(reasoning_item)
+            if item.encrypted_content:
+                reasoning_item["encrypted_content"] = item.encrypted_content
+            entries.append((item.output_index, reasoning_item))
 
         accumulated = context.accumulated_text
         if accumulated:
@@ -1915,36 +1927,50 @@ class OpenAIResponsesConverter(BaseConverter):
                 for part in msg_item.get("content", []):
                     part.setdefault("annotations", [])
                     part.setdefault("logprobs", [])
-            output.append(msg_item)
+            entries.append((context._message_output_index, msg_item))
 
         for call_id in context.tool_call_ids:
             tool_name = context.get_tool_name(call_id)
             arguments = context._tool_call_args.get(call_id, "")
             tc_item_id = context.get_tool_call_item_id(call_id) or call_id
             tool_type = context.get_tool_type(call_id)
+            tc_index = context._tool_call_output_indices.get(call_id, -1)
 
             if tool_type == "custom":
-                output.append(
-                    self._build_stream_custom_tool_call_item(
-                        context,
-                        item_id=tc_item_id,
-                        call_id=call_id,
-                        tool_name=tool_name,
-                        input_str=arguments,
-                        status="completed",
+                entries.append(
+                    (
+                        tc_index,
+                        self._build_stream_custom_tool_call_item(
+                            context,
+                            item_id=tc_item_id,
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            input_str=arguments,
+                            status="completed",
+                        ),
                     )
                 )
             else:
-                output.append(
-                    self._build_stream_function_call_item(
-                        context,
-                        item_id=tc_item_id,
-                        call_id=call_id,
-                        tool_name=tool_name,
-                        arguments=arguments,
-                        status="completed",
+                entries.append(
+                    (
+                        tc_index,
+                        self._build_stream_function_call_item(
+                            context,
+                            item_id=tc_item_id,
+                            call_id=call_id,
+                            tool_name=tool_name,
+                            arguments=arguments,
+                            status="completed",
+                        ),
                     )
                 )
+
+        # Only reorder when every item knows its index; otherwise keep the
+        # historical reasoning → message → tool-calls order.  sort() is
+        # stable, so ties stay as appended.
+        if all(index >= 0 for index, _ in entries):
+            entries.sort(key=lambda entry: entry[0])
+        output.extend(item for _, item in entries)
         return output
 
     @staticmethod
@@ -2053,46 +2079,42 @@ class OpenAIResponsesConverter(BaseConverter):
         context: OpenAIResponsesStreamContext,
         results: list[dict[str, Any]],
     ) -> None:
-        """Emit reasoning lifecycle done events."""
-        if not context._reasoning_item_id:
-            return
-        item_id = context._reasoning_item_id
-        output_index = context._reasoning_output_index
-        accumulated = context._reasoning_accumulated_text
-
-        results.append(
-            {
-                "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DONE,
-                "item_id": item_id,
-                "output_index": output_index,
-                "summary_index": 0,
-                "text": accumulated,
+        """Emit reasoning lifecycle done events, one set per item."""
+        for item in context._reasoning_items:
+            accumulated = item.accumulated_text
+            results.append(
+                {
+                    "type": ResponsesEventType.REASONING_SUMMARY_TEXT_DONE,
+                    "item_id": item.item_id,
+                    "output_index": item.output_index,
+                    "summary_index": 0,
+                    "text": accumulated,
+                }
+            )
+            results.append(
+                {
+                    "type": ResponsesEventType.REASONING_SUMMARY_PART_DONE,
+                    "item_id": item.item_id,
+                    "output_index": item.output_index,
+                    "summary_index": 0,
+                    "part": {"type": "summary_text", "text": accumulated},
+                }
+            )
+            reasoning_item: dict[str, Any] = {
+                "id": item.item_id,
+                "type": "reasoning",
+                "summary": [{"type": "summary_text", "text": accumulated}],
+                "status": "completed",
             }
-        )
-        results.append(
-            {
-                "type": ResponsesEventType.REASONING_SUMMARY_PART_DONE,
-                "item_id": item_id,
-                "output_index": output_index,
-                "summary_index": 0,
-                "part": {"type": "summary_text", "text": accumulated},
-            }
-        )
-        reasoning_item: dict[str, Any] = {
-            "id": item_id,
-            "type": "reasoning",
-            "summary": [{"type": "summary_text", "text": accumulated}],
-            "status": "completed",
-        }
-        if context._reasoning_encrypted_content:
-            reasoning_item["encrypted_content"] = context._reasoning_encrypted_content
-        results.append(
-            {
-                "type": ResponsesEventType.OUTPUT_ITEM_DONE,
-                "output_index": output_index,
-                "item": reasoning_item,
-            }
-        )
+            if item.encrypted_content:
+                reasoning_item["encrypted_content"] = item.encrypted_content
+            results.append(
+                {
+                    "type": ResponsesEventType.OUTPUT_ITEM_DONE,
+                    "output_index": item.output_index,
+                    "item": reasoning_item,
+                }
+            )
 
     def _emit_text_done_events(
         self,
