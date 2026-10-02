@@ -920,6 +920,44 @@ class TestOpenAIResponsesConverterFullRoundTrip:
         assert len(tools) == 1
         assert tools[0]["name"] == "search"
 
+    def test_custom_tool_history_round_trip(self):
+        """A custom call and its output stay paired through a full request.
+
+        Same-format traffic replays its own history, so a call emitted as
+        ``custom_tool_call`` whose output came back as
+        ``function_call_output`` is a visible fidelity diff.
+        """
+        body = {
+            "model": "gpt-5.6-sol",
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "list files"}],
+                },
+                {
+                    "type": "custom_tool_call",
+                    "call_id": "call_exec",
+                    "name": "exec",
+                    "input": "ls",
+                },
+                {
+                    "type": "custom_tool_call_output",
+                    "call_id": "call_exec",
+                    "output": "README.md",
+                },
+            ],
+            "tools": [{"type": "custom", "name": "exec", "description": "run"}],
+        }
+        ir = self.converter.request_from_provider(body)
+        restored, _ = self.converter.request_to_provider(ir)
+
+        assert [item["type"] for item in restored["input"]] == [
+            "message",
+            "custom_tool_call",
+            "custom_tool_call_output",
+        ]
+
     def test_response_round_trip(self):
         """Test OpenAI Responses response -> IR -> OpenAI Responses round-trip."""
         provider_response = {

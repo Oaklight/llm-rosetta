@@ -14,7 +14,7 @@ format with type/name/description/parameters at the top level.
 
 import json
 import logging
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from ..base.helpers.tool_content import (
     convert_content_blocks_to_ir,
@@ -39,6 +39,12 @@ logger = logging.getLogger(__name__)
 
 #: Responses input item type that carries tool definitions inline (Codex).
 ADDITIONAL_TOOLS_ITEM_TYPE = "additional_tools"
+
+#: Result item types whose tool_type is not the "function" default.
+_RESULT_ITEM_TOOL_TYPES: dict[str, Literal["custom", "mcp"]] = {
+    "custom_tool_call_output": "custom",
+    "mcp_call_output": "mcp",
+}
 
 
 # ==================== Orphaned Tool Call Fix ====================
@@ -844,10 +850,13 @@ class OpenAIResponsesToolOps(BaseToolOps):
             output = str(result_content)
 
         # Sanitize here to match the ID registered by ir_tool_call_to_p / streaming start.
-        # Non-streaming ctx may be None (falls back to "function"), which is correct.
         call_id = sanitize_tool_call_id(ir_tool_result["tool_call_id"])
-        ctx = kwargs.get("context")
-        tool_type = ctx.get_tool_type(call_id) if ctx is not None else "function"
+        # The IR part wins: it survives request history, where the context's
+        # tool-type map is empty because only streaming populates it.
+        tool_type = ir_tool_result.get("tool_type")
+        if tool_type is None:
+            ctx = kwargs.get("context")
+            tool_type = ctx.get_tool_type(call_id) if ctx is not None else "function"
 
         if tool_type == "custom":
             return {
@@ -884,12 +893,19 @@ class OpenAIResponsesToolOps(BaseToolOps):
 
             output = convert_content_blocks_to_ir(output, OpenAIResponsesContentOps)
 
-        return ToolResultPart(
+        part = ToolResultPart(
             type="tool_result",
             tool_call_id=provider_tool_result.get("call_id", ""),
             result=output,
             is_error=provider_tool_result.get("is_error", False),
         )
+        # Record the non-default types so the outbound leg can emit the
+        # same item kind.  The context it would otherwise consult is only
+        # populated while streaming a response, never by parsing history.
+        tool_type = _RESULT_ITEM_TOOL_TYPES.get(provider_tool_result.get("type", ""))
+        if tool_type is not None:
+            part["tool_type"] = tool_type
+        return part
 
     # ==================== Tool Config ====================
 
