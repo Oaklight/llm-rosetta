@@ -16,6 +16,7 @@ Key Anthropic differences from OpenAI:
 
 import time
 from collections.abc import Mapping
+from dataclasses import dataclass, field
 from typing import Any, cast
 
 from ...types.ir import (
@@ -56,6 +57,49 @@ from .config_ops import AnthropicConfigOps
 from .content_ops import AnthropicContentOps
 from .message_ops import AnthropicMessageOps
 from .tool_ops import AnthropicToolOps
+
+
+@dataclass
+class _AnthropicBlockState:
+    """Track outbound block identity separately from the currently active block."""
+
+    next_index: int = 0
+    tool_indices: dict[str, int] = field(default_factory=dict)
+    open_indices: set[int] = field(default_factory=set)
+    pending_tool_index: int | None = None
+
+    def open(self, context: StreamContext, index: int | None = None) -> int:
+        if index is None:
+            index = max(self.next_index, context.current_block_index + 1)
+        self.next_index = max(self.next_index, index + 1)
+        self.open_indices.add(index)
+        context.current_block_index = index
+        return index
+
+
+def _stream_blocks(context: StreamContext) -> _AnthropicBlockState:
+    """Keep provider-private state on the stream, including generic contexts."""
+    state = context.metadata.get("_anthropic_blocks")
+    if not isinstance(state, _AnthropicBlockState):
+        state = _AnthropicBlockState()
+        context.metadata["_anthropic_blocks"] = state
+    return state
+
+
+def _close_content_blocks(context: StreamContext) -> list[dict[str, Any]]:
+    """Close every open block once without resetting the allocation watermark."""
+    state = _stream_blocks(context)
+    if context.current_block_index >= 0:
+        state.open(context, context.current_block_index)
+    events = [
+        {"type": AnthropicEventType.CONTENT_BLOCK_STOP, "index": index}
+        for index in sorted(state.open_indices)
+    ]
+    state.open_indices.clear()
+    state.pending_tool_index = None
+    context.current_block_index = -1
+    context.current_block_type = None
+    return events
 
 
 class AnthropicConverter(BaseConverter):
@@ -892,6 +936,7 @@ class AnthropicConverter(BaseConverter):
         """Handle StreamEndEvent → message_stop (with optional pending finish flush)."""
         results: list[dict[str, Any]] = []
         if context is not None:
+            results.extend(_close_content_blocks(context))
             # Flush any buffered finish that never got a UsageEvent
             finish = context.pop_pending_finish()
             if finish is not None:
@@ -918,7 +963,11 @@ class AnthropicConverter(BaseConverter):
             # Anchor context to the explicit block_index from the IR event
             # instead of auto-incrementing, so subsequent deltas that read
             # context.current_block_index stay in sync.  (#246)
-            context.current_block_index = block_index
+            state = _stream_blocks(context)
+            state.open(context, block_index)
+            state.pending_tool_index = (
+                block_index if block_type in ("tool_use", "server_tool_use") else None
+            )
             context.current_block_type = block_type
 
         if block_type == "text":
@@ -941,8 +990,15 @@ class AnthropicConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle ContentBlockEndEvent → content_block_stop."""
         if context is not None:
-            context.current_block_index = -1
-            context.current_block_type = None
+            index = event["block_index"]
+            state = _stream_blocks(context)
+            state.open_indices.discard(index)
+            state.next_index = max(state.next_index, index + 1)
+            if state.pending_tool_index == index:
+                state.pending_tool_index = None
+            if context.current_block_index == index:
+                context.current_block_index = -1
+                context.current_block_type = None
         return {
             "type": AnthropicEventType.CONTENT_BLOCK_STOP,
             "index": event["block_index"],
@@ -965,7 +1021,7 @@ class AnthropicConverter(BaseConverter):
         if explicit_idx is not None:
             result["index"] = explicit_idx
             if context is not None:
-                context.current_block_index = explicit_idx
+                _stream_blocks(context).open(context, explicit_idx)
                 context.current_block_type = "text"
         elif context is not None:
             needs_new_block = context.current_block_index < 0 or (
@@ -973,16 +1029,8 @@ class AnthropicConverter(BaseConverter):
                 and context.current_block_type != "text"
             )
             if needs_new_block:
-                preamble: list[dict[str, Any]] = []
-                # Close previous block if one is open (#250)
-                if context.current_block_index >= 0:
-                    preamble.append(
-                        {
-                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                            "index": context.current_block_index,
-                        }
-                    )
-                context.next_block_index()
+                preamble = _close_content_blocks(context)
+                _stream_blocks(context).open(context)
                 context.current_block_type = "text"
                 result["index"] = context.current_block_index
                 preamble.append(
@@ -1024,7 +1072,7 @@ class AnthropicConverter(BaseConverter):
         if explicit_idx is not None:
             rd_result["index"] = explicit_idx
             if context is not None:
-                context.current_block_index = explicit_idx
+                _stream_blocks(context).open(context, explicit_idx)
                 context.current_block_type = "thinking"
         elif context is not None:
             needs_new_block = context.current_block_index < 0 or (
@@ -1032,16 +1080,8 @@ class AnthropicConverter(BaseConverter):
                 and context.current_block_type != "thinking"
             )
             if needs_new_block:
-                preamble: list[dict[str, Any]] = []
-                # Close previous block if one is open (#250)
-                if context.current_block_index >= 0:
-                    preamble.append(
-                        {
-                            "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                            "index": context.current_block_index,
-                        }
-                    )
-                context.next_block_index()
+                preamble = _close_content_blocks(context)
+                _stream_blocks(context).open(context)
                 context.current_block_type = "thinking"
                 rd_result["index"] = context.current_block_index
                 preamble.append(
@@ -1070,24 +1110,23 @@ class AnthropicConverter(BaseConverter):
             },
         }
         if context is not None:
+            state = _stream_blocks(context)
+            tool_id = event["tool_call_id"]
+            if state.tool_indices.get(tool_id) in state.open_indices:
+                return {}
             preamble: list[dict[str, Any]] = []
-            # Close previous block if one is open and type is changing (#250)
-            if (
-                context.current_block_index >= 0
-                and context.current_block_type is not None
-                and context.current_block_type != "tool_use"
-            ):
-                preamble.append(
-                    {
-                        "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                        "index": context.current_block_index,
-                    }
-                )
-                context.next_block_index()
-            elif context.current_block_index < 0:
-                context.next_block_index()
+            if context.current_block_type not in (None, "tool_use", "server_tool_use"):
+                preamble = _close_content_blocks(context)
+            index = state.pending_tool_index
+            state.pending_tool_index = None
+            if index is None and context.current_block_type is None:
+                # Honor a caller-preallocated generic context index.
+                if context.current_block_index >= state.next_index:
+                    index = context.current_block_index
+            index = state.open(context, index)
+            state.tool_indices[tool_id] = index
             context.current_block_type = "tool_use"
-            result["index"] = context.current_block_index
+            result["index"] = index
             if preamble:
                 preamble.append(result)
                 return preamble
@@ -1106,16 +1145,17 @@ class AnthropicConverter(BaseConverter):
         }
         # Prefer explicit block_index from the IR event (#246)
         explicit_idx: int | None = event.get("block_index")
-        if explicit_idx is not None:
+        if context is not None:
+            state = _stream_blocks(context)
+            index = explicit_idx
+            if index is None:
+                index = state.tool_indices.get(event["tool_call_id"])
+            if index is None and context.current_block_index >= 0:
+                index = context.current_block_index
+            result["index"] = state.open(context, index)
+            context.current_block_type = "tool_use"
+        elif explicit_idx is not None:
             result["index"] = explicit_idx
-            if context is not None:
-                context.current_block_index = explicit_idx
-                context.current_block_type = "tool_use"
-        elif context is not None:
-            if context.current_block_index < 0:
-                context.next_block_index()
-                context.current_block_type = "tool_use"
-            result["index"] = context.current_block_index
         return result
 
     def _handle_ir_finish_to_p(
@@ -1136,15 +1176,7 @@ class AnthropicConverter(BaseConverter):
             }
 
         if context is not None:
-            results: list[dict[str, Any]] = []
-            if context.current_block_index >= 0:
-                results.append(
-                    {
-                        "type": AnthropicEventType.CONTENT_BLOCK_STOP,
-                        "index": context.current_block_index,
-                    }
-                )
-                context.current_block_index = -1
+            results = _close_content_blocks(context)
             usage = context.pop_pending_usage()
             if usage is not None:
                 delta_payload: dict[str, Any] = {"stop_reason": stop_reason}
