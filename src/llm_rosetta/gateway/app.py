@@ -9,6 +9,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
+from llm_rosetta._compat import sync_compat as _sync_compat
+
 from llm_rosetta._vendor.httpserver import (
     App,
     JSONResponse,
@@ -1012,6 +1014,7 @@ async def _periodic_flush(app: App) -> None:
                 logger.warning("Failed to flush metrics: %s", exc)
 
 
+@_sync_compat
 async def _flush_now(app: App) -> None:
     """Final async flush on shutdown."""
     persistence = getattr(app, "persistence", None)
@@ -1294,6 +1297,7 @@ def _install_lifecycle_hooks(app: App) -> None:
         )
 
 
+@_sync_compat
 async def create_app(
     config: GatewayConfig,
     config_path: str | None = None,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from typing import TYPE_CHECKING, Any
+from llm_rosetta._compat import sync_compat
 
 from llm_rosetta.observability import (
     DEFAULT_SUCCESS_MAX,
@@ -149,6 +150,7 @@ async def _init_persistence(
     return persistence, _counter_rebuild_needed
 
 
+@sync_compat
 async def setup_admin(
     app: Any,
     config: GatewayConfig,

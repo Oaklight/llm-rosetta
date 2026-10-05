@@ -18,6 +18,7 @@ import re
 import uuid
 import zlib
 from copy import deepcopy
+from llm_rosetta._compat import sync_compat
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -120,6 +121,7 @@ def decompress_body(data: bytes) -> dict[str, Any]:
 # ------------------------------------------------------------------
 
 
+@sync_compat
 async def dump_error(
     persistence: PersistenceManager | None,
     *,
