@@ -762,7 +762,10 @@ class TestEpochCacheIntegration:
         info2 = cache_info()["ir_validation"]
 
         # Epoch guard should have skipped per-entry work on second call,
-        # so we should see fewer additional misses
-        assert info2["hits"] >= info1["hits"]
+        # so no new misses should be recorded (epoch short-circuited)
+        assert info2["misses"] == info1["misses"], (
+            f"Expected no new misses (epoch guard should skip), "
+            f"got {info2['misses']} vs {info1['misses']}"
+        )
         # Both results should be identical
         assert ir1["messages"] == ir2["messages"]
