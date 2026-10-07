@@ -13,6 +13,28 @@ from ...types.ir.tools import ToolChoice, ToolDefinition
 from ..base import BaseToolOps
 
 
+_SERVER_CALL_TYPES: dict[str, str] = {
+    "google_search_call": "google_search",
+    "code_execution_call": "code_execution",
+    "google_maps_call": "google_maps",
+    "file_search_call": "file_search",
+    "retrieval_call": "retrieval",
+    "url_context_call": "url_context",
+}
+
+_SERVER_RESULT_TYPES: dict[str, str] = {
+    "google_search_result": "google_search",
+    "code_execution_result": "code_execution",
+    "google_maps_result": "google_maps",
+    "file_search_result": "file_search",
+    "retrieval_result": "retrieval",
+    "url_context_result": "url_context",
+}
+
+_INTRINSIC_KIND_TO_CALL_TYPE = {v: k for k, v in _SERVER_CALL_TYPES.items()}
+_INTRINSIC_KIND_TO_RESULT_TYPE = {v: k for k, v in _SERVER_RESULT_TYPES.items()}
+
+
 class GoogleInteractionsToolOps(BaseToolOps):
     """Google Interactions API tool conversion operations."""
 
@@ -64,11 +86,39 @@ class GoogleInteractionsToolOps(BaseToolOps):
     @staticmethod
     def ir_function_call_to_p(ir_part: ToolCallPart) -> dict:
         """IR ToolCallPart → Interactions FunctionCallStep."""
+        if ir_part.get("tool_type") == "intrinsic":
+            pm = ir_part.get("provider_metadata") or {}
+            intrinsic_kind = pm.get("intrinsic_kind", ir_part["tool_name"])
+            step_type = _INTRINSIC_KIND_TO_CALL_TYPE.get(
+                intrinsic_kind, f"{intrinsic_kind}_call"
+            )
+            return {
+                "type": step_type,
+                "id": ir_part["tool_call_id"],
+                "name": ir_part["tool_name"],
+                "arguments": ir_part["tool_input"],
+            }
         return {
             "type": "function_call",
             "id": ir_part["tool_call_id"],
             "name": ir_part["tool_name"],
             "arguments": ir_part["tool_input"],
+        }
+
+    # ── Server step calls ─────────────────────────────────────────
+
+    @staticmethod
+    def p_server_call_to_ir(step: dict) -> ToolCallPart:
+        """Interactions server call step (google_search_call, etc.) → IR ToolCallPart."""
+        step_type = step.get("type", "")
+        intrinsic_kind = _SERVER_CALL_TYPES.get(step_type, step_type)
+        return {
+            "type": "tool_call",
+            "tool_call_id": step.get("id", ""),
+            "tool_name": step.get("name", step_type),
+            "tool_input": step.get("arguments", {}),
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": intrinsic_kind},
         }
 
     # ── Tool results (FunctionResultStep) ──────────────────────────
@@ -86,7 +136,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
             result_val = json.dumps(result_val)
         part: ToolResultPart = {
             "type": "tool_result",
-            "tool_call_id": step["call_id"],
+            "tool_call_id": step.get("call_id", step.get("id", "")),
             "result": result_val,
         }
         if step.get("is_error"):
@@ -96,7 +146,21 @@ class GoogleInteractionsToolOps(BaseToolOps):
     @staticmethod
     def ir_function_result_to_p(ir_part: ToolResultPart) -> dict:
         """IR ToolResultPart → Interactions FunctionResultStep."""
-        result: dict[str, Any] = {
+        if ir_part.get("tool_type") == "intrinsic":
+            pm = ir_part.get("provider_metadata") or {}
+            intrinsic_kind = pm.get("intrinsic_kind", "")
+            step_type = _INTRINSIC_KIND_TO_RESULT_TYPE.get(
+                intrinsic_kind, f"{intrinsic_kind}_result"
+            )
+            result: dict[str, Any] = {
+                "type": step_type,
+                "call_id": ir_part["tool_call_id"],
+                "result": ir_part["result"],
+            }
+            if ir_part.get("is_error"):
+                result["is_error"] = True
+            return result
+        result = {
             "type": "function_result",
             "call_id": ir_part["tool_call_id"],
             "result": ir_part["result"],
@@ -104,6 +168,32 @@ class GoogleInteractionsToolOps(BaseToolOps):
         if ir_part.get("is_error"):
             result["is_error"] = True
         return result
+
+    # ── Server step results ───────────────────────────────────────
+
+    @staticmethod
+    def p_server_result_to_ir(step: dict) -> ToolResultPart:
+        """Interactions server result step (google_search_result, etc.) → IR ToolResultPart."""
+        step_type = step.get("type", "")
+        intrinsic_kind = _SERVER_RESULT_TYPES.get(step_type, step_type)
+        result_val = step.get("result", "")
+        if isinstance(result_val, list):
+            texts = [
+                item.get("text", "") for item in result_val if isinstance(item, dict)
+            ]
+            result_val = "\n".join(texts) if texts else ""
+        elif isinstance(result_val, dict):
+            result_val = json.dumps(result_val)
+        part: ToolResultPart = {
+            "type": "tool_result",
+            "tool_call_id": step.get("call_id", step.get("id", "")),
+            "result": result_val,
+            "tool_type": "intrinsic",
+            "provider_metadata": {"intrinsic_kind": intrinsic_kind},
+        }
+        if step.get("is_error"):
+            part["is_error"] = True
+        return part
 
     # ── Tool choice ────────────────────────────────────────────────
 
