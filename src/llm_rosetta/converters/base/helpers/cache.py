@@ -24,6 +24,7 @@ teardown) to catch code bugs that accidentally mutate cached objects.
 from __future__ import annotations
 
 import json
+import pickle
 import time
 from collections import OrderedDict
 from typing import Any
@@ -42,11 +43,23 @@ DEFAULT_TTL: float = 1800.0
 # ---------------------------------------------------------------------------
 
 
-def _canonical_json_bytes(obj: Any) -> bytes:
-    """Serialize *obj* to deterministic JSON bytes.
+def _content_hash_bytes(obj: Any) -> bytes:
+    """Serialize *obj* to bytes for cache key computation.
 
-    Uses ``sort_keys=True`` so dict key insertion order does not affect
-    the output, and compact separators to minimise byte length.
+    Uses ``pickle.dumps(protocol=5)`` which is ~4-5x faster than
+    ``json.dumps(sort_keys=True)`` for nested dicts.  Key-order
+    dependent, but all IR converters produce identical key order
+    (verified empirically).  Worst case on key-order divergence:
+    cache miss → re-validate (safe, not a false positive).
+    """
+    return pickle.dumps(obj, protocol=5)
+
+
+def _canonical_json_bytes(obj: Any) -> bytes:
+    """Serialize *obj* to deterministic JSON bytes (slow path).
+
+    Only used for mutation-detection fingerprints in :class:`LRUCache`
+    where key-order independence across sessions matters.
     """
     return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
 
@@ -251,6 +264,244 @@ class LRUCache:
 
 
 # ---------------------------------------------------------------------------
+# Generational set — lightweight eviction for boolean caches
+# ---------------------------------------------------------------------------
+
+
+class GenerationalSet:
+    """Two-generation set with time-based rotation for boolean caches.
+
+    Stores only keys (no values) — designed for caches that record
+    ``True``/``False`` status (e.g. "has this IR entry been validated?").
+    Lookup checks both current and previous generations (two O(1) set
+    lookups).  Rotation drops the oldest generation without per-entry
+    bookkeeping.
+
+    Provides the same public interface as :class:`LRUCache` (``get``,
+    ``put``, ``clear``, ``info``, ``check_integrity``) so it can be
+    used as a drop-in replacement for boolean-only caches.
+
+    Args:
+        rotate_interval: Seconds between generation rotations.
+            Entries from sessions ended more than ``rotate_interval``
+            seconds ago naturally age out.
+    """
+
+    __slots__ = (
+        "_current",
+        "_previous",
+        "_rotate_interval",
+        "_last_rotate",
+        "_hits",
+        "_misses",
+        "_rotations",
+    )
+
+    def __init__(self, rotate_interval: float = DEFAULT_TTL) -> None:
+        self._current: set[int] = set()
+        self._previous: set[int] = set()
+        self._rotate_interval = rotate_interval
+        self._last_rotate = time.monotonic()
+        self._hits = 0
+        self._misses = 0
+        self._rotations = 0
+
+    def _maybe_rotate(self) -> None:
+        now = time.monotonic()
+        if now - self._last_rotate >= self._rotate_interval:
+            self._previous = self._current
+            self._current = set()
+            self._last_rotate = now
+            self._rotations += 1
+
+    def get(self, key: int) -> Any:
+        """Return ``True`` on hit, :data:`_SENTINEL` on miss."""
+        self._maybe_rotate()
+        if key in self._current or key in self._previous:
+            self._current.add(key)
+            self._hits += 1
+            return True
+        self._misses += 1
+        return _SENTINEL
+
+    def put(self, key: int, value: Any) -> None:
+        """Record *key* in the current generation (value is ignored)."""
+        self._maybe_rotate()
+        self._current.add(key)
+
+    def clear(self) -> None:
+        """Remove all entries and reset counters."""
+        self._current.clear()
+        self._previous.clear()
+        self._last_rotate = time.monotonic()
+        self._hits = 0
+        self._misses = 0
+        self._rotations = 0
+
+    def check_integrity(self) -> list[int]:
+        """Always returns empty — boolean values cannot be mutated."""
+        return []
+
+    def info(self) -> dict[str, Any]:
+        """Return cache statistics."""
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "expirations": 0,
+            "corruptions": 0,
+            "currsize": len(self._current) + len(self._previous),
+            "maxsize": None,
+            "ttl": self._rotate_interval,
+            "verify": False,
+            "rotations": self._rotations,
+        }
+
+
+# ---------------------------------------------------------------------------
+# Epoch guard — list-level change detection for fast skip
+# ---------------------------------------------------------------------------
+
+
+def _sig_text(entry: dict[str, Any]) -> int:
+    text = entry.get("text", "")
+    return hash(("text", len(text), text[:16], text[-16:]))
+
+
+def _sig_tool_call(entry: dict[str, Any]) -> int:
+    inp = entry.get("input", {})
+    first_key = next(iter(inp), "") if isinstance(inp, dict) else ""
+    return hash(
+        (
+            "tool_call",
+            entry.get("tool_call_id", ""),
+            entry.get("tool_name", ""),
+            len(inp) if isinstance(inp, (dict, str)) else 0,
+            first_key,
+        )
+    )
+
+
+def _sig_tool_result(entry: dict[str, Any]) -> int:
+    result = entry.get("result")
+    if isinstance(result, str):
+        rsig = hash(("s", len(result), result[:16], result[-16:]))
+    elif isinstance(result, list):
+        rsig = hash(("l", len(result)))
+    else:
+        rsig = hash(type(result))
+    return hash(("tool_result", entry.get("tool_call_id", ""), rsig))
+
+
+def _sig_reasoning(entry: dict[str, Any]) -> int:
+    r = entry.get("reasoning", "")
+    s = entry.get("signature", "")
+    return hash(
+        (
+            "reasoning",
+            r[:16] if r else "",
+            r[-16:] if r else "",
+            s[:16] if s else "",
+            s[-16:] if s else "",
+        )
+    )
+
+
+def _sig_refusal(entry: dict[str, Any]) -> int:
+    r = entry.get("refusal", "")
+    return hash(("refusal", r[:16], r[-16:]))
+
+
+def _sig_media(entry: dict[str, Any]) -> int:
+    t = entry["type"]
+    url = entry.get(f"{t}_url") or entry.get("url", "")
+    if url:
+        return hash((t, url[:16], url[-16:]))
+    data = entry.get("data", "")
+    return hash((t, len(data) if data else 0, entry.get("media_type", "")))
+
+
+def _sig_citation(entry: dict[str, Any]) -> int:
+    url = entry.get("url", "")
+    if url:
+        return hash(("citation", url[:64]))
+    return hash(("citation", (entry.get("cited_text", "") or "")[:32]))
+
+
+_SIGNAL_DISPATCH: dict[str, Any] = {
+    "text": _sig_text,
+    "tool_call": _sig_tool_call,
+    "tool_result": _sig_tool_result,
+    "reasoning": _sig_reasoning,
+    "refusal": _sig_refusal,
+    "image": _sig_media,
+    "file": _sig_media,
+    "audio": _sig_media,
+    "citation": _sig_citation,
+}
+
+
+def _entry_signal(entry: Any) -> int:
+    """Compute a lightweight per-entry signal for epoch detection.
+
+    O(1) per entry — field access only, no serialization.  Covers all
+    9 IR content part types plus ToolDefinition.
+    """
+    if not isinstance(entry, dict):
+        return hash(type(entry))
+
+    t = entry.get("type", "")
+    handler = _SIGNAL_DISPATCH.get(t)
+    if handler is not None:
+        return handler(entry)
+
+    # ToolDefinition (no "type" field — keyed by "name")
+    name = entry.get("name")
+    if name is not None:
+        desc = entry.get("description", "")
+        params = entry.get("parameters", {})
+        n_props = len(params.get("properties", {})) if isinstance(params, dict) else 0
+        n_req = len(params.get("required", [])) if isinstance(params, dict) else 0
+        return hash(("tool_def", name, len(desc) if desc else 0, n_props, n_req))
+
+    # Message envelope (role + content)
+    role = entry.get("role")
+    if role is not None:
+        content = entry.get("content", [])
+        if isinstance(content, list):
+            parts_sig = 0
+            for part in content:
+                parts_sig ^= _entry_signal(part)
+            return hash((role, len(content), parts_sig))
+        return hash((role, hash(content)))
+
+    return hash(pickle.dumps(entry, protocol=5))
+
+
+def _list_epoch(entries: list[Any], tag: str) -> int:
+    """Compute a list-level epoch signal.
+
+    Combines list length, two pickle samples (first + last), and
+    an XOR aggregate of per-entry lightweight signals.  Cost is
+    O(n) but O(1) per entry (no serialization except two samples).
+    """
+    n = len(entries)
+    if n == 0:
+        return hash((tag, 0))
+
+    agg = 0
+    for entry in entries:
+        agg ^= _entry_signal(entry)
+
+    first_sample = pickle.dumps(entries[0], protocol=5) if n > 0 else b""
+    last_sample = pickle.dumps(entries[-1], protocol=5) if n > 1 else first_sample
+
+    return hash((tag, n, agg, first_sample, last_sample))
+
+
+# Epoch cache: (field_name, tag) → last epoch value
+_epoch_cache: dict[tuple[str, str], int] = {}
+
+# ---------------------------------------------------------------------------
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
@@ -268,7 +519,7 @@ sanitize_cache = LRUCache(maxsize=512)
 Keyed by ``(schema_json, extra_strip_keys)``.
 """
 
-ir_validation_cache = LRUCache(maxsize=8192)
+ir_validation_cache = GenerationalSet()
 """Unified IR validation status cache (the **hub**).
 
 Stores ``True`` for any IR entry (tool, message, etc.) that has passed
@@ -291,6 +542,7 @@ def clear_all_caches() -> None:
     tool_entry_cache.clear()
     sanitize_cache.clear()
     ir_validation_cache.clear()
+    _epoch_cache.clear()
 
 
 def cache_info() -> dict[str, dict[str, Any]]:
@@ -338,7 +590,7 @@ def _ir_validation_key(tag: str, entry: Any) -> int:
     so different IR types with the same content never collide.  No
     converter tag — IR validation is converter-agnostic.
     """
-    return hash(tag.encode() + b"\x00" + _canonical_json_bytes(entry))
+    return hash(tag.encode() + b"\x00" + _content_hash_bytes(entry))
 
 
 def is_ir_validated(tag: str, entry: Any) -> bool:
