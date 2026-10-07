@@ -468,6 +468,37 @@ class TestOpenAIResponsesToolOps:
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
 
+    def test_intrinsic_code_interpreter_round_trip(self):
+        """Test intrinsic code_interpreter round-trip (Provider → IR → Provider)."""
+        provider_tc = {
+            "type": "code_interpreter_call",
+            "call_id": "call_ci_rt",
+            "name": "code_interpreter",
+            "arguments": '{"code": "print(42)"}',
+        }
+        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert ir["tool_type"] == "intrinsic"
+        assert ir["provider_metadata"]["intrinsic_kind"] == "code_interpreter"
+
+        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        assert restored["type"] == "code_interpreter_call"
+        assert restored["call_id"] == provider_tc["call_id"]
+
+    def test_intrinsic_shell_call_round_trip(self):
+        """Test intrinsic shell_call round-trip (Provider → IR → Provider)."""
+        provider_tc = {
+            "type": "shell_call",
+            "call_id": "call_sh_rt",
+            "name": "shell",
+            "arguments": '{"cmd": "ls"}',
+        }
+        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert ir["tool_type"] == "intrinsic"
+        assert ir["provider_metadata"]["intrinsic_kind"] == "shell"
+
+        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        assert restored["type"] == "shell_call"
+
     # ==================== Custom Tool Call ====================
 
     def test_ir_tool_call_to_p_custom(self):
