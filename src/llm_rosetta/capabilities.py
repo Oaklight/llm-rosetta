@@ -255,7 +255,7 @@ def _strip_intrinsic_from_messages(messages: list[Any]) -> tuple[list[Any], int]
         if filtered:
             new_messages.append({**msg, "content": filtered})
         elif msg.get("role") != "tool":
-            new_messages.append(msg)
+            new_messages.append({**msg, "content": filtered})
     return new_messages, stripped
 
 
