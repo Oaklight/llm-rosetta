@@ -331,12 +331,16 @@ class TestIRValidationHelpers:
         assert is_ir_validated("ir.message", msg1) is True
         assert is_ir_validated("ir.message", msg2) is False
 
-    def test_dict_key_order_independent(self):
+    def test_dict_key_order_dependent(self):
+        """pickle-based validation keys are key-order dependent.
+
+        Different key order → cache miss → re-validate (safe).
+        """
         clear_all_caches()
         msg1 = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
         msg2 = {"content": [{"type": "text", "text": "hi"}], "role": "user"}
         mark_ir_validated("ir.message", msg1)
-        assert is_ir_validated("ir.message", msg2) is True
+        assert is_ir_validated("ir.message", msg2) is False
 
     def test_different_tags_independent(self):
         """Same content with different tags should not collide."""
@@ -389,3 +393,376 @@ class TestModuleSingletons:
             assert "currsize" in v
             assert "maxsize" in v
             assert "ttl" in v
+
+
+# ---------------------------------------------------------------------------
+# _content_hash_bytes (pickle-based, Layer 1)
+# ---------------------------------------------------------------------------
+
+
+class TestContentHashBytes:
+    def test_deterministic(self):
+        from llm_rosetta.converters.base.helpers.cache import _content_hash_bytes
+
+        obj = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        assert _content_hash_bytes(obj) == _content_hash_bytes(obj)
+
+    def test_different_content_different_bytes(self):
+        from llm_rosetta.converters.base.helpers.cache import _content_hash_bytes
+
+        a = _content_hash_bytes({"text": "hello"})
+        b = _content_hash_bytes({"text": "world"})
+        assert a != b
+
+    def test_key_order_dependent(self):
+        """pickle is key-order dependent — this is the trade-off for speed."""
+        from llm_rosetta.converters.base.helpers.cache import _content_hash_bytes
+
+        a = _content_hash_bytes({"a": 1, "b": 2})
+        b = _content_hash_bytes({"b": 2, "a": 1})
+        assert a != b
+
+    def test_faster_than_json(self):
+        """pickle should be meaningfully faster than json for nested dicts."""
+        import json
+        import time
+
+        from llm_rosetta.converters.base.helpers.cache import _content_hash_bytes
+
+        obj = {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "hello " * 50},
+                {
+                    "type": "tool_call",
+                    "tool_call_id": "tc_1",
+                    "tool_name": "fn",
+                    "input": {"arg": "value " * 20},
+                },
+            ],
+        }
+
+        n = 1000
+        t0 = time.perf_counter()
+        for _ in range(n):
+            _content_hash_bytes(obj)
+        t_pickle = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
+        for _ in range(n):
+            json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+        t_json = time.perf_counter() - t0
+
+        speedup = t_json / t_pickle
+        assert speedup > 2.0, f"Expected >2x speedup, got {speedup:.1f}x"
+
+
+# ---------------------------------------------------------------------------
+# GenerationalSet (Layer 2)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerationalSet:
+    def test_put_and_get(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        gs.put(42, True)
+        assert gs.get(42) is True
+
+    def test_miss_returns_sentinel(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        assert gs.get(999) is _SENTINEL
+
+    def test_clear(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        gs.put(1, True)
+        gs.put(2, True)
+        gs.clear()
+        assert gs.get(1) is _SENTINEL
+        assert gs.get(2) is _SENTINEL
+
+    def test_rotation_evicts_old_generation(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet(rotate_interval=3600.0)
+        gs.put(1, True)
+        assert gs.get(1) is True
+
+        # Force first rotation
+        gs._last_rotate -= 7200.0
+        gs._maybe_rotate()
+        # Entry moved to previous generation — should still be findable
+        assert gs.get(1) is True
+
+        # Force second rotation — entry was promoted by get(),
+        # so it survives this rotation too
+        gs._last_rotate -= 7200.0
+        gs._maybe_rotate()
+        assert gs.get(1) is True
+
+        # Now don't access it, force two rotations
+        gs._last_rotate -= 7200.0
+        gs._maybe_rotate()
+        gs._last_rotate -= 7200.0
+        gs._maybe_rotate()
+        assert gs.get(1) is _SENTINEL
+
+    def test_get_promotes_to_current(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet(rotate_interval=3600.0)
+        gs.put(1, True)
+        # Force rotation
+        gs._last_rotate -= 7200.0
+        gs._maybe_rotate()
+        # Entry is in previous, get() should promote to current
+        assert gs.get(1) is True
+        assert 1 in gs._current
+
+    def test_info_structure(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        gs.put(1, True)
+        gs.get(1)  # hit
+        gs.get(2)  # miss
+        info = gs.info()
+        assert info["hits"] == 1
+        assert info["misses"] == 1
+        assert info["currsize"] == 1
+        assert "ttl" in info
+
+    def test_check_integrity_always_empty(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        gs.put(1, True)
+        assert gs.check_integrity() == []
+
+    def test_hit_miss_counters(self):
+        from llm_rosetta.converters.base.helpers.cache import GenerationalSet
+
+        gs = GenerationalSet()
+        gs.put(10, True)
+        gs.get(10)
+        gs.get(10)
+        gs.get(99)  # miss
+        info = gs.info()
+        assert info["hits"] == 2
+        assert info["misses"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Epoch guard (_entry_signal + _list_epoch, Layer 3)
+# ---------------------------------------------------------------------------
+
+
+class TestEntrySignal:
+    def test_text_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        sig = _entry_signal({"type": "text", "text": "hello world"})
+        assert isinstance(sig, int)
+        # Same input → same signal
+        assert sig == _entry_signal({"type": "text", "text": "hello world"})
+        # Different text → different signal
+        assert sig != _entry_signal({"type": "text", "text": "goodbye world"})
+
+    def test_tool_call_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        tc = {
+            "type": "tool_call",
+            "tool_call_id": "tc_1",
+            "tool_name": "read_file",
+            "input": {"path": "/tmp/x"},
+        }
+        sig = _entry_signal(tc)
+        assert isinstance(sig, int)
+        # Different tool → different signal
+        tc2 = {**tc, "tool_name": "write_file"}
+        assert sig != _entry_signal(tc2)
+
+    def test_tool_result_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        tr = {"type": "tool_result", "tool_call_id": "tc_1", "result": "output text"}
+        sig = _entry_signal(tr)
+        assert isinstance(sig, int)
+
+    def test_reasoning_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        r = {"type": "reasoning", "reasoning": "Let me think..."}
+        sig = _entry_signal(r)
+        assert isinstance(sig, int)
+
+    def test_tool_definition(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        td = {
+            "name": "read_file",
+            "description": "Read a file",
+            "parameters": {
+                "type": "object",
+                "properties": {"path": {"type": "string"}},
+                "required": ["path"],
+            },
+        }
+        sig = _entry_signal(td)
+        assert isinstance(sig, int)
+        # Different tool → different signal
+        td2 = {**td, "name": "write_file"}
+        assert sig != _entry_signal(td2)
+
+    def test_message_envelope(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        msg = {"role": "user", "content": [{"type": "text", "text": "hi"}]}
+        sig = _entry_signal(msg)
+        assert isinstance(sig, int)
+
+    def test_image_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        img = {"type": "image", "image_url": "https://example.com/img.png"}
+        sig = _entry_signal(img)
+        assert isinstance(sig, int)
+
+    def test_citation_part(self):
+        from llm_rosetta.converters.base.helpers.cache import _entry_signal
+
+        cit = {"type": "citation", "url": "https://example.com/doc"}
+        sig = _entry_signal(cit)
+        assert isinstance(sig, int)
+
+
+class TestListEpoch:
+    def test_same_list_same_epoch(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs = [
+            {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "hello"}]},
+        ]
+        assert _list_epoch(msgs, "ir.message") == _list_epoch(msgs, "ir.message")
+
+    def test_different_content_different_epoch(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs1 = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        msgs2 = [{"role": "user", "content": [{"type": "text", "text": "bye"}]}]
+        assert _list_epoch(msgs1, "ir.message") != _list_epoch(msgs2, "ir.message")
+
+    def test_different_length_different_epoch(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs1 = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        msgs2 = msgs1 + [
+            {"role": "assistant", "content": [{"type": "text", "text": "yo"}]}
+        ]
+        assert _list_epoch(msgs1, "ir.message") != _list_epoch(msgs2, "ir.message")
+
+    def test_empty_list(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        assert isinstance(_list_epoch([], "ir.message"), int)
+
+    def test_different_tag_different_epoch(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        assert _list_epoch(msgs, "ir.message") != _list_epoch(msgs, "ir.tool")
+
+    def test_mutation_at_various_positions(self):
+        """Mutations at any position should change the epoch."""
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs = [
+            {"role": "user", "content": [{"type": "text", "text": f"msg {i}"}]}
+            for i in range(10)
+        ]
+        baseline = _list_epoch(msgs, "ir.message")
+
+        for pos in [0, 3, 5, 9]:
+            modified = [m.copy() for m in msgs]
+            modified[pos] = {
+                "role": "user",
+                "content": [{"type": "text", "text": "CHANGED"}],
+            }
+            assert _list_epoch(modified, "ir.message") != baseline, (
+                f"Mutation at position {pos} not detected"
+            )
+
+    def test_insertion_detected(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs = [
+            {"role": "user", "content": [{"type": "text", "text": f"msg {i}"}]}
+            for i in range(5)
+        ]
+        baseline = _list_epoch(msgs, "ir.message")
+        extended = msgs + [
+            {"role": "user", "content": [{"type": "text", "text": "new"}]}
+        ]
+        assert _list_epoch(extended, "ir.message") != baseline
+
+    def test_removal_detected(self):
+        from llm_rosetta.converters.base.helpers.cache import _list_epoch
+
+        msgs = [
+            {"role": "user", "content": [{"type": "text", "text": f"msg {i}"}]}
+            for i in range(5)
+        ]
+        baseline = _list_epoch(msgs, "ir.message")
+        shorter = msgs[:4]
+        assert _list_epoch(shorter, "ir.message") != baseline
+
+
+class TestEpochCacheIntegration:
+    """Test that the epoch guard correctly skips per-entry validation."""
+
+    def test_epoch_cache_cleared_on_clear_all(self):
+        from llm_rosetta.converters.base.helpers.cache import _epoch_cache
+
+        clear_all_caches()
+        _epoch_cache[("test", "tag")] = 42
+        clear_all_caches()
+        assert len(_epoch_cache) == 0
+
+    def test_second_call_skips_per_entry_via_epoch(self):
+        """On second call with same data, epoch guard should short-circuit."""
+        import copy
+
+        from llm_rosetta.converters.anthropic import AnthropicConverter
+
+        clear_all_caches()
+        request = {
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 100,
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hello"}]},
+                {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+                {"role": "user", "content": [{"type": "text", "text": "how are you?"}]},
+            ],
+        }
+
+        conv = AnthropicConverter()
+        ir1 = conv.request_from_provider(copy.deepcopy(request))
+        info1 = cache_info()["ir_validation"]
+
+        # Second call with identical input
+        conv2 = AnthropicConverter()
+        ir2 = conv2.request_from_provider(copy.deepcopy(request))
+        info2 = cache_info()["ir_validation"]
+
+        # Epoch guard should have skipped per-entry work on second call,
+        # so we should see fewer additional misses
+        assert info2["hits"] >= info1["hits"]
+        # Both results should be identical
+        assert ir1["messages"] == ir2["messages"]
