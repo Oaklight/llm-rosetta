@@ -35,6 +35,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.tool_batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import AnthropicContentOps
 from .tool_ops import AnthropicToolOps
 
@@ -77,6 +78,8 @@ class AnthropicMessageOps(BaseMessageOps):
         reasoning_cap = kwargs.get("reasoning_cap")
         if not isinstance(reasoning_cap, ReasoningCapability):
             reasoning_cap = None
+
+        ir_messages = merge_tool_messages(ir_messages)
 
         for item in ir_messages:
             passthrough_warnings = self._restore_provider_passthrough_item(
@@ -324,6 +327,7 @@ class AnthropicMessageOps(BaseMessageOps):
             else:
                 ir_messages.append(converted)
 
+        assign_tool_batch_ids(ir_messages)
         return ir_messages
 
     def _p_message_to_ir(self, provider_message: Any) -> Message | list[Message] | None:

@@ -31,6 +31,7 @@ from ...types.ir import (
 )
 from ...types.ir.messages import MessageMetadata
 from ..base import BaseMessageOps
+from ..base.helpers.tool_batch import assign_tool_batch_ids
 from .content_ops import OpenAIResponsesContentOps
 from .tool_ops import OpenAIResponsesToolOps
 
@@ -445,6 +446,7 @@ class OpenAIResponsesMessageOps(BaseMessageOps):
         ):
             ir_input.append(current_message)
 
+        assign_tool_batch_ids(ir_input)
         return ir_input
 
     @classmethod

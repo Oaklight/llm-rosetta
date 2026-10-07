@@ -33,6 +33,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.tool_batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 
@@ -112,10 +113,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         contents: list[dict[str, Any]] = []
         warnings_list: list[str] = []
 
-        # Convert ir_messages to list for context lookup
-        ir_input_list = (
-            list(ir_messages) if not isinstance(ir_messages, list) else ir_messages
-        )
+        # Merge tool messages from the same batch before conversion
+        ir_input_list = merge_tool_messages(ir_messages)
 
         for item in ir_input_list:
             passthrough_warnings = self._restore_provider_passthrough_item(
@@ -245,6 +244,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         # tool_call IDs by function name.
         self._reconcile_tool_call_ids(ir_messages)
 
+        assign_tool_batch_ids(ir_messages)
         return ir_messages
 
     @staticmethod

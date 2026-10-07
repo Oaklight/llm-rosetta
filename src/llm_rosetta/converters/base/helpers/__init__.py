@@ -27,6 +27,7 @@ from .tool_orphan_fix import (
     strip_orphaned_tool_config,
 )
 from .schema import convert_nullable_to_type_array, sanitize_schema
+from .tool_batch import assign_tool_batch_ids, merge_tool_messages
 from .tool_call_id import sanitize_tool_call_id
 from .reasoning import DEFAULT_REASONING_CAPS, apply_reasoning_config
 from .tool_call_unwind import unwind_parallel_tool_calls_ir
@@ -46,6 +47,9 @@ __all__ = [
     # reasoning
     "DEFAULT_REASONING_CAPS",
     "apply_reasoning_config",
+    # tool_batch
+    "assign_tool_batch_ids",
+    "merge_tool_messages",
     # tool_call_unwind
     "unwind_parallel_tool_calls_ir",
     # tool_content

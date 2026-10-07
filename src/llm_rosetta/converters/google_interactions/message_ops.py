@@ -16,6 +16,7 @@ from ...types.ir import (
 from ...types.ir.parts import AssistantContentPart, ContentPart
 from ...types.ir.request import IRInputItem
 from ..base import BaseMessageOps
+from ..base.helpers.tool_batch import assign_tool_batch_ids
 from .content_ops import GoogleInteractionsContentOps
 from .tool_ops import GoogleInteractionsToolOps
 
@@ -77,6 +78,7 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 messages.append(msg_t)
 
         _flush_assistant()
+        assign_tool_batch_ids(messages)
         return messages
 
     def _p_content_list_to_parts(self, content_list: list) -> list[ContentPart]:
