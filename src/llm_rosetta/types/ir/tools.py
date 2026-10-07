@@ -30,27 +30,29 @@ class ToolDefinition(TypedDict):
 
     Source converter contract:
     Provider tool types that fall outside the ``type`` Literal below
-    (e.g. unnamed hosted tools like ``"web_search"``) MUST be coerced to
-    ``"function"`` at the provider→IR boundary so that runtime IR
-    validation (``validate_ir_request``) accepts the result.
-    Provider-specific information may be retained in ``metadata`` or in
-    the ``_passthrough`` extension for round-tripping.
+    MUST be coerced to a recognized IR type at the provider→IR boundary
+    so that runtime IR validation (``validate_ir_request``) accepts the
+    result.  Provider-specific information may be retained in ``metadata``
+    or in the ``_passthrough`` extension for round-tripping.
 
     ``"custom"`` is a first-class IR type supported natively by both
     OpenAI Chat Completions and Responses APIs.  Custom tools accept
     free-form text input (not JSON); ``parameters`` carries a synthesized
     ``{"input": string}`` schema for providers that require JSON Schema.
     Custom tool format info (text/grammar) is stored in ``metadata``.
+
+    ``"intrinsic"`` represents provider-hosted built-in tools (web search,
+    code execution, file search, etc.).  The specific kind is stored in
+    ``metadata["intrinsic_kind"]`` (e.g. ``"web_search"``,
+    ``"code_execution"``).  Intrinsic tools pass through in same-format
+    conversions and are stripped in cross-format conversions.
     """
 
     type: Literal[
         "function",
         "mcp",
         "custom",
-        # 未来陆续支持 Future supports
-        # "web_search",
-        # "code_interpreter",
-        # "file_search",
+        "intrinsic",
     ]
     name: str
     description: str

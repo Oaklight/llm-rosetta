@@ -345,26 +345,28 @@ class TestOpenAIResponsesToolOps:
         assert result["type"] == "mcp_call"
 
     def test_ir_tool_call_to_p_web_search(self):
-        """Test IR ToolCallPart with web_search type."""
+        """Test IR ToolCallPart with intrinsic web_search type."""
         ir_tc = ToolCallPart(
             type="tool_call",
             tool_call_id="call_ws",
             tool_name="web_search",
             tool_input={"query": "test"},
-            tool_type="web_search",
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "web_search"},
         )
         result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "function_web_search"
         assert result["query"] == "test"
 
     def test_ir_tool_call_to_p_code_interpreter(self):
-        """Test IR ToolCallPart with code_interpreter type."""
+        """Test IR ToolCallPart with intrinsic code_interpreter type."""
         ir_tc = ToolCallPart(
             type="tool_call",
             tool_call_id="call_ci",
             tool_name="code_interpreter",
             tool_input={"code": "print('hello')"},
-            tool_type="code_interpreter",
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "code_interpreter"},
         )
         result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "code_interpreter_call"
@@ -409,7 +411,8 @@ class TestOpenAIResponsesToolOps:
         }
         result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
-        assert result["tool_type"] == "code_interpreter"
+        assert result["tool_type"] == "intrinsic"
+        assert result["provider_metadata"]["intrinsic_kind"] == "shell"
 
     def test_p_tool_call_to_ir_invalid_json(self):
         """Test p_tool_call_to_ir handles invalid JSON arguments."""
