@@ -281,6 +281,11 @@ class GenerationalSet:
     ``put``, ``clear``, ``info``, ``check_integrity``) so it can be
     used as a drop-in replacement for boolean-only caches.
 
+    Size is bounded by rotation interval, not by count.  Each
+    generation's set grows without limit between rotations.  Since
+    entries are just ``int`` keys (~28 bytes each on CPython), even
+    100k entries is ~2.8MB — negligible for a long-running gateway.
+
     Args:
         rotate_interval: Seconds between generation rotations.
             Entries from sessions ended more than ``rotate_interval``
@@ -398,8 +403,10 @@ def _sig_reasoning(entry: dict[str, Any]) -> int:
     return hash(
         (
             "reasoning",
+            len(r),
             r[:16] if r else "",
             r[-16:] if r else "",
+            len(s) if s else 0,
             s[:16] if s else "",
             s[-16:] if s else "",
         )
@@ -408,7 +415,7 @@ def _sig_reasoning(entry: dict[str, Any]) -> int:
 
 def _sig_refusal(entry: dict[str, Any]) -> int:
     r = entry.get("refusal", "")
-    return hash(("refusal", r[:16], r[-16:]))
+    return hash(("refusal", len(r), r[:16], r[-16:]))
 
 
 def _sig_media(entry: dict[str, Any]) -> int:
@@ -483,6 +490,13 @@ def _list_epoch(entries: list[Any], tag: str) -> int:
     Combines list length, two pickle samples (first + last), and
     an XOR aggregate of per-entry lightweight signals.  Cost is
     O(n) but O(1) per entry (no serialization except two samples).
+
+    The XOR aggregate is order-insensitive: swapping two middle entries
+    with different signals produces the same aggregate.  The first/last
+    pickle samples and list length mitigate this — only interior
+    reordering without boundary or length changes is undetected.  This
+    is benign: the entries themselves haven't changed, so skipping
+    re-validation is correct.
     """
     n = len(entries)
     if n == 0:
@@ -492,13 +506,17 @@ def _list_epoch(entries: list[Any], tag: str) -> int:
     for entry in entries:
         agg ^= _entry_signal(entry)
 
-    first_sample = pickle.dumps(entries[0], protocol=5) if n > 0 else b""
+    first_sample = pickle.dumps(entries[0], protocol=5)
     last_sample = pickle.dumps(entries[-1], protocol=5) if n > 1 else first_sample
 
     return hash((tag, n, agg, first_sample, last_sample))
 
 
-# Epoch cache: (field_name, tag) → last epoch value
+# Epoch cache: (field_name, tag) → last epoch value.
+# Keyed by (field, tag) globally — different requests overwrite each
+# other's entries, so the warm-path benefit (11x) is per-conversation
+# (consecutive calls with the same list).  The cold-path benefit (4x
+# from pickle) applies to all requests regardless.
 _epoch_cache: dict[tuple[str, str], int] = {}
 
 # ---------------------------------------------------------------------------
