@@ -135,6 +135,7 @@ class ToolMessage(TypedDict):
 
     role: Required[Literal["tool"]]
     content: Required[list[ToolContentPart]]
+    batch_id: NotRequired[str]
     metadata: NotRequired[MessageMetadata]
 
 
@@ -273,7 +274,11 @@ def create_assistant_message(text: str, **metadata) -> AssistantMessage:
 
 
 def create_tool_message(
-    tool_call_id: str, result: Any, is_error: bool = False, **metadata
+    tool_call_id: str,
+    result: Any,
+    is_error: bool = False,
+    batch_id: str | None = None,
+    **metadata,
 ) -> ToolMessage:
     """创建工具消息
     Create tool message
@@ -282,6 +287,8 @@ def create_tool_message(
         tool_call_id: 工具调用ID Tool call ID
         result: 工具执行结果 Tool execution result
         is_error: 是否为错误结果 Whether it is an error result
+        batch_id: 工具调用批次ID，用于标识同一轮assistant tool_calls的结果
+            Tool call batch ID, identifies results from the same assistant tool_calls turn
         **metadata: 额外的元数据 Additional metadata
 
     Returns:
@@ -299,6 +306,8 @@ def create_tool_message(
             }
         ],
     }
+    if batch_id is not None:
+        message["batch_id"] = batch_id
     if metadata:
         message["metadata"] = MessageMetadata(**metadata)
     return message

@@ -33,6 +33,7 @@ from ...types.ir import (
     is_tool_result_part,
 )
 from ..base import BaseMessageOps
+from ..base.helpers.tool_batch import assign_tool_batch_ids
 from ..base.helpers.multimodal_tool_patch import (
     has_multimodal_content,
     inject_packed_tool_content,
@@ -495,6 +496,7 @@ class OpenAIChatMessageOps(BaseMessageOps):
             if converted is not None:
                 ir_messages.append(converted)
 
+        assign_tool_batch_ids(ir_messages)
         return ir_messages
 
     def _p_message_to_ir(
