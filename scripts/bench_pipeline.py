@@ -330,6 +330,64 @@ def _make_google_messages(
     return msgs[:n]
 
 
+def _make_google_interactions_steps(
+    n: int, *, n_tools: int, text_size: int
+) -> list[dict[str, Any]]:
+    """Generate Google Interactions steps (input format)."""
+    steps: list[dict[str, Any]] = []
+    tool_interval = max(6, n // 15)
+    tc = 0
+    i = 0
+    while i < n:
+        if i % 2 == 0:
+            steps.append(
+                {
+                    "type": "user_input",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"User message {i}. " + "u" * text_size,
+                        }
+                    ],
+                }
+            )
+            i += 1
+        elif i % tool_interval == tool_interval - 1 and i + 2 < n:
+            tc += 1
+            step_id = f"fc_{tc:06d}"
+            fn_name = f"tool_{tc % n_tools}"
+            steps.append(
+                {
+                    "type": "function_call",
+                    "id": step_id,
+                    "name": fn_name,
+                    "arguments": {"param_0": "val_" + "a" * (text_size // 4)},
+                }
+            )
+            steps.append(
+                {
+                    "type": "function_result",
+                    "call_id": step_id,
+                    "output": f"Result {tc}: " + "r" * text_size,
+                }
+            )
+            i += 2
+        else:
+            steps.append(
+                {
+                    "type": "model_output",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Assistant message {i}. " + "a" * text_size,
+                        }
+                    ],
+                }
+            )
+            i += 1
+    return steps[:n]
+
+
 PROFILES: dict[str, dict[str, int]] = {
     "small": {"n_messages": 170, "n_tools": 87, "text_size": 2700},
     "medium": {"n_messages": 220, "n_tools": 104, "text_size": 8000},
@@ -393,18 +451,18 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
     if provider == "google_interactions":
         return {
             "model": "gemini-2.0-flash",
-            "contents": _make_google_messages(
+            "input": _make_google_interactions_steps(
                 n_msgs, n_tools=n_tools, text_size=text_size
             ),
-            "config": {
-                "tools": [
-                    {
-                        "function_declarations": [
-                            _make_tool_google(i) for i in range(n_tools)
-                        ]
-                    }
-                ]
-            },
+            "tools": [
+                {
+                    "type": "function",
+                    "name": f"tool_{i}",
+                    "description": _make_tool_anthropic(i)["description"],
+                    "parameters": _make_tool_anthropic(i)["input_schema"],
+                }
+                for i in range(n_tools)
+            ],
         }
 
     raise ValueError(f"Unknown provider: {provider}")

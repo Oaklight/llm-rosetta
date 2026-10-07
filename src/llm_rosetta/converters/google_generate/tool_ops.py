@@ -475,6 +475,39 @@ class GoogleGenerateToolOps(BaseToolOps):
         return {"functionResponse": func_response}
 
     @staticmethod
+    def ir_tool_result_to_p_named(
+        ir_tool_result: ToolResultPart, tool_name: str
+    ) -> dict:
+        """IR ToolResultPart → Google function_response Part with known name.
+
+        O(1) alternative to ``ir_tool_result_to_p_with_context`` — the
+        caller has already resolved ``tool_call_id → tool_name`` via an
+        accumulator dict built during message iteration.
+
+        Args:
+            ir_tool_result: IR tool result part.
+            tool_name: Resolved function name.
+
+        Returns:
+            Google function_response Part dict.
+        """
+        result_content = _get_result_content(ir_tool_result)
+
+        response_data: dict[str, Any] = {"output": result_content}
+        if ir_tool_result.get("is_error"):
+            response_data = {"error": result_content}
+
+        func_response: dict[str, Any] = {
+            "name": tool_name,
+            "response": response_data,
+        }
+        tool_call_id = ir_tool_result.get("tool_call_id")
+        if tool_call_id:
+            func_response["id"] = sanitize_tool_call_id(tool_call_id)
+
+        return {"functionResponse": func_response}
+
+    @staticmethod
     def p_tool_result_to_ir(provider_tool_result: Any, **kwargs: Any) -> ToolResultPart:
         """Google GenAI function_response Part → IR ToolResultPart.
 

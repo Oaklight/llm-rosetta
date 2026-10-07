@@ -112,6 +112,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         """
         contents: list[dict[str, Any]] = []
         warnings_list: list[str] = []
+        # tool_call_id → tool_name, built incrementally as we iterate
+        tool_call_index: dict[str, str] = {}
 
         # Merge tool messages from the same batch before conversion
         ir_input_list = merge_tool_messages(ir_messages)
@@ -132,9 +134,18 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                     # System messages are handled at converter level
                     # Skip them here
                     continue
-                content = self._ir_message_to_p(msg, ir_input_list)
-                if content:
-                    contents.append(content)
+                # Accumulate tool_call_id → tool_name before converting,
+                # so tool_results in this or later messages can look up
+                # the name in O(1) instead of scanning the full list.
+                for part in msg.get("content", []):
+                    if is_tool_call_part(part):
+                        tc_id = part.get("tool_call_id")
+                        tc_name = part.get("tool_name")
+                        if tc_id and tc_name:
+                            tool_call_index[tc_id] = tc_name
+                converted = self._ir_message_to_p(msg, tool_call_index)
+                if converted:
+                    contents.append(converted)
             elif is_extension_item(item):
                 warnings_list.append(
                     f"Google GenAI不支持扩展项类型 '{item.get('type')}'，将被忽略 "
@@ -148,13 +159,16 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         return contents, warnings_list
 
     def _ir_message_to_p(
-        self, message: Message, ir_input: Any = None
+        self,
+        message: Message,
+        tool_call_index: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         """Convert a single IR message to Google Content format.
 
         Args:
             message: IR message dict.
-            ir_input: Full IR input for tool result context lookup.
+            tool_call_index: Accumulated ``{tool_call_id: tool_name}``
+                mapping for O(1) tool result name resolution.
 
         Returns:
             Google Content dict with role and parts.
@@ -163,22 +177,23 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         parts: list[dict[str, Any]] = []
 
         for content_part in message.get("content", []):
-            part = self._ir_content_part_to_p(content_part, ir_input)
+            part = self._ir_content_part_to_p(content_part, tool_call_index)
             if part is not None:
                 parts.append(part)
 
         return {"role": google_role, "parts": parts}
 
     def _ir_content_part_to_p(
-        self, content_part: ContentPart, ir_input: Any = None
+        self,
+        content_part: ContentPart,
+        tool_call_index: dict[str, str] | None = None,
     ) -> Any:
         """Convert a single IR content part to Google Part format.
 
-        Dispatches to the appropriate content_ops or tool_ops method.
-
         Args:
             content_part: IR content part dict.
-            ir_input: Full IR input for tool result context lookup.
+            tool_call_index: Accumulated ``{tool_call_id: tool_name}``
+                for O(1) tool result name resolution.
 
         Returns:
             Google Part dict, or None if unsupported.
@@ -198,10 +213,14 @@ class GoogleGenerateMessageOps(BaseMessageOps):
         elif is_tool_call_part(content_part):
             return self.tool_ops.ir_tool_call_to_p(content_part)
         elif is_tool_result_part(content_part):
-            if ir_input is not None:
-                return self.tool_ops.ir_tool_result_to_p_with_context(
-                    content_part, ir_input
-                )
+            tool_call_id = content_part.get("tool_call_id")
+            tool_name = (
+                tool_call_index.get(tool_call_id)
+                if tool_call_index and tool_call_id
+                else None
+            )
+            if tool_name is not None:
+                return self.tool_ops.ir_tool_result_to_p_named(content_part, tool_name)
             return self.tool_ops.ir_tool_result_to_p(content_part)
         else:
             warnings.warn(f"不支持的内容类型: {content_part.get('type')}")
