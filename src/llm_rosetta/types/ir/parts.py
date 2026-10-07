@@ -96,19 +96,27 @@ class ToolCallPart(TypedDict):
 
     使用两层类型系统：
     - type: 固定为 "tool_call"
-    - tool_type: 区分不同的工具类型（function, mcp, web_search等）
+    - tool_type: 区分不同的工具类型（function, mcp, custom, intrinsic）
     Uses a two-layer type system:
     - type: fixed as "tool_call"
-    - tool_type: distinguishes different tool types (function, mcp, web_search, etc.)
+    - tool_type: distinguishes different tool types (function, mcp, custom, intrinsic)
 
     这样设计避免了类型爆炸，同时保持扩展性。
     This design avoids type explosion while maintaining extensibility.
 
+    ``intrinsic`` 表示 provider 托管的内置工具（web search、code execution 等），
+    具体种类通过 ``provider_metadata["intrinsic_kind"]`` 区分。
+    ``intrinsic`` represents provider-hosted built-in tools (web search, code
+    execution, etc.); the specific kind is stored in
+    ``provider_metadata["intrinsic_kind"]``.
+
     provider_metadata字段用于存储provider特定的元数据，例如：
     - Google的thought_signature（Gemini 3必需，Gemini 2.5推荐）
+    - intrinsic工具的intrinsic_kind（如 "web_search", "code_execution"）
     - 其他provider的特殊字段
     The provider_metadata field is used to store provider-specific metadata, e.g.:
     - Google's thought_signature (required for Gemini 3, recommended for Gemini 2.5)
+    - intrinsic_kind for intrinsic tools (e.g. "web_search", "code_execution")
     - Other provider's special fields
     """
 
@@ -121,9 +129,7 @@ class ToolCallPart(TypedDict):
             "function",
             "mcp",
             "custom",
-            "web_search",
-            "code_interpreter",
-            "file_search",
+            "intrinsic",
         ]
     ]  # 默认为 "function" Default is "function"
     provider_metadata: NotRequired[
@@ -151,9 +157,7 @@ class ToolResultPart(TypedDict):
             "function",
             "mcp",
             "custom",
-            "web_search",
-            "code_interpreter",
-            "file_search",
+            "intrinsic",
         ]
     ]
     is_error: NotRequired[bool]  # 是否是错误结果 Whether it is an error result

@@ -140,13 +140,14 @@ class TestAnthropicToolOps:
         assert result["input"] == {"city": "Beijing"}
 
     def test_ir_tool_call_to_p_web_search(self):
-        """Test IR web_search ToolCallPart → Anthropic server_tool_use."""
+        """Test IR intrinsic web_search ToolCallPart → Anthropic server_tool_use."""
         ir_tc = ToolCallPart(
             type="tool_call",
             tool_call_id="call_456",
             tool_name="web_search",
             tool_input={"query": "AI news"},
-            tool_type="web_search",
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "web_search"},
         )
         result = AnthropicToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "server_tool_use"
@@ -177,7 +178,8 @@ class TestAnthropicToolOps:
         }
         result = AnthropicToolOps.p_tool_call_to_ir(provider)
         assert result["type"] == "tool_call"
-        assert result["tool_type"] == "web_search"
+        assert result["tool_type"] == "intrinsic"
+        assert result["provider_metadata"]["intrinsic_kind"] == "web_search"
         assert result["tool_call_id"] == "server_456"
 
     def test_tool_call_round_trip(self):

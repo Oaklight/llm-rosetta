@@ -281,6 +281,47 @@ def _build_function_call_item(
     return item
 
 
+_INTRINSIC_KIND_TO_ITEM: dict[str, str] = {
+    "web_search": "function_web_search",
+    "code_interpreter": "code_interpreter_call",
+    "file_search": "file_search_call",
+    "shell": "shell_call",
+    "computer_use": "computer_call",
+}
+
+
+def _ir_intrinsic_to_responses(
+    ir_tool_call: ToolCallPart,
+    tool_call_id: str,
+    tool_name: str,
+    tool_input: Any,
+    arguments: str,
+) -> dict[str, Any]:
+    pm = ir_tool_call.get("provider_metadata") or {}
+    intrinsic_kind = pm.get("intrinsic_kind", tool_name)
+    item_type = _INTRINSIC_KIND_TO_ITEM.get(intrinsic_kind, "function_call")
+    result_item: dict[str, Any] = {
+        "type": item_type,
+        "call_id": tool_call_id,
+        "arguments": arguments,
+    }
+    if item_type == "function_web_search":
+        result_item["query"] = (
+            tool_input.get("query", "") if isinstance(tool_input, dict) else ""
+        )
+    elif item_type == "code_interpreter_call":
+        result_item["code"] = (
+            tool_input.get("code", "") if isinstance(tool_input, dict) else ""
+        )
+    elif item_type == "file_search_call":
+        result_item["query"] = (
+            tool_input.get("query", "") if isinstance(tool_input, dict) else ""
+        )
+    elif item_type == "function_call":
+        result_item["name"] = f"{intrinsic_kind}_{tool_name}"
+    return result_item
+
+
 def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
     """Parse a ``custom_tool_call`` item into an IR tool call part.
 
@@ -487,7 +528,7 @@ class OpenAIResponsesToolOps(BaseToolOps):
             IR ToolDefinition, or list of ToolDefinitions for namespace
             containers.
         """
-        _IR_ALLOWED_TYPES = {"function", "mcp", "custom"}
+        _IR_ALLOWED_TYPES = {"function", "mcp", "custom", "intrinsic"}
 
         # Handle nested format ({"type": "function", "function": {...}})
         if "function" in provider_tool and isinstance(provider_tool["function"], dict):
@@ -694,33 +735,10 @@ class OpenAIResponsesToolOps(BaseToolOps):
             if namespace:
                 item["namespace"] = namespace
             return item
-        elif tool_type == "web_search":
-            return {
-                "type": "function_web_search",
-                "call_id": tool_call_id,
-                "query": tool_input.get("query", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
-        elif tool_type == "code_interpreter":
-            return {
-                "type": "code_interpreter_call",
-                "call_id": tool_call_id,
-                "code": tool_input.get("code", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
-        elif tool_type == "file_search":
-            return {
-                "type": "file_search_call",
-                "call_id": tool_call_id,
-                "query": tool_input.get("query", "")
-                if isinstance(tool_input, dict)
-                else "",
-                "arguments": arguments,
-            }
+        elif tool_type == "intrinsic":
+            return _ir_intrinsic_to_responses(
+                ir_tool_call, tool_call_id, tool_name, tool_input, arguments
+            )
         else:
             # Default to function_call
             return {
@@ -734,8 +752,9 @@ class OpenAIResponsesToolOps(BaseToolOps):
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
         """OpenAI Responses tool call item → IR ToolCallPart.
 
-        Handles function_call, mcp_call, shell_call, computer_call,
-        and code_interpreter_call item types.
+        Handles function_call, mcp_call, custom_tool_call, and server
+        tool item types (shell_call, computer_call, code_interpreter_call,
+        web_search_call, file_search_call) which map to intrinsic.
 
         Args:
             provider_tool_call: OpenAI Responses tool call item dict.
@@ -800,12 +819,21 @@ class OpenAIResponsesToolOps(BaseToolOps):
                 tool_input=tool_input,
                 tool_type="mcp",
             )
-        elif item_type in ("shell_call", "computer_call", "code_interpreter_call"):
-            tool_type_map = {
-                "shell_call": "code_interpreter",
+        elif item_type in (
+            "shell_call",
+            "computer_call",
+            "code_interpreter_call",
+            "web_search_call",
+            "file_search_call",
+        ):
+            _ITEM_TO_INTRINSIC_KIND = {
+                "shell_call": "shell",
                 "computer_call": "computer_use",
                 "code_interpreter_call": "code_interpreter",
+                "web_search_call": "web_search",
+                "file_search_call": "file_search",
             }
+            intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
             return cast(
                 ToolCallPart,
                 {
@@ -815,7 +843,8 @@ class OpenAIResponsesToolOps(BaseToolOps):
                     ),
                     "tool_name": provider_tool_call.get("name", item_type),
                     "tool_input": tool_input,
-                    "tool_type": tool_type_map.get(item_type, "function"),
+                    "tool_type": "intrinsic",
+                    "provider_metadata": {"intrinsic_kind": intrinsic_kind},
                 },
             )
         elif item_type == "custom_tool_call":

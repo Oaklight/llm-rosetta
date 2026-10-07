@@ -221,6 +221,103 @@ _CUSTOM_TOOL_SYNTH_PARAMS: dict[str, Any] = {
 }
 
 
+def _is_intrinsic_part(part: Any) -> bool:
+    return (
+        isinstance(part, dict)
+        and part.get("type") in ("tool_call", "tool_result")
+        and part.get("tool_type") == "intrinsic"
+    )
+
+
+def _has_intrinsic_parts(messages: list[Any]) -> bool:
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        for part in msg.get("content") or []:
+            if _is_intrinsic_part(part):
+                return True
+    return False
+
+
+def _strip_intrinsic_from_messages(messages: list[Any]) -> tuple[list[Any], int]:
+    new_messages: list[Any] = []
+    stripped = 0
+    for msg in messages:
+        if not isinstance(msg, dict):
+            new_messages.append(msg)
+            continue
+        content = msg.get("content")
+        if not isinstance(content, list):
+            new_messages.append(msg)
+            continue
+        filtered = [p for p in content if not _is_intrinsic_part(p)]
+        stripped += len(content) - len(filtered)
+        if filtered:
+            new_messages.append({**msg, "content": filtered})
+        elif msg.get("role") != "tool":
+            new_messages.append(msg)
+    return new_messages, stripped
+
+
+def strip_intrinsic_tools(
+    ir_request: dict[str, Any],
+    *,
+    same_format: bool = False,
+    request_id: str = "-",
+) -> dict[str, Any]:
+    """Strip intrinsic (provider-hosted) tools from the IR request for cross-format conversion.
+
+    Intrinsic tools (web search, code execution, etc.) are provider-specific
+    server-side capabilities. They pass through in same-format conversions but
+    must be stripped in cross-format conversions where the target provider
+    cannot interpret them.
+
+    Removes intrinsic tool definitions, tool_call parts, and tool_result parts.
+    Tool-role messages that become empty after stripping are removed entirely.
+
+    No-op when ``same_format`` is True.
+    """
+    if same_format:
+        return ir_request
+
+    tools = ir_request.get("tools")
+    has_intrinsic_defs = tools and any(
+        isinstance(t, dict) and t.get("type") == "intrinsic" for t in tools
+    )
+
+    messages = ir_request.get("messages")
+    has_parts = messages and _has_intrinsic_parts(messages)
+
+    if not has_intrinsic_defs and not has_parts:
+        return ir_request
+
+    ir_request = dict(ir_request)
+    stripped_count = 0
+
+    if has_intrinsic_defs:
+        ir_request["tools"] = [
+            t
+            for t in tools
+            if not (isinstance(t, dict) and t.get("type") == "intrinsic")
+        ]
+        stripped_count += len(tools) - len(ir_request["tools"])
+
+    if has_parts:
+        ir_request["messages"], parts_stripped = _strip_intrinsic_from_messages(
+            messages
+        )
+        stripped_count += parts_stripped
+
+    if stripped_count:
+        logger.info(
+            "[%s] stripped %d intrinsic tool element(s) for cross-format conversion",
+            request_id,
+            stripped_count,
+        )
+
+    return ir_request
+
+
 def enforce_custom_tools(
     ir_request: dict[str, Any],
     *,

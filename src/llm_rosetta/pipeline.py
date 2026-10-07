@@ -29,6 +29,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from llm_rosetta.capabilities import (
     enforce_custom_tools,
+    strip_intrinsic_tools,
     relocate_oversized_tool_descriptions,
     enforce_reasoning,
     enforce_vision,
@@ -542,6 +543,13 @@ class ConversionPipeline:
             ir_request,
             model_capabilities=self._model_capabilities,
             model=self._upstream_model or body.get("model") or "",
+            request_id=request_id,
+        )
+
+        # Capability enforcement: intrinsic tools (post-IR)
+        ir_request = strip_intrinsic_tools(
+            ir_request,
+            same_format=self._source_provider == self._target_provider,
             request_id=request_id,
         )
 

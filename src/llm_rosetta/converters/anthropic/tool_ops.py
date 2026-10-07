@@ -312,12 +312,14 @@ class AnthropicToolOps(BaseToolOps):
         """
         tool_type = ir_tool_call.get("tool_type", "function")
         tool_input = ir_tool_call.get("tool_input", {})
+        pm = ir_tool_call.get("provider_metadata") or {}
 
-        if tool_type == "web_search":
+        if tool_type == "intrinsic":
+            intrinsic_kind = pm.get("intrinsic_kind", ir_tool_call["tool_name"])
             result = {
                 "type": "server_tool_use",
                 "id": sanitize_tool_call_id(ir_tool_call["tool_call_id"]),
-                "name": "web_search",
+                "name": intrinsic_kind,
                 "input": tool_input,
             }
         else:
@@ -334,7 +336,6 @@ class AnthropicToolOps(BaseToolOps):
             result["_provider_metadata"] = ir_tool_call["provider_metadata"]
 
         # Restore caller from provider_metadata (only if originally present)
-        pm = ir_tool_call.get("provider_metadata") or {}
         caller = pm.get("anthropic_caller")
         if caller is not None and result["type"] == "tool_use":
             result["caller"] = caller
@@ -362,7 +363,7 @@ class AnthropicToolOps(BaseToolOps):
         tool_name = provider_tool_call.get("name", "")
 
         if block_type == "server_tool_use":
-            tool_type = "web_search" if tool_name == "web_search" else "function"
+            tool_type = "intrinsic"
         else:
             tool_type = "function"
 
@@ -378,6 +379,9 @@ class AnthropicToolOps(BaseToolOps):
         pm = provider_tool_call.get("_provider_metadata")
         if pm:
             part["provider_metadata"] = pm
+
+        if block_type == "server_tool_use":
+            part.setdefault("provider_metadata", {})["intrinsic_kind"] = tool_name
 
         # Preserve non-default caller for Anthropic round-trip
         caller = provider_tool_call.get("caller")
