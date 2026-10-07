@@ -43,6 +43,12 @@ test:
 	pytest tests/ --ignore=tests/integration -v --tb=short
 	@echo "Tests completed."
 
+
+# Run conversion pipeline benchmarks
+bench:
+	@echo "Running pipeline benchmarks..."
+	python scripts/bench_pipeline.py
+	@echo ""
 # Run integration tests (requires API keys; uses proxychains if available)
 test-integration:
 	@echo "Running integration tests..."
@@ -399,4 +405,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint lint-fix test test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-integration test-gateway build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
