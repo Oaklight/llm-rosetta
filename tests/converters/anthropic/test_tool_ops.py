@@ -197,6 +197,44 @@ class TestAnthropicToolOps:
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
 
+    def test_intrinsic_tool_call_round_trip(self):
+        """Test intrinsic tool call round-trip (IR → Anthropic → IR)."""
+        original = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_ws",
+            tool_name="web_search",
+            tool_input={"query": "latest news"},
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "web_search"},
+        )
+        provider = AnthropicToolOps.ir_tool_call_to_p(original)
+        assert provider["type"] == "server_tool_use"
+        assert provider["name"] == "web_search"
+
+        restored = AnthropicToolOps.p_tool_call_to_ir(provider)
+        assert restored["tool_type"] == "intrinsic"
+        assert restored["provider_metadata"]["intrinsic_kind"] == "web_search"
+        assert restored["tool_call_id"] == original["tool_call_id"]
+        assert restored["tool_input"] == original["tool_input"]
+
+    def test_intrinsic_code_execution_round_trip(self):
+        """Test intrinsic code_execution round-trip (IR → Anthropic → IR)."""
+        original = ToolCallPart(
+            type="tool_call",
+            tool_call_id="call_ce",
+            tool_name="code_execution",
+            tool_input={"code": "print(42)"},
+            tool_type="intrinsic",
+            provider_metadata={"intrinsic_kind": "code_execution"},
+        )
+        provider = AnthropicToolOps.ir_tool_call_to_p(original)
+        assert provider["type"] == "server_tool_use"
+        assert provider["name"] == "code_execution"
+
+        restored = AnthropicToolOps.p_tool_call_to_ir(provider)
+        assert restored["tool_type"] == "intrinsic"
+        assert restored["provider_metadata"]["intrinsic_kind"] == "code_execution"
+
     # ==================== Tool Result ====================
 
     def test_ir_tool_result_to_p(self):
