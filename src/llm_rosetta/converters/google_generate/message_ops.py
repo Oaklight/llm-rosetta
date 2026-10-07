@@ -13,6 +13,7 @@ Google-specific:
 - All content is represented as Part objects in a flat list
 """
 
+import uuid
 import warnings
 from collections.abc import Sequence
 from typing import Any, cast
@@ -411,8 +412,6 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             # Handle executableCode / codeExecutionResult as intrinsic tools
             exec_code = part.get("executableCode") or part.get("executable_code")
             if exec_code is not None:
-                import uuid
-
                 call_id = f"google_exec_{uuid.uuid4().hex[:12]}"
                 content_parts.append(
                     ToolCallPart(
@@ -433,6 +432,8 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 "code_execution_result"
             )
             if code_result is not None:
+                # Google's codeExecutionResult has no ID field to pair with
+                # executableCode; _reconcile_tool_call_ids handles matching.
                 tool_result_parts.append(
                     ToolResultPart(
                         type="tool_result",

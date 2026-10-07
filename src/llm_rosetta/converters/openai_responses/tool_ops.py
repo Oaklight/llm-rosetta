@@ -289,6 +289,14 @@ _INTRINSIC_KIND_TO_ITEM: dict[str, str] = {
     "computer_use": "computer_call",
 }
 
+_ITEM_TO_INTRINSIC_KIND: dict[str, str] = {
+    "shell_call": "shell",
+    "computer_call": "computer_use",
+    "code_interpreter_call": "code_interpreter",
+    "web_search_call": "web_search",
+    "file_search_call": "file_search",
+}
+
 
 def _ir_intrinsic_to_responses(
     ir_tool_call: ToolCallPart,
@@ -318,7 +326,7 @@ def _ir_intrinsic_to_responses(
             tool_input.get("query", "") if isinstance(tool_input, dict) else ""
         )
     elif item_type == "function_call":
-        result_item["name"] = f"{intrinsic_kind}_{tool_name}"
+        result_item["name"] = intrinsic_kind
     return result_item
 
 
@@ -826,13 +834,6 @@ class OpenAIResponsesToolOps(BaseToolOps):
             "web_search_call",
             "file_search_call",
         ):
-            _ITEM_TO_INTRINSIC_KIND = {
-                "shell_call": "shell",
-                "computer_call": "computer_use",
-                "code_interpreter_call": "code_interpreter",
-                "web_search_call": "web_search",
-                "file_search_call": "file_search",
-            }
             intrinsic_kind = _ITEM_TO_INTRINSIC_KIND.get(item_type, item_type)
             return cast(
                 ToolCallPart,
