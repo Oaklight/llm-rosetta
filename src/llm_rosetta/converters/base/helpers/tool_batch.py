@@ -55,6 +55,32 @@ def assign_tool_batch_ids(ir_messages: list[Any]) -> list[Any]:
     return ir_messages
 
 
+def _should_merge_tool(
+    batch_id: str | None, last_batch_id: str | None, last_was_tool: bool
+) -> bool:
+    if not last_was_tool:
+        return False
+    if batch_id is not None:
+        return batch_id == last_batch_id
+    return last_batch_id is None
+
+
+def _find_last_tool_idx(merged: list[Any]) -> int:
+    for i in range(len(merged) - 1, -1, -1):
+        if isinstance(merged[i], dict) and merged[i].get("role") == "tool":
+            return i
+    return -1
+
+
+def _merge_into(merged: list[Any], idx: int, item: dict[str, Any]) -> None:
+    prev = merged[idx]
+    new = {**prev, "content": prev["content"] + item["content"]}
+    meta = item.get("metadata")
+    if meta and "metadata" not in prev:
+        new["metadata"] = meta
+    merged[idx] = new
+
+
 def merge_tool_messages(ir_messages: Sequence[Any]) -> list[Any]:
     """Merge consecutive tool messages that belong to the same batch.
 
@@ -77,22 +103,15 @@ def merge_tool_messages(ir_messages: Sequence[Any]) -> list[Any]:
     for item in ir_messages:
         role = item.get("role") if isinstance(item, dict) else None
 
+        if role is None:
+            merged.append(item)
+            continue
+
         if role == "tool":
             batch_id = item.get("batch_id") if isinstance(item, dict) else None
 
-            should_merge = False
-            if merged and last_was_tool:
-                if batch_id is not None and batch_id == last_batch_id:
-                    should_merge = True
-                elif batch_id is None and last_batch_id is None:
-                    should_merge = True
-
-            if should_merge:
-                prev = merged[-1]
-                merged[-1] = {
-                    **prev,
-                    "content": prev["content"] + item["content"],
-                }
+            if _should_merge_tool(batch_id, last_batch_id, last_was_tool):
+                _merge_into(merged, _find_last_tool_idx(merged), item)
             else:
                 merged.append(copy.copy(item))
 
