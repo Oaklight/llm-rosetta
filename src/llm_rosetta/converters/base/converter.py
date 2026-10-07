@@ -631,16 +631,32 @@ class BaseConverter(ABC):
     ) -> None:
         """Check one list field against the IR validation cache.
 
-        Partitions entries into cached (skip) and new (validate).
-        On partial/full hit, swaps the field with a placeholder so the
-        main ``validate_ir_request`` pass skips it.
+        Uses a two-tier strategy:
+        1. **Epoch guard** (Layer 3): compute a cheap list-level signal.
+           If the epoch matches, the entire list is unchanged — skip all
+           per-entry work.
+        2. **Per-entry check** (Layer 1): for each entry, compute a
+           pickle-based cache key and look up in the generational set.
         """
-        from .helpers.cache import is_ir_validated
+        from .helpers.cache import _epoch_cache, _list_epoch, is_ir_validated
 
         original = data.get(field)
         if not original:
             return
 
+        # Layer 3: epoch guard — skip per-entry work if list unchanged
+        epoch_key = (field, tag)
+        current_epoch = _list_epoch(original, tag)
+        if _epoch_cache.get(epoch_key) == current_epoch:
+            saved[field] = original
+            if placeholder is not None:
+                data[field] = placeholder
+            else:
+                data.pop(field, None)
+            return
+        _epoch_cache[epoch_key] = current_epoch
+
+        # Layer 1: per-entry check with pickle-based cache keys
         new = [e for e in original if not is_ir_validated(tag, e)]
         if not new:
             # All cached — swap in placeholder
