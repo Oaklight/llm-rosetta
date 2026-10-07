@@ -45,10 +45,12 @@ test:
 
 
 # Run conversion pipeline benchmarks
+BENCH_ROUNDS ?= 5
 bench:
 	@echo "Running pipeline benchmarks..."
-	python scripts/bench_pipeline.py
+	python scripts/bench_pipeline.py --rounds $(BENCH_ROUNDS)
 	@echo ""
+
 # Run integration tests (requires API keys; uses proxychains if available)
 test-integration:
 	@echo "Running integration tests..."
