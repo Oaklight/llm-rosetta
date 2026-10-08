@@ -35,6 +35,11 @@ from ...types.ir import (
 )
 from ..base import BaseMessageOps
 from ..base.helpers.tool_batch import assign_tool_batch_ids, merge_tool_messages
+from ..base.helpers.tool_intrinsic import (
+    get_intrinsic_kind,
+    make_intrinsic_tool_call,
+    make_intrinsic_tool_result,
+)
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 
@@ -66,8 +71,6 @@ def _match_tool_name(result_id: str, known_names: dict[str, list[str]]) -> str:
 
 
 def _ir_intrinsic_tool_call_to_google(content_part: Any) -> dict[str, Any] | None:
-    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
-
     if get_intrinsic_kind(content_part) != "code_execution":
         return None
     return {
@@ -79,8 +82,6 @@ def _ir_intrinsic_tool_call_to_google(content_part: Any) -> dict[str, Any] | Non
 
 
 def _ir_intrinsic_tool_result_to_google(content_part: Any) -> dict[str, Any] | None:
-    from ..base.helpers.tool_intrinsic import get_intrinsic_kind
-
     if get_intrinsic_kind(content_part) != "code_execution":
         return None
     outcome = "OUTCOME_FAILED" if content_part.get("is_error") else "OUTCOME_OK"
@@ -412,8 +413,6 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             # Handle executableCode / codeExecutionResult as intrinsic tools
             exec_code = part.get("executableCode") or part.get("executable_code")
             if exec_code is not None:
-                from ..base.helpers.tool_intrinsic import make_intrinsic_tool_call
-
                 call_id = f"google_exec_{uuid.uuid4().hex[:12]}"
                 content_parts.append(
                     cast(
@@ -435,8 +434,6 @@ class GoogleGenerateMessageOps(BaseMessageOps):
                 "code_execution_result"
             )
             if code_result is not None:
-                from ..base.helpers.tool_intrinsic import make_intrinsic_tool_result
-
                 # Google's codeExecutionResult has no ID field to pair with
                 # executableCode; _reconcile_tool_call_ids handles matching.
                 tool_result_parts.append(

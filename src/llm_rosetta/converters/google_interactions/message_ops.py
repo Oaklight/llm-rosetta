@@ -20,8 +20,8 @@ from ..base.helpers.tool_batch import assign_tool_batch_ids
 from .content_ops import GoogleInteractionsContentOps
 from .tool_ops import (
     GoogleInteractionsToolOps,
-    _SERVER_CALL_TYPES,
-    _SERVER_RESULT_TYPES,
+    SERVER_CALL_TYPES,
+    SERVER_RESULT_TYPES,
 )
 
 
@@ -81,11 +81,11 @@ class GoogleInteractionsMessageOps(BaseMessageOps):
                 msg_t: ToolMessage = {"role": "tool", "content": [tr]}
                 messages.append(msg_t)
 
-            elif step_type in _SERVER_CALL_TYPES:
+            elif step_type in SERVER_CALL_TYPES:
                 tc = self.tool_ops.p_server_call_to_ir(step)
                 assistant_parts.append(tc)
 
-            elif step_type in _SERVER_RESULT_TYPES:
+            elif step_type in SERVER_RESULT_TYPES:
                 _flush_assistant()
                 tr = self.tool_ops.p_server_result_to_ir(step)
                 messages.append(cast(ToolMessage, {"role": "tool", "content": [tr]}))
