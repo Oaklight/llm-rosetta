@@ -559,10 +559,19 @@ BENCH_PATHS = [
 ]
 
 
-def run_all(rounds: int = 5) -> list[dict[str, Any]]:
+def run_all(
+    rounds: int = 5,
+    size: str | None = None,
+    path: str | None = None,
+) -> list[dict[str, Any]]:
+    profiles = [size] if size else ["small", "medium", "large"]
+    paths = BENCH_PATHS
+    if path:
+        src, tgt = path.split(":")
+        paths = [(src, tgt)]
     results = []
-    for source, target in BENCH_PATHS:
-        for profile in ["small", "medium", "large"]:
+    for source, target in paths:
+        for profile in profiles:
             results.append(bench_pipeline(source, target, profile, rounds))
     return results
 
@@ -611,11 +620,20 @@ def main() -> None:
         "--rounds", type=int, default=5, help="Benchmark rounds (default: 5)"
     )
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument(
+        "--size",
+        choices=["small", "medium", "large"],
+        help="Run only one payload size",
+    )
+    parser.add_argument(
+        "--path",
+        help="Run only one conversion path (e.g. google:anthropic)",
+    )
     args = parser.parse_args()
 
     print(f"Running pipeline benchmarks ({args.rounds} rounds each)...\n")
     t0 = time.perf_counter()
-    results = run_all(rounds=args.rounds)
+    results = run_all(rounds=args.rounds, size=args.size, path=args.path)
     elapsed = time.perf_counter() - t0
 
     if args.json:
