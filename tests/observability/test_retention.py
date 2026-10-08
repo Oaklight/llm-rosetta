@@ -23,6 +23,13 @@ class TestRetentionPolicy:
         p.success_max = 200
         assert p.success_max == 200
 
+    def test_floor_enforcement(self):
+        p = RetentionPolicy(success_max=0, dump_max=0, ops_info_max=-1, max_age_days=0)
+        assert p.success_max == 1
+        assert p.dump_max == 1
+        assert p.ops_info_max == 1
+        assert p.max_age_days == 1
+
 
 class TestRetentionTracker:
     def test_note_insert_under_threshold(self):
