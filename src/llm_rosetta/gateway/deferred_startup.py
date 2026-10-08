@@ -300,10 +300,10 @@ class DeferredStartup:
                 await persistence.backfill_provider_names(model_to_provider) or 0
             )
 
-            # 2. Backfill API key last_used (keystore is still sync)
+            # 2. Backfill API key last_used
             if keystore is not None:
                 results["key_last_used"] = (
-                    keystore.backfill_last_used(persistence.db_path) or 0
+                    await keystore.backfill_last_used(persistence.db_path) or 0
                 )
 
             # 3. Backfill total_tokens (cache tokens were excluded)

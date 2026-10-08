@@ -198,11 +198,11 @@ class TestKeysDbDataDir:
         data_dir = str(tmp_path / "data")
         os.makedirs(data_dir, exist_ok=True)
 
-        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        _, keystore, _ = await _setup_auth(config, config_path, data_dir=data_dir)
         try:
             assert str(keystore._db_path) == os.path.join(data_dir, "keys.db")
         finally:
-            keystore.close()
+            await keystore.close()
 
     @pytest.mark.asyncio
     async def test_keys_db_legacy_fallback(self, tmp_path):
@@ -221,11 +221,11 @@ class TestKeysDbDataDir:
         conn.execute("CREATE TABLE test (id INTEGER)")
         conn.close()
 
-        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        _, keystore, _ = await _setup_auth(config, config_path, data_dir=data_dir)
         try:
             assert str(keystore._db_path) == old_path
         finally:
-            keystore.close()
+            await keystore.close()
 
     @pytest.mark.asyncio
     async def test_keys_db_explicit_api_keys_db_wins(self, tmp_path):
@@ -244,11 +244,11 @@ class TestKeysDbDataDir:
         _write_config(config_path)
 
         data_dir = str(tmp_path / "data")
-        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        _, keystore, _ = await _setup_auth(config, config_path, data_dir=data_dir)
         try:
             assert str(keystore._db_path) == explicit
         finally:
-            keystore.close()
+            await keystore.close()
 
     @pytest.mark.asyncio
     async def test_keys_db_new_location_preferred(self, tmp_path):
@@ -267,11 +267,11 @@ class TestKeysDbDataDir:
             conn.execute("CREATE TABLE test (id INTEGER)")
             conn.close()
 
-        _, keystore, _ = _setup_auth(config, config_path, data_dir=data_dir)
+        _, keystore, _ = await _setup_auth(config, config_path, data_dir=data_dir)
         try:
             assert str(keystore._db_path) == os.path.join(data_dir, "keys.db")
         finally:
-            keystore.close()
+            await keystore.close()
 
     @pytest.mark.asyncio
     async def test_resolve_data_dir_for_app(self, tmp_path):
